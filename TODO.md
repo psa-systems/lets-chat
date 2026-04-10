@@ -40,16 +40,22 @@ src/
 ├── server_fns/
 │   ├── mod.rs           # Module registration
 │   ├── auth.rs          # register, login, logout, get_current_user
-│   ├── chat.rs          # list_rooms, get_room, list_messages, send_message
+│   ├── chat.rs          # list_rooms, get_room, list_messages, send_message + WS broadcast
 │   ├── admin.rs         # 11 admin endpoints (require admin, except list_users requires moderator)
-│   ├── moderation.rs    # ban, mute, suspend, kick, delete_message, etc.
-│   ├── dm.rs            # get_or_create_dm, list_my_dms, send_dm_message
+│   ├── moderation.rs    # ban, mute, suspend, kick, delete_message + WS broadcasts
+│   ├── dm.rs            # get_or_create_dm, list_my_dms, send_dm_message + WS broadcast
 │   └── helpers.rs       # require_auth(), require_role(), role_level() — SERVER-ONLY (#[cfg(feature = "server")])
+├── ws/
+│   ├── mod.rs           # Module root (hub/handler gated to non-wasm)
+│   ├── events.rs        # ChatEvent + ClientControl enums (shared client+server)
+│   ├── hub.rs           # In-memory connection registry, room subscriptions, broadcast (SERVER-ONLY)
+│   └── handler.rs       # /ws Axum endpoint, auth, read/write loop (SERVER-ONLY)
 └── components/
     ├── mod.rs
-    ├── auth_layout.rs   # Session gate, provides Signal<User> context
+    ├── auth_layout.rs   # Session gate, provides Signal<User> + WsHandle context
     ├── layout.rs        # Sidebar + Outlet
-    ├── sidebar.rs       # Room list, DM list, admin/moderate link, user info
+    ├── sidebar.rs       # Room list, DM list (WS-refreshed), admin/moderate link, user info
+    ├── use_websocket.rs # use_websocket() hook with auto-reconnect (WASM client)
     ├── login.rs / register.rs / welcome.rs
     ├── room_view.rs     # Chat room with mod actions + DM links on usernames
     ├── dm_view.rs       # DM conversation view
@@ -120,53 +126,19 @@ tests/
 
 ---
 
-## What's Left
+## What's Done (continued)
 
-### Phase 6: WebSockets (real-time updates) — START HERE
-
-This is the next phase. No plan has been written yet. To begin:
-1. Read the design spec: `docs/superpowers/specs/2026-04-10-lets-chat-design.md` (especially the "Real-Time (WebSockets)" section starting around line 221)
-2. Look at existing Phase plans in `docs/superpowers/plans/` for the format used
-3. Read `src/main.rs` to understand how the Axum router is set up (the `/ws` endpoint needs to be registered there)
-4. Read `src/server_fns/chat.rs` (send_message) and `src/server_fns/moderation.rs` — these are where broadcast calls need to be added
-
-Requirements from the design spec:
-
-**Server side:**
-- Dedicated `/ws` endpoint on Axum router, outside Dioxus server functions
-- On connect: validate session cookie, reject if unauthenticated or banned
-- In-memory `HashMap<RoomId, HashSet<UserConnection>>` for room subscriptions
-- Message sends (via server function) broadcast to all subscribed connections
-- Ping/pong every 30 seconds for stale connection detection
-
-**Events:**
-- `NewMessage` — new message in a subscribed room
-- `MessageDeleted` — message soft-deleted by moderator
-- `UserJoined` / `UserLeft` — user entered/left a room
-- `UserMuted` / `UserBanned` / `UserKicked` — mod actions
-
-**Client side:**
-- `use_websocket()` hook: connects on login, reconnects with exponential backoff
-- Provides `Signal<Vec<ChatEvent>>` for components to subscribe to
-- `RoomViewPage` appends new messages from WebSocket (no full refetch)
-- Sidebar listens for room list changes
-- DM notifications through the same connection
-- Client sends `Subscribe { room_id }` / `Unsubscribe { room_id }` control frames as user navigates rooms
-
-**Architecture note:** Sending stays as HTTP server functions (proper error handling). WebSocket is server-to-client only for event fan-out.
-
-**Key files to create/modify:**
-- New: WebSocket hub module (in-memory connection registry)
-- New: `/ws` endpoint handler in Axum router
-- New: `use_websocket()` client hook
-- New: Event types (serde-serializable enum)
-- Modify: `src/main.rs` — register `/ws` route on the Axum router
-- Modify: `src/server_fns/chat.rs` — broadcast `NewMessage` after `insert_message`
-- Modify: `src/server_fns/moderation.rs` — broadcast mod events after actions
-- Modify: `src/components/room_view.rs` — subscribe to WebSocket, append messages
-- Modify: `src/components/sidebar.rs` — listen for updates
-
-**Dependencies to add:** `tokio-tungstenite` or `axum`'s built-in WebSocket support (`axum::extract::ws`), `futures` for stream handling.
+### Phase 6: WebSockets (real-time updates) ✅
+- `ChatEvent` enum with tagged serde: NewMessage, MessageDeleted, UserMuted, UserBanned, UserKicked
+- `ClientControl` enum: Subscribe/Unsubscribe room_id
+- In-memory connection hub (`src/ws/hub.rs`) using DashMap for room subscriptions
+- `/ws` Axum endpoint with session cookie auth, ban check on connect
+- DM room membership verification on subscribe (prevents subscribing to others' DMs)
+- Broadcast lag handling (RecvError::Lagged continues instead of killing send task)
+- Server functions broadcast events: send_message, send_dm_message, delete_message, ban_user, mute_user, kick_user
+- Client `use_websocket()` hook with exponential backoff reconnect (500ms to 30s)
+- RoomView and DmView subscribe/unsubscribe on mount/unmount, bump messages_version on WS events
+- Sidebar refreshes DM list on new message events
 
 ### Future Enhancements (see FUTURE.md)
 
@@ -192,7 +164,7 @@ These are deferred and not part of the current build plan:
 ## Reference
 
 - **Design spec:** `docs/superpowers/specs/2026-04-10-lets-chat-design.md` — the authoritative source for all requirements
-- **Implementation plans:** `docs/superpowers/plans/2026-04-10-phase*.md` (Phases 1, 2, 4, 5 have written plans)
+- **Implementation plans:** `docs/superpowers/plans/2026-04-10-phase*.md` (Phases 1, 2, 4, 5, 6 have written plans)
 - **Build:** `docker run --rm -v /home/nate/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check`
 - **Test:** `docker run --rm -v /home/nate/lets-chat:/app -w /app rust:1.93-slim-trixie cargo test`
-- **Cargo.toml dependencies:** dioxus 0.7.3, sqlx 0.8, axum 0.8, argon2 0.5, chrono, serde, serde_json, uuid, rand 0.8, tokio
+- **Cargo.toml dependencies:** dioxus 0.7.3, sqlx 0.8, axum 0.8 (ws feature), argon2 0.5, chrono, serde, serde_json, uuid, rand 0.8, tokio, dashmap 6, futures 0.3, web-sys/wasm-bindgen/js-sys/gloo-timers (WASM)

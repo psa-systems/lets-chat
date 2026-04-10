@@ -73,7 +73,28 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
     }
 
     let chat_pool = crate::db::get_chat_pool().await;
-    crate::db::chat::insert_message(chat_pool, room_id, &user.id, &body)
+    let msg_id = crate::db::chat::insert_message(chat_pool, room_id, &user.id, &body)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Broadcast via WebSocket
+    let author_name = user
+        .display_name
+        .clone()
+        .unwrap_or_else(|| user.username.clone());
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let event = crate::ws::events::ChatEvent::NewMessage {
+        message: crate::models::Message {
+            id: msg_id,
+            room_id,
+            user_id: user.id.clone(),
+            author_name,
+            body,
+            created_at: now,
+        },
+        is_dm: false,
+    };
+    crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
+
+    Ok(msg_id)
 }

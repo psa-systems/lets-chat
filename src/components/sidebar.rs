@@ -1,15 +1,32 @@
 use dioxus::prelude::*;
 
+use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::routes::Route;
 use crate::server_fns::auth::logout;
 use crate::server_fns::chat::list_rooms;
 use crate::server_fns::dm::list_my_dms;
+use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn Sidebar() -> Element {
     let rooms = use_server_future(list_rooms)?;
-    let dms = use_server_future(list_my_dms)?;
+
+    let mut dms_version = use_signal(|| 0u32);
+    let dms = use_server_future(move || {
+        let _v = dms_version();
+        async move { list_my_dms().await }
+    })?;
+
+    let ws = use_context::<WsHandle>();
+    use_effect(move || {
+        if let Some(ref event) = *ws.latest_event.read() {
+            if matches!(event, ChatEvent::NewMessage { is_dm: true, .. }) {
+                dms_version.set(dms_version() + 1);
+            }
+        }
+    });
+
     let user: Signal<User> = use_context::<Signal<User>>();
     let nav = use_navigator();
 
