@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::models::User;
+use crate::routes::Route;
 use crate::server_fns::chat::{get_room, list_messages, send_message};
 use crate::server_fns::moderation::delete_message;
 
@@ -136,10 +137,19 @@ pub fn RoomViewPage(room_id: String) -> Element {
                 for msg in message_list.iter() {
                     {
                         let msg_id = msg.id;
+                        let msg_user_id = msg.user_id.clone();
                         rsx! {
                             div { key: "{msg.id}", class: "group flex flex-col",
                                 div { class: "flex items-baseline gap-2",
-                                    span { class: "font-semibold text-gray-800", "{msg.author_name}" }
+                                    if msg_user_id != u.id {
+                                        Link {
+                                            to: Route::Dm { user_id: msg_user_id.clone() },
+                                            class: "font-semibold text-gray-800 hover:underline hover:text-blue-600",
+                                            "{msg.author_name}"
+                                        }
+                                    } else {
+                                        span { class: "font-semibold text-gray-800", "{msg.author_name}" }
+                                    }
                                     span { class: "text-xs text-gray-400", "{msg.created_at}" }
                                     if is_mod {
                                         button {

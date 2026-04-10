@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth_layout;
+pub mod dm_view;
 pub mod layout;
 pub mod login;
 pub mod register;

@@ -4,14 +4,21 @@ use crate::models::User;
 use crate::routes::Route;
 use crate::server_fns::auth::logout;
 use crate::server_fns::chat::list_rooms;
+use crate::server_fns::dm::list_my_dms;
 
 #[component]
 pub fn Sidebar() -> Element {
     let rooms = use_server_future(list_rooms)?;
+    let dms = use_server_future(list_my_dms)?;
     let user: Signal<User> = use_context::<Signal<User>>();
     let nav = use_navigator();
 
     let room_list = match rooms() {
+        Some(Ok(list)) => list,
+        _ => vec![],
+    };
+
+    let dm_list = match dms() {
         Some(Ok(list)) => list,
         _ => vec![],
     };
@@ -47,6 +54,24 @@ pub fn Sidebar() -> Element {
                         class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
                         span { class: "text-gray-400", "#" }
                         span { "{room.name}" }
+                    }
+                }
+            }
+
+            // Direct Messages section
+            div { class: "mt-4 px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
+                "Direct Messages"
+            }
+            if dm_list.is_empty() {
+                div { class: "px-3 py-2 text-sm text-gray-400", "No conversations" }
+            } else {
+                for dm in dm_list.iter() {
+                    Link {
+                        key: "{dm.room_id}",
+                        to: Route::Dm { user_id: dm.other_user_id.clone() },
+                        class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
+                        span { class: "text-gray-400", "@" }
+                        span { "{dm.other_user_name}" }
                     }
                 }
             }
