@@ -17,7 +17,8 @@ pub fn LoginPage() -> Element {
         loading.set(true);
 
         match auth::login(username(), password()).await {
-            Ok(_user) => {
+            Ok(resp) => {
+                auth::set_session_cookie(&resp.session_token);
                 nav.push(Route::Home {});
             }
             Err(e) => {

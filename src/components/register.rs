@@ -24,7 +24,8 @@ pub fn RegisterPage() -> Element {
         loading.set(true);
 
         match auth::register(username(), password()).await {
-            Ok(_user) => {
+            Ok(resp) => {
+                auth::set_session_cookie(&resp.session_token);
                 nav.push(Route::Home {});
             }
             Err(e) => {
