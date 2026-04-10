@@ -1,0 +1,46 @@
+#[cfg(not(target_arch = "wasm32"))]
+pub mod chat;
+
+#[cfg(not(target_arch = "wasm32"))]
+use sqlx::SqlitePool;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::OnceLock;
+
+#[cfg(not(target_arch = "wasm32"))]
+static CHAT_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
+
+#[cfg(not(target_arch = "wasm32"))]
+static DATA_DIR: OnceLock<String> = OnceLock::new();
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_data_dir(dir: String) {
+    DATA_DIR.set(dir).expect("data dir already set");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn data_dir() -> &'static str {
+    DATA_DIR.get().map(|s| s.as_str()).unwrap_or("/data")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn init_chat_pool() -> SqlitePool {
+    let dir = data_dir();
+    std::fs::create_dir_all(dir).expect("Failed to create data directory");
+
+    let pool = SqlitePool::connect(&format!("sqlite:{}/chat.db?mode=rwc", dir))
+        .await
+        .expect("Failed to connect to chat DB");
+
+    let migration_sql = include_str!("../../migrations/chat/0001_create_tables.sql");
+    sqlx::raw_sql(migration_sql)
+        .execute(&pool)
+        .await
+        .expect("Failed to run chat DB migration");
+
+    pool
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_chat_pool() -> &'static SqlitePool {
+    CHAT_POOL.get_or_init(init_chat_pool).await
+}

@@ -1,0 +1,22 @@
+---
+
+services:
+
+  app:
+    build:
+      context: .
+    container_name: lets-chat-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      RUST_LOG: debug
+    volumes:
+      - ./src:/app/src
+      - ./assets:/app/assets
+      - ./Cargo.toml:/app/Cargo.toml
+      - ./Cargo.lock:/app/Cargo.lock
+      - cargo_target:/app/target
+
+volumes:
+  cargo_target:

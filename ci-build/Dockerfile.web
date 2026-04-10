@@ -1,0 +1,80 @@
+# Build stage (trixie for glibc 2.41, required by pre-built dioxus-cli binary)
+FROM rust:1.93-slim-trixie AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+    curl pkg-config libssl-dev unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Bun
+RUN curl --fail --location --silent --show-error https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Install cargo-binstall, then use it to fetch pre-built dioxus-cli (seconds instead of minutes)
+RUN curl --location --silent --show-error https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
+    | tar --extract --gzip --directory /usr/local/cargo/bin
+RUN cargo binstall dioxus-cli@0.7.3 --no-confirm
+
+# Install WASM target for client build
+RUN rustup target add wasm32-unknown-unknown
+
+# --- Dependency caching (server-side only) ---
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release \
+    && rm -rf src target/release/deps/lets_chat*
+
+# --- Full build with dioxus ---
+# Copy source code (respects .dockerignore)
+COPY . .
+
+# Build Tailwind CSS (tailwind-built.css is gitignored, must be generated)
+RUN bun install --frozen-lockfile && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
+
+# Build fullstack app (server binary + WASM client bundle)
+RUN dx build --release --platform web
+
+# Create consistent output path
+RUN ln -s /build/target/dx/lets-chat/release/web /build/dx-output
+
+# Runtime stage (must match builder glibc version)
+FROM debian:trixie-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+    ca-certificates tzdata curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd --create-home --uid 1001 appuser
+
+# Create standard directory structure:
+#   /app    — application binary, static assets, and WASM client (read-only)
+#   /data   — persistent application data (Docker volume)
+#   /config — application configuration (Docker volume)
+RUN mkdir -p /app/assets /data /config
+
+WORKDIR /app
+
+# Copy dx build output (server binary + public/ with index.html and WASM/JS)
+COPY --from=builder /build/dx-output/ /app/
+
+# Copy WASM/JS assets to /app/assets/ for the ServeDir("/assets") route in main.rs
+RUN cp /app/public/assets/* /app/assets/ 2>/dev/null || true
+
+# Set ownership of all standard directories
+RUN chown -R appuser:appuser /app /data /config
+
+USER appuser
+
+LABEL org.opencontainers.image.source=https://dev.a8n.run/a8n-tools/lets-chat
+LABEL org.opencontainers.image.description="lets-chat"
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
+
+ENTRYPOINT ["/app/lets-chat"]
