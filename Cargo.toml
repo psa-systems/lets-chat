@@ -17,7 +17,7 @@ desktop = ["dioxus/desktop", "dioxus/server", "dioxus/fullstack"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "1", features = ["js"] }
-web-sys = { version = "0.3", features = ["WebSocket", "BinaryType", "MessageEvent", "Location", "Window"] }
+web-sys = { version = "0.3", features = ["WebSocket", "BinaryType", "MessageEvent", "Location", "Window", "Document", "HtmlDocument"] }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 gloo-timers = { version = "0.3", features = ["futures"] }
