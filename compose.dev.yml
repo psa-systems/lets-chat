@@ -1,0 +1,36 @@
+---
+name: chat-${USER}
+
+services:
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      RUST_LOG: debug
+    volumes:
+      - ./src:/app/src
+      - ./assets:/app/assets
+      - ./Cargo.toml:/app/Cargo.toml
+      - ./Cargo.lock:/app/Cargo.lock
+      - ./migrations:/app/migrations
+      - cargo_target:/app/target
+    networks:
+      - default
+      - network-traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=network-traefik-public"
+      - "traefik.http.routers.chat-${USER}.rule=Host(`${USER}-chat.a8n.run`)"
+      - "traefik.http.routers.chat-${USER}.service=chat-${USER}@docker"
+      - "traefik.http.routers.chat-${USER}.entrypoints=web-secure"
+      - "traefik.http.routers.chat-${USER}.tls.certresolver=cert-cloudflare"
+      - "traefik.http.services.chat-${USER}.loadbalancer.server.port=8080"
+
+volumes:
+  cargo_target:
+
+networks:
+  network-traefik-public:
+    external: true

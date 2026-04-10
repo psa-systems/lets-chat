@@ -44,10 +44,24 @@ build-docker:
 
 # Show available dev targets
 dev:
-    @echo "Please use a target-specific recipe: just dev-web or just dev-desktop"
+    @echo "Please use a target-specific recipe: just dev-web, just dev-web-local, or just dev-desktop"
 
-# Start development server (web)
+# Start development server (web) via Docker with Traefik (https://{USER}-chat.a8n.run)
 dev-web:
+    @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
+    @echo ""
+    docker compose -f compose.dev.yml up --build
+
+# Stop dev-web containers
+dev-web-down:
+    docker compose -f compose.dev.yml down
+
+# Stop dev-web containers and remove volumes (clean rebuild)
+dev-web-clean:
+    docker compose -f compose.dev.yml down -v
+
+# Start development server (web) locally on localhost:8080
+dev-web-local:
     dx serve --platform web
 
 # Start development server (desktop)
