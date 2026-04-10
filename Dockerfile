@@ -17,4 +17,4 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build && rm -rf src
 
 EXPOSE 8080
 
-CMD ["dx", "serve", "--platform", "web"]
+CMD ["dx", "serve", "--platform", "web", "--addr", "0.0.0.0", "--port", "8080"]

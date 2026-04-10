@@ -179,7 +179,7 @@ fn set_session_cookie(token: &str) -> Result<(), ServerFnError> {
         .ok_or_else(|| ServerFnError::new("No server context"))?;
     ctx.add_response_header(
         http::header::SET_COOKIE,
-        cookie.to_string().parse().map_err(|e: http::header::InvalidHeaderValue| {
+        cookie.to_string().parse::<http::HeaderValue>().map_err(|e| {
             ServerFnError::new(format!("Cookie header error: {}", e))
         })?,
     );
@@ -202,7 +202,7 @@ fn clear_session_cookie() -> Result<(), ServerFnError> {
         .ok_or_else(|| ServerFnError::new("No server context"))?;
     ctx.add_response_header(
         http::header::SET_COOKIE,
-        cookie.to_string().parse().map_err(|e: http::header::InvalidHeaderValue| {
+        cookie.to_string().parse::<http::HeaderValue>().map_err(|e| {
             ServerFnError::new(format!("Cookie header error: {}", e))
         })?,
     );
