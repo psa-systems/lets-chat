@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id     INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    author      TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
     body        TEXT NOT NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

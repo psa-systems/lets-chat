@@ -17,7 +17,7 @@ fn parse_data_dir() -> Option<String> {
         .map(|pair| pair[1].clone())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "server"))]
 fn build_server_router() -> axum::Router {
     use dioxus::server::DioxusRouterExt;
     axum::Router::new().serve_dioxus_application(ServeConfig::new(), App)
@@ -84,7 +84,7 @@ fn main() {
     }
 
     // Web fullstack server binary built by `dx build`.
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "desktop")))]
+    #[cfg(all(not(target_arch = "wasm32"), not(feature = "desktop"), feature = "server"))]
     {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")
