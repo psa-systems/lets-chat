@@ -1,5 +1,6 @@
 use sqlx::{Row, SqlitePool};
 
+use crate::models::invite::InviteCode;
 use crate::models::user::UserRecord;
 
 pub async fn create_user(
@@ -178,4 +179,127 @@ pub async fn delete_user_sessions(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, username, display_name, password_hash, role, \
+         is_banned, ban_reason, banned_until, \
+         is_muted, muted_until, mute_reason, \
+         created_at, updated_at \
+         FROM users ORDER BY created_at ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| UserRecord {
+            id: r.get("id"),
+            username: r.get("username"),
+            display_name: r.get("display_name"),
+            password_hash: r.get("password_hash"),
+            role: r.get("role"),
+            is_banned: r.get("is_banned"),
+            ban_reason: r.get("ban_reason"),
+            banned_until: r.get("banned_until"),
+            is_muted: r.get("is_muted"),
+            muted_until: r.get("muted_until"),
+            mute_reason: r.get("mute_reason"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+        })
+        .collect())
+}
+
+pub async fn delete_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn create_invite_code(
+    pool: &SqlitePool,
+    code: &str,
+    created_by: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO invite_codes (code, created_by) VALUES (?, ?)",
+    )
+    .bind(code)
+    .bind(created_by)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
+pub async fn list_invite_codes(pool: &SqlitePool) -> Result<Vec<InviteCode>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, code, created_by, used_by, used_at, expires_at, created_at \
+         FROM invite_codes ORDER BY created_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| InviteCode {
+            id: r.get("id"),
+            code: r.get("code"),
+            created_by: r.get("created_by"),
+            used_by: r.get("used_by"),
+            used_at: r.get("used_at"),
+            expires_at: r.get("expires_at"),
+            created_at: r.get("created_at"),
+        })
+        .collect())
+}
+
+pub async fn revoke_invite_code(pool: &SqlitePool, code_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM invite_codes WHERE id = ?")
+        .bind(code_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn use_invite_code(
+    pool: &SqlitePool,
+    code: &str,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE invite_codes SET used_by = ?, used_at = datetime('now') \
+         WHERE code = ? AND used_by IS NULL",
+    )
+    .bind(user_id)
+    .bind(code)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_invite_code(
+    pool: &SqlitePool,
+    code: &str,
+) -> Result<Option<InviteCode>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, code, created_by, used_by, used_at, expires_at, created_at \
+         FROM invite_codes WHERE code = ?",
+    )
+    .bind(code)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| InviteCode {
+        id: r.get("id"),
+        code: r.get("code"),
+        created_by: r.get("created_by"),
+        used_by: r.get("used_by"),
+        used_at: r.get("used_at"),
+        expires_at: r.get("expires_at"),
+        created_at: r.get("created_at"),
+    }))
 }
