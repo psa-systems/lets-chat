@@ -95,6 +95,9 @@ pub async fn list_users() -> Result<Vec<User>, ServerFnError> {
             role: r.role,
             is_muted: r.is_muted,
             muted_until: r.muted_until,
+            is_banned: r.is_banned,
+            ban_reason: r.ban_reason,
+            banned_until: r.banned_until,
             created_at: r.created_at,
         })
         .collect())

@@ -303,3 +303,77 @@ pub async fn get_invite_code(
         created_at: r.get("created_at"),
     }))
 }
+
+pub async fn ban_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    reason: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_banned = 1, ban_reason = ?, banned_until = NULL, \
+         updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(reason)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn unban_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_banned = 0, ban_reason = NULL, banned_until = NULL, \
+         updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn suspend_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    until: &str,
+    reason: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_banned = 1, ban_reason = ?, banned_until = ?, \
+         updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(reason)
+    .bind(until)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn mute_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    until: Option<&str>,
+    reason: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_muted = 1, muted_until = ?, mute_reason = ?, \
+         updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(until)
+    .bind(reason)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn unmute_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_muted = 0, muted_until = NULL, mute_reason = NULL, \
+         updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

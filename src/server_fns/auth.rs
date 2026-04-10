@@ -155,6 +155,9 @@ fn user_record_to_user(record: &crate::models::user::UserRecord) -> User {
         role: record.role.clone(),
         is_muted: record.is_muted,
         muted_until: record.muted_until.clone(),
+        is_banned: record.is_banned,
+        ban_reason: record.ban_reason.clone(),
+        banned_until: record.banned_until.clone(),
         created_at: record.created_at.clone(),
     }
 }
