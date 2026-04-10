@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth_layout;
 pub mod layout;
 pub mod login;

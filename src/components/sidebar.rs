@@ -55,7 +55,7 @@ pub fn Sidebar() -> Element {
         if u.role == "admin" {
             div { class: "px-2 mt-2",
                 Link {
-                    to: Route::Admin {},
+                    to: Route::AdminSettings {},
                     class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-red-50 text-red-600 font-medium",
                     span { "Admin" }
                 }

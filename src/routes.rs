@@ -1,6 +1,13 @@
 use dioxus::prelude::*;
 
 use crate::components::{
+    admin::{
+        invites::AdminInvitesPage,
+        layout::AdminLayout,
+        rooms::AdminRoomsPage,
+        settings::AdminSettingsPage,
+        users::AdminUsersPage,
+    },
     auth_layout::AuthLayout,
     layout::Layout,
     login::LoginPage,
@@ -21,8 +28,15 @@ pub enum Route {
     Home {},
     #[route("/room/:room_id")]
     Room { room_id: String },
+    #[layout(AdminLayout)]
     #[route("/admin")]
-    Admin {},
+    AdminSettings {},
+    #[route("/admin/users")]
+    AdminUsers {},
+    #[route("/admin/invites")]
+    AdminInvites {},
+    #[route("/admin/rooms")]
+    AdminRooms {},
 }
 
 #[component]
@@ -46,13 +60,21 @@ fn Room(room_id: String) -> Element {
 }
 
 #[component]
-fn Admin() -> Element {
-    rsx! {
-        div { class: "flex-1 flex items-center justify-center text-gray-500",
-            div { class: "text-center",
-                p { class: "text-2xl mb-2", "Admin Panel" }
-                p { class: "text-sm", "Coming soon in Phase 3" }
-            }
-        }
-    }
+fn AdminSettings() -> Element {
+    rsx! { AdminSettingsPage {} }
+}
+
+#[component]
+fn AdminUsers() -> Element {
+    rsx! { AdminUsersPage {} }
+}
+
+#[component]
+fn AdminInvites() -> Element {
+    rsx! { AdminInvitesPage {} }
+}
+
+#[component]
+fn AdminRooms() -> Element {
+    rsx! { AdminRoomsPage {} }
 }
