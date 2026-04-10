@@ -1,0 +1,35 @@
+---
+name: lets-chat-${USER}
+
+services:
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      RUST_LOG: debug
+    volumes:
+      - ./src:/app/src
+      - ./assets:/app/assets
+      - ./Cargo.toml:/app/Cargo.toml
+      - ./Cargo.lock:/app/Cargo.lock
+      - cargo_target:/app/target
+    networks:
+      - default
+      - network-traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=network-traefik-public"
+      - "traefik.http.routers.lets-chat-${USER}.rule=Host(`${USER}-lets-chat.a8n.run`)"
+      - "traefik.http.routers.lets-chat-${USER}.service=lets-chat-${USER}@docker"
+      - "traefik.http.routers.lets-chat-${USER}.entrypoints=web-secure"
+      - "traefik.http.routers.lets-chat-${USER}.tls.certresolver=cert-cloudflare"
+      - "traefik.http.services.lets-chat-${USER}.loadbalancer.server.port=8080"
+
+volumes:
+  cargo_target:
+
+networks:
+  network-traefik-public:
+    external: true
