@@ -52,6 +52,16 @@ pub fn Sidebar() -> Element {
             }
         }
 
+        if u.role == "admin" {
+            div { class: "px-2 mt-2",
+                Link {
+                    to: Route::Admin {},
+                    class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-red-50 text-red-600 font-medium",
+                    span { "Admin" }
+                }
+            }
+        }
+
         // User info + logout at the bottom
         div { class: "p-3 border-t border-gray-200 flex items-center gap-2",
             // Avatar circle with initial
