@@ -21,7 +21,8 @@ uuid = { version = "1", features = ["js"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
+http = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 argon2 = "0.5"
