@@ -55,6 +55,12 @@ async fn init_chat_pool() -> SqlitePool {
         .await
         .expect("Failed to run chat DB migration 002");
 
+    let migration_003 = include_str!("../../migrations/chat/0003_dms.sql");
+    sqlx::raw_sql(migration_003)
+        .execute(&pool)
+        .await
+        .expect("Failed to run chat DB migration 003");
+
     pool
 }
 
