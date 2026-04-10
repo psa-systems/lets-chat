@@ -46,6 +46,11 @@ pub async fn ban_user(user_id: String, reason: String) -> Result<(), ServerFnErr
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 
+    let event = crate::ws::events::ChatEvent::UserBanned {
+        user_id: user_id.clone(),
+    };
+    crate::ws::hub::get_hub().broadcast_global(&event);
+
     Ok(())
 }
 
@@ -195,6 +200,12 @@ pub async fn mute_user(
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 
+    let event = crate::ws::events::ChatEvent::UserMuted {
+        user_id: user_id.clone(),
+        muted_until: until_opt.clone(),
+    };
+    crate::ws::hub::get_hub().broadcast_global(&event);
+
     Ok(())
 }
 
@@ -266,6 +277,12 @@ pub async fn delete_message(message_id: i64, reason: String) -> Result<(), Serve
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 
+    let event = crate::ws::events::ChatEvent::MessageDeleted {
+        message_id,
+        room_id,
+    };
+    crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
+
     Ok(())
 }
 
@@ -309,6 +326,12 @@ pub async fn kick_user(
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let event = crate::ws::events::ChatEvent::UserKicked {
+        user_id: user_id.clone(),
+        room_id,
+    };
+    crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
 
     Ok(())
 }
