@@ -51,19 +51,26 @@ pub async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap) -> impl IntoRe
 
 async fn handle_socket(socket: WebSocket, user_id: String) {
     let hub = get_hub();
+    let chat_pool = crate::db::get_chat_pool().await;
     let (conn_id, mut rx) = hub.connect(&user_id);
 
     let (mut ws_tx, mut ws_rx) = socket.split();
 
     // Spawn task: forward hub events to the WebSocket
     let send_task = tokio::spawn(async move {
-        while let Ok(event) = rx.recv().await {
-            let json = match serde_json::to_string(&event) {
-                Ok(j) => j,
-                Err(_) => continue,
-            };
-            if ws_tx.send(Message::Text(json.into())).await.is_err() {
-                break;
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    let json = match serde_json::to_string(&event) {
+                        Ok(j) => j,
+                        Err(_) => continue,
+                    };
+                    if ws_tx.send(Message::Text(json.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
@@ -75,7 +82,22 @@ async fn handle_socket(socket: WebSocket, user_id: String) {
                 if let Ok(ctrl) = serde_json::from_str::<ClientControl>(text.as_str()) {
                     match ctrl {
                         ClientControl::Subscribe { room_id } => {
-                            hub.subscribe(conn_id, room_id);
+                            // For DM rooms, verify user is a member
+                            let allowed = match crate::db::chat::get_room(chat_pool, room_id).await {
+                                Ok(Some(room)) if room.room_type == "dm" => {
+                                    sqlx::query("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
+                                        .bind(room_id)
+                                        .bind(&user_id)
+                                        .fetch_optional(chat_pool)
+                                        .await
+                                        .unwrap_or(None)
+                                        .is_some()
+                                }
+                                _ => true, // Public rooms: allow anyone
+                            };
+                            if allowed {
+                                hub.subscribe(conn_id, room_id);
+                            }
                         }
                         ClientControl::Unsubscribe { room_id } => {
                             hub.unsubscribe(conn_id, room_id);
