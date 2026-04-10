@@ -52,12 +52,12 @@ pub fn Sidebar() -> Element {
             }
         }
 
-        if u.role == "admin" {
+        if u.role == "admin" || u.role == "moderator" {
             div { class: "px-2 mt-2",
                 Link {
-                    to: Route::AdminSettings {},
+                    to: if u.role == "admin" { Route::AdminSettings {} } else { Route::AdminUsers {} },
                     class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-red-50 text-red-600 font-medium",
-                    span { "Admin" }
+                    span { if u.role == "admin" { "Admin" } else { "Moderate" } }
                 }
             }
         }

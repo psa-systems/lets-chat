@@ -1,21 +1,32 @@
 use dioxus::prelude::*;
 
+use crate::models::User;
 use crate::routes::Route;
 
 #[component]
 pub fn AdminLayout() -> Element {
-    let tabs = vec![
-        ("Settings", Route::AdminSettings {}),
-        ("Users", Route::AdminUsers {}),
-        ("Invite Codes", Route::AdminInvites {}),
-        ("Rooms", Route::AdminRooms {}),
-    ];
+    let user: Signal<User> = use_context::<Signal<User>>();
+    let u = user();
+
+    let mut tabs: Vec<(&str, Route)> = vec![];
+
+    if u.role == "admin" {
+        tabs.push(("Settings", Route::AdminSettings {}));
+    }
+
+    tabs.push(("Users", Route::AdminUsers {}));
+
+    if u.role == "admin" {
+        tabs.push(("Invite Codes", Route::AdminInvites {}));
+        tabs.push(("Rooms", Route::AdminRooms {}));
+    }
+
+    tabs.push(("Mod Log", Route::AdminModLog {}));
 
     let current_route = use_route::<Route>();
 
     rsx! {
         div { class: "flex-1 flex flex-col overflow-hidden",
-            // Tab bar
             div { class: "flex border-b border-gray-200 bg-white px-4",
                 for (label, route) in tabs {
                     {
@@ -35,7 +46,6 @@ pub fn AdminLayout() -> Element {
                     }
                 }
             }
-            // Content area
             div { class: "flex-1 overflow-y-auto p-6 bg-gray-50",
                 Outlet::<Route> {}
             }
