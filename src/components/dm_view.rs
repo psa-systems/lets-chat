@@ -1,8 +1,10 @@
 use dioxus::prelude::*;
 
+use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::server_fns::chat::list_messages;
 use crate::server_fns::dm::{get_or_create_dm, send_dm_message};
+use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn DmViewPage(user_id: String) -> Element {
@@ -40,6 +42,31 @@ pub fn DmViewPage(user_id: String) -> Element {
         let _v = messages_version();
         async move { list_messages(room_id).await }
     })?;
+
+    let ws = use_context::<WsHandle>();
+
+    // Subscribe to this DM room's WS events
+    let ws_sub = ws.clone();
+    use_effect(move || {
+        ws_sub.subscribe(room_id);
+    });
+
+    let ws_drop = ws.clone();
+    use_drop(move || {
+        ws_drop.unsubscribe(room_id);
+    });
+
+    // When a WS event arrives for this room, bump messages_version
+    use_effect(move || {
+        if let Some(ref event) = *ws.latest_event.read() {
+            match event {
+                ChatEvent::NewMessage { message } if message.room_id == room_id => {
+                    messages_version.set(messages_version() + 1);
+                }
+                _ => {}
+            }
+        }
+    });
 
     let mut draft = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);

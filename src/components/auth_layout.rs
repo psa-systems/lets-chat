@@ -12,6 +12,8 @@ pub fn AuthLayout() -> Element {
     let result = match &*read_guard {
         Some(Ok(Some(user))) => {
             use_context_provider(|| Signal::new(user.clone()));
+            let ws = crate::components::use_websocket::use_websocket();
+            use_context_provider(|| ws);
             rsx! {
                 Outlet::<Route> {}
             }
