@@ -6,4 +6,5 @@ pub mod login;
 pub mod register;
 pub mod room_view;
 pub mod sidebar;
+pub mod use_websocket;
 pub mod welcome;
