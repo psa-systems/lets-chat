@@ -2,8 +2,15 @@ use dioxus::prelude::*;
 
 use crate::models::User;
 
+/// Response from login/register that includes a session token for the client to store.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AuthResponse {
+    pub user: User,
+    pub session_token: String,
+}
+
 #[server]
-pub async fn register(username: String, password: String) -> Result<User, ServerFnError> {
+pub async fn register(username: String, password: String) -> Result<AuthResponse, ServerFnError> {
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand::rngs::OsRng;
 
@@ -60,20 +67,20 @@ pub async fn register(username: String, password: String) -> Result<User, Server
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    // Set session cookie
-    set_session_cookie(&session_token)?;
-
     // Fetch the user record to return public info
     let record = crate::db::auth::find_user_by_id(pool, &user_id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .ok_or_else(|| ServerFnError::new("User not found after creation"))?;
 
-    Ok(user_record_to_user(&record))
+    Ok(AuthResponse {
+        user: user_record_to_user(&record),
+        session_token,
+    })
 }
 
 #[server]
-pub async fn login(username: String, password: String) -> Result<User, ServerFnError> {
+pub async fn login(username: String, password: String) -> Result<AuthResponse, ServerFnError> {
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
     let username = username.trim().to_string();
@@ -107,10 +114,10 @@ pub async fn login(username: String, password: String) -> Result<User, ServerFnE
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    // Set session cookie
-    set_session_cookie(&session_token)?;
-
-    Ok(user_record_to_user(&record))
+    Ok(AuthResponse {
+        user: user_record_to_user(&record),
+        session_token,
+    })
 }
 
 #[server]
@@ -123,9 +130,6 @@ pub async fn logout() -> Result<(), ServerFnError> {
             .await
             .map_err(|e| ServerFnError::new(e.to_string()))?;
     }
-
-    // Clear cookie
-    clear_session_cookie()?;
 
     Ok(())
 }
@@ -163,54 +167,41 @@ fn user_record_to_user(record: &crate::models::user::UserRecord) -> User {
 }
 
 #[cfg(feature = "server")]
-fn set_session_cookie(token: &str) -> Result<(), ServerFnError> {
-    use axum_extra::extract::cookie::Cookie;
-    use time::Duration;
-
-    let cookie = Cookie::build(("session", token.to_string()))
-        .path("/")
-        .http_only(true)
-        .secure(false) // set to true in production with HTTPS
-        .max_age(Duration::days(30))
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
-        .build();
-
-    let ctx = dioxus_fullstack::FullstackContext::current()
-        .ok_or_else(|| ServerFnError::new("No server context"))?;
-    ctx.add_response_header(
-        http::header::SET_COOKIE,
-        cookie.to_string().parse::<http::HeaderValue>().map_err(|e| {
-            ServerFnError::new(format!("Cookie header error: {}", e))
-        })?,
-    );
-
-    Ok(())
-}
-
-#[cfg(feature = "server")]
-fn clear_session_cookie() -> Result<(), ServerFnError> {
-    use axum_extra::extract::cookie::Cookie;
-    use time::Duration;
-
-    let cookie = Cookie::build(("session", ""))
-        .path("/")
-        .http_only(true)
-        .max_age(Duration::seconds(0))
-        .build();
-
-    let ctx = dioxus_fullstack::FullstackContext::current()
-        .ok_or_else(|| ServerFnError::new("No server context"))?;
-    ctx.add_response_header(
-        http::header::SET_COOKIE,
-        cookie.to_string().parse::<http::HeaderValue>().map_err(|e| {
-            ServerFnError::new(format!("Cookie header error: {}", e))
-        })?,
-    );
-
-    Ok(())
-}
-
-#[cfg(feature = "server")]
 async fn get_session_from_cookie() -> Result<Option<String>, ServerFnError> {
     crate::server_fns::helpers::get_session_id().await
+}
+
+/// Set the session cookie in the browser using document.cookie.
+pub fn set_session_cookie(token: &str) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                let document: web_sys::HtmlDocument = document.unchecked_into();
+                let cookie = format!(
+                    "session={}; path=/; max-age={}; SameSite=Lax",
+                    token,
+                    30 * 24 * 60 * 60 // 30 days
+                );
+                let _ = document.set_cookie(&cookie);
+            }
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = token;
+}
+
+/// Clear the session cookie in the browser.
+pub fn clear_session_cookie() {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                let document: web_sys::HtmlDocument = document.unchecked_into();
+                let _ = document.set_cookie("session=; path=/; max-age=0");
+            }
+        }
+    }
 }
