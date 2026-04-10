@@ -23,7 +23,6 @@ pub fn RoomViewPage(room_id: String) -> Element {
         async move { list_messages(parsed_id).await }
     })?;
 
-    let mut author = use_signal(|| String::from("you"));
     let mut draft = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
 
@@ -69,7 +68,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                 for msg in message_list.iter() {
                     div { key: "{msg.id}", class: "flex flex-col",
                         div { class: "flex items-baseline gap-2",
-                            span { class: "font-semibold text-gray-800", "{msg.author}" }
+                            span { class: "font-semibold text-gray-800", "{msg.author_name}" }
                             span { class: "text-xs text-gray-400", "{msg.created_at}" }
                         }
                         p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
@@ -84,12 +83,11 @@ pub fn RoomViewPage(room_id: String) -> Element {
             onsubmit: move |evt: Event<FormData>| {
                 evt.prevent_default();
                 let body = draft();
-                let who = author();
                 if body.trim().is_empty() {
                     return;
                 }
                 spawn(async move {
-                    match send_message(parsed_id, who, body).await {
+                    match send_message(parsed_id, body).await {
                         Ok(_) => {
                             draft.set(String::new());
                             error.set(None);
@@ -105,13 +103,6 @@ pub fn RoomViewPage(room_id: String) -> Element {
                 div { class: "mb-2 text-sm text-red-600", "{err}" }
             }
             div { class: "flex items-center gap-2",
-                input {
-                    class: "w-32 px-2 py-1.5 border border-gray-300 rounded text-sm",
-                    r#type: "text",
-                    placeholder: "name",
-                    value: "{author}",
-                    oninput: move |evt| author.set(evt.value()),
-                }
                 input {
                     class: "flex-1 px-3 py-1.5 border border-gray-300 rounded",
                     r#type: "text",
