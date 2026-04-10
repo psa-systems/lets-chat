@@ -6,6 +6,7 @@ mod db;
 mod models;
 mod routes;
 mod server_fns;
+mod ws;
 
 use routes::Route;
 
@@ -19,8 +20,11 @@ fn parse_data_dir() -> Option<String> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "server"))]
 fn build_server_router() -> axum::Router {
+    use axum::routing::get;
     use dioxus::server::DioxusRouterExt;
-    axum::Router::new().serve_dioxus_application(ServeConfig::new(), App)
+    axum::Router::new()
+        .route("/ws", get(ws::handler::ws_handler))
+        .serve_dioxus_application(ServeConfig::new(), App)
 }
 
 fn main() {

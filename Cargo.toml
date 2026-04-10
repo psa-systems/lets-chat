@@ -17,14 +17,22 @@ desktop = ["dioxus/desktop", "dioxus/server", "dioxus/fullstack"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "1", features = ["js"] }
+web-sys = { version = "0.3", features = ["WebSocket", "BinaryType", "MessageEvent", "Location", "Window"] }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
+futures = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
+http = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 argon2 = "0.5"
 rand = "0.8"
 axum-extra = { version = "0.10", features = ["cookie"] }
 time = "0.3"
+dashmap = "6"
+futures = "0.3"
