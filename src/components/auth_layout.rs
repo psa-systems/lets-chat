@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 
-use crate::models::User;
 use crate::routes::Route;
 use crate::server_fns::auth;
 
