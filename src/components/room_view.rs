@@ -49,7 +49,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
-                ChatEvent::NewMessage { message } if message.room_id == parsed_id => {
+                ChatEvent::NewMessage { message, .. } if message.room_id == parsed_id => {
                     messages_version.set(messages_version() + 1);
                 }
                 ChatEvent::MessageDeleted { room_id, .. } if *room_id == parsed_id => {

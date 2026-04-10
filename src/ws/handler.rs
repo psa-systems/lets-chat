@@ -56,21 +56,32 @@ async fn handle_socket(socket: WebSocket, user_id: String) {
 
     let (mut ws_tx, mut ws_rx) = socket.split();
 
-    // Spawn task: forward hub events to the WebSocket
+    // Spawn task: forward hub events to the WebSocket + ping every 30s
     let send_task = tokio::spawn(async move {
+        let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        ping_interval.tick().await; // consume the immediate first tick
         loop {
-            match rx.recv().await {
-                Ok(event) => {
-                    let json = match serde_json::to_string(&event) {
-                        Ok(j) => j,
-                        Err(_) => continue,
-                    };
-                    if ws_tx.send(Message::Text(json.into())).await.is_err() {
+            tokio::select! {
+                result = rx.recv() => {
+                    match result {
+                        Ok(event) => {
+                            let json = match serde_json::to_string(&event) {
+                                Ok(j) => j,
+                                Err(_) => continue,
+                            };
+                            if ws_tx.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+                _ = ping_interval.tick() => {
+                    if ws_tx.send(Message::Ping(vec![].into())).await.is_err() {
                         break;
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
