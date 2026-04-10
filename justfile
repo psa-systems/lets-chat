@@ -46,9 +46,9 @@ build-docker:
 dev:
     @echo "Please use a target-specific recipe: just dev-web, just dev-web-local, or just dev-desktop"
 
-# Start development server (web) via Docker with Traefik (https://{USER}-lets-chat.a8n.run)
+# Start development server (web) via Docker with Traefik (https://{USER}-chat.a8n.run)
 dev-web:
-    @echo "Web: https://{{ env('USER') }}-lets-chat.a8n.run"
+    @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
     @echo ""
     docker compose -f compose.dev.yml up --build
 
