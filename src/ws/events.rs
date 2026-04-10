@@ -8,6 +8,7 @@ use crate::models::Message;
 pub enum ChatEvent {
     NewMessage {
         message: Message,
+        is_dm: bool,
     },
     MessageDeleted {
         message_id: i64,

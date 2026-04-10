@@ -21,7 +21,7 @@ pub fn Sidebar() -> Element {
     let ws = use_context::<WsHandle>();
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            if matches!(event, ChatEvent::NewMessage { .. }) {
+            if matches!(event, ChatEvent::NewMessage { is_dm: true, .. }) {
                 dms_version.set(dms_version() + 1);
             }
         }

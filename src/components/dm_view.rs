@@ -60,7 +60,7 @@ pub fn DmViewPage(user_id: String) -> Element {
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
-                ChatEvent::NewMessage { message } if message.room_id == room_id => {
+                ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
                     messages_version.set(messages_version() + 1);
                 }
                 _ => {}

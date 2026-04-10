@@ -92,6 +92,7 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
             body,
             created_at: now,
         },
+        is_dm: false,
     };
     crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
 
