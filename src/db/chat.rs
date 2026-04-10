@@ -1,6 +1,17 @@
 use sqlx::Row;
 
-use crate::models::{Message, Room};
+use crate::models::Room;
+
+/// Raw message row from the chat DB — contains user_id but no author_name.
+/// The server fn layer resolves the display name from the auth DB.
+#[derive(Debug, Clone)]
+pub struct RawMessage {
+    pub id: i64,
+    pub room_id: i64,
+    pub user_id: String,
+    pub body: String,
+    pub created_at: String,
+}
 
 pub async fn list_rooms(pool: &sqlx::SqlitePool) -> Result<Vec<Room>, sqlx::Error> {
     let rows = sqlx::query("SELECT id, name, topic, created_at FROM rooms ORDER BY name")
@@ -35,9 +46,9 @@ pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Ro
 pub async fn list_messages(
     pool: &sqlx::SqlitePool,
     room_id: i64,
-) -> Result<Vec<Message>, sqlx::Error> {
+) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, author, body, created_at \
+        "SELECT id, room_id, user_id, body, created_at \
          FROM messages WHERE room_id = ? ORDER BY id ASC",
     )
     .bind(room_id)
@@ -46,10 +57,10 @@ pub async fn list_messages(
 
     Ok(rows
         .into_iter()
-        .map(|row| Message {
+        .map(|row| RawMessage {
             id: row.get("id"),
             room_id: row.get("room_id"),
-            author: row.get("author"),
+            user_id: row.get("user_id"),
             body: row.get("body"),
             created_at: row.get("created_at"),
         })
@@ -59,12 +70,12 @@ pub async fn list_messages(
 pub async fn insert_message(
     pool: &sqlx::SqlitePool,
     room_id: i64,
-    author: &str,
+    user_id: &str,
     body: &str,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query("INSERT INTO messages (room_id, author, body) VALUES (?, ?, ?)")
+    let result = sqlx::query("INSERT INTO messages (room_id, user_id, body) VALUES (?, ?, ?)")
         .bind(room_id)
-        .bind(author)
+        .bind(user_id)
         .bind(body)
         .execute(pool)
         .await?;
