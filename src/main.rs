@@ -6,6 +6,7 @@ mod db;
 mod models;
 mod routes;
 mod server_fns;
+mod ws;
 
 use routes::Route;
 
