@@ -14,6 +14,7 @@ services:
       - ./assets:/app/assets
       - ./Cargo.toml:/app/Cargo.toml
       - ./Cargo.lock:/app/Cargo.lock
+      - ./migrations:/app/migrations
       - cargo_target:/app/target
     networks:
       - default
