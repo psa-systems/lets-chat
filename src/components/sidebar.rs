@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::routes::Route;
-use crate::server_fns::auth::logout;
+use crate::server_fns::auth::{clear_session_cookie, logout};
 use crate::server_fns::chat::list_rooms;
 use crate::server_fns::dm::list_my_dms;
 use crate::ws::events::ChatEvent;
@@ -123,6 +123,7 @@ pub fn Sidebar() -> Element {
                     let nav = nav.clone();
                     spawn(async move {
                         let _ = logout().await;
+                        clear_session_cookie();
                         nav.push(Route::Login {});
                     });
                 },
