@@ -55,33 +55,25 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
         return Err(ServerFnError::new("message body cannot be empty"));
     }
 
-    // Extract session token from cookie
-    let headers: http::HeaderMap = extract().await?;
-    let cookie_header = headers
-        .get(http::header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+    let user = crate::server_fns::helpers::require_auth().await?;
 
-    let session_id = cookie_header
-        .split(';')
-        .find_map(|part| {
-            let part = part.trim();
-            part.strip_prefix("session=").and_then(|v| {
-                let v = v.trim();
-                if v.is_empty() { None } else { Some(v.to_string()) }
-            })
-        })
-        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
-
-    let auth_pool = crate::db::get_auth_pool().await;
-    let record = crate::db::auth::get_user_by_session(auth_pool, &session_id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("Session expired or invalid"))?;
+    // Check mute status
+    if user.is_muted {
+        if let Some(ref until) = user.muted_until {
+            let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+            if until.as_str() > now.as_str() {
+                return Err(ServerFnError::new(format!(
+                    "You are muted until {}",
+                    until
+                )));
+            }
+        } else {
+            return Err(ServerFnError::new("You are muted"));
+        }
+    }
 
     let chat_pool = crate::db::get_chat_pool().await;
-    crate::db::chat::insert_message(chat_pool, room_id, &record.id, &body)
+    crate::db::chat::insert_message(chat_pool, room_id, &user.id, &body)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
