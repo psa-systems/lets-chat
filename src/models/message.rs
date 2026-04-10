@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 pub struct Message {
     pub id: i64,
     pub room_id: i64,
-    pub author: String,
+    pub user_id: String,
+    pub author_name: String,
     pub body: String,
     pub created_at: String,
 }
