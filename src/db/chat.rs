@@ -81,3 +81,39 @@ pub async fn insert_message(
         .await?;
     Ok(result.last_insert_rowid())
 }
+
+pub async fn create_room(
+    pool: &sqlx::SqlitePool,
+    name: &str,
+    topic: Option<&str>,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query("INSERT INTO rooms (name, topic) VALUES (?, ?)")
+        .bind(name)
+        .bind(topic)
+        .execute(pool)
+        .await?;
+    Ok(result.last_insert_rowid())
+}
+
+pub async fn delete_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    name: &str,
+    topic: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE rooms SET name = ?, topic = ? WHERE id = ?")
+        .bind(name)
+        .bind(topic)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
