@@ -52,6 +52,14 @@ dev-web:
     @echo ""
     docker compose -f compose.dev.yml up --build
 
+# Stop dev-web containers
+dev-web-down:
+    docker compose -f compose.dev.yml down
+
+# Stop dev-web containers and remove volumes (clean rebuild)
+dev-web-clean:
+    docker compose -f compose.dev.yml down -v
+
 # Start development server (web) locally on localhost:8080
 dev-web-local:
     dx serve --platform web
