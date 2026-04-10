@@ -4,6 +4,7 @@ use crate::components::{
     admin::{
         invites::AdminInvitesPage,
         layout::AdminLayout,
+        mod_log::AdminModLogPage,
         rooms::AdminRoomsPage,
         settings::AdminSettingsPage,
         users::AdminUsersPage,
@@ -37,6 +38,8 @@ pub enum Route {
     AdminInvites {},
     #[route("/admin/rooms")]
     AdminRooms {},
+    #[route("/admin/modlog")]
+    AdminModLog {},
 }
 
 #[component]
@@ -77,4 +80,9 @@ fn AdminInvites() -> Element {
 #[component]
 fn AdminRooms() -> Element {
     rsx! { AdminRoomsPage {} }
+}
+
+#[component]
+fn AdminModLog() -> Element {
+    rsx! { AdminModLogPage {} }
 }
