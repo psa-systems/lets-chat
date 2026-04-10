@@ -79,7 +79,7 @@ pub async fn update_settings(settings: SiteSettings) -> Result<(), ServerFnError
 
 #[server]
 pub async fn list_users() -> Result<Vec<User>, ServerFnError> {
-    crate::server_fns::helpers::require_role("admin").await?;
+    crate::server_fns::helpers::require_role("moderator").await?;
 
     let pool = crate::db::get_auth_pool().await;
     let records = crate::db::auth::list_users(pool)
