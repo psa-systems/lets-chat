@@ -209,22 +209,5 @@ fn clear_session_cookie() -> Result<(), ServerFnError> {
 
 #[cfg(feature = "server")]
 async fn get_session_from_cookie() -> Result<Option<String>, ServerFnError> {
-    let headers: http::HeaderMap = extract().await?;
-    let cookie_header = match headers.get(http::header::COOKIE) {
-        Some(val) => val.to_str().unwrap_or("").to_string(),
-        None => return Ok(None),
-    };
-
-    // Parse "session=xxx" from cookie header
-    for part in cookie_header.split(';') {
-        let part = part.trim();
-        if let Some(value) = part.strip_prefix("session=") {
-            let value = value.trim();
-            if !value.is_empty() {
-                return Ok(Some(value.to_string()));
-            }
-        }
-    }
-
-    Ok(None)
+    crate::server_fns::helpers::get_session_id().await
 }
