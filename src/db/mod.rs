@@ -3,6 +3,8 @@ pub mod auth;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod chat;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod moderation;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod settings;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -46,6 +48,12 @@ async fn init_chat_pool() -> SqlitePool {
         .execute(&pool)
         .await
         .expect("Failed to run chat DB migration");
+
+    let migration_002 = include_str!("../../migrations/chat/0002_moderation.sql");
+    sqlx::raw_sql(migration_002)
+        .execute(&pool)
+        .await
+        .expect("Failed to run chat DB migration 002");
 
     pool
 }

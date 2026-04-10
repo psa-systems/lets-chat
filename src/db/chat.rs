@@ -49,7 +49,7 @@ pub async fn list_messages(
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at \
-         FROM messages WHERE room_id = ? ORDER BY id ASC",
+         FROM messages WHERE room_id = ? AND deleted_at IS NULL ORDER BY id ASC",
     )
     .bind(room_id)
     .fetch_all(pool)

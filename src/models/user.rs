@@ -28,5 +28,8 @@ pub struct User {
     pub role: String,
     pub is_muted: bool,
     pub muted_until: Option<String>,
+    pub is_banned: bool,
+    pub ban_reason: Option<String>,
+    pub banned_until: Option<String>,
     pub created_at: String,
 }
