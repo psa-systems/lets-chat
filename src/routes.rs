@@ -10,6 +10,7 @@ use crate::components::{
         users::AdminUsersPage,
     },
     auth_layout::AuthLayout,
+    dm_view::DmViewPage,
     layout::Layout,
     login::LoginPage,
     register::RegisterPage,
@@ -29,6 +30,8 @@ pub enum Route {
     Home {},
     #[route("/room/:room_id")]
     Room { room_id: String },
+    #[route("/dm/:user_id")]
+    Dm { user_id: String },
     #[layout(AdminLayout)]
     #[route("/admin")]
     AdminSettings {},
@@ -60,6 +63,11 @@ fn Home() -> Element {
 #[component]
 fn Room(room_id: String) -> Element {
     rsx! { RoomViewPage { room_id } }
+}
+
+#[component]
+fn Dm(user_id: String) -> Element {
+    rsx! { DmViewPage { user_id } }
 }
 
 #[component]
