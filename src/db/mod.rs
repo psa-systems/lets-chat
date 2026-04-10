@@ -1,4 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
+pub mod auth;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod chat;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -8,6 +10,9 @@ use std::sync::OnceLock;
 
 #[cfg(not(target_arch = "wasm32"))]
 static CHAT_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
+
+#[cfg(not(target_arch = "wasm32"))]
+static AUTH_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
 
 #[cfg(not(target_arch = "wasm32"))]
 static DATA_DIR: OnceLock<String> = OnceLock::new();
@@ -41,6 +46,29 @@ async fn init_chat_pool() -> SqlitePool {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+async fn init_auth_pool() -> SqlitePool {
+    let dir = data_dir();
+    std::fs::create_dir_all(dir).expect("Failed to create data directory");
+
+    let pool = SqlitePool::connect(&format!("sqlite:{}/auth.db?mode=rwc", dir))
+        .await
+        .expect("Failed to connect to auth DB");
+
+    let migration_sql = include_str!("../../migrations/auth/0001_create_tables.sql");
+    sqlx::raw_sql(migration_sql)
+        .execute(&pool)
+        .await
+        .expect("Failed to run auth DB migration");
+
+    pool
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn get_chat_pool() -> &'static SqlitePool {
     CHAT_POOL.get_or_init(init_chat_pool).await
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_auth_pool() -> &'static SqlitePool {
+    AUTH_POOL.get_or_init(init_auth_pool).await
 }
