@@ -148,7 +148,7 @@ async fn connect_ws(
         let close_tx = std::cell::RefCell::new(Some(close_tx));
 
         let onmessage = {
-            let latest = latest_event;
+            let mut latest = latest_event;
             Closure::wrap(Box::new(move |e: MessageEvent| {
                 if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
                     let s: String = text.into();

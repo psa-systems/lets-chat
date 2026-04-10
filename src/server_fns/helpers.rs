@@ -58,7 +58,7 @@ pub fn role_level(role: &str) -> u8 {
 
 /// Extract session ID from cookie header. Returns None if no session cookie.
 pub async fn get_session_id() -> Result<Option<String>, ServerFnError> {
-    let headers: http::HeaderMap = extract().await?;
+    let headers: http::HeaderMap = dioxus_fullstack::FullstackContext::extract().await?;
     let cookie_header = match headers.get(http::header::COOKIE) {
         Some(val) => val.to_str().unwrap_or("").to_string(),
         None => return Ok(None),

@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 
 RUN curl --location --silent --show-error https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
     | tar --extract --gzip --directory /usr/local/cargo/bin
-RUN cargo binstall dioxus-cli@0.7.3 --no-confirm
+RUN cargo binstall dioxus-cli@0.7.5 --no-confirm
 
 RUN rustup target add wasm32-unknown-unknown
 
@@ -17,4 +17,4 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build && rm -rf src
 
 EXPOSE 8080
 
-CMD ["dx", "serve"]
+CMD ["dx", "serve", "--platform", "web", "--addr", "0.0.0.0", "--port", "8080"]
