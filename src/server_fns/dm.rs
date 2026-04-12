@@ -167,6 +167,7 @@ pub async fn send_dm_message(room_id: i64, body: String) -> Result<i64, ServerFn
             author_name,
             body,
             created_at: now,
+            edited_at: None,
         },
         is_dm: true,
     };
