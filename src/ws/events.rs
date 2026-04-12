@@ -10,6 +10,12 @@ pub enum ChatEvent {
         message: Message,
         is_dm: bool,
     },
+    MessageEdited {
+        message_id: i64,
+        room_id: i64,
+        new_body: String,
+        edited_at: String,
+    },
     MessageDeleted {
         message_id: i64,
         room_id: i64,
