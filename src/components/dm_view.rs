@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::components::use_websocket::WsHandle;
 use crate::models::User;
-use crate::server_fns::chat::list_messages;
+use crate::server_fns::chat::{edit_message, list_messages};
 use crate::server_fns::dm::{get_or_create_dm, send_dm_message};
 use crate::ws::events::ChatEvent;
 
@@ -63,6 +63,9 @@ pub fn DmViewPage(user_id: String) -> Element {
                 ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
                     messages_version.set(messages_version() + 1);
                 }
+                ChatEvent::MessageEdited { room_id: event_room_id, .. } if *event_room_id == room_id => {
+                    messages_version.set(messages_version() + 1);
+                }
                 _ => {}
             }
         }
@@ -70,6 +73,9 @@ pub fn DmViewPage(user_id: String) -> Element {
 
     let mut draft = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
+    let mut editing_msg_id = use_signal(|| Option::<i64>::None);
+    let mut edit_draft = use_signal(String::new);
+    let mut edit_error = use_signal(|| Option::<String>::None);
 
     let message_list = match messages() {
         Some(Ok(list)) => list,
@@ -119,12 +125,81 @@ pub fn DmViewPage(user_id: String) -> Element {
                 }
             } else {
                 for msg in message_list.iter() {
-                    div { key: "{msg.id}", class: "flex flex-col",
-                        div { class: "flex items-baseline gap-2",
-                            span { class: "font-semibold text-gray-800", "{msg.author_name}" }
-                            span { class: "text-xs text-gray-400", "{msg.created_at}" }
+                    {
+                        let msg_id = msg.id;
+                        let msg_user_id = msg.user_id.clone();
+                        let msg_body = msg.body.clone();
+                        let is_own = msg_user_id == u.id;
+                        let is_editing = editing_msg_id() == Some(msg_id);
+                        let has_edited = msg.edited_at.is_some();
+                        rsx! {
+                            div { key: "{msg.id}", class: "group flex flex-col",
+                                div { class: "flex items-baseline gap-2",
+                                    span { class: "font-semibold text-gray-800", "{msg.author_name}" }
+                                    span { class: "text-xs text-gray-400", "{msg.created_at}" }
+                                    if has_edited {
+                                        span { class: "text-xs text-gray-400 italic", "(edited)" }
+                                    }
+                                    if is_own && !is_editing {
+                                        button {
+                                            class: "opacity-0 group-hover:opacity-100 text-xs text-blue-500 hover:text-blue-700 ml-2 transition-opacity",
+                                            onclick: move |_| {
+                                                editing_msg_id.set(Some(msg_id));
+                                                edit_draft.set(msg_body.clone());
+                                                edit_error.set(None);
+                                            },
+                                            "edit"
+                                        }
+                                    }
+                                }
+                                if is_editing {
+                                    div { class: "mt-1 flex flex-col gap-1",
+                                        if let Some(err) = edit_error() {
+                                            div { class: "text-xs text-red-600", "{err}" }
+                                        }
+                                        textarea {
+                                            class: "w-full px-3 py-1.5 border border-blue-400 rounded text-sm resize-none",
+                                            rows: "3",
+                                            value: "{edit_draft}",
+                                            oninput: move |e| edit_draft.set(e.value()),
+                                        }
+                                        div { class: "flex gap-2",
+                                            button {
+                                                class: "px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700",
+                                                onclick: move |_| {
+                                                    let body = edit_draft();
+                                                    spawn(async move {
+                                                        match edit_message(msg_id, body).await {
+                                                            Ok(()) => {
+                                                                editing_msg_id.set(None);
+                                                                edit_draft.set(String::new());
+                                                                edit_error.set(None);
+                                                                messages_version.set(messages_version() + 1);
+                                                            }
+                                                            Err(e) => {
+                                                                edit_error.set(Some(e.to_string()));
+                                                            }
+                                                        }
+                                                    });
+                                                },
+                                                "Save"
+                                            }
+                                            button {
+                                                class: "px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200",
+                                                onclick: move |_| {
+                                                    editing_msg_id.set(None);
+                                                    edit_draft.set(String::new());
+                                                    edit_error.set(None);
+                                                },
+                                                "Cancel"
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
+                                }
+                            }
                         }
-                        p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
                     }
                 }
             }
