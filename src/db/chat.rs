@@ -11,6 +11,7 @@ pub struct RawMessage {
     pub user_id: String,
     pub body: String,
     pub created_at: String,
+    pub edited_at: Option<String>,
 }
 
 pub async fn list_rooms(pool: &sqlx::SqlitePool) -> Result<Vec<Room>, sqlx::Error> {
@@ -50,7 +51,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at \
+        "SELECT id, room_id, user_id, body, created_at, edited_at \
          FROM messages WHERE room_id = ? AND deleted_at IS NULL ORDER BY id ASC",
     )
     .bind(room_id)
@@ -65,8 +66,48 @@ pub async fn list_messages(
             user_id: row.get("user_id"),
             body: row.get("body"),
             created_at: row.get("created_at"),
+            edited_at: row.get("edited_at"),
         })
         .collect())
+}
+
+/// Fetch a single message by ID. Returns None if soft-deleted.
+pub async fn get_message(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+) -> Result<Option<RawMessage>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at \
+         FROM messages WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| RawMessage {
+        id: row.get("id"),
+        room_id: row.get("room_id"),
+        user_id: row.get("user_id"),
+        body: row.get("body"),
+        created_at: row.get("created_at"),
+        edited_at: row.get("edited_at"),
+    }))
+}
+
+/// Update a message's body and set edited_at to now. Returns the edited_at timestamp.
+pub async fn update_message_body(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    new_body: &str,
+) -> Result<String, sqlx::Error> {
+    let edited_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    sqlx::query("UPDATE messages SET body = ?, edited_at = ? WHERE id = ?")
+        .bind(new_body)
+        .bind(&edited_at)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(edited_at)
 }
 
 pub async fn insert_message(
