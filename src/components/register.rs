@@ -51,7 +51,7 @@ pub fn RegisterPage() -> Element {
     // returns — avoids the Dioxus "RefCell already borrowed" panic.
     let do_register = move || {
         spawn(async move {
-            if loading() {
+            if loading() || !hydrated() {
                 return;
             }
             let u = read_input_value("username");
@@ -77,6 +77,20 @@ pub fn RegisterPage() -> Element {
                 }
             }
         });
+    };
+
+    let is_disabled = loading() || !hydrated();
+    let button_class = if is_disabled {
+        "w-full bg-blue-400 text-white py-2 rounded opacity-50 cursor-not-allowed"
+    } else {
+        "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+    };
+    let button_label = if loading() {
+        "Creating account..."
+    } else if !hydrated() {
+        "Loading, please wait…"
+    } else {
+        "Register"
     };
 
     rsx! {
@@ -147,17 +161,11 @@ pub fn RegisterPage() -> Element {
                     }
 
                     button {
-                        class: "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed",
+                        class: button_class,
                         r#type: "button",
-                        disabled: loading() || !hydrated(),
+                        disabled: is_disabled,
                         onclick: move |_| do_register(),
-                        if loading() {
-                            "Creating account..."
-                        } else if !hydrated() {
-                            "Loading, please wait…"
-                        } else {
-                            "Register"
-                        }
+                        "{button_label}"
                     }
                 }
 
