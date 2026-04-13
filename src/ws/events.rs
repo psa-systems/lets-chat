@@ -29,6 +29,14 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    RoomMemberAdded {
+        room_id: i64,
+        user_id: String,
+    },
+    RoomMemberRemoved {
+        room_id: i64,
+        user_id: String,
+    },
     UserMuted {
         user_id: String,
         muted_until: Option<String>,
