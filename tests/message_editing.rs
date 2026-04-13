@@ -17,6 +17,9 @@ async fn setup_pool() -> SqlitePool {
     let m4 = include_str!("../migrations/chat/0004_message_editing.sql");
     sqlx::raw_sql(m4).execute(&pool).await.expect("migration 4");
 
+    let m5 = include_str!("../migrations/chat/0005_private_rooms.sql");
+    sqlx::raw_sql(m5).execute(&pool).await.expect("migration 5");
+
     pool
 }
 
@@ -24,7 +27,7 @@ async fn setup_pool() -> SqlitePool {
 async fn test_edit_message_updates_body_and_sets_edited_at() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-edit", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-edit", None, "public", None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "original body")
@@ -58,7 +61,7 @@ async fn test_edit_message_updates_body_and_sets_edited_at() {
 async fn test_get_message_returns_none_for_soft_deleted() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-softdelete", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-softdelete", None, "public", None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
@@ -85,7 +88,7 @@ async fn test_get_message_returns_none_for_soft_deleted() {
 async fn test_list_messages_includes_edited_at() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-list-edited", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-list-edited", None, "public", None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "first message")
@@ -118,7 +121,7 @@ async fn test_list_messages_includes_edited_at() {
 async fn test_soft_deleted_messages_not_returned_by_list_messages() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-deleted-list", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-deleted-list", None, "public", None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "will be deleted")
