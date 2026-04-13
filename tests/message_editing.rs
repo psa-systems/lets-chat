@@ -20,6 +20,9 @@ async fn setup_pool() -> SqlitePool {
     let m5 = include_str!("../migrations/chat/0005_private_rooms.sql");
     sqlx::raw_sql(m5).execute(&pool).await.expect("migration 5");
 
+    let m6 = include_str!("../migrations/chat/0006_read_receipts.sql");
+    sqlx::raw_sql(m6).execute(&pool).await.expect("migration 6");
+
     pool
 }
 
