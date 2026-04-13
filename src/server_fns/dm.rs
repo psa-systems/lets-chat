@@ -2,6 +2,18 @@ use dioxus::prelude::*;
 
 use crate::models::{Room, User};
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PeerReadState {
+    pub last_read_message_id: i64,
+    pub read_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DmUnread {
+    pub room_id: i64,
+    pub count: i64,
+}
+
 /// DM room info with the other user's display name.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DmConversation {
@@ -175,4 +187,117 @@ pub async fn send_dm_message(room_id: i64, body: String) -> Result<i64, ServerFn
     crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
 
     Ok(msg_id)
+}
+
+#[server]
+pub async fn mark_dm_read(room_id: i64, message_id: i64) -> Result<(), ServerFnError> {
+    let me = crate::server_fns::helpers::require_auth().await?;
+
+    let chat_pool = crate::db::get_chat_pool().await;
+    let room = crate::db::chat::get_room(chat_pool, room_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Room not found"))?;
+    if room.room_type != "dm" {
+        return Err(ServerFnError::new("Not a DM"));
+    }
+
+    // Verify the message belongs to this room (prevents smuggling a stranger's id)
+    let msg = crate::db::chat::get_message(chat_pool, message_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Message not found"))?;
+    if msg.room_id != room_id {
+        return Err(ServerFnError::new("Message not in this room"));
+    }
+
+    let is_member = crate::db::chat::is_room_member(chat_pool, room_id, &me.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    if !is_member {
+        return Err(ServerFnError::new("Not a member of this DM"));
+    }
+
+    let read_at = crate::db::chat::upsert_dm_read(chat_pool, &me.id, room_id, message_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Symmetric-consent broadcast: only if both users have receipts enabled.
+    let peer_id: Option<String> = sqlx::query_scalar(
+        "SELECT user_id FROM room_members WHERE room_id = ? AND user_id != ? LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(&me.id)
+    .fetch_optional(chat_pool)
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let auth_pool = crate::db::get_auth_pool().await;
+    if me.read_receipts_enabled {
+        if let Some(peer_id) = peer_id {
+            if let Ok(Some(peer)) = crate::db::auth::find_user_by_id(auth_pool, &peer_id).await {
+                if peer.read_receipts_enabled {
+                    let event = crate::ws::events::ChatEvent::DmRead {
+                        room_id,
+                        user_id: me.id.clone(),
+                        last_read_message_id: message_id,
+                        read_at,
+                    };
+                    crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn get_dm_peer_read_state(room_id: i64) -> Result<Option<PeerReadState>, ServerFnError> {
+    let me = crate::server_fns::helpers::require_auth().await?;
+    if !me.read_receipts_enabled {
+        return Ok(None);
+    }
+
+    let chat_pool = crate::db::get_chat_pool().await;
+    let auth_pool = crate::db::get_auth_pool().await;
+
+    let peer_id: Option<String> = sqlx::query_scalar(
+        "SELECT user_id FROM room_members WHERE room_id = ? AND user_id != ? LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(&me.id)
+    .fetch_optional(chat_pool)
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let Some(peer_id) = peer_id else { return Ok(None) };
+
+    let peer = crate::db::auth::find_user_by_id(auth_pool, &peer_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    if peer.map(|p| !p.read_receipts_enabled).unwrap_or(true) {
+        return Ok(None);
+    }
+
+    let state = crate::db::chat::get_dm_read_state(chat_pool, &peer_id, room_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(state.map(|s| PeerReadState {
+        last_read_message_id: s.last_read_message_id,
+        read_at: s.updated_at,
+    }))
+}
+
+#[server]
+pub async fn list_dm_unread_counts_fn() -> Result<Vec<DmUnread>, ServerFnError> {
+    let me = crate::server_fns::helpers::require_auth().await?;
+    let chat_pool = crate::db::get_chat_pool().await;
+    let rows = crate::db::chat::list_dm_unread_counts(chat_pool, &me.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|(room_id, count)| DmUnread { room_id, count })
+        .collect())
 }
