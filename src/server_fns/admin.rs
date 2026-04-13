@@ -99,6 +99,7 @@ pub async fn list_users() -> Result<Vec<User>, ServerFnError> {
             ban_reason: r.ban_reason,
             banned_until: r.banned_until,
             created_at: r.created_at,
+            read_receipts_enabled: r.read_receipts_enabled,
         })
         .collect())
 }

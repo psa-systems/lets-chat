@@ -163,6 +163,7 @@ fn user_record_to_user(record: &crate::models::user::UserRecord) -> User {
         ban_reason: record.ban_reason.clone(),
         banned_until: record.banned_until.clone(),
         created_at: record.created_at.clone(),
+        read_receipts_enabled: record.read_receipts_enabled,
     }
 }
 
@@ -190,6 +191,15 @@ pub fn set_session_cookie(token: &str) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     let _ = token;
+}
+
+#[server]
+pub async fn set_read_receipts_enabled(enabled: bool) -> Result<(), ServerFnError> {
+    let me = crate::server_fns::helpers::require_auth().await?;
+    let pool = crate::db::get_auth_pool().await;
+    crate::db::auth::set_read_receipts_enabled(pool, &me.id, enabled)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 /// Clear the session cookie in the browser.

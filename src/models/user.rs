@@ -17,6 +17,7 @@ pub struct UserRecord {
     pub mute_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub read_receipts_enabled: bool,
 }
 
 /// Public user info safe to send to the client.
@@ -32,4 +33,5 @@ pub struct User {
     pub ban_reason: Option<String>,
     pub banned_until: Option<String>,
     pub created_at: String,
+    pub read_receipts_enabled: bool,
 }

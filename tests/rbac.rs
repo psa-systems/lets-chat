@@ -10,6 +10,8 @@ async fn setup_pool() -> SqlitePool {
         .expect("Failed to create in-memory pool");
     let migration = include_str!("../migrations/auth/0001_create_tables.sql");
     sqlx::raw_sql(migration).execute(&pool).await.expect("Migration failed");
+    let migration2 = include_str!("../migrations/auth/0002_read_receipts.sql");
+    sqlx::raw_sql(migration2).execute(&pool).await.expect("Migration 2 failed");
     pool
 }
 
