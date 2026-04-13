@@ -193,6 +193,15 @@ pub fn set_session_cookie(token: &str) {
     let _ = token;
 }
 
+#[server]
+pub async fn set_read_receipts_enabled(enabled: bool) -> Result<(), ServerFnError> {
+    let me = crate::server_fns::helpers::require_auth().await?;
+    let pool = crate::db::get_auth_pool().await;
+    crate::db::auth::set_read_receipts_enabled(pool, &me.id, enabled)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 /// Clear the session cookie in the browser.
 pub fn clear_session_cookie() {
     #[cfg(target_arch = "wasm32")]
