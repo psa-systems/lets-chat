@@ -5,8 +5,8 @@ use crate::routes::Route;
 
 #[component]
 pub fn AdminLayout() -> Element {
-    let user: Signal<User> = use_context::<Signal<User>>();
-    let u = user();
+    let user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let u = user().expect("user must be authenticated");
 
     let mut tabs: Vec<(&str, Route)> = vec![];
 

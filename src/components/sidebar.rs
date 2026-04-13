@@ -10,7 +10,14 @@ use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn Sidebar() -> Element {
-    let rooms = use_server_future(list_rooms)?;
+    let user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let my_id = user().map(|u| u.id).unwrap_or_default();
+
+    let mut rooms_version = use_signal(|| 0u32);
+    let rooms = use_server_future(move || {
+        let _v = rooms_version();
+        async move { list_rooms().await }
+    })?;
 
     let mut dms_version = use_signal(|| 0u32);
     let dms = use_server_future(move || {
@@ -21,13 +28,20 @@ pub fn Sidebar() -> Element {
     let ws = use_context::<WsHandle>();
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            if matches!(event, ChatEvent::NewMessage { is_dm: true, .. }) {
-                dms_version.set(dms_version() + 1);
+            match event {
+                ChatEvent::NewMessage { is_dm: true, .. } => {
+                    let v = *dms_version.peek(); dms_version.set(v + 1);
+                }
+                ChatEvent::RoomMemberAdded { user_id, .. } | ChatEvent::RoomMemberRemoved { user_id, .. }
+                    if *user_id == my_id =>
+                {
+                    let v = *rooms_version.peek(); rooms_version.set(v + 1);
+                }
+                _ => {}
             }
         }
     });
 
-    let user: Signal<User> = use_context::<Signal<User>>();
     let nav = use_navigator();
 
     let room_list = match rooms() {
@@ -40,7 +54,7 @@ pub fn Sidebar() -> Element {
         _ => vec![],
     };
 
-    let u = user();
+    let u = user().expect("user must be authenticated");
     let avatar_initial = u
         .display_name
         .as_deref()

@@ -8,8 +8,8 @@ use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn DmViewPage(user_id: String) -> Element {
-    let current_user: Signal<User> = use_context::<Signal<User>>();
-    let u = current_user();
+    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let u = current_user().expect("user must be authenticated");
 
     // Resolve or create the DM room
     let dm_room = use_server_future(move || {

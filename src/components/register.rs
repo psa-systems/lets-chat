@@ -12,27 +12,28 @@ pub fn RegisterPage() -> Element {
     let mut loading = use_signal(|| false);
     let nav = use_navigator();
 
-    let on_submit = move |evt: Event<FormData>| async move {
-        evt.prevent_default();
-        error.set(None);
-
+    let mut do_register = move || {
+        if loading() {
+            return;
+        }
         if password() != confirm_password() {
             error.set(Some("Passwords do not match".to_string()));
             return;
         }
-
+        error.set(None);
         loading.set(true);
-
-        match auth::register(username(), password()).await {
-            Ok(resp) => {
-                auth::set_session_cookie(&resp.session_token);
-                nav.push(Route::Home {});
+        spawn(async move {
+            match auth::register(username(), password()).await {
+                Ok(resp) => {
+                    auth::set_session_cookie(&resp.session_token);
+                    nav.push(Route::Home {});
+                }
+                Err(e) => {
+                    error.set(Some(e.to_string()));
+                    loading.set(false);
+                }
             }
-            Err(e) => {
-                error.set(Some(e.to_string()));
-            }
-        }
-        loading.set(false);
+        });
     };
 
     rsx! {
@@ -47,7 +48,7 @@ pub fn RegisterPage() -> Element {
                     }
                 }
 
-                form { onsubmit: on_submit,
+                div {
                     div { class: "mb-4",
                         label { class: "block text-sm font-medium text-gray-700 mb-1",
                             r#for: "username",
@@ -57,10 +58,13 @@ pub fn RegisterPage() -> Element {
                             class: "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "text",
                             id: "username",
-                            name: "username",
-                            required: true,
                             value: "{username}",
                             oninput: move |evt| username.set(evt.value()),
+                            onkeydown: move |evt| {
+                                if evt.key() == Key::Enter {
+                                    do_register();
+                                }
+                            },
                         }
                     }
 
@@ -73,10 +77,13 @@ pub fn RegisterPage() -> Element {
                             class: "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "password",
                             id: "password",
-                            name: "password",
-                            required: true,
                             value: "{password}",
                             oninput: move |evt| password.set(evt.value()),
+                            onkeydown: move |evt| {
+                                if evt.key() == Key::Enter {
+                                    do_register();
+                                }
+                            },
                         }
                     }
 
@@ -89,17 +96,21 @@ pub fn RegisterPage() -> Element {
                             class: "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "password",
                             id: "confirm_password",
-                            name: "confirm_password",
-                            required: true,
                             value: "{confirm_password}",
                             oninput: move |evt| confirm_password.set(evt.value()),
+                            onkeydown: move |evt| {
+                                if evt.key() == Key::Enter {
+                                    do_register();
+                                }
+                            },
                         }
                     }
 
                     button {
                         class: "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50",
-                        r#type: "submit",
+                        r#type: "button",
                         disabled: loading(),
+                        onclick: move |_| do_register(),
                         if loading() { "Creating account..." } else { "Register" }
                     }
                 }
