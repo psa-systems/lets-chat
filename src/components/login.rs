@@ -50,7 +50,7 @@ pub fn LoginPage() -> Element {
     // returns — avoids the Dioxus "RefCell already borrowed" panic.
     let do_login = move || {
         spawn(async move {
-            if loading() {
+            if loading() || !hydrated() {
                 return;
             }
             let u = read_input_value("username");
@@ -70,6 +70,20 @@ pub fn LoginPage() -> Element {
                 }
             }
         });
+    };
+
+    let is_disabled = loading() || !hydrated();
+    let button_class = if is_disabled {
+        "w-full bg-blue-400 text-white py-2 rounded opacity-50 cursor-not-allowed"
+    } else {
+        "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+    };
+    let button_label = if loading() {
+        "Signing in..."
+    } else if !hydrated() {
+        "Loading, please wait…"
+    } else {
+        "Sign in"
     };
 
     rsx! {
@@ -121,17 +135,11 @@ pub fn LoginPage() -> Element {
                 }
 
                 button {
-                    class: "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed",
+                    class: button_class,
                     r#type: "button",
-                    disabled: loading() || !hydrated(),
+                    disabled: is_disabled,
                     onclick: move |_| do_login(),
-                    if loading() {
-                        "Signing in..."
-                    } else if !hydrated() {
-                        "Loading, please wait…"
-                    } else {
-                        "Sign in"
-                    }
+                    "{button_label}"
                 }
 
                 p { class: "mt-4 text-center text-sm text-gray-500",
