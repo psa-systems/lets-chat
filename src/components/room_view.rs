@@ -183,15 +183,17 @@ pub fn RoomViewPage(room_id: String) -> Element {
                             r#type: "text",
                             placeholder: "Reason for deletion...",
                             value: "{delete_reason}",
-                            oninput: move |e| delete_reason.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { delete_reason.set(v); }); },
                         }
                     }
                     div { class: "flex justify-end gap-2",
                         button {
                             class: "px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200",
                             onclick: move |_| {
-                                confirm_delete_msg.set(None);
-                                delete_reason.set(String::new());
+                                spawn(async move {
+                                    confirm_delete_msg.set(None);
+                                    delete_reason.set(String::new());
+                                });
                             },
                             "Cancel"
                         }
@@ -254,9 +256,12 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                         button {
                                             class: "opacity-0 group-hover:opacity-100 text-xs text-blue-500 hover:text-blue-700 ml-2 transition-opacity",
                                             onclick: move |_| {
-                                                editing_msg_id.set(Some(msg_id));
-                                                edit_draft.set(msg_body.clone());
-                                                edit_error.set(None);
+                                                let body = msg_body.clone();
+                                                spawn(async move {
+                                                    editing_msg_id.set(Some(msg_id));
+                                                    edit_draft.set(body);
+                                                    edit_error.set(None);
+                                                });
                                             },
                                             "edit"
                                         }
@@ -265,7 +270,9 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                         button {
                                             class: "opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 ml-2 transition-opacity",
                                             onclick: move |_| {
-                                                confirm_delete_msg.set(Some(msg_id));
+                                                spawn(async move {
+                                                    confirm_delete_msg.set(Some(msg_id));
+                                                });
                                             },
                                             "delete"
                                         }
@@ -280,7 +287,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                             class: "w-full px-3 py-1.5 border border-blue-400 rounded text-sm resize-none",
                                             rows: "3",
                                             value: "{edit_draft}",
-                                            oninput: move |e| edit_draft.set(e.value()),
+                                            oninput: move |e| { let v = e.value(); spawn(async move { edit_draft.set(v); }); },
                                         }
                                         div { class: "flex gap-2",
                                             button {
@@ -306,9 +313,11 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                             button {
                                                 class: "px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200",
                                                 onclick: move |_| {
-                                                    editing_msg_id.set(None);
-                                                    edit_draft.set(String::new());
-                                                    edit_error.set(None);
+                                                    spawn(async move {
+                                                        editing_msg_id.set(None);
+                                                        edit_draft.set(String::new());
+                                                        edit_error.set(None);
+                                                    });
                                                 },
                                                 "Cancel"
                                             }

@@ -58,7 +58,7 @@ pub fn AdminRoomsPage() -> Element {
                             r#type: "text",
                             placeholder: "general",
                             value: "{new_name}",
-                            oninput: move |e| new_name.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { new_name.set(v); }); },
                         }
                     }
                     div { class: "flex-1 min-w-32",
@@ -68,7 +68,7 @@ pub fn AdminRoomsPage() -> Element {
                             r#type: "text",
                             placeholder: "General discussion",
                             value: "{new_topic}",
-                            oninput: move |e| new_topic.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { new_topic.set(v); }); },
                         }
                     }
                     div {
@@ -186,7 +186,7 @@ pub fn AdminRoomsPage() -> Element {
                                                     class: "w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                                                     r#type: "text",
                                                     value: "{edit_name}",
-                                                    oninput: move |e| edit_name.set(e.value()),
+                                                    oninput: move |e| { let v = e.value(); spawn(async move { edit_name.set(v); }); },
                                                 }
                                             }
                                             td { class: "px-4 py-3 text-gray-500", "{room.room_type}" }
@@ -195,7 +195,7 @@ pub fn AdminRoomsPage() -> Element {
                                                     class: "w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                                                     r#type: "text",
                                                     value: "{edit_topic}",
-                                                    oninput: move |e| edit_topic.set(e.value()),
+                                                    oninput: move |e| { let v = e.value(); spawn(async move { edit_topic.set(v); }); },
                                                 }
                                             }
                                             td { class: "px-4 py-3 text-gray-500", "{created_at}" }
@@ -309,7 +309,7 @@ pub fn AdminRoomsPage() -> Element {
                                                                 r#type: "text",
                                                                 placeholder: "username",
                                                                 value: "{invite_username}",
-                                                                oninput: move |e| invite_username.set(e.value()),
+                                                                oninput: move |e| { let v = e.value(); spawn(async move { invite_username.set(v); }); },
                                                             }
                                                             button {
                                                                 class: "px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700",
