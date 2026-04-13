@@ -23,6 +23,13 @@ impl WsHandle {
             tx.send(&serde_json::to_string(&msg).unwrap());
         }
     }
+
+    pub fn send_typing(&self, room_id: i64) {
+        if let Some(ref tx) = *self.sender.read() {
+            let msg = ClientControl::Typing { room_id };
+            tx.send(&serde_json::to_string(&msg).unwrap());
+        }
+    }
 }
 
 #[derive(Clone)]
