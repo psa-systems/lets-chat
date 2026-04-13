@@ -184,7 +184,22 @@ pub async fn send_dm_message(room_id: i64, body: String) -> Result<i64, ServerFn
         },
         is_dm: true,
     };
-    crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
+    let hub = crate::ws::hub::get_hub();
+    hub.broadcast_to_room(room_id, &event);
+
+    // DM members may not be subscribed to the room yet (e.g. recipient hasn't
+    // opened the thread). Notify each non-sender member directly so their
+    // sidebar gets the new-DM listing and unread badge.
+    let members: Vec<String> = sqlx::query_scalar("SELECT user_id FROM room_members WHERE room_id = ?")
+        .bind(room_id)
+        .fetch_all(chat_pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    for member_id in &members {
+        if member_id != &user.id {
+            hub.broadcast_to_user(member_id, &event);
+        }
+    }
 
     Ok(msg_id)
 }
