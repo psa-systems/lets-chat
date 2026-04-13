@@ -8,7 +8,7 @@ use crate::server_fns::moderation::{
 
 #[component]
 pub fn AdminUsersPage() -> Element {
-    let current_user: Signal<User> = use_context::<Signal<User>>();
+    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
     let mut users_future = use_server_future(list_users)?;
     let mut feedback = use_signal(|| Option::<(bool, String)>::None);
     let mut confirm_delete = use_signal(|| Option::<(String, String)>::None);
@@ -30,7 +30,7 @@ pub fn AdminUsersPage() -> Element {
         }
     };
 
-    let cu = current_user();
+    let cu = current_user().expect("user must be authenticated");
     let is_admin = cu.role == "admin";
 
     rsx! {
@@ -287,7 +287,7 @@ fn render_mod_modal(
                             r#type: "text",
                             placeholder: "Reason for action...",
                             value: "{reason}",
-                            oninput: move |e| reason.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { reason.set(v); }); },
                         }
                     }
                     if show_duration {
@@ -296,7 +296,7 @@ fn render_mod_modal(
                             select {
                                 class: "w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                                 value: "{duration}",
-                                oninput: move |e| duration.set(e.value()),
+                                oninput: move |e| { let v = e.value(); spawn(async move { duration.set(v); }); },
                                 option { value: "1", "1 hour" }
                                 option { value: "24", "24 hours" }
                                 option { value: "168", "7 days" }

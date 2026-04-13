@@ -14,26 +14,15 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         .await
         .expect("chat pool");
     let chat_m1 = include_str!("../migrations/chat/0001_create_tables.sql");
-    sqlx::raw_sql(chat_m1)
-        .execute(&chat_pool)
-        .await
-        .expect("chat migration 1");
+    sqlx::raw_sql(chat_m1).execute(&chat_pool).await.expect("chat migration 1");
     let chat_m2 = include_str!("../migrations/chat/0002_moderation.sql");
-    sqlx::raw_sql(chat_m2)
-        .execute(&chat_pool)
-        .await
-        .expect("chat migration 2");
+    sqlx::raw_sql(chat_m2).execute(&chat_pool).await.expect("chat migration 2");
     let chat_m3 = include_str!("../migrations/chat/0003_dms.sql");
-    sqlx::raw_sql(chat_m3)
-        .execute(&chat_pool)
-        .await
-        .expect("chat migration 3");
-
+    sqlx::raw_sql(chat_m3).execute(&chat_pool).await.expect("chat migration 3");
     let chat_m4 = include_str!("../migrations/chat/0004_message_editing.sql");
-    sqlx::raw_sql(chat_m4)
-        .execute(&chat_pool)
-        .await
-        .expect("chat migration 4");
+    sqlx::raw_sql(chat_m4).execute(&chat_pool).await.expect("chat migration 4");
+    let chat_m5 = include_str!("../migrations/chat/0005_private_rooms.sql");
+    sqlx::raw_sql(chat_m5).execute(&chat_pool).await.expect("chat migration 5");
 
     (auth_pool, chat_pool)
 }
@@ -42,8 +31,10 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
 async fn test_list_rooms_excludes_dm_rooms() {
     let (_, chat_pool) = setup_pools().await;
 
-    // Seeded rooms are public
-    let rooms = lets_chat::db::chat::list_rooms(&chat_pool).await.unwrap();
+    // Seeded rooms are public — admin sees all
+    let rooms = lets_chat::db::chat::list_rooms(&chat_pool, "admin-user", true)
+        .await
+        .unwrap();
     assert_eq!(rooms.len(), 2);
     assert!(rooms.iter().all(|r| r.room_type == "public"));
 
@@ -53,7 +44,9 @@ async fn test_list_rooms_excludes_dm_rooms() {
         .unwrap();
 
     // list_rooms should still return only 2
-    let rooms = lets_chat::db::chat::list_rooms(&chat_pool).await.unwrap();
+    let rooms = lets_chat::db::chat::list_rooms(&chat_pool, "admin-user", true)
+        .await
+        .unwrap();
     assert_eq!(rooms.len(), 2);
 }
 
