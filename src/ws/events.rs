@@ -33,6 +33,12 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    DmRead {
+        room_id: i64,
+        user_id: String,
+        last_read_message_id: i64,
+        read_at: String,
+    },
     RoomMemberRemoved {
         room_id: i64,
         user_id: String,
