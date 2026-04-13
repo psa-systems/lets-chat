@@ -2,10 +2,39 @@ use dioxus::prelude::*;
 
 use crate::models::{Message, Room};
 
+#[cfg(not(target_arch = "wasm32"))]
+async fn require_room_access(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    is_admin: bool,
+) -> Result<(), ServerFnError> {
+    if is_admin {
+        return Ok(());
+    }
+    let room = crate::db::chat::get_room(pool, room_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Room not found"))?;
+    if room.room_type == "public" {
+        return Ok(());
+    }
+    let member = crate::db::chat::is_room_member(pool, room_id, user_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    if member {
+        Ok(())
+    } else {
+        Err(ServerFnError::new("Access denied"))
+    }
+}
+
 #[server]
 pub async fn list_rooms() -> Result<Vec<Room>, ServerFnError> {
+    let user = crate::server_fns::helpers::require_auth().await?;
+    let is_admin = crate::server_fns::helpers::role_level(&user.role) >= 3;
     let pool = crate::db::get_chat_pool().await;
-    crate::db::chat::list_rooms(pool)
+    crate::db::chat::list_rooms(pool, &user.id, is_admin)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
@@ -22,6 +51,10 @@ pub async fn get_room(room_id: i64) -> Result<Option<Room>, ServerFnError> {
 pub async fn list_messages(room_id: i64) -> Result<Vec<Message>, ServerFnError> {
     let chat_pool = crate::db::get_chat_pool().await;
     let auth_pool = crate::db::get_auth_pool().await;
+
+    let user = crate::server_fns::helpers::require_auth().await?;
+    let is_admin = crate::server_fns::helpers::role_level(&user.role) >= 3;
+    require_room_access(chat_pool, room_id, &user.id, is_admin).await?;
 
     let raw = crate::db::chat::list_messages(chat_pool, room_id)
         .await
@@ -74,6 +107,9 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
     }
 
     let chat_pool = crate::db::get_chat_pool().await;
+    let is_admin = crate::server_fns::helpers::role_level(&user.role) >= 3;
+    require_room_access(chat_pool, room_id, &user.id, is_admin).await?;
+
     let msg_id = crate::db::chat::insert_message(chat_pool, room_id, &user.id, &body)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;

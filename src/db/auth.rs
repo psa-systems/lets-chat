@@ -265,7 +265,7 @@ pub async fn revoke_invite_code(pool: &SqlitePool, code_id: i64) -> Result<(), s
     Ok(())
 }
 
-pub async fn use_invite_code(
+pub async fn redeem_invite_code(
     pool: &SqlitePool,
     code: &str,
     user_id: &str,

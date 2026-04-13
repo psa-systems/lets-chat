@@ -12,10 +12,12 @@ services:
     volumes:
       - ./src:/app/src
       - ./assets:/app/assets
+      - ./tests:/app/tests
       - ./Cargo.toml:/app/Cargo.toml
       - ./Cargo.lock:/app/Cargo.lock
       - ./migrations:/app/migrations
       - cargo_target:/app/target
+      - lets_chat_data:/data
     networks:
       - default
       - network-traefik-public
@@ -30,6 +32,7 @@ services:
 
 volumes:
   cargo_target:
+  lets_chat_data:
 
 networks:
   network-traefik-public:

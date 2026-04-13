@@ -8,8 +8,8 @@ use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn DmViewPage(user_id: String) -> Element {
-    let current_user: Signal<User> = use_context::<Signal<User>>();
-    let u = current_user();
+    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let u = current_user().expect("user must be authenticated");
 
     // Resolve or create the DM room
     let dm_room = use_server_future(move || {
@@ -194,7 +194,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                                             class: "w-full px-3 py-1.5 border border-blue-400 rounded text-sm resize-none",
                                             rows: "3",
                                             value: "{edit_draft}",
-                                            oninput: move |e| edit_draft.set(e.value()),
+                                            oninput: move |e| { let v = e.value(); spawn(async move { edit_draft.set(v); }); },
                                         }
                                         div { class: "flex gap-2",
                                             button {
@@ -261,27 +261,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                 span { class: "text-sm text-yellow-700", "{mute_message}" }
             }
         } else {
-            form {
-                class: "px-6 py-3 border-t border-gray-200 bg-white",
-                onsubmit: move |evt: Event<FormData>| {
-                    evt.prevent_default();
-                    let body = draft();
-                    if body.trim().is_empty() {
-                        return;
-                    }
-                    spawn(async move {
-                        match send_dm_message(room_id, body).await {
-                            Ok(_) => {
-                                draft.set(String::new());
-                                error.set(None);
-                                messages_version.set(messages_version() + 1);
-                            }
-                            Err(e) => {
-                                error.set(Some(e.to_string()));
-                            }
-                        }
-                    });
-                },
+            div { class: "px-6 py-3 border-t border-gray-200 bg-white",
                 if let Some(err) = error() {
                     div { class: "mb-2 text-sm text-red-600", "{err}" }
                 }
@@ -302,10 +282,44 @@ pub fn DmViewPage(user_id: String) -> Element {
                                 }
                             }
                         },
+                        onkeydown: move |evt| {
+                            if evt.key() == Key::Enter {
+                                let body = draft();
+                                if body.trim().is_empty() {
+                                    return;
+                                }
+                                spawn(async move {
+                                    match send_dm_message(room_id, body).await {
+                                        Ok(_) => {
+                                            draft.set(String::new());
+                                            error.set(None);
+                                            messages_version.set(messages_version() + 1);
+                                        }
+                                        Err(e) => error.set(Some(e.to_string())),
+                                    }
+                                });
+                            }
+                        },
                     }
                     button {
                         class: "px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700",
-                        r#type: "submit",
+                        r#type: "button",
+                        onclick: move |_| {
+                            let body = draft();
+                            if body.trim().is_empty() {
+                                return;
+                            }
+                            spawn(async move {
+                                match send_dm_message(room_id, body).await {
+                                    Ok(_) => {
+                                        draft.set(String::new());
+                                        error.set(None);
+                                        messages_version.set(messages_version() + 1);
+                                    }
+                                    Err(e) => error.set(Some(e.to_string())),
+                                }
+                            });
+                        },
                         "Send"
                     }
                 }

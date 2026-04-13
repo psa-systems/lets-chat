@@ -5,7 +5,12 @@
       "Bash(docker compose:*)",
       "Bash(just dev-web:*)",
       "Bash(git -C /home/long/lets-chat log main --oneline)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(cargo check:*)",
+      "Bash(sudo chown:*)",
+      "Bash(dx check:*)",
+      "Bash(cargo test:*)",
+      "Bash(perl:*)"
     ]
   }
 }
