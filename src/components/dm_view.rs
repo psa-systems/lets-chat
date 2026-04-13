@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::server_fns::chat::{edit_message, list_messages};
-use crate::server_fns::dm::{get_or_create_dm, send_dm_message};
+use crate::server_fns::dm::{get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message};
 use crate::ws::events::ChatEvent;
 
 #[component]
@@ -43,6 +43,25 @@ pub fn DmViewPage(user_id: String) -> Element {
         async move { list_messages(room_id).await }
     })?;
 
+    let mut draft = use_signal(String::new);
+    let mut error = use_signal(|| Option::<String>::None);
+    let mut editing_msg_id = use_signal(|| Option::<i64>::None);
+    let mut edit_draft = use_signal(String::new);
+    let mut edit_error = use_signal(|| Option::<String>::None);
+    let mut peer_last_read_id = use_signal(|| Option::<i64>::None);
+    let mut peer_read_at = use_signal(|| Option::<String>::None);
+
+    let peer_state = use_server_future(move || async move {
+        get_dm_peer_read_state(room_id).await
+    })?;
+
+    use_effect(move || {
+        if let Some(Ok(Some(s))) = peer_state() {
+            peer_last_read_id.set(Some(s.last_read_message_id));
+            peer_read_at.set(Some(s.read_at));
+        }
+    });
+
     let ws = use_context::<WsHandle>();
 
     // Subscribe to this DM room's WS events
@@ -66,16 +85,17 @@ pub fn DmViewPage(user_id: String) -> Element {
                 ChatEvent::MessageEdited { room_id: event_room_id, .. } if *event_room_id == room_id => {
                     let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
+                ChatEvent::DmRead { room_id: event_room_id, last_read_message_id, read_at, .. }
+                    if *event_room_id == room_id =>
+                {
+                    peer_last_read_id.set(Some(*last_read_message_id));
+                    peer_read_at.set(Some(read_at.clone()));
+                }
                 _ => {}
             }
         }
     });
 
-    let mut draft = use_signal(String::new);
-    let mut error = use_signal(|| Option::<String>::None);
-    let mut editing_msg_id = use_signal(|| Option::<i64>::None);
-    let mut edit_draft = use_signal(String::new);
-    let mut edit_error = use_signal(|| Option::<String>::None);
     let mut typing_users = use_signal(Vec::<(String, String)>::new);
     let mut last_typing_sent = use_signal(|| 0.0f64);
     let my_user_id = u.id.clone();
@@ -107,6 +127,49 @@ pub fn DmViewPage(user_id: String) -> Element {
                 }
                 _ => {}
             }
+        }
+    });
+
+    let my_id_for_read = u.id.clone();
+    use_effect(move || {
+        let list = match messages() { Some(Ok(l)) => l, _ => return };
+        let latest_peer = list.iter().rev().find(|m| m.user_id != my_id_for_read);
+        let Some(latest) = latest_peer else { return };
+        let latest_id = latest.id;
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let visible = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| {
+                    js_sys::Reflect::get(d.as_ref(), &wasm_bindgen::JsValue::from_str("visibilityState")).ok()
+                })
+                .and_then(|v| v.as_string())
+                .map(|s| s == "visible")
+                .unwrap_or(true);
+            if !visible { return; }
+        }
+
+        spawn(async move {
+            let _ = mark_dm_read(room_id, latest_id).await;
+        });
+    });
+
+    use_effect(move || {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::closure::Closure;
+            use wasm_bindgen::JsCast;
+            let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+            let cb = Closure::<dyn FnMut()>::new(move || {
+                let v = *messages_version.peek();
+                messages_version.set(v + 1);
+            });
+            let _ = document.add_event_listener_with_callback(
+                "visibilitychange",
+                cb.as_ref().unchecked_ref(),
+            );
+            cb.forget();
         }
     });
 
@@ -230,6 +293,22 @@ pub fn DmViewPage(user_id: String) -> Element {
                                     }
                                 } else {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
+                                }
+                                {
+                                    let last_read = peer_last_read_id();
+                                    let show_seen = is_own && last_read.map(|lr| {
+                                        msg_id <= lr &&
+                                        message_list.iter().rev()
+                                            .find(|m| m.user_id == u.id && m.id <= lr)
+                                            .map(|m| m.id == msg_id).unwrap_or(false)
+                                    }).unwrap_or(false);
+                                    if show_seen {
+                                        let read_at = peer_read_at().unwrap_or_default();
+                                        let hhmm = read_at.split(' ').nth(1).map(|t| &t[..5.min(t.len())]).unwrap_or("").to_string();
+                                        rsx! { div { class: "text-xs text-gray-400 mt-0.5", "Seen {hhmm}" } }
+                                    } else {
+                                        rsx! {}
+                                    }
                                 }
                             }
                         }
