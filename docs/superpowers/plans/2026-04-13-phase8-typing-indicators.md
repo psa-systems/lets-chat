@@ -1,6 +1,6 @@
 # Phase 8: Typing Indicators Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Show "Alice is typing…" in real time when another user is composing a message. Purely ephemeral — no DB changes. The feature lives entirely in the WS layer plus two UI components.
 
@@ -28,7 +28,7 @@
 **Files:**
 - Modify: `src/ws/events.rs`
 
-- [ ] **Step 1: Add typing variants to `ChatEvent` and `ClientControl`**
+- [x] **Step 1: Add typing variants to `ChatEvent` and `ClientControl`**
 
 Replace `src/ws/events.rs` in full:
 
@@ -87,7 +87,7 @@ pub enum ClientControl {
 }
 ```
 
-- [ ] **Step 2: Build check**
+- [x] **Step 2: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -95,7 +95,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: compile errors in `handler.rs` for non-exhaustive `ClientControl` match. That is expected — fixed in Task 3.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/ws/events.rs
@@ -109,7 +109,7 @@ git commit -m "feat(ws): add UserTyping, UserStoppedTyping, and Typing control f
 **Files:**
 - Modify: `src/ws/hub.rs`
 
-- [ ] **Step 1: Add `username` to `Connection` and update `connect()`**
+- [x] **Step 1: Add `username` to `Connection` and update `connect()`**
 
 Replace the `Connection` struct and `connect` method:
 
@@ -143,7 +143,7 @@ pub fn connect(&self, user_id: &str, username: &str) -> (ConnId, broadcast::Rece
 }
 ```
 
-- [ ] **Step 2: Add `typing` map to `Hub`**
+- [x] **Step 2: Add `typing` map to `Hub`**
 
 Add the field to the `Hub` struct:
 
@@ -173,7 +173,7 @@ pub fn new() -> Self {
 }
 ```
 
-- [ ] **Step 3: Add `broadcast_to_room_except`**
+- [x] **Step 3: Add `broadcast_to_room_except`**
 
 Add after `broadcast_to_room`:
 
@@ -193,7 +193,7 @@ pub fn broadcast_to_room_except(&self, room_id: i64, event: &ChatEvent, except_c
 }
 ```
 
-- [ ] **Step 4: Add `notify_typing` and `stop_typing`**
+- [x] **Step 4: Add `notify_typing` and `stop_typing`**
 
 Add after `broadcast_to_room_except`:
 
@@ -250,7 +250,7 @@ pub fn stop_typing(&self, room_id: i64, user_id: &str) {
 }
 ```
 
-- [ ] **Step 5: Build check**
+- [x] **Step 5: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -258,7 +258,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: compile errors in `handler.rs` (wrong arity on `hub.connect` call). That is expected — fixed in Task 3.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ws/hub.rs
@@ -272,7 +272,7 @@ git commit -m "feat(ws): add typing state map and notify_typing/stop_typing to h
 **Files:**
 - Modify: `src/ws/handler.rs`
 
-- [ ] **Step 1: Pass `username` through to `handle_socket`**
+- [x] **Step 1: Pass `username` through to `handle_socket`**
 
 In `ws_handler`, change:
 
@@ -303,7 +303,7 @@ And update the `hub.connect` call:
 let (conn_id, mut rx) = hub.connect(&user_id, &username);
 ```
 
-- [ ] **Step 2: Handle `ClientControl::Typing` in the read loop**
+- [x] **Step 2: Handle `ClientControl::Typing` in the read loop**
 
 Add the `Typing` arm to the match in the client read loop:
 
@@ -319,7 +319,7 @@ ClientControl::Typing { room_id } => {
 }
 ```
 
-- [ ] **Step 3: Build check**
+- [x] **Step 3: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -327,7 +327,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: clean compile.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ws/handler.rs
@@ -341,7 +341,7 @@ git commit -m "feat(ws): pass username to hub connect, handle Typing control fra
 **Files:**
 - Modify: `src/components/use_websocket.rs`
 
-- [ ] **Step 1: Add `send_typing` to `WsHandle`**
+- [x] **Step 1: Add `send_typing` to `WsHandle`**
 
 Add after `unsubscribe`:
 
@@ -354,7 +354,7 @@ pub fn send_typing(&self, room_id: i64) {
 }
 ```
 
-- [ ] **Step 2: Build check**
+- [x] **Step 2: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -362,7 +362,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: clean compile.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/use_websocket.rs
@@ -376,7 +376,7 @@ git commit -m "feat(ws): add send_typing to WsHandle"
 **Files:**
 - Modify: `src/components/room_view.rs`
 
-- [ ] **Step 1: Add `typing_users` signal and `last_typing_sent` signal**
+- [x] **Step 1: Add `typing_users` signal and `last_typing_sent` signal**
 
 Add alongside the existing signals near the top of the component:
 
@@ -385,7 +385,7 @@ let mut typing_users = use_signal(Vec::<String>::new);
 let mut last_typing_sent = use_signal(|| 0.0f64);
 ```
 
-- [ ] **Step 2: Add a separate `use_effect` for typing events**
+- [x] **Step 2: Add a separate `use_effect` for typing events**
 
 Add after the existing WS `use_effect` block (the one that handles `NewMessage` / `MessageDeleted` / `MessageEdited`):
 
@@ -431,7 +431,7 @@ use_effect(move || {
 
 > **Note:** The simplest correct implementation stores `(user_id, username)` pairs in `typing_users`. See Step 3 for the cleaner version.
 
-- [ ] **Step 2 (revised): Cleaner approach — store `(user_id, username)` pairs**
+- [x] **Step 2 (revised): Cleaner approach — store `(user_id, username)` pairs**
 
 Replace the previous step with this cleaner signal and effect:
 
@@ -471,7 +471,7 @@ use_effect(move || {
 });
 ```
 
-- [ ] **Step 3: Send `Typing` on composer `oninput`**
+- [x] **Step 3: Send `Typing` on composer `oninput`**
 
 In the composer `oninput` handler, add the typing send after updating `draft`. Use `js_sys::Date::now()` to debounce to at most once per second:
 
@@ -490,7 +490,7 @@ oninput: move |evt| {
 },
 ```
 
-- [ ] **Step 4: Render the typing indicator above the composer**
+- [x] **Step 4: Render the typing indicator above the composer**
 
 Add this block just above the form (or the mute banner), before the `if is_muted` block:
 
@@ -511,7 +511,7 @@ Add this block just above the form (or the mute banner), before the `if is_muted
 }
 ```
 
-- [ ] **Step 5: Build check**
+- [x] **Step 5: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -519,7 +519,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: clean compile.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/room_view.rs
@@ -535,15 +535,15 @@ git commit -m "feat(ui): add typing indicator to room view"
 
 Apply the identical changes from Task 5 to `dm_view.rs`:
 
-- [ ] **Step 1: Add `typing_users` and `last_typing_sent` signals** (same as Task 5 Step 1)
+- [x] **Step 1: Add `typing_users` and `last_typing_sent` signals** (same as Task 5 Step 1)
 
-- [ ] **Step 2: Add typing `use_effect`** — same as Task 5 Step 2, matching on `room_id` (the DM room's resolved ID, which is already `room_id: i64` in scope)
+- [x] **Step 2: Add typing `use_effect`** — same as Task 5 Step 2, matching on `room_id` (the DM room's resolved ID, which is already `room_id: i64` in scope)
 
-- [ ] **Step 3: Add `Typing` send to the composer `oninput`** — same as Task 5 Step 3, using the DM `room_id`
+- [x] **Step 3: Add `Typing` send to the composer `oninput`** — same as Task 5 Step 3, using the DM `room_id`
 
-- [ ] **Step 4: Render typing indicator** — same as Task 5 Step 4
+- [x] **Step 4: Render typing indicator** — same as Task 5 Step 4
 
-- [ ] **Step 5: Build check**
+- [x] **Step 5: Build check**
 
 ```bash
 docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo check 2>&1 | tail -5
@@ -559,7 +559,7 @@ docker run --rm -v /home/long/lets-chat:/app -w /app rust:1.93-slim-trixie cargo
 
 Expected: all tests pass (no new tests for this phase — pure WS, no DB).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/dm_view.rs
@@ -570,15 +570,15 @@ git commit -m "feat(ui): add typing indicator to DM view"
 
 ## Phase 8 complete checklist
 
-- [ ] `ChatEvent` has `UserTyping` and `UserStoppedTyping` variants
-- [ ] `ClientControl` has `Typing` variant
-- [ ] `Connection` stores `username`; `hub.connect()` accepts username
-- [ ] Hub has `typing: DashMap<(i64, String), Instant>`
-- [ ] `notify_typing` broadcasts `UserTyping` on new session, spawns 5s eviction task
-- [ ] `stop_typing` removes entry and broadcasts `UserStoppedTyping`
-- [ ] `broadcast_to_room_except` excludes the sender's own connection
-- [ ] `handler.rs` passes username to `hub.connect()` and handles `ClientControl::Typing`
-- [ ] `WsHandle` has `send_typing(room_id)`
-- [ ] `room_view.rs` sends `Typing` on oninput (debounced 1s), shows typing label
-- [ ] `dm_view.rs` same
-- [ ] Full test suite still passes
+- [x] `ChatEvent` has `UserTyping` and `UserStoppedTyping` variants
+- [x] `ClientControl` has `Typing` variant
+- [x] `Connection` stores `username`; `hub.connect()` accepts username
+- [x] Hub has `typing: DashMap<(i64, String), Instant>`
+- [x] `notify_typing` broadcasts `UserTyping` on new session, spawns 5s eviction task
+- [x] `stop_typing` removes entry and broadcasts `UserStoppedTyping`
+- [x] `broadcast_to_room_except` excludes the sender's own connection
+- [x] `handler.rs` passes username to `hub.connect()` and handles `ClientControl::Typing`
+- [x] `WsHandle` has `send_typing(room_id)`
+- [x] `room_view.rs` sends `Typing` on oninput (debounced 1s), shows typing label
+- [x] `dm_view.rs` same
+- [x] Full test suite still passes
