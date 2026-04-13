@@ -61,7 +61,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "text",
                             id: "username",
                             value: "{username}",
-                            oninput: move |evt| { let v = evt.value(); spawn(async move { username.set(v); }); },
+                            oninput: move |evt| username.set(evt.value()),
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
@@ -80,7 +80,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "password",
                             id: "password",
                             value: "{password}",
-                            oninput: move |evt| { let v = evt.value(); spawn(async move { password.set(v); }); },
+                            oninput: move |evt| password.set(evt.value()),
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
@@ -99,7 +99,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "password",
                             id: "confirm_password",
                             value: "{confirm_password}",
-                            oninput: move |evt| { let v = evt.value(); spawn(async move { confirm_password.set(v); }); },
+                            oninput: move |evt| confirm_password.set(evt.value()),
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
