@@ -48,19 +48,11 @@ pub fn DmViewPage(user_id: String) -> Element {
     let mut editing_msg_id = use_signal(|| Option::<i64>::None);
     let mut edit_draft = use_signal(String::new);
     let mut edit_error = use_signal(|| Option::<String>::None);
-    let mut peer_last_read_id = use_signal(|| Option::<i64>::None);
-    let mut peer_read_at = use_signal(|| Option::<String>::None);
+    let mut ws_peer_read = use_signal(|| Option::<(i64, String)>::None);
 
     let peer_state = use_server_future(move || async move {
         get_dm_peer_read_state(room_id).await
     })?;
-
-    use_effect(move || {
-        if let Some(Ok(Some(s))) = peer_state() {
-            peer_last_read_id.set(Some(s.last_read_message_id));
-            peer_read_at.set(Some(s.read_at));
-        }
-    });
 
     let ws = use_context::<WsHandle>();
 
@@ -89,8 +81,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                 ChatEvent::DmRead { room_id: event_room_id, user_id: event_user_id, last_read_message_id, read_at }
                     if *event_room_id == room_id && *event_user_id != my_id_for_ws =>
                 {
-                    peer_last_read_id.set(Some(*last_read_message_id));
-                    peer_read_at.set(Some(read_at.clone()));
+                    ws_peer_read.set(Some((*last_read_message_id, read_at.clone())));
                 }
                 _ => {}
             }
@@ -296,7 +287,13 @@ pub fn DmViewPage(user_id: String) -> Element {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
                                 }
                                 {
-                                    let last_read = peer_last_read_id();
+                                    let (last_read, read_at_str) = match ws_peer_read() {
+                                        Some((id, at)) => (Some(id), Some(at)),
+                                        None => match peer_state() {
+                                            Some(Ok(Some(s))) => (Some(s.last_read_message_id), Some(s.read_at)),
+                                            _ => (None, None),
+                                        },
+                                    };
                                     let show_seen = is_own && last_read.map(|lr| {
                                         msg_id <= lr &&
                                         message_list.iter().rev()
@@ -304,7 +301,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                                             .map(|m| m.id == msg_id).unwrap_or(false)
                                     }).unwrap_or(false);
                                     if show_seen {
-                                        let read_at = peer_read_at().unwrap_or_default();
+                                        let read_at = read_at_str.unwrap_or_default();
                                         let hhmm = read_at.split(' ').nth(1).map(|t| &t[..5.min(t.len())]).unwrap_or("").to_string();
                                         rsx! { div { class: "text-xs text-gray-400 mt-0.5", "Seen {hhmm}" } }
                                     } else {
