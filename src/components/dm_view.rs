@@ -76,6 +76,39 @@ pub fn DmViewPage(user_id: String) -> Element {
     let mut editing_msg_id = use_signal(|| Option::<i64>::None);
     let mut edit_draft = use_signal(String::new);
     let mut edit_error = use_signal(|| Option::<String>::None);
+    let mut typing_users = use_signal(Vec::<(String, String)>::new);
+    let mut last_typing_sent = use_signal(|| 0.0f64);
+    let my_user_id = u.id.clone();
+
+    // Handle typing indicator events
+    use_effect(move || {
+        if let Some(ref event) = *ws.latest_event.read() {
+            match event {
+                ChatEvent::UserTyping { room_id: event_room_id, user_id, username }
+                    if *event_room_id == room_id && *user_id != my_user_id =>
+                {
+                    let uid = user_id.clone();
+                    let name = username.clone();
+                    typing_users.with_mut(|v| {
+                        if !v.iter().any(|(id, _)| id == &uid) {
+                            v.push((uid, name));
+                        }
+                    });
+                }
+                ChatEvent::UserStoppedTyping { room_id: event_room_id, user_id }
+                    if *event_room_id == room_id =>
+                {
+                    let uid = user_id.clone();
+                    typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
+                }
+                ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
+                    let uid = message.user_id.clone();
+                    typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
+                }
+                _ => {}
+            }
+        }
+    });
 
     let message_list = match messages() {
         Some(Ok(list)) => list,
@@ -205,6 +238,23 @@ pub fn DmViewPage(user_id: String) -> Element {
             }
         }
 
+        // Typing indicator
+        {
+            let typers: Vec<String> = typing_users.read().iter().map(|(_, name)| name.clone()).collect();
+            if !typers.is_empty() {
+                let label = match typers.len() {
+                    1 => format!("{} is typing…", typers[0]),
+                    2 => format!("{} and {} are typing…", typers[0], typers[1]),
+                    _ => "Several people are typing…".to_string(),
+                };
+                rsx! {
+                    div { class: "px-6 py-1 text-xs text-gray-400 italic", "{label}" }
+                }
+            } else {
+                rsx! {}
+            }
+        }
+
         // Composer
         if is_muted {
             div { class: "px-6 py-3 border-t border-gray-200 bg-yellow-50 text-center",
@@ -241,7 +291,17 @@ pub fn DmViewPage(user_id: String) -> Element {
                         r#type: "text",
                         placeholder: "Type a message…",
                         value: "{draft}",
-                        oninput: move |evt| draft.set(evt.value()),
+                        oninput: move |evt| {
+                            draft.set(evt.value());
+                            #[cfg(target_arch = "wasm32")]
+                            {
+                                let now = js_sys::Date::now();
+                                if now - *last_typing_sent.peek() > 1000.0 {
+                                    last_typing_sent.set(now);
+                                    ws.send_typing(room_id);
+                                }
+                            }
+                        },
                     }
                     button {
                         class: "px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700",
