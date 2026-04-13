@@ -4,7 +4,7 @@ Prioritized implementation plan for Phases 7–13. Each phase builds on the prev
 
 ---
 
-## Phase 7 — Message Editing
+## Phase 7 — Message Editing (Done)
 
 **Goal:** Let users correct their own messages after sending. Baseline expectation for any chat app. Unblocks Phase 11 (search must index canonical body).
 
