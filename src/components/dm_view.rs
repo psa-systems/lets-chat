@@ -261,27 +261,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                 span { class: "text-sm text-yellow-700", "{mute_message}" }
             }
         } else {
-            form {
-                class: "px-6 py-3 border-t border-gray-200 bg-white",
-                onsubmit: move |evt: Event<FormData>| {
-                    evt.prevent_default();
-                    let body = draft();
-                    if body.trim().is_empty() {
-                        return;
-                    }
-                    spawn(async move {
-                        match send_dm_message(room_id, body).await {
-                            Ok(_) => {
-                                draft.set(String::new());
-                                error.set(None);
-                                messages_version.set(messages_version() + 1);
-                            }
-                            Err(e) => {
-                                error.set(Some(e.to_string()));
-                            }
-                        }
-                    });
-                },
+            div { class: "px-6 py-3 border-t border-gray-200 bg-white",
                 if let Some(err) = error() {
                     div { class: "mb-2 text-sm text-red-600", "{err}" }
                 }
@@ -302,10 +282,44 @@ pub fn DmViewPage(user_id: String) -> Element {
                                 }
                             }
                         },
+                        onkeydown: move |evt| {
+                            if evt.key() == Key::Enter {
+                                let body = draft();
+                                if body.trim().is_empty() {
+                                    return;
+                                }
+                                spawn(async move {
+                                    match send_dm_message(room_id, body).await {
+                                        Ok(_) => {
+                                            draft.set(String::new());
+                                            error.set(None);
+                                            messages_version.set(messages_version() + 1);
+                                        }
+                                        Err(e) => error.set(Some(e.to_string())),
+                                    }
+                                });
+                            }
+                        },
                     }
                     button {
                         class: "px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700",
-                        r#type: "submit",
+                        r#type: "button",
+                        onclick: move |_| {
+                            let body = draft();
+                            if body.trim().is_empty() {
+                                return;
+                            }
+                            spawn(async move {
+                                match send_dm_message(room_id, body).await {
+                                    Ok(_) => {
+                                        draft.set(String::new());
+                                        error.set(None);
+                                        messages_version.set(messages_version() + 1);
+                                    }
+                                    Err(e) => error.set(Some(e.to_string())),
+                                }
+                            });
+                        },
                         "Send"
                     }
                 }
