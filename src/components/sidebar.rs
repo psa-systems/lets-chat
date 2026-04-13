@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::routes::Route;
-use crate::server_fns::auth::{clear_session_cookie, logout};
+use crate::server_fns::auth::{clear_session_cookie, logout, set_read_receipts_enabled};
 use crate::server_fns::chat::list_rooms;
 use crate::server_fns::dm::{list_dm_unread_counts_fn, list_my_dms};
 use crate::ws::events::ChatEvent;
@@ -70,6 +70,8 @@ pub fn Sidebar() -> Element {
     };
 
     let u = user().expect("user must be authenticated");
+    let mut show_settings = use_signal(|| false);
+    let mut receipts_enabled = use_signal(|| u.read_receipts_enabled);
     let avatar_initial = u
         .display_name
         .as_deref()
@@ -144,6 +146,27 @@ pub fn Sidebar() -> Element {
             }
         }
 
+        // Settings popover
+        if show_settings() {
+            div { class: "px-3 py-2 border-t border-gray-200 bg-gray-50 text-xs",
+                label { class: "flex items-center gap-2 cursor-pointer",
+                    input {
+                        r#type: "checkbox",
+                        checked: receipts_enabled(),
+                        oninput: move |e| {
+                            let new_val = e.checked();
+                            spawn(async move {
+                                if set_read_receipts_enabled(new_val).await.is_ok() {
+                                    receipts_enabled.set(new_val);
+                                }
+                            });
+                        },
+                    }
+                    span { "Send and receive read receipts" }
+                }
+            }
+        }
+
         // User info + logout at the bottom
         div { class: "p-3 border-t border-gray-200 flex items-center gap-2",
             // Avatar circle with initial
@@ -154,6 +177,16 @@ pub fn Sidebar() -> Element {
             div { class: "flex-1 min-w-0",
                 div { class: "text-sm font-medium text-gray-800 truncate", "{display}" }
                 div { class: "text-xs text-gray-400", "{u.role}" }
+            }
+            // Settings (gear) button
+            button {
+                class: "text-xs text-gray-500 hover:text-blue-600 flex-shrink-0",
+                r#type: "button",
+                onclick: move |_| {
+                    let cur = show_settings();
+                    show_settings.set(!cur);
+                },
+                "⚙"
             }
             // Logout button
             button {
