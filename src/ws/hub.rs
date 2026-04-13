@@ -19,6 +19,7 @@ pub fn next_conn_id() -> ConnId {
 /// A connected user's handle.
 struct Connection {
     user_id: String,
+    username: String,
     tx: broadcast::Sender<ChatEvent>,
 }
 
@@ -30,6 +31,8 @@ pub struct Hub {
     rooms: DashMap<i64, HashSet<ConnId>>,
     /// user_id -> set of conn_ids (a user may have multiple tabs)
     user_conns: DashMap<String, HashSet<ConnId>>,
+    /// (room_id, user_id) -> last typing Instant (ephemeral, no DB)
+    typing: DashMap<(i64, String), std::time::Instant>,
 }
 
 impl Hub {
@@ -38,17 +41,19 @@ impl Hub {
             connections: DashMap::new(),
             rooms: DashMap::new(),
             user_conns: DashMap::new(),
+            typing: DashMap::new(),
         }
     }
 
     /// Register a new connection. Returns (conn_id, broadcast::Receiver).
-    pub fn connect(&self, user_id: &str) -> (ConnId, broadcast::Receiver<ChatEvent>) {
+    pub fn connect(&self, user_id: &str, username: &str) -> (ConnId, broadcast::Receiver<ChatEvent>) {
         let id = next_conn_id();
         let (tx, rx) = broadcast::channel(64);
         self.connections.insert(
             id,
             Connection {
                 user_id: user_id.to_string(),
+                username: username.to_string(),
                 tx,
             },
         );
@@ -62,7 +67,6 @@ impl Hub {
     /// Unregister a connection and remove from all rooms.
     pub fn disconnect(&self, conn_id: ConnId) {
         if let Some((_, conn)) = self.connections.remove(&conn_id) {
-            // Remove from user_conns
             if let Some(mut conns) = self.user_conns.get_mut(&conn.user_id) {
                 conns.remove(&conn_id);
                 if conns.is_empty() {
@@ -70,11 +74,9 @@ impl Hub {
                     self.user_conns.remove(&conn.user_id);
                 }
             }
-            // Remove from all rooms
             self.rooms.iter_mut().for_each(|mut entry| {
                 entry.value_mut().remove(&conn_id);
             });
-            // Clean up empty rooms
             self.rooms.retain(|_, conns| !conns.is_empty());
         }
     }
@@ -102,6 +104,20 @@ impl Hub {
         }
     }
 
+    /// Broadcast an event to all room subscribers except one connection (the sender).
+    pub fn broadcast_to_room_except(&self, room_id: i64, event: &ChatEvent, except_conn_id: ConnId) {
+        if let Some(conns) = self.rooms.get(&room_id) {
+            for &conn_id in conns.iter() {
+                if conn_id == except_conn_id {
+                    continue;
+                }
+                if let Some(conn) = self.connections.get(&conn_id) {
+                    let _ = conn.tx.send(event.clone());
+                }
+            }
+        }
+    }
+
     /// Broadcast an event to ALL connected users (for global mod events like ban/mute).
     pub fn broadcast_global(&self, event: &ChatEvent) {
         for entry in self.connections.iter() {
@@ -117,6 +133,54 @@ impl Hub {
                     let _ = conn.tx.send(event.clone());
                 }
             }
+        }
+    }
+
+    /// Record a typing event for a connection. Broadcasts UserTyping to the room
+    /// (excluding the sender) on the first frame of a new typing session, then
+    /// spawns an eviction task that sends UserStoppedTyping after 5s of silence.
+    pub fn notify_typing(&self, conn_id: ConnId, room_id: i64) {
+        let (user_id, username) = match self.connections.get(&conn_id) {
+            Some(c) => (c.user_id.clone(), c.username.clone()),
+            None => return,
+        };
+
+        let key = (room_id, user_id.clone());
+        let is_new = !self.typing.contains_key(&key);
+        self.typing.insert(key.clone(), std::time::Instant::now());
+
+        // Only broadcast on the first frame of a new typing session.
+        if is_new {
+            let event = ChatEvent::UserTyping {
+                room_id,
+                user_id: user_id.clone(),
+                username,
+            };
+            self.broadcast_to_room_except(room_id, &event, conn_id);
+        }
+
+        // Spawn eviction task: after 5s check if the user has gone silent.
+        let hub = get_hub().clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            if let Some(entry) = hub.typing.get(&key) {
+                if entry.elapsed() >= std::time::Duration::from_secs(5) {
+                    drop(entry);
+                    hub.stop_typing(room_id, &user_id);
+                }
+            }
+        });
+    }
+
+    /// Remove a user's typing state for a room and broadcast UserStoppedTyping.
+    pub fn stop_typing(&self, room_id: i64, user_id: &str) {
+        let key = (room_id, user_id.to_string());
+        if self.typing.remove(&key).is_some() {
+            let event = ChatEvent::UserStoppedTyping {
+                room_id,
+                user_id: user_id.to_string(),
+            };
+            self.broadcast_to_room(room_id, &event);
         }
     }
 }
