@@ -57,7 +57,7 @@ Broadcast immediately after the DB write, same pattern as `send_message`.
 
 ---
 
-## Phase 8 — Typing Indicators
+## Phase 8 — Typing Indicators (Done)
 
 **Goal:** Show "Alice is typing…" in real time. Pure WebSocket, zero DB writes — highest UX-to-effort ratio of any remaining feature.
 
