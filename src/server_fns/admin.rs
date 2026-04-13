@@ -178,12 +178,19 @@ pub async fn revoke_invite_code(code_id: i64) -> Result<(), ServerFnError> {
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 
 #[server]
-pub async fn create_room(name: String, topic: String) -> Result<Room, ServerFnError> {
+pub async fn create_room(name: String, topic: String, room_type: String) -> Result<Room, ServerFnError> {
+    use rand::Rng;
+
     crate::server_fns::helpers::require_role("admin").await?;
 
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err(ServerFnError::new("Room name cannot be empty"));
+    }
+
+    let valid_types = ["public", "private"];
+    if !valid_types.contains(&room_type.as_str()) {
+        return Err(ServerFnError::new("Invalid room type"));
     }
 
     let topic_opt: Option<&str> = if topic.trim().is_empty() {
@@ -192,8 +199,20 @@ pub async fn create_room(name: String, topic: String) -> Result<Room, ServerFnEr
         Some(topic.trim())
     };
 
+    let invite_code: Option<String> = if room_type == "private" {
+        Some(
+            rand::thread_rng()
+                .sample_iter(&rand::distributions::Alphanumeric)
+                .take(16)
+                .map(char::from)
+                .collect(),
+        )
+    } else {
+        None
+    };
+
     let pool = crate::db::get_chat_pool().await;
-    let room_id = crate::db::chat::create_room(pool, &name, topic_opt)
+    let room_id = crate::db::chat::create_room(pool, &name, topic_opt, &room_type, invite_code.as_deref())
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
@@ -232,4 +251,48 @@ pub async fn update_room(room_id: i64, name: String, topic: String) -> Result<()
     crate::db::chat::update_room(pool, room_id, &name, topic_opt)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn invite_user_to_room(room_id: i64, username: String) -> Result<(), ServerFnError> {
+    crate::server_fns::helpers::require_role("moderator").await?;
+
+    let auth_pool = crate::db::get_auth_pool().await;
+    let target = crate::db::auth::find_user_by_username(auth_pool, &username)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new(format!("User '{}' not found", username)))?;
+
+    let chat_pool = crate::db::get_chat_pool().await;
+    crate::db::chat::add_room_member(chat_pool, room_id, &target.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let event = crate::ws::events::ChatEvent::RoomMemberAdded {
+        room_id,
+        user_id: target.id.clone(),
+    };
+    crate::ws::hub::get_hub().broadcast_global(&event);
+
+    Ok(())
+}
+
+#[server]
+pub async fn regenerate_invite_code(room_id: i64) -> Result<String, ServerFnError> {
+    use rand::Rng;
+
+    crate::server_fns::helpers::require_role("admin").await?;
+
+    let new_code: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+
+    let pool = crate::db::get_chat_pool().await;
+    crate::db::chat::regenerate_invite_code(pool, room_id, &new_code)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(new_code)
 }
