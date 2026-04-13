@@ -194,7 +194,7 @@ pub fn DmViewPage(user_id: String) -> Element {
                                             class: "w-full px-3 py-1.5 border border-blue-400 rounded text-sm resize-none",
                                             rows: "3",
                                             value: "{edit_draft}",
-                                            oninput: move |e| edit_draft.set(e.value()),
+                                            oninput: move |e| { let v = e.value(); spawn(async move { edit_draft.set(v); }); },
                                         }
                                         div { class: "flex gap-2",
                                             button {

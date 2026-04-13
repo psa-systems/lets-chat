@@ -9,7 +9,8 @@
       "Bash(cargo check:*)",
       "Bash(sudo chown:*)",
       "Bash(dx check:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(perl:*)"
     ]
   }
 }
