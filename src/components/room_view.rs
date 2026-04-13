@@ -9,53 +9,70 @@ use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn RoomViewPage(room_id: String) -> Element {
-    let parsed_id: i64 = match room_id.parse() {
-        Ok(id) => id,
-        Err(_) => {
-            return rsx! {
-                div { class: "flex-1 flex items-center justify-center text-red-500",
-                    "Invalid room id"
-                }
-            };
-        }
-    };
+    // Sync room_id prop into a Signal so use_server_future tracks it reactively.
+    // Without this, navigating between rooms doesn't re-run the futures.
+    let mut room_id_sig = use_signal(|| room_id.parse::<i64>().unwrap_or(0));
+    let new_id = room_id.parse::<i64>().unwrap_or(0);
+    if *room_id_sig.peek() != new_id {
+        room_id_sig.set(new_id);
+    }
 
     let user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
     let u = user().expect("user must be authenticated");
     let is_mod = u.role == "admin" || u.role == "moderator";
+    let my_user_id = u.id.clone();
 
-    let room = use_server_future(move || async move { get_room(parsed_id).await })?;
+    // Futures read room_id_sig() — they re-run automatically when the room changes.
+    let room = use_server_future(move || async move { get_room(room_id_sig()).await })?;
 
     let mut messages_version = use_signal(|| 0u32);
     let messages = use_server_future(move || {
+        let id = room_id_sig();
         let _v = messages_version();
-        async move { list_messages(parsed_id).await }
+        async move { list_messages(id).await }
     })?;
 
     let ws = use_context::<WsHandle>();
 
-    // Subscribe to this room's WS events
+    let mut typing_users = use_signal(Vec::<(String, String)>::new);
+    let mut last_typing_sent = use_signal(|| 0.0f64);
+
+    // Track which room we're subscribed to so we can cleanly unsubscribe when switching.
+    let mut last_subscribed = use_signal(|| 0i64);
     let ws_sub = ws.clone();
+    let ws_unsub = ws.clone();
     use_effect(move || {
-        ws_sub.subscribe(parsed_id);
+        let id = room_id_sig();
+        let prev = *last_subscribed.peek();
+        if prev != 0 && prev != id {
+            ws_unsub.unsubscribe(prev);
+            typing_users.set(Vec::new());
+        }
+        ws_sub.subscribe(id);
+        last_subscribed.set(id);
     });
 
     let ws_drop = ws.clone();
+    let last_sub_for_drop = last_subscribed;
     use_drop(move || {
-        ws_drop.unsubscribe(parsed_id);
+        let id = *last_sub_for_drop.peek();
+        if id != 0 {
+            ws_drop.unsubscribe(id);
+        }
     });
 
-    // When a WS event arrives for this room, bump messages_version to trigger refetch
+    // Bump messages_version when relevant WS events arrive for this room.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
+            let id = room_id_sig();
             match event {
-                ChatEvent::NewMessage { message, .. } if message.room_id == parsed_id => {
+                ChatEvent::NewMessage { message, .. } if message.room_id == id => {
                     let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
-                ChatEvent::MessageDeleted { room_id, .. } if *room_id == parsed_id => {
+                ChatEvent::MessageDeleted { room_id, .. } if *room_id == id => {
                     let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
-                ChatEvent::MessageEdited { room_id, .. } if *room_id == parsed_id => {
+                ChatEvent::MessageEdited { room_id, .. } if *room_id == id => {
                     let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 _ => {}
@@ -63,16 +80,13 @@ pub fn RoomViewPage(room_id: String) -> Element {
         }
     });
 
-    let mut typing_users = use_signal(Vec::<(String, String)>::new);
-    let mut last_typing_sent = use_signal(|| 0.0f64);
-    let my_user_id = u.id.clone();
-
-    // Handle typing indicator events — separate effect to avoid touching messages_version
+    // Handle typing indicator events.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
+            let id = room_id_sig();
             match event {
                 ChatEvent::UserTyping { room_id, user_id, username }
-                    if *room_id == parsed_id && *user_id != my_user_id =>
+                    if *room_id == id && *user_id != my_user_id =>
                 {
                     let uid = user_id.clone();
                     let name = username.clone();
@@ -83,12 +97,12 @@ pub fn RoomViewPage(room_id: String) -> Element {
                     });
                 }
                 ChatEvent::UserStoppedTyping { room_id, user_id }
-                    if *room_id == parsed_id =>
+                    if *room_id == id =>
                 {
                     let uid = user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
                 }
-                ChatEvent::NewMessage { message, .. } if message.room_id == parsed_id => {
+                ChatEvent::NewMessage { message, .. } if message.room_id == id => {
                     let uid = message.user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
                 }
@@ -105,9 +119,17 @@ pub fn RoomViewPage(room_id: String) -> Element {
     let mut edit_draft = use_signal(String::new);
     let mut edit_error = use_signal(|| Option::<String>::None);
 
+    if new_id == 0 {
+        return rsx! {
+            div { class: "flex-1 flex items-center justify-center text-red-500",
+                "Invalid room id"
+            }
+        };
+    }
+
     let room_name = match room() {
         Some(Ok(Some(r))) => r.name,
-        _ => format!("room {}", parsed_id),
+        _ => format!("room {}", room_id_sig()),
     };
     let room_topic = match room() {
         Some(Ok(Some(r))) => r.topic,
@@ -325,27 +347,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                 span { class: "text-sm text-yellow-700", "{mute_message}" }
             }
         } else {
-            form {
-                class: "px-6 py-3 border-t border-gray-200 bg-white",
-                onsubmit: move |evt: Event<FormData>| {
-                    evt.prevent_default();
-                    let body = draft();
-                    if body.trim().is_empty() {
-                        return;
-                    }
-                    spawn(async move {
-                        match send_message(parsed_id, body).await {
-                            Ok(_) => {
-                                draft.set(String::new());
-                                error.set(None);
-                                messages_version.set(messages_version() + 1);
-                            }
-                            Err(e) => {
-                                error.set(Some(e.to_string()));
-                            }
-                        }
-                    });
-                },
+            div { class: "px-6 py-3 border-t border-gray-200 bg-white",
                 if let Some(err) = error() {
                     div { class: "mb-2 text-sm text-red-600", "{err}" }
                 }
@@ -362,14 +364,48 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                 let now = js_sys::Date::now();
                                 if now - *last_typing_sent.peek() > 1000.0 {
                                     last_typing_sent.set(now);
-                                    ws.send_typing(parsed_id);
+                                    ws.send_typing(room_id_sig());
                                 }
+                            }
+                        },
+                        onkeydown: move |evt| {
+                            if evt.key() == Key::Enter {
+                                let body = draft();
+                                if body.trim().is_empty() {
+                                    return;
+                                }
+                                spawn(async move {
+                                    match send_message(room_id_sig(), body).await {
+                                        Ok(_) => {
+                                            draft.set(String::new());
+                                            error.set(None);
+                                            messages_version.set(messages_version() + 1);
+                                        }
+                                        Err(e) => error.set(Some(e.to_string())),
+                                    }
+                                });
                             }
                         },
                     }
                     button {
                         class: "px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700",
-                        r#type: "submit",
+                        r#type: "button",
+                        onclick: move |_| {
+                            let body = draft();
+                            if body.trim().is_empty() {
+                                return;
+                            }
+                            spawn(async move {
+                                match send_message(room_id_sig(), body).await {
+                                    Ok(_) => {
+                                        draft.set(String::new());
+                                        error.set(None);
+                                        messages_version.set(messages_version() + 1);
+                                    }
+                                    Err(e) => error.set(Some(e.to_string())),
+                                }
+                            });
+                        },
                         "Send"
                     }
                 }

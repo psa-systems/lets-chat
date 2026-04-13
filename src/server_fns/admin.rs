@@ -211,10 +211,20 @@ pub async fn create_room(name: String, topic: String, room_type: String) -> Resu
         None
     };
 
+    let caller = crate::server_fns::helpers::require_auth().await?;
     let pool = crate::db::get_chat_pool().await;
     let room_id = crate::db::chat::create_room(pool, &name, topic_opt, &room_type, invite_code.as_deref())
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Auto-add creator as member and broadcast so their sidebar refreshes.
+    crate::db::chat::add_room_member(pool, room_id, &caller.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    crate::ws::hub::get_hub().broadcast_to_user(
+        &caller.id,
+        &crate::ws::events::ChatEvent::RoomMemberAdded { room_id, user_id: caller.id.clone() },
+    );
 
     crate::db::chat::get_room(pool, room_id)
         .await
