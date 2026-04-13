@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker run:*)"
+      "Bash(docker run:*)",
+      "Bash(docker compose:*)",
+      "Bash(just dev-web:*)",
+      "Bash(git -C /home/long/lets-chat log main --oneline)",
+      "Bash(git:*)"
     ]
   }
 }
