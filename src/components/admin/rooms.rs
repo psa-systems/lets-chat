@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::server_fns::admin::{create_room, delete_room, update_room};
+use crate::server_fns::admin::{
+    create_room, delete_room, invite_user_to_room, regenerate_invite_code, update_room,
+};
 use crate::server_fns::chat::list_rooms;
 
 #[component]
@@ -9,11 +11,14 @@ pub fn AdminRoomsPage() -> Element {
     let mut feedback = use_signal(|| Option::<(bool, String)>::None);
     let mut new_name = use_signal(|| String::new());
     let mut new_topic = use_signal(|| String::new());
+    let mut new_room_type = use_signal(|| "public".to_string());
     let mut creating = use_signal(|| false);
     let mut editing = use_signal(|| Option::<i64>::None);
     let mut edit_name = use_signal(|| String::new());
     let mut edit_topic = use_signal(|| String::new());
     let mut confirm_delete = use_signal(|| Option::<(i64, String)>::None);
+    let mut inviting_room = use_signal(|| Option::<i64>::None);
+    let mut invite_username = use_signal(|| String::new());
 
     let read_guard = rooms_future.read();
     let rooms = match &*read_guard {
@@ -45,8 +50,8 @@ pub fn AdminRoomsPage() -> Element {
             // Create room form
             div { class: "bg-white border border-gray-200 rounded-lg p-4",
                 h3 { class: "text-sm font-semibold text-gray-700 mb-3", "Create Room" }
-                div { class: "flex gap-3 items-end",
-                    div { class: "flex-1",
+                div { class: "flex gap-3 items-end flex-wrap",
+                    div { class: "flex-1 min-w-32",
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "Name" }
                         input {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -56,7 +61,7 @@ pub fn AdminRoomsPage() -> Element {
                             oninput: move |e| new_name.set(e.value()),
                         }
                     }
-                    div { class: "flex-1",
+                    div { class: "flex-1 min-w-32",
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "Topic" }
                         input {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -66,12 +71,23 @@ pub fn AdminRoomsPage() -> Element {
                             oninput: move |e| new_topic.set(e.value()),
                         }
                     }
+                    div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "Type" }
+                        select {
+                            class: "border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
+                            value: "{new_room_type}",
+                            onchange: move |e| new_room_type.set(e.value()),
+                            option { value: "public", "Public" }
+                            option { value: "private", "Private" }
+                        }
+                    }
                     button {
                         class: "px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50",
                         disabled: creating(),
                         onclick: move |_| {
                             let name = new_name();
                             let topic = new_topic();
+                            let room_type = new_room_type();
                             if name.trim().is_empty() {
                                 feedback.set(Some((false, "Room name is required.".to_string())));
                                 return;
@@ -79,11 +95,12 @@ pub fn AdminRoomsPage() -> Element {
                             spawn(async move {
                                 creating.set(true);
                                 feedback.set(None);
-                                match create_room(name, topic).await {
+                                match create_room(name, topic, room_type).await {
                                     Ok(room) => {
                                         feedback.set(Some((true, format!("Room '{}' created.", room.name))));
                                         new_name.set(String::new());
                                         new_topic.set(String::new());
+                                        new_room_type.set("public".to_string());
                                         rooms_future.restart();
                                     }
                                     Err(e) => feedback.set(Some((false, format!("Error: {}", e)))),
@@ -139,6 +156,7 @@ pub fn AdminRoomsPage() -> Element {
                     thead {
                         tr { class: "bg-gray-50 text-left",
                             th { class: "px-4 py-3 font-medium text-gray-500", "Name" }
+                            th { class: "px-4 py-3 font-medium text-gray-500", "Type" }
                             th { class: "px-4 py-3 font-medium text-gray-500", "Topic" }
                             th { class: "px-4 py-3 font-medium text-gray-500", "Created" }
                             th { class: "px-4 py-3 font-medium text-gray-500", "Actions" }
@@ -152,6 +170,9 @@ pub fn AdminRoomsPage() -> Element {
                                 let room_topic = room.topic.clone().unwrap_or_default();
                                 let created_at = room.created_at.clone();
                                 let is_editing = editing() == Some(room_id);
+                                let is_private = room.room_type == "private";
+                                let invite_code = room.invite_code.clone();
+                                let is_inviting = inviting_room() == Some(room_id);
 
                                 let name_for_delete = room_name.clone();
                                 let name_for_edit = room_name.clone();
@@ -168,6 +189,7 @@ pub fn AdminRoomsPage() -> Element {
                                                     oninput: move |e| edit_name.set(e.value()),
                                                 }
                                             }
+                                            td { class: "px-4 py-3 text-gray-500", "{room.room_type}" }
                                             td { class: "px-4 py-3",
                                                 input {
                                                     class: "w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -205,28 +227,109 @@ pub fn AdminRoomsPage() -> Element {
                                                 }
                                             }
                                         } else {
-                                            td { class: "px-4 py-3 font-medium text-gray-800", "{room_name}" }
+                                            td { class: "px-4 py-3 font-medium text-gray-800",
+                                                div { "{room_name}" }
+                                                if is_private {
+                                                    if let Some(ref code) = invite_code {
+                                                        div { class: "mt-1 space-y-1",
+                                                            span { class: "text-xs font-mono text-gray-500 bg-gray-100 px-1 rounded",
+                                                                "/invite/{code}"
+                                                            }
+                                                            button {
+                                                                class: "block text-xs text-blue-500 hover:text-blue-700",
+                                                                onclick: move |_| {
+                                                                    spawn(async move {
+                                                                        match regenerate_invite_code(room_id).await {
+                                                                            Ok(new_code) => {
+                                                                                feedback.set(Some((true, format!("New invite link: /invite/{}", new_code))));
+                                                                                rooms_future.restart();
+                                                                            }
+                                                                            Err(e) => feedback.set(Some((false, format!("Error: {}", e)))),
+                                                                        }
+                                                                    });
+                                                                },
+                                                                "Regenerate link"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            td { class: "px-4 py-3",
+                                                span {
+                                                    class: if is_private {
+                                                        "text-xs font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700"
+                                                    } else {
+                                                        "text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700"
+                                                    },
+                                                    if is_private { "private" } else { "public" }
+                                                }
+                                            }
                                             td { class: "px-4 py-3 text-gray-600",
                                                 if room_topic.is_empty() { "-" } else { "{room_topic}" }
                                             }
                                             td { class: "px-4 py-3 text-gray-500", "{created_at}" }
                                             td { class: "px-4 py-3",
-                                                div { class: "flex gap-2",
-                                                    button {
-                                                        class: "text-sm text-blue-600 hover:text-blue-800 font-medium",
-                                                        onclick: move |_| {
-                                                            editing.set(Some(room_id));
-                                                            edit_name.set(name_for_edit.clone());
-                                                            edit_topic.set(topic_for_edit.clone());
-                                                        },
-                                                        "Edit"
+                                                div { class: "flex flex-col gap-1",
+                                                    div { class: "flex gap-2",
+                                                        button {
+                                                            class: "text-sm text-blue-600 hover:text-blue-800 font-medium",
+                                                            onclick: move |_| {
+                                                                editing.set(Some(room_id));
+                                                                edit_name.set(name_for_edit.clone());
+                                                                edit_topic.set(topic_for_edit.clone());
+                                                            },
+                                                            "Edit"
+                                                        }
+                                                        if is_private {
+                                                            button {
+                                                                class: "text-sm text-purple-600 hover:text-purple-800 font-medium",
+                                                                onclick: move |_| {
+                                                                    if inviting_room() == Some(room_id) {
+                                                                        inviting_room.set(None);
+                                                                    } else {
+                                                                        inviting_room.set(Some(room_id));
+                                                                        invite_username.set(String::new());
+                                                                    }
+                                                                },
+                                                                "Invite"
+                                                            }
+                                                        }
+                                                        button {
+                                                            class: "text-sm text-red-600 hover:text-red-800 font-medium",
+                                                            onclick: move |_| {
+                                                                confirm_delete.set(Some((room_id, name_for_delete.clone())));
+                                                            },
+                                                            "Delete"
+                                                        }
                                                     }
-                                                    button {
-                                                        class: "text-sm text-red-600 hover:text-red-800 font-medium",
-                                                        onclick: move |_| {
-                                                            confirm_delete.set(Some((room_id, name_for_delete.clone())));
-                                                        },
-                                                        "Delete"
+                                                    if is_inviting {
+                                                        div { class: "flex gap-1 mt-1",
+                                                            input {
+                                                                class: "border border-gray-300 rounded px-2 py-1 text-sm w-32",
+                                                                r#type: "text",
+                                                                placeholder: "username",
+                                                                value: "{invite_username}",
+                                                                oninput: move |e| invite_username.set(e.value()),
+                                                            }
+                                                            button {
+                                                                class: "px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700",
+                                                                onclick: move |_| {
+                                                                    let username = invite_username();
+                                                                    if username.trim().is_empty() { return; }
+                                                                    spawn(async move {
+                                                                        match invite_user_to_room(room_id, username.clone()).await {
+                                                                            Ok(()) => {
+                                                                                feedback.set(Some((true, format!("Invited {} to room.", username))));
+                                                                                inviting_room.set(None);
+                                                                                invite_username.set(String::new());
+                                                                            }
+                                                                            Err(e) => feedback.set(Some((false, format!("Error: {}", e)))),
+                                                                        }
+                                                                    });
+                                                                },
+                                                                "Add"
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
