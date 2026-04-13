@@ -8,7 +8,7 @@ use crate::server_fns::moderation::{
 
 #[component]
 pub fn AdminUsersPage() -> Element {
-    let current_user: Signal<User> = use_context::<Signal<User>>();
+    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
     let mut users_future = use_server_future(list_users)?;
     let mut feedback = use_signal(|| Option::<(bool, String)>::None);
     let mut confirm_delete = use_signal(|| Option::<(String, String)>::None);
@@ -30,7 +30,7 @@ pub fn AdminUsersPage() -> Element {
         }
     };
 
-    let cu = current_user();
+    let cu = current_user().expect("user must be authenticated");
     let is_admin = cu.role == "admin";
 
     rsx! {

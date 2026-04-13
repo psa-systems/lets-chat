@@ -79,9 +79,9 @@ async fn test_use_invite_code() {
         .await
         .unwrap();
 
-    lets_chat::db::auth::use_invite_code(&pool, "USETEST", &user_id)
+    lets_chat::db::auth::redeem_invite_code(&pool, "USETEST", &user_id)
         .await
-        .expect("use_invite_code should succeed");
+        .expect("redeem_invite_code should succeed");
 
     let invite = lets_chat::db::auth::get_invite_code(&pool, "USETEST")
         .await

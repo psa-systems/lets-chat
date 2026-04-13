@@ -20,8 +20,8 @@ pub fn RoomViewPage(room_id: String) -> Element {
         }
     };
 
-    let user: Signal<User> = use_context::<Signal<User>>();
-    let u = user();
+    let user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let u = user().expect("user must be authenticated");
     let is_mod = u.role == "admin" || u.role == "moderator";
 
     let room = use_server_future(move || async move { get_room(parsed_id).await })?;
