@@ -33,6 +33,17 @@ pub fn LoginPage() -> Element {
     let mut password = use_signal(|| String::new());
     let mut error = use_signal(|| Option::<String>::None);
     let mut loading = use_signal(|| false);
+    // `hydrated` starts false on SSR and on the initial client render so the
+    // button stays disabled until WASM hydration actually finishes. The spawn
+    // below only runs client-side (gated by cfg) and flips it to true on the
+    // next microtask, after listeners are wired.
+    let mut hydrated = use_signal(|| false);
+    #[cfg(target_arch = "wasm32")]
+    use_hook(|| {
+        spawn(async move {
+            hydrated.set(true);
+        });
+    });
     let nav = use_navigator();
 
     // All signal mutations happen inside spawn so they run after the event handler
@@ -110,11 +121,17 @@ pub fn LoginPage() -> Element {
                 }
 
                 button {
-                    class: "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50",
+                    class: "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed",
                     r#type: "button",
-                    disabled: loading(),
+                    disabled: loading() || !hydrated(),
                     onclick: move |_| do_login(),
-                    if loading() { "Signing in..." } else { "Sign in" }
+                    if loading() {
+                        "Signing in..."
+                    } else if !hydrated() {
+                        "Loading, please wait…"
+                    } else {
+                        "Sign in"
+                    }
                 }
 
                 p { class: "mt-4 text-center text-sm text-gray-500",
