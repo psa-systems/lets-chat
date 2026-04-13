@@ -14,36 +14,57 @@ pub struct RawMessage {
     pub edited_at: Option<String>,
 }
 
-pub async fn list_rooms(pool: &sqlx::SqlitePool) -> Result<Vec<Room>, sqlx::Error> {
-    let rows = sqlx::query("SELECT id, name, topic, room_type, created_at FROM rooms WHERE room_type = 'public' ORDER BY name")
-        .fetch_all(pool)
-        .await?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| Room {
-            id: row.get("id"),
-            name: row.get("name"),
-            topic: row.get("topic"),
-            room_type: row.get("room_type"),
-            created_at: row.get("created_at"),
-        })
-        .collect())
-}
-
-pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Room>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, name, topic, room_type, created_at FROM rooms WHERE id = ?")
-        .bind(room_id)
-        .fetch_optional(pool)
-        .await?;
-
-    Ok(row.map(|row| Room {
+fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
+    Room {
         id: row.get("id"),
         name: row.get("name"),
         topic: row.get("topic"),
         room_type: row.get("room_type"),
+        invite_code: row.get("invite_code"),
         created_at: row.get("created_at"),
-    }))
+    }
+}
+
+/// List rooms visible to a user.
+/// Admins see all non-DM rooms. Regular users see public rooms plus private rooms they joined.
+pub async fn list_rooms(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    is_admin: bool,
+) -> Result<Vec<Room>, sqlx::Error> {
+    if is_admin {
+        let rows = sqlx::query(
+            "SELECT id, name, topic, room_type, invite_code, created_at \
+             FROM rooms WHERE room_type != 'dm' ORDER BY name",
+        )
+        .fetch_all(pool)
+        .await?;
+        return Ok(rows.iter().map(map_room).collect());
+    }
+
+    let rows = sqlx::query(
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+         FROM rooms r \
+         LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
+         WHERE r.room_type != 'dm' AND (r.room_type = 'public' OR m.user_id IS NOT NULL) \
+         ORDER BY r.name",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.iter().map(map_room).collect())
+}
+
+pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Room>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, name, topic, room_type, invite_code, created_at FROM rooms WHERE id = ?",
+    )
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.as_ref().map(map_room))
 }
 
 pub async fn list_messages(
@@ -129,12 +150,18 @@ pub async fn create_room(
     pool: &sqlx::SqlitePool,
     name: &str,
     topic: Option<&str>,
+    room_type: &str,
+    invite_code: Option<&str>,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query("INSERT INTO rooms (name, topic, room_type) VALUES (?, ?, 'public')")
-        .bind(name)
-        .bind(topic)
-        .execute(pool)
-        .await?;
+    let result = sqlx::query(
+        "INSERT INTO rooms (name, topic, room_type, invite_code) VALUES (?, ?, ?, ?)",
+    )
+    .bind(name)
+    .bind(topic)
+    .bind(room_type)
+    .bind(invite_code)
+    .execute(pool)
+    .await?;
     Ok(result.last_insert_rowid())
 }
 
@@ -161,6 +188,81 @@ pub async fn update_room(
     Ok(())
 }
 
+/// Check if a user is a member of a room.
+pub async fn is_room_member(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?",
+    )
+    .bind(room_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// Add a user to a room's member list. No-op if already a member (INSERT OR IGNORE).
+pub async fn add_room_member(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
+    )
+    .bind(room_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Remove a user from a room's member list.
+pub async fn remove_room_member(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM room_members WHERE room_id = ? AND user_id = ?")
+        .bind(room_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Find a room by its invite code.
+pub async fn get_room_by_invite(
+    pool: &sqlx::SqlitePool,
+    invite_code: &str,
+) -> Result<Option<Room>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, name, topic, room_type, invite_code, created_at \
+         FROM rooms WHERE invite_code = ?",
+    )
+    .bind(invite_code)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.as_ref().map(map_room))
+}
+
+/// Update the invite code for a room.
+pub async fn regenerate_invite_code(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    new_code: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE rooms SET invite_code = ? WHERE id = ?")
+        .bind(new_code)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Find an existing DM room between two users.
 pub async fn find_dm_room(
     pool: &sqlx::SqlitePool,
@@ -168,7 +270,7 @@ pub async fn find_dm_room(
     user_b: &str,
 ) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.created_at \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ? \
@@ -179,13 +281,7 @@ pub async fn find_dm_room(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| Room {
-        id: row.get("id"),
-        name: row.get("name"),
-        topic: row.get("topic"),
-        room_type: row.get("room_type"),
-        created_at: row.get("created_at"),
-    }))
+    Ok(row.as_ref().map(map_room))
 }
 
 /// Create a DM room between two users.
@@ -226,7 +322,7 @@ pub async fn list_user_dm_rooms(
     user_id: &str,
 ) -> Result<Vec<(Room, String)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.created_at, m2.user_id as other_user \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, m2.user_id as other_user \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id != ? \
@@ -241,13 +337,7 @@ pub async fn list_user_dm_rooms(
     Ok(rows
         .into_iter()
         .map(|row| {
-            let room = Room {
-                id: row.get("id"),
-                name: row.get("name"),
-                topic: row.get("topic"),
-                room_type: row.get("room_type"),
-                created_at: row.get("created_at"),
-            };
+            let room = map_room(&row);
             let other: String = row.get("other_user");
             (room, other)
         })
