@@ -50,13 +50,13 @@ pub fn RoomViewPage(room_id: String) -> Element {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == parsed_id => {
-                    messages_version.set(messages_version() + 1);
+                    let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 ChatEvent::MessageDeleted { room_id, .. } if *room_id == parsed_id => {
-                    messages_version.set(messages_version() + 1);
+                    let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 ChatEvent::MessageEdited { room_id, .. } if *room_id == parsed_id => {
-                    messages_version.set(messages_version() + 1);
+                    let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 _ => {}
             }
