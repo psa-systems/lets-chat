@@ -3,6 +3,30 @@ use dioxus::prelude::*;
 use crate::routes::Route;
 use crate::server_fns::auth;
 
+/// Read an input element's current value directly from the DOM by id.
+///
+/// Controlled inputs rely on `oninput` to sync the DOM value into a Rust signal,
+/// but `oninput` only fires after Dioxus has hydrated the WASM event listeners.
+/// On `/login` and `/register` the page is SSR'd and interactive natively before
+/// hydration completes — a user who types and clicks Submit quickly races the
+/// hydration and the signal stays empty. Reading from the DOM at submit time
+/// recovers the real value regardless of hydration state.
+#[cfg(target_arch = "wasm32")]
+fn read_input_value(id: &str) -> String {
+    use wasm_bindgen::JsCast;
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|i| i.value())
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_input_value(_id: &str) -> String {
+    String::new()
+}
+
 #[component]
 pub fn LoginPage() -> Element {
     let mut username = use_signal(|| String::new());
@@ -18,9 +42,13 @@ pub fn LoginPage() -> Element {
             if loading() {
                 return;
             }
+            let u = read_input_value("username");
+            let p = read_input_value("password");
+            username.set(u.clone());
+            password.set(p.clone());
             error.set(None);
             loading.set(true);
-            match auth::login(username(), password()).await {
+            match auth::login(u, p).await {
                 Ok(resp) => {
                     auth::set_session_cookie(&resp.session_token);
                     nav.push(Route::Home {});
@@ -54,7 +82,6 @@ pub fn LoginPage() -> Element {
                         class: "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500",
                         r#type: "text",
                         id: "username",
-                        value: "{username}",
                         oninput: move |evt| username.set(evt.value()),
                         onkeydown: move |evt| {
                             if evt.key() == Key::Enter {
@@ -73,7 +100,6 @@ pub fn LoginPage() -> Element {
                         class: "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500",
                         r#type: "password",
                         id: "password",
-                        value: "{password}",
                         oninput: move |evt| password.set(evt.value()),
                         onkeydown: move |evt| {
                             if evt.key() == Key::Enter {
