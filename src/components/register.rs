@@ -12,17 +12,19 @@ pub fn RegisterPage() -> Element {
     let mut loading = use_signal(|| false);
     let nav = use_navigator();
 
-    let mut do_register = move || {
-        if loading() {
-            return;
-        }
-        if password() != confirm_password() {
-            error.set(Some("Passwords do not match".to_string()));
-            return;
-        }
-        error.set(None);
-        loading.set(true);
+    // All signal mutations happen inside spawn so they run after the event handler
+    // returns — avoids the Dioxus "RefCell already borrowed" panic.
+    let do_register = move || {
         spawn(async move {
+            if loading() {
+                return;
+            }
+            if password() != confirm_password() {
+                error.set(Some("Passwords do not match".to_string()));
+                return;
+            }
+            error.set(None);
+            loading.set(true);
             match auth::register(username(), password()).await {
                 Ok(resp) => {
                     auth::set_session_cookie(&resp.session_token);
@@ -59,7 +61,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "text",
                             id: "username",
                             value: "{username}",
-                            oninput: move |evt| username.set(evt.value()),
+                            oninput: move |evt| { let v = evt.value(); spawn(async move { username.set(v); }); },
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
@@ -78,7 +80,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "password",
                             id: "password",
                             value: "{password}",
-                            oninput: move |evt| password.set(evt.value()),
+                            oninput: move |evt| { let v = evt.value(); spawn(async move { password.set(v); }); },
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
@@ -97,7 +99,7 @@ pub fn RegisterPage() -> Element {
                             r#type: "password",
                             id: "confirm_password",
                             value: "{confirm_password}",
-                            oninput: move |evt| confirm_password.set(evt.value()),
+                            oninput: move |evt| { let v = evt.value(); spawn(async move { confirm_password.set(v); }); },
                             onkeydown: move |evt| {
                                 if evt.key() == Key::Enter {
                                     do_register();
