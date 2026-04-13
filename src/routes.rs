@@ -97,3 +97,8 @@ fn AdminRooms() -> Element {
 fn AdminModLog() -> Element {
     rsx! { AdminModLogPage {} }
 }
+
+#[component]
+fn Invite(code: String) -> Element {
+    rsx! { InvitePage { code } }
+}
