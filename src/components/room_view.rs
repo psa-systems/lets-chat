@@ -65,13 +65,14 @@ pub fn RoomViewPage(room_id: String) -> Element {
 
     let mut typing_users = use_signal(Vec::<(String, String)>::new);
     let mut last_typing_sent = use_signal(|| 0.0f64);
+    let my_user_id = u.id.clone();
 
     // Handle typing indicator events — separate effect to avoid touching messages_version
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::UserTyping { room_id, user_id, username }
-                    if *room_id == parsed_id && *user_id != u.id =>
+                    if *room_id == parsed_id && *user_id != my_user_id =>
                 {
                     let uid = user_id.clone();
                     let name = username.clone();
