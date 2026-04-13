@@ -8,4 +8,5 @@ pub struct Message {
     pub author_name: String,
     pub body: String,
     pub created_at: String,
+    pub edited_at: Option<String>,
 }
