@@ -61,10 +61,10 @@ pub fn DmViewPage(user_id: String) -> Element {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
-                    messages_version.set(messages_version() + 1);
+                    let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 ChatEvent::MessageEdited { room_id: event_room_id, .. } if *event_room_id == room_id => {
-                    messages_version.set(messages_version() + 1);
+                    let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
                 _ => {}
             }
