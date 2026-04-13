@@ -343,3 +343,85 @@ pub async fn list_user_dm_rooms(
         })
         .collect())
 }
+
+#[derive(Debug, Clone)]
+pub struct DmReadState {
+    pub user_id: String,
+    pub room_id: i64,
+    pub last_read_message_id: i64,
+    pub updated_at: String,
+}
+
+/// Upsert the caller's last-read watermark for a DM. Monotonic: never decreases.
+pub async fn upsert_dm_read(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_id: i64,
+    message_id: i64,
+) -> Result<String, sqlx::Error> {
+    let updated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    sqlx::query(
+        "INSERT INTO dm_read_state (user_id, room_id, last_read_message_id, updated_at) \
+         VALUES (?, ?, ?, ?) \
+         ON CONFLICT(user_id, room_id) DO UPDATE SET \
+           last_read_message_id = MAX(excluded.last_read_message_id, dm_read_state.last_read_message_id), \
+           updated_at = CASE \
+             WHEN excluded.last_read_message_id > dm_read_state.last_read_message_id \
+             THEN excluded.updated_at ELSE dm_read_state.updated_at END",
+    )
+    .bind(user_id)
+    .bind(room_id)
+    .bind(message_id)
+    .bind(&updated_at)
+    .execute(pool)
+    .await?;
+    Ok(updated_at)
+}
+
+pub async fn get_dm_read_state(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_id: i64,
+) -> Result<Option<DmReadState>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT user_id, room_id, last_read_message_id, updated_at \
+         FROM dm_read_state WHERE user_id = ? AND room_id = ?",
+    )
+    .bind(user_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| DmReadState {
+        user_id: r.get("user_id"),
+        room_id: r.get("room_id"),
+        last_read_message_id: r.get("last_read_message_id"),
+        updated_at: r.get("updated_at"),
+    }))
+}
+
+/// For each DM the user is a member of, count peer messages newer than the user's watermark.
+pub async fn list_dm_unread_counts(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT r.id AS room_id, \
+                COUNT(m.id) AS unread \
+         FROM rooms r \
+         JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = ? \
+         LEFT JOIN dm_read_state s ON s.room_id = r.id AND s.user_id = ? \
+         LEFT JOIN messages m \
+           ON m.room_id = r.id \
+          AND m.user_id != ? \
+          AND m.deleted_at IS NULL \
+          AND m.id > COALESCE(s.last_read_message_id, 0) \
+         WHERE r.room_type = 'dm' \
+         GROUP BY r.id",
+    )
+    .bind(user_id)
+    .bind(user_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.get("room_id"), r.get::<i64, _>("unread"))).collect())
+}
