@@ -432,15 +432,15 @@ Add a `use_effect` that bumps `rooms_version` on `RoomMemberAdded` and `RoomMemb
 
 ## Phase 9 complete checklist
 
-- [ ] Migration 005 adds `invite_code TEXT UNIQUE` to rooms
-- [ ] `Room` model has `invite_code: Option<String>`
-- [ ] `list_rooms` filters by role — admins see all, users see public + joined private
-- [ ] `list_messages` and `send_message` reject non-members of private rooms
-- [ ] `join_room_by_invite` inserts into `room_members`, broadcasts `RoomMemberAdded`
-- [ ] `leave_room` deletes from `room_members`, broadcasts `RoomMemberRemoved`
-- [ ] `invite_user_to_room` (mod+) adds a user by username
-- [ ] `regenerate_invite_code` (admin) rotates the invite code
-- [ ] Admin rooms UI shows `room_type` dropdown, invite link, invite-user form
-- [ ] `/invite/:code` route joins and redirects
-- [ ] Sidebar refreshes room list on member events
-- [ ] Integration tests pass
+- [x] Migration 005 adds `invite_code TEXT UNIQUE` to rooms
+- [x] `Room` model has `invite_code: Option<String>`
+- [x] `list_rooms` filters by role — admins see all, users see public + joined private
+- [x] `list_messages` and `send_message` reject non-members of private rooms
+- [x] `join_room_by_invite` inserts into `room_members`, broadcasts `RoomMemberAdded`
+- [x] `leave_room` deletes from `room_members`, broadcasts `RoomMemberRemoved`
+- [x] `invite_user_to_room` (mod+) adds a user by username
+- [x] `regenerate_invite_code` (admin) rotates the invite code
+- [x] Admin rooms UI shows `room_type` dropdown, invite link, invite-user form
+- [x] `/invite/:code` route joins and redirects
+- [x] Sidebar refreshes room list on member events
+- [x] Integration tests pass

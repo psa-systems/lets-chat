@@ -121,7 +121,7 @@ Typing indicators are hard to integration-test without a real WS client. A singl
 
 ---
 
-## Phase 9 — Private / Invite-Only Rooms
+## Phase 9 — Private / Invite-Only Rooms (Done)
 
 **Goal:** Rooms that only members can see or post in. Architecturally foundational — gates access for search (Phase 11) and file uploads (Phase 13). Build before those phases to avoid retrofitting access checks.
 
