@@ -11,6 +11,7 @@ use crate::components::{
     },
     auth_layout::AuthLayout,
     dm_view::DmViewPage,
+    invite::InvitePage,
     layout::Layout,
     login::LoginPage,
     register::RegisterPage,
@@ -32,6 +33,8 @@ pub enum Route {
     Room { room_id: String },
     #[route("/dm/:user_id")]
     Dm { user_id: String },
+    #[route("/invite/:code")]
+    Invite { code: String },
     #[layout(AdminLayout)]
     #[route("/admin")]
     AdminSettings {},
