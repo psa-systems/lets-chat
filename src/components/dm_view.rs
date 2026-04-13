@@ -76,6 +76,7 @@ pub fn DmViewPage(user_id: String) -> Element {
     });
 
     // When a WS event arrives for this room, bump messages_version
+    let my_id_for_ws = u.id.clone();
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
@@ -85,8 +86,8 @@ pub fn DmViewPage(user_id: String) -> Element {
                 ChatEvent::MessageEdited { room_id: event_room_id, .. } if *event_room_id == room_id => {
                     let v = *messages_version.peek(); messages_version.set(v + 1);
                 }
-                ChatEvent::DmRead { room_id: event_room_id, last_read_message_id, read_at, .. }
-                    if *event_room_id == room_id =>
+                ChatEvent::DmRead { room_id: event_room_id, user_id: event_user_id, last_read_message_id, read_at }
+                    if *event_room_id == room_id && *event_user_id != my_id_for_ws =>
                 {
                     peer_last_read_id.set(Some(*last_read_message_id));
                     peer_read_at.set(Some(read_at.clone()));
