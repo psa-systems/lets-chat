@@ -5,7 +5,7 @@ use crate::models::User;
 use crate::routes::Route;
 use crate::server_fns::auth::{clear_session_cookie, logout};
 use crate::server_fns::chat::list_rooms;
-use crate::server_fns::dm::list_my_dms;
+use crate::server_fns::dm::{list_dm_unread_counts_fn, list_my_dms};
 use crate::ws::events::ChatEvent;
 
 #[component]
@@ -25,12 +25,22 @@ pub fn Sidebar() -> Element {
         async move { list_my_dms().await }
     })?;
 
+    let mut unread_version = use_signal(|| 0u32);
+    let unread = use_server_future(move || {
+        let _v = unread_version();
+        async move { list_dm_unread_counts_fn().await }
+    })?;
+
     let ws = use_context::<WsHandle>();
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { is_dm: true, .. } => {
                     let v = *dms_version.peek(); dms_version.set(v + 1);
+                    let v = *unread_version.peek(); unread_version.set(v + 1);
+                }
+                ChatEvent::DmRead { .. } => {
+                    let v = *unread_version.peek(); unread_version.set(v + 1);
                 }
                 ChatEvent::RoomMemberAdded { user_id, .. } | ChatEvent::RoomMemberRemoved { user_id, .. }
                     if *user_id == my_id =>
@@ -52,6 +62,11 @@ pub fn Sidebar() -> Element {
     let dm_list = match dms() {
         Some(Ok(list)) => list,
         _ => vec![],
+    };
+
+    let unread_map: std::collections::HashMap<i64, i64> = match unread() {
+        Some(Ok(list)) => list.into_iter().map(|u| (u.room_id, u.count)).collect(),
+        _ => std::collections::HashMap::new(),
     };
 
     let u = user().expect("user must be authenticated");
@@ -97,12 +112,23 @@ pub fn Sidebar() -> Element {
                 div { class: "px-3 py-2 text-sm text-gray-400", "No conversations" }
             } else {
                 for dm in dm_list.iter() {
-                    Link {
-                        key: "{dm.room_id}",
-                        to: Route::Dm { user_id: dm.other_user_id.clone() },
-                        class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
-                        span { class: "text-gray-400", "@" }
-                        span { "{dm.other_user_name}" }
+                    {
+                        let count = unread_map.get(&dm.room_id).copied().unwrap_or(0);
+                        rsx! {
+                            Link {
+                                key: "{dm.room_id}",
+                                to: Route::Dm { user_id: dm.other_user_id.clone() },
+                                class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
+                                span { class: "text-gray-400", "@" }
+                                span { class: "flex-1", "{dm.other_user_name}" }
+                                if count > 0 {
+                                    span {
+                                        class: "ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-blue-600 text-white text-xs font-semibold",
+                                        "{count}"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
