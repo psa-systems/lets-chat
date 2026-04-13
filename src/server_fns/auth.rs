@@ -163,6 +163,7 @@ fn user_record_to_user(record: &crate::models::user::UserRecord) -> User {
         ban_reason: record.ban_reason.clone(),
         banned_until: record.banned_until.clone(),
         created_at: record.created_at.clone(),
+        read_receipts_enabled: record.read_receipts_enabled,
     }
 }
 

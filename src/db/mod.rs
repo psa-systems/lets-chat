@@ -97,6 +97,12 @@ async fn init_auth_pool() -> SqlitePool {
         .await
         .expect("Failed to run auth DB migration");
 
+    let auth_m2 = include_str!("../../migrations/auth/0002_read_receipts.sql");
+    sqlx::raw_sql(auth_m2)
+        .execute(&pool)
+        .await
+        .expect("Failed to run auth DB migration 002");
+
     pool
 }
 
