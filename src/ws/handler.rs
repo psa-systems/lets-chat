@@ -45,14 +45,15 @@ pub async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap) -> impl IntoRe
     }
 
     let user_id = user.id.clone();
+    let username = user.display_name.clone().unwrap_or_else(|| user.username.clone());
 
-    ws.on_upgrade(move |socket| handle_socket(socket, user_id))
+    ws.on_upgrade(move |socket| handle_socket(socket, user_id, username))
 }
 
-async fn handle_socket(socket: WebSocket, user_id: String) {
+async fn handle_socket(socket: WebSocket, user_id: String, username: String) {
     let hub = get_hub();
     let chat_pool = crate::db::get_chat_pool().await;
-    let (conn_id, mut rx) = hub.connect(&user_id);
+    let (conn_id, mut rx) = hub.connect(&user_id, &username);
 
     let (mut ws_tx, mut ws_rx) = socket.split();
 
@@ -112,6 +113,9 @@ async fn handle_socket(socket: WebSocket, user_id: String) {
                         }
                         ClientControl::Unsubscribe { room_id } => {
                             hub.unsubscribe(conn_id, room_id);
+                        }
+                        ClientControl::Typing { room_id } => {
+                            hub.notify_typing(conn_id, room_id);
                         }
                     }
                 }

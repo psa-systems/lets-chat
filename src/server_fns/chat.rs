@@ -42,6 +42,7 @@ pub async fn list_messages(room_id: i64) -> Result<Vec<Message>, ServerFnError> 
             author_name,
             body: rm.body,
             created_at: rm.created_at,
+            edited_at: rm.edited_at,
         });
     }
 
@@ -91,10 +92,63 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
             author_name,
             body,
             created_at: now,
+            edited_at: None,
         },
         is_dm: false,
     };
     crate::ws::hub::get_hub().broadcast_to_room(room_id, &event);
 
     Ok(msg_id)
+}
+
+#[server]
+pub async fn edit_message(message_id: i64, new_body: String) -> Result<(), ServerFnError> {
+    let new_body = new_body.trim().to_string();
+    if new_body.is_empty() {
+        return Err(ServerFnError::new("Message body cannot be empty"));
+    }
+
+    let user = crate::server_fns::helpers::require_auth().await?;
+
+    // Enforce max_message_length from settings
+    let settings_pool = crate::db::get_settings_pool().await;
+    if let Ok(Some(max_str)) = crate::db::settings::get_setting(settings_pool, "max_message_length").await {
+        if let Ok(max_len) = max_str.parse::<usize>() {
+            if new_body.len() > max_len {
+                return Err(ServerFnError::new(format!(
+                    "Message exceeds maximum length of {} characters",
+                    max_len
+                )));
+            }
+        }
+    }
+
+    let chat_pool = crate::db::get_chat_pool().await;
+
+    // Fetch the message — returns None if soft-deleted
+    let msg = crate::db::chat::get_message(chat_pool, message_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Message not found"))?;
+
+    // Ownership check: must be author OR admin/moderator
+    let is_owner = msg.user_id == user.id;
+    let is_privileged = crate::server_fns::helpers::role_level(&user.role) >= 2;
+    if !is_owner && !is_privileged {
+        return Err(ServerFnError::new("Cannot edit another user's message"));
+    }
+
+    let edited_at = crate::db::chat::update_message_body(chat_pool, message_id, &new_body)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let event = crate::ws::events::ChatEvent::MessageEdited {
+        message_id,
+        room_id: msg.room_id,
+        new_body,
+        edited_at,
+    };
+    crate::ws::hub::get_hub().broadcast_to_room(msg.room_id, &event);
+
+    Ok(())
 }
