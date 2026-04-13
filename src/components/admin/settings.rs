@@ -89,7 +89,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "text",
                             value: "{site_name}",
-                            oninput: move |e| site_name.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { site_name.set(v); }); },
                         }
                     }
                     div {
@@ -98,7 +98,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             rows: "3",
                             value: "{welcome_message}",
-                            oninput: move |e| welcome_message.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { welcome_message.set(v); }); },
                         }
                     }
                     div {
@@ -107,7 +107,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             rows: "2",
                             value: "{motd}",
-                            oninput: move |e| motd.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { motd.set(v); }); },
                         }
                     }
                     div { class: "flex items-center gap-3",
@@ -115,7 +115,7 @@ pub fn AdminSettingsPage() -> Element {
                             r#type: "checkbox",
                             class: "h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500",
                             checked: maintenance_mode(),
-                            oninput: move |e| maintenance_mode.set(e.checked()),
+                            oninput: move |e| { let v = e.checked(); spawn(async move { maintenance_mode.set(v); }); },
                         }
                         label { class: "text-sm font-medium text-gray-700", "Maintenance Mode" }
                     }
@@ -131,7 +131,7 @@ pub fn AdminSettingsPage() -> Element {
                             r#type: "checkbox",
                             class: "h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500",
                             checked: registration_open(),
-                            oninput: move |e| registration_open.set(e.checked()),
+                            oninput: move |e| { let v = e.checked(); spawn(async move { registration_open.set(v); }); },
                         }
                         label { class: "text-sm font-medium text-gray-700", "Registration Open" }
                     }
@@ -140,7 +140,7 @@ pub fn AdminSettingsPage() -> Element {
                             r#type: "checkbox",
                             class: "h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500",
                             checked: require_invite_code(),
-                            oninput: move |e| require_invite_code.set(e.checked()),
+                            oninput: move |e| { let v = e.checked(); spawn(async move { require_invite_code.set(v); }); },
                         }
                         label { class: "text-sm font-medium text-gray-700", "Require Invite Code" }
                     }
@@ -149,7 +149,7 @@ pub fn AdminSettingsPage() -> Element {
                         select {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             value: "{default_role}",
-                            oninput: move |e| default_role.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { default_role.set(v); }); },
                             option { value: "user", "user" }
                             option { value: "moderator", "moderator" }
                             option { value: "admin", "admin" }
@@ -168,7 +168,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "number",
                             value: "{max_message_length}",
-                            oninput: move |e| max_message_length.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { max_message_length.set(v); }); },
                         }
                     }
                     div {
@@ -177,7 +177,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "number",
                             value: "{rate_limit_messages}",
-                            oninput: move |e| rate_limit_messages.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { rate_limit_messages.set(v); }); },
                         }
                     }
                 }
@@ -193,7 +193,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "text",
                             value: "{smtp_host}",
-                            oninput: move |e| smtp_host.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { smtp_host.set(v); }); },
                         }
                     }
                     div {
@@ -202,7 +202,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "text",
                             value: "{smtp_port}",
-                            oninput: move |e| smtp_port.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { smtp_port.set(v); }); },
                         }
                     }
                     div {
@@ -211,7 +211,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "text",
                             value: "{smtp_user}",
-                            oninput: move |e| smtp_user.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { smtp_user.set(v); }); },
                         }
                     }
                     div {
@@ -220,7 +220,7 @@ pub fn AdminSettingsPage() -> Element {
                             class: "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
                             r#type: "password",
                             value: "{smtp_pass}",
-                            oninput: move |e| smtp_pass.set(e.value()),
+                            oninput: move |e| { let v = e.value(); spawn(async move { smtp_pass.set(v); }); },
                         }
                     }
                 }
