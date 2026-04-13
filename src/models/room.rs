@@ -6,5 +6,6 @@ pub struct Room {
     pub name: String,
     pub topic: Option<String>,
     pub room_type: String,
+    pub invite_code: Option<String>,
     pub created_at: String,
 }
