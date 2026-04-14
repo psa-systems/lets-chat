@@ -99,6 +99,44 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
         last_len.set(new_len);
     });
 
+    // Attach a `scroll` listener so the pill auto-dismisses when the user
+    // reaches the bottom, and so last-seen advances on manual scroll-down.
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+
+        use_effect(move || {
+            let rid = room_id();
+            let container_id = format!("chat-scroll-{rid}");
+
+            let Some(el) = get_container(&container_id) else {
+                return;
+            };
+
+            let mut show_new_pill = show_new_pill;
+            let messages = messages;
+            let rid_captured = rid;
+
+            let cb = Closure::<dyn FnMut()>::new(move || {
+                let Some(el) = get_container(&format!("chat-scroll-{rid_captured}")) else {
+                    return;
+                };
+                if is_near_bottom(&el) {
+                    let newest = messages.peek().last().map(|m| m.id).unwrap_or(0);
+                    if newest > 0 {
+                        write_last_seen(rid_captured, newest);
+                    }
+                    show_new_pill.set(false);
+                }
+            });
+
+            let _ = el
+                .add_event_listener_with_callback("scroll", cb.as_ref().unchecked_ref());
+            cb.forget();
+        });
+    }
+
     let scroll_to_bottom = use_callback(move |_: ()| {
         let rid = *room_id.peek();
         let newest_id = messages.peek().last().map(|m| m.id).unwrap_or(0);
