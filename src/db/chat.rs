@@ -1,6 +1,6 @@
 use sqlx::Row;
 
-use crate::models::Room;
+use crate::models::{Reaction, Room};
 
 /// Raw message row from the chat DB — contains user_id but no author_name.
 /// The server fn layer resolves the display name from the auth DB.
@@ -419,5 +419,77 @@ pub async fn list_dm_unread_counts(
     Ok(rows
         .into_iter()
         .map(|r| (r.get("room_id"), r.get::<i64, _>("unread")))
+        .collect())
+}
+
+// ── Reactions ─────────────────────────────────────────────────────────────────
+
+/// Toggle a reaction: insert if not present, delete if already present.
+/// Returns `true` if the reaction was added, `false` if it was removed.
+pub async fn toggle_reaction(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    user_id: &str,
+    emoji: &str,
+) -> Result<bool, sqlx::Error> {
+    let existing = sqlx::query(
+        "SELECT 1 FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
+    )
+    .bind(message_id)
+    .bind(user_id)
+    .bind(emoji)
+    .fetch_optional(pool)
+    .await?;
+
+    if existing.is_some() {
+        sqlx::query(
+            "DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
+        )
+        .bind(message_id)
+        .bind(user_id)
+        .bind(emoji)
+        .execute(pool)
+        .await?;
+        Ok(false)
+    } else {
+        sqlx::query(
+            "INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
+        )
+        .bind(message_id)
+        .bind(user_id)
+        .bind(emoji)
+        .execute(pool)
+        .await?;
+        Ok(true)
+    }
+}
+
+/// List reactions grouped by emoji for a message.
+/// `caller_user_id` is used to populate `reacted_by_me`.
+pub async fn list_reactions(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    caller_user_id: &str,
+) -> Result<Vec<Reaction>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT emoji, COUNT(*) AS count, \
+                MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me \
+         FROM message_reactions \
+         WHERE message_id = ? \
+         GROUP BY emoji \
+         ORDER BY MIN(created_at)",
+    )
+    .bind(caller_user_id)
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| Reaction {
+            emoji: r.get("emoji"),
+            count: r.get("count"),
+            reacted_by_me: r.get::<i64, _>("reacted_by_me") == 1,
+        })
         .collect())
 }
