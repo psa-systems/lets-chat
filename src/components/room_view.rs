@@ -1,11 +1,13 @@
 use dioxus::prelude::*;
 
+use crate::components::reaction_bar::ReactionBar;
 use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
-use crate::models::{Message, User};
+use crate::models::{Message, Reaction, User};
 use crate::routes::Route;
 use crate::server_fns::chat::{edit_message, get_room, list_messages, send_message};
 use crate::server_fns::moderation::delete_message;
+use crate::server_fns::reactions::get_room_reactions;
 use crate::ws::events::ChatEvent;
 
 #[component]
@@ -22,6 +24,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     let u = user().expect("user must be authenticated");
     let is_mod = u.role == "admin" || u.role == "moderator";
     let my_user_id = u.id.clone();
+    let my_user_id_reactions = my_user_id.clone();
 
     // Futures read room_id_sig() — they re-run automatically when the room changes.
     let room = use_server_future(move || async move { get_room(room_id_sig()).await })?;
@@ -83,7 +86,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Apply WS events directly to the local messages signal — no re-fetching.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            let id = room_id_sig();
+            let id = *room_id_sig.peek();
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == id => {
                     let m = message.clone();
@@ -124,7 +127,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Handle typing indicator events.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            let id = room_id_sig();
+            let id = *room_id_sig.peek();
             match event {
                 ChatEvent::UserTyping {
                     room_id,
@@ -146,6 +149,87 @@ pub fn RoomViewPage(room_id: String) -> Element {
                 ChatEvent::NewMessage { message, .. } if message.room_id == id => {
                     let uid = message.user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Per-message reactions: keyed by message_id, updated via WS events.
+    let mut reactions_map =
+        use_signal(|| std::collections::HashMap::<i64, Vec<Reaction>>::new());
+
+    // Fetch all reactions for the room on load (re-runs when room changes).
+    let reactions_fetch =
+        use_server_future(move || async move { get_room_reactions(room_id_sig()).await })?;
+
+    // Populate reactions_map from the server fetch result.
+    use_effect(move || {
+        if let Some(Ok(rows)) = reactions_fetch() {
+            let mut map = std::collections::HashMap::<i64, Vec<Reaction>>::new();
+            for (mid, emoji, count, reacted_by_me) in rows {
+                map.entry(mid).or_default().push(Reaction {
+                    emoji,
+                    count,
+                    reacted_by_me,
+                });
+            }
+            reactions_map.set(map);
+        }
+    });
+
+    // Handle reaction WS events.
+    use_effect(move || {
+        if let Some(ref event) = *ws.latest_event.read() {
+            let id = *room_id_sig.peek();
+            match event {
+                ChatEvent::ReactionAdded {
+                    message_id,
+                    room_id,
+                    emoji,
+                    user_id,
+                } if *room_id == id => {
+                    let mid = *message_id;
+                    let e = emoji.clone();
+                    let uid = user_id.clone();
+                    reactions_map.with_mut(|map| {
+                        let entry = map.entry(mid).or_default();
+                        if let Some(r) = entry.iter_mut().find(|r| r.emoji == e) {
+                            r.count += 1;
+                            if uid == my_user_id_reactions {
+                                r.reacted_by_me = true;
+                            }
+                        } else {
+                            entry.push(Reaction {
+                                emoji: e,
+                                count: 1,
+                                reacted_by_me: uid == my_user_id_reactions,
+                            });
+                        }
+                    });
+                }
+                ChatEvent::ReactionRemoved {
+                    message_id,
+                    room_id,
+                    emoji,
+                    user_id,
+                } if *room_id == id => {
+                    let mid = *message_id;
+                    let e = emoji.clone();
+                    let uid = user_id.clone();
+                    reactions_map.with_mut(|map| {
+                        if let Some(entry) = map.get_mut(&mid) {
+                            if let Some(r) = entry.iter_mut().find(|r| r.emoji == e) {
+                                r.count -= 1;
+                                if uid == my_user_id_reactions {
+                                    r.reacted_by_me = false;
+                                }
+                                if r.count <= 0 {
+                                    entry.retain(|r| r.emoji != e);
+                                }
+                            }
+                        }
+                    });
                 }
                 _ => {}
             }
@@ -373,6 +457,12 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                     }
                                 } else {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
+                                    ReactionBar {
+                                        message_id: msg_id,
+                                        room_id: room_id_sig(),
+                                        initial_reactions: reactions_map.read().get(&msg_id).cloned().unwrap_or_default(),
+                                        my_user_id: u.id.clone(),
+                                    }
                                 }
                                 }
                             }

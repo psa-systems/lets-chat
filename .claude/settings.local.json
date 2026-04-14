@@ -10,7 +10,12 @@
       "Bash(sudo chown:*)",
       "Bash(dx check:*)",
       "Bash(cargo test:*)",
-      "Bash(perl:*)"
+      "Bash(perl:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(cargo build:*)",
+      "Bash(sudo rm:*)",
+      "Bash(CARGO_TARGET_DIR=/tmp/lets-chat-target cargo build --features server)",
+      "Bash(CARGO_TARGET_DIR=/tmp/lets-chat-target cargo test:*)"
     ]
   }
 }
