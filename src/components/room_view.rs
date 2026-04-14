@@ -41,7 +41,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
             load_error.set(None);
         }
         Some(Err(e)) => {
-            load_error.set(Some(e.to_string()));
+            load_error.set(Some(crate::server_fns::auth::user_facing_error(&e)));
         }
         None => {}
     });
@@ -334,7 +334,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                                                 edit_error.set(None);
                                                             }
                                                             Err(e) => {
-                                                                edit_error.set(Some(e.to_string()));
+                                                                edit_error.set(Some(crate::server_fns::auth::user_facing_error(&e)));
                                                             }
                                                         }
                                                     });
@@ -420,7 +420,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                             draft.set(String::new());
                                             error.set(None);
                                         }
-                                        Err(e) => error.set(Some(e.to_string())),
+                                        Err(e) => error.set(Some(crate::server_fns::auth::user_facing_error(&e))),
                                     }
                                 });
                             }
@@ -440,7 +440,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                         draft.set(String::new());
                                         error.set(None);
                                     }
-                                    Err(e) => error.set(Some(e.to_string())),
+                                    Err(e) => error.set(Some(crate::server_fns::auth::user_facing_error(&e))),
                                 }
                             });
                         },
