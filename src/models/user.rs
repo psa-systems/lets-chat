@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Full user record. Only used server-side — never sent to the client.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 #[derive(Debug, Clone)]
 pub struct UserRecord {
     pub id: String,

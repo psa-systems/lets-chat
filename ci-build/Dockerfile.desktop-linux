@@ -34,4 +34,4 @@ COPY . .
 RUN bun install --frozen-lockfile && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
 # Build desktop app
-RUN dx build --release --platform desktop
+RUN dx build --release --platform desktop --features client --no-default-features
