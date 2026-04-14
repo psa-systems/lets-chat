@@ -1,5 +1,5 @@
 /// Session record. Server-side only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id: String,

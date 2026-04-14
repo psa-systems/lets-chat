@@ -1,5 +1,5 @@
 pub mod events;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod handler;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod hub;

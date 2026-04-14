@@ -2,16 +2,20 @@
 default:
     @just --list
 
-# Run all checks (server, web, clippy, fmt)
-check: check-server check-web check-clippy check-fmt
+# Run all checks (server, web, client, clippy, fmt)
+check: check-server check-web check-client check-clippy check-fmt
 
 # Check server compilation
 check-server:
-    cargo check
+    cargo check --features server --no-default-features
 
 # Check web/WASM compilation
 check-web:
     cargo check --target wasm32-unknown-unknown
+
+# Check client (desktop, native) compilation
+check-client:
+    cargo check --features client --no-default-features
 
 # Run clippy lints
 check-clippy:
@@ -64,9 +68,9 @@ dev-web-clean:
 dev-web-local:
     dx serve --platform web
 
-# Start development server (desktop)
+# Start development server (desktop client)
 dev-desktop:
-    dx serve --platform desktop
+    dx serve --platform desktop --features client --no-default-features
 
 # Run tests
 test:

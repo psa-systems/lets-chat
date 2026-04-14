@@ -1,4 +1,4 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod db;
 pub mod models;
 pub mod server_fns;
