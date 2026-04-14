@@ -1,19 +1,23 @@
 use dioxus::prelude::*;
 
-use crate::components::register::LoadingCard;
 use crate::routes::Route;
 use crate::server_fns::auth;
 
 #[component]
 pub fn LoginPage() -> Element {
     let mut hydrated = use_signal(|| false);
-    #[cfg(target_arch = "wasm32")]
-    use_effect(move || {
-        hydrated.set(true);
-    });
 
     if !hydrated() {
-        return rsx! { LoadingCard { message: "Loading…" } };
+        return rsx! {
+            div {
+                class: "min-h-screen flex items-center justify-center bg-gray-100",
+                onmounted: move |_| hydrated.set(true),
+                div { class: "bg-white p-8 rounded-lg shadow-md w-full max-w-sm text-center",
+                    h1 { class: "text-2xl font-bold mb-2", "Let's Chat" }
+                    p { class: "text-gray-500", "Loading…" }
+                }
+            }
+        };
     }
 
     rsx! { LoginForm {} }
