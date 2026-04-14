@@ -9,8 +9,31 @@ pub struct AuthResponse {
     pub session_token: String,
 }
 
-const GENERIC_REGISTER_ERROR: &str = "Registration failed";
-const GENERIC_LOGIN_ERROR: &str = "Invalid credentials";
+pub const GENERIC_REGISTER_ERROR: &str = "Registration failed";
+pub const GENERIC_LOGIN_ERROR: &str = "Invalid credentials";
+pub const TRY_AGAIN_ERROR: &str = "Something went wrong, please try again";
+
+/// Length of the hydration-race grace window on the register/login pages.
+/// Blank submissions within this window of page mount show TRY_AGAIN_ERROR;
+/// after, they show the generic error.
+pub const GRACE_WINDOW_MS: f64 = 120_000.0;
+
+/// Current wall-clock time in milliseconds. Cross-platform: `js_sys::Date::now`
+/// on wasm, `SystemTime` elsewhere.
+pub fn now_ms() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as f64
+    }
+}
 
 /// Extract the user-facing message from a `ServerFnError`. The default `Display`
 /// impl wraps the message as `"error running server function: <msg> (details: ...)"`,
@@ -32,17 +55,12 @@ pub async fn register(username: String, password: String) -> Result<AuthResponse
     let password = password.trim().to_string();
 
     if username.is_empty() || password.is_empty() {
-        let msg = crate::server_fns::helpers::classify_blank_error(
-            std::time::Instant::now(),
-            crate::server_fns::helpers::server_started_at(),
-            GENERIC_REGISTER_ERROR,
-        );
         warn!(
             username_empty = username.is_empty(),
             password_empty = password.is_empty(),
             "register rejected: blank input"
         );
-        return Err(ServerFnError::new(msg));
+        return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
     }
 
     if username.len() < 3 {
@@ -135,17 +153,12 @@ pub async fn login(username: String, password: String) -> Result<AuthResponse, S
     let password = password.trim().to_string();
 
     if username.is_empty() || password.is_empty() {
-        let msg = crate::server_fns::helpers::classify_blank_error(
-            std::time::Instant::now(),
-            crate::server_fns::helpers::server_started_at(),
-            GENERIC_LOGIN_ERROR,
-        );
         warn!(
             username_empty = username.is_empty(),
             password_empty = password.is_empty(),
             "login rejected: blank input"
         );
-        return Err(ServerFnError::new(msg));
+        return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
     }
 
     let pool = crate::db::get_auth_pool().await;
