@@ -41,7 +41,7 @@ futures = "0.3"
 
 [dependencies.sqlx]
 version = "0.8"
-features = ["runtime-tokio", "sqlite"]
+features = ["runtime-tokio", "sqlite", "migrate"]
 optional = true
 
 [dependencies.axum]
