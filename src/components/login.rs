@@ -1,10 +1,28 @@
 use dioxus::prelude::*;
 
+use crate::components::register::LoadingCard;
 use crate::routes::Route;
 use crate::server_fns::auth;
 
 #[component]
 pub fn LoginPage() -> Element {
+    let mut hydrated = use_signal(|| false);
+    #[cfg(target_arch = "wasm32")]
+    use_hook(|| {
+        spawn(async move {
+            hydrated.set(true);
+        });
+    });
+
+    if !hydrated() {
+        return rsx! { LoadingCard { message: "Loading…" } };
+    }
+
+    rsx! { LoginForm {} }
+}
+
+#[component]
+fn LoginForm() -> Element {
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
