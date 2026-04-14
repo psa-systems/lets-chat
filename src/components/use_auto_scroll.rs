@@ -28,6 +28,7 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
     let mut initialized_for_room = use_signal(|| 0i64);
     let mut last_len = use_signal(|| 0usize);
     let mut last_max_id = use_signal(|| 0i64);
+    let mut at_bottom = use_signal(|| true);
 
     use_effect(move || {
         let rid = room_id();
@@ -38,6 +39,7 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
             first_unseen_id.set(None);
             last_len.set(0);
             last_max_id.set(0);
+            at_bottom.set(true);
             initialized_for_room.set(rid);
         }
 
@@ -58,10 +60,14 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
 
                 let container_id = format!("chat-scroll-{rid}");
                 match unseen {
-                    Some(id) => scroll_message_into_view(id),
+                    Some(id) => {
+                        scroll_message_into_view(id);
+                        at_bottom.set(false);
+                    }
                     None => {
                         scroll_container_to_bottom(&container_id);
                         write_last_seen(rid, newest_id);
+                        at_bottom.set(true);
                     }
                 }
             }
@@ -81,11 +87,11 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
             #[cfg(target_arch = "wasm32")]
             {
                 let container_id = format!("chat-scroll-{rid}");
-                let was_near_bottom = get_container(&container_id)
-                    .map(|el| is_near_bottom(&el))
-                    .unwrap_or(true);
-
-                if was_near_bottom {
+                // Use the remembered state from the scroll listener — by the
+                // time this effect runs, Dioxus has already appended the new
+                // row so `scrollHeight` no longer reflects "was the user at
+                // the bottom before this arrival?".
+                if *at_bottom.peek() {
                     scroll_container_to_bottom(&container_id);
                     write_last_seen(rid, newest_id);
                     show_new_pill.set(false);
@@ -118,16 +124,25 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
             let messages = messages;
             let rid_captured = rid;
 
+            let mut at_bottom = at_bottom;
             let cb = Closure::<dyn FnMut()>::new(move || {
                 let Some(el) = get_container(&format!("chat-scroll-{rid_captured}")) else {
                     return;
                 };
-                if is_near_bottom(&el) {
-                    let newest = messages.peek().last().map(|m| m.id).unwrap_or(0);
+                let near = is_near_bottom(&el);
+                let Ok(mut w) = at_bottom.try_write() else { return };
+                *w = near;
+                drop(w);
+                if near {
+                    let newest = messages
+                        .try_peek()
+                        .ok()
+                        .and_then(|m| m.last().map(|m| m.id))
+                        .unwrap_or(0);
                     if newest > 0 {
                         write_last_seen(rid_captured, newest);
                     }
-                    show_new_pill.set(false);
+                    let _ = show_new_pill.try_write().map(|mut w| *w = false);
                 }
             });
 
@@ -152,6 +167,7 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
         {
             let _ = (rid, newest_id);
         }
+        at_bottom.set(true);
         show_new_pill.set(false);
     });
 
