@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
 use crate::models::{Message, User};
 use crate::routes::Route;
@@ -34,6 +35,9 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Local, WS-driven source of truth for the rendered message list.
     let mut messages = use_signal(Vec::<Message>::new);
     let mut load_error = use_signal(|| Option::<String>::None);
+
+    let my_user_id_sig = use_signal(|| my_user_id.clone());
+    let auto = use_auto_scroll(room_id_sig, messages, my_user_id_sig);
 
     use_effect(move || match messages_fetch() {
         Some(Ok(list)) => {
@@ -254,7 +258,9 @@ pub fn RoomViewPage(room_id: String) -> Element {
         }
 
         // Message list
-        div { class: "flex-1 overflow-y-auto px-6 py-4 space-y-3",
+        div {
+            id: "{auto.container_id}",
+            class: "flex-1 overflow-y-auto px-6 py-4 space-y-3",
             if message_list.is_empty() {
                 div { class: "text-center text-gray-400 mt-12",
                     "No messages yet — say hello!"
@@ -268,8 +274,19 @@ pub fn RoomViewPage(room_id: String) -> Element {
                         let is_own = msg_user_id == u.id;
                         let is_editing = editing_msg_id() == Some(msg_id);
                         let has_edited = msg.edited_at.is_some();
+                        let is_first_unseen = *auto.first_unseen_id.read() == Some(msg_id);
                         rsx! {
-                            div { key: "{msg.id}", class: "group flex flex-col",
+                            div { key: "{msg.id}",
+                                if is_first_unseen {
+                                    div { class: "flex items-center gap-2 my-2 text-xs font-medium text-blue-600",
+                                        div { class: "flex-1 h-px bg-blue-300" }
+                                        span { "New messages" }
+                                        div { class: "flex-1 h-px bg-blue-300" }
+                                    }
+                                }
+                                div {
+                                    "data-msg-id": "{msg.id}",
+                                    class: "group flex flex-col",
                                 div { class: "flex items-baseline gap-2",
                                     if msg_user_id != u.id {
                                         Link {
@@ -357,9 +374,21 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                 } else {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
                                 }
+                                }
                             }
                         }
                     }
+                }
+            }
+        }
+
+        if *auto.show_new_pill.read() {
+            div { class: "relative",
+                button {
+                    r#type: "button",
+                    class: "absolute right-6 -top-12 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-full shadow-lg hover:bg-blue-700",
+                    onclick: move |_| auto.scroll_to_bottom.call(()),
+                    "↓ New messages"
                 }
             }
         }
