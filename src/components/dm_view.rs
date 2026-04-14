@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::components::use_websocket::WsHandle;
-use crate::models::User;
+use crate::models::{Message, User};
 use crate::server_fns::chat::{edit_message, list_messages};
 use crate::server_fns::dm::{
     get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message,
@@ -39,11 +39,24 @@ pub fn DmViewPage(user_id: String) -> Element {
 
     let room_id = room.id;
 
-    let mut messages_version = use_signal(|| 0u32);
-    let messages = use_server_future(move || {
-        let _v = messages_version();
-        async move { list_messages(room_id).await }
-    })?;
+    // Initial load from server — fetched once per DM room.
+    let messages_fetch =
+        use_server_future(move || async move { list_messages(room_id).await })?;
+
+    let mut messages = use_signal(Vec::<Message>::new);
+    let mut load_error = use_signal(|| Option::<String>::None);
+    let mut visibility_tick = use_signal(|| 0u32);
+
+    use_effect(move || match messages_fetch() {
+        Some(Ok(list)) => {
+            messages.set(list);
+            load_error.set(None);
+        }
+        Some(Err(e)) => {
+            load_error.set(Some(e.to_string()));
+        }
+        None => {}
+    });
 
     let mut draft = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
@@ -68,21 +81,41 @@ pub fn DmViewPage(user_id: String) -> Element {
         ws_drop.unsubscribe(room_id);
     });
 
-    // When a WS event arrives for this room, bump messages_version
+    // Apply WS events directly to the local messages signal — no re-fetching.
     let my_id_for_ws = u.id.clone();
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
-                    let v = *messages_version.peek();
-                    messages_version.set(v + 1);
+                    let m = message.clone();
+                    messages.with_mut(|v| {
+                        if !v.iter().any(|x| x.id == m.id) {
+                            v.push(m);
+                        }
+                    });
                 }
                 ChatEvent::MessageEdited {
                     room_id: event_room_id,
-                    ..
+                    message_id,
+                    new_body,
+                    edited_at,
                 } if *event_room_id == room_id => {
-                    let v = *messages_version.peek();
-                    messages_version.set(v + 1);
+                    let mid = *message_id;
+                    let body = new_body.clone();
+                    let at = edited_at.clone();
+                    messages.with_mut(|v| {
+                        if let Some(m) = v.iter_mut().find(|m| m.id == mid) {
+                            m.body = body;
+                            m.edited_at = Some(at);
+                        }
+                    });
+                }
+                ChatEvent::MessageDeleted {
+                    room_id: event_room_id,
+                    message_id,
+                } if *event_room_id == room_id => {
+                    let mid = *message_id;
+                    messages.with_mut(|v| v.retain(|m| m.id != mid));
                 }
                 ChatEvent::DmRead {
                     room_id: event_room_id,
@@ -136,10 +169,11 @@ pub fn DmViewPage(user_id: String) -> Element {
 
     let my_id_for_read = u.id.clone();
     use_effect(move || {
-        let list = match messages() {
-            Some(Ok(l)) => l,
-            _ => return,
-        };
+        let _tick = visibility_tick();
+        let list = messages();
+        if list.is_empty() {
+            return;
+        }
         let latest_peer = list.iter().rev().find(|m| m.user_id != my_id_for_read);
         let Some(latest) = latest_peer else { return };
         let latest_id = latest.id;
@@ -177,8 +211,8 @@ pub fn DmViewPage(user_id: String) -> Element {
                 return;
             };
             let cb = Closure::<dyn FnMut()>::new(move || {
-                let v = *messages_version.peek();
-                messages_version.set(v + 1);
+                let v = *visibility_tick.peek();
+                visibility_tick.set(v + 1);
             });
             let _ = document
                 .add_event_listener_with_callback("visibilitychange", cb.as_ref().unchecked_ref());
@@ -186,17 +220,14 @@ pub fn DmViewPage(user_id: String) -> Element {
         }
     });
 
-    let message_list = match messages() {
-        Some(Ok(list)) => list,
-        Some(Err(e)) => {
-            return rsx! {
-                div { class: "flex-1 flex items-center justify-center text-red-500",
-                    "Failed to load messages: {e}"
-                }
-            };
-        }
-        None => vec![],
-    };
+    if let Some(e) = load_error() {
+        return rsx! {
+            div { class: "flex-1 flex items-center justify-center text-red-500",
+                "Failed to load messages: {e}"
+            }
+        };
+    }
+    let message_list = messages();
 
     // Extract other user's name from room name (dm-<user1>-<user2>)
     let other_name = room
@@ -284,7 +315,6 @@ pub fn DmViewPage(user_id: String) -> Element {
                                                                 editing_msg_id.set(None);
                                                                 edit_draft.set(String::new());
                                                                 edit_error.set(None);
-                                                                messages_version.set(messages_version() + 1);
                                                             }
                                                             Err(e) => {
                                                                 edit_error.set(Some(e.to_string()));
@@ -392,7 +422,6 @@ pub fn DmViewPage(user_id: String) -> Element {
                                         Ok(_) => {
                                             draft.set(String::new());
                                             error.set(None);
-                                            messages_version.set(messages_version() + 1);
                                         }
                                         Err(e) => error.set(Some(e.to_string())),
                                     }
@@ -413,7 +442,6 @@ pub fn DmViewPage(user_id: String) -> Element {
                                     Ok(_) => {
                                         draft.set(String::new());
                                         error.set(None);
-                                        messages_version.set(messages_version() + 1);
                                     }
                                     Err(e) => error.set(Some(e.to_string())),
                                 }

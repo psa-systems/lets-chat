@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::components::use_websocket::WsHandle;
-use crate::models::User;
+use crate::models::{Message, User};
 use crate::routes::Route;
 use crate::server_fns::chat::{edit_message, get_room, list_messages, send_message};
 use crate::server_fns::moderation::delete_message;
@@ -25,12 +25,26 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Futures read room_id_sig() — they re-run automatically when the room changes.
     let room = use_server_future(move || async move { get_room(room_id_sig()).await })?;
 
-    let mut messages_version = use_signal(|| 0u32);
-    let messages = use_server_future(move || {
+    // Initial load from server — re-runs only when the room changes.
+    let messages_fetch = use_server_future(move || {
         let id = room_id_sig();
-        let _v = messages_version();
         async move { list_messages(id).await }
     })?;
+
+    // Local, WS-driven source of truth for the rendered message list.
+    let mut messages = use_signal(Vec::<Message>::new);
+    let mut load_error = use_signal(|| Option::<String>::None);
+
+    use_effect(move || match messages_fetch() {
+        Some(Ok(list)) => {
+            messages.set(list);
+            load_error.set(None);
+        }
+        Some(Err(e)) => {
+            load_error.set(Some(e.to_string()));
+        }
+        None => {}
+    });
 
     let ws = use_context::<WsHandle>();
 
@@ -47,6 +61,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
         if prev != 0 && prev != id {
             ws_unsub.unsubscribe(prev);
             typing_users.set(Vec::new());
+            messages.set(Vec::new());
         }
         ws_sub.subscribe(id);
         last_subscribed.set(id);
@@ -61,22 +76,41 @@ pub fn RoomViewPage(room_id: String) -> Element {
         }
     });
 
-    // Bump messages_version when relevant WS events arrive for this room.
+    // Apply WS events directly to the local messages signal — no re-fetching.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             let id = room_id_sig();
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == id => {
-                    let v = *messages_version.peek();
-                    messages_version.set(v + 1);
+                    let m = message.clone();
+                    messages.with_mut(|v| {
+                        if !v.iter().any(|x| x.id == m.id) {
+                            v.push(m);
+                        }
+                    });
                 }
-                ChatEvent::MessageDeleted { room_id, .. } if *room_id == id => {
-                    let v = *messages_version.peek();
-                    messages_version.set(v + 1);
+                ChatEvent::MessageDeleted {
+                    room_id,
+                    message_id,
+                } if *room_id == id => {
+                    let mid = *message_id;
+                    messages.with_mut(|v| v.retain(|m| m.id != mid));
                 }
-                ChatEvent::MessageEdited { room_id, .. } if *room_id == id => {
-                    let v = *messages_version.peek();
-                    messages_version.set(v + 1);
+                ChatEvent::MessageEdited {
+                    room_id,
+                    message_id,
+                    new_body,
+                    edited_at,
+                } if *room_id == id => {
+                    let mid = *message_id;
+                    let body = new_body.clone();
+                    let at = edited_at.clone();
+                    messages.with_mut(|v| {
+                        if let Some(m) = v.iter_mut().find(|m| m.id == mid) {
+                            m.body = body;
+                            m.edited_at = Some(at);
+                        }
+                    });
                 }
                 _ => {}
             }
@@ -139,17 +173,14 @@ pub fn RoomViewPage(room_id: String) -> Element {
         _ => None,
     };
 
-    let message_list = match messages() {
-        Some(Ok(list)) => list,
-        Some(Err(e)) => {
-            return rsx! {
-                div { class: "flex-1 flex items-center justify-center text-red-500",
-                    "Failed to load messages: {e}"
-                }
-            };
-        }
-        None => vec![],
-    };
+    if let Some(e) = load_error() {
+        return rsx! {
+            div { class: "flex-1 flex items-center justify-center text-red-500",
+                "Failed to load messages: {e}"
+            }
+        };
+    }
+    let message_list = messages();
 
     // Determine mute state for composer
     let is_muted = u.is_muted;
@@ -208,9 +239,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                     confirm_delete_msg.set(None);
                                     delete_reason.set(String::new());
                                     match delete_message(msg_id, reason).await {
-                                        Ok(()) => {
-                                            messages_version.set(messages_version() + 1);
-                                        }
+                                        Ok(()) => {}
                                         Err(e) => {
                                             error.set(Some(format!("Delete failed: {}", e)));
                                         }
@@ -303,7 +332,6 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                                                 editing_msg_id.set(None);
                                                                 edit_draft.set(String::new());
                                                                 edit_error.set(None);
-                                                                messages_version.set(messages_version() + 1);
                                                             }
                                                             Err(e) => {
                                                                 edit_error.set(Some(e.to_string()));
@@ -391,7 +419,6 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                         Ok(_) => {
                                             draft.set(String::new());
                                             error.set(None);
-                                            messages_version.set(messages_version() + 1);
                                         }
                                         Err(e) => error.set(Some(e.to_string())),
                                     }
@@ -412,7 +439,6 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                     Ok(_) => {
                                         draft.set(String::new());
                                         error.set(None);
-                                        messages_version.set(messages_version() + 1);
                                     }
                                     Err(e) => error.set(Some(e.to_string())),
                                 }
