@@ -73,3 +73,44 @@ fn read_last_seen(_room_id: i64) -> Option<i64> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn write_last_seen(_room_id: i64, _message_id: i64) {}
+
+#[cfg(target_arch = "wasm32")]
+const NEAR_BOTTOM_PX: f64 = 50.0;
+
+#[cfg(target_arch = "wasm32")]
+fn get_container(id: &str) -> Option<web_sys::HtmlElement> {
+    use wasm_bindgen::JsCast;
+    let doc = web_sys::window()?.document()?;
+    let el = doc.get_element_by_id(id)?;
+    el.dyn_into::<web_sys::HtmlElement>().ok()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn is_near_bottom(el: &web_sys::HtmlElement) -> bool {
+    let scroll_top = el.scroll_top() as f64;
+    let client_height = el.client_height() as f64;
+    let scroll_height = el.scroll_height() as f64;
+    scroll_top + client_height >= scroll_height - NEAR_BOTTOM_PX
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scroll_container_to_bottom(id: &str) {
+    if let Some(el) = get_container(id) {
+        el.set_scroll_top(el.scroll_height());
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scroll_message_into_view(message_id: i64) {
+    use wasm_bindgen::JsCast;
+    let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
+    let selector = format!("[data-msg-id=\"{message_id}\"]");
+    let Ok(Some(el)) = doc.query_selector(&selector) else {
+        return;
+    };
+    if let Ok(html) = el.dyn_into::<web_sys::HtmlElement>() {
+        html.scroll_into_view_with_bool(true);
+    }
+}
