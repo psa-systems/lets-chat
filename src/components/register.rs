@@ -32,7 +32,7 @@ pub fn RegisterPage() -> Element {
                     nav.push(Route::Home {});
                 }
                 Err(e) => {
-                    error.set(Some(e.to_string()));
+                    error.set(Some(auth::user_facing_error(&e)));
                     loading.set(false);
                 }
             }

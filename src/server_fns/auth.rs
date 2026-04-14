@@ -12,6 +12,16 @@ pub struct AuthResponse {
 const GENERIC_REGISTER_ERROR: &str = "Registration failed";
 const GENERIC_LOGIN_ERROR: &str = "Invalid credentials";
 
+/// Extract the user-facing message from a `ServerFnError`. The default `Display`
+/// impl wraps the message as `"error running server function: <msg> (details: ...)"`,
+/// which is leaky for end users.
+pub fn user_facing_error(err: &ServerFnError) -> String {
+    match err {
+        ServerFnError::ServerError { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
 #[server]
 pub async fn register(username: String, password: String) -> Result<AuthResponse, ServerFnError> {
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
