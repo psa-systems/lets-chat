@@ -16,7 +16,7 @@ pub fn AdminUsersPage() -> Element {
     let users = match &*read_guard {
         Some(Ok(u)) => u.clone(),
         Some(Err(e)) => {
-            let err = e.to_string();
+            let err = crate::server_fns::auth::user_facing_error(e);
             return rsx! {
                 div { class: "text-red-600 p-4", "Error loading users: {err}" }
             };

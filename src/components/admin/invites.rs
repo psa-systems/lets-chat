@@ -12,7 +12,7 @@ pub fn AdminInvitesPage() -> Element {
     let invites = match &*read_guard {
         Some(Ok(list)) => list.clone(),
         Some(Err(e)) => {
-            let err = e.to_string();
+            let err = crate::server_fns::auth::user_facing_error(e);
             return rsx! {
                 div { class: "text-red-600 p-4", "Error loading invite codes: {err}" }
             };

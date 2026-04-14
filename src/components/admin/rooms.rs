@@ -24,7 +24,7 @@ pub fn AdminRoomsPage() -> Element {
     let rooms = match &*read_guard {
         Some(Ok(list)) => list.clone(),
         Some(Err(e)) => {
-            let err = e.to_string();
+            let err = crate::server_fns::auth::user_facing_error(e);
             return rsx! {
                 div { class: "text-red-600 p-4", "Error loading rooms: {err}" }
             };
