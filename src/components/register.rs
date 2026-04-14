@@ -5,6 +5,35 @@ use crate::server_fns::auth;
 
 #[component]
 pub fn RegisterPage() -> Element {
+    let mut hydrated = use_signal(|| false);
+    #[cfg(target_arch = "wasm32")]
+    use_hook(|| {
+        spawn(async move {
+            hydrated.set(true);
+        });
+    });
+
+    if !hydrated() {
+        return rsx! { LoadingCard { message: "Loading…" } };
+    }
+
+    rsx! { RegisterForm {} }
+}
+
+#[component]
+pub(crate) fn LoadingCard(message: String) -> Element {
+    rsx! {
+        div { class: "min-h-screen flex items-center justify-center bg-gray-100",
+            div { class: "bg-white p-8 rounded-lg shadow-md w-full max-w-sm text-center",
+                h1 { class: "text-2xl font-bold mb-2", "Let's Chat" }
+                p { class: "text-gray-500", "{message}" }
+            }
+        }
+    }
+}
+
+#[component]
+fn RegisterForm() -> Element {
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut confirm_password = use_signal(String::new);
@@ -44,11 +73,7 @@ pub fn RegisterPage() -> Element {
     } else {
         "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
     };
-    let button_label = if loading() {
-        "Creating account..."
-    } else {
-        "Register"
-    };
+    let button_label = if loading() { "Creating account..." } else { "Register" };
 
     rsx! {
         div { class: "min-h-screen flex items-center justify-center bg-gray-100",
