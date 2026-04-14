@@ -43,6 +43,10 @@ fn main() {
             .unwrap_or_else(|| "/data".to_string());
         tracing::info!(data_dir = %data_dir, "starting lets-chat");
         db::set_data_dir(data_dir);
+
+        // Eagerly initialize the server uptime clock so the 120s blank-input
+        // grace window is measured from process boot, not first auth attempt.
+        let _ = server_fns::helpers::server_started_at();
     }
 
     #[cfg(target_os = "linux")]
