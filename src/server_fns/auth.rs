@@ -9,65 +9,116 @@ pub struct AuthResponse {
     pub session_token: String,
 }
 
+const GENERIC_REGISTER_ERROR: &str = "Registration failed";
+const GENERIC_LOGIN_ERROR: &str = "Invalid credentials";
+
+/// Extract the user-facing message from a `ServerFnError`. The default `Display`
+/// impl wraps the message as `"error running server function: <msg> (details: ...)"`,
+/// which is leaky for end users.
+pub fn user_facing_error(err: &ServerFnError) -> String {
+    match err {
+        ServerFnError::ServerError { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
 #[server]
 pub async fn register(username: String, password: String) -> Result<AuthResponse, ServerFnError> {
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand::rngs::OsRng;
+    use tracing::warn;
 
     let username = username.trim().to_string();
     let password = password.trim().to_string();
 
+    if username.is_empty() || password.is_empty() {
+        let msg = crate::server_fns::helpers::classify_blank_error(
+            std::time::Instant::now(),
+            crate::server_fns::helpers::server_started_at(),
+            GENERIC_REGISTER_ERROR,
+        );
+        warn!(
+            username_empty = username.is_empty(),
+            password_empty = password.is_empty(),
+            "register rejected: blank input"
+        );
+        return Err(ServerFnError::new(msg));
+    }
+
     if username.len() < 3 {
-        return Err(ServerFnError::new("Username must be at least 3 characters"));
+        warn!(username_len = username.len(), "register rejected: username too short");
+        return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
     }
     if password.len() < 8 {
-        return Err(ServerFnError::new("Password must be at least 8 characters"));
+        warn!(password_len = password.len(), "register rejected: password too short");
+        return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
     }
 
     let pool = crate::db::get_auth_pool().await;
 
-    // Check if username already taken
-    if crate::db::auth::find_user_by_username(pool, &username)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .is_some()
-    {
-        return Err(ServerFnError::new("Username already taken"));
+    match crate::db::auth::find_user_by_username(pool, &username).await {
+        Ok(Some(_)) => {
+            warn!(%username, "register rejected: username already taken");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+        Ok(None) => {}
+        Err(e) => {
+            warn!(error = %e, "register failed: db lookup");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
     }
 
-    // Hash password
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| ServerFnError::new(format!("Failed to hash password: {}", e)))?
-        .to_string();
+    let password_hash = match argon2.hash_password(password.as_bytes(), &salt) {
+        Ok(h) => h.to_string(),
+        Err(e) => {
+            warn!(error = %e, "register failed: password hash");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+    };
 
-    // Create user
-    let user_id = crate::db::auth::create_user(pool, &username, &password_hash)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let user_id = match crate::db::auth::create_user(pool, &username, &password_hash).await {
+        Ok(id) => id,
+        Err(e) => {
+            warn!(error = %e, "register failed: create_user");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+    };
 
-    // Auto-promote first user to admin
-    let user_count = crate::db::auth::count_users(pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let user_count = match crate::db::auth::count_users(pool).await {
+        Ok(n) => n,
+        Err(e) => {
+            warn!(error = %e, "register failed: count_users");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+    };
     if user_count == 1 {
-        crate::db::auth::set_user_role(pool, &user_id, "admin")
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        if let Err(e) = crate::db::auth::set_user_role(pool, &user_id, "admin").await {
+            warn!(error = %e, "register failed: set_user_role admin");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
     }
 
-    // Create session
-    let session_token = crate::db::auth::create_session(pool, &user_id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let session_token = match crate::db::auth::create_session(pool, &user_id).await {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(error = %e, "register failed: create_session");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+    };
 
-    // Fetch the user record to return public info
-    let record = crate::db::auth::find_user_by_id(pool, &user_id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("User not found after creation"))?;
+    let record = match crate::db::auth::find_user_by_id(pool, &user_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            warn!(%user_id, "register failed: user not found after creation");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+        Err(e) => {
+            warn!(error = %e, "register failed: find_user_by_id");
+            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+        }
+    };
 
     Ok(AuthResponse {
         user: user_record_to_user(&record),
@@ -78,25 +129,55 @@ pub async fn register(username: String, password: String) -> Result<AuthResponse
 #[server]
 pub async fn login(username: String, password: String) -> Result<AuthResponse, ServerFnError> {
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
+    use tracing::warn;
 
     let username = username.trim().to_string();
     let password = password.trim().to_string();
 
+    if username.is_empty() || password.is_empty() {
+        let msg = crate::server_fns::helpers::classify_blank_error(
+            std::time::Instant::now(),
+            crate::server_fns::helpers::server_started_at(),
+            GENERIC_LOGIN_ERROR,
+        );
+        warn!(
+            username_empty = username.is_empty(),
+            password_empty = password.is_empty(),
+            "login rejected: blank input"
+        );
+        return Err(ServerFnError::new(msg));
+    }
+
     let pool = crate::db::get_auth_pool().await;
 
-    let record = crate::db::auth::find_user_by_username(pool, &username)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("Invalid username or password"))?;
+    let record = match crate::db::auth::find_user_by_username(pool, &username).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            warn!(%username, "login rejected: user not found");
+            return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
+        }
+        Err(e) => {
+            warn!(error = %e, "login failed: db lookup");
+            return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
+        }
+    };
 
-    // Verify password
-    let parsed_hash = PasswordHash::new(&record.password_hash)
-        .map_err(|e| ServerFnError::new(format!("Hash error: {}", e)))?;
-    Argon2::default()
+    let parsed_hash = match PasswordHash::new(&record.password_hash) {
+        Ok(h) => h,
+        Err(e) => {
+            warn!(error = %e, "login failed: stored hash unparseable");
+            return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
+        }
+    };
+    if Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
-        .map_err(|_| ServerFnError::new("Invalid username or password"))?;
+        .is_err()
+    {
+        warn!(%username, "login rejected: bad password");
+        return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
+    }
 
-    // Check ban status
+    // Ban status is preserved as a distinct, user-facing message per design.
     if record.is_banned {
         let msg = match &record.ban_reason {
             Some(reason) => format!("Account banned: {}", reason),
@@ -105,10 +186,13 @@ pub async fn login(username: String, password: String) -> Result<AuthResponse, S
         return Err(ServerFnError::new(msg));
     }
 
-    // Create session
-    let session_token = crate::db::auth::create_session(pool, &record.id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let session_token = match crate::db::auth::create_session(pool, &record.id).await {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(error = %e, "login failed: create_session");
+            return Err(ServerFnError::new(GENERIC_LOGIN_ERROR));
+        }
+    };
 
     Ok(AuthResponse {
         user: user_record_to_user(&record),
