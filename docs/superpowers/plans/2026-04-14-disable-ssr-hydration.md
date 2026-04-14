@@ -462,3 +462,113 @@ Tasks 3 and 4 are safe to keep even under SSR — simpler code does not reintrod
 - A cold server start followed by an immediate register attempt works without the "dead button" or "empty fields" error windows.
 - All existing tests still pass.
 - `just verify` returns HTTP 200.
+
+---
+
+## Research findings
+
+Investigated the vendored `dioxus-server-0.7.5` source (pulled in transitively by `dioxus = "0.7.3"` with `fullstack` feature) in the dev container at `/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/dioxus-server-0.7.5/src/server.rs`.
+
+### `DioxusRouterExt` methods (all on `Router<FullstackState>`)
+
+From `dioxus-server-0.7.5/src/server.rs` — trait declaration at line 22, impl at line 127:
+
+```rust
+pub trait DioxusRouterExt {
+    // Serves every file under `public/` EXCEPT index.html (explicitly skipped).
+    // Returns Router<FullstackState> — still needs .with_state(...) applied later.
+    fn serve_static_assets(self) -> Router<FullstackState>;
+
+    // Full SSR: register_server_functions + serve_static_assets +
+    // fallback(render_handler) + .with_state(FullstackState::new(cfg, app)).
+    // This is what we're replacing.
+    fn serve_dioxus_application<M: 'static>(
+        self,
+        cfg: ServeConfig,
+        app: impl ComponentFunction<(), M> + Send + Sync,
+    ) -> Router<()>;
+
+    // Iterates inventory-collected `ServerFunction::collect()` and adds a POST
+    // route for each. Exactly what we want — returns Router<FullstackState>.
+    fn register_server_functions(self) -> Router<FullstackState>;
+
+    // Same as serve_dioxus_application but without static assets. Still does SSR
+    // via render_handler — NOT what we want (we're CSR-only).
+    fn serve_api_application<M: 'static>(
+        self,
+        cfg: ServeConfig,
+        app: impl ComponentFunction<(), M> + Send + Sync,
+    ) -> Router<()>;
+}
+```
+
+There is **no** Dioxus-provided method that serves a bare `index.html` SPA shell. `serve_static_assets()` explicitly excludes `index.html` (see line 414 in `server.rs`). We must mount it ourselves via `tower_http::services::ServeFile`.
+
+### `FullstackState::headless()`
+
+`dioxus-server-0.7.5/src/server.rs:228` — `FullstackState::headless()` returns a state with no root component. Docstring: *"This won't render pages, but can still be used to register server functions and serve static assets."* Exactly the CSR-only use case. Use this instead of `FullstackState::new(cfg, App)`.
+
+### `public_path()` — asset directory discovery
+
+`dioxus-server-0.7.5/src/server.rs:387`:
+
+```rust
+pub(crate) fn public_path() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("DIOXUS_PUBLIC_PATH") {
+        return Some(PathBuf::from(path));
+    }
+    Some(std::env::current_exe().ok()?.parent().unwrap().join("public"))
+}
+```
+
+The CLI bundles all built assets (WASM blob, JS glue, `assets/*`, `index.html`) into a `public/` directory **sibling** to the compiled binary. For this project, with `dx build --platform web` and debug profile:
+
+- Binary: `./target/dx/lets-chat/debug/web/lets-chat`
+- Assets: `./target/dx/lets-chat/debug/web/public/`
+- Index shell: `./target/dx/lets-chat/debug/web/public/index.html`
+
+`justfile:78` already references the binary at that path. The runtime path is `current_exe().parent().join("public")` — so whatever cwd you launch from, it resolves relative to the binary, which matches Docker deployment too.
+
+### Recommended Task 2 wiring
+
+```rust
+#[cfg(all(not(target_arch = "wasm32"), feature = "server"))]
+fn build_server_router() -> axum::Router {
+    use axum::routing::get;
+    use dioxus::server::{DioxusRouterExt, FullstackState};
+    use tower_http::services::ServeFile;
+
+    // Compute the index.html path the same way dioxus-server's public_path() does.
+    let index_html = std::env::var("DIOXUS_PUBLIC_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::current_exe()
+                .expect("current_exe")
+                .parent()
+                .expect("parent")
+                .join("public")
+        })
+        .join("index.html");
+
+    axum::Router::new()
+        .route("/ws", get(ws::handler::ws_handler))
+        .register_server_functions()                   // mount /api/... POST routes
+        .serve_static_assets()                         // mount /assets, wasm, JS (not index.html)
+        .fallback_service(ServeFile::new(index_html))  // SPA shell for every other GET
+        .with_state(FullstackState::headless())
+}
+```
+
+Key points:
+- `register_server_functions()` and `serve_static_assets()` both return `Router<FullstackState>`, so the `.with_state(FullstackState::headless())` call at the end erases the state param to `Router<()>` — matches the existing return type.
+- `fallback_service` (not `fallback`) is needed because `ServeFile` is a `Service`, not a handler. Mounted after the static-assets ServeDir so real files win.
+- `tower-http` is already a transitive dep via `dioxus-server`; may need to be added to `Cargo.toml` with the `fs` feature explicitly.
+- The `/ws` route must be registered **before** `register_server_functions()`/`serve_static_assets()` (as shown) to avoid being shadowed by the fallback.
+
+### Caveats / open questions
+
+1. **`Cargo.toml` may need `tower-http = { version = "0.6", features = ["fs"] }`** added as a direct dependency (currently pulled in transitively). Check during Task 2 whether the `ServeFile` symbol is reachable without it.
+2. The `FullstackState` path: public re-exports live at `dioxus::server::FullstackState` (confirmed via `dioxus-0.7.5/src/lib.rs`). If the import fails, try `dioxus_server::FullstackState` directly (requires adding `dioxus-server` as a direct dep — undesirable).
+3. `serve_static_assets()` gracefully no-ops when `public/` is absent (`if let Some(public_path) = public_path() else { return self; }`). But `ServeFile::new(missing_path)` will return 404 at request time, not startup — acceptable, but means a malformed build won't crash early.
+4. `dx build --platform web` still generates an `index.html` even without SSR configured — it's a static shell with `<script>` tags that load the WASM. This is exactly what we want.
+5. The `DIOXUS_PUBLIC_PATH` env var overrides the default; if we want to honor it (for Docker deployments that relocate assets), the snippet above already does.
