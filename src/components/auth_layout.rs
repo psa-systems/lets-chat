@@ -29,7 +29,7 @@ pub fn AuthLayout() -> Element {
             }
         }
         Some(Err(e)) => {
-            let err_msg = e.to_string();
+            let err_msg = auth::user_facing_error(&e);
             rsx! {
                 div { class: "min-h-screen flex items-center justify-center bg-gray-100",
                     div { class: "bg-white p-8 rounded-lg shadow-md text-center",

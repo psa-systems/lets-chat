@@ -13,7 +13,7 @@ pub fn AdminSettingsPage() -> Element {
     let settings = match &*read_guard {
         Some(Ok(s)) => s.clone(),
         Some(Err(e)) => {
-            let err = e.to_string();
+            let err = crate::server_fns::auth::user_facing_error(e);
             return rsx! {
                 div { class: "text-red-600 p-4", "Error loading settings: {err}" }
             };
