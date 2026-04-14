@@ -7,10 +7,8 @@ use crate::server_fns::auth;
 pub fn RegisterPage() -> Element {
     let mut hydrated = use_signal(|| false);
     #[cfg(target_arch = "wasm32")]
-    use_hook(|| {
-        spawn(async move {
-            hydrated.set(true);
-        });
+    use_effect(move || {
+        hydrated.set(true);
     });
 
     if !hydrated() {
