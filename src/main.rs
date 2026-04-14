@@ -21,26 +21,10 @@ fn parse_data_dir() -> Option<String> {
 #[cfg(all(not(target_arch = "wasm32"), feature = "server"))]
 fn build_server_router() -> axum::Router {
     use axum::routing::get;
-    use dioxus::server::{DioxusRouterExt, FullstackState};
-    use tower_http::services::ServeFile;
-
-    let index_html = std::env::var("DIOXUS_PUBLIC_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::current_exe()
-                .expect("current_exe")
-                .parent()
-                .expect("parent")
-                .join("public")
-        })
-        .join("index.html");
-
+    use dioxus::server::DioxusRouterExt;
     axum::Router::new()
         .route("/ws", get(ws::handler::ws_handler))
-        .register_server_functions()
-        .serve_static_assets()
-        .fallback_service(ServeFile::new(index_html))
-        .with_state(FullstackState::headless())
+        .serve_dioxus_application(ServeConfig::new(), App)
 }
 
 fn main() {
@@ -69,7 +53,10 @@ fn main() {
         if std::env::var("GDK_SCALE").unwrap_or_default().is_empty() {
             unsafe { std::env::set_var("GDK_SCALE", "1") };
         }
-        if std::env::var("GDK_DPI_SCALE").unwrap_or_default().is_empty() {
+        if std::env::var("GDK_DPI_SCALE")
+            .unwrap_or_default()
+            .is_empty()
+        {
             unsafe { std::env::set_var("GDK_DPI_SCALE", "1") };
         }
     }
@@ -104,7 +91,11 @@ fn main() {
     }
 
     // Web fullstack server binary built by `dx build`.
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "desktop"), feature = "server"))]
+    #[cfg(all(
+        not(target_arch = "wasm32"),
+        not(feature = "desktop"),
+        feature = "server"
+    ))]
     {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")
