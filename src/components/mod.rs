@@ -4,6 +4,7 @@ pub mod dm_view;
 pub mod invite;
 pub mod layout;
 pub mod login;
+pub mod reaction_bar;
 pub mod register;
 pub mod room_view;
 pub mod sidebar;
