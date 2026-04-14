@@ -182,11 +182,11 @@ Broadcast `RoomMemberRemoved` on kick/leave so the sidebar updates without a rel
 
 ---
 
-## Phase 10 — Emoji Reactions
+## Phase 10 — Emoji Reactions (Done)
 
 **Goal:** React to messages with emoji. High UX value, self-contained schema, no hard dependency on earlier phases.
 
-### DB Migration — `migrations/chat/0006_reactions.sql`
+### DB Migration — `migrations/chat/0007_reactions.sql`
 
 ```sql
 CREATE TABLE IF NOT EXISTS message_reactions (
@@ -253,7 +253,7 @@ ReactionRemoved {
 
 **Goal:** Full-text search across messages the user has access to. **Depends on Phase 9** (private room membership must gate search results).
 
-### DB Migration — `migrations/chat/0007_search.sql`
+### DB Migration — `migrations/chat/0008_search.sql`
 
 ```sql
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
