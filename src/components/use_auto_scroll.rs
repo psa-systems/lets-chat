@@ -22,22 +22,104 @@ pub struct AutoScroll {
 ///   near the bottom; otherwise shows the "new messages" pill.
 /// - Tracks the highest-seen message id in `localStorage` keyed by room.
 pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> AutoScroll {
-    let _ = messages;
+    let mut show_new_pill = use_signal(|| false);
+    let mut first_unseen_id = use_signal(|| Option::<i64>::None);
 
-    let show_new_pill = use_signal(|| false);
-    let first_unseen_id = use_signal(|| Option::<i64>::None);
+    let mut initialized_for_room = use_signal(|| 0i64);
+    let mut last_len = use_signal(|| 0usize);
+    let mut last_max_id = use_signal(|| 0i64);
+
+    use_effect(move || {
+        let rid = room_id();
+        let list = messages();
+
+        if *initialized_for_room.peek() != rid {
+            show_new_pill.set(false);
+            first_unseen_id.set(None);
+            last_len.set(0);
+            last_max_id.set(0);
+            initialized_for_room.set(rid);
+        }
+
+        let prev_len = *last_len.peek();
+        let new_len = list.len();
+        let newest_id = list.last().map(|m| m.id).unwrap_or(0);
+
+        // First non-empty render for this room: decide initial scroll target.
+        if prev_len == 0 && new_len > 0 {
+            #[cfg(target_arch = "wasm32")]
+            {
+                let last_seen = read_last_seen(rid);
+                let unseen = match last_seen {
+                    Some(seen) => list.iter().find(|m| m.id > seen).map(|m| m.id),
+                    None => None,
+                };
+                first_unseen_id.set(unseen);
+
+                let container_id = format!("chat-scroll-{rid}");
+                match unseen {
+                    Some(id) => scroll_message_into_view(id),
+                    None => {
+                        scroll_container_to_bottom(&container_id);
+                        write_last_seen(rid, newest_id);
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = (rid, newest_id);
+                first_unseen_id.set(None);
+            }
+
+            last_len.set(new_len);
+            last_max_id.set(newest_id);
+            return;
+        }
+
+        // Appended messages (new message arrived) for this room.
+        if new_len > prev_len && newest_id > *last_max_id.peek() {
+            #[cfg(target_arch = "wasm32")]
+            {
+                let container_id = format!("chat-scroll-{rid}");
+                let was_near_bottom = get_container(&container_id)
+                    .map(|el| is_near_bottom(&el))
+                    .unwrap_or(true);
+
+                if was_near_bottom {
+                    scroll_container_to_bottom(&container_id);
+                    write_last_seen(rid, newest_id);
+                    show_new_pill.set(false);
+                } else {
+                    show_new_pill.set(true);
+                }
+            }
+            last_max_id.set(newest_id);
+        }
+
+        last_len.set(new_len);
+    });
 
     let scroll_to_bottom = use_callback(move |_: ()| {
+        let rid = *room_id.peek();
+        let newest_id = messages.peek().last().map(|m| m.id).unwrap_or(0);
         #[cfg(target_arch = "wasm32")]
         {
-            let _ = room_id;
-            // Filled in by a later task.
+            let container_id = format!("chat-scroll-{rid}");
+            scroll_container_to_bottom(&container_id);
+            if newest_id > 0 {
+                write_last_seen(rid, newest_id);
+            }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (rid, newest_id);
+        }
+        show_new_pill.set(false);
     });
 
     let container_id = {
         let id = *room_id.peek();
-        format!("chat-scroll-{}", id)
+        format!("chat-scroll-{id}")
     };
 
     AutoScroll {
