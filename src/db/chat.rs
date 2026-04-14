@@ -493,3 +493,40 @@ pub async fn list_reactions(
         })
         .collect())
 }
+
+/// List all reactions for every message in a room, in a single query.
+/// Returns a vec of `(message_id, Reaction)` for messages that have at least one reaction.
+pub async fn list_room_reactions(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    caller_user_id: &str,
+) -> Result<Vec<(i64, Reaction)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT mr.message_id, mr.emoji, \
+                COUNT(*) AS count, \
+                MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me \
+         FROM message_reactions mr \
+         JOIN messages m ON m.id = mr.message_id \
+         WHERE m.room_id = ? AND m.deleted_at IS NULL \
+         GROUP BY mr.message_id, mr.emoji \
+         ORDER BY mr.message_id, MIN(mr.created_at)",
+    )
+    .bind(caller_user_id)
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.get::<i64, _>("message_id"),
+                Reaction {
+                    emoji: r.get("emoji"),
+                    count: r.get("count"),
+                    reacted_by_me: r.get::<i64, _>("reacted_by_me") == 1,
+                },
+            )
+        })
+        .collect())
+}

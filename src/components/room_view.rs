@@ -7,6 +7,7 @@ use crate::models::{Message, Reaction, User};
 use crate::routes::Route;
 use crate::server_fns::chat::{edit_message, get_room, list_messages, send_message};
 use crate::server_fns::moderation::delete_message;
+use crate::server_fns::reactions::get_room_reactions;
 use crate::ws::events::ChatEvent;
 
 #[component]
@@ -85,7 +86,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Apply WS events directly to the local messages signal — no re-fetching.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            let id = room_id_sig();
+            let id = *room_id_sig.peek();
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == id => {
                     let m = message.clone();
@@ -126,7 +127,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
     // Handle typing indicator events.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            let id = room_id_sig();
+            let id = *room_id_sig.peek();
             match event {
                 ChatEvent::UserTyping {
                     room_id,
@@ -158,10 +159,29 @@ pub fn RoomViewPage(room_id: String) -> Element {
     let mut reactions_map =
         use_signal(|| std::collections::HashMap::<i64, Vec<Reaction>>::new());
 
+    // Fetch all reactions for the room on load (re-runs when room changes).
+    let reactions_fetch =
+        use_server_future(move || async move { get_room_reactions(room_id_sig()).await })?;
+
+    // Populate reactions_map from the server fetch result.
+    use_effect(move || {
+        if let Some(Ok(rows)) = reactions_fetch() {
+            let mut map = std::collections::HashMap::<i64, Vec<Reaction>>::new();
+            for (mid, emoji, count, reacted_by_me) in rows {
+                map.entry(mid).or_default().push(Reaction {
+                    emoji,
+                    count,
+                    reacted_by_me,
+                });
+            }
+            reactions_map.set(map);
+        }
+    });
+
     // Handle reaction WS events.
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
-            let id = room_id_sig();
+            let id = *room_id_sig.peek();
             match event {
                 ChatEvent::ReactionAdded {
                     message_id,

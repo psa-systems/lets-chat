@@ -66,3 +66,20 @@ pub async fn list_reactions(message_id: i64) -> Result<Vec<Reaction>, ServerFnEr
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
+
+/// Fetch all reactions for a room in one query.
+/// Returns `(message_id, emoji, count, reacted_by_me)` tuples.
+#[server]
+pub async fn get_room_reactions(
+    room_id: i64,
+) -> Result<Vec<(i64, String, i64, bool)>, ServerFnError> {
+    let user = crate::server_fns::helpers::require_auth().await?;
+    let pool = crate::db::get_chat_pool().await;
+    let rows = crate::db::chat::list_room_reactions(pool, room_id, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|(mid, r)| (mid, r.emoji, r.count, r.reacted_by_me))
+        .collect())
+}

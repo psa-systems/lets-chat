@@ -74,7 +74,7 @@ pub fn ReactionBar(
                     "+"
                 }
                 if show_picker() {
-                    div { class: "absolute bottom-8 left-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1",
+                    div { class: "absolute top-full mt-1 left-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1",
                         style: "min-width: 180px;",
                         for &e in EMOJI_PICKER {
                             {
