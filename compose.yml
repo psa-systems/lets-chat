@@ -18,6 +18,8 @@ services:
       - ./Cargo.lock:/app/Cargo.lock
       - ./migrations:/app/migrations
       - cargo_target:/app/target
+      - lets_chat_data:/data
 
 volumes:
   cargo_target:
+  lets_chat_data:
