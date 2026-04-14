@@ -215,8 +215,13 @@ pub fn DmViewPage(user_id: String) -> Element {
                 return;
             };
             let cb = Closure::<dyn FnMut()>::new(move || {
-                let v = *visibility_tick.peek();
-                visibility_tick.set(v + 1);
+                // The listener is attached to `document` and leaked via
+                // `cb.forget()`, so it outlives the component. Guard against
+                // the signal being dropped after unmount.
+                let Ok(v) = visibility_tick.try_peek() else { return };
+                let next = *v + 1;
+                drop(v);
+                let _ = visibility_tick.try_write().map(|mut w| *w = next);
             });
             let _ = document
                 .add_event_listener_with_callback("visibilitychange", cb.as_ref().unchecked_ref());
