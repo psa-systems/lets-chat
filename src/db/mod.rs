@@ -1,40 +1,40 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod auth;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod chat;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod moderation;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod settings;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 use sqlx::SqlitePool;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 use std::sync::OnceLock;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 static CHAT_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 static AUTH_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 static SETTINGS_POOL: tokio::sync::OnceCell<SqlitePool> = tokio::sync::OnceCell::const_new();
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 static DATA_DIR: OnceLock<String> = OnceLock::new();
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub fn set_data_dir(dir: String) {
     DATA_DIR.set(dir).expect("data dir already set");
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 fn data_dir() -> &'static str {
     DATA_DIR.get().map(|s| s.as_str()).unwrap_or("/data")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 async fn init_chat_pool() -> SqlitePool {
     let dir = data_dir();
     std::fs::create_dir_all(dir).expect("Failed to create data directory");
@@ -82,7 +82,7 @@ async fn init_chat_pool() -> SqlitePool {
     pool
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 async fn init_auth_pool() -> SqlitePool {
     let dir = data_dir();
     std::fs::create_dir_all(dir).expect("Failed to create data directory");
@@ -106,7 +106,7 @@ async fn init_auth_pool() -> SqlitePool {
     pool
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 async fn init_settings_pool() -> SqlitePool {
     let dir = data_dir();
     std::fs::create_dir_all(dir).expect("Failed to create data directory");
@@ -124,17 +124,17 @@ async fn init_settings_pool() -> SqlitePool {
     pool
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub async fn get_chat_pool() -> &'static SqlitePool {
     CHAT_POOL.get_or_init(init_chat_pool).await
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub async fn get_auth_pool() -> &'static SqlitePool {
     AUTH_POOL.get_or_init(init_auth_pool).await
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub async fn get_settings_pool() -> &'static SqlitePool {
     SETTINGS_POOL.get_or_init(init_settings_pool).await
 }

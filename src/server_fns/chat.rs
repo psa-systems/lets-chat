@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::models::{Message, Room};
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 async fn require_room_access(
     pool: &sqlx::SqlitePool,
     room_id: i64,
