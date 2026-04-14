@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::models::ModAction;
+use dioxus::prelude::*;
 
 // ─── Ban ──────────────────────────────────────────────────────────────────────
 
@@ -16,7 +16,9 @@ pub async fn ban_user(user_id: String, reason: String) -> Result<(), ServerFnErr
     let actor_level = crate::server_fns::helpers::role_level(&actor.role);
     let target_level = crate::server_fns::helpers::role_level(&target.role);
     if target_level >= actor_level {
-        return Err(ServerFnError::new("Cannot moderate a user with equal or higher role"));
+        return Err(ServerFnError::new(
+            "Cannot moderate a user with equal or higher role",
+        ));
     }
 
     let reason_opt: Option<&str> = if reason.trim().is_empty() {
@@ -35,13 +37,7 @@ pub async fn ban_user(user_id: String, reason: String) -> Result<(), ServerFnErr
 
     let chat_pool = crate::db::get_chat_pool().await;
     crate::db::moderation::log_mod_action(
-        chat_pool,
-        "ban",
-        &user_id,
-        &actor.id,
-        reason_opt,
-        None,
-        None,
+        chat_pool, "ban", &user_id, &actor.id, reason_opt, None, None,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -67,13 +63,7 @@ pub async fn unban_user(user_id: String) -> Result<(), ServerFnError> {
 
     let chat_pool = crate::db::get_chat_pool().await;
     crate::db::moderation::log_mod_action(
-        chat_pool,
-        "unban",
-        &user_id,
-        &actor.id,
-        None,
-        None,
-        None,
+        chat_pool, "unban", &user_id, &actor.id, None, None, None,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -100,7 +90,9 @@ pub async fn suspend_user(
     let actor_level = crate::server_fns::helpers::role_level(&actor.role);
     let target_level = crate::server_fns::helpers::role_level(&target.role);
     if target_level >= actor_level {
-        return Err(ServerFnError::new("Cannot moderate a user with equal or higher role"));
+        return Err(ServerFnError::new(
+            "Cannot moderate a user with equal or higher role",
+        ));
     }
 
     let until_dt = if let Ok(hours) = until.trim().parse::<i64>() {
@@ -162,7 +154,9 @@ pub async fn mute_user(
     let actor_level = crate::server_fns::helpers::role_level(&actor.role);
     let target_level = crate::server_fns::helpers::role_level(&target.role);
     if target_level >= actor_level {
-        return Err(ServerFnError::new("Cannot moderate a user with equal or higher role"));
+        return Err(ServerFnError::new(
+            "Cannot moderate a user with equal or higher role",
+        ));
     }
 
     let until_opt: Option<String> = if until.trim().is_empty() {
@@ -189,13 +183,7 @@ pub async fn mute_user(
 
     let chat_pool = crate::db::get_chat_pool().await;
     crate::db::moderation::log_mod_action(
-        chat_pool,
-        "mute",
-        &user_id,
-        &actor.id,
-        reason_opt,
-        None,
-        None,
+        chat_pool, "mute", &user_id, &actor.id, reason_opt, None, None,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -222,13 +210,7 @@ pub async fn unmute_user(user_id: String) -> Result<(), ServerFnError> {
 
     let chat_pool = crate::db::get_chat_pool().await;
     crate::db::moderation::log_mod_action(
-        chat_pool,
-        "unmute",
-        &user_id,
-        &actor.id,
-        None,
-        None,
-        None,
+        chat_pool, "unmute", &user_id, &actor.id, None, None, None,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -244,12 +226,13 @@ pub async fn delete_message(message_id: i64, reason: String) -> Result<(), Serve
 
     let chat_pool = crate::db::get_chat_pool().await;
 
-    let row = sqlx::query("SELECT user_id, room_id FROM messages WHERE id = ? AND deleted_at IS NULL")
-        .bind(message_id)
-        .fetch_optional(chat_pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("Message not found"))?;
+    let row =
+        sqlx::query("SELECT user_id, room_id FROM messages WHERE id = ? AND deleted_at IS NULL")
+            .bind(message_id)
+            .fetch_optional(chat_pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?
+            .ok_or_else(|| ServerFnError::new("Message not found"))?;
     let target_user: String = sqlx::Row::get(&row, "user_id");
     let room_id: i64 = sqlx::Row::get(&row, "room_id");
 
@@ -289,11 +272,7 @@ pub async fn delete_message(message_id: i64, reason: String) -> Result<(), Serve
 // ─── Kick ─────────────────────────────────────────────────────────────────────
 
 #[server]
-pub async fn kick_user(
-    user_id: String,
-    room_id: i64,
-    reason: String,
-) -> Result<(), ServerFnError> {
+pub async fn kick_user(user_id: String, room_id: i64, reason: String) -> Result<(), ServerFnError> {
     let actor = crate::server_fns::helpers::require_role("moderator").await?;
 
     let auth_pool = crate::db::get_auth_pool().await;
@@ -305,7 +284,9 @@ pub async fn kick_user(
     let actor_level = crate::server_fns::helpers::role_level(&actor.role);
     let target_level = crate::server_fns::helpers::role_level(&target.role);
     if target_level >= actor_level {
-        return Err(ServerFnError::new("Cannot moderate a user with equal or higher role"));
+        return Err(ServerFnError::new(
+            "Cannot moderate a user with equal or higher role",
+        ));
     }
 
     let reason_opt: Option<&str> = if reason.trim().is_empty() {

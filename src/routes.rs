@@ -2,12 +2,8 @@ use dioxus::prelude::*;
 
 use crate::components::{
     admin::{
-        invites::AdminInvitesPage,
-        layout::AdminLayout,
-        mod_log::AdminModLogPage,
-        rooms::AdminRoomsPage,
-        settings::AdminSettingsPage,
-        users::AdminUsersPage,
+        invites::AdminInvitesPage, layout::AdminLayout, mod_log::AdminModLogPage,
+        rooms::AdminRoomsPage, settings::AdminSettingsPage, users::AdminUsersPage,
     },
     auth_layout::AuthLayout,
     dm_view::DmViewPage,

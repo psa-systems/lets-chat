@@ -5,7 +5,8 @@ use crate::models::user::UserRecord;
 /// Extract the authenticated user from the session cookie.
 /// Returns ServerFnError if not authenticated or banned.
 pub async fn require_auth() -> Result<UserRecord, ServerFnError> {
-    let session_id = get_session_id().await?
+    let session_id = get_session_id()
+        .await?
         .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
 
     let pool = crate::db::get_auth_pool().await;

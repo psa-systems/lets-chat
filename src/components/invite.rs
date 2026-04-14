@@ -14,7 +14,9 @@ pub fn InvitePage(code: String) -> Element {
 
     match result() {
         Some(Ok(room_id)) => {
-            nav.push(Route::Room { room_id: room_id.to_string() });
+            nav.push(Route::Room {
+                room_id: room_id.to_string(),
+            });
             rsx! {
                 div { class: "flex-1 flex items-center justify-center text-gray-500",
                     "Joining room…"

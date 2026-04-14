@@ -127,11 +127,7 @@ async fn connect_ws(
         onerror.forget();
 
         // Wait for either open or error
-        let opened = futures::future::select(
-            Box::pin(open_rx),
-            Box::pin(err_rx),
-        )
-        .await;
+        let opened = futures::future::select(Box::pin(open_rx), Box::pin(err_rx)).await;
 
         let connected = match opened {
             futures::future::Either::Left((Ok(true), _)) => true,

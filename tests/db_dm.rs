@@ -19,17 +19,35 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         .await
         .expect("chat pool");
     let chat_m1 = include_str!("../migrations/chat/0001_create_tables.sql");
-    sqlx::raw_sql(chat_m1).execute(&chat_pool).await.expect("chat migration 1");
+    sqlx::raw_sql(chat_m1)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 1");
     let chat_m2 = include_str!("../migrations/chat/0002_moderation.sql");
-    sqlx::raw_sql(chat_m2).execute(&chat_pool).await.expect("chat migration 2");
+    sqlx::raw_sql(chat_m2)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 2");
     let chat_m3 = include_str!("../migrations/chat/0003_dms.sql");
-    sqlx::raw_sql(chat_m3).execute(&chat_pool).await.expect("chat migration 3");
+    sqlx::raw_sql(chat_m3)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 3");
     let chat_m4 = include_str!("../migrations/chat/0004_message_editing.sql");
-    sqlx::raw_sql(chat_m4).execute(&chat_pool).await.expect("chat migration 4");
+    sqlx::raw_sql(chat_m4)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 4");
     let chat_m5 = include_str!("../migrations/chat/0005_private_rooms.sql");
-    sqlx::raw_sql(chat_m5).execute(&chat_pool).await.expect("chat migration 5");
+    sqlx::raw_sql(chat_m5)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 5");
     let chat_m6 = include_str!("../migrations/chat/0006_read_receipts.sql");
-    sqlx::raw_sql(chat_m6).execute(&chat_pool).await.expect("chat migration 6");
+    sqlx::raw_sql(chat_m6)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 6");
 
     (auth_pool, chat_pool)
 }

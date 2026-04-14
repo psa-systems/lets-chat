@@ -96,10 +96,7 @@ pub async fn send_message(room_id: i64, body: String) -> Result<i64, ServerFnErr
         if let Some(ref until) = user.muted_until {
             let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
             if until.as_str() > now.as_str() {
-                return Err(ServerFnError::new(format!(
-                    "You are muted until {}",
-                    until
-                )));
+                return Err(ServerFnError::new(format!("You are muted until {}", until)));
             }
         } else {
             return Err(ServerFnError::new("You are muted"));
@@ -148,7 +145,9 @@ pub async fn edit_message(message_id: i64, new_body: String) -> Result<(), Serve
 
     // Enforce max_message_length from settings
     let settings_pool = crate::db::get_settings_pool().await;
-    if let Ok(Some(max_str)) = crate::db::settings::get_setting(settings_pool, "max_message_length").await {
+    if let Ok(Some(max_str)) =
+        crate::db::settings::get_setting(settings_pool, "max_message_length").await
+    {
         if let Ok(max_len) = max_str.parse::<usize>() {
             if new_body.len() > max_len {
                 return Err(ServerFnError::new(format!(

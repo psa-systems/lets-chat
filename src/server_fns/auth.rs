@@ -18,14 +18,10 @@ pub async fn register(username: String, password: String) -> Result<AuthResponse
     let password = password.trim().to_string();
 
     if username.len() < 3 {
-        return Err(ServerFnError::new(
-            "Username must be at least 3 characters",
-        ));
+        return Err(ServerFnError::new("Username must be at least 3 characters"));
     }
     if password.len() < 8 {
-        return Err(ServerFnError::new(
-            "Password must be at least 8 characters",
-        ));
+        return Err(ServerFnError::new("Password must be at least 8 characters"));
     }
 
     let pool = crate::db::get_auth_pool().await;

@@ -27,14 +27,10 @@ pub async fn get_settings() -> Result<SiteSettings, ServerFnError> {
         require_invite_code: get("require_invite_code", "false") == "true",
         default_role: get("default_role", "user"),
         welcome_message: get("welcome_message", ""),
-        max_message_length: get("max_message_length", "4000")
-            .parse()
-            .unwrap_or(4000),
+        max_message_length: get("max_message_length", "4000").parse().unwrap_or(4000),
         motd: get("motd", ""),
         maintenance_mode: get("maintenance_mode", "false") == "true",
-        rate_limit_messages: get("rate_limit_messages", "30")
-            .parse()
-            .unwrap_or(30),
+        rate_limit_messages: get("rate_limit_messages", "30").parse().unwrap_or(30),
         smtp_host: get("smtp_host", ""),
         smtp_port: get("smtp_port", "587"),
         smtp_user: get("smtp_user", ""),
@@ -53,13 +49,22 @@ pub async fn update_settings(settings: SiteSettings) -> Result<(), ServerFnError
     let pairs: &[(&str, String)] = &[
         ("site_name", settings.site_name),
         ("registration_open", settings.registration_open.to_string()),
-        ("require_invite_code", settings.require_invite_code.to_string()),
+        (
+            "require_invite_code",
+            settings.require_invite_code.to_string(),
+        ),
         ("default_role", settings.default_role),
         ("welcome_message", settings.welcome_message),
-        ("max_message_length", settings.max_message_length.to_string()),
+        (
+            "max_message_length",
+            settings.max_message_length.to_string(),
+        ),
         ("motd", settings.motd),
         ("maintenance_mode", settings.maintenance_mode.to_string()),
-        ("rate_limit_messages", settings.rate_limit_messages.to_string()),
+        (
+            "rate_limit_messages",
+            settings.rate_limit_messages.to_string(),
+        ),
         ("smtp_host", settings.smtp_host),
         ("smtp_port", settings.smtp_port),
         ("smtp_user", settings.smtp_user),
@@ -151,7 +156,9 @@ pub async fn create_invite_code() -> Result<InviteCode, ServerFnError> {
     let invite = crate::db::auth::get_invite_code(pool, &code)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new(format!("Invite code {} not found after creation", id)))?;
+        .ok_or_else(|| {
+            ServerFnError::new(format!("Invite code {} not found after creation", id))
+        })?;
 
     Ok(invite)
 }
@@ -179,7 +186,11 @@ pub async fn revoke_invite_code(code_id: i64) -> Result<(), ServerFnError> {
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 
 #[server]
-pub async fn create_room(name: String, topic: String, room_type: String) -> Result<Room, ServerFnError> {
+pub async fn create_room(
+    name: String,
+    topic: String,
+    room_type: String,
+) -> Result<Room, ServerFnError> {
     use rand::Rng;
 
     crate::server_fns::helpers::require_role("admin").await?;
@@ -214,9 +225,10 @@ pub async fn create_room(name: String, topic: String, room_type: String) -> Resu
 
     let caller = crate::server_fns::helpers::require_auth().await?;
     let pool = crate::db::get_chat_pool().await;
-    let room_id = crate::db::chat::create_room(pool, &name, topic_opt, &room_type, invite_code.as_deref())
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let room_id =
+        crate::db::chat::create_room(pool, &name, topic_opt, &room_type, invite_code.as_deref())
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     // Auto-add creator as member and broadcast so their sidebar refreshes.
     crate::db::chat::add_room_member(pool, room_id, &caller.id)
@@ -224,7 +236,10 @@ pub async fn create_room(name: String, topic: String, room_type: String) -> Resu
         .map_err(|e| ServerFnError::new(e.to_string()))?;
     crate::ws::hub::get_hub().broadcast_to_user(
         &caller.id,
-        &crate::ws::events::ChatEvent::RoomMemberAdded { room_id, user_id: caller.id.clone() },
+        &crate::ws::events::ChatEvent::RoomMemberAdded {
+            room_id,
+            user_id: caller.id.clone(),
+        },
     );
 
     crate::db::chat::get_room(pool, room_id)

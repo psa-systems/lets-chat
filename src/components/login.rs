@@ -38,7 +38,11 @@ pub fn LoginPage() -> Element {
     } else {
         "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
     };
-    let button_label = if loading() { "Signing in..." } else { "Sign in" };
+    let button_label = if loading() {
+        "Signing in..."
+    } else {
+        "Sign in"
+    };
 
     rsx! {
         div { class: "min-h-screen flex items-center justify-center bg-gray-100",

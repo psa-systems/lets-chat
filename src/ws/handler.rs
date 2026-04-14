@@ -45,7 +45,10 @@ pub async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap) -> impl IntoRe
     }
 
     let user_id = user.id.clone();
-    let username = user.display_name.clone().unwrap_or_else(|| user.username.clone());
+    let username = user
+        .display_name
+        .clone()
+        .unwrap_or_else(|| user.username.clone());
 
     ws.on_upgrade(move |socket| handle_socket(socket, user_id, username))
 }
@@ -95,16 +98,17 @@ async fn handle_socket(socket: WebSocket, user_id: String, username: String) {
                     match ctrl {
                         ClientControl::Subscribe { room_id } => {
                             // For DM rooms, verify user is a member
-                            let allowed = match crate::db::chat::get_room(chat_pool, room_id).await {
-                                Ok(Some(room)) if room.room_type == "dm" => {
-                                    sqlx::query("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
-                                        .bind(room_id)
-                                        .bind(&user_id)
-                                        .fetch_optional(chat_pool)
-                                        .await
-                                        .unwrap_or(None)
-                                        .is_some()
-                                }
+                            let allowed = match crate::db::chat::get_room(chat_pool, room_id).await
+                            {
+                                Ok(Some(room)) if room.room_type == "dm" => sqlx::query(
+                                    "SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?",
+                                )
+                                .bind(room_id)
+                                .bind(&user_id)
+                                .fetch_optional(chat_pool)
+                                .await
+                                .unwrap_or(None)
+                                .is_some(),
                                 _ => true, // Public rooms: allow anyone
                             };
                             if allowed {

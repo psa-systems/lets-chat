@@ -67,13 +67,16 @@ pub fn RoomViewPage(room_id: String) -> Element {
             let id = room_id_sig();
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == id => {
-                    let v = *messages_version.peek(); messages_version.set(v + 1);
+                    let v = *messages_version.peek();
+                    messages_version.set(v + 1);
                 }
                 ChatEvent::MessageDeleted { room_id, .. } if *room_id == id => {
-                    let v = *messages_version.peek(); messages_version.set(v + 1);
+                    let v = *messages_version.peek();
+                    messages_version.set(v + 1);
                 }
                 ChatEvent::MessageEdited { room_id, .. } if *room_id == id => {
-                    let v = *messages_version.peek(); messages_version.set(v + 1);
+                    let v = *messages_version.peek();
+                    messages_version.set(v + 1);
                 }
                 _ => {}
             }
@@ -85,9 +88,11 @@ pub fn RoomViewPage(room_id: String) -> Element {
         if let Some(ref event) = *ws.latest_event.read() {
             let id = room_id_sig();
             match event {
-                ChatEvent::UserTyping { room_id, user_id, username }
-                    if *room_id == id && *user_id != my_user_id =>
-                {
+                ChatEvent::UserTyping {
+                    room_id,
+                    user_id,
+                    username,
+                } if *room_id == id && *user_id != my_user_id => {
                     let uid = user_id.clone();
                     let name = username.clone();
                     typing_users.with_mut(|v| {
@@ -96,9 +101,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                         }
                     });
                 }
-                ChatEvent::UserStoppedTyping { room_id, user_id }
-                    if *room_id == id =>
-                {
+                ChatEvent::UserStoppedTyping { room_id, user_id } if *room_id == id => {
                     let uid = user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
                 }
