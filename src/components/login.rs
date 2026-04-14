@@ -5,9 +5,6 @@ use crate::server_fns::auth;
 
 #[component]
 pub fn LoginPage() -> Element {
-    #[cfg(target_arch = "wasm32")]
-    web_sys::console::log_1(&"[lets-chat] LoginPage body ran on client".into());
-
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);

@@ -5,9 +5,6 @@ use crate::server_fns::auth;
 
 #[component]
 pub fn RegisterPage() -> Element {
-    #[cfg(target_arch = "wasm32")]
-    web_sys::console::log_1(&"[lets-chat] RegisterPage body ran on client".into());
-
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut confirm_password = use_signal(String::new);
