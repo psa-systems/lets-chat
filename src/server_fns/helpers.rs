@@ -1,34 +1,6 @@
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
-
 use dioxus::prelude::*;
 
 use crate::models::user::UserRecord;
-
-pub const STARTUP_GRACE: Duration = Duration::from_secs(120);
-pub const TRY_AGAIN_ERROR: &str = "Something went wrong, please try again";
-
-static SERVER_STARTED_AT: OnceLock<Instant> = OnceLock::new();
-
-pub fn server_started_at() -> Instant {
-    *SERVER_STARTED_AT.get_or_init(Instant::now)
-}
-
-pub fn within_startup_window() -> bool {
-    Instant::now().duration_since(server_started_at()) < STARTUP_GRACE
-}
-
-pub fn classify_blank_error(
-    now: Instant,
-    started_at: Instant,
-    generic: &'static str,
-) -> &'static str {
-    if now.duration_since(started_at) < STARTUP_GRACE {
-        TRY_AGAIN_ERROR
-    } else {
-        generic
-    }
-}
 
 /// Extract the authenticated user from the session cookie.
 /// Returns ServerFnError if not authenticated or banned.
