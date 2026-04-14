@@ -1,8 +1,9 @@
 use dioxus::prelude::*;
 
+use crate::components::reaction_bar::ReactionBar;
 use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
-use crate::models::{Message, User};
+use crate::models::{Message, Reaction, User};
 use crate::server_fns::chat::{edit_message, list_messages};
 use crate::server_fns::dm::{
     get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message,
@@ -138,6 +139,7 @@ pub fn DmViewPage(user_id: String) -> Element {
     let mut typing_users = use_signal(Vec::<(String, String)>::new);
     let mut last_typing_sent = use_signal(|| 0.0f64);
     let my_user_id = u.id.clone();
+    let my_user_id_reactions = my_user_id.clone();
 
     // Handle typing indicator events
     use_effect(move || {
@@ -166,6 +168,66 @@ pub fn DmViewPage(user_id: String) -> Element {
                 ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
                     let uid = message.user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Per-message reactions for this DM room.
+    let mut reactions_map =
+        use_signal(|| std::collections::HashMap::<i64, Vec<Reaction>>::new());
+
+    use_effect(move || {
+        if let Some(ref event) = *ws.latest_event.read() {
+            match event {
+                ChatEvent::ReactionAdded {
+                    message_id,
+                    room_id: event_room_id,
+                    emoji,
+                    user_id,
+                } if *event_room_id == room_id => {
+                    let mid = *message_id;
+                    let e = emoji.clone();
+                    let uid = user_id.clone();
+                    reactions_map.with_mut(|map| {
+                        let entry = map.entry(mid).or_default();
+                        if let Some(r) = entry.iter_mut().find(|r| r.emoji == e) {
+                            r.count += 1;
+                            if uid == my_user_id_reactions {
+                                r.reacted_by_me = true;
+                            }
+                        } else {
+                            entry.push(Reaction {
+                                emoji: e,
+                                count: 1,
+                                reacted_by_me: uid == my_user_id_reactions,
+                            });
+                        }
+                    });
+                }
+                ChatEvent::ReactionRemoved {
+                    message_id,
+                    room_id: event_room_id,
+                    emoji,
+                    user_id,
+                } if *event_room_id == room_id => {
+                    let mid = *message_id;
+                    let e = emoji.clone();
+                    let uid = user_id.clone();
+                    reactions_map.with_mut(|map| {
+                        if let Some(entry) = map.get_mut(&mid) {
+                            if let Some(r) = entry.iter_mut().find(|r| r.emoji == e) {
+                                r.count -= 1;
+                                if uid == my_user_id_reactions {
+                                    r.reacted_by_me = false;
+                                }
+                                if r.count <= 0 {
+                                    entry.retain(|r| r.emoji != e);
+                                }
+                            }
+                        }
+                    });
                 }
                 _ => {}
             }
@@ -360,6 +422,12 @@ pub fn DmViewPage(user_id: String) -> Element {
                                     }
                                 } else {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
+                                    ReactionBar {
+                                        message_id: msg_id,
+                                        room_id,
+                                        initial_reactions: reactions_map.read().get(&msg_id).cloned().unwrap_or_default(),
+                                        my_user_id: u.id.clone(),
+                                    }
                                 }
                                 {
                                     let (last_read, read_at_str) = match ws_peer_read() {
