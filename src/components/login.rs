@@ -5,38 +5,9 @@ use crate::server_fns::auth;
 
 #[component]
 pub fn LoginPage() -> Element {
-    let mut hydrated = use_signal(|| false);
-
     #[cfg(target_arch = "wasm32")]
-    use_future(move || async move {
-        web_sys::console::log_1(&"[lets-chat login] use_future entered".into());
-        gloo_timers::future::TimeoutFuture::new(0).await;
-        web_sys::console::log_1(&"[lets-chat login] yield returned, setting hydrated=true".into());
-        hydrated.set(true);
-        web_sys::console::log_1(&"[lets-chat login] hydrated.set(true) returned".into());
-    });
+    web_sys::console::log_1(&"[lets-chat] LoginPage body ran on client".into());
 
-    if !hydrated() {
-        return rsx! {
-            div {
-                class: "min-h-screen flex items-center justify-center bg-gray-100",
-                onmounted: move |_| {
-                    #[cfg(target_arch = "wasm32")]
-                    web_sys::console::log_1(&"[lets-chat login] onmounted fired".into());
-                },
-                div { class: "bg-white p-8 rounded-lg shadow-md w-full max-w-sm text-center",
-                    h1 { class: "text-2xl font-bold mb-2", "Let's Chat" }
-                    p { class: "text-gray-500", "Loading…" }
-                }
-            }
-        };
-    }
-
-    rsx! { LoginForm {} }
-}
-
-#[component]
-fn LoginForm() -> Element {
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
