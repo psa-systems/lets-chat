@@ -1,8 +1,9 @@
 use dioxus::prelude::*;
 
+use crate::components::reaction_bar::ReactionBar;
 use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
-use crate::models::{Message, User};
+use crate::models::{Message, Reaction, User};
 use crate::routes::Route;
 use crate::server_fns::chat::{edit_message, get_room, list_messages, send_message};
 use crate::server_fns::moderation::delete_message;
