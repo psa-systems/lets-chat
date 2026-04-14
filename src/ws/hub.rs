@@ -46,7 +46,11 @@ impl Hub {
     }
 
     /// Register a new connection. Returns (conn_id, broadcast::Receiver).
-    pub fn connect(&self, user_id: &str, username: &str) -> (ConnId, broadcast::Receiver<ChatEvent>) {
+    pub fn connect(
+        &self,
+        user_id: &str,
+        username: &str,
+    ) -> (ConnId, broadcast::Receiver<ChatEvent>) {
         let id = next_conn_id();
         let (tx, rx) = broadcast::channel(64);
         self.connections.insert(
@@ -105,7 +109,12 @@ impl Hub {
     }
 
     /// Broadcast an event to all room subscribers except one connection (the sender).
-    pub fn broadcast_to_room_except(&self, room_id: i64, event: &ChatEvent, except_conn_id: ConnId) {
+    pub fn broadcast_to_room_except(
+        &self,
+        room_id: i64,
+        event: &ChatEvent,
+        except_conn_id: ConnId,
+    ) {
         if let Some(conns) = self.rooms.get(&room_id) {
             for &conn_id in conns.iter() {
                 if conn_id == except_conn_id {

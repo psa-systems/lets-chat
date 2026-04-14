@@ -53,7 +53,10 @@ fn main() {
         if std::env::var("GDK_SCALE").unwrap_or_default().is_empty() {
             unsafe { std::env::set_var("GDK_SCALE", "1") };
         }
-        if std::env::var("GDK_DPI_SCALE").unwrap_or_default().is_empty() {
+        if std::env::var("GDK_DPI_SCALE")
+            .unwrap_or_default()
+            .is_empty()
+        {
             unsafe { std::env::set_var("GDK_DPI_SCALE", "1") };
         }
     }
@@ -88,7 +91,11 @@ fn main() {
     }
 
     // Web fullstack server binary built by `dx build`.
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "desktop"), feature = "server"))]
+    #[cfg(all(
+        not(target_arch = "wasm32"),
+        not(feature = "desktop"),
+        feature = "server"
+    ))]
     {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")

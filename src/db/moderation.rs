@@ -57,12 +57,10 @@ pub async fn soft_delete_message(
     message_id: i64,
     deleted_by: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE messages SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?",
-    )
-    .bind(deleted_by)
-    .bind(message_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE messages SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?")
+        .bind(deleted_by)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }

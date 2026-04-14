@@ -2,9 +2,7 @@ use dioxus::prelude::*;
 
 use crate::models::User;
 use crate::server_fns::admin::{change_user_role, delete_user, list_users};
-use crate::server_fns::moderation::{
-    ban_user, mute_user, unban_user, unmute_user,
-};
+use crate::server_fns::moderation::{ban_user, mute_user, unban_user, unmute_user};
 
 #[component]
 pub fn AdminUsersPage() -> Element {
