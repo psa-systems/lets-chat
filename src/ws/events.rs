@@ -54,6 +54,18 @@ pub enum ChatEvent {
         user_id: String,
         room_id: i64,
     },
+    ReactionAdded {
+        message_id: i64,
+        room_id: i64,
+        emoji: String,
+        user_id: String,
+    },
+    ReactionRemoved {
+        message_id: i64,
+        room_id: i64,
+        emoji: String,
+        user_id: String,
+    },
 }
 
 /// Control frames sent from client to server.
