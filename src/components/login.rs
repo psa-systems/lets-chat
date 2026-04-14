@@ -10,6 +10,7 @@ pub fn LoginPage() -> Element {
     let mut error = use_signal(|| Option::<String>::None);
     let mut loading = use_signal(|| false);
     let nav = use_navigator();
+    let mounted_ms = use_hook(auth::now_ms);
 
     let mut do_login = move || {
         if loading() {
@@ -17,6 +18,16 @@ pub fn LoginPage() -> Element {
         }
         let u = username();
         let p = password();
+        if u.trim().is_empty() || p.trim().is_empty() {
+            let elapsed = auth::now_ms() - mounted_ms;
+            let msg = if elapsed < auth::GRACE_WINDOW_MS {
+                auth::TRY_AGAIN_ERROR
+            } else {
+                auth::GENERIC_LOGIN_ERROR
+            };
+            error.set(Some(msg.to_string()));
+            return;
+        }
         error.set(None);
         loading.set(true);
         spawn(async move {
