@@ -273,19 +273,19 @@ pub fn RoomViewPage(room_id: String) -> Element {
                         let is_own = msg_user_id == u.id;
                         let is_editing = editing_msg_id() == Some(msg_id);
                         let has_edited = msg.edited_at.is_some();
-                        let is_first_unseen = auto.first_unseen_id() == Some(msg_id);
+                        let is_first_unseen = *auto.first_unseen_id.read() == Some(msg_id);
                         rsx! {
-                            if is_first_unseen {
-                                div { class: "flex items-center gap-2 my-2 text-xs font-medium text-blue-600",
-                                    div { class: "flex-1 h-px bg-blue-300" }
-                                    span { "New messages" }
-                                    div { class: "flex-1 h-px bg-blue-300" }
+                            div { key: "{msg.id}",
+                                if is_first_unseen {
+                                    div { class: "flex items-center gap-2 my-2 text-xs font-medium text-blue-600",
+                                        div { class: "flex-1 h-px bg-blue-300" }
+                                        span { "New messages" }
+                                        div { class: "flex-1 h-px bg-blue-300" }
+                                    }
                                 }
-                            }
-                            div {
-                                key: "{msg.id}",
-                                "data-msg-id": "{msg.id}",
-                                class: "group flex flex-col",
+                                div {
+                                    "data-msg-id": "{msg.id}",
+                                    class: "group flex flex-col",
                                 div { class: "flex items-baseline gap-2",
                                     if msg_user_id != u.id {
                                         Link {
@@ -373,6 +373,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                 } else {
                                     p { class: "text-gray-700 whitespace-pre-wrap", "{msg.body}" }
                                 }
+                                }
                             }
                         }
                     }
@@ -380,7 +381,7 @@ pub fn RoomViewPage(room_id: String) -> Element {
             }
         }
 
-        if auto.show_new_pill() {
+        if *auto.show_new_pill.read() {
             div { class: "relative",
                 button {
                     r#type: "button",
