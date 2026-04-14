@@ -47,3 +47,29 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
         scroll_to_bottom,
     }
 }
+
+const LAST_SEEN_PREFIX: &str = "lets-chat:last-seen:";
+
+#[cfg(target_arch = "wasm32")]
+fn read_last_seen(room_id: i64) -> Option<i64> {
+    let storage = web_sys::window()?.local_storage().ok().flatten()?;
+    let key = format!("{LAST_SEEN_PREFIX}{room_id}");
+    let raw = storage.get_item(&key).ok().flatten()?;
+    raw.parse::<i64>().ok()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn write_last_seen(room_id: i64, message_id: i64) {
+    let Some(window) = web_sys::window() else { return };
+    let Ok(Some(storage)) = window.local_storage() else { return };
+    let key = format!("{LAST_SEEN_PREFIX}{room_id}");
+    let _ = storage.set_item(&key, &message_id.to_string());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_last_seen(_room_id: i64) -> Option<i64> {
+    None
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_last_seen(_room_id: i64, _message_id: i64) {}
