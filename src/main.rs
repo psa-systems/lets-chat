@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 mod components;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 mod db;
 mod models;
 mod routes;
@@ -10,7 +10,7 @@ mod ws;
 
 use routes::Route;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 fn parse_data_dir() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
     args.windows(2)
@@ -28,7 +28,7 @@ fn build_server_router() -> axum::Router {
 }
 
 fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "server")]
     {
         use tracing_subscriber::EnvFilter;
         tracing_subscriber::fmt()
@@ -61,24 +61,18 @@ fn main() {
         }
     }
 
-    // Desktop: spawn an embedded Axum server on a background thread before
-    // launching the UI.
-    #[cfg(feature = "desktop")]
+    // Desktop client: launch the native UI only. The server URL is read from
+    // LETS_CHAT_SERVER_URL (TODO: wire this into Dioxus's client-side server
+    // function dispatcher in a follow-up).
+    #[cfg(feature = "client")]
     {
-        std::thread::spawn(|| {
-            let rt = tokio::runtime::Runtime::new().expect("Failed to create server runtime");
-            rt.block_on(async {
-                let router = build_server_router();
-                let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
-                    .await
-                    .expect("Failed to bind server to 127.0.0.1:8080");
-                axum::serve(listener, router.into_make_service())
-                    .await
-                    .expect("Server exited unexpectedly");
-            });
-        });
-
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        if let Ok(url) = std::env::var("LETS_CHAT_SERVER_URL") {
+            eprintln!("lets-chat desktop: server URL = {url}");
+        } else {
+            eprintln!(
+                "lets-chat desktop: LETS_CHAT_SERVER_URL not set; server calls will fail"
+            );
+        }
 
         dioxus::LaunchBuilder::new()
             .with_cfg(desktop! {
@@ -91,11 +85,7 @@ fn main() {
     }
 
     // Web fullstack server binary built by `dx build`.
-    #[cfg(all(
-        not(target_arch = "wasm32"),
-        not(feature = "desktop"),
-        feature = "server"
-    ))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "server"))]
     {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")
