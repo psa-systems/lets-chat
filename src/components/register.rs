@@ -44,7 +44,11 @@ pub fn RegisterPage() -> Element {
     } else {
         "w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
     };
-    let button_label = if loading() { "Creating account..." } else { "Register" };
+    let button_label = if loading() {
+        "Creating account..."
+    } else {
+        "Register"
+    };
 
     rsx! {
         div { class: "min-h-screen flex items-center justify-center bg-gray-100",

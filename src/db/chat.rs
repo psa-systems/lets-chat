@@ -153,15 +153,14 @@ pub async fn create_room(
     room_type: &str,
     invite_code: Option<&str>,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query(
-        "INSERT INTO rooms (name, topic, room_type, invite_code) VALUES (?, ?, ?, ?)",
-    )
-    .bind(name)
-    .bind(topic)
-    .bind(room_type)
-    .bind(invite_code)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("INSERT INTO rooms (name, topic, room_type, invite_code) VALUES (?, ?, ?, ?)")
+            .bind(name)
+            .bind(topic)
+            .bind(room_type)
+            .bind(invite_code)
+            .execute(pool)
+            .await?;
     Ok(result.last_insert_rowid())
 }
 
@@ -194,13 +193,11 @@ pub async fn is_room_member(
     room_id: i64,
     user_id: &str,
 ) -> Result<bool, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?",
-    )
-    .bind(room_id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
+        .bind(room_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.is_some())
 }
 
@@ -210,13 +207,11 @@ pub async fn add_room_member(
     room_id: i64,
     user_id: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
-    )
-    .bind(room_id)
-    .bind(user_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)")
+        .bind(room_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -291,13 +286,11 @@ pub async fn create_dm_room(
     user_a: &str,
     user_b: &str,
 ) -> Result<Room, sqlx::Error> {
-    let result = sqlx::query(
-        "INSERT INTO rooms (name, room_type, created_by) VALUES (?, 'dm', ?)",
-    )
-    .bind(name)
-    .bind(user_a)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("INSERT INTO rooms (name, room_type, created_by) VALUES (?, 'dm', ?)")
+        .bind(name)
+        .bind(user_a)
+        .execute(pool)
+        .await?;
     let room_id = result.last_insert_rowid();
 
     sqlx::query("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)")
@@ -423,5 +416,8 @@ pub async fn list_dm_unread_counts(
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(|r| (r.get("room_id"), r.get::<i64, _>("unread"))).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("room_id"), r.get::<i64, _>("unread")))
+        .collect())
 }

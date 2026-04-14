@@ -3,7 +3,9 @@ use dioxus::prelude::*;
 use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::server_fns::chat::{edit_message, list_messages};
-use crate::server_fns::dm::{get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message};
+use crate::server_fns::dm::{
+    get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message,
+};
 use crate::ws::events::ChatEvent;
 
 #[component]
@@ -50,9 +52,8 @@ pub fn DmViewPage(user_id: String) -> Element {
     let mut edit_error = use_signal(|| Option::<String>::None);
     let mut ws_peer_read = use_signal(|| Option::<(i64, String)>::None);
 
-    let peer_state = use_server_future(move || async move {
-        get_dm_peer_read_state(room_id).await
-    })?;
+    let peer_state =
+        use_server_future(move || async move { get_dm_peer_read_state(room_id).await })?;
 
     let ws = use_context::<WsHandle>();
 
@@ -73,14 +74,22 @@ pub fn DmViewPage(user_id: String) -> Element {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { message, .. } if message.room_id == room_id => {
-                    let v = *messages_version.peek(); messages_version.set(v + 1);
+                    let v = *messages_version.peek();
+                    messages_version.set(v + 1);
                 }
-                ChatEvent::MessageEdited { room_id: event_room_id, .. } if *event_room_id == room_id => {
-                    let v = *messages_version.peek(); messages_version.set(v + 1);
+                ChatEvent::MessageEdited {
+                    room_id: event_room_id,
+                    ..
+                } if *event_room_id == room_id => {
+                    let v = *messages_version.peek();
+                    messages_version.set(v + 1);
                 }
-                ChatEvent::DmRead { room_id: event_room_id, user_id: event_user_id, last_read_message_id, read_at }
-                    if *event_room_id == room_id && *event_user_id != my_id_for_ws =>
-                {
+                ChatEvent::DmRead {
+                    room_id: event_room_id,
+                    user_id: event_user_id,
+                    last_read_message_id,
+                    read_at,
+                } if *event_room_id == room_id && *event_user_id != my_id_for_ws => {
                     ws_peer_read.set(Some((*last_read_message_id, read_at.clone())));
                 }
                 _ => {}
@@ -96,9 +105,11 @@ pub fn DmViewPage(user_id: String) -> Element {
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
-                ChatEvent::UserTyping { room_id: event_room_id, user_id, username }
-                    if *event_room_id == room_id && *user_id != my_user_id =>
-                {
+                ChatEvent::UserTyping {
+                    room_id: event_room_id,
+                    user_id,
+                    username,
+                } if *event_room_id == room_id && *user_id != my_user_id => {
                     let uid = user_id.clone();
                     let name = username.clone();
                     typing_users.with_mut(|v| {
@@ -107,9 +118,10 @@ pub fn DmViewPage(user_id: String) -> Element {
                         }
                     });
                 }
-                ChatEvent::UserStoppedTyping { room_id: event_room_id, user_id }
-                    if *event_room_id == room_id =>
-                {
+                ChatEvent::UserStoppedTyping {
+                    room_id: event_room_id,
+                    user_id,
+                } if *event_room_id == room_id => {
                     let uid = user_id.clone();
                     typing_users.with_mut(|v| v.retain(|(id, _)| id != &uid));
                 }
@@ -124,7 +136,10 @@ pub fn DmViewPage(user_id: String) -> Element {
 
     let my_id_for_read = u.id.clone();
     use_effect(move || {
-        let list = match messages() { Some(Ok(l)) => l, _ => return };
+        let list = match messages() {
+            Some(Ok(l)) => l,
+            _ => return,
+        };
         let latest_peer = list.iter().rev().find(|m| m.user_id != my_id_for_read);
         let Some(latest) = latest_peer else { return };
         let latest_id = latest.id;
@@ -134,12 +149,18 @@ pub fn DmViewPage(user_id: String) -> Element {
             let visible = web_sys::window()
                 .and_then(|w| w.document())
                 .and_then(|d| {
-                    js_sys::Reflect::get(d.as_ref(), &wasm_bindgen::JsValue::from_str("visibilityState")).ok()
+                    js_sys::Reflect::get(
+                        d.as_ref(),
+                        &wasm_bindgen::JsValue::from_str("visibilityState"),
+                    )
+                    .ok()
                 })
                 .and_then(|v| v.as_string())
                 .map(|s| s == "visible")
                 .unwrap_or(true);
-            if !visible { return; }
+            if !visible {
+                return;
+            }
         }
 
         spawn(async move {
@@ -152,15 +173,15 @@ pub fn DmViewPage(user_id: String) -> Element {
         {
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;
-            let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+            let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+                return;
+            };
             let cb = Closure::<dyn FnMut()>::new(move || {
                 let v = *messages_version.peek();
                 messages_version.set(v + 1);
             });
-            let _ = document.add_event_listener_with_callback(
-                "visibilitychange",
-                cb.as_ref().unchecked_ref(),
-            );
+            let _ = document
+                .add_event_listener_with_callback("visibilitychange", cb.as_ref().unchecked_ref());
             cb.forget();
         }
     });
@@ -178,7 +199,8 @@ pub fn DmViewPage(user_id: String) -> Element {
     };
 
     // Extract other user's name from room name (dm-<user1>-<user2>)
-    let other_name = room.name
+    let other_name = room
+        .name
         .strip_prefix("dm-")
         .unwrap_or(&room.name)
         .split('-')

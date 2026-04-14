@@ -124,9 +124,10 @@ async fn test_list_messages_includes_edited_at() {
 async fn test_soft_deleted_messages_not_returned_by_list_messages() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-deleted-list", None, "public", None)
-        .await
-        .unwrap();
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "test-deleted-list", None, "public", None)
+            .await
+            .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "will be deleted")
         .await
         .unwrap();
