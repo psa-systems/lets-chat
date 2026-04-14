@@ -21,7 +21,11 @@ pub struct AutoScroll {
 /// - On message append, stays pinned to the bottom if the user is already
 ///   near the bottom; otherwise shows the "new messages" pill.
 /// - Tracks the highest-seen message id in `localStorage` keyed by room.
-pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> AutoScroll {
+pub fn use_auto_scroll(
+    room_id: Signal<i64>,
+    messages: Signal<Vec<Message>>,
+    my_user_id: Signal<String>,
+) -> AutoScroll {
     let mut show_new_pill = use_signal(|| false);
     let mut first_unseen_id = use_signal(|| Option::<i64>::None);
 
@@ -87,14 +91,18 @@ pub fn use_auto_scroll(room_id: Signal<i64>, messages: Signal<Vec<Message>>) -> 
             #[cfg(target_arch = "wasm32")]
             {
                 let container_id = format!("chat-scroll-{rid}");
-                // Use the remembered state from the scroll listener — by the
-                // time this effect runs, Dioxus has already appended the new
-                // row so `scrollHeight` no longer reflects "was the user at
-                // the bottom before this arrival?".
-                if *at_bottom.peek() {
+                // Own messages always stick — sending implies the user wants
+                // to see the result. Otherwise, defer to the remembered scroll
+                // position from the scroll listener.
+                let is_own = list
+                    .last()
+                    .map(|m| m.user_id == *my_user_id.peek())
+                    .unwrap_or(false);
+                if is_own || *at_bottom.peek() {
                     scroll_container_to_bottom(&container_id);
                     write_last_seen(rid, newest_id);
                     show_new_pill.set(false);
+                    at_bottom.set(true);
                 } else {
                     show_new_pill.set(true);
                 }

@@ -48,7 +48,8 @@ pub fn DmViewPage(user_id: String) -> Element {
     let mut messages = use_signal(Vec::<Message>::new);
     let mut load_error = use_signal(|| Option::<String>::None);
 
-    let auto = use_auto_scroll(room_id_sig, messages);
+    let my_user_id_sig = use_signal(|| u.id.clone());
+    let auto = use_auto_scroll(room_id_sig, messages, my_user_id_sig);
     let mut visibility_tick = use_signal(|| 0u32);
 
     use_effect(move || match messages_fetch() {
