@@ -43,41 +43,10 @@ async fn init_chat_pool() -> SqlitePool {
         .await
         .expect("Failed to connect to chat DB");
 
-    let migration_sql = include_str!("../../migrations/chat/0001_create_tables.sql");
-    sqlx::raw_sql(migration_sql)
-        .execute(&pool)
+    sqlx::migrate!("./migrations/chat")
+        .run(&pool)
         .await
-        .expect("Failed to run chat DB migration");
-
-    let migration_002 = include_str!("../../migrations/chat/0002_moderation.sql");
-    sqlx::raw_sql(migration_002)
-        .execute(&pool)
-        .await
-        .expect("Failed to run chat DB migration 002");
-
-    let migration_003 = include_str!("../../migrations/chat/0003_dms.sql");
-    sqlx::raw_sql(migration_003)
-        .execute(&pool)
-        .await
-        .expect("Failed to run chat DB migration 003");
-
-    let migration_004 = include_str!("../../migrations/chat/0004_message_editing.sql");
-    sqlx::raw_sql(migration_004)
-        .execute(&pool)
-        .await
-        .expect("Failed to run chat DB migration 004");
-
-    let migration_005 = include_str!("../../migrations/chat/0005_private_rooms.sql");
-    sqlx::raw_sql(migration_005)
-        .execute(&pool)
-        .await
-        .expect("Failed to run chat DB migration 005");
-
-    let migration_006 = include_str!("../../migrations/chat/0006_read_receipts.sql");
-    sqlx::raw_sql(migration_006)
-        .execute(&pool)
-        .await
-        .expect("Failed to run chat DB migration 006");
+        .expect("Failed to run chat DB migrations");
 
     pool
 }
@@ -91,17 +60,10 @@ async fn init_auth_pool() -> SqlitePool {
         .await
         .expect("Failed to connect to auth DB");
 
-    let migration_sql = include_str!("../../migrations/auth/0001_create_tables.sql");
-    sqlx::raw_sql(migration_sql)
-        .execute(&pool)
+    sqlx::migrate!("./migrations/auth")
+        .run(&pool)
         .await
-        .expect("Failed to run auth DB migration");
-
-    let auth_m2 = include_str!("../../migrations/auth/0002_read_receipts.sql");
-    sqlx::raw_sql(auth_m2)
-        .execute(&pool)
-        .await
-        .expect("Failed to run auth DB migration 002");
+        .expect("Failed to run auth DB migrations");
 
     pool
 }
@@ -115,11 +77,10 @@ async fn init_settings_pool() -> SqlitePool {
         .await
         .expect("Failed to connect to settings DB");
 
-    let migration_sql = include_str!("../../migrations/settings/0001_create_tables.sql");
-    sqlx::raw_sql(migration_sql)
-        .execute(&pool)
+    sqlx::migrate!("./migrations/settings")
+        .run(&pool)
         .await
-        .expect("Failed to run settings DB migration");
+        .expect("Failed to run settings DB migrations");
 
     pool
 }
