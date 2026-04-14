@@ -128,10 +128,7 @@ pub async fn send_dm_message(room_id: i64, body: String) -> Result<i64, ServerFn
         if let Some(ref until) = user.muted_until {
             let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
             if until.as_str() > now.as_str() {
-                return Err(ServerFnError::new(format!(
-                    "You are muted until {}",
-                    until
-                )));
+                return Err(ServerFnError::new(format!("You are muted until {}", until)));
             }
         } else {
             return Err(ServerFnError::new("You are muted"));
@@ -190,11 +187,12 @@ pub async fn send_dm_message(room_id: i64, body: String) -> Result<i64, ServerFn
     // DM members may not be subscribed to the room yet (e.g. recipient hasn't
     // opened the thread). Notify each non-sender member directly so their
     // sidebar gets the new-DM listing and unread badge.
-    let members: Vec<String> = sqlx::query_scalar("SELECT user_id FROM room_members WHERE room_id = ?")
-        .bind(room_id)
-        .fetch_all(chat_pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let members: Vec<String> =
+        sqlx::query_scalar("SELECT user_id FROM room_members WHERE room_id = ?")
+            .bind(room_id)
+            .fetch_all(chat_pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
     for member_id in &members {
         if member_id != &user.id {
             hub.broadcast_to_user(member_id, &event);
@@ -286,7 +284,9 @@ pub async fn get_dm_peer_read_state(room_id: i64) -> Result<Option<PeerReadState
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    let Some(peer_id) = peer_id else { return Ok(None) };
+    let Some(peer_id) = peer_id else {
+        return Ok(None);
+    };
 
     let peer = crate::db::auth::find_user_by_id(auth_pool, &peer_id)
         .await

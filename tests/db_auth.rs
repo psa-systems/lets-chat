@@ -41,7 +41,9 @@ async fn test_create_user_and_find_by_username() {
 #[tokio::test]
 async fn test_create_user_duplicate_username_fails() {
     let pool = setup_pool().await;
-    lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.expect("First create should succeed");
+    lets_chat::db::auth::create_user(&pool, "alice", "hash1")
+        .await
+        .expect("First create should succeed");
     let result = lets_chat::db::auth::create_user(&pool, "alice", "hash2").await;
     assert!(result.is_err());
 }
@@ -49,8 +51,12 @@ async fn test_create_user_duplicate_username_fails() {
 #[tokio::test]
 async fn test_username_case_insensitive() {
     let pool = setup_pool().await;
-    lets_chat::db::auth::create_user(&pool, "Alice", "hash1").await.expect("Create should succeed");
-    let found = lets_chat::db::auth::find_user_by_username(&pool, "alice").await.expect("Lookup should succeed");
+    lets_chat::db::auth::create_user(&pool, "Alice", "hash1")
+        .await
+        .expect("Create should succeed");
+    let found = lets_chat::db::auth::find_user_by_username(&pool, "alice")
+        .await
+        .expect("Lookup should succeed");
     assert!(found.is_some());
     assert_eq!(found.unwrap().username, "Alice");
 }
@@ -58,29 +64,48 @@ async fn test_username_case_insensitive() {
 #[tokio::test]
 async fn test_count_users() {
     let pool = setup_pool().await;
-    let count = lets_chat::db::auth::count_users(&pool).await.expect("Count should work");
+    let count = lets_chat::db::auth::count_users(&pool)
+        .await
+        .expect("Count should work");
     assert_eq!(count, 0);
-    lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.unwrap();
-    let count = lets_chat::db::auth::count_users(&pool).await.expect("Count should work");
+    lets_chat::db::auth::create_user(&pool, "alice", "hash1")
+        .await
+        .unwrap();
+    let count = lets_chat::db::auth::count_users(&pool)
+        .await
+        .expect("Count should work");
     assert_eq!(count, 1);
 }
 
 #[tokio::test]
 async fn test_set_user_role() {
     let pool = setup_pool().await;
-    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.unwrap();
-    lets_chat::db::auth::set_user_role(&pool, &user_id, "admin").await.expect("Set role should work");
-    let user = lets_chat::db::auth::find_user_by_username(&pool, "alice").await.unwrap().unwrap();
+    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1")
+        .await
+        .unwrap();
+    lets_chat::db::auth::set_user_role(&pool, &user_id, "admin")
+        .await
+        .expect("Set role should work");
+    let user = lets_chat::db::auth::find_user_by_username(&pool, "alice")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(user.role, "admin");
 }
 
 #[tokio::test]
 async fn test_create_and_validate_session() {
     let pool = setup_pool().await;
-    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.unwrap();
-    let session_id = lets_chat::db::auth::create_session(&pool, &user_id).await.expect("Create session should work");
+    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1")
+        .await
+        .unwrap();
+    let session_id = lets_chat::db::auth::create_session(&pool, &user_id)
+        .await
+        .expect("Create session should work");
     assert!(!session_id.is_empty());
-    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id).await.expect("Get session user should work");
+    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id)
+        .await
+        .expect("Get session user should work");
     assert!(session_user.is_some());
     assert_eq!(session_user.unwrap().username, "alice");
 }
@@ -88,24 +113,38 @@ async fn test_create_and_validate_session() {
 #[tokio::test]
 async fn test_delete_session() {
     let pool = setup_pool().await;
-    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.unwrap();
-    let session_id = lets_chat::db::auth::create_session(&pool, &user_id).await.unwrap();
-    lets_chat::db::auth::delete_session(&pool, &session_id).await.expect("Delete session should work");
-    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id).await.unwrap();
+    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1")
+        .await
+        .unwrap();
+    let session_id = lets_chat::db::auth::create_session(&pool, &user_id)
+        .await
+        .unwrap();
+    lets_chat::db::auth::delete_session(&pool, &session_id)
+        .await
+        .expect("Delete session should work");
+    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id)
+        .await
+        .unwrap();
     assert!(session_user.is_none());
 }
 
 #[tokio::test]
 async fn test_expired_session_returns_none() {
     let pool = setup_pool().await;
-    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1").await.unwrap();
-    let session_id = uuid::Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '-1 hour'))")
-        .bind(&session_id)
-        .bind(&user_id)
-        .execute(&pool)
+    let user_id = lets_chat::db::auth::create_user(&pool, "alice", "hash1")
         .await
         .unwrap();
-    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id).await.unwrap();
+    let session_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '-1 hour'))",
+    )
+    .bind(&session_id)
+    .bind(&user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let session_user = lets_chat::db::auth::get_user_by_session(&pool, &session_id)
+        .await
+        .unwrap();
     assert!(session_user.is_none());
 }

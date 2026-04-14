@@ -104,10 +104,7 @@ pub async fn set_user_role(
     Ok(())
 }
 
-pub async fn create_session(
-    pool: &SqlitePool,
-    user_id: &str,
-) -> Result<String, sqlx::Error> {
+pub async fn create_session(pool: &SqlitePool, user_id: &str) -> Result<String, sqlx::Error> {
     use rand::Rng;
     let token: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
@@ -162,10 +159,7 @@ pub async fn get_user_by_session(
     }))
 }
 
-pub async fn delete_session(
-    pool: &SqlitePool,
-    session_id: &str,
-) -> Result<(), sqlx::Error> {
+pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE id = ?")
         .bind(session_id)
         .execute(pool)
@@ -173,10 +167,7 @@ pub async fn delete_session(
     Ok(())
 }
 
-pub async fn delete_user_sessions(
-    pool: &SqlitePool,
-    user_id: &str,
-) -> Result<(), sqlx::Error> {
+pub async fn delete_user_sessions(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE user_id = ?")
         .bind(user_id)
         .execute(pool)
@@ -229,13 +220,11 @@ pub async fn create_invite_code(
     code: &str,
     created_by: &str,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query(
-        "INSERT INTO invite_codes (code, created_by) VALUES (?, ?)",
-    )
-    .bind(code)
-    .bind(created_by)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("INSERT INTO invite_codes (code, created_by) VALUES (?, ?)")
+        .bind(code)
+        .bind(created_by)
+        .execute(pool)
+        .await?;
     Ok(result.last_insert_rowid())
 }
 

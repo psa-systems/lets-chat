@@ -36,16 +36,21 @@ pub fn Sidebar() -> Element {
         if let Some(ref event) = *ws.latest_event.read() {
             match event {
                 ChatEvent::NewMessage { is_dm: true, .. } => {
-                    let v = *dms_version.peek(); dms_version.set(v + 1);
-                    let v = *unread_version.peek(); unread_version.set(v + 1);
+                    let v = *dms_version.peek();
+                    dms_version.set(v + 1);
+                    let v = *unread_version.peek();
+                    unread_version.set(v + 1);
                 }
                 ChatEvent::DmRead { .. } => {
-                    let v = *unread_version.peek(); unread_version.set(v + 1);
+                    let v = *unread_version.peek();
+                    unread_version.set(v + 1);
                 }
-                ChatEvent::RoomMemberAdded { user_id, .. } | ChatEvent::RoomMemberRemoved { user_id, .. }
+                ChatEvent::RoomMemberAdded { user_id, .. }
+                | ChatEvent::RoomMemberRemoved { user_id, .. }
                     if *user_id == my_id =>
                 {
-                    let v = *rooms_version.peek(); rooms_version.set(v + 1);
+                    let v = *rooms_version.peek();
+                    rooms_version.set(v + 1);
                 }
                 _ => {}
             }

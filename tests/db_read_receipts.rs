@@ -19,15 +19,26 @@ async fn setup_chat_pool() -> SqlitePool {
 async fn upsert_is_monotonic() {
     let pool = setup_chat_pool().await;
     let room = lets_chat::db::chat::create_dm_room(&pool, "dm-a-b", "user-a", "user-b")
-        .await.unwrap();
-    let m1 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "hi").await.unwrap();
-    let m2 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "again").await.unwrap();
+        .await
+        .unwrap();
+    let m1 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "hi")
+        .await
+        .unwrap();
+    let m2 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "again")
+        .await
+        .unwrap();
 
-    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m2).await.unwrap();
-    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m1).await.unwrap();
+    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m2)
+        .await
+        .unwrap();
+    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m1)
+        .await
+        .unwrap();
 
     let state = lets_chat::db::chat::get_dm_read_state(&pool, "user-a", room.id)
-        .await.unwrap().expect("state");
+        .await
+        .unwrap()
+        .expect("state");
     assert_eq!(state.last_read_message_id, m2);
 }
 
@@ -35,18 +46,39 @@ async fn upsert_is_monotonic() {
 async fn unread_counts_peer_only_above_watermark() {
     let pool = setup_chat_pool().await;
     let room = lets_chat::db::chat::create_dm_room(&pool, "dm-a-b", "user-a", "user-b")
-        .await.unwrap();
-    let _m1 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "1").await.unwrap();
-    let m2 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "2").await.unwrap();
-    let _m3 = lets_chat::db::chat::insert_message(&pool, room.id, "user-a", "own").await.unwrap();
+        .await
+        .unwrap();
+    let _m1 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "1")
+        .await
+        .unwrap();
+    let m2 = lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "2")
+        .await
+        .unwrap();
+    let _m3 = lets_chat::db::chat::insert_message(&pool, room.id, "user-a", "own")
+        .await
+        .unwrap();
 
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a").await.unwrap();
-    let got = counts.iter().find(|(r, _)| *r == room.id).map(|(_, c)| *c).unwrap_or(0);
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+        .await
+        .unwrap();
+    let got = counts
+        .iter()
+        .find(|(r, _)| *r == room.id)
+        .map(|(_, c)| *c)
+        .unwrap_or(0);
     assert_eq!(got, 2);
 
-    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m2).await.unwrap();
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a").await.unwrap();
-    let got = counts.iter().find(|(r, _)| *r == room.id).map(|(_, c)| *c).unwrap_or(0);
+    lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m2)
+        .await
+        .unwrap();
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+        .await
+        .unwrap();
+    let got = counts
+        .iter()
+        .find(|(r, _)| *r == room.id)
+        .map(|(_, c)| *c)
+        .unwrap_or(0);
     assert_eq!(got, 0);
 }
 
@@ -54,9 +86,14 @@ async fn unread_counts_peer_only_above_watermark() {
 async fn unread_counts_only_dms_user_is_in() {
     let pool = setup_chat_pool().await;
     let room = lets_chat::db::chat::create_dm_room(&pool, "dm-b-c", "user-b", "user-c")
-        .await.unwrap();
-    lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "hi").await.unwrap();
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, room.id, "user-b", "hi")
+        .await
+        .unwrap();
 
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a").await.unwrap();
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+        .await
+        .unwrap();
     assert!(counts.iter().all(|(r, _)| *r != room.id));
 }
