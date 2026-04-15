@@ -4,7 +4,7 @@ use crate::components::use_websocket::WsHandle;
 use crate::models::User;
 use crate::routes::Route;
 use crate::server_fns::auth::{clear_session_cookie, logout, set_read_receipts_enabled};
-use crate::server_fns::chat::list_rooms;
+use crate::server_fns::chat::{list_rooms, search_messages};
 use crate::server_fns::dm::{list_dm_unread_counts_fn, list_my_dms};
 use crate::ws::events::ChatEvent;
 
@@ -74,6 +74,22 @@ pub fn Sidebar() -> Element {
         _ => std::collections::HashMap::new(),
     };
 
+    // Search state: `search_input` tracks the live text; `search_query` is set
+    // on submit and drives the server future so it only fires on Enter/click.
+    let mut search_input = use_signal(String::new);
+    let mut search_query = use_signal(String::new);
+
+    let search_results = use_server_future(move || {
+        let q = search_query();
+        async move {
+            if q.trim().is_empty() {
+                Ok(vec![])
+            } else {
+                search_messages(q, None).await
+            }
+        }
+    })?;
+
     let u = user().expect("user must be authenticated");
     let mut show_settings = use_signal(|| false);
     let mut receipts_enabled = use_signal(|| u.read_receipts_enabled);
@@ -88,50 +104,167 @@ pub fn Sidebar() -> Element {
 
     let display = u.display_name.as_deref().unwrap_or(&u.username).to_string();
 
+    let is_searching = !search_query().trim().is_empty();
+
     rsx! {
         div { class: "p-4 border-b border-gray-200",
             h1 { class: "text-lg font-bold text-gray-800", "Let's Chat" }
         }
 
-        nav { class: "flex-1 overflow-y-auto p-2",
-            div { class: "px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
-                "Rooms"
-            }
-            if room_list.is_empty() {
-                div { class: "px-3 py-2 text-sm text-gray-400", "No rooms" }
-            } else {
-                for room in room_list.iter() {
-                    Link {
-                        key: "{room.id}",
-                        to: Route::Room { room_id: room.id.to_string() },
-                        class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
-                        span { class: "text-gray-400", "#" }
-                        span { "{room.name}" }
+        // Search bar
+        div { class: "px-3 py-2 border-b border-gray-100",
+            div { class: "flex items-center gap-1",
+                input {
+                    class: "flex-1 px-2 py-1 text-sm border border-gray-200 rounded bg-gray-50 focus:outline-none focus:border-blue-400",
+                    r#type: "text",
+                    placeholder: "Search messages…",
+                    value: "{search_input}",
+                    oninput: move |e| {
+                        let v = e.value();
+                        spawn(async move { search_input.set(v); });
+                    },
+                    onkeydown: move |e| {
+                        if e.key() == Key::Enter {
+                            let q = search_input();
+                            spawn(async move { search_query.set(q); });
+                        }
+                        if e.key() == Key::Escape {
+                            spawn(async move {
+                                search_input.set(String::new());
+                                search_query.set(String::new());
+                            });
+                        }
+                    },
+                }
+                if is_searching {
+                    button {
+                        class: "text-gray-400 hover:text-gray-600 text-sm px-1",
+                        r#type: "button",
+                        onclick: move |_| {
+                            spawn(async move {
+                                search_input.set(String::new());
+                                search_query.set(String::new());
+                            });
+                        },
+                        "×"
+                    }
+                } else {
+                    button {
+                        class: "text-gray-400 hover:text-blue-600 text-sm px-1",
+                        r#type: "button",
+                        onclick: move |_| {
+                            let q = search_input();
+                            spawn(async move { search_query.set(q); });
+                        },
+                        "↵"
                     }
                 }
             }
+        }
 
-            // Direct Messages section
-            div { class: "mt-4 px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
-                "Direct Messages"
+        if is_searching {
+            // Search results panel
+            div { class: "flex-1 overflow-y-auto p-2",
+                match search_results() {
+                    None => rsx! {
+                        div { class: "px-3 py-4 text-sm text-gray-400 text-center", "Searching…" }
+                    },
+                    Some(Err(e)) => rsx! {
+                        div { class: "px-3 py-2 text-sm text-red-500", "{e}" }
+                    },
+                    Some(Ok(results)) => {
+                        if results.is_empty() {
+                            rsx! {
+                                div { class: "px-3 py-4 text-sm text-gray-400 text-center",
+                                    "No results for "{search_query()}""
+                                }
+                            }
+                        } else {
+                            let count = results.len();
+                            let plural = if count == 1 { "" } else { "s" };
+                            rsx! {
+                                div { class: "px-3 py-1 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
+                                    "{count} result{plural}"
+                                }
+                                for r in results.iter() {
+                                    {
+                                        let room_id_str = r.room_id.to_string();
+                                        let room_name = r.room_name.clone();
+                                        let author = r.author_name.clone();
+                                        let body = r.body.clone();
+                                        let ts = r.created_at.split(' ').next().unwrap_or("").to_string();
+                                        rsx! {
+                                            button {
+                                                key: "{r.message_id}",
+                                                class: "w-full text-left px-3 py-2 rounded hover:bg-blue-50 border border-transparent hover:border-blue-100 mb-1",
+                                                r#type: "button",
+                                                onclick: move |_| {
+                                                    let rid = room_id_str.clone();
+                                                    nav.push(Route::Room { room_id: rid });
+                                                    spawn(async move {
+                                                        search_input.set(String::new());
+                                                        search_query.set(String::new());
+                                                    });
+                                                },
+                                                div { class: "flex items-center gap-1 mb-0.5",
+                                                    span { class: "text-xs font-semibold text-blue-700", "#{room_name}" }
+                                                    span { class: "text-xs text-gray-400", "·" }
+                                                    span { class: "text-xs text-gray-500", "{author}" }
+                                                    span { class: "ml-auto text-xs text-gray-400", "{ts}" }
+                                                }
+                                                p { class: "text-xs text-gray-700 line-clamp-2 whitespace-pre-wrap",
+                                                    "{body}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            if dm_list.is_empty() {
-                div { class: "px-3 py-2 text-sm text-gray-400", "No conversations" }
-            } else {
-                for dm in dm_list.iter() {
-                    {
-                        let count = unread_map.get(&dm.room_id).copied().unwrap_or(0);
-                        rsx! {
-                            Link {
-                                key: "{dm.room_id}",
-                                to: Route::Dm { user_id: dm.other_user_id.clone() },
-                                class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
-                                span { class: "text-gray-400", "@" }
-                                span { class: "flex-1", "{dm.other_user_name}" }
-                                if count > 0 {
-                                    span {
-                                        class: "ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-blue-600 text-white text-xs font-semibold",
-                                        "{count}"
+        } else {
+            nav { class: "flex-1 overflow-y-auto p-2",
+                div { class: "px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
+                    "Rooms"
+                }
+                if room_list.is_empty() {
+                    div { class: "px-3 py-2 text-sm text-gray-400", "No rooms" }
+                } else {
+                    for room in room_list.iter() {
+                        Link {
+                            key: "{room.id}",
+                            to: Route::Room { room_id: room.id.to_string() },
+                            class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
+                            span { class: "text-gray-400", "#" }
+                            span { "{room.name}" }
+                        }
+                    }
+                }
+
+                // Direct Messages section
+                div { class: "mt-4 px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider",
+                    "Direct Messages"
+                }
+                if dm_list.is_empty() {
+                    div { class: "px-3 py-2 text-sm text-gray-400", "No conversations" }
+                } else {
+                    for dm in dm_list.iter() {
+                        {
+                            let count = unread_map.get(&dm.room_id).copied().unwrap_or(0);
+                            rsx! {
+                                Link {
+                                    key: "{dm.room_id}",
+                                    to: Route::Dm { user_id: dm.other_user_id.clone() },
+                                    class: "flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-700",
+                                    span { class: "text-gray-400", "@" }
+                                    span { class: "flex-1", "{dm.other_user_name}" }
+                                    if count > 0 {
+                                        span {
+                                            class: "ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-blue-600 text-white text-xs font-semibold",
+                                            "{count}"
+                                        }
                                     }
                                 }
                             }
