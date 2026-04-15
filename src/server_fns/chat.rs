@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::models::{Message, Room};
+use crate::models::{Message, Room, SearchResult};
 
 #[cfg(feature = "server")]
 async fn require_room_access(
@@ -186,4 +186,42 @@ pub async fn edit_message(message_id: i64, new_body: String) -> Result<(), Serve
     crate::ws::hub::get_hub().broadcast_to_room(msg.room_id, &event);
 
     Ok(())
+}
+
+/// Full-text search across messages the caller has access to.
+/// `room_id` optionally narrows the search to a single room.
+#[server]
+pub async fn search_messages(
+    query: String,
+    room_id: Option<i64>,
+) -> Result<Vec<SearchResult>, ServerFnError> {
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return Err(ServerFnError::new("Query must not be empty"));
+    }
+    if query.len() > 200 {
+        return Err(ServerFnError::new("Query too long (max 200 characters)"));
+    }
+
+    let fts_query = crate::db::chat::sanitize_fts_query(&query)
+        .ok_or_else(|| ServerFnError::new("Query contains no searchable terms"))?;
+
+    let user = crate::server_fns::helpers::require_auth().await?;
+    let is_admin = crate::server_fns::helpers::role_level(&user.role) >= 3;
+    let chat_pool = crate::db::get_chat_pool().await;
+    let auth_pool = crate::db::get_auth_pool().await;
+
+    let mut results =
+        crate::db::chat::search_messages(chat_pool, &fts_query, room_id, &user.id, is_admin)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Resolve user_id → display name from the auth DB (same pattern as list_messages).
+    for r in &mut results {
+        if let Ok(Some(record)) = crate::db::auth::find_user_by_id(auth_pool, &r.user_id).await {
+            r.author_name = record.display_name.unwrap_or(record.username);
+        }
+    }
+
+    Ok(results)
 }
