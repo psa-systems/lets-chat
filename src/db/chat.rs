@@ -1,6 +1,6 @@
 use sqlx::Row;
 
-use crate::models::{Reaction, Room};
+use crate::models::{Reaction, Room, SearchResult};
 
 /// Raw message row from the chat DB — contains user_id but no author_name.
 /// The server fn layer resolves the display name from the auth DB.
@@ -527,6 +527,98 @@ pub async fn list_room_reactions(
                     reacted_by_me: r.get::<i64, _>("reacted_by_me") == 1,
                 },
             )
+        })
+        .collect())
+}
+
+/// Escape a raw user query string for safe use in an FTS5 MATCH expression.
+/// Splits on whitespace, strips FTS5 special characters from each token,
+/// and drops empty tokens. Returns None if no usable tokens remain.
+pub fn sanitize_fts_query(raw: &str) -> Option<String> {
+    let special = |c: char| matches!(c, '"' | '*' | '(' | ')' | '+' | '-' | '^' | ':');
+    let tokens: Vec<String> = raw
+        .split_whitespace()
+        .map(|t| t.replace(special, ""))
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        None
+    } else {
+        // Wrap each token in double-quotes so FTS5 treats it as a literal term
+        // rather than a command keyword.
+        Some(
+            tokens
+                .iter()
+                .map(|t| format!("\"{t}\""))
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+}
+
+/// Full-text search across accessible messages.
+///
+/// For non-admin callers the result is restricted to public rooms plus rooms
+/// the caller is a member of.  Pass `is_admin = true` to skip the access
+/// filter.  `room_id_filter` narrows results to a single room when set.
+pub async fn search_messages(
+    pool: &sqlx::SqlitePool,
+    fts_query: &str,
+    room_id_filter: Option<i64>,
+    caller_user_id: &str,
+    is_admin: bool,
+) -> Result<Vec<SearchResult>, sqlx::Error> {
+    // Build the room-access predicate inline so we can use a single query.
+    // Admin: no restriction.
+    // Regular user: public rooms OR rooms where caller is a member.
+    let room_filter_clause = match room_id_filter {
+        Some(_) => "AND m.room_id = ?",
+        None => "",
+    };
+
+    let access_clause = if is_admin {
+        "AND r.room_type != 'dm'"
+    } else {
+        "AND (r.room_type = 'public' OR EXISTS (\
+             SELECT 1 FROM room_members rm \
+             WHERE rm.room_id = r.id AND rm.user_id = ?))"
+    };
+
+    let sql = format!(
+        "SELECT m.id AS message_id, m.room_id, r.name AS room_name, \
+                m.body, m.user_id, m.created_at \
+         FROM messages_fts \
+         JOIN messages m ON m.id = messages_fts.rowid \
+         JOIN rooms    r ON r.id  = m.room_id \
+         WHERE messages_fts MATCH ? \
+           AND m.deleted_at IS NULL \
+           {room_filter_clause} \
+           {access_clause} \
+         ORDER BY messages_fts.rank \
+         LIMIT 50"
+    );
+
+    // Bind parameters in order: fts_query, [room_id_filter], [caller_user_id]
+    let mut q = sqlx::query(&sql).bind(fts_query);
+    if let Some(rid) = room_id_filter {
+        q = q.bind(rid);
+    }
+    if !is_admin {
+        q = q.bind(caller_user_id);
+    }
+
+    let rows = q.fetch_all(pool).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| SearchResult {
+            message_id: r.get("message_id"),
+            room_id: r.get("room_id"),
+            room_name: r.get("room_name"),
+            body: r.get("body"),
+            user_id: r.get("user_id"),
+            author_name: r.get::<String, _>("user_id"), // resolved by server fn layer
+            created_at: r.get("created_at"),
         })
         .collect())
 }

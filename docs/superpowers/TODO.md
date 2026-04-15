@@ -249,7 +249,7 @@ ReactionRemoved {
 
 ---
 
-## Phase 11 — Message Search
+## Phase 11 — Message Search (Done)
 
 **Goal:** Full-text search across messages the user has access to. **Depends on Phase 9** (private room membership must gate search results).
 

@@ -74,7 +74,7 @@ dev-desktop:
 
 # Run tests
 test:
-    cargo test --features server --test db_auth --test db_dm --test db_invite --test db_moderation --test db_settings --test message_editing --test rbac --test db_private_rooms --test db_reactions
+    cargo test --features server --test db_auth --test db_dm --test db_invite --test db_moderation --test db_settings --test message_editing --test rbac --test db_private_rooms --test db_reactions --test db_search
 
 # Verify the server binary starts and responds to HTTP requests
 verify:
