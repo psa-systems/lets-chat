@@ -10,6 +10,8 @@ pub struct AuthResponse {
 }
 
 pub const GENERIC_REGISTER_ERROR: &str = "Registration failed";
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub const USERNAME_TAKEN_ERROR: &str = "Username taken";
 pub const GENERIC_LOGIN_ERROR: &str = "Invalid credentials";
 pub const TRY_AGAIN_ERROR: &str = "Something went wrong, please try again";
 
@@ -77,7 +79,7 @@ pub async fn register(username: String, password: String) -> Result<AuthResponse
     match crate::db::auth::find_user_by_username(pool, &username).await {
         Ok(Some(_)) => {
             warn!(%username, "register rejected: username already taken");
-            return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
+            return Err(ServerFnError::new(USERNAME_TAKEN_ERROR));
         }
         Ok(None) => {}
         Err(e) => {
@@ -98,6 +100,10 @@ pub async fn register(username: String, password: String) -> Result<AuthResponse
 
     let user_id = match crate::db::auth::create_user(pool, &username, &password_hash).await {
         Ok(id) => id,
+        Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+            warn!(%username, "register rejected: username already taken (unique violation)");
+            return Err(ServerFnError::new(USERNAME_TAKEN_ERROR));
+        }
         Err(e) => {
             warn!(error = %e, "register failed: create_user");
             return Err(ServerFnError::new(GENERIC_REGISTER_ERROR));
