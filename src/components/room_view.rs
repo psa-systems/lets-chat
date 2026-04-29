@@ -5,7 +5,9 @@ use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
 use crate::models::{Message, Reaction, User};
 use crate::routes::Route;
-use crate::server_fns::chat::{edit_message, get_room, list_messages, send_message};
+use crate::server_fns::chat::{
+    delete_own_message, edit_message, get_room, list_messages, send_message,
+};
 use crate::server_fns::moderation::delete_message;
 use crate::server_fns::reactions::get_room_reactions;
 use crate::ws::events::ChatEvent;
@@ -399,7 +401,22 @@ pub fn RoomViewPage(room_id: String) -> Element {
                                             "edit"
                                         }
                                     }
-                                    if is_mod && !is_editing {
+                                    if is_own && !is_editing {
+                                        button {
+                                            class: "opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 ml-2 transition-opacity",
+                                            onclick: move |_| {
+                                                spawn(async move {
+                                                    match delete_own_message(msg_id).await {
+                                                        Ok(()) => {}
+                                                        Err(e) => {
+                                                            error.set(Some(crate::server_fns::auth::user_facing_error(&e)));
+                                                        }
+                                                    }
+                                                });
+                                            },
+                                            "delete"
+                                        }
+                                    } else if is_mod && !is_editing {
                                         button {
                                             class: "opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 ml-2 transition-opacity",
                                             onclick: move |_| {
