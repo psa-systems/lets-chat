@@ -13,23 +13,30 @@ pub fn Sidebar() -> Element {
     let user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
     let my_id = user().map(|u| u.id).unwrap_or_default();
 
+    // These futures use `use_resource` (not `use_server_future`) because they are
+    // refetched in response to WebSocket events via the version signals below.
+    // `use_server_future` re-suspends on every refetch via its `?` operator,
+    // which propagates to the root SuspenseBoundary and unmounts the entire
+    // tree (including the route Outlet) until the new data arrives — visible
+    // as a full-page flash on every DM send/receive. `use_resource` keeps the
+    // previous value while refetching, so siblings keep rendering smoothly.
     let mut rooms_version = use_signal(|| 0u32);
-    let rooms = use_server_future(move || {
+    let rooms = use_resource(move || {
         let _v = rooms_version();
         async move { list_rooms().await }
-    })?;
+    });
 
     let mut dms_version = use_signal(|| 0u32);
-    let dms = use_server_future(move || {
+    let dms = use_resource(move || {
         let _v = dms_version();
         async move { list_my_dms().await }
-    })?;
+    });
 
     let mut unread_version = use_signal(|| 0u32);
-    let unread = use_server_future(move || {
+    let unread = use_resource(move || {
         let _v = unread_version();
         async move { list_dm_unread_counts_fn().await }
-    })?;
+    });
 
     let ws = use_context::<WsHandle>();
     use_effect(move || {
@@ -79,7 +86,7 @@ pub fn Sidebar() -> Element {
     let mut search_input = use_signal(String::new);
     let mut search_query = use_signal(String::new);
 
-    let search_results = use_server_future(move || {
+    let search_results = use_resource(move || {
         let q = search_query();
         async move {
             if q.trim().is_empty() {
@@ -88,7 +95,7 @@ pub fn Sidebar() -> Element {
                 search_messages(q, None).await
             }
         }
-    })?;
+    });
 
     let u = user().expect("user must be authenticated");
     let mut show_settings = use_signal(|| false);
