@@ -1815,7 +1815,19 @@ EOF
 
 This task ports `ws::handler` to the new module structure and changes the wire payload to plain HTML strings (no JSON). The hub keeps emitting `ChatEvent` internally; a render layer at the connection boundary turns each event into HTML.
 
+**Pre-step: unify the Hub instance.** `server/src/ws/hub.rs` still has a module-level `static HUB: OnceLock<Arc<Hub>>` and a `pub fn get_hub() -> &'static Arc<Hub>` carried over from the old code. Meanwhile `AppState::hub` is a separate `Arc<Hub>` constructed in `main.rs`. As soon as anything calls `state.hub.notify_typing(...)`, the eviction task spawned inside `notify_typing` will look up its keys on the `static HUB` instance, not on `state.hub`, and `UserStoppedTyping` will never broadcast.
+
+Before adding any `/ws` wiring in this task, do the following in `server/src/ws/hub.rs`:
+
+1. Delete the `static HUB` line and the `get_hub()` function.
+2. Change `notify_typing(&self, conn_id, room_id)` to `notify_typing(self: &Arc<Self>, conn_id, room_id)`.
+3. Inside `notify_typing`'s spawned eviction closure, replace the `let hub = get_hub().clone();` line with `let hub = self.clone();`.
+4. Run `./dev/cargo check -p lets-chat-server`. The only callers of the removed symbols today should be inside `hub.rs` itself; if any other call site shows up, route it through `state.hub`.
+
+After this refactor, only one `Hub` instance exists in the process and all callers use `state.hub`.
+
 **Files:**
+- Modify: `server/src/ws/hub.rs` (Hub-instance unification, see pre-step)
 - Create: `server/src/routes/ws.rs`
 - Create: `server/src/views/ws_fragments.rs`
 - Modify: `server/src/routes/mod.rs`
