@@ -11,26 +11,19 @@ const EMOJI_PICKER: &[&str] = &[
 pub fn ReactionBar(
     message_id: i64,
     room_id: i64,
-    /// Initial reactions passed from the message list.
+    /// Reactions for this message. Owned by the parent and re-passed on every
+    /// render so WS-driven updates reach all viewers, not only the user who
+    /// toggled the reaction.
     initial_reactions: Vec<Reaction>,
-    /// The current user's id — used to highlight their own reactions.
+    /// The current user's id (kept for prop compat with callers).
     my_user_id: String,
 ) -> Element {
-    let mut reactions = use_signal(|| initial_reactions.clone());
     let mut show_picker = use_signal(|| false);
-
-    // Keep reactions in sync when the parent passes fresh data (e.g. after a WS update).
-    // We use use_effect tracking `initial_reactions` length as a simple heuristic.
-    // A full reactive sync would need a version signal; for reactions a WS push is the
-    // primary update path handled by the parent via `update_reactions`.
-    let _ = initial_reactions; // consumed via closure below
-
-    let my_id = my_user_id.clone();
 
     rsx! {
         div { class: "flex items-center gap-1 flex-wrap mt-1",
             // Existing reactions
-            for reaction in reactions.read().iter() {
+            for reaction in initial_reactions.iter() {
                 {
                     let emoji = reaction.emoji.clone();
                     let count = reaction.count;
@@ -49,9 +42,7 @@ pub fn ReactionBar(
                                 let e = emoji_for_click.clone();
                                 let mid = message_id;
                                 spawn(async move {
-                                    if let Ok(updated) = toggle_reaction(mid, e).await {
-                                        reactions.set(updated);
-                                    }
+                                    let _ = toggle_reaction(mid, e).await;
                                 });
                             },
                             span { "{emoji}" }
@@ -89,9 +80,7 @@ pub fn ReactionBar(
                                             let mid = message_id;
                                             spawn(async move {
                                                 show_picker.set(false);
-                                                if let Ok(updated) = toggle_reaction(mid, em).await {
-                                                    reactions.set(updated);
-                                                }
+                                                let _ = toggle_reaction(mid, em).await;
                                             });
                                         },
                                         "{e}"
