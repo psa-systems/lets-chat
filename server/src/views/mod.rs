@@ -1,1 +1,2 @@
-// Askama view structs live here; populated starting Task 3.
+pub mod home;
+pub mod layout;
