@@ -188,6 +188,34 @@ pub async fn edit_message(message_id: i64, new_body: String) -> Result<(), Serve
     Ok(())
 }
 
+#[server]
+pub async fn delete_own_message(message_id: i64) -> Result<(), ServerFnError> {
+    let user = crate::server_fns::helpers::require_auth().await?;
+
+    let chat_pool = crate::db::get_chat_pool().await;
+
+    let msg = crate::db::chat::get_message(chat_pool, message_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Message not found"))?;
+
+    if msg.user_id != user.id {
+        return Err(ServerFnError::new("Cannot delete another user's message"));
+    }
+
+    crate::db::moderation::soft_delete_message(chat_pool, message_id, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let event = crate::ws::events::ChatEvent::MessageDeleted {
+        message_id,
+        room_id: msg.room_id,
+    };
+    crate::ws::hub::get_hub().broadcast_to_room(msg.room_id, &event);
+
+    Ok(())
+}
+
 /// Full-text search across messages the caller has access to.
 /// `room_id` optionally narrows the search to a single room.
 #[server]
