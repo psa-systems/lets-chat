@@ -157,6 +157,19 @@ Dioxus.toml              # DELETED in cleanup phase
 - Verification commands use `cargo` (no `dx`). `cargo run` starts the server on `0.0.0.0:8080` once Phase 2 is complete.
 - Tests use `cargo test`. Test files in `tests/` use the `lets_chat::` crate root re-exported from `src/lib.rs`.
 - Curl examples assume a running server. If the step doesn't say to start the server, you don't have to.
+- **Toolchain:** the host has no Rust or Bun. Use `./dev/cargo <args>` and `./dev/bun <args>` wrappers (already added on this branch). `./dev/server-up <cargo-args>` starts the server in a detached container with port 8080 published; override the host port via `HOST_PORT=18080 ./dev/server-up ...` if 8080 is taken. `./dev/server-down` stops it.
+- **Em-dashes:** the user's global rule forbids the em-dash character (`—`, U+2014) in any text shown to the user or written to artifacts. Wherever this plan still shows an em-dash in a code block (e.g., `Home — lets-chat`), substitute a regular hyphen (`Home - lets-chat`) when copying into a template, commit message, or doc.
+- **Askama integration (substitution for `askama_axum`):** `askama_axum` 0.4 is incompatible with Axum 0.8 (axum_core version skew) and is also officially deprecated. The codebase uses a small in-house helper at `server/src/views/mod.rs`:
+  ```rust
+  pub struct Html(pub String);
+  impl IntoResponse for Html { /* sets Content-Type: text/html; charset=utf-8 */ }
+  pub fn html<T: askama::Template>(t: &T) -> Result<Html, AppError> { /* renders via askama */ }
+  ```
+  In every plan code block that imports `askama_axum::Template` and ends a handler with `Ok(page.into_response())`, **substitute** the following equivalents when copying into the codebase:
+  - Replace `use askama_axum::Template;` with `use askama::Template;`.
+  - Replace handler return type `Result<Response, AppError>` with `Result<Html, AppError>` and the body's final line `Ok(page.into_response())` with `crate::views::html(&page)`.
+  - For ad-hoc HTML responses such as `axum::response::Html(html).into_response()` (used for tiny inline-built fragments like the reaction picker), keep `axum::response::Html(html)` — that type is unrelated to the wrapper above and is fine as-is.
+  - Keep the `Cargo.toml` `askama = "0.12"` dep but do NOT add `askama_axum`.
 
 ---
 
@@ -263,7 +276,6 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
 http = "1"
 askama = "0.12"
-askama_axum = "0.4"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
 argon2 = "0.5"
 rand = "0.8"
