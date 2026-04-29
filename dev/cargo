@@ -10,5 +10,5 @@ docker run --rm --init \
     -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
     -v lets-chat-rewrite-target:/work/target \
     -e CARGO_HOME=/usr/local/cargo \
-    rust:1.83-slim-bookworm \
+    rust:1.88-slim-bookworm \
     cargo "$@"

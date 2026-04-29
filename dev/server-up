@@ -6,7 +6,7 @@ docker rm --force lets-chat-rewrite-server >/dev/null 2>&1 || true
 docker run --rm --detach --init \
     --name lets-chat-rewrite-server \
     --user "$(id -u):$(id -g)" \
-    -p 127.0.0.1:8080:8080 \
+    -p "127.0.0.1:${HOST_PORT:-8080}:8080" \
     -v "$PWD:/work" \
     -w /work \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
@@ -17,7 +17,7 @@ docker run --rm --detach --init \
     -e LETS_CHAT_DATA_DIR=/data \
     -e BIND_ADDR=0.0.0.0:8080 \
     -e RUST_LOG=lets_chat=debug \
-    rust:1.83-slim-bookworm \
+    rust:1.88-slim-bookworm \
     cargo run "$@"
 echo "Server container started: lets-chat-rewrite-server"
 echo "Tail logs: docker logs --follow lets-chat-rewrite-server"
