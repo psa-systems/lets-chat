@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::components::reaction_bar::ReactionBar;
 use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
-use crate::models::{Message, Reaction, User};
+use crate::models::{Message, Reaction, Room, User};
 use crate::server_fns::chat::{delete_own_message, edit_message, list_messages};
 use crate::server_fns::dm::{
     get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message,
@@ -12,39 +12,39 @@ use crate::ws::events::ChatEvent;
 
 #[component]
 pub fn DmViewPage(user_id: String) -> Element {
-    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
-    let u = current_user().expect("user must be authenticated");
-
-    // Resolve or create the DM room
     let dm_room = use_server_future(move || {
         let uid = user_id.clone();
         async move { get_or_create_dm(uid).await }
     })?;
 
-    let room = match dm_room() {
-        Some(Ok(r)) => r,
-        Some(Err(e)) => {
-            return rsx! {
-                div { class: "flex-1 flex items-center justify-center text-red-500",
-                    "Error: {e}"
-                }
-            };
+    match dm_room() {
+        Some(Ok(room)) => {
+            let key = room.id;
+            rsx! { DmRoomView { key: "{key}", room } }
         }
-        None => {
-            return rsx! {
-                div { class: "flex-1 flex items-center justify-center text-gray-500",
-                    "Loading DM..."
-                }
-            };
-        }
-    };
+        Some(Err(e)) => rsx! {
+            div { class: "flex-1 flex items-center justify-center text-red-500",
+                "Error: {e}"
+            }
+        },
+        None => rsx! {
+            div { class: "flex-1 flex items-center justify-center text-gray-500",
+                "Loading DM..."
+            }
+        },
+    }
+}
+
+#[component]
+fn DmRoomView(room: Room) -> Element {
+    let current_user: Signal<Option<User>> = use_context::<Signal<Option<User>>>();
+    let u = current_user().expect("user must be authenticated");
 
     let room_id = room.id;
     let room_id_sig = use_signal(|| room_id);
 
     // Initial load from server — fetched once per DM room.
-    let messages_fetch =
-        use_server_future(move || async move { list_messages(room_id).await })?;
+    let messages_fetch = use_server_future(move || async move { list_messages(room_id).await })?;
 
     let mut messages = use_signal(Vec::<Message>::new);
     let mut load_error = use_signal(|| Option::<String>::None);
@@ -175,8 +175,7 @@ pub fn DmViewPage(user_id: String) -> Element {
     });
 
     // Per-message reactions for this DM room.
-    let mut reactions_map =
-        use_signal(|| std::collections::HashMap::<i64, Vec<Reaction>>::new());
+    let mut reactions_map = use_signal(|| std::collections::HashMap::<i64, Vec<Reaction>>::new());
 
     use_effect(move || {
         if let Some(ref event) = *ws.latest_event.read() {
@@ -281,7 +280,9 @@ pub fn DmViewPage(user_id: String) -> Element {
                 // The listener is attached to `document` and leaked via
                 // `cb.forget()`, so it outlives the component. Guard against
                 // the signal being dropped after unmount.
-                let Ok(v) = visibility_tick.try_peek() else { return };
+                let Ok(v) = visibility_tick.try_peek() else {
+                    return;
+                };
                 let next = *v + 1;
                 drop(v);
                 let _ = visibility_tick.try_write().map(|mut w| *w = next);
