@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Wrapper: runs cargo inside a Docker container since the host has no Rust toolchain.
+# Caches the cargo registry and target dir in named volumes so rebuilds are fast.
+set -euo pipefail
+docker run --rm --init \
+    --user "$(id -u):$(id -g)" \
+    -v "$PWD:/work" \
+    -w /work \
+    -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
+    -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
+    -v lets-chat-rewrite-target:/work/target \
+    -e CARGO_HOME=/usr/local/cargo \
+    rust:1.83-slim-bookworm \
+    cargo "$@"

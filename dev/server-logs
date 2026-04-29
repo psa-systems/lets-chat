@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+docker logs "${@:---tail=100}" lets-chat-rewrite-server
