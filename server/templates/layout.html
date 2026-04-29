@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div hx-ext="ws" ws-connect="/ws" class="flex h-screen">
+  {% include "partials/sidebar.html" %}
+  <main id="main" class="flex-1 flex flex-col overflow-hidden">
+    {% block main %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

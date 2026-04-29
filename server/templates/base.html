@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}lets-chat{% endblock %}</title>
+  <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
+  <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
+  <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/vendor/htmx-ext-ws.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/vendor/htmx-ext-response-targets.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/vendor/idiomorph.min.js?v={{ asset_version }}" defer></script>
+</head>
+<body hx-ext="response-targets" class="h-screen overflow-hidden bg-slate-50 text-slate-900">
+  {% block body %}{% endblock %}
+</body>
+</html>

@@ -4,14 +4,12 @@ use tower_http::trace::TraceLayer;
 
 use crate::state::AppState;
 
+mod home;
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(home_stub))
+        .route("/", get(home::get_home))
         .nest_service("/assets", ServeDir::new("server/assets"))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
-}
-
-async fn home_stub() -> &'static str {
-    "lets-chat (rewrite in progress)"
 }
