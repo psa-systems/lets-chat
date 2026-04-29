@@ -1,0 +1,39 @@
+[package]
+name = "lets-chat-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "lets-chat"
+path = "src/main.rs"
+
+[lib]
+name = "lets_chat"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
+http = "1"
+askama = "0.12"
+askama_axum = "0.4"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
+argon2 = "0.5"
+rand = "0.8"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dashmap = "6"
+time = "0.3"
+mime_guess = "2"
+percent-encoding = "2"
+async-trait = "0.1"
+thiserror = "1"
