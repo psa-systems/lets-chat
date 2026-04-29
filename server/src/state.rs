@@ -12,13 +12,3 @@ pub struct AppState {
     pub hub: Arc<Hub>,
     pub asset_version: &'static str,
 }
-
-impl AppState {
-    pub fn asset_url(&self, path: &str) -> String {
-        format!(
-            "/assets/{}?v={}",
-            path.trim_start_matches('/'),
-            self.asset_version
-        )
-    }
-}
