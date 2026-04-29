@@ -144,7 +144,15 @@ async fn connect_ws(
         // Connected — reset backoff
         backoff_ms = 500;
 
-        sender.set(Some(WebSocketSender { ws: ws.clone() }));
+        if sender
+            .try_write()
+            .map(|mut w| *w = Some(WebSocketSender { ws: ws.clone() }))
+            .is_err()
+        {
+            // Signal scope dropped (e.g. hot reload). Stop reconnect loop.
+            let _ = ws.close();
+            return;
+        }
 
         // Listen for messages
         let (close_tx, close_rx) = futures::channel::oneshot::channel::<()>();
@@ -156,7 +164,9 @@ async fn connect_ws(
                 if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
                     let s: String = text.into();
                     if let Ok(event) = serde_json::from_str::<ChatEvent>(&s) {
-                        latest.set(Some(event));
+                        // Closure may outlive the Signal across hot-reload or
+                        // scope drop; ignore writes after the signal is gone.
+                        let _ = latest.try_write().map(|mut w| *w = Some(event));
                     }
                 }
             }) as Box<dyn FnMut(MessageEvent)>)
@@ -175,7 +185,9 @@ async fn connect_ws(
         // Wait until closed
         let _ = close_rx.await;
 
-        sender.set(None);
+        if sender.try_write().map(|mut w| *w = None).is_err() {
+            return;
+        }
 
         // Reconnect with backoff
         gloo_timers::future::TimeoutFuture::new(backoff_ms).await;
