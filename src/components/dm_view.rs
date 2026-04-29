@@ -4,7 +4,7 @@ use crate::components::reaction_bar::ReactionBar;
 use crate::components::use_auto_scroll::use_auto_scroll;
 use crate::components::use_websocket::WsHandle;
 use crate::models::{Message, Reaction, User};
-use crate::server_fns::chat::{edit_message, list_messages};
+use crate::server_fns::chat::{delete_own_message, edit_message, list_messages};
 use crate::server_fns::dm::{
     get_dm_peer_read_state, get_or_create_dm, mark_dm_read, send_dm_message,
 };
@@ -375,6 +375,20 @@ pub fn DmViewPage(user_id: String) -> Element {
                                                 edit_error.set(None);
                                             },
                                             "edit"
+                                        }
+                                        button {
+                                            class: "opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 ml-2 transition-opacity",
+                                            onclick: move |_| {
+                                                spawn(async move {
+                                                    match delete_own_message(msg_id).await {
+                                                        Ok(()) => {}
+                                                        Err(e) => {
+                                                            error.set(Some(crate::server_fns::auth::user_facing_error(&e)));
+                                                        }
+                                                    }
+                                                });
+                                            },
+                                            "delete"
                                         }
                                     }
                                 }
