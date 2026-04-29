@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Full user record. Only used server-side — never sent to the client.
-#[cfg(feature = "server")]
+/// Full user record. Only used server-side - never sent to the client.
 #[derive(Debug, Clone)]
 pub struct UserRecord {
     pub id: String,
