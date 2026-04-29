@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+docker rm --force lets-chat-rewrite-server 2>/dev/null || true
+echo "Server stopped."
