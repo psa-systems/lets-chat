@@ -35,25 +35,3 @@ pub struct User {
     pub read_receipts_enabled: bool,
 }
 
-impl User {
-    /// Construct a User without DB access.
-    ///
-    /// This is a temporary helper used during the rewrite so the homepage can
-    /// render before real auth lands. Removed in Task 4 once `require_auth`
-    /// is wired up.
-    pub fn placeholder() -> Self {
-        Self {
-            id: "anonymous".to_string(),
-            username: "anonymous".to_string(),
-            display_name: None,
-            role: "user".to_string(),
-            is_muted: false,
-            muted_until: None,
-            is_banned: false,
-            ban_reason: None,
-            banned_until: None,
-            created_at: String::new(),
-            read_receipts_enabled: false,
-        }
-    }
-}
