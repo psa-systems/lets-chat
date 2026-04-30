@@ -26,3 +26,9 @@ pub struct RoomPage<'a> {
     pub messages: &'a [MessageView],
     pub asset_version: &'a str,
 }
+
+#[derive(Template)]
+#[template(path = "room/composer.html")]
+pub struct ComposerFragment<'a> {
+    pub room: &'a Room,
+}
