@@ -4,7 +4,7 @@ Resume point for continuing the rewrite from a fresh Claude Code session.
 
 ## Branch
 
-`feat/axum-htmx-rewrite` (pushed). Current HEAD: `38fa3ed refactor(views): introduce Html wrapper helper; drop dead asset_url`.
+`feat/axum-htmx-rewrite`. Current HEAD: `b830011 feat(search): full-text message search via /search?q=...`.
 
 The spec and plan live on `spec/axum-htmx-rewrite` (already pushed; PR open: https://dev.a8n.run/a8n-tools/lets-chat/compare/main...spec/axum-htmx-rewrite). The feat branch was forked from spec, so it carries the spec doc, the plan doc, and all infra commits.
 
@@ -22,7 +22,7 @@ Or skip worktrees and just checkout the branch in your normal clone.
 
 ## Toolchain (no Rust on host)
 
-`./dev/cargo`, `./dev/bun`, `./dev/server-up`, `./dev/server-down`, `./dev/server-logs` — all wrap Docker. The cargo wrapper uses `rust:1.88-slim-bookworm` (was bumped from 1.83 by Task 2 because transitive deps require edition2024). `./dev/server-up` publishes container port 8080. The dev host already binds 0.0.0.0:8080 (cadvisor); always pass `HOST_PORT=18080` when starting:
+`./dev/cargo`, `./dev/bun`, `./dev/server-up`, `./dev/server-down`, `./dev/server-logs` — all wrap Docker. The cargo wrapper uses `rust:1.88-slim-bookworm`. `./dev/server-up` publishes container port 8080. The dev host already binds 0.0.0.0:8080 (cadvisor); always pass `HOST_PORT=18080` when starting:
 
 ```bash
 HOST_PORT=18080 ./dev/server-up -p lets-chat-server
@@ -37,135 +37,156 @@ docker run --rm -v lets-chat-rewrite-target:/d rust:1.88-slim-bookworm chown -R 
 docker run --rm -v lets-chat-rewrite-data:/d rust:1.88-slim-bookworm chown -R "$(id -u):$(id -g)" /d
 ```
 
-## Plan-wide conventions to read first
+## Plan-wide conventions (in plan file lines 152-180)
 
-`docs/superpowers/plans/2026-04-29-axum-htmx-rewrite.md`, lines 152-180. Two substitutions are in force globally:
-
-1. **No em-dashes.** Anywhere the plan shows `—` in a code block (template title strings, etc.), substitute `-` when copying into the codebase.
-
-2. **`askama_axum` is NOT used.** The codebase has `server/src/views/mod.rs::Html(pub String)` and `views::html(&template) -> Result<Html, AppError>`. Every plan code block that imports `use askama_axum::Template;` and ends a handler with `Ok(page.into_response())` should be transformed to:
-   - `use askama::Template;` (still needed for the derive)
-   - Handler return type `Result<Html, AppError>`
-   - Handler body ends with `crate::views::html(&page)` or `Ok(html(&page)?)`
-   - For ad-hoc inline HTML responses like `axum::response::Html(html_string).into_response()` (used for tiny inline-built fragments such as the reaction picker in Task 11), **keep** `axum::response::Html(...)` — that's a different type and works as-is.
+1. **No em-dashes.** Substitute `-` for `—` everywhere in code, templates, commits, docs.
+2. **`askama_axum` is NOT used.** Use the in-house helper at `server/src/views/mod.rs`:
+   - `pub struct Html(pub String)` plus `impl IntoResponse`
+   - `pub fn html<T: askama::Template>(t: &T) -> Result<Html, AppError>`
+   - Handler return type `Result<Html, AppError>`; body ends with `html(&page)` or `Ok(html(&page)?)`
+   - For ad-hoc inline HTML, keep `axum::response::Html(string)` as-is (different type).
+3. **Use the `From<UserRecord> for User` impl** at `server/src/models/user.rs` (introduced commit `bd1edb9`) — call `record.into()` rather than reconstructing field-by-field.
 
 ## Status
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 1 | DONE (commit `d7ddac1` + fix `7ec92f6`) | Workspace conversion + vendor htmx assets |
-| 2 | DONE (commit `6d4f4a0`) | Strip Dioxus, empty Axum server. Latent dual-Hub bug noted in plan Task 8 pre-step |
-| 3 | DONE (commits `f313cea` + refactor `38fa3ed`) | Base layout + welcome page. Html wrapper helper introduced |
-| 4 | NOT STARTED | Cookie auth middleware + AuthUser/AdminUser extractors. Implementer dispatch was prepared (see "Resume Task 4" below) but rejected to free session budget |
-| 5-17 | NOT STARTED | |
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+| 1 | DONE | `d7ddac1` + fix `7ec92f6` | Workspace conversion + vendor htmx assets |
+| 2 | DONE | `6d4f4a0` | Strip Dioxus, empty Axum server |
+| 3 | DONE | `f313cea` + refactor `38fa3ed` | Base layout + welcome page; Html wrapper helper |
+| 4 | DONE | `2c8375d` | Cookie auth middleware + extractors |
+| 5 | DONE | `2f4b5d5` + fix `512b109` | Login, register, logout (transactional first-user-admin) |
+| 6 | DONE | `522ddc2` + refactor `bd1edb9` | Sidebar with rooms + DM peers |
+| 7 | DONE | `08b5d99` | Room view (read-only) |
+| 8 | DONE | `5061d23` + fix `b72e7f1` | WebSocket fragment broadcast (Hub unified) |
+| 9 | DONE | `eb1ea0a` | Send message POST /room/:id/messages |
+| 10 | DONE | `0741d24` | Edit + delete message endpoints |
+| 11 | DONE | `b9b95fe` | Reactions with HTMX picker |
+| 12 | DONE | `c79910a` | Direct messages /dm/:peer_id |
+| 13 | DONE | `b830011` | Full-text search /search?q=... |
+| 14 | NOT STARTED | — | Admin pages |
+| 15 | NOT STARTED | — | Read receipts + unread badges |
+| 16 | NOT STARTED | — | Desktop wrapper Tao+Wry |
+| 17 | NOT STARTED | — | Justfile + Docker + cleanup + merge |
 
 Three commits beyond the plan's prescribed flow:
 - `db74bc1` — Docker cargo/bun wrappers under `dev/`
 - `7111716` — plan refinement: note Hub-instance unification as Task 8 pre-step
 - `38fa3ed` — Html helper + plan-wide convention note
 
-## Resume Task 4 - implementer prompt
+## Resume Task 14 (next) - implementer prompt
 
-Dispatch a fresh subagent with this prompt (substitute `<HEAD-SHA>` with whatever `git log` shows is current, currently `38fa3ed`):
+Dispatch a fresh subagent (general-purpose) with this prompt. Update HEAD-SHA to current `git log --oneline -1`.
 
 ```
-You are implementing Task 4 of the lets-chat Axum+HTMX rewrite.
+You are implementing Task 14 of the lets-chat Axum+HTMX rewrite. Admin pages: settings, users, invites, rooms, mod log.
 
-Working directory: /home/nate/.config/superpowers/worktrees/lets-chat/feat-axum-htmx-rewrite (or wherever the feat/axum-htmx-rewrite branch lives on this machine).
-Current HEAD: <HEAD-SHA>.
+Working directory: /home/nate/.config/superpowers/worktrees/lets-chat/feat-axum-htmx-rewrite (branch feat/axum-htmx-rewrite, current HEAD b830011).
 
 Critical environment: NO Rust or Bun on host. Use ./dev/cargo and ./dev/server-up; HOST_PORT=18080 must be passed to ./dev/server-up.
 
-Read the plan-wide conventions section (lines 152-180 of docs/superpowers/plans/2026-04-29-axum-htmx-rewrite.md). Two substitutions:
-- No em-dashes in any code or template; use hyphens.
-- Use `crate::views::{html, Html}` helper instead of `askama_axum::Template`. Handler returns `Result<Html, AppError>` and ends with `Ok(html(&page)?)`.
+Read plan-wide conventions in docs/superpowers/plans/2026-04-29-axum-htmx-rewrite.md lines 152-180. No em-dashes; use crate::views::{html, Html}; use record.into() for UserRecord -> User.
 
-Implement Task 4 from the plan (search "## Task 4: Cookie auth middleware"). Adjustments:
+Pre-reads:
+- server/src/auth.rs (AdminUser extractor exists)
+- grep -n 'pub async fn|pub fn' server/src/db/auth.rs (list_users, set_user_role, ban/unban)
+- grep -n 'pub async fn|pub fn' server/src/db/chat.rs (admin room helpers)
+- grep -n 'pub async fn|pub fn' server/src/db/moderation.rs (invite + mod log)
+- grep -n 'pub async fn|pub fn' server/src/db/settings.rs
+- cat server/src/models/{invite,mod_action,settings}.rs
 
-- Step 2 (auth.rs): use `#[async_trait::async_trait]` (the `async-trait` crate is already a dep), not `#[axum::async_trait]` — axum 0.8 deprecated the latter.
-- Step 4: routes/home.rs becomes the `Html` handler shown below.
-- Step 5: confirm `grep -rn 'User::placeholder' server/src` returns empty after deletion.
-- Step 6: `HOST_PORT=18080 ./dev/server-up -p lets-chat-server`, then verify `curl --silent --include http://127.0.0.1:18080/ | head -3` shows `303 See Other` with `location: /login`. Stop with ./dev/server-down.
+If a needed helper doesn't exist as a 5-line wrapper, recover the SQL from git history: git show 4a483d3:src/server_fns/admin.rs and git show 4a483d3:src/components/admin/{users,invites,rooms,mod_log,settings}.rs.
 
-Verify the actual User struct first: `cat server/src/models/user.rs`. The role field is a `String`, not a `UserRole` enum. AdminUser must do `match user.role.as_str() { "admin" => ..., _ => ... }` accordingly.
+Implement Task 14 from the plan (## Task 14: Admin pages). Seven sub-steps; some are open-ended ("write each remaining template fully") - follow plan's pattern.
 
-Acceptance:
-- server/src/auth.rs has inject_user + AuthUser + OptionalUser + AdminUser + SESSION_COOKIE constant.
-- routes/mod.rs adds `.layer(middleware::from_fn_with_state(state.clone(), inject_user))`.
-- routes/home.rs uses AuthUser; User::placeholder is removed.
-- ./dev/cargo check -p lets-chat-server passes.
-- GET / without cookie returns 303 to /login.
-- One new commit subject starting `feat(auth): add cookie middleware and AuthUser/AdminUser extractors`.
+Adaptations:
+- Each admin page struct carries the four sidebar fields (user, rooms, dm_peers, asset_version) plus section: &'static str + page-specific data.
+- All admin handlers gated on AdminUser extractor.
+- Expose admin routes via pub fn router() -> Router<AppState> in routes/admin.rs.
+- Ban broadcasts ChatEvent::UserBanned via state.hub.broadcast_global - confirm method name first.
+- Use existing db helpers; only add 5-line wrappers if missing.
 
-Updated home.rs to write:
-```rust
-use axum::extract::State;
-use crate::auth::AuthUser;
-use crate::error::AppError;
-use crate::state::AppState;
-use crate::views::home::WelcomePage;
-use crate::views::{html, Html};
+Verify: cargo check passes; admin user gets 200 on /admin, /admin/users, /admin/invites, /admin/rooms, /admin/modlog; non-admin gets 403. Sample smoke commands in the plan.
 
-pub async fn get_home(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-) -> Result<Html, AppError> {
-    let page = WelcomePage { user: &user, asset_version: state.asset_version };
-    html(&page)
-}
+Caveat for smoke test: a previously-promoted admin from earlier test runs is in the persisted volume. Newly registered users won't be admin. Either clear the data volume or promote the new user via SQL:
+
+  docker run --rm -v lets-chat-rewrite-data:/data alpine sh -c "apk add sqlite >/dev/null && sqlite3 /data/auth.db \"update users set role='admin' where username='$USR'\""
+
+Commit subject must start: feat(admin): port admin pages to Askama+HTMX
 ```
 
-Self-review then report (DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT).
-```
+After implementer reports DONE, dispatch combined spec+quality review (superpowers:code-reviewer with full diff context). Apply important fixes directly. Mark complete via TaskUpdate, move to Task 15.
 
-Then dispatch a spec-compliance subagent (template at `~/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/spec-reviewer-prompt.md`), then a `superpowers:code-reviewer` subagent (template at `code-quality-reviewer-prompt.md` in the same dir), then mark Task 4 done and move to Task 5.
+## Resume Tasks 15-17
 
-## Resume Tasks 5-17
-
-For each remaining task, follow the same flow:
-
+For each, follow the same flow:
 1. Pre-read the plan section.
-2. Apply the global conventions (no em-dashes, use `views::html`/`Html`, use `./dev/cargo` and `./dev/server-up`).
-3. Dispatch implementer (`general-purpose` subagent).
-4. Dispatch spec-compliance reviewer.
-5. Dispatch code-quality reviewer (`superpowers:code-reviewer`).
-6. Apply fixes, mark TaskUpdate complete, move to next.
+2. Apply global conventions.
+3. Dispatch implementer (general-purpose subagent).
+4. Dispatch combined spec+quality reviewer (superpowers:code-reviewer agent type).
+5. Apply fixes, mark TaskUpdate complete, move to next.
 
-Tasks remaining (per the plan):
-- Task 4: Cookie auth middleware + AuthUser/AdminUser extractors
-- Task 5: Login, register, logout
-- Task 6: Sidebar with rooms list and DM list
-- Task 7: Room view (read-only) GET /room/:id
-- Task 8: WebSocket route with HTML fragment broadcast (do the Hub-instance unification pre-step from the plan)
-- Task 9: Send messages POST /room/:id/messages
-- Task 10: Edit + delete messages
-- Task 11: Reactions
-- Task 12: Direct messages /dm/:user_id
-- Task 13: Search /search
+Tasks remaining:
 - Task 14: Admin pages
-- Task 15: Read receipts + unread badges
-- Task 16: Desktop wrapper Tao+Wry
-- Task 17: Justfile + Docker + cleanup + merge
+- Task 15: Read receipts + unread badges (per-room/DM unread counts in sidebar; mark-as-read on render)
+- Task 16: Desktop wrapper Tao+Wry (~50 LOC native window pointing at LETS_CHAT_SERVER_URL)
+- Task 17: Justfile + Docker + cleanup + merge (final infra rewrite + delete obsolete plans + update CLAUDE.md + open PR)
 
 ## Watchpoints discovered so far
 
-1. **`db` API names referenced in plan may not exist verbatim.** The plan references helpers like `list_rooms_visible_to`, `list_dm_peers`, `recent_messages`, `reaction_counts_for`, `get_or_create_dm_room`, `set_last_read`, `unread_count`. Tasks 6, 7, 11, 12, 15 each say "verify before implementing" — when subagents hit a missing helper, lift the SQL from the deleted server_fns via `git show <pre-rewrite-sha>:server/src/server_fns/<file>.rs` (e.g., `git show 4a483d3:src/server_fns/rooms.rs`).
+1. **`db` API names differ from plan.** Real names found in this branch:
+   - `db::chat::list_rooms(pool, user_id, is_admin)` (plan: list_rooms_visible_to)
+   - `db::chat::list_user_dm_rooms(pool, user_id) -> Vec<(Room, peer_id String)>` (plan: list_dm_peers)
+   - `db::chat::list_messages(pool, room_id, limit, before_id)` (plan: recent_messages)
+   - `db::chat::list_reactions(pool, message_id, caller_user_id) -> Vec<Reaction>` with `reacted_by_me` field (plan: reaction_counts_for)
+   - `db::chat::list_room_reactions(pool, room_id, caller_user_id) -> Vec<(message_id, Reaction)>`
+   - `db::chat::toggle_reaction(pool, message_id, user_id, emoji) -> bool` (true=added, false=removed)
+   - `db::chat::find_dm_room(pool, user_a, user_b)` + `db::chat::create_dm_room(pool, name, user_a, user_b)` (plan: get_or_create_dm_room — split into two)
+   - `db::chat::is_room_member(pool, room_id, user_id)`
+   - `db::chat::insert_message(pool, room_id, user_id, body) -> i64`
+   - `db::chat::get_message(pool, id) -> Option<RawMessage>` (soft-deleted rows return None)
+   - `db::chat::update_message_body(pool, id, body) -> String` (returns edited_at "%Y-%m-%d %H:%M:%S")
+   - `db::moderation::soft_delete_message(pool, id, deleted_by)` (lives in moderation.rs not chat.rs!)
+   - `db::chat::search_messages(pool, fts_query, room_id_filter, caller_user_id, is_admin) -> Vec<SearchResult>` (hardcoded LIMIT 50)
+   - `db::chat::sanitize_fts_query(raw) -> Option<String>` (must call before search to escape FTS5 operators)
+   - `db::auth::find_user_by_id`, `db::auth::find_user_by_username`, `db::auth::create_user(pool, username, password_hash) -> id`
+   - `db::auth::create_session`, `delete_session`, `count_users`, `set_user_role`
 
-2. **User struct.** Fields are: `id, username, display_name, role (String), is_muted, muted_until, is_banned, ban_reason, banned_until, created_at, read_receipts_enabled`. No `email`, no `UserRole` enum. Plan code samples that show `UserRole::Admin` need conversion to string match.
+2. **User struct.** Fields: `id, username, display_name, role (String), is_muted, muted_until, is_banned, ban_reason, banned_until, created_at, read_receipts_enabled`. No `email`, no `UserRole` enum. Use string match: `user.role == "admin"`.
 
-3. **Hub-instance unification.** Task 8 must delete `static HUB: OnceLock<Arc<Hub>>` and `get_hub()` from `server/src/ws/hub.rs`, and refactor `notify_typing` to take `self: &Arc<Self>`. The plan's pre-step section (lines 1816-1828 of the plan) covers this.
+3. **`Message`/`RawMessage`.** Use `user_id` not `author_id`. `created_at` is `String` ("%Y-%m-%d %H:%M:%S"). `Message` has `author_name` not `author_username`.
 
-4. **`db::auth::register_user` return type.** Last commit on main (`95dcc1c`) made it return `Result<User, RegisterError>` with a `UsernameTaken` variant. Task 5's plan code assumes that shape.
+4. **`Room`.** No `is_private` field; use `room_type == "private"` (or "dm").
 
-5. **Cookie name.** `session` (lower-case). Defined in plan + ws/handler.rs. Reused by `auth.rs::SESSION_COOKIE`.
+5. **`Reaction`.** Has `reacted_by_me` field; map to `ReactionView.viewer_reacted` at the boundary.
 
-6. **`HOST_PORT=18080` always.** 8080 conflicts with cadvisor on the dev host.
+6. **`UserRecord`.** Use `record.into()` to convert to `User` (From impl on the model).
 
-7. **`tailwind.config.js` content glob.** Must include `./templates/**/*.html` (Task 3 fixed this). Don't regress.
+7. **Hub broadcast methods on `state.hub`:**
+   - `broadcast_to_room(room_id, &event)` — fan out to subscribers of one room
+   - `broadcast_global(&event)` — fan out to all connected users
+   - `broadcast_to_user(user_id, &event)` — single user (all tabs)
+   - `notify_typing(self: &Arc<Self>, conn_id, room_id)` — debounced typing presence (Task 8 unified the Hub instance)
+   - `connect(user_id, username)`, `disconnect(conn_id)`, `subscribe(conn_id, room_id)`, `unsubscribe(conn_id, room_id)`
 
-8. **`bun.lock` is committed.** Future `bun install` invocations should pass `--frozen-lockfile`.
+8. **WS reaction rendering.** `routes/ws.rs` handles `ChatEvent::ReactionAdded`/`ReactionRemoved` specially via `render_reaction_bar(&state, msg_id, &user_id)` (renders per-user with viewer_reacted state). All other events go through `views::ws_fragments::render_event(&event)`.
 
-9. **Tests untouched so far.** Existing `server/tests/db_*.rs` tests still compile (they only use `lets_chat::db::*` helpers). Don't break them. New handler-level tests (`tests/handler_*.rs`) land in respective tasks.
+9. **WS subscribe wiring.** Use the public `htmx:wsOpen` event with `evt.detail.socketWrapper.send(...)`. Don't reach into `_htmxWebSocket` (private).
+
+10. **`HOST_PORT=18080` always.** 8080 conflicts with cadvisor on the dev host.
+
+11. **`tailwind.config.js` content glob.** Includes `./templates/**/*.html` and `./src/**/*.rs`. Don't regress.
+
+12. **`bun.lock` is committed.** Future `bun install` invocations should pass `--frozen-lockfile`.
+
+13. **Tests untouched so far.** Existing `server/tests/db_*.rs` tests still compile. Don't break them. New handler-level tests come later (none yet).
+
+14. **Pre-existing data volume.** `lets-chat-rewrite-data` persists across runs. First-user-is-admin promotion only fires if `count_users == 1`. To promote a fresh user for admin testing, run SQL:
+    ```
+    docker run --rm -v lets-chat-rewrite-data:/data alpine sh -c "apk add sqlite >/dev/null && sqlite3 /data/auth.db \"update users set role='admin' where username='$USR'\""
+    ```
+
+15. **`db::moderation::soft_delete_message`** lives in `moderation.rs` not `chat.rs`. Surprised by this in Task 10.
 
 ## Context the next session should grab on entry
 
