@@ -45,12 +45,22 @@ pub async fn post_login(
     let record = match db::auth::find_user_by_username(&state.auth, &form.username).await? {
         Some(r) if !r.is_banned => r,
         _ => {
-            return Ok(form_error(&state, &headers, "Invalid username or password"));
+            return Ok(form_error(
+                &state,
+                &headers,
+                FormPage::Login,
+                "Invalid username or password",
+            ));
         }
     };
 
     if !verify_password(&record.password_hash, &form.password) {
-        return Ok(form_error(&state, &headers, "Invalid username or password"));
+        return Ok(form_error(
+            &state,
+            &headers,
+            FormPage::Login,
+            "Invalid username or password",
+        ));
     }
 
     let token = db::auth::create_session(&state.auth, &record.id).await?;
@@ -87,10 +97,20 @@ pub async fn post_register(
     let username = form.username.trim();
     let password = form.password.as_str();
     if username.len() < 3 || username.len() > 32 {
-        return Ok(form_error(&state, &headers, "Username must be 3-32 characters"));
+        return Ok(form_error(
+            &state,
+            &headers,
+            FormPage::Register,
+            "Username must be 3-32 characters",
+        ));
     }
     if password.len() < 8 {
-        return Ok(form_error(&state, &headers, "Password must be at least 8 characters"));
+        return Ok(form_error(
+            &state,
+            &headers,
+            FormPage::Register,
+            "Password must be at least 8 characters",
+        ));
     }
 
     let password_hash = match hash_password(password) {
@@ -102,18 +122,18 @@ pub async fn post_register(
         Ok(id) => id,
         Err(e) => {
             if is_unique_violation(&e) {
-                return Ok(form_error(&state, &headers, "Username taken"));
+                return Ok(form_error(
+                    &state,
+                    &headers,
+                    FormPage::Register,
+                    "Username taken",
+                ));
             }
             return Err(AppError::Internal(format!("register: {}", e)));
         }
     };
 
-    // First registered user becomes admin.
-    if let Ok(count) = db::auth::count_users(&state.auth).await {
-        if count == 1 {
-            let _ = db::auth::set_user_role(&state.auth, &user_id, "admin").await;
-        }
-    }
+    promote_first_user_to_admin(&state, &user_id).await?;
 
     let token = db::auth::create_session(&state.auth, &user_id).await?;
     let cookie = build_session_cookie(token);
@@ -160,27 +180,63 @@ fn is_htmx(headers: &HeaderMap) -> bool {
     headers.get("HX-Request").is_some()
 }
 
-fn form_error(state: &AppState, headers: &HeaderMap, msg: &str) -> Response {
-    if is_htmx(headers) {
-        let body = FormErrors { error: Some(msg) }.render().unwrap_or_default();
-        (
-            http::StatusCode::UNPROCESSABLE_ENTITY,
-            axum::response::Html(body),
-        )
-            .into_response()
+enum FormPage {
+    Login,
+    Register,
+}
+
+fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) -> Response {
+    let body = if is_htmx(headers) {
+        FormErrors { error: Some(msg) }.render()
     } else {
-        let body = LoginPage {
-            error: Some(msg),
-            asset_version: state.asset_version,
+        match page {
+            FormPage::Login => LoginPage {
+                error: Some(msg),
+                asset_version: state.asset_version,
+            }
+            .render(),
+            FormPage::Register => RegisterPage {
+                error: Some(msg),
+                asset_version: state.asset_version,
+            }
+            .render(),
         }
-        .render()
-        .unwrap_or_default();
-        (
-            http::StatusCode::UNPROCESSABLE_ENTITY,
-            axum::response::Html(body),
-        )
-            .into_response()
+    };
+    let body = match body {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to render form_error template");
+            return AppError::Internal(format!("askama: {}", e)).into_response();
+        }
+    };
+    (
+        http::StatusCode::UNPROCESSABLE_ENTITY,
+        axum::response::Html(body),
+    )
+        .into_response()
+}
+
+/// Promote a freshly created user to admin if and only if they are the first
+/// user in the system. The check + update is wrapped in a single transaction
+/// to avoid a race where two concurrent registrations both observe a count
+/// past 1 and neither bootstraps the admin.
+async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<(), AppError> {
+    let mut tx = state.auth.begin().await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *tx)
+        .await?;
+    if count == 1 {
+        if let Err(e) = sqlx::query("UPDATE users SET role = 'admin' WHERE id = ?")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+        {
+            tracing::error!(error = %e, user_id, "failed to promote first user to admin");
+            return Err(AppError::Internal(format!("promote admin: {}", e)));
+        }
     }
+    tx.commit().await?;
+    Ok(())
 }
 
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
