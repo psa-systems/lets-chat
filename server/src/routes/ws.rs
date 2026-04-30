@@ -1,14 +1,16 @@
+use std::collections::HashSet;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 
-use crate::auth::SESSION_COOKIE;
+use crate::auth::OptionalUser;
 use crate::db;
+use crate::models::User;
 use crate::state::AppState;
 use crate::views::ws_fragments::render_event;
 
@@ -21,40 +23,28 @@ enum ClientFrame {
     Typing { room_id: i64 },
 }
 
-/// Per-connection auth context derived from the session cookie.
-struct WsUser {
-    id: String,
-    username: String,
-}
-
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
-    jar: CookieJar,
+    OptionalUser(user): OptionalUser,
 ) -> impl IntoResponse {
-    let token = match jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) {
-        Some(t) => t,
-        None => return (http::StatusCode::UNAUTHORIZED, "no session").into_response(),
+    // The inject_user middleware has already validated the session cookie and
+    // filtered banned accounts; just project to the connection-local fields.
+    let Some(user) = user else {
+        return (http::StatusCode::UNAUTHORIZED, "no session").into_response();
     };
-    let record = match db::auth::get_user_by_session(&state.auth, &token).await {
-        Ok(Some(u)) if !u.is_banned => u,
-        _ => return (http::StatusCode::UNAUTHORIZED, "invalid").into_response(),
-    };
-
-    let username = record
-        .display_name
-        .clone()
-        .unwrap_or_else(|| record.username.clone());
-    let user = WsUser {
-        id: record.id,
-        username,
-    };
-
     ws.on_upgrade(move |socket| handle_socket(socket, state, user))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, user: WsUser) {
-    let (conn_id, mut rx) = state.hub.connect(&user.id, &user.username);
+async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
+    let username = user
+        .display_name
+        .clone()
+        .unwrap_or_else(|| user.username.clone());
+    let (conn_id, mut rx) = state.hub.connect(&user.id, &username);
+    // Track which rooms this connection has been authorized to subscribe to so
+    // typing pings can be gated to authorized rooms only.
+    let subscribed: Mutex<HashSet<i64>> = Mutex::new(HashSet::new());
     let (mut tx, mut rx_ws) = socket.split();
 
     let send = tokio::spawn(async move {
@@ -100,10 +90,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: WsUser) {
                             };
                             if allowed {
                                 state.hub.subscribe(conn_id, room_id);
+                                subscribed.lock().unwrap().insert(room_id);
                             }
                         }
                         ClientFrame::Typing { room_id } => {
-                            state.hub.notify_typing(conn_id, room_id);
+                            // Only forward typing pings for rooms the connection
+                            // is already authorized to subscribe to. This prevents
+                            // a client from leaking typing presence into rooms
+                            // they cannot view.
+                            if subscribed.lock().unwrap().contains(&room_id) {
+                                state.hub.notify_typing(conn_id, room_id);
+                            }
                         }
                     }
                 }
