@@ -1,13 +1,20 @@
 use axum::extract::{Path, State};
+use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
-use crate::models::User;
+use crate::models::{Message, User};
 use crate::state::AppState;
-use crate::views::room::{MessageView, RoomPage};
+use crate::views::room::{ComposerFragment, MessageView, RoomPage};
 use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
+
+#[derive(Deserialize)]
+pub struct MessageForm {
+    pub body: String,
+}
 
 pub async fn get_room(
     State(state): State<AppState>,
@@ -76,4 +83,74 @@ pub async fn get_room(
         asset_version: state.asset_version,
     };
     html(&page)
+}
+
+pub async fn post_message(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    axum::Form(form): axum::Form<MessageForm>,
+) -> Result<Html, AppError> {
+    // Reject blank submissions outright.
+    let body = form.body.trim();
+    if body.is_empty() {
+        return Err(AppError::BadRequest("message body cannot be empty".into()));
+    }
+
+    // Banned/muted users cannot post anywhere.
+    if user.is_banned {
+        return Err(AppError::Forbidden);
+    }
+    if user.is_muted {
+        return Err(AppError::Forbidden);
+    }
+
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Posting access check. Public rooms accept any authenticated, non-banned,
+    // non-muted user. DM and private rooms require room membership. Admin
+    // status alone does not grant posting rights to a DM.
+    let can_post = match room.room_type.as_str() {
+        "public" => true,
+        _ => db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
+    };
+    if !can_post {
+        return Err(AppError::Forbidden);
+    }
+
+    let new_id = db::chat::insert_message(&state.chat, room_id, &user.id, body).await?;
+
+    // Re-fetch the inserted row to pick up the server-assigned created_at.
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted message vanished".into(),
+        ))?;
+
+    // Resolve author display name from the auth DB.
+    let author_name = db::auth::find_user_by_id(&state.auth, &raw.user_id)
+        .await?
+        .map(|r| r.username)
+        .unwrap_or_else(|| "(unknown)".to_string());
+
+    let message = Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: raw.user_id,
+        author_name,
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+    };
+
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: room.room_type == "dm",
+    };
+    state.hub.broadcast_to_room(room_id, &event);
+
+    let fragment = ComposerFragment { room: &room };
+    html(&fragment)
 }
