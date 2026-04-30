@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use askama::Template;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -12,7 +13,9 @@ use crate::auth::OptionalUser;
 use crate::db;
 use crate::models::User;
 use crate::state::AppState;
-use crate::views::ws_fragments::render_event;
+use crate::views::room::ReactionView;
+use crate::views::ws_fragments::{render_event, ReactionUpdateFragment};
+use crate::ws::events::ChatEvent;
 
 #[derive(Deserialize)]
 #[serde(tag = "type")]
@@ -47,6 +50,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     let subscribed: Mutex<HashSet<i64>> = Mutex::new(HashSet::new());
     let (mut tx, mut rx_ws) = socket.split();
 
+    let send_state = state.clone();
+    let send_user_id = user.id.clone();
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
@@ -54,9 +59,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
             tokio::select! {
                 evt = rx.recv() => {
                     match evt {
-                        Ok(e) => if let Some(html) = render_event(&e) {
-                            if tx.send(Message::Text(html.into())).await.is_err() {
-                                break;
+                        Ok(e) => {
+                            let rendered = match &e {
+                                ChatEvent::ReactionAdded { message_id, .. }
+                                | ChatEvent::ReactionRemoved { message_id, .. } => {
+                                    render_reaction_bar(&send_state, *message_id, &send_user_id).await
+                                }
+                                _ => render_event(&e),
+                            };
+                            if let Some(html) = rendered {
+                                if tx.send(Message::Text(html.into())).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -112,4 +126,28 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
 
     state.hub.disconnect(conn_id);
     send.abort();
+}
+
+/// Render the per-user reaction-bar fragment for a WS push. Returns None if
+/// the message has been deleted or the DB query fails. The result is an
+/// out-of-band swap that updates the corresponding `#reactions-{id}` div in
+/// every viewer's tab with their own `viewer_reacted` state.
+async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+    let counts = db::chat::list_reactions(&state.chat, message_id, user_id)
+        .await
+        .ok()?;
+    let reactions: Vec<ReactionView> = counts
+        .into_iter()
+        .map(|r| ReactionView {
+            emoji: r.emoji,
+            count: r.count,
+            viewer_reacted: r.reacted_by_me,
+        })
+        .collect();
+    ReactionUpdateFragment {
+        message_id,
+        reactions: &reactions,
+    }
+    .render()
+    .ok()
 }

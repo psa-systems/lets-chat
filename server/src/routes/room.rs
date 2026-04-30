@@ -9,7 +9,8 @@ use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
 use crate::views::room::{
-    ComposerFragment, EditFormFragment, MessageView, RoomPage, SingleMessageFragment,
+    ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage,
+    SingleMessageFragment,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -49,6 +50,21 @@ pub async fn get_room(
     // Cache lookups by user_id to avoid duplicate queries for the same author.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
     let mut username_cache: HashMap<String, String> = HashMap::new();
+
+    // Reactions for every message in the room, in a single query. Group them
+    // by message_id so we can attach to each MessageView below.
+    let mut reactions_by_message: HashMap<i64, Vec<ReactionView>> = HashMap::new();
+    for (mid, r) in db::chat::list_room_reactions(&state.chat, room_id, &user.id).await? {
+        reactions_by_message
+            .entry(mid)
+            .or_default()
+            .push(ReactionView {
+                emoji: r.emoji,
+                count: r.count,
+                viewer_reacted: r.reacted_by_me,
+            });
+    }
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     for m in raw_messages {
         let username = if let Some(name) = username_cache.get(&m.user_id) {
@@ -62,14 +78,14 @@ pub async fn get_room(
             resolved
         };
         let can_edit = m.user_id == user.id;
+        let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
         messages.push(MessageView {
             id: m.id,
             username,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
-            // Reactions are populated in Task 11.
-            reactions: Vec::new(),
+            reactions,
             can_edit,
         });
     }
@@ -200,14 +216,22 @@ pub async fn get_single_message(
         .map(|r| r.username)
         .unwrap_or_else(|| "(unknown)".to_string());
     let can_edit = m.user_id == user.id;
+    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
+        .await?
+        .into_iter()
+        .map(|r| ReactionView {
+            emoji: r.emoji,
+            count: r.count,
+            viewer_reacted: r.reacted_by_me,
+        })
+        .collect();
     let view = MessageView {
         id: m.id,
         username,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,
-        // Reactions are populated in Task 11.
-        reactions: Vec::new(),
+        reactions,
         can_edit,
     };
     let fragment = SingleMessageFragment {
@@ -251,14 +275,22 @@ pub async fn patch_message(
         .await?
         .map(|r| r.username)
         .unwrap_or_else(|| "(unknown)".to_string());
+    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
+        .await?
+        .into_iter()
+        .map(|r| ReactionView {
+            emoji: r.emoji,
+            count: r.count,
+            viewer_reacted: r.reacted_by_me,
+        })
+        .collect();
     let view = MessageView {
         id: m.id,
         username,
         created_at: m.created_at,
         edited_at: Some(edited_at_str),
         body: body.to_string(),
-        // Reactions are populated in Task 11.
-        reactions: Vec::new(),
+        reactions,
         can_edit: true,
     };
     let fragment = SingleMessageFragment {
