@@ -1,0 +1,16 @@
+<form
+  id="composer"
+  hx-post="/room/{{ room.id }}/messages"
+  hx-target="#composer"
+  hx-swap="outerHTML"
+  hx-on::after-request="this.querySelector('input[name=body]').focus()"
+  class="border-t border-slate-200 p-2"
+>
+  <input
+    name="body"
+    autocomplete="off"
+    autofocus
+    placeholder="Message #{{ room.name }}"
+    class="w-full border rounded px-3 py-2"
+  >
+</form>

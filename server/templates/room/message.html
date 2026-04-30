@@ -1,0 +1,11 @@
+<div id="msg-{{ message.id }}" class="px-4 py-2 hover:bg-slate-100 group">
+  <div class="flex items-baseline gap-2">
+    <span class="font-medium">{{ message.username }}</span>
+    <span class="text-xs text-slate-500">{{ message.created_at }}</span>
+    {% if message.edited_at.is_some() %}
+    <span class="text-xs text-slate-400">(edited)</span>
+    {% endif %}
+  </div>
+  <div class="whitespace-pre-wrap">{{ message.body }}</div>
+  <div id="reactions-{{ message.id }}" class="mt-1"></div>
+</div>

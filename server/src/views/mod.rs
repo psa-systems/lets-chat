@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod home;
 pub mod layout;
+pub mod room;
 
 use askama::Template;
 use axum::http::header;
