@@ -10,6 +10,7 @@ use crate::auth::inject_user;
 use crate::state::AppState;
 
 mod auth;
+mod dm;
 mod home;
 mod reactions;
 mod room;
@@ -23,6 +24,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route("/dm/{peer_id}", get(dm::get_dm))
         .route(
             "/messages/{message_id}",
             get(room::get_single_message)
