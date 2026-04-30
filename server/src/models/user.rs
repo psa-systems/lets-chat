@@ -35,3 +35,21 @@ pub struct User {
     pub read_receipts_enabled: bool,
 }
 
+impl From<UserRecord> for User {
+    fn from(r: UserRecord) -> Self {
+        User {
+            id: r.id,
+            username: r.username,
+            display_name: r.display_name,
+            role: r.role,
+            is_muted: r.is_muted,
+            muted_until: r.muted_until,
+            is_banned: r.is_banned,
+            ban_reason: r.ban_reason,
+            banned_until: r.banned_until,
+            created_at: r.created_at,
+            read_receipts_enabled: r.read_receipts_enabled,
+        }
+    }
+}
+
