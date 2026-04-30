@@ -14,6 +14,7 @@ mod dm;
 mod home;
 mod reactions;
 mod room;
+mod search;
 mod ws;
 
 pub fn build_router(state: AppState) -> Router {
@@ -44,6 +45,7 @@ pub fn build_router(state: AppState) -> Router {
             "/messages/{message_id}/reactions/{emoji}",
             post(reactions::toggle_reaction),
         )
+        .route("/search", get(search::get_search))
         .route("/ws", get(ws::ws_handler))
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
