@@ -148,7 +148,7 @@ impl Hub {
     /// Record a typing event for a connection. Broadcasts UserTyping to the room
     /// (excluding the sender) on the first frame of a new typing session, then
     /// spawns an eviction task that sends UserStoppedTyping after 5s of silence.
-    pub fn notify_typing(&self, conn_id: ConnId, room_id: i64) {
+    pub fn notify_typing(self: &Arc<Self>, conn_id: ConnId, room_id: i64) {
         let (user_id, username) = match self.connections.get(&conn_id) {
             Some(c) => (c.user_id.clone(), c.username.clone()),
             None => return,
@@ -169,7 +169,7 @@ impl Hub {
         }
 
         // Spawn eviction task: after 5s check if the user has gone silent.
-        let hub = get_hub().clone();
+        let hub = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if let Some(entry) = hub.typing.get(&key) {
@@ -192,11 +192,4 @@ impl Hub {
             self.broadcast_to_room(room_id, &event);
         }
     }
-}
-
-/// Global hub instance.
-static HUB: std::sync::OnceLock<Arc<Hub>> = std::sync::OnceLock::new();
-
-pub fn get_hub() -> &'static Arc<Hub> {
-    HUB.get_or_init(|| Arc::new(Hub::new()))
 }

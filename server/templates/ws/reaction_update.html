@@ -1,0 +1,5 @@
+<div id="reactions-{{ message_id }}" hx-swap-oob="outerHTML" class="mt-1 flex flex-wrap gap-1">
+  {% for r in reactions %}
+  <span class="text-xs bg-slate-200 rounded px-2 py-0.5">{{ r.emoji }} {{ r.count }}</span>
+  {% endfor %}
+</div>

@@ -8,6 +8,7 @@ use crate::state::AppState;
 mod auth;
 mod home;
 mod room;
+mod ws;
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
@@ -16,6 +17,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/register", get(auth::get_register).post(auth::post_register))
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
+        .route("/ws", get(ws::ws_handler))
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())
