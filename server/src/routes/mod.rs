@@ -11,6 +11,7 @@ use crate::state::AppState;
 
 mod auth;
 mod home;
+mod reactions;
 mod room;
 mod ws;
 
@@ -29,6 +30,18 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(room::delete_message),
         )
         .route("/messages/{message_id}/edit", get(room::get_edit_form))
+        .route(
+            "/messages/{message_id}/reactions/picker",
+            get(reactions::get_picker),
+        )
+        .route(
+            "/messages/{message_id}/reactions/cancel",
+            get(reactions::cancel_picker),
+        )
+        .route(
+            "/messages/{message_id}/reactions/{emoji}",
+            post(reactions::toggle_reaction),
+        )
         .route("/ws", get(ws::ws_handler))
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))

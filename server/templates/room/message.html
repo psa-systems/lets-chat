@@ -13,5 +13,9 @@
     {% endif %}
   </div>
   <div class="whitespace-pre-wrap">{{ message.body }}</div>
-  <div id="reactions-{{ message.id }}" class="mt-1"></div>
+  <div id="reactions-{{ message.id }}" class="mt-1">
+    {% let message_id = message.id %}
+    {% let reactions = message.reactions.as_slice() %}
+    {% include "partials/reaction_bar.html" %}
+  </div>
 </div>

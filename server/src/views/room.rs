@@ -15,6 +15,7 @@ pub struct MessageView {
 pub struct ReactionView {
     pub emoji: String,
     pub count: i64,
+    pub viewer_reacted: bool,
 }
 
 #[derive(Template)]
@@ -46,4 +47,11 @@ pub struct EditFormFragment<'a> {
 pub struct SingleMessageFragment<'a> {
     pub message: &'a MessageView,
     pub can_edit: bool,
+}
+
+#[derive(Template)]
+#[template(path = "partials/reaction_bar.html")]
+pub struct ReactionBarFragment<'a> {
+    pub message_id: i64,
+    pub reactions: &'a [ReactionView],
 }

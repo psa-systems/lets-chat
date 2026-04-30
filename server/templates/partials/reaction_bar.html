@@ -1,4 +1,4 @@
-<div id="reactions-{{ message_id }}" hx-swap-oob="outerHTML" class="flex flex-wrap gap-1 items-center">
+<div id="reactions-{{ message_id }}" class="flex flex-wrap gap-1 items-center">
   {% for r in reactions %}
   <button
     hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
