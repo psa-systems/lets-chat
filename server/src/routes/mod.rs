@@ -22,6 +22,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route(
+            "/messages/{message_id}",
+            get(room::get_single_message)
+                .patch(room::patch_message)
+                .delete(room::delete_message),
+        )
+        .route("/messages/{message_id}/edit", get(room::get_edit_form))
         .route("/ws", get(ws::ws_handler))
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))

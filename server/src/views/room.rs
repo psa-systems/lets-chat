@@ -9,6 +9,7 @@ pub struct MessageView {
     pub edited_at: Option<String>,
     pub body: String,
     pub reactions: Vec<ReactionView>,
+    pub can_edit: bool,
 }
 
 pub struct ReactionView {
@@ -31,4 +32,18 @@ pub struct RoomPage<'a> {
 #[template(path = "room/composer.html")]
 pub struct ComposerFragment<'a> {
     pub room: &'a Room,
+}
+
+#[derive(Template)]
+#[template(path = "room/edit_form.html")]
+pub struct EditFormFragment<'a> {
+    pub message_id: i64,
+    pub current_body: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "room/message.html")]
+pub struct SingleMessageFragment<'a> {
+    pub message: &'a MessageView,
+    pub can_edit: bool,
 }
