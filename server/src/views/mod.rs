@@ -3,6 +3,7 @@ pub mod dm;
 pub mod home;
 pub mod layout;
 pub mod room;
+pub mod search;
 pub mod ws_fragments;
 
 use askama::Template;

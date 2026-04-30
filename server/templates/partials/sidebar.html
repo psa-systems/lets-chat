@@ -3,6 +3,17 @@
     <div class="font-semibold">lets-chat</div>
     <div class="text-xs text-slate-500">{{ user.username }}</div>
   </div>
+  <form class="p-2">
+    <input
+      name="q"
+      placeholder="Search messages..."
+      hx-get="/search"
+      hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+      hx-target="#main"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      class="w-full border rounded px-2 py-1 text-sm">
+  </form>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">
     <section>
       <h2 class="text-xs uppercase text-slate-500 px-2">Rooms</h2>
