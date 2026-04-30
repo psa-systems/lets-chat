@@ -21,19 +21,7 @@ pub async fn get_home(
     let mut dm_peers: Vec<User> = Vec::with_capacity(dm_rooms.len());
     for (_room, peer_id) in &dm_rooms {
         if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
-            dm_peers.push(User {
-                id: record.id,
-                username: record.username,
-                display_name: record.display_name,
-                role: record.role,
-                is_muted: record.is_muted,
-                muted_until: record.muted_until,
-                is_banned: record.is_banned,
-                ban_reason: record.ban_reason,
-                banned_until: record.banned_until,
-                created_at: record.created_at,
-                read_receipts_enabled: record.read_receipts_enabled,
-            });
+            dm_peers.push(record.into());
         }
     }
 
