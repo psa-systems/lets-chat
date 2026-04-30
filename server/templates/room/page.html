@@ -12,4 +12,26 @@
 {% include "room/messages.html" %}
 <div id="typing" class="px-4 text-xs text-slate-500"></div>
 {% include "room/composer.html" %}
+<script>
+(function() {
+  var roomId = {{ room.id }};
+  function sendSubscribe() {
+    var wsEl = document.querySelector('[ws-connect]');
+    var sock = wsEl && wsEl._htmxWebSocket;
+    if (sock && sock.readyState === 1) {
+      sock.send(JSON.stringify({type: 'subscribe', room_id: roomId}));
+    } else {
+      setTimeout(sendSubscribe, 200);
+    }
+  }
+  document.body.addEventListener('htmx:wsOpen', function(evt) {
+    sendSubscribe();
+  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sendSubscribe);
+  } else {
+    sendSubscribe();
+  }
+})();
+</script>
 {% endblock %}
