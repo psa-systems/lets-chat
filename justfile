@@ -2,110 +2,110 @@
 default:
     @just --list
 
-# Run all checks (server, web, client, clippy, fmt)
-check: check-server check-web check-client check-clippy check-fmt
+# Run all checks
+check: check-server check-desktop check-clippy check-fmt
 
 # Check server compilation
 check-server:
-    cargo check --features server --no-default-features
+    ./dev/cargo check -p lets-chat-server
 
-# Check web/WASM compilation
-check-web:
-    cargo check --target wasm32-unknown-unknown
+# Check desktop compilation
+check-desktop:
+    ./dev/cargo-desktop check -p lets-chat-desktop
 
-# Check client (desktop, native) compilation
-check-client:
-    cargo check --features client --no-default-features
-
-# Run clippy lints
+# Run clippy lints (server in the slim image, desktop in the GTK-equipped image)
 check-clippy:
-    cargo clippy
+    ./dev/cargo clippy -p lets-chat-server
+    ./dev/cargo-desktop clippy -p lets-chat-desktop
 
 # Check formatting
 check-fmt:
-    cargo fmt --check
+    ./dev/cargo fmt --check
 
 # Build Docker image for validation
 check-docker:
     docker buildx build --tag lets-chat:check -f ci-build/Dockerfile.web .
 
-# Build desktop Linux Docker image for validation
-check-desktop-linux:
-    docker buildx build --tag lets-chat-desktop:check -f ci-build/Dockerfile.desktop-linux .
-
 # Build Tailwind CSS from source
 build-css:
-    bun install --frozen-lockfile
-    bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
+    cd server && ../dev/bun install --frozen-lockfile
+    cd server && ../dev/bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
 # Build release binary
 build: build-css
-    cargo build --release
+    ./dev/cargo build --release -p lets-chat-server
 
 # Build Docker image
-build-docker:
+build-docker: build-css
     docker buildx build --tag lets-chat:local -f ci-build/Dockerfile.web .
 
-# Show available dev targets
-dev:
-    @echo "Please use a target-specific recipe: just dev-web, just dev-web-local, or just dev-desktop"
-
-# Start development server (web) via Docker with Traefik (https://{USER}-chat.a8n.run)
+# Start development server (web) via Docker with Traefik
 dev-web:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    @echo ""
     docker compose -f compose.dev.yml up --build
 
 # Stop dev-web containers
 dev-web-down:
     docker compose -f compose.dev.yml down
 
-# Stop dev-web containers and remove volumes (clean rebuild)
+# Stop dev-web containers and remove volumes
 dev-web-clean:
     docker compose -f compose.dev.yml down -v
 
-# Start development server (web) locally on localhost:8080
-dev-web-local:
-    dx serve --platform web
+# Start development server (web) locally on http://localhost:18080
+dev-web-local: build-css
+    HOST_PORT=18080 ./dev/server-up -p lets-chat-server
 
-# Start development server (desktop client)
+# Stop the local dev server container
+dev-web-local-down:
+    ./dev/server-down
+
+# Start development server (desktop)
 dev-desktop:
-    dx serve --platform desktop --features client --no-default-features
+    LETS_CHAT_SERVER_URL=http://localhost:18080 ./dev/cargo-desktop run -p lets-chat-desktop
 
-# Run tests
+# Run tests (server only; the desktop crate has no tests and needs the GTK image)
 test:
-    cargo test --features server --test db_auth --test db_dm --test db_invite --test db_moderation --test db_settings --test message_editing --test rbac --test db_private_rooms --test db_reactions --test db_search
+    ./dev/cargo test -p lets-chat-server
 
-# Verify the server binary starts and responds to HTTP requests
-verify:
+# Verify the server binary starts and serves the login page
+verify: build-css
     #!/usr/bin/env nu
-    let server_bin = "./target/dx/lets-chat/debug/web/lets-chat"
-    let log_file = "/tmp/lets-chat-verify.log"
-    let pid_file = "/tmp/lets-chat-verify.pid"
-    print "Building with dx..."
-    dx build --platform web out+err>| lines | last 5 | each { print $in }
+    let container = "lets-chat-rewrite-server"
+    print "Building release binary..."
+    ./dev/cargo build --release -p lets-chat-server
     print ""
-    print "Starting server..."
-    ^bash -c $"($server_bin) > ($log_file) 2>&1 & echo $! > ($pid_file)"
-    sleep 2sec
-    let server_pid = (open $pid_file | str trim | into int)
-    let alive = (ps | where pid == $server_pid | length)
-    if $alive == 0 {
-        print "FAIL: Server process exited prematurely"
-        print (open $log_file)
+    print "Starting server container on port 18080..."
+    with-env { HOST_PORT: "18080" } { ./dev/server-up --release -p lets-chat-server }
+    # Wait for the server to be listening (poll for up to 30 seconds).
+    mut http_code = "000"
+    mut body = ""
+    for i in 0..30 {
+        sleep 1sec
+        let alive = (try { ^docker inspect --format '{{{{.State.Running}}' $container | str trim } catch { "false" })
+        if $alive != "true" {
+            continue
+        }
+        $http_code = (try { ^curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/login } catch { "000" })
+        if $http_code == "200" {
+            $body = (try { ^curl --silent http://127.0.0.1:18080/login } catch { "" })
+            break
+        }
+    }
+    if $http_code != "200" {
+        print "FAIL: Server did not become healthy within 30 seconds"
+        try { ^docker logs --tail 80 $container }
+        ./dev/server-down | ignore
         exit 1
     }
-    print $"Server is running \(PID ($server_pid)\), checking HTTP..."
-    let http_code = (try { ^curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/ } catch { "000" })
-    ^kill --signal TERM $server_pid
-    if $http_code == "200" {
-        print $"PASS: Server responded with HTTP ($http_code)"
+    ./dev/server-down | ignore
+    if $http_code == "200" and ($body | str contains '<form') {
+        print $"PASS: Server responded with HTTP ($http_code) and HTML form body"
     } else {
-        print $"FAIL: Server responded with HTTP ($http_code) \(expected 200\)"
-        print (open $log_file)
+        print $"FAIL: Server responded with HTTP ($http_code), body did not contain '<form'"
         exit 1
     }
 
 # Format code
 fmt:
-    cargo fmt
+    ./dev/cargo fmt --all

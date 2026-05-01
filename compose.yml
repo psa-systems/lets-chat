@@ -1,25 +1,23 @@
 ---
+# Production-style Docker Compose for lets-chat.
+# Builds the multi-stage runtime image and exposes it on port 8080.
 
 services:
 
   app:
     build:
       context: .
-    container_name: lets-chat-dev
+      dockerfile: ci-build/Dockerfile.web
+    container_name: lets-chat
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      RUST_LOG: debug
+      RUST_LOG: lets_chat=info
+      LETS_CHAT_DATA_DIR: /data
+      BIND_ADDR: 0.0.0.0:8080
     volumes:
-      - ./src:/app/src
-      - ./assets:/app/assets
-      - ./Cargo.toml:/app/Cargo.toml
-      - ./Cargo.lock:/app/Cargo.lock
-      - ./migrations:/app/migrations
-      - cargo_target:/app/target
-      - lets_chat_data:/data
+      - lets-chat-data:/data
 
 volumes:
-  cargo_target:
-  lets_chat_data:
+  lets-chat-data:

@@ -38,10 +38,7 @@ pub struct AuthUser(pub User);
 
 impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     type Rejection = Response;
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         if let Some(u) = parts.extensions.get::<User>().cloned() {
             Ok(AuthUser(u))
         } else {
@@ -55,10 +52,7 @@ pub struct OptionalUser(pub Option<User>);
 
 impl<S: Send + Sync> FromRequestParts<S> for OptionalUser {
     type Rejection = std::convert::Infallible;
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Ok(OptionalUser(parts.extensions.get::<User>().cloned()))
     }
 }
@@ -68,10 +62,7 @@ pub struct AdminUser(pub User);
 
 impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
     type Rejection = Response;
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         match parts.extensions.get::<User>().cloned() {
             Some(u) => match u.role.as_str() {
                 "admin" => Ok(AdminUser(u)),

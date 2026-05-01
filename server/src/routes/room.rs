@@ -9,8 +9,7 @@ use crate::error::AppError;
 use crate::models::Message;
 use crate::state::AppState;
 use crate::views::room::{
-    ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage,
-    SingleMessageFragment,
+    ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage, SingleMessageFragment,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -317,8 +316,7 @@ pub async fn delete_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let can_delete =
-        m.user_id == user.id || user.role == "admin" || user.role == "moderator";
+    let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
     if !can_delete {
         return Err(AppError::Forbidden);
     }

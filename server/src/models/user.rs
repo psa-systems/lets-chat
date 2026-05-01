@@ -52,4 +52,3 @@ impl From<UserRecord> for User {
         }
     }
 }
-

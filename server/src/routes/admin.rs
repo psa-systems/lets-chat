@@ -23,10 +23,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users", get(get_users))
         .route("/admin/users/{id}/ban", post(post_ban))
         .route("/admin/users/{id}/unban", post(post_unban))
-        .route(
-            "/admin/invites",
-            get(get_invites).post(post_create_invite),
-        )
+        .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
         .route("/admin/rooms", get(get_rooms))
         .route("/admin/rooms/{id}/archive", post(post_archive_room))

@@ -125,10 +125,9 @@ async fn test_list_reactions_reacted_by_me_false_for_other_user() {
 #[tokio::test]
 async fn test_reaction_removed_disappears_from_list() {
     let pool = setup_pool().await;
-    let room_id =
-        lets_chat::db::chat::create_room(&pool, "test-react-gone", None, "public", None)
-            .await
-            .unwrap();
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-gone", None, "public", None)
+        .await
+        .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
         .await
         .unwrap();
