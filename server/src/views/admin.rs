@@ -1,0 +1,93 @@
+use askama::Template;
+
+use crate::models::{ModAction, Room, User};
+
+/// Per-row projection for the users admin table.
+pub struct AdminUserView {
+    pub id: String,
+    pub username: String,
+    pub role: String,
+    pub is_banned: bool,
+}
+
+/// Per-row projection for the invites admin table.
+pub struct AdminInviteView {
+    pub id: i64,
+    pub code: String,
+    pub created_by_username: String,
+    pub used_by_username: Option<String>,
+    pub created_at: String,
+}
+
+/// Per-row projection for the rooms admin table.
+pub struct AdminRoomView {
+    pub id: i64,
+    pub name: String,
+    pub members: i64,
+    pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/users.html")]
+pub struct UsersPage<'a> {
+    pub user: &'a User,
+    pub rooms: &'a [Room],
+    pub dm_peers: &'a [User],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub users: &'a [AdminUserView],
+}
+
+#[derive(Template)]
+#[template(path = "admin/user_row.html")]
+pub struct UserRowFragment<'a> {
+    pub u: &'a AdminUserView,
+}
+
+#[derive(Template)]
+#[template(path = "admin/rooms.html")]
+pub struct RoomsPage<'a> {
+    pub user: &'a User,
+    pub rooms: &'a [Room],
+    pub dm_peers: &'a [User],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub rooms_admin: &'a [AdminRoomView],
+}
+
+#[derive(Template)]
+#[template(path = "admin/modlog.html")]
+pub struct ModLogPage<'a> {
+    pub user: &'a User,
+    pub rooms: &'a [Room],
+    pub dm_peers: &'a [User],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub entries: &'a [ModAction],
+}
+
+#[derive(Template)]
+#[template(path = "admin/settings.html")]
+pub struct SettingsPage<'a> {
+    pub user: &'a User,
+    pub rooms: &'a [Room],
+    pub dm_peers: &'a [User],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub smtp_host: String,
+    pub smtp_port: String,
+    pub smtp_user: String,
+    pub smtp_from: String,
+    pub saved: bool,
+}
+
+#[derive(Template)]
+#[template(path = "admin/invites.html")]
+pub struct InvitesPage<'a> {
+    pub user: &'a User,
+    pub rooms: &'a [Room],
+    pub dm_peers: &'a [User],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub invites: &'a [AdminInviteView],
+}
