@@ -54,8 +54,7 @@ pub async fn get_search(
     };
 
     let is_admin = user.role == "admin";
-    let rows =
-        db::chat::search_messages(&state.chat, &fts_query, None, &user.id, is_admin).await?;
+    let rows = db::chat::search_messages(&state.chat, &fts_query, None, &user.id, is_admin).await?;
 
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
     // search excludes DMs entirely, so this map is only consulted for non-

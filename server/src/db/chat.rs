@@ -230,10 +230,7 @@ pub async fn remove_room_member(
 }
 
 /// Count members in a room (used by the admin rooms table).
-pub async fn count_room_members(
-    pool: &sqlx::SqlitePool,
-    room_id: i64,
-) -> Result<i64, sqlx::Error> {
+pub async fn count_room_members(pool: &sqlx::SqlitePool, room_id: i64) -> Result<i64, sqlx::Error> {
     let row = sqlx::query("SELECT COUNT(*) AS c FROM room_members WHERE room_id = ?")
         .bind(room_id)
         .fetch_one(pool)
@@ -550,14 +547,12 @@ pub async fn toggle_reaction(
         .await?;
         Ok(false)
     } else {
-        sqlx::query(
-            "INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
-        )
-        .bind(message_id)
-        .bind(user_id)
-        .bind(emoji)
-        .execute(pool)
-        .await?;
+        sqlx::query("INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)")
+            .bind(message_id)
+            .bind(user_id)
+            .bind(emoji)
+            .execute(pool)
+            .await?;
         Ok(true)
     }
 }

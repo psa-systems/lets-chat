@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Wrapper: runs cargo inside a Docker container since the host has no Rust toolchain.
-# Caches the cargo registry and target dir in named volumes so rebuilds are fast.
+# Caches the cargo registry, target dir, and rustup toolchain components in named volumes
+# so rebuilds and component installs (rustfmt, clippy) persist across invocations.
+#
+# The first call installs rustfmt and clippy into the rustup volume (the slim image ships
+# the binaries but does not register them). Subsequent calls are no-ops.
 set -euo pipefail
 docker run --rm --init \
     --user "$(id -u):$(id -g)" \
@@ -9,6 +13,8 @@ docker run --rm --init \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
     -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
     -v lets-chat-rewrite-target:/work/target \
+    -v lets-chat-rewrite-rustup:/usr/local/rustup \
     -e CARGO_HOME=/usr/local/cargo \
+    -e RUSTUP_HOME=/usr/local/rustup \
     rust:1.88-slim-bookworm \
-    cargo "$@"
+    bash -c 'cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null; exec cargo "$@"' -- "$@"

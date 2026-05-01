@@ -18,11 +18,7 @@ pub struct Html(pub String);
 
 impl IntoResponse for Html {
     fn into_response(self) -> Response {
-        (
-            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            self.0,
-        )
-            .into_response()
+        ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], self.0).into_response()
     }
 }
 

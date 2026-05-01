@@ -71,7 +71,10 @@ async fn test_search_does_not_return_soft_deleted() {
         .await
         .unwrap();
 
-    assert!(results.is_empty(), "deleted messages must not appear in search");
+    assert!(
+        results.is_empty(),
+        "deleted messages must not appear in search"
+    );
 }
 
 #[tokio::test]
@@ -157,18 +160,16 @@ async fn test_search_edited_body_is_reindexed() {
 
     // Old term should no longer match
     let fts_old = lets_chat::db::chat::sanitize_fts_query("original").unwrap();
-    let old_results =
-        lets_chat::db::chat::search_messages(&pool, &fts_old, None, "user-1", false)
-            .await
-            .unwrap();
+    let old_results = lets_chat::db::chat::search_messages(&pool, &fts_old, None, "user-1", false)
+        .await
+        .unwrap();
     assert!(old_results.is_empty(), "old term must not match after edit");
 
     // New term should match
     let fts_new = lets_chat::db::chat::sanitize_fts_query("revised").unwrap();
-    let new_results =
-        lets_chat::db::chat::search_messages(&pool, &fts_new, None, "user-1", false)
-            .await
-            .unwrap();
+    let new_results = lets_chat::db::chat::search_messages(&pool, &fts_new, None, "user-1", false)
+        .await
+        .unwrap();
     assert_eq!(new_results.len(), 1);
     assert_eq!(new_results[0].body, "completely revised content");
 }

@@ -76,7 +76,10 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(home::get_home))
         .route("/login", get(auth::get_login).post(auth::post_login))
-        .route("/register", get(auth::get_register).post(auth::post_register))
+        .route(
+            "/register",
+            get(auth::get_register).post(auth::post_register),
+        )
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
