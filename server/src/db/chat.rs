@@ -229,6 +229,18 @@ pub async fn remove_room_member(
     Ok(())
 }
 
+/// Count members in a room (used by the admin rooms table).
+pub async fn count_room_members(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM room_members WHERE room_id = ?")
+        .bind(room_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(row.get("c"))
+}
+
 /// Find a room by its invite code.
 pub async fn get_room_by_invite(
     pool: &sqlx::SqlitePool,

@@ -9,6 +9,7 @@ use tower_http::trace::TraceLayer;
 use crate::auth::inject_user;
 use crate::state::AppState;
 
+mod admin;
 mod auth;
 mod dm;
 mod home;
@@ -47,6 +48,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/search", get(search::get_search))
         .route("/ws", get(ws::ws_handler))
+        .merge(admin::router())
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())

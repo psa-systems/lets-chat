@@ -1,0 +1,29 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Mod log - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">Moderation log</h1>
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2">Who</th>
+      <th class="py-2">Action</th>
+      <th class="py-2">Target</th>
+      <th class="py-2">Reason</th>
+      <th class="py-2">When</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr class="border-t border-slate-200">
+      <td class="py-1">{{ entry.actor_user }}</td>
+      <td class="py-1">{{ entry.action }}</td>
+      <td class="py-1">{{ entry.target_user }}</td>
+      <td class="py-1">{% if let Some(reason) = entry.reason.as_ref() %}{{ reason }}{% else %}-{% endif %}</td>
+      <td class="py-1">{{ entry.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
