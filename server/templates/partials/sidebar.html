@@ -1,0 +1,54 @@
+<aside class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
+  <div class="p-4 border-b border-slate-200">
+    <div class="font-semibold">lets-chat</div>
+    <div class="text-xs text-slate-500">{{ user.username }}</div>
+  </div>
+  <form class="p-2">
+    <input
+      name="q"
+      placeholder="Search messages..."
+      hx-get="/search"
+      hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+      hx-target="#main"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      class="w-full border rounded px-2 py-1 text-sm">
+  </form>
+  <nav class="flex-1 overflow-y-auto p-2 space-y-4">
+    <section>
+      <h2 class="text-xs uppercase text-slate-500 px-2">Rooms</h2>
+      <ul class="mt-1">
+        {% for room in sidebar_rooms %}
+        <li>
+          <a href="/room/{{ room.id }}" class="flex items-center px-2 py-1 rounded hover:bg-slate-200">
+            <span># {{ room.name }}</span>
+            {% let kind = "room" %}
+            {% let id = room.id.to_string() %}
+            {% let unread = room.unread %}
+            {% include "partials/unread_badge.html" %}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    <section>
+      <h2 class="text-xs uppercase text-slate-500 px-2">Direct messages</h2>
+      <ul class="mt-1">
+        {% for peer in sidebar_peers %}
+        <li>
+          <a href="/dm/{{ peer.id }}" class="flex items-center px-2 py-1 rounded hover:bg-slate-200">
+            <span>@ {{ peer.username }}</span>
+            {% let kind = "dm" %}
+            {% let id = peer.id.clone() %}
+            {% let unread = peer.unread %}
+            {% include "partials/unread_badge.html" %}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </nav>
+  <div class="p-2 border-t border-slate-200 text-sm">
+    <a href="/logout" class="text-slate-600 hover:underline">Sign out</a>
+  </div>
+</aside>

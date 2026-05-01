@@ -1,4 +1,7 @@
 ---
+# Developer Docker Compose: builds via the same multi-stage Dockerfile as
+# production, then attaches the running container to the shared Traefik
+# network so it is reachable at https://${USER}-chat.a8n.run.
 name: chat-${USER}
 
 services:
@@ -6,33 +9,28 @@ services:
   app:
     build:
       context: .
+      dockerfile: ci-build/Dockerfile.web
     restart: unless-stopped
     environment:
-      RUST_LOG: debug
+      RUST_LOG: lets_chat=debug
+      LETS_CHAT_DATA_DIR: /data
+      BIND_ADDR: 0.0.0.0:8080
     volumes:
-      - ./src:/app/src
-      - ./assets:/app/assets
-      - ./tests:/app/tests
-      - ./Cargo.toml:/app/Cargo.toml
-      - ./Cargo.lock:/app/Cargo.lock
-      - ./migrations:/app/migrations
-      - cargo_target:/app/target
-      - lets_chat_data:/data
+      - lets-chat-data:/data
     networks:
       - default
       - network-traefik-public
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=network-traefik-public"
-      - "traefik.http.routers.chat-${USER}.rule=Host(`${USER}-chat.a8n.run`)"
-      - "traefik.http.routers.chat-${USER}.service=chat-${USER}@docker"
-      - "traefik.http.routers.chat-${USER}.entrypoints=web-secure"
-      - "traefik.http.routers.chat-${USER}.tls.certresolver=cert-cloudflare"
-      - "traefik.http.services.chat-${USER}.loadbalancer.server.port=8080"
+      traefik.enable: "true"
+      traefik.docker.network: network-traefik-public
+      traefik.http.routers.chat-${USER}.rule: Host(`${USER}-chat.a8n.run`)
+      traefik.http.routers.chat-${USER}.service: chat-${USER}@docker
+      traefik.http.routers.chat-${USER}.entrypoints: web-secure
+      traefik.http.routers.chat-${USER}.tls.certresolver: cert-cloudflare
+      traefik.http.services.chat-${USER}.loadbalancer.server.port: "8080"
 
 volumes:
-  cargo_target:
-  lets_chat_data:
+  lets-chat-data:
 
 networks:
   network-traefik-public:
