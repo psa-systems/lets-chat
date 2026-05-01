@@ -9,6 +9,7 @@ use crate::state::AppState;
 use crate::views::dm::DmPage;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
 
 /// GET /dm/{peer_id} - render a DM view between the authenticated user and
 /// the peer. Resolves to (or creates) a room with `room_type = "dm"` and
@@ -86,23 +87,29 @@ pub async fn get_dm(
         });
     }
 
-    // Sidebar data (mirrors get_room).
-    let is_admin = user.role == "admin";
-    let rooms = db::chat::list_rooms(&state.chat, &user.id, is_admin).await?;
-    let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
-    let mut dm_peers: Vec<User> = Vec::with_capacity(dm_rooms.len());
-    for (_room, other_id) in &dm_rooms {
-        if let Some(record) = db::auth::find_user_by_id(&state.auth, other_id).await? {
-            dm_peers.push(record.into());
-        }
+    // Mark the latest message as read for this viewer and broadcast to the
+    // room so other tabs of this user clear the DM badge live. Skipped when
+    // the DM has no messages yet.
+    if let Some(last) = messages.last() {
+        db::chat::set_last_read(&state.chat, &user.id, room_id, last.id).await?;
+        let event = ChatEvent::DmRead {
+            room_id,
+            user_id: user.id.clone(),
+            last_read_message_id: last.id,
+            read_at: chrono::Utc::now().to_rfc3339(),
+        };
+        state.hub.broadcast_to_room(room_id, &event);
     }
+
+    // Sidebar data (after marking-as-read so the badge for this DM is 0).
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
 
     let page = DmPage {
         user: &user,
         peer: &peer,
         room: &room,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         messages: &messages,
         asset_version: state.asset_version,
     };

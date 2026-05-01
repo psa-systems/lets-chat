@@ -1,6 +1,7 @@
 use askama::Template;
 
 use crate::models::{Room, User};
+use crate::views::layout::{SidebarPeer, SidebarRoom};
 
 pub struct MessageView {
     pub id: i64,
@@ -23,8 +24,8 @@ pub struct ReactionView {
 pub struct RoomPage<'a> {
     pub user: &'a User,
     pub room: &'a Room,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub messages: &'a [MessageView],
     pub asset_version: &'a str,
 }

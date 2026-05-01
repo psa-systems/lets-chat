@@ -434,6 +434,92 @@ pub async fn list_dm_unread_counts(
         .collect())
 }
 
+/// For each non-DM room visible to the user (public rooms plus private rooms
+/// they joined), count messages from other users that are newer than the
+/// caller's watermark in dm_read_state. The dm_read_state table is room-keyed,
+/// so we reuse it for non-DM rooms as well.
+pub async fn list_room_unread_counts(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    is_admin: bool,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    // Admins see every non-DM room regardless of membership.
+    let sql = if is_admin {
+        "SELECT r.id AS room_id, \
+                COUNT(m.id) AS unread \
+         FROM rooms r \
+         LEFT JOIN dm_read_state s ON s.room_id = r.id AND s.user_id = ? \
+         LEFT JOIN messages m \
+           ON m.room_id = r.id \
+          AND m.user_id != ? \
+          AND m.deleted_at IS NULL \
+          AND m.id > COALESCE(s.last_read_message_id, 0) \
+         WHERE r.room_type != 'dm' \
+         GROUP BY r.id"
+    } else {
+        "SELECT r.id AS room_id, \
+                COUNT(m.id) AS unread \
+         FROM rooms r \
+         LEFT JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = ? \
+         LEFT JOIN dm_read_state s ON s.room_id = r.id AND s.user_id = ? \
+         LEFT JOIN messages m \
+           ON m.room_id = r.id \
+          AND m.user_id != ? \
+          AND m.deleted_at IS NULL \
+          AND m.id > COALESCE(s.last_read_message_id, 0) \
+         WHERE r.room_type != 'dm' \
+           AND (r.room_type = 'public' OR rm.user_id IS NOT NULL) \
+         GROUP BY r.id"
+    };
+
+    let mut q = sqlx::query(sql).bind(user_id);
+    if !is_admin {
+        q = q.bind(user_id);
+    }
+    q = q.bind(user_id);
+
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("room_id"), r.get::<i64, _>("unread")))
+        .collect())
+}
+
+/// Set the caller's last-read watermark for any room (DM or non-DM). Wraps
+/// upsert_dm_read since dm_read_state is room-keyed and not constrained to
+/// DM rooms; the name is preserved for backward compatibility, but the table
+/// is used as a generic per-user, per-room watermark.
+pub async fn set_last_read(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_id: i64,
+    message_id: i64,
+) -> Result<String, sqlx::Error> {
+    upsert_dm_read(pool, user_id, room_id, message_id).await
+}
+
+/// Return the peer's user_id for a DM room from the caller's perspective, or
+/// None if the room is not a DM the caller is a member of.
+pub async fn get_dm_peer(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT m2.user_id AS peer \
+         FROM rooms r \
+         JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
+         JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id != ? \
+         WHERE r.id = ? AND r.room_type = 'dm'",
+    )
+    .bind(user_id)
+    .bind(user_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.get::<String, _>("peer")))
+}
+
 // ── Reactions ─────────────────────────────────────────────────────────────────
 
 /// Toggle a reaction: insert if not present, delete if already present.

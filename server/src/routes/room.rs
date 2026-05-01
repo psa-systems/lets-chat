@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
-use crate::models::{Message, User};
+use crate::models::Message;
 use crate::state::AppState;
 use crate::views::room::{
     ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage,
@@ -90,21 +90,28 @@ pub async fn get_room(
         });
     }
 
-    // Sidebar data (mirrors the home route).
-    let rooms = db::chat::list_rooms(&state.chat, &user.id, is_admin).await?;
-    let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
-    let mut dm_peers: Vec<User> = Vec::with_capacity(dm_rooms.len());
-    for (_room, peer_id) in &dm_rooms {
-        if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
-            dm_peers.push(record.into());
-        }
+    // Mark the latest message as read for this viewer and notify other tabs
+    // of the same user (and any other subscribers in the room) so badges
+    // clear in real time. Skipped when the room has no messages.
+    if let Some(last) = messages.last() {
+        db::chat::set_last_read(&state.chat, &user.id, room_id, last.id).await?;
+        let event = ChatEvent::DmRead {
+            room_id,
+            user_id: user.id.clone(),
+            last_read_message_id: last.id,
+            read_at: chrono::Utc::now().to_rfc3339(),
+        };
+        state.hub.broadcast_to_room(room_id, &event);
     }
+
+    // Sidebar data (after marking-as-read so the badge for this room is 0).
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
 
     let page = RoomPage {
         user: &user,
         room: &room,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         messages: &messages,
         asset_version: state.asset_version,
     };
