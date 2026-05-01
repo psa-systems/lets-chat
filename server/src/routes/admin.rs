@@ -8,7 +8,6 @@ use serde::Deserialize;
 use crate::auth::AdminUser;
 use crate::db;
 use crate::error::AppError;
-use crate::models::User;
 use crate::state::AppState;
 use crate::views::admin::{
     AdminInviteView, AdminRoomView, AdminUserView, InvitesPage, ModLogPage, RoomsPage,
@@ -34,23 +33,6 @@ pub fn router() -> Router<AppState> {
         .route("/admin/modlog", get(get_modlog))
 }
 
-/// Load the sidebar context (rooms list + DM peers) for the admin user.
-async fn sidebar_context(
-    state: &AppState,
-    user: &User,
-) -> Result<(Vec<crate::models::Room>, Vec<User>), AppError> {
-    let is_admin = user.role == "admin";
-    let rooms = db::chat::list_rooms(&state.chat, &user.id, is_admin).await?;
-    let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
-    let mut dm_peers: Vec<User> = Vec::with_capacity(dm_rooms.len());
-    for (_room, peer_id) in &dm_rooms {
-        if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
-            dm_peers.push(record.into());
-        }
-    }
-    Ok((rooms, dm_peers))
-}
-
 // Settings ------------------------------------------------------------------
 
 #[derive(Deserialize)]
@@ -66,7 +48,7 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (rooms, dm_peers) = sidebar_context(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
     let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
         .await?
         .unwrap_or_default();
@@ -81,8 +63,8 @@ pub async fn get_settings(
         .unwrap_or_default();
     let page = SettingsPage {
         user: &user,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         asset_version: state.asset_version,
         section: "settings",
         smtp_host,
@@ -117,7 +99,7 @@ pub async fn get_users(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (rooms, dm_peers) = sidebar_context(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
     let records = db::auth::list_users(&state.auth).await?;
     let users: Vec<AdminUserView> = records
         .into_iter()
@@ -130,8 +112,8 @@ pub async fn get_users(
         .collect();
     let page = UsersPage {
         user: &user,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         asset_version: state.asset_version,
         section: "users",
         users: &users,
@@ -179,12 +161,12 @@ pub async fn get_invites(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (rooms, dm_peers) = sidebar_context(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
     let invites = build_invite_views(&state).await?;
     let page = InvitesPage {
         user: &user,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         asset_version: state.asset_version,
         section: "invites",
         invites: &invites,
@@ -246,7 +228,7 @@ pub async fn get_rooms(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (rooms, dm_peers) = sidebar_context(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
     // Admin view: list every room visible to admins, with member counts.
     let raw_rooms = db::chat::list_rooms(&state.chat, &user.id, true).await?;
     let mut rooms_admin = Vec::with_capacity(raw_rooms.len());
@@ -261,8 +243,8 @@ pub async fn get_rooms(
     }
     let page = RoomsPage {
         user: &user,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         asset_version: state.asset_version,
         section: "rooms",
         rooms_admin: &rooms_admin,
@@ -288,12 +270,12 @@ pub async fn get_modlog(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (rooms, dm_peers) = sidebar_context(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
     let entries = db::moderation::list_mod_actions(&state.chat).await?;
     let page = ModLogPage {
         user: &user,
-        rooms: &rooms,
-        dm_peers: &dm_peers,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
         asset_version: state.asset_version,
         section: "modlog",
         entries: &entries,

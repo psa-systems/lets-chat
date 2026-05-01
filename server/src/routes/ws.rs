@@ -14,7 +14,7 @@ use crate::db;
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::room::ReactionView;
-use crate::views::ws_fragments::{render_event, ReactionUpdateFragment};
+use crate::views::ws_fragments::{render_event, ReactionUpdateFragment, ReadReceiptFragment};
 use crate::ws::events::ChatEvent;
 
 #[derive(Deserialize)]
@@ -64,6 +64,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::ReactionAdded { message_id, .. }
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
                                     render_reaction_bar(&send_state, *message_id, &send_user_id).await
+                                }
+                                ChatEvent::DmRead { user_id, room_id, .. } => {
+                                    // Per-user filter: only the badge owner's
+                                    // tabs receive the clear fragment.
+                                    if user_id == &send_user_id {
+                                        render_read_receipt(&send_state, *room_id, &send_user_id).await
+                                    } else {
+                                        None
+                                    }
                                 }
                                 _ => render_event(&e),
                             };
@@ -126,6 +135,34 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
 
     state.hub.disconnect(conn_id);
     send.abort();
+}
+
+/// Render the badge-clearing fragment for the badge owner. For non-DM rooms
+/// the badge id is `unread-room-{room_id}`; for DM rooms it is
+/// `unread-dm-{peer_user_id}` where peer is the OTHER member from the badge
+/// owner's perspective. Returns None if the room cannot be resolved or the
+/// caller is not a member of a DM.
+async fn render_read_receipt(state: &AppState, room_id: i64, user_id: &str) -> Option<String> {
+    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    if room.room_type == "dm" {
+        let peer_id = db::chat::get_dm_peer(&state.chat, room_id, user_id)
+            .await
+            .ok()??;
+        ReadReceiptFragment {
+            kind: "dm",
+            id: &peer_id,
+        }
+        .render()
+        .ok()
+    } else {
+        let id_str = room_id.to_string();
+        ReadReceiptFragment {
+            kind: "room",
+            id: &id_str,
+        }
+        .render()
+        .ok()
+    }
 }
 
 /// Render the per-user reaction-bar fragment for a WS push. Returns None if

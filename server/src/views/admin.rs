@@ -1,6 +1,7 @@
 use askama::Template;
 
-use crate::models::{ModAction, Room, User};
+use crate::models::{ModAction, User};
+use crate::views::layout::{SidebarPeer, SidebarRoom};
 
 /// Per-row projection for the users admin table.
 pub struct AdminUserView {
@@ -31,8 +32,8 @@ pub struct AdminRoomView {
 #[template(path = "admin/users.html")]
 pub struct UsersPage<'a> {
     pub user: &'a User,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub users: &'a [AdminUserView],
@@ -48,8 +49,8 @@ pub struct UserRowFragment<'a> {
 #[template(path = "admin/rooms.html")]
 pub struct RoomsPage<'a> {
     pub user: &'a User,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub rooms_admin: &'a [AdminRoomView],
@@ -59,8 +60,8 @@ pub struct RoomsPage<'a> {
 #[template(path = "admin/modlog.html")]
 pub struct ModLogPage<'a> {
     pub user: &'a User,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub entries: &'a [ModAction],
@@ -70,8 +71,8 @@ pub struct ModLogPage<'a> {
 #[template(path = "admin/settings.html")]
 pub struct SettingsPage<'a> {
     pub user: &'a User,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub smtp_host: String,
@@ -85,8 +86,8 @@ pub struct SettingsPage<'a> {
 #[template(path = "admin/invites.html")]
 pub struct InvitesPage<'a> {
     pub user: &'a User,
-    pub rooms: &'a [Room],
-    pub dm_peers: &'a [User],
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub invites: &'a [AdminInviteView],

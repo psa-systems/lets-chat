@@ -43,6 +43,16 @@ pub struct ReactionUpdateFragment<'a> {
     pub reactions: &'a [super::room::ReactionView],
 }
 
+/// Out-of-band swap that clears an unread badge in the sidebar. The badge id
+/// is `unread-{kind}-{id}` where kind is "room" or "dm" and id is the room_id
+/// (for rooms) or peer user_id (for DMs, from the badge owner's perspective).
+#[derive(Template)]
+#[template(path = "ws/read_receipt.html")]
+pub struct ReadReceiptFragment<'a> {
+    pub kind: &'a str,
+    pub id: &'a str,
+}
+
 /// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes.
 /// Returns None for events that don't produce a fragment for the given user
 /// (e.g., a global UserBanned event for the current user - the page should
