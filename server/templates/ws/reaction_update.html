@@ -1,0 +1,16 @@
+<div id="reactions-{{ message_id }}" hx-swap-oob="outerHTML" class="flex flex-wrap gap-1 items-center">
+  {% for r in reactions %}
+  <button
+    hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
+    hx-target="#reactions-{{ message_id }}"
+    hx-swap="outerHTML"
+    class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-blue-200{% else %}bg-slate-200 hover:bg-slate-300{% endif %}"
+  >{{ r.emoji }} {{ r.count }}</button>
+  {% endfor %}
+  <button
+    hx-get="/messages/{{ message_id }}/reactions/picker"
+    hx-target="this"
+    hx-swap="outerHTML"
+    class="text-xs text-slate-500 hover:text-slate-700"
+  >+</button>
+</div>

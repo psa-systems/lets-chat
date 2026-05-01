@@ -1,0 +1,10 @@
+<div id="messages" hx-swap-oob="beforeend">
+  <div id="msg-{{ message_id }}" class="px-4 py-2 group">
+    <div class="flex items-baseline gap-2">
+      <span class="font-medium">{{ username }}</span>
+      <span class="text-xs text-slate-500">{{ created_at }}</span>
+    </div>
+    <div class="whitespace-pre-wrap">{{ body }}</div>
+    <div id="reactions-{{ message_id }}" class="mt-1"></div>
+  </div>
+</div>

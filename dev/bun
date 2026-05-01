@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Wrapper: runs bun inside a Docker container since the host has no bun.
+set -euo pipefail
+docker run --rm --init \
+    --user "$(id -u):$(id -g)" \
+    -v "$PWD:/work" \
+    -w /work \
+    -v lets-chat-rewrite-bun-cache:/home/bun/.bun \
+    oven/bun:1 \
+    bun "$@"
