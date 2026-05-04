@@ -1,23 +1,20 @@
 use askama::Template;
 
+use crate::models::User;
+use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::views::room::MessageView;
 use crate::ws::events::ChatEvent;
 
 #[derive(Template)]
 #[template(path = "ws/new_message.html")]
 pub struct NewMessageFragment<'a> {
-    pub message_id: i64,
-    pub room_id: i64,
-    pub username: &'a str,
-    pub created_at: &'a str,
-    pub body: &'a str,
+    pub message: &'a MessageView,
 }
 
 #[derive(Template)]
 #[template(path = "ws/edited_message.html")]
 pub struct EditedMessageFragment<'a> {
-    pub message_id: i64,
-    pub new_body: &'a str,
-    pub edited_at: &'a str,
+    pub message: &'a MessageView,
 }
 
 #[derive(Template)]
@@ -53,33 +50,24 @@ pub struct ReadReceiptFragment<'a> {
     pub id: &'a str,
 }
 
-/// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes.
-/// Returns None for events that don't produce a fragment for the given user
-/// (e.g., a global UserBanned event for the current user - the page should
-/// redirect, not swap).
+/// OOB sidebar replacement. Used when the user's room/DM membership changes
+/// so the new entry shows up live without a refresh. Renders the entire
+/// sidebar partial wrapped to swap on the existing #sidebar element.
+#[derive(Template)]
+#[template(path = "ws/sidebar_update.html")]
+pub struct SidebarUpdateFragment<'a> {
+    pub user: &'a User,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+}
+
+/// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes for
+/// events that do not depend on the recipient. Per-recipient events
+/// (NewMessage, MessageEdited, ReactionAdded/Removed, DmRead,
+/// RoomMemberAdded/Removed) are rendered directly in the WS handler where
+/// the recipient identity is available.
 pub fn render_event(event: &ChatEvent) -> Option<String> {
     match event {
-        ChatEvent::NewMessage { message, .. } => NewMessageFragment {
-            message_id: message.id,
-            room_id: message.room_id,
-            username: &message.author_name,
-            created_at: &message.created_at,
-            body: &message.body,
-        }
-        .render()
-        .ok(),
-        ChatEvent::MessageEdited {
-            message_id,
-            new_body,
-            edited_at,
-            ..
-        } => EditedMessageFragment {
-            message_id: *message_id,
-            new_body,
-            edited_at,
-        }
-        .render()
-        .ok(),
         ChatEvent::MessageDeleted { message_id, .. } => DeletedMessageFragment {
             message_id: *message_id,
         }
@@ -87,8 +75,11 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         .ok(),
         ChatEvent::UserTyping { username, .. } => TypingFragment { username }.render().ok(),
         ChatEvent::UserStoppedTyping { .. } => StoppedTypingFragment.render().ok(),
-        ChatEvent::ReactionAdded { .. } | ChatEvent::ReactionRemoved { .. } => None,
-        ChatEvent::RoomMemberAdded { .. }
+        ChatEvent::NewMessage { .. }
+        | ChatEvent::MessageEdited { .. }
+        | ChatEvent::ReactionAdded { .. }
+        | ChatEvent::ReactionRemoved { .. }
+        | ChatEvent::RoomMemberAdded { .. }
         | ChatEvent::RoomMemberRemoved { .. }
         | ChatEvent::DmRead { .. }
         | ChatEvent::UserMuted { .. }

@@ -1,4 +1,4 @@
-<div id="msg-{{ message.id }}" class="px-4 py-2 hover:bg-slate-100 group">
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="px-4 py-2 hover:bg-slate-100 group">
   <div class="flex items-baseline gap-2">
     {% if message.user_id != message.viewer_id %}
     <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="Direct message {{ message.username }}">{{ message.username }}</a>
@@ -9,8 +9,8 @@
     {% if message.edited_at.is_some() %}
     <span class="text-xs text-slate-400">(edited)</span>
     {% endif %}
+    {% if message.can_edit || message.can_delete %}
     <span class="ml-auto flex gap-2 text-xs">
-      <button hx-get="/messages/{{ message.id }}/reactions/picker" hx-target="#reactions-{{ message.id }}" hx-swap="outerHTML" class="text-slate-500 hover:text-slate-800 hover:underline">React</button>
       {% if message.can_edit %}
       <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Edit</button>
       {% endif %}
@@ -18,6 +18,7 @@
       <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="Delete this message?" class="text-red-600 hover:underline">Delete</button>
       {% endif %}
     </span>
+    {% endif %}
   </div>
   <div class="whitespace-pre-wrap">{{ message.body }}</div>
   <div id="reactions-{{ message.id }}" class="mt-1">

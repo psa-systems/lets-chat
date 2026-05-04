@@ -50,6 +50,7 @@ pub struct EditFormFragment<'a> {
 #[template(path = "room/message.html")]
 pub struct SingleMessageFragment<'a> {
     pub message: &'a MessageView,
+    pub oob: bool,
 }
 
 #[derive(Template)]

@@ -1,4 +1,4 @@
-<aside class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
+<aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
   <div class="p-4 border-b border-slate-200">
     <div class="font-semibold">lets-chat</div>
     <div class="text-xs text-slate-500">{{ user.username }}</div>
