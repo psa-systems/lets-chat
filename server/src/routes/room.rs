@@ -244,6 +244,13 @@ pub async fn get_single_message(
             viewer_reacted: r.reacted_by_me,
         })
         .collect();
+    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (m.user_id.as_str(), m.created_at.as_str()),
+    );
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
@@ -256,7 +263,7 @@ pub async fn get_single_message(
         can_delete,
         viewer_id: user.id.clone(),
         seen_caption: None,
-        is_follow_up: false,
+        is_follow_up,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -308,6 +315,13 @@ pub async fn patch_message(
             viewer_reacted: r.reacted_by_me,
         })
         .collect();
+    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (m.user_id.as_str(), m.created_at.as_str()),
+    );
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
@@ -320,7 +334,7 @@ pub async fn patch_message(
         can_delete: true,
         viewer_id: user.id.clone(),
         seen_caption: None,
-        is_follow_up: false,
+        is_follow_up,
     };
     let fragment = SingleMessageFragment {
         message: &view,
