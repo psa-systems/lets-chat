@@ -26,4 +26,11 @@
     {% let reactions = message.reactions.as_slice() %}
     {% include "partials/reaction_bar.html" %}
   </div>
+  {% if message.user_id == message.viewer_id %}
+  <div id="seen-{{ message.id }}">
+    {% if let Some(t) = message.seen_caption.as_ref() %}
+    <div class="text-xs text-slate-400">Seen {{ t }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
