@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.6
+
+# Build the lets-chat-desktop binary for Linux x86_64.
+#
+# The desktop crate is a Tao + Wry webview wrapper that links against system
+# GTK / WebKit2GTK / Soup libraries, so the build image installs those plus
+# the usual native build deps. The runtime artifact is the single binary at
+# /build/target/release/lets-chat-desktop, which the CI workflow extracts
+# via `docker create` + `docker cp`.
+
+FROM rust:1.88-slim-bookworm AS builder
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        pkg-config \
+        libgtk-3-dev \
+        libwebkit2gtk-4.1-dev \
+        libsoup-3.0-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+RUN cargo build --release -p lets-chat-desktop
