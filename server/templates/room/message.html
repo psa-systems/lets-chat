@@ -1,4 +1,4 @@
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0.5{% else %}py-2{% endif %} hover:bg-slate-100 group">
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
   {% if !message.is_follow_up %}
   <div class="flex items-baseline gap-2">
     {% if message.user_id != message.viewer_id %}
@@ -22,8 +22,8 @@
     {% endif %}
   </span>
   {% endif %}
-  <div class="whitespace-pre-wrap">{{ message.body }}</div>
-  <div id="reactions-{{ message.id }}" class="mt-1">
+  <div class="whitespace-pre-wrap leading-snug">{{ message.body }}</div>
+  <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}
     {% include "partials/reaction_bar.html" %}
