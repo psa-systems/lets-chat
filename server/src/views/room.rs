@@ -14,6 +14,9 @@ pub struct MessageView {
     pub can_edit: bool,
     pub can_delete: bool,
     pub viewer_id: String,
+    /// HH:MM peer-read timestamp shown under this message in a DM, or None.
+    /// Only one own-authored message in a DM should have this set at a time.
+    pub seen_caption: Option<String>,
 }
 
 pub struct ReactionView {

@@ -10,9 +10,10 @@ use tower_http::trace::TraceLayer;
 use crate::auth::inject_user;
 use crate::db;
 use crate::error::AppError;
-use crate::models::User;
+use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::ws::events::ChatEvent;
 
 mod admin;
 mod auth;
@@ -71,6 +72,29 @@ pub(crate) async fn load_sidebar(
     }
 
     Ok((sidebar_rooms, sidebar_peers))
+}
+
+/// Broadcast a `NewMessage` (or other room-wide) event to every user that has
+/// the room visible in their sidebar - room members for private/DM rooms, all
+/// connected users for public rooms. Each recipient's WebSocket handler then
+/// decides how to render based on whether the connection is currently
+/// subscribed to the room (open in the foreground) or not (sidebar-only,
+/// renders an unread bump). Replaces the narrower `broadcast_to_room` so
+/// sidebar badges update live for users who are not actively viewing the
+/// room when a new message arrives.
+pub(crate) async fn broadcast_room_message(
+    state: &AppState,
+    room: &Room,
+    event: &ChatEvent,
+) -> Result<(), AppError> {
+    let recipients: Vec<String> = match room.room_type.as_str() {
+        "public" => state.hub.list_connected_users(),
+        _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
+    };
+    for uid in recipients {
+        state.hub.broadcast_to_user(&uid, event);
+    }
+    Ok(())
 }
 
 pub fn build_router(state: AppState) -> Router {
