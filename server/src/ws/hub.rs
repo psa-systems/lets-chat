@@ -134,6 +134,12 @@ impl Hub {
         }
     }
 
+    /// Return the user_ids of every connected user (deduped). Used to fan out
+    /// public-room sidebar updates to all live sessions.
+    pub fn list_connected_users(&self) -> Vec<String> {
+        self.user_conns.iter().map(|e| e.key().clone()).collect()
+    }
+
     /// Broadcast to a specific user's connections (all their tabs/devices).
     pub fn broadcast_to_user(&self, user_id: &str, event: &ChatEvent) {
         if let Some(conns) = self.user_conns.get(user_id) {
