@@ -8,19 +8,20 @@
 # Shares the rustup volume with dev/cargo so rustfmt and clippy components are
 # available without re-downloading.
 #
-# Note: runs as root because apt-get requires it. The resulting build artifacts
-# in target/ may be owned by root; the regular dev/cargo wrapper runs as the
-# host user and may need to chown if you alternate between them.
+# Note: runs as root because apt-get requires it. Build artifacts live in the
+# named volume mounted at /cargo-target, so host filesystem ownership is
+# unaffected; alternating with dev/cargo (which runs as host user) is fine.
 set -euo pipefail
 docker run --rm --init \
     -v "$PWD:/work" \
     -w /work \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
     -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
-    -v lets-chat-rewrite-target:/work/target \
+    -v lets-chat-rewrite-target:/cargo-target \
     -v lets-chat-rewrite-rustup:/usr/local/rustup \
     -v lets-chat-rewrite-desktop-apt:/var/cache/apt \
     -e CARGO_HOME=/usr/local/cargo \
+    -e CARGO_TARGET_DIR=/cargo-target \
     -e RUSTUP_HOME=/usr/local/rustup \
     rust:1.88-slim-bookworm \
     bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libssl-dev > /dev/null && (cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null) && cargo "$@"' -- "$@"
