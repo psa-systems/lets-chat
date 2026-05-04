@@ -116,7 +116,7 @@ pub async fn get_room(
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         messages: &messages,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
     };
     html(&page)
 }

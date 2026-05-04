@@ -62,7 +62,7 @@ pub async fn get_settings(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
         section: "settings",
         smtp_host,
         smtp_port,
@@ -111,7 +111,7 @@ pub async fn get_users(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
         section: "users",
         users: &users,
     };
@@ -164,7 +164,7 @@ pub async fn get_invites(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
         section: "invites",
         invites: &invites,
     };
@@ -242,7 +242,7 @@ pub async fn get_rooms(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
         section: "rooms",
         rooms_admin: &rooms_admin,
     };
@@ -273,7 +273,7 @@ pub async fn get_modlog(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
         section: "modlog",
         entries: &entries,
     };
