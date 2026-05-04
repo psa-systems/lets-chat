@@ -77,15 +77,19 @@ pub async fn get_room(
             resolved
         };
         let can_edit = m.user_id == user.id;
+        let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
         messages.push(MessageView {
             id: m.id,
+            user_id: m.user_id.clone(),
             username,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
             reactions,
             can_edit,
+            can_delete,
+            viewer_id: user.id.clone(),
         });
     }
 
@@ -222,6 +226,7 @@ pub async fn get_single_message(
         .map(|r| r.username)
         .unwrap_or_else(|| "(unknown)".to_string());
     let can_edit = m.user_id == user.id;
+    let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
         .into_iter()
@@ -233,17 +238,17 @@ pub async fn get_single_message(
         .collect();
     let view = MessageView {
         id: m.id,
+        user_id: m.user_id.clone(),
         username,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,
         reactions,
         can_edit,
+        can_delete,
+        viewer_id: user.id.clone(),
     };
-    let fragment = SingleMessageFragment {
-        message: &view,
-        can_edit,
-    };
+    let fragment = SingleMessageFragment { message: &view };
     html(&fragment)
 }
 
@@ -292,17 +297,17 @@ pub async fn patch_message(
         .collect();
     let view = MessageView {
         id: m.id,
+        user_id: m.user_id.clone(),
         username,
         created_at: m.created_at,
         edited_at: Some(edited_at_str),
         body: body.to_string(),
         reactions,
         can_edit: true,
+        can_delete: true,
+        viewer_id: user.id.clone(),
     };
-    let fragment = SingleMessageFragment {
-        message: &view,
-        can_edit: true,
-    };
+    let fragment = SingleMessageFragment { message: &view };
     html(&fragment)
 }
 

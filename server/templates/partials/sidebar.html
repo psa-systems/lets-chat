@@ -48,7 +48,11 @@
       </ul>
     </section>
   </nav>
-  <div class="p-2 border-t border-slate-200 text-sm">
+  <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
+    {% if user.role == "admin" || user.role == "moderator" %}
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}Admin{% else %}Moderate{% endif %}</a>
+    {% endif %}
+    <a href="/settings" class="text-slate-600 hover:underline">Settings</a>
     <a href="/logout" class="text-slate-600 hover:underline">Sign out</a>
   </div>
 </aside>
