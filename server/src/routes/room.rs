@@ -90,6 +90,7 @@ pub async fn get_room(
             can_edit,
             can_delete,
             viewer_id: user.id.clone(),
+            seen_caption: None,
         });
     }
 
@@ -185,7 +186,7 @@ pub async fn post_message(
         message,
         is_dm: room.room_type == "dm",
     };
-    state.hub.broadcast_to_room(room_id, &event);
+    super::broadcast_room_message(&state, &room, &event).await?;
 
     let fragment = ComposerFragment { room: &room };
     html(&fragment)
@@ -247,6 +248,7 @@ pub async fn get_single_message(
         can_edit,
         can_delete,
         viewer_id: user.id.clone(),
+        seen_caption: None,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -309,6 +311,7 @@ pub async fn patch_message(
         can_edit: true,
         can_delete: true,
         viewer_id: user.id.clone(),
+        seen_caption: None,
     };
     let fragment = SingleMessageFragment {
         message: &view,

@@ -238,6 +238,18 @@ pub async fn count_room_members(pool: &sqlx::SqlitePool, room_id: i64) -> Result
     Ok(row.get("c"))
 }
 
+/// List the user_ids of all members of a room.
+pub async fn list_room_member_ids(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query("SELECT user_id FROM room_members WHERE room_id = ?")
+        .bind(room_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
+}
+
 /// Find a room by its invite code.
 pub async fn get_room_by_invite(
     pool: &sqlx::SqlitePool,
@@ -480,6 +492,62 @@ pub async fn list_room_unread_counts(
         .into_iter()
         .map(|r| (r.get("room_id"), r.get::<i64, _>("unread")))
         .collect())
+}
+
+/// Count messages in `room_id` newer than `user_id`'s last-read watermark
+/// authored by anyone other than `user_id` and not soft-deleted. Used to
+/// re-render a single sidebar unread badge after a live event.
+pub async fn get_unread_count(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(m.id) AS unread \
+         FROM messages m \
+         LEFT JOIN dm_read_state s ON s.room_id = m.room_id AND s.user_id = ? \
+         WHERE m.room_id = ? \
+           AND m.user_id != ? \
+           AND m.deleted_at IS NULL \
+           AND m.id > COALESCE(s.last_read_message_id, 0)",
+    )
+    .bind(user_id)
+    .bind(room_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.get("unread"))
+}
+
+/// Find the highest own-authored message id in a DM that the peer has read,
+/// along with the peer's read timestamp. Used to render the "Seen" caption
+/// under the most recent own message that the peer has acknowledged. Returns
+/// None when the peer has not read any of `viewer_id`'s messages yet.
+pub async fn find_dm_seen_state(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    viewer_id: &str,
+    peer_id: &str,
+) -> Result<Option<(i64, String)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT MAX(m.id) AS msg_id, s.updated_at AS read_at \
+         FROM dm_read_state s \
+         JOIN messages m \
+           ON m.room_id = s.room_id \
+          AND m.user_id = ? \
+          AND m.deleted_at IS NULL \
+          AND m.id <= s.last_read_message_id \
+         WHERE s.room_id = ? AND s.user_id = ?",
+    )
+    .bind(viewer_id)
+    .bind(room_id)
+    .bind(peer_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| {
+        let id: Option<i64> = r.get("msg_id");
+        id.map(|i| (i, r.get::<String, _>("read_at")))
+    }))
 }
 
 /// Set the caller's last-read watermark for any room (DM or non-DM). Wraps

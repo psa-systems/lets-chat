@@ -40,14 +40,27 @@ pub struct ReactionUpdateFragment<'a> {
     pub reactions: &'a [super::room::ReactionView],
 }
 
-/// Out-of-band swap that clears an unread badge in the sidebar. The badge id
-/// is `unread-{kind}-{id}` where kind is "room" or "dm" and id is the room_id
+/// Out-of-band swap that updates a sidebar unread badge. The badge id is
+/// `unread-{kind}-{id}` where kind is "room" or "dm" and id is the room_id
 /// (for rooms) or peer user_id (for DMs, from the badge owner's perspective).
+/// `unread = 0` clears the badge; positive values render a count chip.
 #[derive(Template)]
-#[template(path = "ws/read_receipt.html")]
-pub struct ReadReceiptFragment<'a> {
+#[template(path = "ws/unread_badge.html")]
+pub struct UnreadBadgeFragment<'a> {
     pub kind: &'a str,
     pub id: &'a str,
+    pub unread: i64,
+}
+
+/// Out-of-band swap that updates the "Seen HH:MM" caption under one DM
+/// message. `caption = None` clears the slot; `Some(text)` populates it. The
+/// element id is `seen-{message_id}`, present in the DOM for every
+/// own-authored DM message via `room/message.html`.
+#[derive(Template)]
+#[template(path = "ws/seen_indicator.html")]
+pub struct SeenIndicatorFragment<'a> {
+    pub message_id: i64,
+    pub caption: Option<&'a str>,
 }
 
 /// OOB sidebar replacement. Used when the user's room/DM membership changes

@@ -1,5 +1,5 @@
-use std::collections::HashSet;
-use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use askama::Template;
@@ -16,7 +16,7 @@ use crate::state::AppState;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, EditedMessageFragment, NewMessageFragment, ReactionUpdateFragment,
-    ReadReceiptFragment, SidebarUpdateFragment,
+    SeenIndicatorFragment, SidebarUpdateFragment, UnreadBadgeFragment,
 };
 use crate::ws::events::ChatEvent;
 
@@ -46,11 +46,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         .clone()
         .unwrap_or_else(|| user.username.clone());
     let (conn_id, mut rx) = state.hub.connect(&user.id, &username);
-    let subscribed: Mutex<HashSet<i64>> = Mutex::new(HashSet::new());
+    let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
+    // Per-connection memory of which own-authored DM message currently shows
+    // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous
+    // slot when the peer reads further.
+    let dm_seen_msg: Arc<Mutex<HashMap<i64, i64>>> = Arc::new(Mutex::new(HashMap::new()));
     let (mut tx, mut rx_ws) = socket.split();
 
     let send_state = state.clone();
     let send_user = user.clone();
+    let send_subscribed = subscribed.clone();
+    let send_dm_seen = dm_seen_msg.clone();
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
@@ -61,7 +67,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         Ok(e) => {
                             let rendered = match &e {
                                 ChatEvent::NewMessage { message, .. } => {
-                                    render_new_message(&send_state, message, &send_user).await
+                                    render_new_message_or_bump(
+                                        &send_state,
+                                        message,
+                                        &send_user,
+                                        &send_subscribed,
+                                    )
+                                    .await
                                 }
                                 ChatEvent::MessageEdited { message_id, .. } => {
                                     render_edited_message(&send_state, *message_id, &send_user).await
@@ -70,12 +82,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
                                     render_reaction_bar(&send_state, *message_id, &send_user.id).await
                                 }
-                                ChatEvent::DmRead { user_id, room_id, .. } => {
-                                    if user_id == &send_user.id {
-                                        render_read_receipt(&send_state, *room_id, &send_user.id).await
-                                    } else {
-                                        None
-                                    }
+                                ChatEvent::DmRead { user_id, room_id, last_read_message_id, read_at } => {
+                                    render_dm_read(
+                                        &send_state,
+                                        &send_user,
+                                        *room_id,
+                                        user_id,
+                                        *last_read_message_id,
+                                        read_at,
+                                        &send_dm_seen,
+                                    )
+                                    .await
                                 }
                                 ChatEvent::RoomMemberAdded { user_id, .. }
                                 | ChatEvent::RoomMemberRemoved { user_id, .. } => {
@@ -143,27 +160,168 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     send.abort();
 }
 
-async fn render_read_receipt(state: &AppState, room_id: i64, user_id: &str) -> Option<String> {
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+/// Render a single sidebar unread badge OOB swap reflecting the viewer's
+/// current unread count for `room_id`. `room` is the resolved Room used to
+/// pick the badge id encoding (kind="dm" + peer_id vs kind="room" + room_id).
+async fn render_unread_badge(
+    state: &AppState,
+    viewer: &User,
+    room: &models::Room,
+) -> Option<String> {
+    let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id)
+        .await
+        .ok()?;
     if room.room_type == "dm" {
-        let peer_id = db::chat::get_dm_peer(&state.chat, room_id, user_id)
+        let peer_id = db::chat::get_dm_peer(&state.chat, room.id, &viewer.id)
             .await
             .ok()??;
-        ReadReceiptFragment {
+        UnreadBadgeFragment {
             kind: "dm",
             id: &peer_id,
+            unread,
         }
         .render()
         .ok()
     } else {
-        let id_str = room_id.to_string();
-        ReadReceiptFragment {
+        let id_str = room.id.to_string();
+        UnreadBadgeFragment {
             kind: "room",
             id: &id_str,
+            unread,
         }
         .render()
         .ok()
     }
+}
+
+/// Handle a `DmRead` event. Two distinct sub-cases live in the same arm:
+///
+/// 1. `actor_user_id == viewer.id` - the viewer themselves opened/refreshed the
+///    room in another tab. Re-render their sidebar badge so it clears live
+///    across all of their sessions.
+///
+/// 2. `actor_user_id != viewer.id` - the peer read the viewer's messages in a
+///    DM. If both parties have read receipts enabled, render the "Seen HH:MM"
+///    caption under the most recent own-authored message <= peer's
+///    `last_read_message_id`, and clear the previous caption slot if any.
+async fn render_dm_read(
+    state: &AppState,
+    viewer: &User,
+    room_id: i64,
+    actor_user_id: &str,
+    last_read_message_id: i64,
+    read_at: &str,
+    dm_seen_msg: &Arc<Mutex<HashMap<i64, i64>>>,
+) -> Option<String> {
+    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+
+    if actor_user_id == viewer.id {
+        return render_unread_badge(state, viewer, &room).await;
+    }
+
+    if room.room_type != "dm" {
+        return None;
+    }
+
+    if !viewer.read_receipts_enabled {
+        return None;
+    }
+
+    // Symmetric consent: peer must have receipts enabled for the viewer to
+    // see "Seen". Look up the peer's user record from auth.
+    let peer_record = db::auth::find_user_by_id(&state.auth, actor_user_id)
+        .await
+        .ok()??;
+    if !peer_record.read_receipts_enabled {
+        return None;
+    }
+
+    // Find the highest own-authored, non-deleted message in this DM with id
+    // <= last_read_message_id. If none, peer hasn't read any of viewer's
+    // messages yet - clear any previous caption and stop.
+    let new_seen_id = db::chat::find_dm_seen_state(&state.chat, room_id, &viewer.id, actor_user_id)
+        .await
+        .ok()?
+        .map(|(id, _)| id)
+        .filter(|id| *id <= last_read_message_id);
+
+    let prev_seen_id = {
+        let map = dm_seen_msg.lock().unwrap();
+        map.get(&room_id).copied()
+    };
+
+    if new_seen_id == prev_seen_id {
+        return None;
+    }
+
+    let mut html = String::new();
+    if let Some(prev) = prev_seen_id {
+        if Some(prev) != new_seen_id {
+            if let Ok(frag) = (SeenIndicatorFragment {
+                message_id: prev,
+                caption: None,
+            })
+            .render()
+            {
+                html.push_str(&frag);
+            }
+        }
+    }
+    if let Some(new_id) = new_seen_id {
+        let hhmm = super::dm::format_hhmm(read_at);
+        if let Ok(frag) = (SeenIndicatorFragment {
+            message_id: new_id,
+            caption: Some(&hhmm),
+        })
+        .render()
+        {
+            html.push_str(&frag);
+        }
+    }
+
+    {
+        let mut map = dm_seen_msg.lock().unwrap();
+        match new_seen_id {
+            Some(id) => {
+                map.insert(room_id, id);
+            }
+            None => {
+                map.remove(&room_id);
+            }
+        }
+    }
+
+    if html.is_empty() {
+        None
+    } else {
+        Some(html)
+    }
+}
+
+/// Pick the right rendering for a `NewMessage` event for this connection:
+///
+/// - If the viewer's connection is currently subscribed to the room (room is
+///   open in the foreground), render the message into `#messages`.
+/// - Else, if the message was authored by someone other than the viewer,
+///   render an unread-badge bump for the sidebar.
+/// - Otherwise (own message, no open subscription), render nothing.
+async fn render_new_message_or_bump(
+    state: &AppState,
+    message: &models::Message,
+    viewer: &User,
+    subscribed: &Arc<Mutex<HashSet<i64>>>,
+) -> Option<String> {
+    let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
+    if is_subscribed {
+        return render_new_message(state, message, viewer).await;
+    }
+    if message.user_id == viewer.id {
+        return None;
+    }
+    let room = db::chat::get_room(&state.chat, message.room_id)
+        .await
+        .ok()??;
+    render_unread_badge(state, viewer, &room).await
 }
 
 async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
@@ -208,6 +366,7 @@ async fn render_new_message(
         can_edit,
         can_delete,
         viewer_id: viewer.id.clone(),
+        seen_caption: None,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -248,6 +407,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         can_edit,
         can_delete,
         viewer_id: viewer.id.clone(),
+        seen_caption: None,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
