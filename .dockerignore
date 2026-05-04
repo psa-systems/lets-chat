@@ -1,0 +1,26 @@
+# Build artifacts (cargo-chef rebuilds inside container)
+target/
+
+# Node deps (css stage runs `bun install` itself)
+**/node_modules/
+
+# Generated CSS (css stage regenerates it)
+**/tailwind-built.css
+
+# VCS / IDE / dev tooling
+.git/
+.gitignore
+.idea/
+.claude/
+.superpowers/
+.forgejo/
+
+# Local data and secrets
+data/
+*.db
+.env
+
+# Docs and notes (not needed in build context)
+docs/
+*.md
+!server/migrations/**/*.md
