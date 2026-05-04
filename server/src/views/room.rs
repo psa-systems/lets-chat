@@ -17,6 +17,9 @@ pub struct MessageView {
     /// HH:MM peer-read timestamp shown under this message in a DM, or None.
     /// Only one own-authored message in a DM should have this set at a time.
     pub seen_caption: Option<String>,
+    /// True when this message follows another message from the same author
+    /// within MESSAGE_GROUPING_WINDOW. Hides the username/timestamp header.
+    pub is_follow_up: bool,
 }
 
 pub struct ReactionView {
