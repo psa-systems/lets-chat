@@ -8,10 +8,46 @@
 # Shares the rustup volume with dev/cargo so rustfmt and clippy components are
 # available without re-downloading.
 #
+# When invoked with `cargo run` from a graphical session the wrapper also
+# forwards the X11 / Wayland display, the LETS_CHAT_SERVER_URL env, and switches
+# to host networking so the GUI window renders and so localhost dev servers are
+# reachable from inside the container.
+#
 # Note: runs as root because apt-get requires it. Build artifacts live in the
 # named volume mounted at /cargo-target, so host filesystem ownership is
 # unaffected; alternating with dev/cargo (which runs as host user) is fine.
 set -euo pipefail
+
+EXTRA_ARGS=()
+
+# Forward LETS_CHAT_SERVER_URL so the desktop binary opens the right window.
+if [ -n "${LETS_CHAT_SERVER_URL:-}" ]; then
+    EXTRA_ARGS+=(-e "LETS_CHAT_SERVER_URL=${LETS_CHAT_SERVER_URL}")
+fi
+
+# Display forwarding for `cargo run`. Detected via DISPLAY / WAYLAND_DISPLAY.
+# Host networking is also enabled so the binary can reach localhost dev
+# servers and so X11 over TCP works without extra plumbing.
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    EXTRA_ARGS+=(--network=host --ipc=host)
+    if [ -n "${DISPLAY:-}" ]; then
+        EXTRA_ARGS+=(-e "DISPLAY=${DISPLAY}")
+        if [ -d /tmp/.X11-unix ]; then
+            EXTRA_ARGS+=(-v /tmp/.X11-unix:/tmp/.X11-unix:rw)
+        fi
+        if [ -n "${XAUTHORITY:-}" ] && [ -f "${XAUTHORITY}" ]; then
+            EXTRA_ARGS+=(-v "${XAUTHORITY}:${XAUTHORITY}:ro" -e "XAUTHORITY=${XAUTHORITY}")
+        fi
+    fi
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        EXTRA_ARGS+=(
+            -e "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}"
+            -e "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}"
+            -v "${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR}:rw"
+        )
+    fi
+fi
+
 docker run --rm --init \
     -v "$PWD:/work" \
     -w /work \
@@ -23,5 +59,6 @@ docker run --rm --init \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     -e RUSTUP_HOME=/usr/local/rustup \
+    "${EXTRA_ARGS[@]}" \
     rust:1.88-slim-bookworm \
     bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libssl-dev > /dev/null && (cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null) && cargo "$@"' -- "$@"
