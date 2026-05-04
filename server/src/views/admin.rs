@@ -9,6 +9,7 @@ pub struct AdminUserView {
     pub username: String,
     pub role: String,
     pub is_banned: bool,
+    pub is_muted: bool,
 }
 
 /// Per-row projection for the invites admin table.
@@ -24,8 +25,17 @@ pub struct AdminInviteView {
 pub struct AdminRoomView {
     pub id: i64,
     pub name: String,
+    pub topic: Option<String>,
+    pub room_type: String,
+    pub invite_code: Option<String>,
     pub members: i64,
     pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/room_row.html")]
+pub struct RoomRowFragment<'a> {
+    pub r: &'a AdminRoomView,
 }
 
 #[derive(Template)]

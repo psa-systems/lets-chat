@@ -21,6 +21,7 @@ mod home;
 mod reactions;
 mod room;
 mod search;
+mod settings;
 mod ws;
 
 /// Build the sidebar's room and DM-peer view-models for a given user, with
@@ -104,6 +105,10 @@ pub fn build_router(state: AppState) -> Router {
             post(reactions::toggle_reaction),
         )
         .route("/search", get(search::get_search))
+        .route(
+            "/settings",
+            get(settings::get_settings).post(settings::post_settings),
+        )
         .route("/ws", get(ws::ws_handler))
         .merge(admin::router())
         .nest_service("/assets", ServeDir::new("server/assets"))
