@@ -5,6 +5,7 @@ pub mod home;
 pub mod layout;
 pub mod room;
 pub mod search;
+pub mod settings;
 pub mod ws_fragments;
 
 use askama::Template;

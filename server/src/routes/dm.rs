@@ -39,7 +39,18 @@ pub async fn get_dm(
         Some(r) => r,
         None => {
             let dm_name = format!("@{}", peer.username);
-            db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?
+            let r = db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
+            // Notify both parties so their sidebars pick up the new DM live.
+            // Each user receives RoomMemberAdded for their own user_id; the WS
+            // handler then re-renders that user's sidebar OOB.
+            for member_id in [&user.id, &peer.id] {
+                let event = ChatEvent::RoomMemberAdded {
+                    room_id: r.id,
+                    user_id: member_id.clone(),
+                };
+                state.hub.broadcast_to_user(member_id, &event);
+            }
+            r
         }
     };
     let room_id = room.id;
@@ -67,6 +78,7 @@ pub async fn get_dm(
             resolved
         };
         let can_edit = m.user_id == user.id;
+        let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
             .await?
             .into_iter()
@@ -78,12 +90,15 @@ pub async fn get_dm(
             .collect();
         messages.push(MessageView {
             id: m.id,
+            user_id: m.user_id.clone(),
             username,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
             reactions,
             can_edit,
+            can_delete,
+            viewer_id: user.id.clone(),
         });
     }
 
@@ -111,7 +126,7 @@ pub async fn get_dm(
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         messages: &messages,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
     };
     html(&page)
 }

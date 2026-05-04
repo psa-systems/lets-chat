@@ -33,7 +33,7 @@ pub struct RegisterForm {
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
     let page = LoginPage {
         error: None,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
     };
     html(&page)
 }
@@ -85,7 +85,7 @@ pub async fn post_login(
 pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppError> {
     let page = RegisterPage {
         error: None,
-        asset_version: state.asset_version,
+        asset_version: &state.asset_version,
     };
     html(&page)
 }
@@ -194,12 +194,12 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
         match page {
             FormPage::Login => LoginPage {
                 error: Some(msg),
-                asset_version: state.asset_version,
+                asset_version: &state.asset_version,
             }
             .render(),
             FormPage::Register => RegisterPage {
                 error: Some(msg),
-                asset_version: state.asset_version,
+                asset_version: &state.asset_version,
             }
             .render(),
         }

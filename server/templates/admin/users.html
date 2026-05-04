@@ -10,23 +10,12 @@
       <th class="py-2">Username</th>
       <th class="py-2">Role</th>
       <th class="py-2">Status</th>
-      <th class="py-2 text-right">Action</th>
+      <th class="py-2 text-right">Actions</th>
     </tr>
   </thead>
   <tbody>
     {% for u in users %}
-    <tr id="user-{{ u.id }}" class="border-t border-slate-200">
-      <td class="py-1">{{ u.username }}</td>
-      <td class="py-1">{{ u.role }}</td>
-      <td class="py-1">{% if u.is_banned %}Banned{% else %}Active{% endif %}</td>
-      <td class="py-1 text-right">
-        {% if u.is_banned %}
-        <button hx-post="/admin/users/{{ u.id }}/unban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Unban</button>
-        {% else %}
-        <button hx-post="/admin/users/{{ u.id }}/ban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">Ban</button>
-        {% endif %}
-      </td>
-    </tr>
+    {% include "admin/user_row.html" %}
     {% endfor %}
   </tbody>
 </table>

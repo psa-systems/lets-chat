@@ -1,0 +1,31 @@
+<tr id="room-{{ r.id }}" class="border-t border-slate-200 align-top">
+  <td class="py-2">
+    <details>
+      <summary class="cursor-pointer">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-slate-400 text-xs">{{ topic }}</span>{% endif %}</summary>
+      <form hx-post="/admin/rooms/{{ r.id }}/edit" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex flex-col gap-1">
+        <input name="name" value="{{ r.name }}" required maxlength="64" class="border rounded px-2 py-1 text-xs">
+        <input name="topic" value="{% if let Some(topic) = r.topic.as_ref() %}{{ topic }}{% endif %}" maxlength="200" placeholder="Topic" class="border rounded px-2 py-1 text-xs">
+        <button type="submit" class="text-blue-600 hover:underline text-xs self-start">Save</button>
+      </form>
+      {% if r.room_type == "private" %}
+      <form hx-post="/admin/rooms/{{ r.id }}/invite" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex gap-1">
+        <input name="username" required placeholder="Username" class="border rounded px-2 py-1 text-xs">
+        <button type="submit" class="text-blue-600 hover:underline text-xs">Invite</button>
+      </form>
+      {% endif %}
+    </details>
+  </td>
+  <td class="py-2 text-xs">{{ r.room_type }}</td>
+  <td class="py-2 text-xs">{{ r.members }}</td>
+  <td class="py-2 text-xs">
+    {% if let Some(code) = r.invite_code.as_ref() %}
+    <span class="font-mono">/invite/{{ code }}</span>
+    <button hx-post="/admin/rooms/{{ r.id }}/regenerate" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline ml-1">Regen</button>
+    {% else %}
+    <span class="text-slate-400">-</span>
+    {% endif %}
+  </td>
+  <td class="py-2 text-right text-xs whitespace-nowrap">
+    <button hx-post="/admin/rooms/{{ r.id }}/archive" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" hx-confirm="Delete room {{ r.name }}? This deletes all its messages." class="text-red-600 hover:underline">Delete</button>
+  </td>
+</tr>
