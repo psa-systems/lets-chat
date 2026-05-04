@@ -1,4 +1,36 @@
+use lets_chat::db;
 use lets_chat::db::chat::{is_follow_up_of, MESSAGE_GROUPING_WINDOW_SECONDS};
+use sqlx::SqlitePool;
+
+async fn setup_pools() -> (SqlitePool, SqlitePool) {
+    let auth_pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("auth pool");
+    for sql in [
+        include_str!("../migrations/auth/0001_create_tables.sql"),
+        include_str!("../migrations/auth/0002_read_receipts.sql"),
+    ] {
+        sqlx::raw_sql(sql).execute(&auth_pool).await.unwrap();
+    }
+
+    let chat_pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("chat pool");
+    for sql in [
+        include_str!("../migrations/chat/0001_create_tables.sql"),
+        include_str!("../migrations/chat/0002_moderation.sql"),
+        include_str!("../migrations/chat/0003_dms.sql"),
+        include_str!("../migrations/chat/0004_message_editing.sql"),
+        include_str!("../migrations/chat/0005_private_rooms.sql"),
+        include_str!("../migrations/chat/0006_read_receipts.sql"),
+        include_str!("../migrations/chat/0007_reactions.sql"),
+        include_str!("../migrations/chat/0008_search.sql"),
+    ] {
+        sqlx::raw_sql(sql).execute(&chat_pool).await.unwrap();
+    }
+
+    (auth_pool, chat_pool)
+}
 
 #[test]
 fn follow_up_when_same_user_within_window() {
@@ -40,4 +72,116 @@ fn not_follow_up_when_no_prior() {
 #[test]
 fn window_is_five_minutes() {
     assert_eq!(MESSAGE_GROUPING_WINDOW_SECONDS, 300);
+}
+
+#[tokio::test]
+async fn loader_marks_consecutive_same_user_as_follow_ups() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    let _ = db::chat::insert_message(&chat_pool, room_id, &user_id, "first")
+        .await
+        .unwrap();
+    let _ = db::chat::insert_message(&chat_pool, room_id, &user_id, "second")
+        .await
+        .unwrap();
+    let _ = db::chat::insert_message(&chat_pool, room_id, &user_id, "third")
+        .await
+        .unwrap();
+
+    let raw = db::chat::list_messages(&chat_pool, room_id).await.unwrap();
+    assert_eq!(raw.len(), 3);
+    let mut prev: Option<(String, String)> = None;
+    let mut flags: Vec<bool> = Vec::new();
+    for m in &raw {
+        let is_fu = is_follow_up_of(
+            prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+            (&m.user_id, &m.created_at),
+        );
+        prev = Some((m.user_id.clone(), m.created_at.clone()));
+        flags.push(is_fu);
+    }
+    assert_eq!(flags, vec![false, true, true]);
+}
+
+#[tokio::test]
+async fn loader_breaks_grouping_on_different_user() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+    let alice = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let bob = db::auth::create_user(&auth_pool, "bob", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    db::chat::insert_message(&chat_pool, room_id, &alice, "a1").await.unwrap();
+    db::chat::insert_message(&chat_pool, room_id, &bob, "b1").await.unwrap();
+    db::chat::insert_message(&chat_pool, room_id, &alice, "a2").await.unwrap();
+
+    let raw = db::chat::list_messages(&chat_pool, room_id).await.unwrap();
+    let mut prev: Option<(String, String)> = None;
+    let mut flags: Vec<bool> = Vec::new();
+    for m in &raw {
+        flags.push(is_follow_up_of(
+            prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+            (&m.user_id, &m.created_at),
+        ));
+        prev = Some((m.user_id.clone(), m.created_at.clone()));
+    }
+    assert_eq!(flags, vec![false, false, false]);
+}
+
+#[tokio::test]
+async fn prior_message_in_room_returns_immediately_prior() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    let id1 = db::chat::insert_message(&chat_pool, room_id, &user_id, "first")
+        .await
+        .unwrap();
+    let id2 = db::chat::insert_message(&chat_pool, room_id, &user_id, "second")
+        .await
+        .unwrap();
+
+    let prior_of_2 = db::chat::prior_message_in_room(&chat_pool, room_id, id2)
+        .await
+        .unwrap();
+    assert_eq!(prior_of_2.unwrap().id, id1);
+
+    let prior_of_1 = db::chat::prior_message_in_room(&chat_pool, room_id, id1)
+        .await
+        .unwrap();
+    assert!(prior_of_1.is_none());
+}
+
+#[tokio::test]
+async fn next_message_in_room_returns_immediately_next() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    let id1 = db::chat::insert_message(&chat_pool, room_id, &user_id, "first")
+        .await
+        .unwrap();
+    let id2 = db::chat::insert_message(&chat_pool, room_id, &user_id, "second")
+        .await
+        .unwrap();
+
+    let next_of_1 = db::chat::next_message_in_room(&chat_pool, room_id, id1)
+        .await
+        .unwrap();
+    assert_eq!(next_of_1.unwrap().id, id2);
+
+    let next_of_2 = db::chat::next_message_in_room(&chat_pool, room_id, id2)
+        .await
+        .unwrap();
+    assert!(next_of_2.is_none());
 }
