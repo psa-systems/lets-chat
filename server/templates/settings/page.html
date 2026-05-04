@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - lets-chat{% endblock %}
+
+{% block main %}
+<header class="border-b border-slate-200 px-4 py-2">
+  <h1 class="font-semibold">Settings</h1>
+</header>
+<section class="p-6 max-w-xl">
+  {% if saved %}
+  <div class="mb-4 p-2 bg-green-100 text-green-800 text-sm rounded">Saved.</div>
+  {% endif %}
+  <form method="post" action="/settings" class="space-y-4">
+    <div>
+      <h2 class="font-medium mb-2">Account</h2>
+      <dl class="text-sm text-slate-700 space-y-1">
+        <div class="flex gap-2"><dt class="w-32 text-slate-500">Username</dt><dd>{{ user.username }}</dd></div>
+        <div class="flex gap-2"><dt class="w-32 text-slate-500">Role</dt><dd>{{ user.role }}</dd></div>
+      </dl>
+    </div>
+    <div>
+      <h2 class="font-medium mb-2">Preferences</h2>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
+        <span>Send and receive read receipts</span>
+      </label>
+    </div>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save</button>
+  </form>
+</section>
+{% endblock %}

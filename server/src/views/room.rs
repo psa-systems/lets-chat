@@ -5,12 +5,15 @@ use crate::views::layout::{SidebarPeer, SidebarRoom};
 
 pub struct MessageView {
     pub id: i64,
+    pub user_id: String,
     pub username: String,
     pub created_at: String,
     pub edited_at: Option<String>,
     pub body: String,
     pub reactions: Vec<ReactionView>,
     pub can_edit: bool,
+    pub can_delete: bool,
+    pub viewer_id: String,
 }
 
 pub struct ReactionView {
@@ -47,7 +50,6 @@ pub struct EditFormFragment<'a> {
 #[template(path = "room/message.html")]
 pub struct SingleMessageFragment<'a> {
     pub message: &'a MessageView,
-    pub can_edit: bool,
 }
 
 #[derive(Template)]

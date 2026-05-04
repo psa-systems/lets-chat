@@ -67,6 +67,7 @@ pub async fn get_dm(
             resolved
         };
         let can_edit = m.user_id == user.id;
+        let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
             .await?
             .into_iter()
@@ -78,12 +79,15 @@ pub async fn get_dm(
             .collect();
         messages.push(MessageView {
             id: m.id,
+            user_id: m.user_id.clone(),
             username,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
             reactions,
             can_edit,
+            can_delete,
+            viewer_id: user.id.clone(),
         });
     }
 
