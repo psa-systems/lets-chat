@@ -110,6 +110,7 @@ pub async fn get_dm(
             can_delete,
             viewer_id: user.id.clone(),
             seen_caption: None,
+            is_follow_up: false,
         });
     }
 

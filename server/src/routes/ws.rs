@@ -367,6 +367,7 @@ async fn render_new_message(
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
+        is_follow_up: false,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -408,6 +409,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
+        is_follow_up: false,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
