@@ -10,5 +10,5 @@ pub struct AppState {
     pub chat: SqlitePool,
     pub settings: SqlitePool,
     pub hub: Arc<Hub>,
-    pub asset_version: &'static str,
+    pub asset_version: String,
 }
