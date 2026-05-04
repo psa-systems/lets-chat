@@ -39,7 +39,18 @@ pub async fn get_dm(
         Some(r) => r,
         None => {
             let dm_name = format!("@{}", peer.username);
-            db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?
+            let r = db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
+            // Notify both parties so their sidebars pick up the new DM live.
+            // Each user receives RoomMemberAdded for their own user_id; the WS
+            // handler then re-renders that user's sidebar OOB.
+            for member_id in [&user.id, &peer.id] {
+                let event = ChatEvent::RoomMemberAdded {
+                    room_id: r.id,
+                    user_id: member_id.clone(),
+                };
+                state.hub.broadcast_to_user(member_id, &event);
+            }
+            r
         }
     };
     let room_id = room.id;

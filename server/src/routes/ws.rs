@@ -11,10 +11,13 @@ use serde::Deserialize;
 
 use crate::auth::OptionalUser;
 use crate::db;
-use crate::models::User;
+use crate::models::{self, User};
 use crate::state::AppState;
-use crate::views::room::ReactionView;
-use crate::views::ws_fragments::{render_event, ReactionUpdateFragment, ReadReceiptFragment};
+use crate::views::room::{MessageView, ReactionView};
+use crate::views::ws_fragments::{
+    render_event, EditedMessageFragment, NewMessageFragment, ReactionUpdateFragment,
+    ReadReceiptFragment, SidebarUpdateFragment,
+};
 use crate::ws::events::ChatEvent;
 
 #[derive(Deserialize)]
@@ -31,8 +34,6 @@ pub async fn ws_handler(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
 ) -> impl IntoResponse {
-    // The inject_user middleware has already validated the session cookie and
-    // filtered banned accounts; just project to the connection-local fields.
     let Some(user) = user else {
         return (http::StatusCode::UNAUTHORIZED, "no session").into_response();
     };
@@ -45,13 +46,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         .clone()
         .unwrap_or_else(|| user.username.clone());
     let (conn_id, mut rx) = state.hub.connect(&user.id, &username);
-    // Track which rooms this connection has been authorized to subscribe to so
-    // typing pings can be gated to authorized rooms only.
     let subscribed: Mutex<HashSet<i64>> = Mutex::new(HashSet::new());
     let (mut tx, mut rx_ws) = socket.split();
 
     let send_state = state.clone();
-    let send_user_id = user.id.clone();
+    let send_user = user.clone();
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
@@ -61,15 +60,27 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                     match evt {
                         Ok(e) => {
                             let rendered = match &e {
+                                ChatEvent::NewMessage { message, .. } => {
+                                    render_new_message(&send_state, message, &send_user).await
+                                }
+                                ChatEvent::MessageEdited { message_id, .. } => {
+                                    render_edited_message(&send_state, *message_id, &send_user).await
+                                }
                                 ChatEvent::ReactionAdded { message_id, .. }
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
-                                    render_reaction_bar(&send_state, *message_id, &send_user_id).await
+                                    render_reaction_bar(&send_state, *message_id, &send_user.id).await
                                 }
                                 ChatEvent::DmRead { user_id, room_id, .. } => {
-                                    // Per-user filter: only the badge owner's
-                                    // tabs receive the clear fragment.
-                                    if user_id == &send_user_id {
-                                        render_read_receipt(&send_state, *room_id, &send_user_id).await
+                                    if user_id == &send_user.id {
+                                        render_read_receipt(&send_state, *room_id, &send_user.id).await
+                                    } else {
+                                        None
+                                    }
+                                }
+                                ChatEvent::RoomMemberAdded { user_id, .. }
+                                | ChatEvent::RoomMemberRemoved { user_id, .. } => {
+                                    if user_id == &send_user.id {
+                                        render_sidebar(&send_state, &send_user).await
                                     } else {
                                         None
                                     }
@@ -101,7 +112,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
                     match frame {
                         ClientFrame::Subscribe { room_id } => {
-                            // Public rooms: allow. DM/private: verify membership.
                             let allowed = match db::chat::get_room(&state.chat, room_id).await {
                                 Ok(Some(r)) if r.room_type == "dm" || r.room_type == "private" => {
                                     db::chat::is_room_member(&state.chat, room_id, &user.id)
@@ -117,10 +127,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             }
                         }
                         ClientFrame::Typing { room_id } => {
-                            // Only forward typing pings for rooms the connection
-                            // is already authorized to subscribe to. This prevents
-                            // a client from leaking typing presence into rooms
-                            // they cannot view.
                             if subscribed.lock().unwrap().contains(&room_id) {
                                 state.hub.notify_typing(conn_id, room_id);
                             }
@@ -137,11 +143,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     send.abort();
 }
 
-/// Render the badge-clearing fragment for the badge owner. For non-DM rooms
-/// the badge id is `unread-room-{room_id}`; for DM rooms it is
-/// `unread-dm-{peer_user_id}` where peer is the OTHER member from the badge
-/// owner's perspective. Returns None if the room cannot be resolved or the
-/// caller is not a member of a DM.
 async fn render_read_receipt(state: &AppState, room_id: i64, user_id: &str) -> Option<String> {
     let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
     if room.room_type == "dm" {
@@ -165,10 +166,6 @@ async fn render_read_receipt(state: &AppState, room_id: i64, user_id: &str) -> O
     }
 }
 
-/// Render the per-user reaction-bar fragment for a WS push. Returns None if
-/// the message has been deleted or the DB query fails. The result is an
-/// out-of-band swap that updates the corresponding `#reactions-{id}` div in
-/// every viewer's tab with their own `viewer_reacted` state.
 async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
     let counts = db::chat::list_reactions(&state.chat, message_id, user_id)
         .await
@@ -184,6 +181,88 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
     ReactionUpdateFragment {
         message_id,
         reactions: &reactions,
+    }
+    .render()
+    .ok()
+}
+
+/// Build a MessageView for a freshly broadcast message rendered for `viewer`.
+/// Reactions are empty (a brand-new message has none); can_edit/can_delete
+/// reflect viewer's role and authorship.
+async fn render_new_message(
+    _state: &AppState,
+    message: &models::Message,
+    viewer: &User,
+) -> Option<String> {
+    let can_edit = message.user_id == viewer.id;
+    let can_delete =
+        message.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let view = MessageView {
+        id: message.id,
+        user_id: message.user_id.clone(),
+        username: message.author_name.clone(),
+        created_at: message.created_at.clone(),
+        edited_at: message.edited_at.clone(),
+        body: message.body.clone(),
+        reactions: Vec::new(),
+        can_edit,
+        can_delete,
+        viewer_id: viewer.id.clone(),
+    };
+    NewMessageFragment { message: &view }.render().ok()
+}
+
+/// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
+/// Loading from the DB ensures the broadcast picks up the canonical body and
+/// edited_at timestamp rather than trusting the event payload.
+async fn render_edited_message(
+    state: &AppState,
+    message_id: i64,
+    viewer: &User,
+) -> Option<String> {
+    let m = db::chat::get_message(&state.chat, message_id).await.ok()??;
+    let username = db::auth::find_user_by_id(&state.auth, &m.user_id)
+        .await
+        .ok()?
+        .map(|u| u.username)
+        .unwrap_or_else(|| "(unknown)".to_string());
+    let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
+        .await
+        .ok()?;
+    let reactions: Vec<ReactionView> = counts
+        .into_iter()
+        .map(|r| ReactionView {
+            emoji: r.emoji,
+            count: r.count,
+            viewer_reacted: r.reacted_by_me,
+        })
+        .collect();
+    let can_edit = m.user_id == viewer.id;
+    let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let view = MessageView {
+        id: m.id,
+        user_id: m.user_id,
+        username,
+        created_at: m.created_at,
+        edited_at: m.edited_at,
+        body: m.body,
+        reactions,
+        can_edit,
+        can_delete,
+        viewer_id: viewer.id.clone(),
+    };
+    EditedMessageFragment { message: &view }.render().ok()
+}
+
+/// Render a full sidebar OOB replacement for `viewer` reflecting current
+/// room/DM membership and unread counts. Used to live-update the sidebar
+/// when membership changes (new DM, room kick, room invite).
+async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(state, viewer).await.ok()?;
+    SidebarUpdateFragment {
+        user: viewer,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
     }
     .render()
     .ok()
