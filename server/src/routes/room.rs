@@ -248,7 +248,10 @@ pub async fn get_single_message(
         can_delete,
         viewer_id: user.id.clone(),
     };
-    let fragment = SingleMessageFragment { message: &view, oob: false };
+    let fragment = SingleMessageFragment {
+        message: &view,
+        oob: false,
+    };
     html(&fragment)
 }
 
@@ -307,7 +310,10 @@ pub async fn patch_message(
         can_delete: true,
         viewer_id: user.id.clone(),
     };
-    let fragment = SingleMessageFragment { message: &view, oob: false };
+    let fragment = SingleMessageFragment {
+        message: &view,
+        oob: false,
+    };
     html(&fragment)
 }
 

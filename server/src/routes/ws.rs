@@ -215,12 +215,10 @@ async fn render_new_message(
 /// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
 /// Loading from the DB ensures the broadcast picks up the canonical body and
 /// edited_at timestamp rather than trusting the event payload.
-async fn render_edited_message(
-    state: &AppState,
-    message_id: i64,
-    viewer: &User,
-) -> Option<String> {
-    let m = db::chat::get_message(&state.chat, message_id).await.ok()??;
+async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User) -> Option<String> {
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await
+        .ok()??;
     let username = db::auth::find_user_by_id(&state.auth, &m.user_id)
         .await
         .ok()?
