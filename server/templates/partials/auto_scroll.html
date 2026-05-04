@@ -1,0 +1,40 @@
+<script>
+(function() {
+  var messages = document.getElementById('messages');
+  if (!messages) return;
+  var slack = 50;
+  var wasAtBottom = true;
+
+  function isAtBottom() {
+    return messages.scrollTop + messages.clientHeight >= messages.scrollHeight - slack;
+  }
+  function scrollToBottom() {
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  // Track scroll position so we know whether the user is parked at the bottom.
+  messages.addEventListener('scroll', function() {
+    wasAtBottom = isAtBottom();
+  });
+
+  // Initial paint: jump to the newest message.
+  scrollToBottom();
+  wasAtBottom = true;
+
+  // Capture stickiness BEFORE htmx mutates the DOM, then restore after.
+  // htmx:beforeSwap fires for all swaps (regular + OOB) on the body level.
+  document.body.addEventListener('htmx:beforeSwap', function() {
+    wasAtBottom = isAtBottom();
+  });
+  document.body.addEventListener('htmx:afterSwap', function() {
+    if (wasAtBottom) scrollToBottom();
+  });
+  // OOB swaps (new messages over WS) take a separate event path.
+  document.body.addEventListener('htmx:oobBeforeSwap', function() {
+    wasAtBottom = isAtBottom();
+  });
+  document.body.addEventListener('htmx:oobAfterSwap', function() {
+    if (wasAtBottom) scrollToBottom();
+  });
+})();
+</script>
