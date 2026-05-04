@@ -12,9 +12,10 @@ docker run --rm --init \
     -w /work \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
     -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
-    -v lets-chat-rewrite-target:/work/target \
+    -v lets-chat-rewrite-target:/cargo-target \
     -v lets-chat-rewrite-rustup:/usr/local/rustup \
     -e CARGO_HOME=/usr/local/cargo \
+    -e CARGO_TARGET_DIR=/cargo-target \
     -e RUSTUP_HOME=/usr/local/rustup \
     rust:1.88-slim-bookworm \
     bash -c 'cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null; exec cargo "$@"' -- "$@"
