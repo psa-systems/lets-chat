@@ -75,7 +75,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     )
                                     .await
                                 }
-                                ChatEvent::MessageEdited { message_id, .. } => {
+                                ChatEvent::MessageEdited { message_id, .. }
+                                | ChatEvent::MessageRegrouped { message_id, .. } => {
                                     render_edited_message(&send_state, *message_id, &send_user).await
                                 }
                                 ChatEvent::ReactionAdded { message_id, .. }
@@ -313,6 +314,25 @@ async fn render_new_message_or_bump(
 ) -> Option<String> {
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
     if is_subscribed {
+        // The viewer has the room open in the foreground, so the message is
+        // effectively read on arrival. Advance their last-read watermark and
+        // broadcast a DmRead so the author sees a live "Seen" update (in DMs)
+        // and any other tabs of this user clear their sidebar badge. Skip
+        // when the viewer authored the message - their own send path already
+        // re-marks read state.
+        if message.user_id != viewer.id {
+            if let Ok(read_at) =
+                db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
+            {
+                let event = ChatEvent::DmRead {
+                    room_id: message.room_id,
+                    user_id: viewer.id.clone(),
+                    last_read_message_id: message.id,
+                    read_at,
+                };
+                state.hub.broadcast_to_room(message.room_id, &event);
+            }
+        }
         return render_new_message(state, message, viewer).await;
     }
     if message.user_id == viewer.id {
@@ -348,13 +368,23 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
 /// Reactions are empty (a brand-new message has none); can_edit/can_delete
 /// reflect viewer's role and authorship.
 async fn render_new_message(
-    _state: &AppState,
+    state: &AppState,
     message: &models::Message,
     viewer: &User,
 ) -> Option<String> {
     let can_edit = message.user_id == viewer.id;
     let can_delete =
         message.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let prior = db::chat::prior_message_in_room(&state.chat, message.room_id, message.id)
+        .await
+        .ok()
+        .flatten();
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (message.user_id.as_str(), message.created_at.as_str()),
+    );
     let view = MessageView {
         id: message.id,
         user_id: message.user_id.clone(),
@@ -367,6 +397,8 @@ async fn render_new_message(
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
+        is_follow_up,
+        show_unread_divider: false,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -394,6 +426,16 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             viewer_reacted: r.reacted_by_me,
         })
         .collect();
+    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id)
+        .await
+        .ok()
+        .flatten();
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (m.user_id.as_str(), m.created_at.as_str()),
+    );
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
     let view = MessageView {
@@ -408,6 +450,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
+        is_follow_up,
+        show_unread_divider: false,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }

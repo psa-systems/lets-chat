@@ -90,6 +90,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         ChatEvent::UserStoppedTyping { .. } => StoppedTypingFragment.render().ok(),
         ChatEvent::NewMessage { .. }
         | ChatEvent::MessageEdited { .. }
+        | ChatEvent::MessageRegrouped { .. }
         | ChatEvent::ReactionAdded { .. }
         | ChatEvent::ReactionRemoved { .. }
         | ChatEvent::RoomMemberAdded { .. }
