@@ -2,6 +2,34 @@ use sqlx::Row;
 
 use crate::models::{Reaction, Room, SearchResult};
 
+/// Two messages from the same author within this window are visually grouped:
+/// the second is rendered as a "follow-up" (no username/timestamp header).
+pub const MESSAGE_GROUPING_WINDOW_SECONDS: i64 = 300;
+
+/// Pure predicate: would `(curr_user, curr_created_at)` render as a follow-up
+/// of the immediately-prior message `(prev_user, prev_created_at)`?
+///
+/// Times are SQLite "YYYY-MM-DD HH:MM:SS" UTC strings. Returns `false` when
+/// `prior` is `None` (first message in the thread).
+pub fn is_follow_up_of(prior: Option<(&str, &str)>, curr: (&str, &str)) -> bool {
+    let Some((prev_user, prev_at)) = prior else {
+        return false;
+    };
+    if prev_user != curr.0 {
+        return false;
+    }
+    let fmt = "%Y-%m-%d %H:%M:%S";
+    let Ok(prev_dt) = chrono::NaiveDateTime::parse_from_str(prev_at, fmt) else {
+        return false;
+    };
+    let Ok(curr_dt) = chrono::NaiveDateTime::parse_from_str(curr.1, fmt) else {
+        return false;
+    };
+    let delta = curr_dt - prev_dt;
+    delta >= chrono::Duration::zero()
+        && delta <= chrono::Duration::seconds(MESSAGE_GROUPING_WINDOW_SECONDS)
+}
+
 /// Raw message row from the chat DB — contains user_id but no author_name.
 /// The server fn layer resolves the display name from the auth DB.
 #[derive(Debug, Clone)]
