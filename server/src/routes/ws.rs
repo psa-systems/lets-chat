@@ -314,6 +314,25 @@ async fn render_new_message_or_bump(
 ) -> Option<String> {
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
     if is_subscribed {
+        // The viewer has the room open in the foreground, so the message is
+        // effectively read on arrival. Advance their last-read watermark and
+        // broadcast a DmRead so the author sees a live "Seen" update (in DMs)
+        // and any other tabs of this user clear their sidebar badge. Skip
+        // when the viewer authored the message - their own send path already
+        // re-marks read state.
+        if message.user_id != viewer.id {
+            if let Ok(read_at) =
+                db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
+            {
+                let event = ChatEvent::DmRead {
+                    room_id: message.room_id,
+                    user_id: viewer.id.clone(),
+                    last_read_message_id: message.id,
+                    read_at,
+                };
+                state.hub.broadcast_to_room(message.room_id, &event);
+            }
+        }
         return render_new_message(state, message, viewer).await;
     }
     if message.user_id == viewer.id {
