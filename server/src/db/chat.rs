@@ -120,6 +120,65 @@ pub async fn list_messages(
         .collect())
 }
 
+/// Fetch the most recent non-deleted message in `room_id` strictly before
+/// `before_id` (by id). Returns `None` if `before_id` is the first message in
+/// the room. Used to compute `is_follow_up` for a message rendered in
+/// isolation (POST handler and WS new-message broadcast).
+pub async fn prior_message_in_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    before_id: i64,
+) -> Result<Option<RawMessage>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at \
+         FROM messages \
+         WHERE room_id = ? AND id < ? AND deleted_at IS NULL \
+         ORDER BY id DESC LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(before_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| RawMessage {
+        id: row.get("id"),
+        room_id: row.get("room_id"),
+        user_id: row.get("user_id"),
+        body: row.get("body"),
+        created_at: row.get("created_at"),
+        edited_at: row.get("edited_at"),
+    }))
+}
+
+/// Fetch the next non-deleted message in `room_id` strictly after `after_id`
+/// (by id). Returns `None` if `after_id` is the last message in the room.
+/// Used by the delete handler to repair grouping when a header is removed.
+pub async fn next_message_in_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    after_id: i64,
+) -> Result<Option<RawMessage>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at \
+         FROM messages \
+         WHERE room_id = ? AND id > ? AND deleted_at IS NULL \
+         ORDER BY id ASC LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(after_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| RawMessage {
+        id: row.get("id"),
+        room_id: row.get("room_id"),
+        user_id: row.get("user_id"),
+        body: row.get("body"),
+        created_at: row.get("created_at"),
+        edited_at: row.get("edited_at"),
+    }))
+}
+
 /// Fetch a single message by ID. Returns None if soft-deleted.
 pub async fn get_message(
     pool: &sqlx::SqlitePool,
