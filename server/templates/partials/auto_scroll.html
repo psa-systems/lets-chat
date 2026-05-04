@@ -17,9 +17,16 @@
     wasAtBottom = isAtBottom();
   });
 
-  // Initial paint: jump to the newest message.
-  scrollToBottom();
-  wasAtBottom = true;
+  // Initial paint: anchor at the unread divider if there is one, otherwise
+  // jump to the newest message.
+  var divider = messages.querySelector('[data-unread-divider]');
+  if (divider) {
+    divider.scrollIntoView({ block: 'start' });
+    wasAtBottom = isAtBottom();
+  } else {
+    scrollToBottom();
+    wasAtBottom = true;
+  }
 
   // Capture stickiness BEFORE htmx mutates the DOM, then restore after.
   // htmx:beforeSwap fires for all swaps (regular + OOB) on the body level.

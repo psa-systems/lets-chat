@@ -1,3 +1,10 @@
+{% if message.show_unread_divider %}
+<div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-red-600">
+  <span class="h-px flex-1 bg-red-300"></span>
+  <span>Unread messages</span>
+  <span class="h-px flex-1 bg-red-300"></span>
+</div>
+{% endif %}
 <div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
   {% if !message.is_follow_up %}
   <div class="flex items-baseline gap-2">
