@@ -16,6 +16,13 @@ pub enum ChatEvent {
         new_body: String,
         edited_at: String,
     },
+    /// Emitted by the delete handler when removing a header message exposes a
+    /// follow-up that should be promoted to a header. Recipients re-render the
+    /// referenced message with the current grouping flag.
+    MessageRegrouped {
+        message_id: i64,
+        room_id: i64,
+    },
     MessageDeleted {
         message_id: i64,
         room_id: i64,

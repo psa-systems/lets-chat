@@ -161,6 +161,76 @@ async fn prior_message_in_room_returns_immediately_prior() {
 }
 
 #[tokio::test]
+async fn delete_header_marks_next_for_promotion() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    let id1 = db::chat::insert_message(&chat_pool, room_id, &user_id, "first")
+        .await
+        .unwrap();
+    let _id2 = db::chat::insert_message(&chat_pool, room_id, &user_id, "second")
+        .await
+        .unwrap();
+    let _id3 = db::chat::insert_message(&chat_pool, room_id, &user_id, "third")
+        .await
+        .unwrap();
+
+    let target = db::chat::get_message(&chat_pool, id1).await.unwrap().unwrap();
+    let next = db::chat::next_message_in_room(&chat_pool, room_id, id1)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let was_follow_up = is_follow_up_of(
+        Some((target.user_id.as_str(), target.created_at.as_str())),
+        (next.user_id.as_str(), next.created_at.as_str()),
+    );
+    assert!(was_follow_up, "next was a follow-up of the deleted header");
+
+    db::moderation::soft_delete_message(&chat_pool, id1, &user_id)
+        .await
+        .unwrap();
+
+    let new_prior = db::chat::prior_message_in_room(&chat_pool, room_id, next.id)
+        .await
+        .unwrap();
+    let promoted_flag = is_follow_up_of(
+        new_prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (next.user_id.as_str(), next.created_at.as_str()),
+    );
+    assert!(
+        !promoted_flag,
+        "after delete the next message must render as a header"
+    );
+}
+
+#[tokio::test]
+async fn delete_lone_message_no_promote() {
+    let (auth_pool, chat_pool) = setup_pools().await;
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+        .await
+        .unwrap();
+
+    let only = db::chat::insert_message(&chat_pool, room_id, &user_id, "only")
+        .await
+        .unwrap();
+    let next = db::chat::next_message_in_room(&chat_pool, room_id, only)
+        .await
+        .unwrap();
+    assert!(next.is_none(), "no next message in single-message thread");
+
+    db::moderation::soft_delete_message(&chat_pool, only, &user_id)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn next_message_in_room_returns_immediately_next() {
     let (auth_pool, chat_pool) = setup_pools().await;
     let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();

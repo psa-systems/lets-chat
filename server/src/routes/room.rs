@@ -357,7 +357,28 @@ pub async fn delete_message(
     if !can_delete {
         return Err(AppError::Forbidden);
     }
+    // Look up the next message in the room BEFORE soft-deleting so we can
+    // detect whether deleting `m` exposes an orphaned follow-up. Capturing
+    // the prior state of `m` here lets the regrouping decision use the
+    // pre-delete grouping invariant.
+    let next = db::chat::next_message_in_room(&state.chat, m.room_id, message_id).await?;
+
     db::moderation::soft_delete_message(&state.chat, message_id, &user.id).await?;
+
+    if let Some(n) = next.as_ref() {
+        let was_follow_up = db::chat::is_follow_up_of(
+            Some((m.user_id.as_str(), m.created_at.as_str())),
+            (n.user_id.as_str(), n.created_at.as_str()),
+        );
+        if was_follow_up {
+            let regroup = ChatEvent::MessageRegrouped {
+                message_id: n.id,
+                room_id: m.room_id,
+            };
+            state.hub.broadcast_to_room(m.room_id, &regroup);
+        }
+    }
+
     let event = ChatEvent::MessageDeleted {
         message_id,
         room_id: m.room_id,
