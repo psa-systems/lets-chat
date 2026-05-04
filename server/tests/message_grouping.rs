@@ -78,7 +78,9 @@ fn window_is_five_minutes() {
 async fn loader_marks_consecutive_same_user_as_follow_ups() {
     let (auth_pool, chat_pool) = setup_pools().await;
 
-    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
@@ -111,15 +113,23 @@ async fn loader_marks_consecutive_same_user_as_follow_ups() {
 #[tokio::test]
 async fn loader_breaks_grouping_on_different_user() {
     let (auth_pool, chat_pool) = setup_pools().await;
-    let alice = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let alice = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let bob = db::auth::create_user(&auth_pool, "bob", "x").await.unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
 
-    db::chat::insert_message(&chat_pool, room_id, &alice, "a1").await.unwrap();
-    db::chat::insert_message(&chat_pool, room_id, &bob, "b1").await.unwrap();
-    db::chat::insert_message(&chat_pool, room_id, &alice, "a2").await.unwrap();
+    db::chat::insert_message(&chat_pool, room_id, &alice, "a1")
+        .await
+        .unwrap();
+    db::chat::insert_message(&chat_pool, room_id, &bob, "b1")
+        .await
+        .unwrap();
+    db::chat::insert_message(&chat_pool, room_id, &alice, "a2")
+        .await
+        .unwrap();
 
     let raw = db::chat::list_messages(&chat_pool, room_id).await.unwrap();
     let mut prev: Option<(String, String)> = None;
@@ -137,7 +147,9 @@ async fn loader_breaks_grouping_on_different_user() {
 #[tokio::test]
 async fn prior_message_in_room_returns_immediately_prior() {
     let (auth_pool, chat_pool) = setup_pools().await;
-    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
@@ -163,7 +175,9 @@ async fn prior_message_in_room_returns_immediately_prior() {
 #[tokio::test]
 async fn delete_header_marks_next_for_promotion() {
     let (auth_pool, chat_pool) = setup_pools().await;
-    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
@@ -178,7 +192,10 @@ async fn delete_header_marks_next_for_promotion() {
         .await
         .unwrap();
 
-    let target = db::chat::get_message(&chat_pool, id1).await.unwrap().unwrap();
+    let target = db::chat::get_message(&chat_pool, id1)
+        .await
+        .unwrap()
+        .unwrap();
     let next = db::chat::next_message_in_room(&chat_pool, room_id, id1)
         .await
         .unwrap()
@@ -212,7 +229,9 @@ async fn delete_header_marks_next_for_promotion() {
 #[tokio::test]
 async fn delete_lone_message_no_promote() {
     let (auth_pool, chat_pool) = setup_pools().await;
-    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
@@ -233,7 +252,9 @@ async fn delete_lone_message_no_promote() {
 #[tokio::test]
 async fn next_message_in_room_returns_immediately_next() {
     let (auth_pool, chat_pool) = setup_pools().await;
-    let user_id = db::auth::create_user(&auth_pool, "alice", "x").await.unwrap();
+    let user_id = db::auth::create_user(&auth_pool, "alice", "x")
+        .await
+        .unwrap();
     let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
         .await
         .unwrap();
