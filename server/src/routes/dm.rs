@@ -72,10 +72,20 @@ pub async fn get_dm(
         return Err(AppError::Forbidden);
     }
 
+    // Capture the viewer's watermark BEFORE marking-as-read at the end of
+    // the handler so we can render an "Unread messages" divider above the
+    // first message strictly above the watermark.
+    let prior_watermark = db::chat::get_dm_read_state(&state.chat, &user.id, room_id)
+        .await?
+        .map(|s| s.last_read_message_id)
+        .unwrap_or(0);
+
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
     let mut username_cache: HashMap<String, String> = HashMap::new();
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
+    let mut prev: Option<(String, String)> = None;
+    let mut unread_divider_placed = false;
     for m in raw_messages {
         let username = if let Some(name) = username_cache.get(&m.user_id) {
             name.clone()
@@ -98,6 +108,16 @@ pub async fn get_dm(
                 viewer_reacted: r.reacted_by_me,
             })
             .collect();
+        let is_follow_up = db::chat::is_follow_up_of(
+            prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+            (&m.user_id, &m.created_at),
+        );
+        prev = Some((m.user_id.clone(), m.created_at.clone()));
+        let show_unread_divider =
+            !unread_divider_placed && m.id > prior_watermark && m.user_id != user.id;
+        if show_unread_divider {
+            unread_divider_placed = true;
+        }
         messages.push(MessageView {
             id: m.id,
             user_id: m.user_id.clone(),
@@ -110,6 +130,8 @@ pub async fn get_dm(
             can_delete,
             viewer_id: user.id.clone(),
             seen_caption: None,
+            is_follow_up,
+            show_unread_divider,
         });
     }
 
