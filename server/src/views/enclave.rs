@@ -12,6 +12,7 @@ pub struct EnclavePage<'a> {
     pub members: &'a [EnclaveMembership],
     pub rooms: &'a [Room],
     pub can_manage: bool,
+    pub flash_error: Option<&'a str>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -25,6 +26,7 @@ pub struct EnclaveSettingsPage<'a> {
     pub enclave: &'a Enclave,
     pub members: &'a [EnclaveMembership],
     pub can_delete: bool,
+    pub flash_error: Option<&'a str>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -36,6 +38,7 @@ pub struct EnclaveSettingsPage<'a> {
 pub struct DiscoverPage<'a> {
     pub user: &'a User,
     pub enclaves: &'a [Enclave],
+    pub flash_error: Option<&'a str>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],

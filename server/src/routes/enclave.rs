@@ -1,9 +1,15 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::Router;
 use rand::Rng;
 use serde::Deserialize;
+
+#[derive(Deserialize)]
+pub struct FlashQuery {
+    #[serde(default)]
+    pub error: Option<String>,
+}
 
 use crate::auth::AuthUser;
 use crate::db;
@@ -104,8 +110,10 @@ pub async fn post_create(
     {
         Ok(id) => id,
         Err(e) if is_unique_violation(&e) => {
-            return Err(AppError::BadRequest(format!(
-                "An enclave named \"{name}\" already exists. Pick a different name."
+            let msg = format!("Enclave \"{name}\" already exists. Pick a different name.");
+            return Ok(Redirect::to(&format!(
+                "/enclaves/discover?error={}",
+                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
             )));
         }
         Err(e) => return Err(e.into()),
@@ -117,6 +125,7 @@ pub async fn get_landing(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    Query(flash): Query<FlashQuery>,
 ) -> Result<Html, AppError> {
     let Some(enclave) = db::enclave::get_enclave(&state.chat, id).await? else {
         return Err(AppError::NotFound);
@@ -138,6 +147,7 @@ pub async fn get_landing(
         members: &members,
         rooms: &rooms,
         can_manage,
+        flash_error: flash.error.as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -148,12 +158,14 @@ pub async fn get_landing(
 pub async fn get_discover(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    Query(flash): Query<FlashQuery>,
 ) -> Result<Html, AppError> {
     let enclaves = db::enclave::list_public_enclaves(&state.chat).await?;
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
+        flash_error: flash.error.as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -351,6 +363,7 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    Query(flash): Query<FlashQuery>,
 ) -> Result<Html, AppError> {
     let Some(enclave) = db::enclave::get_enclave(&state.chat, id).await? else {
         return Err(AppError::NotFound);
@@ -369,6 +382,7 @@ pub async fn get_settings(
         enclave: &enclave,
         members: &members,
         can_delete,
+        flash_error: flash.error.as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -402,8 +416,10 @@ pub async fn post_edit(
     .await
     {
         if is_unique_violation(&e) {
-            return Err(AppError::BadRequest(format!(
-                "An enclave named \"{name}\" already exists. Pick a different name."
+            let msg = format!("Enclave \"{name}\" already exists. Pick a different name.");
+            return Ok(Redirect::to(&format!(
+                "/enclave/{id}/settings?error={}",
+                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
             )));
         }
         return Err(e.into());
@@ -573,10 +589,12 @@ pub async fn post_create_room(
     )
     .await
     {
-        Ok(id) => id,
+        Ok(rid) => rid,
         Err(e) if is_unique_violation(&e) => {
-            return Err(AppError::BadRequest(format!(
-                "A room named \"{name}\" already exists. Pick a different name."
+            let msg = format!("Room \"{name}\" already exists. Pick a different name.");
+            return Ok(Redirect::to(&format!(
+                "/enclave/{id}?error={}",
+                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
             )));
         }
         Err(e) => return Err(e.into()),
@@ -642,8 +660,10 @@ pub async fn post_edit_room(
     .await
     {
         if is_unique_violation(&e) {
-            return Err(AppError::BadRequest(format!(
-                "A room named \"{name}\" already exists. Pick a different name."
+            let msg = format!("Room \"{name}\" already exists. Pick a different name.");
+            return Ok(Redirect::to(&format!(
+                "/enclave/{id}?error={}",
+                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
             )));
         }
         return Err(e.into());
