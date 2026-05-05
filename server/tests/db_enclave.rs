@@ -201,6 +201,40 @@ async fn update_role_changes_role() {
 }
 
 #[tokio::test]
+async fn transfer_ownership_demotes_old_promotes_new_atomically() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Admin)
+        .await
+        .unwrap();
+    lets_chat::db::enclave::transfer_ownership(&pool, id, "u2")
+        .await
+        .unwrap();
+    let prev = lets_chat::db::enclave::get_membership(&pool, id, "owner1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(prev.role, EnclaveRole::Admin);
+    let next = lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.role, EnclaveRole::Owner);
+}
+
+#[tokio::test]
+async fn transfer_ownership_rejects_non_member() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    let err = lets_chat::db::enclave::transfer_ownership(&pool, id, "stranger").await;
+    assert!(err.is_err());
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
