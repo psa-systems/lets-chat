@@ -26,51 +26,53 @@ mod search;
 mod settings;
 mod ws;
 
-/// Build the sidebar's room and DM-peer view-models for a given user, with
-/// per-target unread counts attached. The unread counts come from
-/// `dm_read_state`, which is room-keyed and used as a generic per-user
-/// watermark for both DM and non-DM rooms.
+/// Build the sidebar's room and DM-peer view-models scoped to the caller's
+/// current location. When `current_enclave` is `None` (Home), the sidebar
+/// shows DMs only and the rooms list is empty. When `current_enclave` is
+/// `Some(eid)`, the sidebar shows the enclave's rooms (filtered by the
+/// caller's per-room access for private rooms) and the DM list is empty.
 pub(crate) async fn load_sidebar(
     state: &AppState,
     user: &User,
+    current_enclave: Option<i64>,
 ) -> Result<(Vec<SidebarRoom>, Vec<SidebarPeer>), AppError> {
     let is_admin = user.role == "admin";
 
-    // Rooms section: visible non-DM rooms, in the same order as before.
-    let rooms = db::chat::list_rooms(&state.chat, &user.id, is_admin).await?;
-    let room_unreads: HashMap<i64, i64> =
-        db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin)
-            .await?
+    let (sidebar_rooms, sidebar_peers) = if let Some(eid) = current_enclave {
+        let rooms = db::chat::list_rooms_in_enclave(&state.chat, eid, &user.id, is_admin).await?;
+        let room_unreads: HashMap<i64, i64> =
+            db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin)
+                .await?
+                .into_iter()
+                .collect();
+        let sidebar_rooms: Vec<SidebarRoom> = rooms
             .into_iter()
+            .map(|r| SidebarRoom {
+                unread: *room_unreads.get(&r.id).unwrap_or(&0),
+                id: r.id,
+                name: r.name,
+            })
             .collect();
-    let sidebar_rooms: Vec<SidebarRoom> = rooms
-        .into_iter()
-        .map(|r| SidebarRoom {
-            unread: *room_unreads.get(&r.id).unwrap_or(&0),
-            id: r.id,
-            name: r.name,
-        })
-        .collect();
-
-    // DM peers: list the user's DM rooms then resolve each peer to a public
-    // User from the auth DB. The unread count is keyed by DM room_id; we
-    // attach it to the peer record (sidebar key for DMs is the peer.id).
-    let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
-    let dm_unreads_by_room: HashMap<i64, i64> =
-        db::chat::list_dm_unread_counts(&state.chat, &user.id)
-            .await?
-            .into_iter()
-            .collect();
-    let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
-    for (room, peer_id) in &dm_rooms {
-        if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
-            sidebar_peers.push(SidebarPeer {
-                id: record.id.clone(),
-                username: record.username.clone(),
-                unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
-            });
+        (sidebar_rooms, Vec::new())
+    } else {
+        let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
+        let dm_unreads_by_room: HashMap<i64, i64> =
+            db::chat::list_dm_unread_counts(&state.chat, &user.id)
+                .await?
+                .into_iter()
+                .collect();
+        let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
+        for (room, peer_id) in &dm_rooms {
+            if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
+                sidebar_peers.push(SidebarPeer {
+                    id: record.id.clone(),
+                    username: record.username.clone(),
+                    unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
+                });
+            }
         }
-    }
+        (Vec::new(), sidebar_peers)
+    };
 
     Ok((sidebar_rooms, sidebar_peers))
 }
@@ -82,9 +84,24 @@ pub(crate) async fn load_chrome(
     user: &User,
     current_enclave: Option<i64>,
 ) -> Result<(Vec<SidebarRoom>, Vec<SidebarPeer>, Vec<SwitcherEntry>), AppError> {
-    let (rooms, peers) = load_sidebar(state, user).await?;
+    let (rooms, peers) = load_sidebar(state, user, current_enclave).await?;
     let switcher = load_switcher(state, user, current_enclave).await?;
     Ok((rooms, peers, switcher))
+}
+
+/// Resolve a room's enclave so the sidebar/switcher can highlight the right
+/// icon when the caller is viewing /room/{id}. Returns None for DMs and
+/// rooms without an enclave (which should not exist outside DMs).
+pub(crate) async fn enclave_for_room(
+    state: &AppState,
+    room_id: i64,
+) -> Result<Option<i64>, AppError> {
+    use sqlx::Row;
+    let row = sqlx::query("SELECT enclave_id FROM rooms WHERE id=?")
+        .bind(room_id)
+        .fetch_optional(&state.chat)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
 }
 
 /// Build the leftmost switcher column: a Home entry plus one icon per
