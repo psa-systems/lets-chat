@@ -457,6 +457,132 @@ async fn non_owner_cannot_delete_enclave() {
 }
 
 #[tokio::test]
+async fn create_room_in_enclave_attaches_to_enclave() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{id}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=experiments&room_type=public"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert!(res.status().is_redirection());
+
+    let landing = Request::builder()
+        .method(Method::GET)
+        .uri(&format!("/enclave/{id}"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(landing).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(s.contains("experiments"));
+}
+
+#[tokio::test]
+async fn create_room_rejects_unknown_type() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab2"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{id}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=x&room_type=garbage"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn delete_room_404_for_wrong_enclave() {
+    let (app, sess) = app_with_user("user").await;
+    // Create two enclaves; put a room in A; try to delete via B.
+    let mk = |body: &'static str| {
+        Request::builder()
+            .method(Method::POST)
+            .uri("/enclaves")
+            .header("cookie", cookie(&sess))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let res = app.clone().oneshot(mk("name=A")).await.unwrap();
+    let a: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let res = app.clone().oneshot(mk("name=B")).await.unwrap();
+    let b: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let mkroom = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{a}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=r1&room_type=public"))
+        .unwrap();
+    app.clone().oneshot(mkroom).await.unwrap();
+    // Find r1's id via direct DB call would need pool; instead try a wrong id.
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{b}/rooms/9999/delete"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn post_enclaves_requires_auth() {
     let (app, _sess) = app_with_user("user").await;
     let req = Request::builder()

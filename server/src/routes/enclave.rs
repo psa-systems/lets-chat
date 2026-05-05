@@ -39,6 +39,14 @@ pub fn router() -> Router<AppState> {
         .route("/enclave/{id}/leave", post(post_leave))
         .route("/enclave/{id}/members/{user_id}/role", post(post_member_role))
         .route("/enclave/{id}/members/{user_id}/kick", post(post_kick))
+        .route("/enclave/{id}/rooms", post(post_create_room))
+        .route("/enclave/{id}/rooms/{room_id}/edit", post(post_edit_room))
+        .route("/enclave/{id}/rooms/{room_id}/delete", post(post_delete_room))
+        .route("/enclave/{id}/rooms/{room_id}/members", post(post_add_room_member))
+        .route(
+            "/enclave/{id}/rooms/{room_id}/members/{user_id}/remove",
+            post(post_remove_room_member),
+        )
 }
 
 async fn require_manage(
@@ -407,6 +415,147 @@ pub async fn post_kick(
     }
     db::enclave::remove_member(&state.chat, id, &target).await?;
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+#[derive(Deserialize)]
+pub struct RoomForm {
+    pub name: String,
+    pub topic: Option<String>,
+    pub room_type: String,
+}
+
+pub async fn post_create_room(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<RoomForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    if !matches!(form.room_type.as_str(), "public" | "private") {
+        return Err(AppError::BadRequest("invalid room_type".into()));
+    }
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("name required".into()));
+    }
+    let invite_code = if form.room_type == "private" {
+        let c: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(10)
+            .map(char::from)
+            .collect();
+        Some(c)
+    } else {
+        None
+    };
+    let room_id = db::chat::create_room(
+        &state.chat,
+        name,
+        form.topic.as_deref().filter(|s| !s.is_empty()),
+        &form.room_type,
+        invite_code.as_deref(),
+        Some(id),
+    )
+    .await?;
+    if form.room_type == "private" {
+        db::chat::add_room_member(&state.chat, room_id, &user.id).await?;
+    }
+    Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+#[derive(Deserialize)]
+pub struct RoomEditForm {
+    pub name: String,
+    pub topic: Option<String>,
+}
+
+async fn assert_room_in_enclave(
+    pool: &sqlx::SqlitePool,
+    enclave_id: i64,
+    room_id: i64,
+) -> Result<(), AppError> {
+    let row = sqlx::query("SELECT enclave_id FROM rooms WHERE id=?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some(r) = row else {
+        return Err(AppError::NotFound);
+    };
+    let eid: Option<i64> = sqlx::Row::get(&r, "enclave_id");
+    if eid != Some(enclave_id) {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
+pub async fn post_edit_room(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id)): Path<(i64, i64)>,
+    axum::Form(form): axum::Form<RoomEditForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("name required".into()));
+    }
+    db::chat::update_room(
+        &state.chat,
+        room_id,
+        name,
+        form.topic.as_deref().filter(|s| !s.is_empty()),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+pub async fn post_delete_room(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id)): Path<(i64, i64)>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    db::chat::delete_room(&state.chat, room_id).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+#[derive(Deserialize)]
+pub struct RoomMemberForm {
+    pub user_id: String,
+}
+
+pub async fn post_add_room_member(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id)): Path<(i64, i64)>,
+    axum::Form(form): axum::Form<RoomMemberForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let target = form.user_id.trim();
+    if db::enclave::get_membership(&state.chat, id, target)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest(
+            "user is not an enclave member".into(),
+        ));
+    }
+    db::chat::add_room_member(&state.chat, room_id, target).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+pub async fn post_remove_room_member(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id, target)): Path<(i64, i64, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    db::chat::remove_room_member(&state.chat, room_id, &target).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
 pub async fn get_invitations(
