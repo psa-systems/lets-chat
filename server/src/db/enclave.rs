@@ -107,6 +107,33 @@ pub async fn update_role(
     Ok(())
 }
 
+pub async fn transfer_ownership(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    new_owner_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let exists = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(new_owner_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if exists.is_none() {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    sqlx::query("UPDATE enclave_members SET role='admin' WHERE enclave_id=? AND role='owner'")
+        .bind(enclave_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE enclave_members SET role='owner' WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(new_owner_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn list_enclaves_for_user(
     pool: &SqlitePool,
     user_id: &str,
