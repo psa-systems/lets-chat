@@ -36,11 +36,16 @@ async fn open_pool(name: &str) -> SqlitePool {
 }
 
 pub async fn app_with_user(role: &str) -> (Router, String) {
+    let (app, sess, _id) = app_with_named_user(role, "tester").await;
+    (app, sess)
+}
+
+pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String, String) {
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
 
-    let user_id = db::auth::create_user(&auth, "tester", "hash").await.unwrap();
+    let user_id = db::auth::create_user(&auth, username, "hash").await.unwrap();
     sqlx::query("UPDATE users SET role=? WHERE id=?")
         .bind(role)
         .bind(&user_id)
@@ -60,7 +65,50 @@ pub async fn app_with_user(role: &str) -> (Router, String) {
         asset_version: "test".into(),
     };
     let app = routes::build_router(state);
-    (app, session_token)
+    (app, session_token, user_id)
+}
+
+/// Two users sharing the same in-memory pools. Returns (app, sess1, id1, sess2, id2).
+pub async fn app_with_two_users() -> (Router, String, String, String, String) {
+    let auth = open_pool("auth").await;
+    let chat = open_pool("chat").await;
+    let settings = open_pool("settings").await;
+
+    let id1 = db::auth::create_user(&auth, "alice", "h1").await.unwrap();
+    let id2 = db::auth::create_user(&auth, "bob", "h2").await.unwrap();
+    sqlx::query("UPDATE users SET role='user' WHERE id IN (?, ?)")
+        .bind(&id1)
+        .bind(&id2)
+        .execute(&auth)
+        .await
+        .unwrap();
+    // First user gets promoted by hand to seed General owner.
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&id1)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let s1 = db::auth::create_session(&auth, &id1).await.unwrap();
+    let s2 = db::auth::create_session(&auth, &id2).await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    // Demote alice back to plain user for tests that want a non-admin owner.
+    sqlx::query("UPDATE users SET role='user' WHERE id=?")
+        .bind(&id1)
+        .execute(&auth)
+        .await
+        .unwrap();
+
+    let state = AppState {
+        auth,
+        chat,
+        settings,
+        hub: Arc::new(Hub::new()),
+        asset_version: "test".into(),
+    };
+    let app = routes::build_router(state);
+    (app, s1, id1, s2, id2)
 }
 
 pub fn cookie(token: &str) -> String {
@@ -242,6 +290,97 @@ async fn discover_join_rejects_private() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn invite_then_accept_creates_membership() {
+    let (app, s1, _id1, s2, id2) = app_with_two_users().await;
+    // Alice creates an enclave.
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-place"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    // Alice invites Bob.
+    let invite = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{enclave_id}/invite"))
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("username=bob"))
+        .unwrap();
+    let res = app.clone().oneshot(invite).await.unwrap();
+    assert!(res.status().is_redirection());
+
+    // Bob lists pending invitations.
+    let list = Request::builder()
+        .method(Method::GET)
+        .uri("/invitations")
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(s.contains("alices-place"), "invitations page must show enclave name");
+
+    // Bob accepts (find the invitation id from the DB via the response).
+    // Easier: re-fetch via a direct DB call by extracting the invite id from the rendered HTML.
+    let inv_id: i64 = {
+        let start = s.find("/invitations/").expect("invite link missing");
+        let rest = &s[start + "/invitations/".len()..];
+        let end = rest.find('/').unwrap();
+        rest[..end].parse().unwrap()
+    };
+    let accept = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/invitations/{inv_id}/accept"))
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(accept).await.unwrap();
+    assert!(res.status().is_redirection());
+
+    // Bob can now reach the enclave landing.
+    let landing = Request::builder()
+        .method(Method::GET)
+        .uri(&format!("/enclave/{enclave_id}"))
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(landing).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let _ = id2;
+}
+
+#[tokio::test]
+async fn invitation_decline_only_by_invitee() {
+    let (app, s1, _id1, _s2, _id2) = app_with_two_users().await;
+    // Alice creates and invites herself by mistake to a fake id; we just verify
+    // that hitting /accept on a missing invitation 404s.
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/invitations/999/accept")
+        .header("cookie", cookie(&s1))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

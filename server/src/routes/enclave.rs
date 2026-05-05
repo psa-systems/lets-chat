@@ -27,6 +27,10 @@ pub fn router() -> Router<AppState> {
             "/enclave/{id}/invite-code",
             post(post_invite_code).delete(delete_invite_code),
         )
+        .route("/enclave/{id}/invite", post(post_invite))
+        .route("/invitations", get(get_invitations))
+        .route("/invitations/{id}/accept", post(post_invitation_accept))
+        .route("/invitations/{id}/decline", post(post_invitation_decline))
 }
 
 async fn require_manage(
@@ -184,4 +188,79 @@ pub async fn post_join_by_code(
     };
     db::enclave::add_member(&state.chat, enclave.id, &user.id, EnclaveRole::Member).await?;
     Ok(Redirect::to(&format!("/enclave/{}", enclave.id)))
+}
+
+#[derive(Deserialize)]
+pub struct InviteForm {
+    pub username: String,
+}
+
+pub async fn post_invite(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<InviteForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let Some(target) = db::auth::find_user_by_username(&state.auth, form.username.trim()).await?
+    else {
+        return Err(AppError::BadRequest("user not found".into()));
+    };
+    if db::enclave::get_membership(&state.chat, id, &target.id)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::BadRequest("user is already a member".into()));
+    }
+    if let Err(e) = db::enclave::create_invitation(&state.chat, id, &target.id, &user.id).await {
+        if !matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
+            return Err(e.into());
+        }
+    }
+    Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+pub async fn post_invitation_accept(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let Some(inv) = db::enclave::get_invitation(&state.chat, id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if inv.invitee_id != user.id {
+        return Err(AppError::Forbidden);
+    }
+    let (eid, _) = db::enclave::accept_invitation(&state.chat, id).await?;
+    Ok(Redirect::to(&format!("/enclave/{eid}")))
+}
+
+pub async fn post_invitation_decline(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let Some(inv) = db::enclave::get_invitation(&state.chat, id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if inv.invitee_id != user.id {
+        return Err(AppError::Forbidden);
+    }
+    db::enclave::delete_invitation(&state.chat, id).await?;
+    Ok(Redirect::to("/invitations"))
+}
+
+pub async fn get_invitations(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Html, AppError> {
+    let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    html(&crate::views::enclave::InvitationsPage {
+        user: &user,
+        invitations: &invs,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        asset_version: &state.asset_version,
+    })
 }
