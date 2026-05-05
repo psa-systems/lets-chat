@@ -98,6 +98,12 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::DmRead { .. }
         | ChatEvent::UserMuted { .. }
         | ChatEvent::UserBanned { .. }
-        | ChatEvent::UserKicked { .. } => None,
+        | ChatEvent::UserKicked { .. }
+        | ChatEvent::EnclaveMemberAdded { .. }
+        | ChatEvent::EnclaveMemberRemoved { .. }
+        | ChatEvent::EnclaveRoomAdded { .. }
+        | ChatEvent::EnclaveRoomRemoved { .. }
+        | ChatEvent::EnclaveInvitationCreated { .. }
+        | ChatEvent::EnclaveInvitationResolved { .. } => None,
     }
 }
