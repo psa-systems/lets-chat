@@ -28,7 +28,7 @@ pub async fn get_room(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -144,7 +144,11 @@ pub async fn get_room(
         messages: &messages,
         asset_version: &state.asset_version,
     };
-    html(&page)
+    let body = html(&page)?;
+    let mut response = body.into_response();
+    let (name, value) = crate::last_visited::set(&format!("/room/{room_id}"));
+    response.headers_mut().insert(name, value);
+    Ok(response)
 }
 
 pub async fn post_message(
