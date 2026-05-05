@@ -1,6 +1,7 @@
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
+use serde::Deserialize;
 
 use crate::auth::AuthUser;
 use crate::error::AppError;
@@ -10,14 +11,27 @@ use crate::state::AppState;
 use crate::views::home::WelcomePage;
 use crate::views::html;
 
+#[derive(Deserialize)]
+pub struct HomeQuery {
+    /// When `home=1`, render the Home pseudo-enclave directly and skip the
+    /// `last_visited` redirect. The switcher's Home button uses this so that
+    /// the user can explicitly go back to the DM hub from any room.
+    #[serde(default)]
+    pub home: Option<String>,
+}
+
 pub async fn get_home(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     headers: HeaderMap,
+    Query(q): Query<HomeQuery>,
 ) -> Result<Response, AppError> {
-    if let Some(path) = last_visited::read(&headers) {
-        if last_visited::is_safe_path(&path) && target_accessible(&state, &user, &path).await? {
-            return Ok(Redirect::to(&path).into_response());
+    let force_home = q.home.as_deref() == Some("1");
+    if !force_home {
+        if let Some(path) = last_visited::read(&headers) {
+            if last_visited::is_safe_path(&path) && target_accessible(&state, &user, &path).await? {
+                return Ok(Redirect::to(&path).into_response());
+            }
         }
     }
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;

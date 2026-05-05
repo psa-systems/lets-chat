@@ -1,6 +1,6 @@
 <nav id="switcher" class="w-16 bg-slate-900 text-white flex flex-col items-center py-2 gap-2 overflow-y-auto">
   {% for e in switcher %}
-  <a href="{% if let Some(id) = e.id %}/enclave/{{ id }}{% else %}/{% endif %}"
+  <a href="{% if let Some(id) = e.id %}/enclave/{{ id }}{% else %}/?home=1{% endif %}"
      class="relative w-10 h-10 rounded-lg flex items-center justify-center
             {% if e.active %}bg-blue-600{% else %}bg-slate-700 hover:bg-slate-600{% endif %}"
      title="{{ e.label }}">
