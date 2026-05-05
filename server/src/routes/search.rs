@@ -12,6 +12,7 @@ use crate::views::{html, Html};
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
+    pub enclave_id: Option<i64>,
 }
 
 /// GET /search?q=... - full-text search over messages the caller can read.
@@ -24,7 +25,7 @@ pub struct SearchQuery {
 pub async fn get_search(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
-    Query(SearchQuery { q }): Query<SearchQuery>,
+    Query(SearchQuery { q, enclave_id }): Query<SearchQuery>,
 ) -> Result<Html, AppError> {
     let query = q.unwrap_or_default();
     let trimmed = query.trim();
@@ -54,7 +55,27 @@ pub async fn get_search(
     };
 
     let is_admin = user.role == "admin";
-    let rows = db::chat::search_messages(&state.chat, &fts_query, None, &user.id, is_admin).await?;
+    if let Some(eid) = enclave_id {
+        // Membership gate: site admins bypass.
+        if !is_admin
+            && db::enclave::get_membership(&state.chat, eid, &user.id)
+                .await?
+                .is_none()
+        {
+            return Err(AppError::Forbidden);
+        }
+    }
+    let home_dm_only = enclave_id.is_none();
+    let rows = db::chat::search_messages(
+        &state.chat,
+        &fts_query,
+        None,
+        enclave_id,
+        home_dm_only,
+        &user.id,
+        is_admin,
+    )
+    .await?;
 
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
     // search excludes DMs entirely, so this map is only consulted for non-

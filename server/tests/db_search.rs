@@ -1,4 +1,4 @@
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 async fn setup_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -14,6 +14,8 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/chat/0006_read_receipts.sql"),
         include_str!("../migrations/chat/0007_reactions.sql"),
         include_str!("../migrations/chat/0008_search.sql"),
+        include_str!("../migrations/chat/0009_enclaves.sql"),
+        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
     ]
     .iter()
     .enumerate()
@@ -27,20 +29,31 @@ async fn setup_pool() -> SqlitePool {
     pool
 }
 
+async fn general_id(pool: &SqlitePool) -> i64 {
+    sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("id")
+}
+
 #[tokio::test]
 async fn test_search_finds_matching_message() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-find", None, "public", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "search-find", None, "public", None, Some(g))
+            .await
+            .unwrap();
     lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello world")
         .await
         .unwrap();
 
     let fts = lets_chat::db::chat::sanitize_fts_query("hello").unwrap();
-    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, "user-1", false)
-        .await
-        .unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "user-1", false)
+            .await
+            .unwrap();
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].body, "hello world");
@@ -50,14 +63,15 @@ async fn test_search_finds_matching_message() {
 #[tokio::test]
 async fn test_search_does_not_return_soft_deleted() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-deleted", None, "public", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "search-deleted", None, "public", None, Some(g))
+            .await
+            .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "secret message")
         .await
         .unwrap();
 
-    // Soft-delete the message
     sqlx::query(
         "UPDATE messages SET deleted_at = datetime('now'), deleted_by = 'user-1' WHERE id = ?",
     )
@@ -67,9 +81,10 @@ async fn test_search_does_not_return_soft_deleted() {
     .unwrap();
 
     let fts = lets_chat::db::chat::sanitize_fts_query("secret").unwrap();
-    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, "user-1", false)
-        .await
-        .unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "user-1", false)
+            .await
+            .unwrap();
 
     assert!(
         results.is_empty(),
@@ -80,18 +95,20 @@ async fn test_search_does_not_return_soft_deleted() {
 #[tokio::test]
 async fn test_search_private_room_excluded_for_non_member() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let private_room =
+        lets_chat::db::chat::create_room(&pool, "secret", None, "private", None, Some(g))
+            .await
+            .unwrap();
     lets_chat::db::chat::insert_message(&pool, private_room, "user-1", "classified info")
         .await
         .unwrap();
 
-    // user-2 is NOT a member of the private room
     let fts = lets_chat::db::chat::sanitize_fts_query("classified").unwrap();
-    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, "user-2", false)
-        .await
-        .unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "user-2", false)
+            .await
+            .unwrap();
 
     assert!(
         results.is_empty(),
@@ -102,9 +119,11 @@ async fn test_search_private_room_excluded_for_non_member() {
 #[tokio::test]
 async fn test_search_private_room_visible_to_member() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "vip", None, "private", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let private_room =
+        lets_chat::db::chat::create_room(&pool, "vip", None, "private", None, Some(g))
+            .await
+            .unwrap();
     lets_chat::db::chat::add_room_member(&pool, private_room, "user-1")
         .await
         .unwrap();
@@ -113,9 +132,10 @@ async fn test_search_private_room_visible_to_member() {
         .unwrap();
 
     let fts = lets_chat::db::chat::sanitize_fts_query("members").unwrap();
-    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, "user-1", false)
-        .await
-        .unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "user-1", false)
+            .await
+            .unwrap();
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].room_name, "vip");
@@ -124,52 +144,75 @@ async fn test_search_private_room_visible_to_member() {
 #[tokio::test]
 async fn test_search_fts_special_chars_do_not_panic() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-special", None, "public", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "search-special", None, "public", None, Some(g))
+            .await
+            .unwrap();
     lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "normal message")
         .await
         .unwrap();
 
-    // These should all sanitize cleanly without panicking
     for raw in &["*", "()", "\"quoted\"", "a*b+c", "--drop", ""] {
         let maybe_fts = lets_chat::db::chat::sanitize_fts_query(raw);
         if let Some(fts) = maybe_fts {
-            let result =
-                lets_chat::db::chat::search_messages(&pool, &fts, None, "user-1", false).await;
+            let result = lets_chat::db::chat::search_messages(
+                &pool,
+                &fts,
+                None,
+                Some(g),
+                false,
+                "user-1",
+                false,
+            )
+            .await;
             assert!(result.is_ok(), "query {raw:?} caused an error: {result:?}");
         }
-        // Empty sanitized query returns None — that's correct, no DB call needed
     }
 }
 
 #[tokio::test]
 async fn test_search_edited_body_is_reindexed() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-edit", None, "public", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "search-edit", None, "public", None, Some(g))
+            .await
+            .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "original text")
         .await
         .unwrap();
 
-    // Edit the message — the update trigger should reindex
     lets_chat::db::chat::update_message_body(&pool, msg_id, "completely revised content")
         .await
         .unwrap();
 
-    // Old term should no longer match
     let fts_old = lets_chat::db::chat::sanitize_fts_query("original").unwrap();
-    let old_results = lets_chat::db::chat::search_messages(&pool, &fts_old, None, "user-1", false)
-        .await
-        .unwrap();
+    let old_results = lets_chat::db::chat::search_messages(
+        &pool,
+        &fts_old,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+    )
+    .await
+    .unwrap();
     assert!(old_results.is_empty(), "old term must not match after edit");
 
-    // New term should match
     let fts_new = lets_chat::db::chat::sanitize_fts_query("revised").unwrap();
-    let new_results = lets_chat::db::chat::search_messages(&pool, &fts_new, None, "user-1", false)
-        .await
-        .unwrap();
+    let new_results = lets_chat::db::chat::search_messages(
+        &pool,
+        &fts_new,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+    )
+    .await
+    .unwrap();
     assert_eq!(new_results.len(), 1);
     assert_eq!(new_results[0].body, "completely revised content");
 }
@@ -177,18 +220,76 @@ async fn test_search_edited_body_is_reindexed() {
 #[tokio::test]
 async fn test_admin_can_search_private_rooms() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "admin-only", None, "private", None)
-        .await
-        .unwrap();
+    let g = general_id(&pool).await;
+    let private_room =
+        lets_chat::db::chat::create_room(&pool, "admin-only", None, "private", None, Some(g))
+            .await
+            .unwrap();
     lets_chat::db::chat::insert_message(&pool, private_room, "user-1", "top secret")
         .await
         .unwrap();
 
-    // Admin (is_admin=true) should see all non-DM rooms
     let fts = lets_chat::db::chat::sanitize_fts_query("secret").unwrap();
-    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, "admin-1", true)
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "admin-1", true)
+            .await
+            .unwrap();
+
+    assert_eq!(results.len(), 1);
+}
+
+#[tokio::test]
+async fn test_search_scoped_to_enclave_excludes_other_enclaves() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let other = lets_chat::db::enclave::create_enclave(&pool, "Other", None, "u-owner")
+        .await
+        .unwrap();
+    let r_in_general =
+        lets_chat::db::chat::create_room(&pool, "general-room", None, "public", None, Some(g))
+            .await
+            .unwrap();
+    let r_in_other =
+        lets_chat::db::chat::create_room(&pool, "other-room", None, "public", None, Some(other))
+            .await
+            .unwrap();
+    lets_chat::db::chat::insert_message(&pool, r_in_general, "u-owner", "shared word here")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, r_in_other, "u-owner", "shared word here")
         .await
         .unwrap();
 
-    assert_eq!(results.len(), 1);
+    let fts = lets_chat::db::chat::sanitize_fts_query("shared").unwrap();
+    let general_results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, Some(g), false, "u-owner", false)
+            .await
+            .unwrap();
+    assert_eq!(general_results.len(), 1);
+    assert_eq!(general_results[0].room_name, "general-room");
+}
+
+#[tokio::test]
+async fn test_search_home_returns_only_dms() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let public_room = lets_chat::db::chat::create_room(&pool, "p", None, "public", None, Some(g))
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, public_room, "u-a", "find me")
+        .await
+        .unwrap();
+
+    let dm = lets_chat::db::chat::create_dm_room(&pool, "@u-b", "u-a", "u-b")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, dm.id, "u-a", "find me")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("find").unwrap();
+    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1, "Home search must return DM message only");
 }

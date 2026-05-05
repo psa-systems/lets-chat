@@ -3,6 +3,7 @@
 {% block body %}
 <div hx-ext="ws" ws-connect="/ws" class="flex h-screen">
   {% let oob = false %}
+  {% include "partials/enclave_switcher.html" %}
   {% include "partials/sidebar.html" %}
   <main id="main" class="flex-1 flex flex-col overflow-hidden">
     {% block main %}{% endblock %}

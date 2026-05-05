@@ -1,7 +1,7 @@
 use askama::Template;
 
 use crate::models::{Room, User};
-use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::room::MessageView;
 
 #[derive(Template)]
@@ -12,6 +12,7 @@ pub struct DmPage<'a> {
     pub room: &'a Room,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub messages: &'a [MessageView],
     pub asset_version: &'a str,
 }

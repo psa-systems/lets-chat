@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+
+{% block title %}Invitations - lets-chat{% endblock %}
+
+{% block main %}
+<section class="p-6 max-w-2xl">
+  <h1 class="text-2xl font-semibold">Pending invitations ({{ invitations.len() }})</h1>
+  {% if invitations.is_empty() %}
+  <p class="text-slate-600 mt-4">No invitations.</p>
+  {% else %}
+  <ul class="mt-4 space-y-2">
+    {% for pair in invitations %}
+    <li class="flex items-center justify-between border rounded p-3">
+      <div>
+        <div class="font-medium">{{ pair.1.name }}</div>
+        {% if let Some(d) = pair.1.description %}<div class="text-sm text-slate-600">{{ d }}</div>{% endif %}
+        <div class="text-xs text-slate-500">Invited by {{ pair.0.invited_by }}</div>
+      </div>
+      <div class="flex gap-2">
+        <form method="post" action="/invitations/{{ pair.0.id }}/accept">
+          <button type="submit" class="bg-green-600 text-white rounded px-3 py-1 text-sm">Accept</button>
+        </form>
+        <form method="post" action="/invitations/{{ pair.0.id }}/decline">
+          <button type="submit" class="bg-slate-200 rounded px-3 py-1 text-sm">Decline</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

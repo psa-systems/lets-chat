@@ -239,15 +239,18 @@ pub async fn create_room(
     topic: Option<&str>,
     room_type: &str,
     invite_code: Option<&str>,
+    enclave_id: Option<i64>,
 ) -> Result<i64, sqlx::Error> {
-    let result =
-        sqlx::query("INSERT INTO rooms (name, topic, room_type, invite_code) VALUES (?, ?, ?, ?)")
-            .bind(name)
-            .bind(topic)
-            .bind(room_type)
-            .bind(invite_code)
-            .execute(pool)
-            .await?;
+    let result = sqlx::query(
+        "INSERT INTO rooms (name, topic, room_type, invite_code, enclave_id) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(name)
+    .bind(topic)
+    .bind(room_type)
+    .bind(invite_code)
+    .bind(enclave_id)
+    .execute(pool)
+    .await?;
     Ok(result.last_insert_rowid())
 }
 
@@ -272,6 +275,86 @@ pub async fn update_room(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn list_rooms_in_enclave(
+    pool: &sqlx::SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    can_see_all_private: bool,
+) -> Result<Vec<Room>, sqlx::Error> {
+    if can_see_all_private {
+        let rows = sqlx::query(
+            "SELECT id, name, topic, room_type, invite_code, created_at \
+             FROM rooms WHERE enclave_id=? AND room_type != 'dm' ORDER BY name",
+        )
+        .bind(enclave_id)
+        .fetch_all(pool)
+        .await?;
+        return Ok(rows.iter().map(map_room).collect());
+    }
+    let rows = sqlx::query(
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+         FROM rooms r \
+         LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
+         WHERE r.enclave_id=? AND r.room_type != 'dm' \
+           AND (r.room_type='public' OR m.user_id IS NOT NULL) \
+         ORDER BY r.name",
+    )
+    .bind(user_id)
+    .bind(enclave_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_room).collect())
+}
+
+/// Predicate combining DM, public-in-enclave, and private-room rules.
+/// `is_site_admin` short-circuits to true.
+pub async fn is_room_accessible(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    is_site_admin: bool,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT room_type, enclave_id FROM rooms WHERE id=?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some(r) = row else {
+        return Ok(false);
+    };
+    let room_type: String = r.get("room_type");
+    let enclave_id: Option<i64> = r.get("enclave_id");
+
+    // Site admin god-mode applies to existing rooms only.
+    if is_site_admin && room_type != "dm" {
+        return Ok(true);
+    }
+    if is_site_admin && room_type == "dm" {
+        return is_room_member(pool, room_id, user_id).await;
+    }
+
+    if room_type == "dm" {
+        return is_room_member(pool, room_id, user_id).await;
+    }
+
+    let Some(eid) = enclave_id else {
+        return Ok(false);
+    };
+    let in_enclave = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(eid)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    if !in_enclave {
+        return Ok(false);
+    }
+
+    if room_type == "public" {
+        return Ok(true);
+    }
+    is_room_member(pool, room_id, user_id).await
 }
 
 /// Check if a user is a member of a room.
@@ -806,30 +889,49 @@ pub fn sanitize_fts_query(raw: &str) -> Option<String> {
 
 /// Full-text search across accessible messages.
 ///
-/// For non-admin callers the result is restricted to public rooms plus rooms
-/// the caller is a member of.  Pass `is_admin = true` to skip the access
-/// filter.  `room_id_filter` narrows results to a single room when set.
+/// Scope rules:
+/// - `enclave_id_filter = Some(eid)`: only non-DM rooms where r.enclave_id = eid.
+///   The caller must be a member of the enclave; the route layer enforces this
+///   before invoking the function. Private rooms still require room_members
+///   unless `is_site_admin = true`.
+/// - `enclave_id_filter = None` and `home_dm_only = true`: only DM rooms the
+///   caller is a member of.
+/// - `enclave_id_filter = None` and `home_dm_only = false`: rejected upstream;
+///   this combination is not produced by the route handler.
+///
+/// `room_id_filter` further narrows the result to a single room when set.
 pub async fn search_messages(
     pool: &sqlx::SqlitePool,
     fts_query: &str,
     room_id_filter: Option<i64>,
+    enclave_id_filter: Option<i64>,
+    home_dm_only: bool,
     caller_user_id: &str,
-    is_admin: bool,
+    is_site_admin: bool,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
-    // Build the room-access predicate inline so we can use a single query.
-    // Admin: no restriction.
-    // Regular user: public rooms OR rooms where caller is a member.
     let room_filter_clause = match room_id_filter {
         Some(_) => "AND m.room_id = ?",
         None => "",
     };
 
-    let access_clause = if is_admin {
-        "AND r.room_type != 'dm'"
+    let scope_clause = if enclave_id_filter.is_some() {
+        // Inside an enclave: rooms in that enclave only, and either site admin
+        // or caller must be in private-room members for private rooms.
+        if is_site_admin {
+            "AND r.enclave_id = ? AND r.room_type != 'dm'"
+        } else {
+            "AND r.enclave_id = ? AND r.room_type != 'dm' \
+             AND (r.room_type = 'public' OR EXISTS (\
+                 SELECT 1 FROM room_members rm \
+                 WHERE rm.room_id = r.id AND rm.user_id = ?))"
+        }
+    } else if home_dm_only {
+        "AND r.room_type = 'dm' \
+         AND EXISTS (SELECT 1 FROM room_members rm \
+                     WHERE rm.room_id = r.id AND rm.user_id = ?)"
     } else {
-        "AND (r.room_type = 'public' OR EXISTS (\
-             SELECT 1 FROM room_members rm \
-             WHERE rm.room_id = r.id AND rm.user_id = ?))"
+        // No usable scope; return nothing rather than leak global results.
+        "AND 0 = 1"
     };
 
     let sql = format!(
@@ -841,17 +943,22 @@ pub async fn search_messages(
          WHERE messages_fts MATCH ? \
            AND m.deleted_at IS NULL \
            {room_filter_clause} \
-           {access_clause} \
+           {scope_clause} \
          ORDER BY messages_fts.rank \
          LIMIT 50"
     );
 
-    // Bind parameters in order: fts_query, [room_id_filter], [caller_user_id]
+    // Bind order: fts_query, [room_id_filter], [enclave_id_filter], [caller_user_id]
     let mut q = sqlx::query(&sql).bind(fts_query);
     if let Some(rid) = room_id_filter {
         q = q.bind(rid);
     }
-    if !is_admin {
+    if let Some(eid) = enclave_id_filter {
+        q = q.bind(eid);
+        if !is_site_admin {
+            q = q.bind(caller_user_id);
+        }
+    } else if home_dm_only {
         q = q.bind(caller_user_id);
     }
 
@@ -865,7 +972,7 @@ pub async fn search_messages(
             room_name: r.get("room_name"),
             body: r.get("body"),
             user_id: r.get("user_id"),
-            author_name: r.get::<String, _>("user_id"), // resolved by server fn layer
+            author_name: r.get::<String, _>("user_id"),
             created_at: r.get("created_at"),
         })
         .collect())

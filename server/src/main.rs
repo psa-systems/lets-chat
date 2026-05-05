@@ -19,6 +19,10 @@ async fn main() {
         asset_version: compute_asset_version(),
     };
 
+    if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
+        tracing::warn!(error = %e, "enclave backfill failed at startup");
+    }
+
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
     let addr: SocketAddr = bind.parse().expect("invalid BIND_ADDR");

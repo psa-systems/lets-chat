@@ -1,4 +1,5 @@
 use axum::extract::{Path, State};
+use axum::response::{IntoResponse, Response};
 use std::collections::HashMap;
 
 use crate::auth::AuthUser;
@@ -7,8 +8,8 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::dm::DmPage;
+use crate::views::html;
 use crate::views::room::{MessageView, ReactionView};
-use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
 /// Extract the HH:MM portion from a timestamp string. Accepts both the
@@ -28,7 +29,7 @@ pub async fn get_dm(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(peer_id): Path<String>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     // Self-DMs are not supported.
     if peer_id == user.id {
         return Err(AppError::BadRequest(
@@ -164,7 +165,7 @@ pub async fn get_dm(
     }
 
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
 
     let page = DmPage {
         user: &user,
@@ -172,8 +173,13 @@ pub async fn get_dm(
         room: &room,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
     };
-    html(&page)
+    let body = html(&page)?;
+    let mut response = body.into_response();
+    let (name, value) = crate::last_visited::set(&format!("/dm/{}", peer.id));
+    response.headers_mut().insert(name, value);
+    Ok(response)
 }
