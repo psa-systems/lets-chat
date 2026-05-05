@@ -9,18 +9,35 @@ use serde::Deserialize;
 pub struct FlashQuery {
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
-/// Resolve a known error code to a user-facing message. Unknown codes are
-/// dropped so untrusted query params can never inject text into the page.
-fn flash_message(code: Option<&str>) -> Option<&'static str> {
+/// Resolve a known error code (with optional caller-supplied name) into the
+/// user-facing message that the template renders. Unknown codes drop to
+/// `None` so an untrusted query param cannot push attacker text onto the
+/// page. The `name` field is rendered through Askama's default
+/// HTML-escaping, and is also length-clamped here so a megabyte of "name="
+/// cannot blow out the banner.
+fn flash_message(code: Option<&str>, name: Option<&str>) -> Option<String> {
+    let trimmed = name
+        .map(|n| n.chars().take(64).collect::<String>())
+        .filter(|n| !n.is_empty());
     match code? {
-        "enclave_name_taken" => {
-            Some("That enclave name is already taken. Pick a different name.")
-        }
-        "room_name_taken" => Some("That room name is already taken. Pick a different name."),
+        "enclave_name_taken" => Some(match trimmed {
+            Some(n) => format!("Enclave \"{n}\" already exists. Pick a different name."),
+            None => "That enclave name is already taken. Pick a different name.".to_string(),
+        }),
+        "room_name_taken" => Some(match trimmed {
+            Some(n) => format!("Room \"{n}\" already exists. Pick a different name."),
+            None => "That room name is already taken. Pick a different name.".to_string(),
+        }),
         _ => None,
     }
+}
+
+fn flash_name_param(name: &str) -> String {
+    percent_encoding::utf8_percent_encode(name, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
 use crate::auth::AuthUser;
@@ -122,9 +139,10 @@ pub async fn post_create(
     {
         Ok(id) => id,
         Err(e) if is_unique_violation(&e) => {
-            return Ok(Redirect::to(
-                "/enclaves/discover?error=enclave_name_taken",
-            ));
+            return Ok(Redirect::to(&format!(
+                "/enclaves/discover?error=enclave_name_taken&name={}",
+                flash_name_param(name)
+            )));
         }
         Err(e) => return Err(e.into()),
     };
@@ -157,7 +175,7 @@ pub async fn get_landing(
         members: &members,
         rooms: &rooms,
         can_manage,
-        flash_error: flash_message(flash.error.as_deref()),
+        flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -175,7 +193,7 @@ pub async fn get_discover(
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
-        flash_error: flash_message(flash.error.as_deref()),
+        flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -392,7 +410,7 @@ pub async fn get_settings(
         enclave: &enclave,
         members: &members,
         can_delete,
-        flash_error: flash_message(flash.error.as_deref()),
+        flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -427,7 +445,8 @@ pub async fn post_edit(
     {
         if is_unique_violation(&e) {
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}/settings?error=enclave_name_taken"
+                "/enclave/{id}/settings?error=enclave_name_taken&name={}",
+                flash_name_param(name)
             )));
         }
         return Err(e.into());
@@ -600,7 +619,8 @@ pub async fn post_create_room(
         Ok(rid) => rid,
         Err(e) if is_unique_violation(&e) => {
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}?error=room_name_taken"
+                "/enclave/{id}?error=room_name_taken&name={}",
+                flash_name_param(name)
             )));
         }
         Err(e) => return Err(e.into()),
@@ -667,7 +687,8 @@ pub async fn post_edit_room(
     {
         if is_unique_violation(&e) {
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}?error=room_name_taken"
+                "/enclave/{id}?error=room_name_taken&name={}",
+                flash_name_param(name)
             )));
         }
         return Err(e.into());
