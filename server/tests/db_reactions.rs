@@ -13,6 +13,8 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/chat/0005_private_rooms.sql"),
         include_str!("../migrations/chat/0006_read_receipts.sql"),
         include_str!("../migrations/chat/0007_reactions.sql"),
+        include_str!("../migrations/chat/0008_search.sql"),
+        include_str!("../migrations/chat/0009_enclaves.sql"),
     ]
     .iter()
     .enumerate()
@@ -29,7 +31,7 @@ async fn setup_pool() -> SqlitePool {
 #[tokio::test]
 async fn test_add_reaction_returns_true() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-react", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
@@ -45,7 +47,7 @@ async fn test_add_reaction_returns_true() {
 #[tokio::test]
 async fn test_remove_reaction_returns_false() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-rm", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-rm", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
@@ -65,7 +67,7 @@ async fn test_remove_reaction_returns_false() {
 #[tokio::test]
 async fn test_list_reactions_aggregates_counts() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-list", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-list", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hi")
@@ -100,7 +102,7 @@ async fn test_list_reactions_aggregates_counts() {
 #[tokio::test]
 async fn test_list_reactions_reacted_by_me_false_for_other_user() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-other", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-other", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
@@ -125,7 +127,7 @@ async fn test_list_reactions_reacted_by_me_false_for_other_user() {
 #[tokio::test]
 async fn test_reaction_removed_disappears_from_list() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-gone", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "test-react-gone", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")

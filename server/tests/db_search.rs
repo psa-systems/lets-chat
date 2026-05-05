@@ -14,6 +14,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/chat/0006_read_receipts.sql"),
         include_str!("../migrations/chat/0007_reactions.sql"),
         include_str!("../migrations/chat/0008_search.sql"),
+        include_str!("../migrations/chat/0009_enclaves.sql"),
     ]
     .iter()
     .enumerate()
@@ -30,7 +31,7 @@ async fn setup_pool() -> SqlitePool {
 #[tokio::test]
 async fn test_search_finds_matching_message() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-find", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "search-find", None, "public", None, None)
         .await
         .unwrap();
     lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello world")
@@ -50,7 +51,7 @@ async fn test_search_finds_matching_message() {
 #[tokio::test]
 async fn test_search_does_not_return_soft_deleted() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-deleted", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "search-deleted", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "secret message")
@@ -80,7 +81,7 @@ async fn test_search_does_not_return_soft_deleted() {
 #[tokio::test]
 async fn test_search_private_room_excluded_for_non_member() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None)
+    let private_room = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None, None)
         .await
         .unwrap();
     lets_chat::db::chat::insert_message(&pool, private_room, "user-1", "classified info")
@@ -102,7 +103,7 @@ async fn test_search_private_room_excluded_for_non_member() {
 #[tokio::test]
 async fn test_search_private_room_visible_to_member() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "vip", None, "private", None)
+    let private_room = lets_chat::db::chat::create_room(&pool, "vip", None, "private", None, None)
         .await
         .unwrap();
     lets_chat::db::chat::add_room_member(&pool, private_room, "user-1")
@@ -124,7 +125,7 @@ async fn test_search_private_room_visible_to_member() {
 #[tokio::test]
 async fn test_search_fts_special_chars_do_not_panic() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-special", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "search-special", None, "public", None, None)
         .await
         .unwrap();
     lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "normal message")
@@ -146,7 +147,7 @@ async fn test_search_fts_special_chars_do_not_panic() {
 #[tokio::test]
 async fn test_search_edited_body_is_reindexed() {
     let pool = setup_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "search-edit", None, "public", None)
+    let room_id = lets_chat::db::chat::create_room(&pool, "search-edit", None, "public", None, None)
         .await
         .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "original text")
@@ -177,7 +178,7 @@ async fn test_search_edited_body_is_reindexed() {
 #[tokio::test]
 async fn test_admin_can_search_private_rooms() {
     let pool = setup_pool().await;
-    let private_room = lets_chat::db::chat::create_room(&pool, "admin-only", None, "private", None)
+    let private_room = lets_chat::db::chat::create_room(&pool, "admin-only", None, "private", None, None)
         .await
         .unwrap();
     lets_chat::db::chat::insert_message(&pool, private_room, "user-1", "top secret")

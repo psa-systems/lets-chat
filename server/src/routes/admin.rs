@@ -381,7 +381,16 @@ pub async fn post_create_room(
     } else {
         None
     };
-    db::chat::create_room(&state.chat, name, topic, room_type, invite_code.as_deref()).await?;
+    let enclave_id = db::enclave::get_general_id(&state.chat).await?;
+    db::chat::create_room(
+        &state.chat,
+        name,
+        topic,
+        room_type,
+        invite_code.as_deref(),
+        enclave_id,
+    )
+    .await?;
     Ok(Redirect::to("/admin/rooms").into_response())
 }
 
