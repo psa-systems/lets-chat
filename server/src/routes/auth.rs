@@ -137,6 +137,10 @@ pub async fn post_register(
 
     promote_first_user_to_admin(&state, &user_id).await?;
 
+    if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
+        tracing::warn!(error = %e, "enclave backfill after first registration failed");
+    }
+
     let token = db::auth::create_session(&state.auth, &user_id).await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
