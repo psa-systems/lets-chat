@@ -107,6 +107,59 @@ pub async fn update_role(
     Ok(())
 }
 
+pub async fn update_metadata(
+    pool: &SqlitePool,
+    id: i64,
+    name: &str,
+    description: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET name=?, description=? WHERE id=?")
+        .bind(name)
+        .bind(description)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn set_public(pool: &SqlitePool, id: i64, is_public: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET is_public=? WHERE id=?")
+        .bind(if is_public { 1_i64 } else { 0_i64 })
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn regenerate_invite_code(
+    pool: &SqlitePool,
+    id: i64,
+    new_code: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET invite_code=? WHERE id=?")
+        .bind(new_code)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn clear_invite_code(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET invite_code=NULL WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_enclave(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM enclaves WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn create_invitation(
     pool: &SqlitePool,
     enclave_id: i64,
