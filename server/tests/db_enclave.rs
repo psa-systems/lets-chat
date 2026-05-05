@@ -235,6 +235,61 @@ async fn transfer_ownership_rejects_non_member() {
 }
 
 #[tokio::test]
+async fn create_and_list_invitation() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    let inv_id = lets_chat::db::enclave::create_invitation(&pool, id, "u2", "owner1")
+        .await
+        .unwrap();
+    let pending = lets_chat::db::enclave::list_invitations_for_user(&pool, "u2")
+        .await
+        .unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].0.id, inv_id);
+    assert_eq!(pending[0].1.id, id);
+}
+
+#[tokio::test]
+async fn create_invitation_unique_per_invitee_per_enclave() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::create_invitation(&pool, id, "u2", "owner1")
+        .await
+        .unwrap();
+    let err = lets_chat::db::enclave::create_invitation(&pool, id, "u2", "owner1").await;
+    assert!(err.is_err());
+}
+
+#[tokio::test]
+async fn accept_invitation_inserts_member_and_deletes_invite() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    let inv_id = lets_chat::db::enclave::create_invitation(&pool, id, "u2", "owner1")
+        .await
+        .unwrap();
+    let (eid, uid) = lets_chat::db::enclave::accept_invitation(&pool, inv_id)
+        .await
+        .unwrap();
+    assert_eq!(eid, id);
+    assert_eq!(uid, "u2");
+    let m = lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m.role, EnclaveRole::Member);
+    assert!(lets_chat::db::enclave::list_invitations_for_user(&pool, "u2")
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")

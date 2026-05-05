@@ -107,6 +107,116 @@ pub async fn update_role(
     Ok(())
 }
 
+pub async fn create_invitation(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    invitee_id: &str,
+    invited_by: &str,
+) -> Result<i64, sqlx::Error> {
+    let res = sqlx::query(
+        "INSERT INTO enclave_invitations (enclave_id, invitee_id, invited_by) VALUES (?, ?, ?)",
+    )
+    .bind(enclave_id)
+    .bind(invitee_id)
+    .bind(invited_by)
+    .execute(pool)
+    .await?;
+    Ok(res.last_insert_rowid())
+}
+
+pub async fn list_invitations_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<(EnclaveInvitation, Enclave)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT i.id, i.enclave_id, i.invitee_id, i.invited_by, i.created_at, \
+                e.id AS e_id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at AS e_created_at \
+         FROM enclave_invitations i \
+         JOIN enclaves e ON e.id = i.enclave_id \
+         WHERE i.invitee_id = ? \
+         ORDER BY i.created_at DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let inv = EnclaveInvitation {
+                id: r.get("id"),
+                enclave_id: r.get("enclave_id"),
+                invitee_id: r.get("invitee_id"),
+                invited_by: r.get("invited_by"),
+                created_at: r.get("created_at"),
+            };
+            let enc = Enclave {
+                id: r.get("e_id"),
+                name: r.get("name"),
+                description: r.get("description"),
+                is_public: r.get::<i64, _>("is_public") != 0,
+                invite_code: r.get("invite_code"),
+                created_by: r.get("created_by"),
+                created_at: r.get("e_created_at"),
+            };
+            (inv, enc)
+        })
+        .collect())
+}
+
+pub async fn get_invitation(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<Option<EnclaveInvitation>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, enclave_id, invitee_id, invited_by, created_at FROM enclave_invitations WHERE id=?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| EnclaveInvitation {
+        id: r.get("id"),
+        enclave_id: r.get("enclave_id"),
+        invitee_id: r.get("invitee_id"),
+        invited_by: r.get("invited_by"),
+        created_at: r.get("created_at"),
+    }))
+}
+
+pub async fn delete_invitation(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM enclave_invitations WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn accept_invitation(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<(i64, String), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query("SELECT enclave_id, invitee_id FROM enclave_invitations WHERE id=?")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let row = row.ok_or(sqlx::Error::RowNotFound)?;
+    let enclave_id: i64 = row.get("enclave_id");
+    let invitee_id: String = row.get("invitee_id");
+    sqlx::query(
+        "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role) VALUES (?, ?, 'member')",
+    )
+    .bind(enclave_id)
+    .bind(&invitee_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("DELETE FROM enclave_invitations WHERE id=?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok((enclave_id, invitee_id))
+}
+
 pub async fn transfer_ownership(
     pool: &SqlitePool,
     enclave_id: i64,
