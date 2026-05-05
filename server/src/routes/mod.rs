@@ -18,6 +18,7 @@ use crate::ws::events::ChatEvent;
 mod admin;
 mod auth;
 mod dm;
+mod enclave;
 mod home;
 mod reactions;
 mod room;
@@ -134,6 +135,7 @@ pub fn build_router(state: AppState) -> Router {
             get(settings::get_settings).post(settings::post_settings),
         )
         .route("/ws", get(ws::ws_handler))
+        .merge(enclave::router())
         .merge(admin::router())
         .nest_service("/assets", ServeDir::new("server/assets"))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
