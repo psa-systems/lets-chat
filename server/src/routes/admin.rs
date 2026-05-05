@@ -10,8 +10,8 @@ use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::views::admin::{
-    AdminInviteView, AdminRoomView, AdminUserView, InvitesPage, ModLogPage, RoomRowFragment,
-    RoomsPage, SettingsPage, UserRowFragment, UsersPage,
+    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, EnclavesPage, InvitesPage,
+    ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -34,7 +34,39 @@ pub fn router() -> Router<AppState> {
         .route("/admin/rooms/{id}/edit", post(post_edit_room))
         .route("/admin/rooms/{id}/invite", post(post_invite_to_room))
         .route("/admin/rooms/{id}/regenerate", post(post_regenerate_invite))
+        .route("/admin/enclaves", get(get_enclaves))
         .route("/admin/modlog", get(get_modlog))
+}
+
+pub async fn get_enclaves(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let raw = db::enclave::list_all_enclaves_with_counts(&state.chat).await?;
+    let enclaves: Vec<AdminEnclaveView> = raw
+        .into_iter()
+        .map(|(e, count, owner_id)| AdminEnclaveView {
+            id: e.id,
+            name: e.name,
+            description: e.description,
+            is_public: e.is_public,
+            invite_code: e.invite_code,
+            member_count: count,
+            owner_id,
+            created_at: e.created_at,
+        })
+        .collect();
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let page = EnclavesPage {
+        user: &user,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        section: "enclaves",
+        enclaves: &enclaves,
+    };
+    html(&page)
 }
 
 // Settings ------------------------------------------------------------------
