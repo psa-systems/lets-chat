@@ -41,7 +41,8 @@ pub async fn get_dm(
     let peer_record = db::auth::find_user_by_id(&state.auth, &peer_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let peer: User = peer_record.into();
+    let mut peer: User = peer_record.into();
+    peer.status = super::effective_status(&state, &peer.id, &peer.status);
 
     // Find or create the underlying DM room. The DM room is named after the
     // peer relative to the creator; the rendered title uses peer.username
@@ -91,7 +92,7 @@ pub async fn get_dm(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = super::load_author_meta(&state, &m.user_id).await?;
+            let entry = super::load_author_meta(&state, &m.user_id, &user.id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };

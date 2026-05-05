@@ -72,7 +72,7 @@ pub async fn get_room(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = super::load_author_meta(&state, &m.user_id).await?;
+            let entry = super::load_author_meta(&state, &m.user_id, &user.id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -245,7 +245,7 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let meta = super::load_author_meta(&state, &m.user_id).await?;
+    let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
     let can_edit = m.user_id == user.id;
     let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
@@ -320,7 +320,7 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta = super::load_author_meta(&state, &m.user_id).await?;
+    let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
         .into_iter()
