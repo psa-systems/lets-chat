@@ -66,3 +66,63 @@ async fn create_enclave_duplicate_name_errors() {
     let err = lets_chat::db::enclave::create_enclave(&pool, "dup", None, "u2").await;
     assert!(err.is_err());
 }
+
+#[tokio::test]
+async fn get_enclave_round_trip() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
+        .await
+        .unwrap();
+    let e = lets_chat::db::enclave::get_enclave(&pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(e.name, "x");
+    assert!(!e.is_public);
+    assert_eq!(e.invite_code, None);
+    assert!(lets_chat::db::enclave::get_enclave(&pool, 9999)
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn get_membership_returns_role() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
+        .await
+        .unwrap();
+    let m = lets_chat::db::enclave::get_membership(&pool, id, "u")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m.role, EnclaveRole::Owner);
+    assert!(lets_chat::db::enclave::get_membership(&pool, id, "nobody")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn get_enclave_by_invite_code_finds_match() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE enclaves SET invite_code='abc' WHERE id=?")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let e = lets_chat::db::enclave::get_enclave_by_invite_code(&pool, "abc")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(e.id, id);
+    assert!(
+        lets_chat::db::enclave::get_enclave_by_invite_code(&pool, "missing")
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
