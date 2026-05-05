@@ -374,6 +374,36 @@ pub async fn list_enclaves_for_user(
     Ok(rows.iter().map(map_enclave).collect())
 }
 
+pub async fn list_all_enclaves_with_counts(
+    pool: &SqlitePool,
+) -> Result<Vec<(Enclave, i64, Option<String>)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, \
+                (SELECT COUNT(*) FROM enclave_members m WHERE m.enclave_id = e.id) AS member_count, \
+                (SELECT user_id FROM enclave_members m WHERE m.enclave_id = e.id AND m.role = 'owner' LIMIT 1) AS owner_id \
+         FROM enclaves e ORDER BY e.name COLLATE NOCASE",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let enclave = Enclave {
+                id: r.get("id"),
+                name: r.get("name"),
+                description: r.get("description"),
+                is_public: r.get::<i64, _>("is_public") != 0,
+                invite_code: r.get("invite_code"),
+                created_by: r.get("created_by"),
+                created_at: r.get("created_at"),
+            };
+            let count: i64 = r.get("member_count");
+            let owner: Option<String> = r.get("owner_id");
+            (enclave, count, owner)
+        })
+        .collect())
+}
+
 pub async fn list_public_enclaves(pool: &SqlitePool) -> Result<Vec<Enclave>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, name, description, is_public, invite_code, created_by, created_at \
