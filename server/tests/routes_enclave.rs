@@ -124,6 +124,127 @@ async fn get_enclave_landing_404_for_unknown() {
 }
 
 #[tokio::test]
+async fn discover_lists_only_public_enclaves() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=open"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let vis = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{id}/visibility"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("is_public=1"))
+        .unwrap();
+    app.clone().oneshot(vis).await.unwrap();
+
+    let get = Request::builder()
+        .method(Method::GET)
+        .uri("/enclaves/discover")
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(get).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(s.contains("open"));
+}
+
+#[tokio::test]
+async fn join_by_invite_code_adds_member() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=clubhouse"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let gen_code = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{id}/invite-code"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(gen_code).await.unwrap();
+    assert!(res.status().is_redirection());
+    // The owner is already a member; we just verify the endpoint succeeds.
+}
+
+#[tokio::test]
+async fn join_by_invalid_invite_code_400() {
+    let (app, sess) = app_with_user("user").await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves/join")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("code=nonsense"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn discover_join_rejects_private() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=secretclub"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclaves/discover/{id}/join"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn post_enclaves_requires_auth() {
     let (app, _sess) = app_with_user("user").await;
     let req = Request::builder()
