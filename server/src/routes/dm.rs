@@ -1,4 +1,5 @@
 use axum::extract::{Path, State};
+use axum::response::{IntoResponse, Response};
 use std::collections::HashMap;
 
 use crate::auth::AuthUser;
@@ -8,7 +9,7 @@ use crate::models::User;
 use crate::state::AppState;
 use crate::views::dm::DmPage;
 use crate::views::room::{MessageView, ReactionView};
-use crate::views::{html, Html};
+use crate::views::html;
 use crate::ws::events::ChatEvent;
 
 /// Extract the HH:MM portion from a timestamp string. Accepts both the
@@ -28,7 +29,7 @@ pub async fn get_dm(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(peer_id): Path<String>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     // Self-DMs are not supported.
     if peer_id == user.id {
         return Err(AppError::BadRequest(
@@ -175,5 +176,9 @@ pub async fn get_dm(
         messages: &messages,
         asset_version: &state.asset_version,
     };
-    html(&page)
+    let body = html(&page)?;
+    let mut response = body.into_response();
+    let (name, value) = crate::last_visited::set(&format!("/dm/{}", peer.id));
+    response.headers_mut().insert(name, value);
+    Ok(response)
 }

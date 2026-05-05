@@ -316,9 +316,6 @@ pub async fn is_room_accessible(
     user_id: &str,
     is_site_admin: bool,
 ) -> Result<bool, sqlx::Error> {
-    if is_site_admin {
-        return Ok(true);
-    }
     let row = sqlx::query("SELECT room_type, enclave_id FROM rooms WHERE id=?")
         .bind(room_id)
         .fetch_optional(pool)
@@ -328,6 +325,14 @@ pub async fn is_room_accessible(
     };
     let room_type: String = r.get("room_type");
     let enclave_id: Option<i64> = r.get("enclave_id");
+
+    // Site admin god-mode applies to existing rooms only.
+    if is_site_admin && room_type != "dm" {
+        return Ok(true);
+    }
+    if is_site_admin && room_type == "dm" {
+        return is_room_member(pool, room_id, user_id).await;
+    }
 
     if room_type == "dm" {
         return is_room_member(pool, room_id, user_id).await;
