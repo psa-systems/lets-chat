@@ -33,15 +33,8 @@ pub async fn get_room(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // Access check: public rooms are visible to everyone; private rooms and
-    // DMs require membership. Admins additionally see all non-DM rooms.
     let is_admin = user.role == "admin";
-    let can_view = match room.room_type.as_str() {
-        "public" => true,
-        "dm" => db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-        _ => is_admin || db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-    };
-    if !can_view {
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
 
