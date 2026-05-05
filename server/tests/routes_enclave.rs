@@ -85,6 +85,45 @@ async fn post_enclaves_creates_and_redirects() {
 }
 
 #[tokio::test]
+async fn get_enclave_landing_renders_for_member() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=rust"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let loc = res.headers().get("location").unwrap().to_str().unwrap().to_string();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(&loc)
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(s.contains("rust"));
+}
+
+#[tokio::test]
+async fn get_enclave_landing_404_for_unknown() {
+    let (app, sess) = app_with_user("user").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/enclave/999999")
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn post_enclaves_requires_auth() {
     let (app, _sess) = app_with_user("user").await;
     let req = Request::builder()
