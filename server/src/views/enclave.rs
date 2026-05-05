@@ -2,7 +2,7 @@ use askama::Template;
 
 use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveMembership};
 use crate::models::{Room, User};
-use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
 #[derive(Template)]
 #[template(path = "enclave/page.html")]
@@ -14,6 +14,7 @@ pub struct EnclavePage<'a> {
     pub can_manage: bool,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
 }
 
@@ -26,6 +27,7 @@ pub struct EnclaveSettingsPage<'a> {
     pub can_delete: bool,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
 }
 
@@ -36,6 +38,7 @@ pub struct DiscoverPage<'a> {
     pub enclaves: &'a [Enclave],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
 }
 
@@ -46,5 +49,6 @@ pub struct InvitationsPage<'a> {
     pub invitations: &'a [(EnclaveInvitation, Enclave)],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
 }

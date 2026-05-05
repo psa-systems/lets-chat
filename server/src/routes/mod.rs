@@ -12,7 +12,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
-use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::ws::events::ChatEvent;
 
 mod admin;
@@ -73,6 +73,71 @@ pub(crate) async fn load_sidebar(
     }
 
     Ok((sidebar_rooms, sidebar_peers))
+}
+
+/// Convenience wrapper that returns sidebar lists plus the switcher entries
+/// in one call. Most page handlers want all three for layout.html.
+pub(crate) async fn load_chrome(
+    state: &AppState,
+    user: &User,
+    current_enclave: Option<i64>,
+) -> Result<(Vec<SidebarRoom>, Vec<SidebarPeer>, Vec<SwitcherEntry>), AppError> {
+    let (rooms, peers) = load_sidebar(state, user).await?;
+    let switcher = load_switcher(state, user, current_enclave).await?;
+    Ok((rooms, peers, switcher))
+}
+
+/// Build the leftmost switcher column: a Home entry plus one icon per
+/// enclave the caller is a member of. The `current_enclave` argument
+/// highlights the active icon (None = Home).
+pub(crate) async fn load_switcher(
+    state: &AppState,
+    user: &User,
+    current_enclave: Option<i64>,
+) -> Result<Vec<SwitcherEntry>, AppError> {
+    let is_admin = user.role == "admin";
+
+    let dm_unread: i64 = db::chat::list_dm_unread_counts(&state.chat, &user.id)
+        .await?
+        .iter()
+        .map(|(_, c)| *c)
+        .sum();
+    let pending_invites = db::enclave::list_invitations_for_user(&state.chat, &user.id)
+        .await?
+        .len() as i64;
+
+    let mut entries = Vec::new();
+    entries.push(SwitcherEntry {
+        id: None,
+        label: "Home".to_string(),
+        initial: "H".to_string(),
+        unread: dm_unread,
+        pending_invites,
+        active: current_enclave.is_none(),
+    });
+
+    let enclaves = db::enclave::list_enclaves_for_user(&state.chat, &user.id).await?;
+    let _ = is_admin;
+    for e in enclaves {
+        let initial = e
+            .name
+            .chars()
+            .next()
+            .map(|c| c.to_uppercase().to_string())
+            .unwrap_or_else(|| "?".to_string());
+        entries.push(SwitcherEntry {
+            id: Some(e.id),
+            label: e.name,
+            initial,
+            // Per-enclave unread aggregation is added in Phase 4 alongside
+            // EnclaveRoomAdded broadcasts; for now the icon shows no badge.
+            unread: 0,
+            pending_invites: 0,
+            active: current_enclave == Some(e.id),
+        });
+    }
+
+    Ok(entries)
 }
 
 /// Broadcast a `NewMessage` (or other room-wide) event to every user that has
