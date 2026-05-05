@@ -11,8 +11,8 @@ use crate::error::AppError;
 use crate::models::enclave::EnclaveRole;
 use crate::models::User;
 use crate::perms::enclave_can_manage;
-use crate::state::AppState;
 use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
+use crate::state::AppState;
 use crate::views::enclave::{DiscoverPage, EnclavePage, EnclaveSettingsPage};
 use crate::views::{html, Html};
 
@@ -37,23 +37,28 @@ pub fn router() -> Router<AppState> {
         .route("/enclave/{id}/transfer", post(post_transfer))
         .route("/enclave/{id}/delete", post(post_delete))
         .route("/enclave/{id}/leave", post(post_leave))
-        .route("/enclave/{id}/members/{user_id}/role", post(post_member_role))
+        .route(
+            "/enclave/{id}/members/{user_id}/role",
+            post(post_member_role),
+        )
         .route("/enclave/{id}/members/{user_id}/kick", post(post_kick))
         .route("/enclave/{id}/rooms", post(post_create_room))
         .route("/enclave/{id}/rooms/{room_id}/edit", post(post_edit_room))
-        .route("/enclave/{id}/rooms/{room_id}/delete", post(post_delete_room))
-        .route("/enclave/{id}/rooms/{room_id}/members", post(post_add_room_member))
+        .route(
+            "/enclave/{id}/rooms/{room_id}/delete",
+            post(post_delete_room),
+        )
+        .route(
+            "/enclave/{id}/rooms/{room_id}/members",
+            post(post_add_room_member),
+        )
         .route(
             "/enclave/{id}/rooms/{room_id}/members/{user_id}/remove",
             post(post_remove_room_member),
         )
 }
 
-async fn require_manage(
-    state: &AppState,
-    user: &User,
-    enclave_id: i64,
-) -> Result<(), AppError> {
+async fn require_manage(state: &AppState, user: &User, enclave_id: i64) -> Result<(), AppError> {
     let m = db::enclave::get_membership(&state.chat, enclave_id, &user.id).await?;
     if !enclave_can_manage(m.map(|x| x.role), &user.role) {
         return Err(AppError::Forbidden);
@@ -539,9 +544,7 @@ pub async fn post_add_room_member(
         .await?
         .is_none()
     {
-        return Err(AppError::BadRequest(
-            "user is not an enclave member".into(),
-        ));
+        return Err(AppError::BadRequest("user is not an enclave member".into()));
     }
     db::chat::add_room_member(&state.chat, room_id, target).await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))

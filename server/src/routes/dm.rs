@@ -8,8 +8,8 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::dm::DmPage;
-use crate::views::room::{MessageView, ReactionView};
 use crate::views::html;
+use crate::views::room::{MessageView, ReactionView};
 use crate::ws::events::ChatEvent;
 
 /// Extract the HH:MM portion from a timestamp string. Accepts both the

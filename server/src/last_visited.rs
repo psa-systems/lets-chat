@@ -26,10 +26,7 @@ pub fn is_safe_path(path: &str) -> bool {
         return !rest.is_empty() && rest.parse::<i64>().is_ok();
     }
     if let Some(rest) = path.strip_prefix("/dm/") {
-        return !rest.is_empty()
-            && rest
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-');
+        return !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
     }
     false
 }
