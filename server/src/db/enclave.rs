@@ -62,6 +62,56 @@ pub async fn get_enclave_by_invite_code(
     Ok(row.as_ref().map(map_enclave))
 }
 
+pub async fn list_enclaves_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<Enclave>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at \
+         FROM enclaves e \
+         JOIN enclave_members m ON m.enclave_id = e.id AND m.user_id = ? \
+         ORDER BY e.name COLLATE NOCASE",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_enclave).collect())
+}
+
+pub async fn list_public_enclaves(pool: &SqlitePool) -> Result<Vec<Enclave>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at \
+         FROM enclaves WHERE is_public = 1 ORDER BY name COLLATE NOCASE",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_enclave).collect())
+}
+
+pub async fn list_members(
+    pool: &SqlitePool,
+    enclave_id: i64,
+) -> Result<Vec<EnclaveMembership>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT enclave_id, user_id, role, joined_at FROM enclave_members WHERE enclave_id = ? ORDER BY joined_at",
+    )
+    .bind(enclave_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let role_str: String = r.get("role");
+        let role = EnclaveRole::from_str(&role_str).map_err(|e| sqlx::Error::Decode(e.into()))?;
+        out.push(EnclaveMembership {
+            enclave_id: r.get("enclave_id"),
+            user_id: r.get("user_id"),
+            role,
+            joined_at: r.get("joined_at"),
+        });
+    }
+    Ok(out)
+}
+
 pub async fn get_membership(
     pool: &SqlitePool,
     enclave_id: i64,
