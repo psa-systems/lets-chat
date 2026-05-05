@@ -290,6 +290,63 @@ async fn accept_invitation_inserts_member_and_deletes_invite() {
 }
 
 #[tokio::test]
+async fn update_metadata_and_visibility_and_invite_code() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::update_metadata(&pool, id, "y", Some("hi"))
+        .await
+        .unwrap();
+    lets_chat::db::enclave::set_public(&pool, id, true).await.unwrap();
+    lets_chat::db::enclave::regenerate_invite_code(&pool, id, "code123")
+        .await
+        .unwrap();
+    let e = lets_chat::db::enclave::get_enclave(&pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(e.name, "y");
+    assert_eq!(e.description.as_deref(), Some("hi"));
+    assert!(e.is_public);
+    assert_eq!(e.invite_code.as_deref(), Some("code123"));
+    lets_chat::db::enclave::clear_invite_code(&pool, id).await.unwrap();
+    let e2 = lets_chat::db::enclave::get_enclave(&pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(e2.invite_code, None);
+}
+
+#[tokio::test]
+async fn delete_enclave_cascades() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO rooms (name, room_type, enclave_id) VALUES ('r', 'public', ?)")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    lets_chat::db::enclave::delete_enclave(&pool, id).await.unwrap();
+    let n: i64 = sqlx::query("SELECT COUNT(*) AS c FROM rooms WHERE enclave_id=?")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("c");
+    assert_eq!(n, 0);
+    let m: i64 = sqlx::query("SELECT COUNT(*) AS c FROM enclave_members WHERE enclave_id=?")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("c");
+    assert_eq!(m, 0);
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
