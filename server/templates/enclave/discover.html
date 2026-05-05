@@ -4,6 +4,11 @@
 
 {% block main %}
 <section class="p-6 max-w-2xl space-y-6">
+  {% if let Some(msg) = flash_error %}
+  <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+    {{ msg }}
+  </div>
+  {% endif %}
   <header>
     <h1 class="text-2xl font-semibold">Enclaves</h1>
     <p class="text-slate-600 mt-1">Top-level groups of rooms. Create one, join via code, or browse public ones.</p>
