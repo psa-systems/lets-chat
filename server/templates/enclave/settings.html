@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ enclave.name }} settings - lets-chat{% endblock %}
+
+{% block main %}
+<section class="p-6 max-w-2xl space-y-6">
+  <h1 class="text-2xl font-semibold">{{ enclave.name }} settings</h1>
+
+  <form method="post" action="/enclave/{{ enclave.id }}/edit" class="space-y-2">
+    <input name="name" value="{{ enclave.name }}" class="border rounded px-2 py-1" required>
+    <input name="description" value="{% if let Some(d) = enclave.description %}{{ d }}{% endif %}" class="border rounded px-2 py-1">
+    <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1">Save</button>
+  </form>
+
+  <form method="post" action="/enclave/{{ enclave.id }}/visibility">
+    <button name="is_public" value="{% if enclave.is_public %}0{% else %}1{% endif %}" type="submit" class="text-sm bg-slate-200 rounded px-3 py-1">
+      {% if enclave.is_public %}Make private{% else %}Make public{% endif %}
+    </button>
+  </form>
+
+  <section class="space-y-2">
+    <h2 class="font-semibold">Invite code</h2>
+    {% if let Some(c) = enclave.invite_code %}
+    <p class="font-mono text-sm bg-slate-100 rounded p-2 select-all">{{ c }}</p>
+    {% endif %}
+    <form method="post" action="/enclave/{{ enclave.id }}/invite-code">
+      <button type="submit" class="bg-slate-200 rounded px-3 py-1">{% if enclave.invite_code.is_some() %}Rotate{% else %}Generate{% endif %}</button>
+    </form>
+  </section>
+
+  <section>
+    <h2 class="font-semibold">Members</h2>
+    <ul>{% for m in members %}<li>{{ m.user_id }} - {{ m.role.as_str() }}</li>{% endfor %}</ul>
+  </section>
+
+  {% if can_delete %}
+  <form method="post" action="/enclave/{{ enclave.id }}/delete" class="pt-6 border-t">
+    <button type="submit" class="text-red-600">Delete enclave</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
