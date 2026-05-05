@@ -33,7 +33,10 @@ async fn setup_pool() -> SqlitePool {
     sqlx::raw_sql(m9).execute(&pool).await.expect("migration 9");
 
     let m10 = include_str!("../migrations/chat/0010_room_name_per_enclave.sql");
-    sqlx::raw_sql(m10).execute(&pool).await.expect("migration 10");
+    sqlx::raw_sql(m10)
+        .execute(&pool)
+        .await
+        .expect("migration 10");
 
     pool
 }

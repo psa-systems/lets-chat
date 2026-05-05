@@ -3,8 +3,16 @@
 {% block title %}@{{ peer.username }} - lets-chat{% endblock %}
 
 {% block main %}
-<header class="border-b border-slate-200 px-4 py-2">
-  <h1 class="font-semibold">@{{ peer.username }}</h1>
+<header class="border-b border-slate-200 px-4 py-2 flex items-center gap-3">
+  {% if peer.avatar_ext.is_some() %}
+  <img src="/avatars/{{ peer.id }}" alt="" class="h-8 w-8 rounded-full object-cover border border-slate-200">
+  {% else %}
+  <div class="h-8 w-8 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-sm font-semibold">{% if let Some(c) = peer.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+  {% endif %}
+  <div>
+    <h1 class="font-semibold">{{ peer.display_label() }}</h1>
+    <div class="text-xs text-slate-500">@{{ peer.username }}</div>
+  </div>
 </header>
 {% include "room/messages.html" %}
 <div id="typing" class="px-4 text-xs text-slate-500"></div>

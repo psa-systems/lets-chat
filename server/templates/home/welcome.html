@@ -4,7 +4,7 @@
 
 {% block main %}
 <section class="p-6 max-w-2xl">
-  <h1 class="text-2xl font-semibold">Welcome, {{ user.username }}</h1>
+  <h1 class="text-2xl font-semibold">Welcome, {{ user.display_label() }}</h1>
   <p class="mt-2 text-slate-600">
     Pick a DM from the sidebar, or
     <a href="/enclaves/discover" class="text-blue-600 hover:underline">create or join an enclave</a>

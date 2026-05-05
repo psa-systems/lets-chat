@@ -6,26 +6,63 @@
 <header class="border-b border-slate-200 px-4 py-2">
   <h1 class="font-semibold">Settings</h1>
 </header>
-<section class="p-6 max-w-xl">
+<section class="p-6 max-w-xl space-y-8">
   {% if saved %}
-  <div class="mb-4 p-2 bg-green-100 text-green-800 text-sm rounded">Saved.</div>
+  <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Saved.</div>
   {% endif %}
+
+  <div>
+    <h2 class="font-medium mb-2">Account</h2>
+    <dl class="text-sm text-slate-700 space-y-1">
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Username</dt><dd>{{ user.username }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Role</dt><dd>{{ user.role }}</dd></div>
+    </dl>
+  </div>
+
+  <form method="post" action="/settings/profile" enctype="multipart/form-data" class="space-y-4">
+    <h2 class="font-medium">Profile</h2>
+    <div class="flex items-start gap-4">
+      <div class="shrink-0">
+        {% if user.avatar_ext.is_some() %}
+        <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-slate-200">
+        {% else %}
+        <div class="h-16 w-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="flex-1 space-y-2">
+        <label class="block text-sm">
+          <span class="text-slate-600">Profile picture</span>
+          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block mt-1 text-sm">
+          <span class="text-xs text-slate-500">PNG, JPEG, or WebP. Max 1 MiB.</span>
+        </label>
+      </div>
+    </div>
+    <label class="block text-sm">
+      <span class="text-slate-600">Display name</span>
+      <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
+    </label>
+    <label class="block text-sm">
+      <span class="text-slate-600">Bio</span>
+      <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
+    </label>
+    <div class="flex items-center gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save profile</button>
+      {% if user.avatar_ext.is_some() %}
+      <button type="submit" form="avatar-delete-form" class="text-sm text-red-600 hover:underline">Remove avatar</button>
+      {% endif %}
+    </div>
+  </form>
+  {% if user.avatar_ext.is_some() %}
+  <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
+  {% endif %}
+
   <form method="post" action="/settings" class="space-y-4">
-    <div>
-      <h2 class="font-medium mb-2">Account</h2>
-      <dl class="text-sm text-slate-700 space-y-1">
-        <div class="flex gap-2"><dt class="w-32 text-slate-500">Username</dt><dd>{{ user.username }}</dd></div>
-        <div class="flex gap-2"><dt class="w-32 text-slate-500">Role</dt><dd>{{ user.role }}</dd></div>
-      </dl>
-    </div>
-    <div>
-      <h2 class="font-medium mb-2">Preferences</h2>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
-        <span>Send and receive read receipts</span>
-      </label>
-    </div>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save</button>
+    <h2 class="font-medium">Preferences</h2>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
+      <span>Send and receive read receipts</span>
+    </label>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 </section>
 {% endblock %}

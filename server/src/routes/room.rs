@@ -49,7 +49,8 @@ pub async fn get_room(
     // Load messages, then resolve each author's username from the auth DB.
     // Cache lookups by user_id to avoid duplicate queries for the same author.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
-    let mut username_cache: HashMap<String, String> = HashMap::new();
+    let mut author_cache: HashMap<String, (String, Option<String>, Option<String>)> =
+        HashMap::new();
 
     // Reactions for every message in the room, in a single query. Group them
     // by message_id so we can attach to each MessageView below.
@@ -69,15 +70,16 @@ pub async fn get_room(
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
     for m in raw_messages {
-        let username = if let Some(name) = username_cache.get(&m.user_id) {
-            name.clone()
+        let (username, display_name, avatar_ext) = if let Some(entry) = author_cache.get(&m.user_id)
+        {
+            entry.clone()
         } else {
-            let resolved = db::auth::find_user_by_id(&state.auth, &m.user_id)
-                .await?
-                .map(|r| r.username)
-                .unwrap_or_else(|| "(unknown)".to_string());
-            username_cache.insert(m.user_id.clone(), resolved.clone());
-            resolved
+            let entry = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
+                Some(r) => (r.username, r.display_name, r.avatar_ext),
+                None => ("(unknown)".to_string(), None, None),
+            };
+            author_cache.insert(m.user_id.clone(), entry.clone());
+            entry
         };
         let can_edit = m.user_id == user.id;
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
@@ -99,6 +101,8 @@ pub async fn get_room(
             id: m.id,
             user_id: m.user_id.clone(),
             username,
+            display_name,
+            avatar_ext,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
@@ -246,10 +250,11 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let username = db::auth::find_user_by_id(&state.auth, &m.user_id)
-        .await?
-        .map(|r| r.username)
-        .unwrap_or_else(|| "(unknown)".to_string());
+    let (username, display_name, avatar_ext) =
+        match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
+            Some(r) => (r.username, r.display_name, r.avatar_ext),
+            None => ("(unknown)".to_string(), None, None),
+        };
     let can_edit = m.user_id == user.id;
     let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
@@ -272,6 +277,8 @@ pub async fn get_single_message(
         id: m.id,
         user_id: m.user_id.clone(),
         username,
+        display_name,
+        avatar_ext,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,
@@ -320,10 +327,11 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let username = db::auth::find_user_by_id(&state.auth, &m.user_id)
-        .await?
-        .map(|r| r.username)
-        .unwrap_or_else(|| "(unknown)".to_string());
+    let (username, display_name, avatar_ext) =
+        match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
+            Some(r) => (r.username, r.display_name, r.avatar_ext),
+            None => ("(unknown)".to_string(), None, None),
+        };
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
         .into_iter()
@@ -344,6 +352,8 @@ pub async fn patch_message(
         id: m.id,
         user_id: m.user_id.clone(),
         username,
+        display_name,
+        avatar_ext,
         created_at: m.created_at,
         edited_at: Some(edited_at_str),
         body: body.to_string(),

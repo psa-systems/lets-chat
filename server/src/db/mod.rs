@@ -5,6 +5,7 @@ pub mod moderation;
 pub mod settings;
 
 use sqlx::SqlitePool;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 static DATA_DIR: OnceLock<String> = OnceLock::new();
@@ -15,6 +16,15 @@ pub fn set_data_dir(dir: String) {
 
 fn data_dir() -> &'static str {
     DATA_DIR.get().map(|s| s.as_str()).unwrap_or("/data")
+}
+
+/// Directory where user avatar files live. Created on demand.
+pub fn avatars_dir() -> PathBuf {
+    let p = PathBuf::from(data_dir()).join("avatars");
+    if let Err(e) = std::fs::create_dir_all(&p) {
+        tracing::warn!(error = %e, path = %p.display(), "failed to create avatars dir");
+    }
+    p
 }
 
 async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool {

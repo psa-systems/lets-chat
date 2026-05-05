@@ -17,6 +17,7 @@ use crate::ws::events::ChatEvent;
 
 mod admin;
 mod auth;
+mod avatar;
 mod dm;
 mod enclave;
 mod home;
@@ -67,6 +68,8 @@ pub(crate) async fn load_sidebar(
                 sidebar_peers.push(SidebarPeer {
                     id: record.id.clone(),
                     username: record.username.clone(),
+                    display_name: record.display_name.clone(),
+                    avatar_ext: record.avatar_ext.clone(),
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
                 });
             }
@@ -216,6 +219,12 @@ pub fn build_router(state: AppState) -> Router {
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
+        .route("/settings/profile", post(settings::post_profile))
+        .route(
+            "/settings/avatar/delete",
+            post(settings::post_avatar_delete),
+        )
+        .route("/avatars/{user_id}", get(avatar::get_avatar))
         .route("/ws", get(ws::ws_handler))
         .merge(enclave::router())
         .merge(admin::router())
