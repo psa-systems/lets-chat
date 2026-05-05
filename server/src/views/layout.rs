@@ -16,7 +16,18 @@ pub struct SidebarRoom {
 pub struct SidebarPeer {
     pub id: String,
     pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
     pub unread: i64,
+}
+
+impl SidebarPeer {
+    pub fn label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
 }
 
 /// One icon in the leftmost enclave-switcher column. `id = None` is the Home

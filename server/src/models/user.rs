@@ -17,6 +17,8 @@ pub struct UserRecord {
     pub created_at: String,
     pub updated_at: String,
     pub read_receipts_enabled: bool,
+    pub bio: Option<String>,
+    pub avatar_ext: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -33,6 +35,18 @@ pub struct User {
     pub banned_until: Option<String>,
     pub created_at: String,
     pub read_receipts_enabled: bool,
+    pub bio: Option<String>,
+    pub avatar_ext: Option<String>,
+}
+
+impl User {
+    /// Trimmed display_name when set and non-empty, otherwise the username.
+    pub fn display_label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
 }
 
 impl From<UserRecord> for User {
@@ -49,6 +63,8 @@ impl From<UserRecord> for User {
             banned_until: r.banned_until,
             created_at: r.created_at,
             read_receipts_enabled: r.read_receipts_enabled,
+            bio: r.bio,
+            avatar_ext: r.avatar_ext,
         }
     }
 }

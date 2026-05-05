@@ -385,10 +385,20 @@ async fn render_new_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (message.user_id.as_str(), message.created_at.as_str()),
     );
+    let (display_name, avatar_ext) = match db::auth::find_user_by_id(&state.auth, &message.user_id)
+        .await
+        .ok()
+        .flatten()
+    {
+        Some(r) => (r.display_name, r.avatar_ext),
+        None => (None, None),
+    };
     let view = MessageView {
         id: message.id,
         user_id: message.user_id.clone(),
         username: message.author_name.clone(),
+        display_name,
+        avatar_ext,
         created_at: message.created_at.clone(),
         edited_at: message.edited_at.clone(),
         body: message.body.clone(),
@@ -410,11 +420,14 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
-    let username = db::auth::find_user_by_id(&state.auth, &m.user_id)
-        .await
-        .ok()?
-        .map(|u| u.username)
-        .unwrap_or_else(|| "(unknown)".to_string());
+    let (username, display_name, avatar_ext) =
+        match db::auth::find_user_by_id(&state.auth, &m.user_id)
+            .await
+            .ok()?
+        {
+            Some(u) => (u.username, u.display_name, u.avatar_ext),
+            None => ("(unknown)".to_string(), None, None),
+        };
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
         .ok()?;
@@ -442,6 +455,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         id: m.id,
         user_id: m.user_id,
         username,
+        display_name,
+        avatar_ext,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,

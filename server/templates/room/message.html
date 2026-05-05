@@ -7,11 +7,16 @@
 {% endif %}
 <div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
   {% if !message.is_follow_up %}
-  <div class="flex items-baseline gap-2">
-    {% if message.user_id != message.viewer_id %}
-    <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="Direct message {{ message.username }}">{{ message.username }}</a>
+  <div class="flex items-center gap-2">
+    {% if message.avatar_ext.is_some() %}
+    <img src="/avatars/{{ message.user_id }}" alt="" class="h-6 w-6 rounded-full object-cover">
     {% else %}
-    <span class="font-medium">{{ message.username }}</span>
+    <div class="h-6 w-6 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-xs font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    {% endif %}
+    {% if message.user_id != message.viewer_id %}
+    <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="Direct message {{ message.username }}">{{ message.label() }}</a>
+    {% else %}
+    <span class="font-medium">{{ message.label() }}</span>
     {% endif %}
     <span class="text-xs text-slate-500">{{ message.created_at }}</span>
     {% if message.edited_at.is_some() %}
