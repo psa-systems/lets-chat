@@ -45,7 +45,9 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
 
-    let user_id = db::auth::create_user(&auth, username, "hash").await.unwrap();
+    let user_id = db::auth::create_user(&auth, username, "hash")
+        .await
+        .unwrap();
     sqlx::query("UPDATE users SET role=? WHERE id=?")
         .bind(role)
         .bind(&user_id)
@@ -143,7 +145,13 @@ async fn get_enclave_landing_renders_for_member() {
         .body(Body::from("name=rust"))
         .unwrap();
     let res = app.clone().oneshot(create).await.unwrap();
-    let loc = res.headers().get("location").unwrap().to_str().unwrap().to_string();
+    let loc = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
 
     let req = Request::builder()
         .method(Method::GET)
@@ -153,7 +161,9 @@ async fn get_enclave_landing_renders_for_member() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
     assert!(s.contains("rust"));
 }
@@ -209,7 +219,9 @@ async fn discover_lists_only_public_enclaves() {
         .unwrap();
     let res = app.clone().oneshot(get).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
     assert!(s.contains("open"));
 }
@@ -334,9 +346,14 @@ async fn invite_then_accept_creates_membership() {
         .unwrap();
     let res = app.clone().oneshot(list).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
-    assert!(s.contains("alices-place"), "invitations page must show enclave name");
+    assert!(
+        s.contains("alices-place"),
+        "invitations page must show enclave name"
+    );
 
     // Bob accepts (find the invitation id from the DB via the response).
     // Easier: re-fetch via a direct DB call by extracting the invite id from the rendered HTML.
@@ -494,7 +511,9 @@ async fn create_room_in_enclave_attaches_to_enclave() {
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(landing).await.unwrap();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
     assert!(s.contains("experiments"));
 }

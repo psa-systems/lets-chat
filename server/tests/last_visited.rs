@@ -72,7 +72,9 @@ async fn home_renders_welcome_when_no_cookie() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
     assert!(s.contains("Welcome"), "should render welcome page");
 }
@@ -144,9 +146,15 @@ async fn get_room_sets_last_visited_cookie() {
     let cookie_header = res.headers().get_all("set-cookie");
     let mut found = false;
     for v in cookie_header {
-        if v.to_str().unwrap().contains("lets_chat_last_visited=/room/1") {
+        if v.to_str()
+            .unwrap()
+            .contains("lets_chat_last_visited=/room/1")
+        {
             found = true;
         }
     }
-    assert!(found, "Set-Cookie header must include the last_visited entry");
+    assert!(
+        found,
+        "Set-Cookie header must include the last_visited entry"
+    );
 }

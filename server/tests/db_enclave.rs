@@ -435,7 +435,10 @@ async fn backfill_repairs_created_by_when_partial_state_exists() {
         .await
         .unwrap()
         .get("created_by");
-    assert_eq!(cb, "ua", "backfill must replace 'system' sentinel even if members already exist");
+    assert_eq!(
+        cb, "ua",
+        "backfill must replace 'system' sentinel even if members already exist"
+    );
 
     // The owner row should now exist (was missing before).
     let role: String =
