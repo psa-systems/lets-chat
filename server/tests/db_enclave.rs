@@ -521,6 +521,47 @@ async fn is_room_accessible_dm_via_room_members() {
 }
 
 #[tokio::test]
+async fn list_rooms_in_enclave_returns_visible_rooms() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u1")
+        .await
+        .unwrap();
+    let _open = lets_chat::db::chat::create_room(&pool, "open", None, "public", None, Some(id))
+        .await
+        .unwrap();
+    let secret = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None, Some(id))
+        .await
+        .unwrap();
+    let _other_enclave = {
+        let oid = lets_chat::db::enclave::create_enclave(&pool, "other", None, "stranger")
+            .await
+            .unwrap();
+        lets_chat::db::chat::create_room(&pool, "other-room", None, "public", None, Some(oid))
+            .await
+            .unwrap()
+    };
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    let visible = lets_chat::db::chat::list_rooms_in_enclave(&pool, id, "u2", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        visible.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+        vec!["open"]
+    );
+    lets_chat::db::chat::add_room_member(&pool, secret, "u2")
+        .await
+        .unwrap();
+    let visible2 = lets_chat::db::chat::list_rooms_in_enclave(&pool, id, "u2", false)
+        .await
+        .unwrap();
+    let names: Vec<String> = visible2.iter().map(|r| r.name.clone()).collect();
+    assert!(names.contains(&"open".to_string()));
+    assert!(names.contains(&"secret".to_string()));
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
