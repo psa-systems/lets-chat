@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: ci-build/Dockerfile.web
+    container_name: dev-lets-chat-app-${USER}
     restart: unless-stopped
     environment:
       RUST_LOG: lets_chat=debug
