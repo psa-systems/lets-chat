@@ -11,6 +11,18 @@ pub struct FlashQuery {
     pub error: Option<String>,
 }
 
+/// Resolve a known error code to a user-facing message. Unknown codes are
+/// dropped so untrusted query params can never inject text into the page.
+fn flash_message(code: Option<&str>) -> Option<&'static str> {
+    match code? {
+        "enclave_name_taken" => {
+            Some("That enclave name is already taken. Pick a different name.")
+        }
+        "room_name_taken" => Some("That room name is already taken. Pick a different name."),
+        _ => None,
+    }
+}
+
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
@@ -110,11 +122,9 @@ pub async fn post_create(
     {
         Ok(id) => id,
         Err(e) if is_unique_violation(&e) => {
-            let msg = format!("Enclave \"{name}\" already exists. Pick a different name.");
-            return Ok(Redirect::to(&format!(
-                "/enclaves/discover?error={}",
-                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
-            )));
+            return Ok(Redirect::to(
+                "/enclaves/discover?error=enclave_name_taken",
+            ));
         }
         Err(e) => return Err(e.into()),
     };
@@ -147,7 +157,7 @@ pub async fn get_landing(
         members: &members,
         rooms: &rooms,
         can_manage,
-        flash_error: flash.error.as_deref(),
+        flash_error: flash_message(flash.error.as_deref()),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -165,7 +175,7 @@ pub async fn get_discover(
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
-        flash_error: flash.error.as_deref(),
+        flash_error: flash_message(flash.error.as_deref()),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -382,7 +392,7 @@ pub async fn get_settings(
         enclave: &enclave,
         members: &members,
         can_delete,
-        flash_error: flash.error.as_deref(),
+        flash_error: flash_message(flash.error.as_deref()),
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -416,10 +426,8 @@ pub async fn post_edit(
     .await
     {
         if is_unique_violation(&e) {
-            let msg = format!("Enclave \"{name}\" already exists. Pick a different name.");
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}/settings?error={}",
-                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
+                "/enclave/{id}/settings?error=enclave_name_taken"
             )));
         }
         return Err(e.into());
@@ -591,10 +599,8 @@ pub async fn post_create_room(
     {
         Ok(rid) => rid,
         Err(e) if is_unique_violation(&e) => {
-            let msg = format!("Room \"{name}\" already exists. Pick a different name.");
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}?error={}",
-                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
+                "/enclave/{id}?error=room_name_taken"
             )));
         }
         Err(e) => return Err(e.into()),
@@ -660,10 +666,8 @@ pub async fn post_edit_room(
     .await
     {
         if is_unique_violation(&e) {
-            let msg = format!("Room \"{name}\" already exists. Pick a different name.");
             return Ok(Redirect::to(&format!(
-                "/enclave/{id}?error={}",
-                percent_encoding::utf8_percent_encode(&msg, percent_encoding::NON_ALPHANUMERIC)
+                "/enclave/{id}?error=room_name_taken"
             )));
         }
         return Err(e.into());
