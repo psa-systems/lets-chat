@@ -75,6 +75,10 @@ async fn require_manage(state: &AppState, user: &User, enclave_id: i64) -> Resul
     Ok(())
 }
 
+fn is_unique_violation(err: &sqlx::Error) -> bool {
+    matches!(err, sqlx::Error::Database(d) if d.is_unique_violation())
+}
+
 #[derive(Deserialize)]
 pub struct CreateForm {
     pub name: String,
@@ -90,13 +94,22 @@ pub async fn post_create(
     if name.is_empty() {
         return Err(AppError::BadRequest("name required".into()));
     }
-    let id = db::enclave::create_enclave(
+    let id = match db::enclave::create_enclave(
         &state.chat,
         name,
         form.description.as_deref().filter(|s| !s.is_empty()),
         &user.id,
     )
-    .await?;
+    .await
+    {
+        Ok(id) => id,
+        Err(e) if is_unique_violation(&e) => {
+            return Err(AppError::BadRequest(format!(
+                "An enclave named \"{name}\" already exists. Pick a different name."
+            )));
+        }
+        Err(e) => return Err(e.into()),
+    };
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -380,13 +393,21 @@ pub async fn post_edit(
     if name.is_empty() {
         return Err(AppError::BadRequest("name required".into()));
     }
-    db::enclave::update_metadata(
+    if let Err(e) = db::enclave::update_metadata(
         &state.chat,
         id,
         name,
         form.description.as_deref().filter(|s| !s.is_empty()),
     )
-    .await?;
+    .await
+    {
+        if is_unique_violation(&e) {
+            return Err(AppError::BadRequest(format!(
+                "An enclave named \"{name}\" already exists. Pick a different name."
+            )));
+        }
+        return Err(e.into());
+    }
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
@@ -542,7 +563,7 @@ pub async fn post_create_room(
     } else {
         None
     };
-    let room_id = db::chat::create_room(
+    let room_id = match db::chat::create_room(
         &state.chat,
         name,
         form.topic.as_deref().filter(|s| !s.is_empty()),
@@ -550,7 +571,16 @@ pub async fn post_create_room(
         invite_code.as_deref(),
         Some(id),
     )
-    .await?;
+    .await
+    {
+        Ok(id) => id,
+        Err(e) if is_unique_violation(&e) => {
+            return Err(AppError::BadRequest(format!(
+                "A room named \"{name}\" already exists. Pick a different name."
+            )));
+        }
+        Err(e) => return Err(e.into()),
+    };
     if form.room_type == "private" {
         db::chat::add_room_member(&state.chat, room_id, &user.id).await?;
     }
@@ -603,13 +633,21 @@ pub async fn post_edit_room(
     if name.is_empty() {
         return Err(AppError::BadRequest("name required".into()));
     }
-    db::chat::update_room(
+    if let Err(e) = db::chat::update_room(
         &state.chat,
         room_id,
         name,
         form.topic.as_deref().filter(|s| !s.is_empty()),
     )
-    .await?;
+    .await
+    {
+        if is_unique_violation(&e) {
+            return Err(AppError::BadRequest(format!(
+                "A room named \"{name}\" already exists. Pick a different name."
+            )));
+        }
+        return Err(e.into());
+    }
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
