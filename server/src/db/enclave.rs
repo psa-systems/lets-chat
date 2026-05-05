@@ -62,6 +62,51 @@ pub async fn get_enclave_by_invite_code(
     Ok(row.as_ref().map(map_enclave))
 }
 
+pub async fn add_member(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    role: EnclaveRole,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role) VALUES (?, ?, ?)",
+    )
+    .bind(enclave_id)
+    .bind(user_id)
+    .bind(role.as_str())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn remove_member(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_role(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    role: EnclaveRole,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclave_members SET role=? WHERE enclave_id=? AND user_id=?")
+        .bind(role.as_str())
+        .bind(enclave_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list_enclaves_for_user(
     pool: &SqlitePool,
     user_id: &str,

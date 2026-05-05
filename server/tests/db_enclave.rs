@@ -141,6 +141,66 @@ async fn list_public_enclaves_filters_on_is_public() {
 }
 
 #[tokio::test]
+async fn add_remove_member_round_trip() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    assert!(lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .is_some());
+    lets_chat::db::enclave::remove_member(&pool, id, "u2")
+        .await
+        .unwrap();
+    assert!(lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn add_member_idempotent_via_or_ignore() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Admin)
+        .await
+        .unwrap();
+    let m = lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m.role, EnclaveRole::Member, "second add must NOT promote silently");
+}
+
+#[tokio::test]
+async fn update_role_changes_role() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    lets_chat::db::enclave::update_role(&pool, id, "u2", EnclaveRole::Admin)
+        .await
+        .unwrap();
+    let m = lets_chat::db::enclave::get_membership(&pool, id, "u2")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m.role, EnclaveRole::Admin);
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
