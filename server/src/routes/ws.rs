@@ -460,7 +460,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
 /// room/DM membership and unread counts. Used to live-update the sidebar
 /// when membership changes (new DM, room kick, room invite).
 async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(state, viewer).await.ok()?;
+    // Live OOB sidebar refreshes only fire from DM-creation today, so render
+    // the Home (DM-only) variant. When per-enclave events ship OOB rendering,
+    // they will pass current_enclave themselves.
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(state, viewer, None).await.ok()?;
     SidebarUpdateFragment {
         user: viewer,
         sidebar_rooms: &sidebar_rooms,
