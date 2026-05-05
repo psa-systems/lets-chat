@@ -83,20 +83,15 @@ pub async fn get_dm(
 
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
-    let mut author_cache: HashMap<String, (String, Option<String>, Option<String>)> =
-        HashMap::new();
+    let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
     for m in raw_messages {
-        let (username, display_name, avatar_ext) = if let Some(entry) = author_cache.get(&m.user_id)
-        {
+        let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
-                Some(r) => (r.username, r.display_name, r.avatar_ext),
-                None => ("(unknown)".to_string(), None, None),
-            };
+            let entry = super::load_author_meta(&state, &m.user_id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -124,9 +119,11 @@ pub async fn get_dm(
         messages.push(MessageView {
             id: m.id,
             user_id: m.user_id.clone(),
-            username,
-            display_name,
-            avatar_ext,
+            username: meta.username,
+            display_name: meta.display_name,
+            avatar_ext: meta.avatar_ext,
+            status: meta.status,
+            custom_status: meta.custom_status,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,

@@ -46,6 +46,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         .clone()
         .unwrap_or_else(|| user.username.clone());
     let (conn_id, mut rx) = state.hub.connect(&user.id, &username);
+    super::touch_user_and_maybe_broadcast(&state, &user.id).await;
     let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
     // Per-connection memory of which own-authored DM message currently shows
     // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous
@@ -147,6 +148,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         ClientFrame::Typing { room_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
                                 state.hub.notify_typing(conn_id, room_id);
+                                super::touch_user_and_maybe_broadcast(&state, &user.id).await;
                             }
                         }
                     }
@@ -385,13 +387,10 @@ async fn render_new_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (message.user_id.as_str(), message.created_at.as_str()),
     );
-    let (display_name, avatar_ext) = match db::auth::find_user_by_id(&state.auth, &message.user_id)
-        .await
-        .ok()
-        .flatten()
-    {
-        Some(r) => (r.display_name, r.avatar_ext),
-        None => (None, None),
+    let meta = super::load_author_meta(state, &message.user_id).await.ok();
+    let (display_name, avatar_ext, status, custom_status) = match meta {
+        Some(m) => (m.display_name, m.avatar_ext, m.status, m.custom_status),
+        None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None),
     };
     let view = MessageView {
         id: message.id,
@@ -399,6 +398,8 @@ async fn render_new_message(
         username: message.author_name.clone(),
         display_name,
         avatar_ext,
+        status,
+        custom_status,
         created_at: message.created_at.clone(),
         edited_at: message.edited_at.clone(),
         body: message.body.clone(),
@@ -420,14 +421,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
-    let (username, display_name, avatar_ext) =
-        match db::auth::find_user_by_id(&state.auth, &m.user_id)
-            .await
-            .ok()?
-        {
-            Some(u) => (u.username, u.display_name, u.avatar_ext),
-            None => ("(unknown)".to_string(), None, None),
-        };
+    let meta = super::load_author_meta(state, &m.user_id).await.ok()?;
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
         .ok()?;
@@ -454,9 +448,11 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let view = MessageView {
         id: m.id,
         user_id: m.user_id,
-        username,
-        display_name,
-        avatar_ext,
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,

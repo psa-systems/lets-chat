@@ -49,8 +49,7 @@ pub async fn get_room(
     // Load messages, then resolve each author's username from the auth DB.
     // Cache lookups by user_id to avoid duplicate queries for the same author.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
-    let mut author_cache: HashMap<String, (String, Option<String>, Option<String>)> =
-        HashMap::new();
+    let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
 
     // Reactions for every message in the room, in a single query. Group them
     // by message_id so we can attach to each MessageView below.
@@ -70,14 +69,10 @@ pub async fn get_room(
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
     for m in raw_messages {
-        let (username, display_name, avatar_ext) = if let Some(entry) = author_cache.get(&m.user_id)
-        {
+        let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
-                Some(r) => (r.username, r.display_name, r.avatar_ext),
-                None => ("(unknown)".to_string(), None, None),
-            };
+            let entry = super::load_author_meta(&state, &m.user_id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -89,9 +84,6 @@ pub async fn get_room(
             (&m.user_id, &m.created_at),
         );
         prev = Some((m.user_id.clone(), m.created_at.clone()));
-        // Place the unread divider above the first message strictly newer
-        // than the prior watermark, ignoring own-authored messages so the
-        // viewer's own send doesn't trigger a divider on their next visit.
         let show_unread_divider =
             !unread_divider_placed && m.id > prior_watermark && m.user_id != user.id;
         if show_unread_divider {
@@ -100,9 +92,11 @@ pub async fn get_room(
         messages.push(MessageView {
             id: m.id,
             user_id: m.user_id.clone(),
-            username,
-            display_name,
-            avatar_ext,
+            username: meta.username,
+            display_name: meta.display_name,
+            avatar_ext: meta.avatar_ext,
+            status: meta.status,
+            custom_status: meta.custom_status,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,
@@ -186,6 +180,7 @@ pub async fn post_message(
     }
 
     let new_id = db::chat::insert_message(&state.chat, room_id, &user.id, body).await?;
+    super::touch_user_and_maybe_broadcast(&state, &user.id).await;
 
     // Re-fetch the inserted row to pick up the server-assigned created_at.
     let raw = db::chat::get_message(&state.chat, new_id)
@@ -250,11 +245,7 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let (username, display_name, avatar_ext) =
-        match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
-            Some(r) => (r.username, r.display_name, r.avatar_ext),
-            None => ("(unknown)".to_string(), None, None),
-        };
+    let meta = super::load_author_meta(&state, &m.user_id).await?;
     let can_edit = m.user_id == user.id;
     let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
@@ -276,9 +267,11 @@ pub async fn get_single_message(
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
-        username,
-        display_name,
-        avatar_ext,
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
         created_at: m.created_at,
         edited_at: m.edited_at,
         body: m.body,
@@ -327,11 +320,7 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let (username, display_name, avatar_ext) =
-        match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
-            Some(r) => (r.username, r.display_name, r.avatar_ext),
-            None => ("(unknown)".to_string(), None, None),
-        };
+    let meta = super::load_author_meta(&state, &m.user_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
         .into_iter()
@@ -351,9 +340,11 @@ pub async fn patch_message(
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
-        username,
-        display_name,
-        avatar_ext,
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
         created_at: m.created_at,
         edited_at: Some(edited_at_str),
         body: body.to_string(),

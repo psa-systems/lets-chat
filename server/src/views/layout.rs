@@ -19,6 +19,8 @@ pub struct SidebarPeer {
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
     pub unread: i64,
+    pub status: String,
+    pub custom_status: Option<String>,
 }
 
 impl SidebarPeer {

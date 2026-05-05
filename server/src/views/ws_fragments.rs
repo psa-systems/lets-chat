@@ -104,6 +104,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveRoomAdded { .. }
         | ChatEvent::EnclaveRoomRemoved { .. }
         | ChatEvent::EnclaveInvitationCreated { .. }
-        | ChatEvent::EnclaveInvitationResolved { .. } => None,
+        | ChatEvent::EnclaveInvitationResolved { .. }
+        | ChatEvent::UserStatusChanged { .. } => None,
     }
 }

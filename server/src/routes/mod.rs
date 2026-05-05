@@ -25,7 +25,76 @@ mod reactions;
 mod room;
 mod search;
 mod settings;
+mod status;
 mod ws;
+
+/// Per-message author metadata cached by callers that build many MessageViews.
+/// Keeps the join across auth.db and chat.db to a single field per author.
+#[derive(Clone)]
+pub(crate) struct AuthorMeta {
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+}
+
+impl AuthorMeta {
+    pub fn unknown() -> Self {
+        Self {
+            username: "(unknown)".to_string(),
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+        }
+    }
+}
+
+impl From<crate::models::user::UserRecord> for AuthorMeta {
+    fn from(r: crate::models::user::UserRecord) -> Self {
+        Self {
+            username: r.username,
+            display_name: r.display_name,
+            avatar_ext: r.avatar_ext,
+            status: r.status,
+            custom_status: r.custom_status,
+        }
+    }
+}
+
+pub(crate) async fn load_author_meta(
+    state: &AppState,
+    user_id: &str,
+) -> Result<AuthorMeta, AppError> {
+    Ok(db::auth::find_user_by_id(&state.auth, user_id)
+        .await?
+        .map(AuthorMeta::from)
+        .unwrap_or_else(AuthorMeta::unknown))
+}
+
+/// Refresh the caller's `last_active_at` and, if that bumped the row from
+/// idle back to active, broadcast `UserStatusChanged` so subscribers can
+/// update their UI. DND status is sticky and never flips here.
+pub(crate) async fn touch_user_and_maybe_broadcast(state: &AppState, user_id: &str) {
+    let flipped = match db::auth::touch_user_activity(&state.auth, user_id).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, user_id, "touch_user_activity failed");
+            return;
+        }
+    };
+    if !flipped {
+        return;
+    }
+    if let Ok(Some(record)) = db::auth::find_user_by_id(&state.auth, user_id).await {
+        state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+            user_id: record.id,
+            status: record.status,
+            custom_status: record.custom_status,
+        });
+    }
+}
 
 /// Build the sidebar's room and DM-peer view-models scoped to the caller's
 /// current location. When `current_enclave` is `None` (Home), the sidebar
@@ -71,6 +140,8 @@ pub(crate) async fn load_sidebar(
                     display_name: record.display_name.clone(),
                     avatar_ext: record.avatar_ext.clone(),
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
+                    status: record.status.clone(),
+                    custom_status: record.custom_status.clone(),
                 });
             }
         }
@@ -178,9 +249,23 @@ pub(crate) async fn broadcast_room_message(
         _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
     };
     for uid in recipients {
+        // OOB DOM updates always deliver - DND only suppresses attention-
+        // grabbing notifications (push/toast/sound). When that delivery path
+        // ships it should consult should_notify(state, uid) below before
+        // firing.
         state.hub.broadcast_to_user(&uid, event);
     }
     Ok(())
+}
+
+/// True when `user_id` is currently accepting attention-grabbing
+/// notifications. Returns false for DND users. v1 has no push/toast/sound
+/// path; this helper is the seam future delivery code must consult.
+#[allow(dead_code)]
+pub(crate) async fn should_notify(state: &AppState, user_id: &str) -> bool {
+    !db::auth::is_user_dnd(&state.auth, user_id)
+        .await
+        .unwrap_or(false)
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -225,6 +310,9 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
+        .route("/status", post(status::post_status))
+        .route("/status/picker", get(status::get_picker))
+        .route("/status/cancel", get(status::cancel_picker))
         .route("/ws", get(ws::ws_handler))
         .merge(enclave::router())
         .merge(admin::router())

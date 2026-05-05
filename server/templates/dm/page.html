@@ -4,11 +4,13 @@
 
 {% block main %}
 <header class="border-b border-slate-200 px-4 py-2 flex items-center gap-3">
-  {% if peer.avatar_ext.is_some() %}
-  <img src="/avatars/{{ peer.id }}" alt="" class="h-8 w-8 rounded-full object-cover border border-slate-200">
-  {% else %}
-  <div class="h-8 w-8 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-sm font-semibold">{% if let Some(c) = peer.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-  {% endif %}
+  {% let avatar_user_id = peer.id.clone() %}
+  {% let avatar_username = peer.username.clone() %}
+  {% let avatar_ext = peer.avatar_ext.clone() %}
+  {% let avatar_status = peer.status.clone() %}
+  {% let avatar_custom_status = peer.custom_status.clone() %}
+  {% let avatar_size = "h-8 w-8 text-sm" %}
+  {% include "partials/avatar.html" %}
   <div>
     <h1 class="font-semibold">{{ peer.display_label() }}</h1>
     <div class="text-xs text-slate-500">@{{ peer.username }}</div>
