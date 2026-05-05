@@ -1,0 +1,20 @@
+<nav id="switcher" class="w-16 bg-slate-900 text-white flex flex-col items-center py-2 gap-2 overflow-y-auto">
+  {% for e in switcher %}
+  <a href="{% if let Some(id) = e.id %}/enclave/{{ id }}{% else %}/?home=1{% endif %}"
+     class="relative w-10 h-10 rounded-lg flex items-center justify-center
+            {% if e.active %}bg-blue-600{% else %}bg-slate-700 hover:bg-slate-600{% endif %}"
+     title="{{ e.label }}">
+    <span class="font-bold">{{ e.initial }}</span>
+    {% if e.unread + e.pending_invites > 0 %}
+    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1">
+      {{ e.unread + e.pending_invites }}
+    </span>
+    {% endif %}
+  </a>
+  {% endfor %}
+  <a href="/enclaves/discover"
+     class="w-10 h-10 rounded-lg bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-bold mt-auto"
+     title="Discover or create enclaves">
+    +
+  </a>
+</nav>

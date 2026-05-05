@@ -1,3 +1,4 @@
+pub mod enclave;
 pub mod invite;
 pub mod message;
 pub mod mod_action;

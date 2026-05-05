@@ -1,0 +1,48 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Enclaves - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">Enclaves</h1>
+
+<p class="text-sm text-slate-600 mb-6">
+  Every enclave on this server, regardless of your membership. Use the manage
+  link to enter the enclave (site-admin god-mode bypasses the membership check).
+</p>
+
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2">Name</th>
+      <th class="py-2">Visibility</th>
+      <th class="py-2">Owner</th>
+      <th class="py-2">Members</th>
+      <th class="py-2">Created</th>
+      <th class="py-2 text-right">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in enclaves %}
+    <tr class="border-b border-slate-100">
+      <td class="py-2">
+        <div class="font-medium">{{ e.name }}</div>
+        {% if let Some(d) = e.description %}<div class="text-xs text-slate-500">{{ d }}</div>{% endif %}
+      </td>
+      <td class="py-2">
+        {% if e.is_public %}<span class="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">Public</span>
+        {% else %}<span class="text-xs bg-slate-100 text-slate-700 rounded px-2 py-0.5">Private</span>{% endif %}
+      </td>
+      <td class="py-2 font-mono text-xs">
+        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-slate-400">none</span>{% endif %}
+      </td>
+      <td class="py-2">{{ e.member_count }}</td>
+      <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
+      <td class="py-2 text-right">
+        <a href="/enclave/{{ e.id }}" class="text-blue-600 hover:underline">Open</a>
+        <a href="/enclave/{{ e.id }}/settings" class="text-blue-600 hover:underline ml-2">Manage</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

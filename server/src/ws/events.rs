@@ -73,6 +73,28 @@ pub enum ChatEvent {
         emoji: String,
         user_id: String,
     },
+    EnclaveMemberAdded {
+        enclave_id: i64,
+        user_id: String,
+    },
+    EnclaveMemberRemoved {
+        enclave_id: i64,
+        user_id: String,
+    },
+    EnclaveRoomAdded {
+        enclave_id: i64,
+        room_id: i64,
+    },
+    EnclaveRoomRemoved {
+        enclave_id: i64,
+        room_id: i64,
+    },
+    EnclaveInvitationCreated {
+        invitee_id: String,
+    },
+    EnclaveInvitationResolved {
+        invitee_id: String,
+    },
 }
 
 /// Control frames sent from client to server.

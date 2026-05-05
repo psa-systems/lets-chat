@@ -28,20 +28,13 @@ pub async fn get_room(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // Access check: public rooms are visible to everyone; private rooms and
-    // DMs require membership. Admins additionally see all non-DM rooms.
     let is_admin = user.role == "admin";
-    let can_view = match room.room_type.as_str() {
-        "public" => true,
-        "dm" => db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-        _ => is_admin || db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-    };
-    if !can_view {
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -134,17 +127,26 @@ pub async fn get_room(
     }
 
     // Sidebar data (after marking-as-read so the badge for this room is 0).
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    // Resolve the room's enclave so the switcher highlights the right icon
+    // and the sidebar shows that enclave's rooms instead of DMs.
+    let current_enclave = super::enclave_for_room(&state, room_id).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, current_enclave).await?;
 
     let page = RoomPage {
         user: &user,
         room: &room,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
     };
-    html(&page)
+    let body = html(&page)?;
+    let mut response = body.into_response();
+    let (name, value) = crate::last_visited::set(&format!("/room/{room_id}"));
+    response.headers_mut().insert(name, value);
+    Ok(response)
 }
 
 pub async fn post_message(
@@ -171,14 +173,11 @@ pub async fn post_message(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // Posting access check. Public rooms accept any authenticated, non-banned,
-    // non-muted user. DM and private rooms require room membership. Admin
-    // status alone does not grant posting rights to a DM.
-    let can_post = match room.room_type.as_str() {
-        "public" => true,
-        _ => db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-    };
-    if !can_post {
+    // Posting follows the same access predicate as reading. Site admins can
+    // post in any non-DM room; DMs require explicit room membership for both
+    // read and write. Enclave membership is required for non-DM rooms.
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
 

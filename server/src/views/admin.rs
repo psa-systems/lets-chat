@@ -1,7 +1,7 @@
 use askama::Template;
 
 use crate::models::{ModAction, User};
-use crate::views::layout::{SidebarPeer, SidebarRoom};
+use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
 /// Per-row projection for the users admin table.
 pub struct AdminUserView {
@@ -44,6 +44,7 @@ pub struct UsersPage<'a> {
     pub user: &'a User,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub users: &'a [AdminUserView],
@@ -61,6 +62,7 @@ pub struct RoomsPage<'a> {
     pub user: &'a User,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub rooms_admin: &'a [AdminRoomView],
@@ -72,6 +74,7 @@ pub struct ModLogPage<'a> {
     pub user: &'a User,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub entries: &'a [ModAction],
@@ -83,6 +86,7 @@ pub struct SettingsPage<'a> {
     pub user: &'a User,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub smtp_host: String,
@@ -92,12 +96,36 @@ pub struct SettingsPage<'a> {
     pub saved: bool,
 }
 
+pub struct AdminEnclaveView {
+    pub id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_public: bool,
+    pub invite_code: Option<String>,
+    pub member_count: i64,
+    pub owner_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/enclaves.html")]
+pub struct EnclavesPage<'a> {
+    pub user: &'a User,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub section: &'static str,
+    pub enclaves: &'a [AdminEnclaveView],
+}
+
 #[derive(Template)]
 #[template(path = "admin/invites.html")]
 pub struct InvitesPage<'a> {
     pub user: &'a User,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub section: &'static str,
     pub invites: &'a [AdminInviteView],

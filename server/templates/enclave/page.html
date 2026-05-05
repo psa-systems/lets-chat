@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ enclave.name }} - lets-chat{% endblock %}
+
+{% block main %}
+<section class="p-6 max-w-4xl">
+  {% if let Some(msg) = flash_error %}
+  <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+    {{ msg }}
+  </div>
+  {% endif %}
+  <header class="mb-4">
+    <h1 class="text-2xl font-semibold">{{ enclave.name }}</h1>
+    {% if let Some(d) = enclave.description %}<p class="text-slate-600 mt-1">{{ d }}</p>{% endif %}
+    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">Public</span>{% endif %}
+  </header>
+
+  <div class="grid grid-cols-2 gap-6">
+    <section>
+      <h2 class="font-semibold flex items-center justify-between">
+        Rooms
+      </h2>
+      <ul class="mt-2 space-y-1">
+        {% for r in rooms %}
+        <li class="flex items-center justify-between">
+          <a href="/room/{{ r.id }}" class="text-blue-600 hover:underline">
+            {% if r.room_type == "private" %}🔒 {% else %}# {% endif %}{{ r.name }}
+          </a>
+          {% if can_manage %}
+          <form method="post" action="/enclave/{{ enclave.id }}/rooms/{{ r.id }}/delete" class="inline">
+            <button type="submit" class="text-xs text-red-600">Remove</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if can_manage %}
+      <form method="post" action="/enclave/{{ enclave.id }}/rooms" class="mt-3 flex flex-wrap gap-2 items-center">
+        <input name="name" placeholder="new-room" class="border rounded px-2 py-1 text-sm" required>
+        <select name="room_type" class="border rounded px-2 py-1 text-sm">
+          <option value="public">public</option>
+          <option value="private">private</option>
+        </select>
+        <button type="submit" class="text-sm bg-blue-600 text-white rounded px-2 py-1">Add room</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2 class="font-semibold">Members ({{ members.len() }})</h2>
+      <ul class="mt-2 space-y-1">
+        {% for m in members %}
+        <li class="flex items-center justify-between">
+          <span>{{ m.user_id }}</span>
+          <span class="text-xs uppercase text-slate-500">{{ m.role.as_str() }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if can_manage %}
+      <form method="post" action="/enclave/{{ enclave.id }}/invite" class="mt-3 flex gap-2">
+        <input name="username" placeholder="Invite by username" class="border rounded px-2 py-1 text-sm flex-1" required>
+        <button type="submit" class="text-sm bg-slate-200 rounded px-2 py-1">Invite</button>
+      </form>
+      <a href="/enclave/{{ enclave.id }}/settings" class="text-sm text-blue-600 hover:underline mt-3 inline-block">Enclave settings</a>
+      {% endif %}
+    </section>
+  </div>
+</section>
+{% endblock %}

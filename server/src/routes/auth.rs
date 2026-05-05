@@ -135,7 +135,13 @@ pub async fn post_register(
         }
     };
 
-    promote_first_user_to_admin(&state, &user_id).await?;
+    let promoted = promote_first_user_to_admin(&state, &user_id).await?;
+
+    if promoted {
+        if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
+            tracing::warn!(error = %e, "enclave backfill after first registration failed");
+        }
+    }
 
     let token = db::auth::create_session(&state.auth, &user_id).await?;
     let cookie = build_session_cookie(token);
@@ -222,23 +228,24 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
 /// user in the system. The check + update is wrapped in a single transaction
 /// to avoid a race where two concurrent registrations both observe a count
 /// past 1 and neither bootstraps the admin.
-async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<(), AppError> {
+async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<bool, AppError> {
     let mut tx = state.auth.begin().await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&mut *tx)
         .await?;
-    if count == 1 {
+    let promoted = count == 1;
+    if promoted {
         if let Err(e) = sqlx::query("UPDATE users SET role = 'admin' WHERE id = ?")
             .bind(user_id)
             .execute(&mut *tx)
             .await
         {
             tracing::error!(error = %e, user_id, "failed to promote first user to admin");
-            return Err(AppError::Internal(format!("promote admin: {}", e)));
+            return Err(AppError::Internal(format!("promote admin: {e}")));
         }
     }
     tx.commit().await?;
-    Ok(())
+    Ok(promoted)
 }
 
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {

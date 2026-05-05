@@ -5,24 +5,10 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">Rooms</h1>
 
-<form method="post" action="/admin/rooms" class="mb-6 flex flex-wrap gap-2 items-end p-3 border border-slate-200 rounded bg-slate-50">
-  <div>
-    <label for="new-room-name" class="block text-xs text-slate-500">Name</label>
-    <input id="new-room-name" name="name" required minlength="1" maxlength="64" class="border rounded px-2 py-1 text-sm">
-  </div>
-  <div>
-    <label for="new-room-topic" class="block text-xs text-slate-500">Topic</label>
-    <input id="new-room-topic" name="topic" maxlength="200" class="border rounded px-2 py-1 text-sm">
-  </div>
-  <div>
-    <label for="new-room-type" class="block text-xs text-slate-500">Type</label>
-    <select id="new-room-type" name="room_type" class="border rounded px-2 py-1 text-sm">
-      <option value="public">Public</option>
-      <option value="private">Private</option>
-    </select>
-  </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Create room</button>
-</form>
+<p class="text-sm text-slate-600 mb-6">
+  Create rooms inside an enclave via the per-enclave landing page. This view is
+  read-only and intended for global moderation.
+</p>
 
 <table class="w-full text-sm">
   <thead>

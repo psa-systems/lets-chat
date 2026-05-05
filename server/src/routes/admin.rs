@@ -10,8 +10,8 @@ use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::views::admin::{
-    AdminInviteView, AdminRoomView, AdminUserView, InvitesPage, ModLogPage, RoomRowFragment,
-    RoomsPage, SettingsPage, UserRowFragment, UsersPage,
+    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, EnclavesPage, InvitesPage,
+    ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -29,12 +29,44 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{id}/delete", post(post_delete_user))
         .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
-        .route("/admin/rooms", get(get_rooms).post(post_create_room))
+        .route("/admin/rooms", get(get_rooms))
         .route("/admin/rooms/{id}/archive", post(post_archive_room))
         .route("/admin/rooms/{id}/edit", post(post_edit_room))
         .route("/admin/rooms/{id}/invite", post(post_invite_to_room))
         .route("/admin/rooms/{id}/regenerate", post(post_regenerate_invite))
+        .route("/admin/enclaves", get(get_enclaves))
         .route("/admin/modlog", get(get_modlog))
+}
+
+pub async fn get_enclaves(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let raw = db::enclave::list_all_enclaves_with_counts(&state.chat).await?;
+    let enclaves: Vec<AdminEnclaveView> = raw
+        .into_iter()
+        .map(|(e, count, owner_id)| AdminEnclaveView {
+            id: e.id,
+            name: e.name,
+            description: e.description,
+            is_public: e.is_public,
+            invite_code: e.invite_code,
+            member_count: count,
+            owner_id,
+            created_at: e.created_at,
+        })
+        .collect();
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let page = EnclavesPage {
+        user: &user,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        section: "enclaves",
+        enclaves: &enclaves,
+    };
+    html(&page)
 }
 
 // Settings ------------------------------------------------------------------
@@ -52,7 +84,7 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
         .await?
         .unwrap_or_default();
@@ -69,6 +101,7 @@ pub async fn get_settings(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "settings",
         smtp_host,
@@ -106,7 +139,7 @@ pub async fn get_users(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let records = db::auth::list_users(&state.auth).await?;
     let users: Vec<AdminUserView> = records
         .into_iter()
@@ -122,6 +155,7 @@ pub async fn get_users(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "users",
         users: &users,
@@ -250,12 +284,13 @@ pub async fn get_invites(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let invites = build_invite_views(&state).await?;
     let page = InvitesPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "invites",
         invites: &invites,
@@ -309,14 +344,6 @@ async fn build_invite_views(state: &AppState) -> Result<Vec<AdminInviteView>, Ap
 // Rooms ---------------------------------------------------------------------
 
 #[derive(Deserialize)]
-pub struct CreateRoomForm {
-    pub name: String,
-    #[serde(default)]
-    pub topic: String,
-    pub room_type: String,
-}
-
-#[derive(Deserialize)]
 pub struct EditRoomForm {
     pub name: String,
     #[serde(default)]
@@ -332,7 +359,7 @@ pub async fn get_rooms(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let raw_rooms = db::chat::list_rooms(&state.chat, &user.id, true).await?;
     let mut rooms_admin = Vec::with_capacity(raw_rooms.len());
     for r in &raw_rooms {
@@ -351,38 +378,12 @@ pub async fn get_rooms(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "rooms",
         rooms_admin: &rooms_admin,
     };
     html(&page)
-}
-
-pub async fn post_create_room(
-    State(state): State<AppState>,
-    AdminUser(_actor): AdminUser,
-    axum::Form(form): axum::Form<CreateRoomForm>,
-) -> Result<Response, AppError> {
-    let name = form.name.trim();
-    if name.is_empty() {
-        return Err(AppError::BadRequest("name required".into()));
-    }
-    let room_type = match form.room_type.as_str() {
-        "public" | "private" => form.room_type.as_str(),
-        _ => return Err(AppError::BadRequest("invalid room_type".into())),
-    };
-    let topic = if form.topic.trim().is_empty() {
-        None
-    } else {
-        Some(form.topic.trim())
-    };
-    let invite_code = if room_type == "private" {
-        Some(random_code(10))
-    } else {
-        None
-    };
-    db::chat::create_room(&state.chat, name, topic, room_type, invite_code.as_deref()).await?;
-    Ok(Redirect::to("/admin/rooms").into_response())
 }
 
 pub async fn post_archive_room(
@@ -487,12 +488,13 @@ pub async fn get_modlog(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let entries = db::moderation::list_mod_actions(&state.chat).await?;
     let page = ModLogPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "modlog",
         entries: &entries,

@@ -3,8 +3,15 @@
 {% block title %}Home - lets-chat{% endblock %}
 
 {% block main %}
-<section class="p-6">
+<section class="p-6 max-w-2xl">
   <h1 class="text-2xl font-semibold">Welcome, {{ user.username }}</h1>
-  <p class="mt-2 text-slate-600">Pick a room or DM from the sidebar to start chatting.</p>
+  <p class="mt-2 text-slate-600">
+    Pick a DM from the sidebar, or
+    <a href="/enclaves/discover" class="text-blue-600 hover:underline">create or join an enclave</a>
+    to chat in rooms.
+  </p>
+  <p class="mt-2 text-slate-600">
+    Pending invitations: <a href="/invitations" class="text-blue-600 hover:underline">view</a>.
+  </p>
 </section>
 {% endblock %}
