@@ -140,6 +140,13 @@ impl Hub {
         self.user_conns.iter().map(|e| e.key().clone()).collect()
     }
 
+    /// True when `user_id` has at least one open WebSocket. Used by view
+    /// loaders to render an "offline" status circle for users with no live
+    /// session, regardless of their persisted status enum.
+    pub fn is_user_connected(&self, user_id: &str) -> bool {
+        self.user_conns.get(user_id).is_some_and(|c| !c.is_empty())
+    }
+
     /// Broadcast to a specific user's connections (all their tabs/devices).
     pub fn broadcast_to_user(&self, user_id: &str, event: &ChatEvent) {
         if let Some(conns) = self.user_conns.get(user_id) {

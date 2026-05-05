@@ -387,7 +387,9 @@ async fn render_new_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (message.user_id.as_str(), message.created_at.as_str()),
     );
-    let meta = super::load_author_meta(state, &message.user_id).await.ok();
+    let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
+        .await
+        .ok();
     let (display_name, avatar_ext, status, custom_status) = match meta {
         Some(m) => (m.display_name, m.avatar_ext, m.status, m.custom_status),
         None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None),
@@ -421,7 +423,9 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
-    let meta = super::load_author_meta(state, &m.user_id).await.ok()?;
+    let meta = super::load_author_meta(state, &m.user_id, &viewer.id)
+        .await
+        .ok()?;
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
         .ok()?;

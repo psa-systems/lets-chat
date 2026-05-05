@@ -28,6 +28,17 @@ mod settings;
 mod status;
 mod ws;
 
+/// Override a persisted status with `"offline"` when the user has no live
+/// WebSocket. Online presence is hub-derived; the `users.status` column only
+/// stores the explicit user choice plus the idle auto-flip.
+pub(crate) fn effective_status(state: &AppState, user_id: &str, persisted: &str) -> String {
+    if state.hub.is_user_connected(user_id) {
+        persisted.to_string()
+    } else {
+        "offline".to_string()
+    }
+}
+
 /// Per-message author metadata cached by callers that build many MessageViews.
 /// Keeps the join across auth.db and chat.db to a single field per author.
 #[derive(Clone)]
@@ -66,11 +77,19 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
 pub(crate) async fn load_author_meta(
     state: &AppState,
     user_id: &str,
+    viewer_id: &str,
 ) -> Result<AuthorMeta, AppError> {
-    Ok(db::auth::find_user_by_id(&state.auth, user_id)
+    let mut meta = db::auth::find_user_by_id(&state.auth, user_id)
         .await?
         .map(AuthorMeta::from)
-        .unwrap_or_else(AuthorMeta::unknown))
+        .unwrap_or_else(AuthorMeta::unknown);
+    // The viewer is by definition present (they are loading this page) even
+    // before their WebSocket finishes opening, so trust their persisted
+    // status rather than the hub's connection set.
+    if user_id != viewer_id {
+        meta.status = effective_status(state, user_id, &meta.status);
+    }
+    Ok(meta)
 }
 
 /// Refresh the caller's `last_active_at` and, if that bumped the row from
@@ -134,13 +153,14 @@ pub(crate) async fn load_sidebar(
         let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
         for (room, peer_id) in &dm_rooms {
             if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
+                let effective = effective_status(state, &record.id, &record.status);
                 sidebar_peers.push(SidebarPeer {
                     id: record.id.clone(),
                     username: record.username.clone(),
                     display_name: record.display_name.clone(),
                     avatar_ext: record.avatar_ext.clone(),
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
-                    status: record.status.clone(),
+                    status: effective,
                     custom_status: record.custom_status.clone(),
                 });
             }
