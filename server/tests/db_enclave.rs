@@ -10,6 +10,23 @@ fn role_round_trips_via_str() {
     assert!(EnclaveRole::from_str("nope").is_err());
 }
 
+async fn auth_pool() -> SqlitePool {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    for sql in [
+        include_str!("../migrations/auth/0001_create_tables.sql"),
+        include_str!("../migrations/auth/0002_read_receipts.sql"),
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+    }
+    pool
+}
+
+async fn insert_user(pool: &SqlitePool, id: &str, username: &str, role: &str, created_at: &str) {
+    sqlx::query("INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES (?, ?, 'h', ?, ?, ?)")
+        .bind(id).bind(username).bind(role).bind(created_at).bind(created_at)
+        .execute(pool).await.unwrap();
+}
+
 async fn chat_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     for sql in [
@@ -316,6 +333,86 @@ async fn update_metadata_and_visibility_and_invite_code() {
         .unwrap()
         .unwrap();
     assert_eq!(e2.invite_code, None);
+}
+
+#[tokio::test]
+async fn backfill_assigns_owner_admin_member_by_role_and_age() {
+    let auth = auth_pool().await;
+    let chat = chat_pool().await;
+    insert_user(&auth, "ua", "alice", "admin", "2026-01-01 00:00:00").await;
+    insert_user(&auth, "ub", "bob", "moderator", "2026-01-02 00:00:00").await;
+    insert_user(&auth, "uc", "carol", "user", "2026-01-03 00:00:00").await;
+    insert_user(&auth, "ud", "dave", "admin", "2026-01-04 00:00:00").await;
+
+    lets_chat::db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+
+    let general_id: i64 = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("id");
+
+    async fn role_of(uid: &str, chat: &SqlitePool) -> String {
+        let r: String = sqlx::query("SELECT role FROM enclave_members WHERE enclave_id=(SELECT id FROM enclaves WHERE name='General') AND user_id=?")
+            .bind(uid).fetch_one(chat).await.unwrap().get("role");
+        r
+    }
+    assert_eq!(role_of("ua", &chat).await, "owner");
+    assert_eq!(role_of("ub", &chat).await, "member");
+    assert_eq!(role_of("uc", &chat).await, "member");
+    assert_eq!(role_of("ud", &chat).await, "admin");
+
+    let created_by: String = sqlx::query("SELECT created_by FROM enclaves WHERE id=?")
+        .bind(general_id)
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("created_by");
+    assert_eq!(created_by, "ua");
+}
+
+#[tokio::test]
+async fn backfill_idempotent() {
+    let auth = auth_pool().await;
+    let chat = chat_pool().await;
+    insert_user(&auth, "ua", "alice", "admin", "2026-01-01 00:00:00").await;
+    insert_user(&auth, "ub", "bob", "user", "2026-01-02 00:00:00").await;
+    lets_chat::db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    lets_chat::db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let n: i64 = sqlx::query("SELECT COUNT(*) AS c FROM enclave_members")
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("c");
+    assert_eq!(n, 2);
+}
+
+#[tokio::test]
+async fn backfill_skips_when_no_admin() {
+    let auth = auth_pool().await;
+    let chat = chat_pool().await;
+    insert_user(&auth, "ua", "alice", "user", "2026-01-01 00:00:00").await;
+    lets_chat::db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let n: i64 = sqlx::query("SELECT COUNT(*) AS c FROM enclave_members")
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("c");
+    assert_eq!(n, 0);
+    let cb: String = sqlx::query("SELECT created_by FROM enclaves WHERE name='General'")
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("created_by");
+    assert_eq!(cb, "system");
 }
 
 #[tokio::test]

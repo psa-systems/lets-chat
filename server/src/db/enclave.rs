@@ -107,6 +107,68 @@ pub async fn update_role(
     Ok(())
 }
 
+/// Idempotent. No-op when General has any members. Reads users from auth pool,
+/// writes membership rows + General.created_by into chat pool.
+pub async fn backfill_general_membership(
+    auth: &SqlitePool,
+    chat: &SqlitePool,
+) -> Result<(), sqlx::Error> {
+    let Some(general_row) = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_optional(chat)
+        .await?
+    else {
+        return Ok(());
+    };
+    let general_id: i64 = general_row.get("id");
+
+    let any_member = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? LIMIT 1")
+        .bind(general_id)
+        .fetch_optional(chat)
+        .await?;
+    if any_member.is_some() {
+        return Ok(());
+    }
+
+    let users = sqlx::query("SELECT id, role FROM users ORDER BY created_at ASC, id ASC")
+        .fetch_all(auth)
+        .await?;
+    let any_admin = users.iter().any(|u| u.get::<String, _>("role") == "admin");
+    if !any_admin {
+        return Ok(());
+    }
+    let mut owner_id: Option<String> = None;
+    for u in &users {
+        let id: String = u.get("id");
+        let role: String = u.get("role");
+        let target_role = if role == "admin" {
+            if owner_id.is_none() {
+                owner_id = Some(id.clone());
+                "owner"
+            } else {
+                "admin"
+            }
+        } else {
+            "member"
+        };
+        sqlx::query(
+            "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role) VALUES (?, ?, ?)",
+        )
+        .bind(general_id)
+        .bind(&id)
+        .bind(target_role)
+        .execute(chat)
+        .await?;
+    }
+    if let Some(o) = owner_id {
+        sqlx::query("UPDATE enclaves SET created_by=? WHERE id=? AND created_by='system'")
+            .bind(&o)
+            .bind(general_id)
+            .execute(chat)
+            .await?;
+    }
+    Ok(())
+}
+
 pub async fn update_metadata(
     pool: &SqlitePool,
     id: i64,
