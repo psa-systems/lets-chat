@@ -12,7 +12,8 @@ use crate::models::enclave::EnclaveRole;
 use crate::models::User;
 use crate::perms::enclave_can_manage;
 use crate::state::AppState;
-use crate::views::enclave::{DiscoverPage, EnclavePage};
+use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
+use crate::views::enclave::{DiscoverPage, EnclavePage, EnclaveSettingsPage};
 use crate::views::{html, Html};
 
 pub fn router() -> Router<AppState> {
@@ -31,6 +32,13 @@ pub fn router() -> Router<AppState> {
         .route("/invitations", get(get_invitations))
         .route("/invitations/{id}/accept", post(post_invitation_accept))
         .route("/invitations/{id}/decline", post(post_invitation_decline))
+        .route("/enclave/{id}/settings", get(get_settings))
+        .route("/enclave/{id}/edit", post(post_edit))
+        .route("/enclave/{id}/transfer", post(post_transfer))
+        .route("/enclave/{id}/delete", post(post_delete))
+        .route("/enclave/{id}/leave", post(post_leave))
+        .route("/enclave/{id}/members/{user_id}/role", post(post_member_role))
+        .route("/enclave/{id}/members/{user_id}/kick", post(post_kick))
 }
 
 async fn require_manage(
@@ -248,6 +256,157 @@ pub async fn post_invitation_decline(
     }
     db::enclave::delete_invitation(&state.chat, id).await?;
     Ok(Redirect::to("/invitations"))
+}
+
+pub async fn get_settings(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    let Some(enclave) = db::enclave::get_enclave(&state.chat, id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
+    let role = m.as_ref().map(|x| x.role);
+    if !enclave_can_manage(role, &user.role) {
+        return Err(AppError::Forbidden);
+    }
+    let can_delete = enclave_can_delete(role, &user.role);
+    let members = db::enclave::list_members(&state.chat, id).await?;
+    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    html(&EnclaveSettingsPage {
+        user: &user,
+        enclave: &enclave,
+        members: &members,
+        can_delete,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        asset_version: &state.asset_version,
+    })
+}
+
+#[derive(Deserialize)]
+pub struct EditForm {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+pub async fn post_edit(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<EditForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("name required".into()));
+    }
+    db::enclave::update_metadata(
+        &state.chat,
+        id,
+        name,
+        form.description.as_deref().filter(|s| !s.is_empty()),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+#[derive(Deserialize)]
+pub struct TransferForm {
+    pub new_owner_id: String,
+}
+
+pub async fn post_transfer(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<TransferForm>,
+) -> Result<impl IntoResponse, AppError> {
+    let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
+    if !enclave_can_manage_admins(m.map(|x| x.role), &user.role) {
+        return Err(AppError::Forbidden);
+    }
+    db::enclave::transfer_ownership(&state.chat, id, form.new_owner_id.trim()).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+pub async fn post_delete(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
+    if !enclave_can_delete(m.map(|x| x.role), &user.role) {
+        return Err(AppError::Forbidden);
+    }
+    db::enclave::delete_enclave(&state.chat, id).await?;
+    Ok(Redirect::to("/"))
+}
+
+pub async fn post_leave(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let Some(m) = db::enclave::get_membership(&state.chat, id, &user.id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if matches!(m.role, EnclaveRole::Owner) {
+        let members = db::enclave::list_members(&state.chat, id).await?;
+        if members.len() == 1 {
+            return Err(AppError::BadRequest(
+                "delete the enclave instead of leaving".into(),
+            ));
+        }
+        return Err(AppError::BadRequest(
+            "transfer ownership before leaving".into(),
+        ));
+    }
+    db::enclave::remove_member(&state.chat, id, &user.id).await?;
+    Ok(Redirect::to("/"))
+}
+
+#[derive(Deserialize)]
+pub struct RoleForm {
+    pub role: String,
+}
+
+pub async fn post_member_role(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, target)): Path<(i64, String)>,
+    axum::Form(form): axum::Form<RoleForm>,
+) -> Result<impl IntoResponse, AppError> {
+    let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
+    if !enclave_can_manage_admins(m.map(|x| x.role), &user.role) {
+        return Err(AppError::Forbidden);
+    }
+    let new_role = match form.role.as_str() {
+        "admin" => EnclaveRole::Admin,
+        "member" => EnclaveRole::Member,
+        _ => return Err(AppError::BadRequest("invalid role".into())),
+    };
+    db::enclave::update_role(&state.chat, id, &target, new_role).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+pub async fn post_kick(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, target)): Path<(i64, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let Some(target_m) = db::enclave::get_membership(&state.chat, id, &target).await? else {
+        return Err(AppError::NotFound);
+    };
+    if matches!(target_m.role, EnclaveRole::Owner) {
+        return Err(AppError::BadRequest(
+            "cannot kick the owner; transfer ownership first".into(),
+        ));
+    }
+    db::enclave::remove_member(&state.chat, id, &target).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
 pub async fn get_invitations(
