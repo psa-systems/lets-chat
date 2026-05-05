@@ -73,15 +73,26 @@ ALTER TABLE rooms ADD COLUMN enclave_id INTEGER REFERENCES enclaves(id) ON DELET
 CREATE INDEX idx_rooms_enclave ON rooms(enclave_id);
 ```
 
-### Migration data step
+### Migration data step (chat-DB SQL only)
 
-1. Insert one row into `enclaves`: `name='General'`, `description='Default enclave'`, `created_by` = id of the first existing site admin (lowest `created_at`); fall back to `'system'` sentinel if no admin exists.
+The `0009_enclaves.sql` migration runs against `chat.db` and cannot read user records from `auth.db`. It performs the chat-side data move only:
+
+1. Insert one row into `enclaves`: `name='General'`, `description='Default enclave'`, `created_by='system'` (sentinel — replaced during the startup backfill below).
 2. `UPDATE rooms SET enclave_id = <general_id> WHERE room_type != 'dm';`
-3. Populate `enclave_members` for every existing user:
-   - First site admin (lowest `created_at`) → `role='owner'`.
-   - Remaining site admins → `role='admin'`.
-   - Everyone else → `role='member'`.
-4. DM rows in `rooms` keep `enclave_id IS NULL` (DMs are cross-enclave).
+3. DM rows in `rooms` keep `enclave_id IS NULL` (DMs are cross-enclave).
+
+### Startup backfill (cross-DB, idempotent)
+
+After both pools migrate at server start, `main.rs` runs `db::enclave::backfill_general_membership(auth, chat)`. This function is idempotent and a no-op when the General enclave already has any members.
+
+Behavior when `enclave_members` is empty and a `General` enclave exists:
+
+- Read every user from `auth.users` ordered by `created_at ASC`.
+- First site admin (lowest `created_at` with `role='admin'`) → insert as `enclave_members(role='owner')`.
+- Remaining site admins → `role='admin'`.
+- Everyone else → `role='member'`.
+- If at least one site admin exists, `UPDATE enclaves SET created_by=<owner_id> WHERE name='General' AND created_by='system'`.
+- If no site admin exists yet (fresh deploy with no users), the function does nothing; the next user to register will be auto-promoted to site admin (existing behavior) and then become the General owner via this same backfill on the *following* startup, or — better — `auth::register` calls `backfill_general_membership` after the first user's promotion completes.
 
 ### Invariants
 
@@ -438,13 +449,18 @@ All tests use the existing in-memory SQLite pool harness in `server/tests/`.
 - `test_kick_owner_rejected_even_for_site_admin`
 - `test_owner_alone_must_delete_not_leave`
 
-### Migration test
+### Migration tests
 
-- `test_migration_0009_creates_general_with_existing_users`: seed an old-schema DB (rooms `general`, `random`, one private room with two members; three users where one is admin), apply the migration, assert:
-  - one `enclaves` row named `General` exists,
+- `test_migration_0009_schema_changes`: seed an old-schema chat DB (rooms `general`, `random`, one private room with two members in `room_members`), apply migration `0009`, assert:
+  - one `enclaves` row named `General` with `created_by='system'`,
   - all non-DM rooms have `enclave_id` set to it,
-  - the admin user is `owner`, the other two are `member`,
-  - the existing private-room `room_members` rows are intact.
+  - DM rows have `enclave_id IS NULL`,
+  - existing `room_members` rows are intact,
+  - `enclave_members` is empty (backfill is a separate step).
+- `test_backfill_general_membership_assigns_roles`: seed auth DB with three users (admin, mod, regular) and a `General` enclave with `created_by='system'`, run `backfill_general_membership`, assert: admin is `owner`, mod is `member`, regular is `member`, and `enclaves.created_by` is the admin's user_id.
+- `test_backfill_general_membership_idempotent`: running it twice yields the same `enclave_members` rows (no duplicates, no role flips).
+- `test_backfill_skips_when_no_general_enclave`: backfill runs cleanly when General is missing (no panic).
+- `test_backfill_skips_when_members_already_present`: backfill is a no-op when `enclave_members` has any row for General.
 
 ## Components
 
@@ -453,7 +469,9 @@ All tests use the existing in-memory SQLite pool harness in `server/tests/`.
 | `server/migrations/chat/0009_enclaves.sql` | New: tables + columns + data migration. |
 | `server/src/models/enclave.rs` | New: `Enclave`, `EnclaveRole`, `EnclaveMembership`, `EnclaveInvitation`. |
 | `server/src/models/mod.rs` | Re-export new module. |
-| `server/src/db/enclave.rs` | New: full CRUD + role + invitation helpers. |
+| `server/src/db/enclave.rs` | New: full CRUD + role + invitation helpers + `backfill_general_membership(auth, chat)`. |
+| `server/src/main.rs` | Call `backfill_general_membership` after both pools migrate at startup. |
+| `server/src/routes/auth.rs` | After auto-promoting the first registered user to site admin, call `backfill_general_membership` so the new admin owns General immediately. |
 | `server/src/db/mod.rs` | Re-export. |
 | `server/src/db/chat.rs` | `create_room` adds `enclave_id`; `list_rooms` becomes `list_rooms_in_enclave`; new `is_room_accessible`; unread-count helpers gain enclave filter. |
 | `server/src/perms.rs` | New: enclave permission helpers. |
