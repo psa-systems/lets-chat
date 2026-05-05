@@ -12,6 +12,7 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0007_reactions.sql"),
         include_str!("../migrations/chat/0008_search.sql"),
         include_str!("../migrations/chat/0009_enclaves.sql"),
+        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
