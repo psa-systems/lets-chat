@@ -73,9 +73,10 @@ async fn test_edit_message_updates_body_and_sets_edited_at() {
 async fn test_get_message_returns_none_for_soft_deleted() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-softdelete", None, "public", None, None)
-        .await
-        .unwrap();
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "test-softdelete", None, "public", None, None)
+            .await
+            .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "hello")
         .await
         .unwrap();
@@ -100,9 +101,10 @@ async fn test_get_message_returns_none_for_soft_deleted() {
 async fn test_list_messages_includes_edited_at() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "test-list-edited", None, "public", None, None)
-        .await
-        .unwrap();
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "test-list-edited", None, "public", None, None)
+            .await
+            .unwrap();
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "first message")
         .await
         .unwrap();

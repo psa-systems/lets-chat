@@ -68,10 +68,16 @@ async fn test_list_rooms_excludes_private_for_non_member() {
 async fn test_list_rooms_includes_private_for_member() {
     let pool = setup_pool().await;
 
-    let room_id =
-        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"), None)
-            .await
-            .unwrap();
+    let room_id = lets_chat::db::chat::create_room(
+        &pool,
+        "secret",
+        None,
+        "private",
+        Some("invite-abc"),
+        None,
+    )
+    .await
+    .unwrap();
     lets_chat::db::chat::add_room_member(&pool, room_id, "user-1")
         .await
         .unwrap();
@@ -128,9 +134,10 @@ async fn test_get_room_by_invite_code() {
 async fn test_is_room_member() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
-        .await
-        .unwrap();
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
+            .await
+            .unwrap();
 
     assert!(
         !lets_chat::db::chat::is_room_member(&pool, room_id, "user-1")
@@ -161,9 +168,10 @@ async fn test_is_room_member() {
 async fn test_add_room_member_is_idempotent() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
-        .await
-        .unwrap();
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
+            .await
+            .unwrap();
 
     // Adding same user twice should not error (INSERT OR IGNORE)
     lets_chat::db::chat::add_room_member(&pool, room_id, "user-1")

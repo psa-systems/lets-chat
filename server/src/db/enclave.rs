@@ -312,10 +312,7 @@ pub async fn delete_invitation(pool: &SqlitePool, id: i64) -> Result<(), sqlx::E
     Ok(())
 }
 
-pub async fn accept_invitation(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<(i64, String), sqlx::Error> {
+pub async fn accept_invitation(pool: &SqlitePool, id: i64) -> Result<(i64, String), sqlx::Error> {
     let mut tx = pool.begin().await?;
     let row = sqlx::query("SELECT enclave_id, invitee_id FROM enclave_invitations WHERE id=?")
         .bind(id)
