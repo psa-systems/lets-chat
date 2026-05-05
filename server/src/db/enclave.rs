@@ -2,6 +2,13 @@ use sqlx::{Row, SqlitePool};
 
 use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveMembership, EnclaveRole};
 
+pub async fn get_general_id(pool: &SqlitePool) -> Result<Option<i64>, sqlx::Error> {
+    let row = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.get::<i64, _>("id")))
+}
+
 fn map_enclave(row: &sqlx::sqlite::SqliteRow) -> Enclave {
     Enclave {
         id: row.get("id"),

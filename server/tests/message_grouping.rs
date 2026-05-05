@@ -25,6 +25,7 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         include_str!("../migrations/chat/0006_read_receipts.sql"),
         include_str!("../migrations/chat/0007_reactions.sql"),
         include_str!("../migrations/chat/0008_search.sql"),
+        include_str!("../migrations/chat/0009_enclaves.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&chat_pool).await.unwrap();
     }
@@ -81,7 +82,7 @@ async fn loader_marks_consecutive_same_user_as_follow_ups() {
     let user_id = db::auth::create_user(&auth_pool, "alice", "x")
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 
@@ -117,7 +118,7 @@ async fn loader_breaks_grouping_on_different_user() {
         .await
         .unwrap();
     let bob = db::auth::create_user(&auth_pool, "bob", "x").await.unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 
@@ -150,7 +151,7 @@ async fn prior_message_in_room_returns_immediately_prior() {
     let user_id = db::auth::create_user(&auth_pool, "alice", "x")
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 
@@ -178,7 +179,7 @@ async fn delete_header_marks_next_for_promotion() {
     let user_id = db::auth::create_user(&auth_pool, "alice", "x")
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 
@@ -232,7 +233,7 @@ async fn delete_lone_message_no_promote() {
     let user_id = db::auth::create_user(&auth_pool, "alice", "x")
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 
@@ -255,7 +256,7 @@ async fn next_message_in_room_returns_immediately_next() {
     let user_id = db::auth::create_user(&auth_pool, "alice", "x")
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None)
+    let room_id = db::chat::create_room(&chat_pool, "grouping-test", None, "public", None, None)
         .await
         .unwrap();
 

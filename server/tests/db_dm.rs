@@ -48,6 +48,21 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         .execute(&chat_pool)
         .await
         .expect("chat migration 6");
+    let chat_m7 = include_str!("../migrations/chat/0007_reactions.sql");
+    sqlx::raw_sql(chat_m7)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 7");
+    let chat_m8 = include_str!("../migrations/chat/0008_search.sql");
+    sqlx::raw_sql(chat_m8)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 8");
+    let chat_m9 = include_str!("../migrations/chat/0009_enclaves.sql");
+    sqlx::raw_sql(chat_m9)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 9");
 
     (auth_pool, chat_pool)
 }

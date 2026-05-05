@@ -239,15 +239,18 @@ pub async fn create_room(
     topic: Option<&str>,
     room_type: &str,
     invite_code: Option<&str>,
+    enclave_id: Option<i64>,
 ) -> Result<i64, sqlx::Error> {
-    let result =
-        sqlx::query("INSERT INTO rooms (name, topic, room_type, invite_code) VALUES (?, ?, ?, ?)")
-            .bind(name)
-            .bind(topic)
-            .bind(room_type)
-            .bind(invite_code)
-            .execute(pool)
-            .await?;
+    let result = sqlx::query(
+        "INSERT INTO rooms (name, topic, room_type, invite_code, enclave_id) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(name)
+    .bind(topic)
+    .bind(room_type)
+    .bind(invite_code)
+    .bind(enclave_id)
+    .execute(pool)
+    .await?;
     Ok(result.last_insert_rowid())
 }
 

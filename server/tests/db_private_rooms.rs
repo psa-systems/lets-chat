@@ -29,6 +29,18 @@ async fn setup_pool() -> SqlitePool {
         .execute(&pool)
         .await
         .expect("migration 6");
+    sqlx::raw_sql(include_str!("../migrations/chat/0007_reactions.sql"))
+        .execute(&pool)
+        .await
+        .expect("migration 7");
+    sqlx::raw_sql(include_str!("../migrations/chat/0008_search.sql"))
+        .execute(&pool)
+        .await
+        .expect("migration 8");
+    sqlx::raw_sql(include_str!("../migrations/chat/0009_enclaves.sql"))
+        .execute(&pool)
+        .await
+        .expect("migration 9");
 
     pool
 }
@@ -38,7 +50,7 @@ async fn test_list_rooms_excludes_private_for_non_member() {
     let pool = setup_pool().await;
 
     // Create a private room
-    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"))
+    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"), None)
         .await
         .unwrap();
 
@@ -57,7 +69,7 @@ async fn test_list_rooms_includes_private_for_member() {
     let pool = setup_pool().await;
 
     let room_id =
-        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"))
+        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"), None)
             .await
             .unwrap();
     lets_chat::db::chat::add_room_member(&pool, room_id, "user-1")
@@ -78,7 +90,7 @@ async fn test_list_rooms_includes_private_for_member() {
 async fn test_admin_sees_all_rooms_including_private() {
     let pool = setup_pool().await;
 
-    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"))
+    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-abc"), None)
         .await
         .unwrap();
 
@@ -96,7 +108,7 @@ async fn test_admin_sees_all_rooms_including_private() {
 async fn test_get_room_by_invite_code() {
     let pool = setup_pool().await;
 
-    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-xyz"))
+    lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("invite-xyz"), None)
         .await
         .unwrap();
 
@@ -116,7 +128,7 @@ async fn test_get_room_by_invite_code() {
 async fn test_is_room_member() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"))
+    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
         .await
         .unwrap();
 
@@ -149,7 +161,7 @@ async fn test_is_room_member() {
 async fn test_add_room_member_is_idempotent() {
     let pool = setup_pool().await;
 
-    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"))
+    let room_id = lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("code"), None)
         .await
         .unwrap();
 
@@ -173,7 +185,7 @@ async fn test_regenerate_invite_code() {
     let pool = setup_pool().await;
 
     let room_id =
-        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("old-code"))
+        lets_chat::db::chat::create_room(&pool, "secret", None, "private", Some("old-code"), None)
             .await
             .unwrap();
 
