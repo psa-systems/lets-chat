@@ -49,8 +49,11 @@ async fn target_accessible(state: &AppState, user: &User, path: &str) -> Result<
         if peer_id == user.id {
             return Ok(false);
         }
-        let other = crate::db::auth::find_user_by_id(&state.auth, peer_id).await?;
-        return Ok(other.is_some());
+        // Require an existing DM room so we never lazily create one on the
+        // home redirect. find_dm_room only returns rooms the caller is a
+        // member of, so this is also an implicit access check.
+        let dm = crate::db::chat::find_dm_room(&state.chat, &user.id, peer_id).await?;
+        return Ok(dm.is_some());
     }
     Ok(false)
 }

@@ -188,6 +188,12 @@ pub async fn post_discover_join(
     if !enclave.is_public {
         return Err(AppError::Forbidden);
     }
+    if db::enclave::get_membership(&state.chat, id, &user.id)
+        .await?
+        .is_some()
+    {
+        return Ok(Redirect::to(&format!("/enclave/{id}")));
+    }
     db::enclave::add_member(&state.chat, id, &user.id, EnclaveRole::Member).await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
@@ -207,6 +213,12 @@ pub async fn post_join_by_code(
     else {
         return Err(AppError::BadRequest("invalid or revoked code".into()));
     };
+    if db::enclave::get_membership(&state.chat, enclave.id, &user.id)
+        .await?
+        .is_some()
+    {
+        return Ok(Redirect::to(&format!("/enclave/{}", enclave.id)));
+    }
     db::enclave::add_member(&state.chat, enclave.id, &user.id, EnclaveRole::Member).await?;
     Ok(Redirect::to(&format!("/enclave/{}", enclave.id)))
 }

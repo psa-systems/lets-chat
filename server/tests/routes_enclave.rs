@@ -602,6 +602,70 @@ async fn delete_room_404_for_wrong_enclave() {
 }
 
 #[tokio::test]
+async fn non_member_cannot_post_to_public_room_in_enclave() {
+    let (app, s1, _id1, s2, _id2) = app_with_two_users().await;
+    // Alice creates an enclave + a public room inside it.
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-only"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let mkroom = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/enclave/{enclave_id}/rooms"))
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lobby&room_type=public"))
+        .unwrap();
+    let res = app.clone().oneshot(mkroom).await.unwrap();
+    assert!(res.status().is_redirection());
+
+    // Find the room id by listing the landing and grepping.
+    let list = Request::builder()
+        .method(Method::GET)
+        .uri(&format!("/enclave/{enclave_id}"))
+        .header("cookie", cookie(&s1))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    // Find the room id by anchoring on the "lobby" label so we ignore unrelated
+    // /room/ links that appear in the sidebar.
+    let lobby_pos = s.find("#lobby").expect("lobby room link missing");
+    let prefix = &s[..lobby_pos];
+    let last_room_pos = prefix.rfind("/room/").expect("preceding /room/ missing");
+    let after = &s[last_room_pos + "/room/".len()..];
+    let end = after
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(after.len());
+    let room_id: i64 = after[..end].parse().unwrap();
+
+    // Bob (not a member of the enclave) tries to POST a message; must be 403.
+    let post = Request::builder()
+        .method(Method::POST)
+        .uri(&format!("/room/{room_id}/messages"))
+        .header("cookie", cookie(&s2))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("body=intrusion"))
+        .unwrap();
+    let res = app.clone().oneshot(post).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn post_enclaves_requires_auth() {
     let (app, _sess) = app_with_user("user").await;
     let req = Request::builder()

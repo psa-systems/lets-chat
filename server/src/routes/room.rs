@@ -168,14 +168,11 @@ pub async fn post_message(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // Posting access check. Public rooms accept any authenticated, non-banned,
-    // non-muted user. DM and private rooms require room membership. Admin
-    // status alone does not grant posting rights to a DM.
-    let can_post = match room.room_type.as_str() {
-        "public" => true,
-        _ => db::chat::is_room_member(&state.chat, room_id, &user.id).await?,
-    };
-    if !can_post {
+    // Posting follows the same access predicate as reading. Site admins can
+    // post in any non-DM room; DMs require explicit room membership for both
+    // read and write. Enclave membership is required for non-DM rooms.
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
 
