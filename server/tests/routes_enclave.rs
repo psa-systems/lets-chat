@@ -640,7 +640,9 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(list).await.unwrap();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
     // Find the room id by anchoring on the "lobby" label so we ignore unrelated
     // /room/ links that appear in the sidebar.
