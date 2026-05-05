@@ -404,6 +404,51 @@ async fn backfill_idempotent() {
 }
 
 #[tokio::test]
+async fn backfill_repairs_created_by_when_partial_state_exists() {
+    let auth = auth_pool().await;
+    let chat = chat_pool().await;
+    insert_user(&auth, "ua", "alice", "admin", "2026-01-01 00:00:00").await;
+    insert_user(&auth, "ub", "bob", "user", "2026-01-02 00:00:00").await;
+
+    // Simulate a partial earlier backfill: members were inserted but the
+    // created_by sentinel was never replaced.
+    let general_id: i64 = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("id");
+    sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'ub', 'member')",
+    )
+    .bind(general_id)
+    .execute(&chat)
+    .await
+    .unwrap();
+
+    lets_chat::db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+
+    let cb: String = sqlx::query("SELECT created_by FROM enclaves WHERE id=?")
+        .bind(general_id)
+        .fetch_one(&chat)
+        .await
+        .unwrap()
+        .get("created_by");
+    assert_eq!(cb, "ua", "backfill must replace 'system' sentinel even if members already exist");
+
+    // The owner row should now exist (was missing before).
+    let role: String =
+        sqlx::query("SELECT role FROM enclave_members WHERE enclave_id=? AND user_id='ua'")
+            .bind(general_id)
+            .fetch_one(&chat)
+            .await
+            .unwrap()
+            .get("role");
+    assert_eq!(role, "owner");
+}
+
+#[tokio::test]
 async fn backfill_skips_when_no_admin() {
     let auth = auth_pool().await;
     let chat = chat_pool().await;

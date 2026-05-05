@@ -114,8 +114,11 @@ pub async fn update_role(
     Ok(())
 }
 
-/// Idempotent. No-op when General has any members. Reads users from auth pool,
-/// writes membership rows + General.created_by into chat pool.
+/// Idempotent. Inserts missing General memberships for every existing auth-DB
+/// user when at least one site admin exists, and repairs the General enclave's
+/// `created_by` field when it is still the `'system'` sentinel. Safe to call
+/// multiple times: per-row INSERTs use `INSERT OR IGNORE`, and the
+/// `created_by` UPDATE is gated on the sentinel value.
 pub async fn backfill_general_membership(
     auth: &SqlitePool,
     chat: &SqlitePool,
@@ -127,14 +130,6 @@ pub async fn backfill_general_membership(
         return Ok(());
     };
     let general_id: i64 = general_row.get("id");
-
-    let any_member = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? LIMIT 1")
-        .bind(general_id)
-        .fetch_optional(chat)
-        .await?;
-    if any_member.is_some() {
-        return Ok(());
-    }
 
     let users = sqlx::query("SELECT id, role FROM users ORDER BY created_at ASC, id ASC")
         .fetch_all(auth)
