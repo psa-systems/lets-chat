@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ enclave.name }} - lets-chat{% endblock %}
+
+{% block main %}
+<section class="p-6">
+  <h1 class="text-2xl font-semibold">{{ enclave.name }}</h1>
+  {% if let Some(d) = enclave.description %}<p class="text-slate-600 mt-1">{{ d }}</p>{% endif %}
+  <h2 class="mt-4 font-semibold">Rooms</h2>
+  <ul>{% for r in rooms %}<li><a href="/room/{{ r.id }}" class="text-blue-600 hover:underline">#{{ r.name }}</a></li>{% endfor %}</ul>
+  <h2 class="mt-4 font-semibold">Members ({{ members.len() }})</h2>
+  <ul>{% for m in members %}<li>{{ m.user_id }} - {{ m.role.as_str() }}</li>{% endfor %}</ul>
+  {% if can_manage %}<a href="/enclave/{{ enclave.id }}/settings" class="text-blue-600 mt-4 inline-block">Settings</a>{% endif %}
+</section>
+{% endblock %}
