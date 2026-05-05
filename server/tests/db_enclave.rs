@@ -39,6 +39,7 @@ async fn chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0007_reactions.sql"),
         include_str!("../migrations/chat/0008_search.sql"),
         include_str!("../migrations/chat/0009_enclaves.sql"),
+        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
@@ -589,6 +590,29 @@ async fn is_room_accessible_dm_via_room_members() {
         !lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u3", false)
             .await
             .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn room_name_unique_per_enclave_not_globally() {
+    let pool = chat_pool().await;
+    let a = lets_chat::db::enclave::create_enclave(&pool, "A", None, "u1")
+        .await
+        .unwrap();
+    let b = lets_chat::db::enclave::create_enclave(&pool, "B", None, "u2")
+        .await
+        .unwrap();
+    lets_chat::db::chat::create_room(&pool, "general", None, "public", None, Some(a))
+        .await
+        .unwrap();
+    lets_chat::db::chat::create_room(&pool, "general", None, "public", None, Some(b))
+        .await
+        .unwrap();
+    let dup =
+        lets_chat::db::chat::create_room(&pool, "general", None, "public", None, Some(a)).await;
+    assert!(
+        dup.is_err(),
+        "duplicate room name within an enclave must be rejected"
     );
 }
 
