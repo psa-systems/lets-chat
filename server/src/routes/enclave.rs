@@ -108,7 +108,7 @@ pub async fn get_landing(
     let can_manage = enclave_can_manage(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     html(&EnclavePage {
         user: &user,
         enclave: &enclave,
@@ -117,6 +117,7 @@ pub async fn get_landing(
         can_manage,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
     })
 }
@@ -126,12 +127,13 @@ pub async fn get_discover(
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
     let enclaves = db::enclave::list_public_enclaves(&state.chat).await?;
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
     })
 }
@@ -298,7 +300,7 @@ pub async fn get_settings(
     }
     let can_delete = enclave_can_delete(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
@@ -306,6 +308,7 @@ pub async fn get_settings(
         can_delete,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
     })
 }
@@ -578,12 +581,13 @@ pub async fn get_invitations(
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
     let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     html(&crate::views::enclave::InvitationsPage {
         user: &user,
         invitations: &invs,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
     })
 }

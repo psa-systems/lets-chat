@@ -18,3 +18,16 @@ pub struct SidebarPeer {
     pub username: String,
     pub unread: i64,
 }
+
+/// One icon in the leftmost enclave-switcher column. `id = None` is the Home
+/// pseudo-enclave (DM hub). `unread` aggregates unread counts across all
+/// rooms (or DMs, for Home) the user can see in that scope. `pending_invites`
+/// is set on the Home entry only and is added to the displayed badge.
+pub struct SwitcherEntry {
+    pub id: Option<i64>,
+    pub label: String,
+    pub initial: String,
+    pub unread: i64,
+    pub pending_invites: i64,
+    pub active: bool,
+}

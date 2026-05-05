@@ -19,11 +19,12 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         saved: false,
     };

@@ -165,7 +165,7 @@ pub async fn get_dm(
     }
 
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
 
     let page = DmPage {
         user: &user,
@@ -173,6 +173,7 @@ pub async fn get_dm(
         room: &room,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
     };

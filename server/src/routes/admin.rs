@@ -52,7 +52,7 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
         .await?
         .unwrap_or_default();
@@ -69,6 +69,7 @@ pub async fn get_settings(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "settings",
         smtp_host,
@@ -106,7 +107,7 @@ pub async fn get_users(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let records = db::auth::list_users(&state.auth).await?;
     let users: Vec<AdminUserView> = records
         .into_iter()
@@ -122,6 +123,7 @@ pub async fn get_users(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "users",
         users: &users,
@@ -250,12 +252,13 @@ pub async fn get_invites(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let invites = build_invite_views(&state).await?;
     let page = InvitesPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "invites",
         invites: &invites,
@@ -332,7 +335,7 @@ pub async fn get_rooms(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let raw_rooms = db::chat::list_rooms(&state.chat, &user.id, true).await?;
     let mut rooms_admin = Vec::with_capacity(raw_rooms.len());
     for r in &raw_rooms {
@@ -351,6 +354,7 @@ pub async fn get_rooms(
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "rooms",
         rooms_admin: &rooms_admin,
@@ -496,12 +500,13 @@ pub async fn get_modlog(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let entries = db::moderation::list_mod_actions(&state.chat).await?;
     let page = ModLogPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         asset_version: &state.asset_version,
         section: "modlog",
         entries: &entries,

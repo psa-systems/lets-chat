@@ -127,13 +127,14 @@ pub async fn get_room(
     }
 
     // Sidebar data (after marking-as-read so the badge for this room is 0).
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(&state, &user).await?;
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
 
     let page = RoomPage {
         user: &user,
         room: &room,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
     };
