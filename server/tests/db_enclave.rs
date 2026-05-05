@@ -444,6 +444,83 @@ async fn delete_enclave_cascades() {
 }
 
 #[tokio::test]
+async fn is_room_accessible_admin_godmode() {
+    let pool = chat_pool().await;
+    let general: i64 = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "private", None, "private", None, Some(general))
+            .await
+            .unwrap();
+    let ok = lets_chat::db::chat::is_room_accessible(&pool, room_id, "outsider", true)
+        .await
+        .unwrap();
+    assert!(ok);
+}
+
+#[tokio::test]
+async fn is_room_accessible_enclave_member_open_room() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u1")
+        .await
+        .unwrap();
+    let room = lets_chat::db::chat::create_room(&pool, "open", None, "public", None, Some(id))
+        .await
+        .unwrap();
+    assert!(lets_chat::db::chat::is_room_accessible(&pool, room, "u1", false)
+        .await
+        .unwrap());
+    assert!(!lets_chat::db::chat::is_room_accessible(&pool, room, "stranger", false)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn is_room_accessible_private_requires_room_member() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u1")
+        .await
+        .unwrap();
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    let room = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None, Some(id))
+        .await
+        .unwrap();
+    assert!(!lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
+        .await
+        .unwrap());
+    lets_chat::db::chat::add_room_member(&pool, room, "u2")
+        .await
+        .unwrap();
+    assert!(lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn is_room_accessible_dm_via_room_members() {
+    let pool = chat_pool().await;
+    let _ = lets_chat::db::chat::create_dm_room(&pool, "dm", "u1", "u2")
+        .await
+        .unwrap();
+    let row = sqlx::query("SELECT id FROM rooms WHERE room_type='dm'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let dm_id: i64 = row.get("id");
+    assert!(lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u1", false)
+        .await
+        .unwrap());
+    assert!(!lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u3", false)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
 async fn list_members_returns_all_with_roles() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")

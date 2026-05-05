@@ -277,6 +277,50 @@ pub async fn update_room(
     Ok(())
 }
 
+/// Predicate combining DM, public-in-enclave, and private-room rules.
+/// `is_site_admin` short-circuits to true.
+pub async fn is_room_accessible(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    is_site_admin: bool,
+) -> Result<bool, sqlx::Error> {
+    if is_site_admin {
+        return Ok(true);
+    }
+    let row = sqlx::query("SELECT room_type, enclave_id FROM rooms WHERE id=?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some(r) = row else {
+        return Ok(false);
+    };
+    let room_type: String = r.get("room_type");
+    let enclave_id: Option<i64> = r.get("enclave_id");
+
+    if room_type == "dm" {
+        return is_room_member(pool, room_id, user_id).await;
+    }
+
+    let Some(eid) = enclave_id else {
+        return Ok(false);
+    };
+    let in_enclave = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(eid)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    if !in_enclave {
+        return Ok(false);
+    }
+
+    if room_type == "public" {
+        return Ok(true);
+    }
+    is_room_member(pool, room_id, user_id).await
+}
+
 /// Check if a user is a member of a room.
 pub async fn is_room_member(
     pool: &sqlx::SqlitePool,
