@@ -644,9 +644,10 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
         .await
         .unwrap();
     let s = String::from_utf8(body.to_vec()).unwrap();
-    // Find the room id by anchoring on the "lobby" label so we ignore unrelated
-    // /room/ links that appear in the sidebar.
-    let lobby_pos = s.find("#lobby").expect("lobby room link missing");
+    // Find the room id by walking back from the "lobby" label to the nearest
+    // preceding /room/ link, regardless of whether the template separates the
+    // hash and the name with whitespace.
+    let lobby_pos = s.find("lobby").expect("lobby room link missing");
     let prefix = &s[..lobby_pos];
     let last_room_pos = prefix.rfind("/room/").expect("preceding /room/ missing");
     let after = &s[last_room_pos + "/room/".len()..];
