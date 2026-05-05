@@ -15,6 +15,15 @@ use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
 use crate::state::AppState;
 use crate::views::enclave::{DiscoverPage, EnclavePage, EnclaveSettingsPage};
 use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
+
+async fn broadcast_to_enclave(state: &AppState, enclave_id: i64, event: &ChatEvent) {
+    if let Ok(members) = db::enclave::list_members(&state.chat, enclave_id).await {
+        for m in members {
+            state.hub.broadcast_to_user(&m.user_id, event);
+        }
+    }
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -197,6 +206,13 @@ pub async fn post_discover_join(
         return Ok(Redirect::to(&format!("/enclave/{id}")));
     }
     db::enclave::add_member(&state.chat, id, &user.id, EnclaveRole::Member).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveMemberAdded {
+            enclave_id: id,
+            user_id: user.id.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -222,6 +238,13 @@ pub async fn post_join_by_code(
         return Ok(Redirect::to(&format!("/enclave/{}", enclave.id)));
     }
     db::enclave::add_member(&state.chat, enclave.id, &user.id, EnclaveRole::Member).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveMemberAdded {
+            enclave_id: enclave.id,
+            user_id: user.id.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{}", enclave.id)))
 }
 
@@ -252,6 +275,12 @@ pub async fn post_invite(
             return Err(e.into());
         }
     }
+    state.hub.broadcast_to_user(
+        &target.id,
+        &ChatEvent::EnclaveInvitationCreated {
+            invitee_id: target.id.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -267,6 +296,19 @@ pub async fn post_invitation_accept(
         return Err(AppError::Forbidden);
     }
     let (eid, _) = db::enclave::accept_invitation(&state.chat, id).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveMemberAdded {
+            enclave_id: eid,
+            user_id: user.id.clone(),
+        },
+    );
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveInvitationResolved {
+            invitee_id: user.id.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{eid}")))
 }
 
@@ -282,6 +324,12 @@ pub async fn post_invitation_decline(
         return Err(AppError::Forbidden);
     }
     db::enclave::delete_invitation(&state.chat, id).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveInvitationResolved {
+            invitee_id: user.id.clone(),
+        },
+    );
     Ok(Redirect::to("/invitations"))
 }
 
@@ -368,7 +416,17 @@ pub async fn post_delete(
     if !enclave_can_delete(m.map(|x| x.role), &user.role) {
         return Err(AppError::Forbidden);
     }
+    let former_members = db::enclave::list_members(&state.chat, id).await?;
     db::enclave::delete_enclave(&state.chat, id).await?;
+    for fm in former_members {
+        state.hub.broadcast_to_user(
+            &fm.user_id,
+            &ChatEvent::EnclaveMemberRemoved {
+                enclave_id: id,
+                user_id: fm.user_id.clone(),
+            },
+        );
+    }
     Ok(Redirect::to("/"))
 }
 
@@ -392,6 +450,13 @@ pub async fn post_leave(
         ));
     }
     db::enclave::remove_member(&state.chat, id, &user.id).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::EnclaveMemberRemoved {
+            enclave_id: id,
+            user_id: user.id.clone(),
+        },
+    );
     Ok(Redirect::to("/"))
 }
 
@@ -434,6 +499,13 @@ pub async fn post_kick(
         ));
     }
     db::enclave::remove_member(&state.chat, id, &target).await?;
+    state.hub.broadcast_to_user(
+        &target,
+        &ChatEvent::EnclaveMemberRemoved {
+            enclave_id: id,
+            user_id: target.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
@@ -480,6 +552,15 @@ pub async fn post_create_room(
     if form.room_type == "private" {
         db::chat::add_room_member(&state.chat, room_id, &user.id).await?;
     }
+    broadcast_to_enclave(
+        &state,
+        id,
+        &ChatEvent::EnclaveRoomAdded {
+            enclave_id: id,
+            room_id,
+        },
+    )
+    .await;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -538,6 +619,15 @@ pub async fn post_delete_room(
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     db::chat::delete_room(&state.chat, room_id).await?;
+    broadcast_to_enclave(
+        &state,
+        id,
+        &ChatEvent::EnclaveRoomRemoved {
+            enclave_id: id,
+            room_id,
+        },
+    )
+    .await;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
