@@ -277,6 +277,37 @@ pub async fn update_room(
     Ok(())
 }
 
+pub async fn list_rooms_in_enclave(
+    pool: &sqlx::SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    can_see_all_private: bool,
+) -> Result<Vec<Room>, sqlx::Error> {
+    if can_see_all_private {
+        let rows = sqlx::query(
+            "SELECT id, name, topic, room_type, invite_code, created_at \
+             FROM rooms WHERE enclave_id=? AND room_type != 'dm' ORDER BY name",
+        )
+        .bind(enclave_id)
+        .fetch_all(pool)
+        .await?;
+        return Ok(rows.iter().map(map_room).collect());
+    }
+    let rows = sqlx::query(
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+         FROM rooms r \
+         LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
+         WHERE r.enclave_id=? AND r.room_type != 'dm' \
+           AND (r.room_type='public' OR m.user_id IS NOT NULL) \
+         ORDER BY r.name",
+    )
+    .bind(user_id)
+    .bind(enclave_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_room).collect())
+}
+
 /// Predicate combining DM, public-in-enclave, and private-room rules.
 /// `is_site_admin` short-circuits to true.
 pub async fn is_room_accessible(
