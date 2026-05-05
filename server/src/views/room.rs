@@ -7,6 +7,8 @@ pub struct MessageView {
     pub id: i64,
     pub user_id: String,
     pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
     pub created_at: String,
     pub edited_at: Option<String>,
     pub body: String,
@@ -24,6 +26,15 @@ pub struct MessageView {
     /// read on this server. Renders an "Unread messages" divider above the
     /// message and tells the auto-scroll script to anchor here on load.
     pub show_unread_divider: bool,
+}
+
+impl MessageView {
+    pub fn label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
 }
 
 pub struct ReactionView {
