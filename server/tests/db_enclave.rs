@@ -195,7 +195,11 @@ async fn add_member_idempotent_via_or_ignore() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(m.role, EnclaveRole::Member, "second add must NOT promote silently");
+    assert_eq!(
+        m.role,
+        EnclaveRole::Member,
+        "second add must NOT promote silently"
+    );
 }
 
 #[tokio::test]
@@ -300,10 +304,12 @@ async fn accept_invitation_inserts_member_and_deletes_invite() {
         .unwrap()
         .unwrap();
     assert_eq!(m.role, EnclaveRole::Member);
-    assert!(lets_chat::db::enclave::list_invitations_for_user(&pool, "u2")
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        lets_chat::db::enclave::list_invitations_for_user(&pool, "u2")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -315,7 +321,9 @@ async fn update_metadata_and_visibility_and_invite_code() {
     lets_chat::db::enclave::update_metadata(&pool, id, "y", Some("hi"))
         .await
         .unwrap();
-    lets_chat::db::enclave::set_public(&pool, id, true).await.unwrap();
+    lets_chat::db::enclave::set_public(&pool, id, true)
+        .await
+        .unwrap();
     lets_chat::db::enclave::regenerate_invite_code(&pool, id, "code123")
         .await
         .unwrap();
@@ -327,7 +335,9 @@ async fn update_metadata_and_visibility_and_invite_code() {
     assert_eq!(e.description.as_deref(), Some("hi"));
     assert!(e.is_public);
     assert_eq!(e.invite_code.as_deref(), Some("code123"));
-    lets_chat::db::enclave::clear_invite_code(&pool, id).await.unwrap();
+    lets_chat::db::enclave::clear_invite_code(&pool, id)
+        .await
+        .unwrap();
     let e2 = lets_chat::db::enclave::get_enclave(&pool, id)
         .await
         .unwrap()
@@ -426,7 +436,9 @@ async fn delete_enclave_cascades() {
         .execute(&pool)
         .await
         .unwrap();
-    lets_chat::db::enclave::delete_enclave(&pool, id).await.unwrap();
+    lets_chat::db::enclave::delete_enclave(&pool, id)
+        .await
+        .unwrap();
     let n: i64 = sqlx::query("SELECT COUNT(*) AS c FROM rooms WHERE enclave_id=?")
         .bind(id)
         .fetch_one(&pool)
@@ -470,12 +482,16 @@ async fn is_room_accessible_enclave_member_open_room() {
     let room = lets_chat::db::chat::create_room(&pool, "open", None, "public", None, Some(id))
         .await
         .unwrap();
-    assert!(lets_chat::db::chat::is_room_accessible(&pool, room, "u1", false)
-        .await
-        .unwrap());
-    assert!(!lets_chat::db::chat::is_room_accessible(&pool, room, "stranger", false)
-        .await
-        .unwrap());
+    assert!(
+        lets_chat::db::chat::is_room_accessible(&pool, room, "u1", false)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !lets_chat::db::chat::is_room_accessible(&pool, room, "stranger", false)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -490,15 +506,19 @@ async fn is_room_accessible_private_requires_room_member() {
     let room = lets_chat::db::chat::create_room(&pool, "secret", None, "private", None, Some(id))
         .await
         .unwrap();
-    assert!(!lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
-        .await
-        .unwrap());
+    assert!(
+        !lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
+            .await
+            .unwrap()
+    );
     lets_chat::db::chat::add_room_member(&pool, room, "u2")
         .await
         .unwrap();
-    assert!(lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
-        .await
-        .unwrap());
+    assert!(
+        lets_chat::db::chat::is_room_accessible(&pool, room, "u2", false)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -512,12 +532,16 @@ async fn is_room_accessible_dm_via_room_members() {
         .await
         .unwrap();
     let dm_id: i64 = row.get("id");
-    assert!(lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u1", false)
-        .await
-        .unwrap());
-    assert!(!lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u3", false)
-        .await
-        .unwrap());
+    assert!(
+        lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u1", false)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !lets_chat::db::chat::is_room_accessible(&pool, dm_id, "u3", false)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -567,10 +591,20 @@ async fn list_members_returns_all_with_roles() {
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
         .await
         .unwrap();
-    sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'admin1', 'admin')")
-        .bind(id).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'member1', 'member')")
-        .bind(id).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'admin1', 'admin')",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'member1', 'member')",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let mut members = lets_chat::db::enclave::list_members(&pool, id)
         .await
         .unwrap();

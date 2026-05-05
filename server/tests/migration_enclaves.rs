@@ -43,7 +43,10 @@ async fn migration_creates_general_and_moves_rooms() {
     .await
     .unwrap()
     .get("c");
-    assert_eq!(n, 0, "every non-DM room must be in an enclave after migration");
+    assert_eq!(
+        n, 0,
+        "every non-DM room must be in an enclave after migration"
+    );
 
     let m: i64 = sqlx::query(
         "SELECT COUNT(*) AS c FROM rooms WHERE enclave_id = ? AND name IN ('general','random')",
@@ -72,15 +75,18 @@ async fn migration_partial_unique_owner_index_enforced() {
         .unwrap()
         .get("id");
 
-    sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u1', 'owner')")
-        .bind(general_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    let dup =
-        sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u2', 'owner')")
-            .bind(general_id)
-            .execute(&pool)
-            .await;
+    sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u1', 'owner')",
+    )
+    .bind(general_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let dup = sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u2', 'owner')",
+    )
+    .bind(general_id)
+    .execute(&pool)
+    .await;
     assert!(dup.is_err(), "two owners per enclave must be rejected");
 }
