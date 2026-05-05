@@ -45,7 +45,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         .display_name
         .clone()
         .unwrap_or_else(|| user.username.clone());
-    let (conn_id, mut rx) = state.hub.connect(&user.id, &username);
+    let (conn_id, mut rx, is_first_conn) = state.hub.connect(&user.id, &username);
+    if is_first_conn {
+        // Re-fetch so the broadcast carries the freshest persisted status,
+        // not the snapshot the inject_user middleware took at HTTP time.
+        if let Ok(Some(rec)) = db::auth::find_user_by_id(&state.auth, &user.id).await {
+            state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+                user_id: rec.id,
+                status: rec.status,
+                custom_status: rec.custom_status,
+            });
+        }
+    }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
     let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
     // Per-connection memory of which own-authored DM message currently shows
@@ -159,7 +170,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         }
     }
 
-    state.hub.disconnect(conn_id);
+    if let Some(uid) = state.hub.disconnect(conn_id) {
+        state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+            user_id: uid,
+            status: "offline".to_string(),
+            custom_status: None,
+        });
+    }
     send.abort();
 }
 

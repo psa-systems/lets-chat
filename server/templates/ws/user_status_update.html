@@ -1,0 +1,21 @@
+<script>
+(function(){
+  var uid = {{ user_id_json|safe }};
+  var status = {{ status_json|safe }};
+  var custom = {{ custom_status_json|safe }};
+  var colorClass = status === 'dnd' ? 'bg-red-500'
+    : status === 'idle' ? 'bg-yellow-400'
+    : status === 'offline' ? 'bg-slate-400'
+    : 'bg-green-500';
+  var dots = document.querySelectorAll('[data-user-status="' + uid.replace(/"/g, '\\"') + '"]');
+  dots.forEach(function(dot){
+    dot.classList.remove('bg-red-500','bg-yellow-400','bg-slate-400','bg-green-500');
+    dot.classList.add(colorClass);
+    var wrapper = dot.parentElement;
+    if (wrapper) {
+      if (custom) { wrapper.setAttribute('title', custom); }
+      else { wrapper.removeAttribute('title'); }
+    }
+  });
+})();
+</script>
