@@ -104,6 +104,62 @@ async fn get_membership_returns_role() {
 }
 
 #[tokio::test]
+async fn list_enclaves_for_user_returns_only_member_enclaves() {
+    let pool = chat_pool().await;
+    let a = lets_chat::db::enclave::create_enclave(&pool, "a", None, "u1")
+        .await
+        .unwrap();
+    let _b = lets_chat::db::enclave::create_enclave(&pool, "b", None, "u2")
+        .await
+        .unwrap();
+    let mine = lets_chat::db::enclave::list_enclaves_for_user(&pool, "u1")
+        .await
+        .unwrap();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0].id, a);
+}
+
+#[tokio::test]
+async fn list_public_enclaves_filters_on_is_public() {
+    let pool = chat_pool().await;
+    let _ = lets_chat::db::enclave::create_enclave(&pool, "private", None, "u")
+        .await
+        .unwrap();
+    let pub_id = lets_chat::db::enclave::create_enclave(&pool, "open", None, "u")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE enclaves SET is_public=1 WHERE id=?")
+        .bind(pub_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let pubs = lets_chat::db::enclave::list_public_enclaves(&pool)
+        .await
+        .unwrap();
+    assert_eq!(pubs.len(), 1);
+    assert_eq!(pubs[0].id, pub_id);
+}
+
+#[tokio::test]
+async fn list_members_returns_all_with_roles() {
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "owner1")
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'admin1', 'admin')")
+        .bind(id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'member1', 'member')")
+        .bind(id).execute(&pool).await.unwrap();
+    let mut members = lets_chat::db::enclave::list_members(&pool, id)
+        .await
+        .unwrap();
+    members.sort_by(|a, b| a.user_id.cmp(&b.user_id));
+    assert_eq!(members.len(), 3);
+    assert_eq!(members[0].user_id, "admin1");
+    assert_eq!(members[0].role, EnclaveRole::Admin);
+}
+
+#[tokio::test]
 async fn get_enclave_by_invite_code_finds_match() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "x", None, "u")
