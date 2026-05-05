@@ -29,7 +29,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{id}/delete", post(post_delete_user))
         .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
-        .route("/admin/rooms", get(get_rooms).post(post_create_room))
+        .route("/admin/rooms", get(get_rooms))
         .route("/admin/rooms/{id}/archive", post(post_archive_room))
         .route("/admin/rooms/{id}/edit", post(post_edit_room))
         .route("/admin/rooms/{id}/invite", post(post_invite_to_room))
@@ -312,14 +312,6 @@ async fn build_invite_views(state: &AppState) -> Result<Vec<AdminInviteView>, Ap
 // Rooms ---------------------------------------------------------------------
 
 #[derive(Deserialize)]
-pub struct CreateRoomForm {
-    pub name: String,
-    #[serde(default)]
-    pub topic: String,
-    pub room_type: String,
-}
-
-#[derive(Deserialize)]
 pub struct EditRoomForm {
     pub name: String,
     #[serde(default)]
@@ -360,42 +352,6 @@ pub async fn get_rooms(
         rooms_admin: &rooms_admin,
     };
     html(&page)
-}
-
-pub async fn post_create_room(
-    State(state): State<AppState>,
-    AdminUser(_actor): AdminUser,
-    axum::Form(form): axum::Form<CreateRoomForm>,
-) -> Result<Response, AppError> {
-    let name = form.name.trim();
-    if name.is_empty() {
-        return Err(AppError::BadRequest("name required".into()));
-    }
-    let room_type = match form.room_type.as_str() {
-        "public" | "private" => form.room_type.as_str(),
-        _ => return Err(AppError::BadRequest("invalid room_type".into())),
-    };
-    let topic = if form.topic.trim().is_empty() {
-        None
-    } else {
-        Some(form.topic.trim())
-    };
-    let invite_code = if room_type == "private" {
-        Some(random_code(10))
-    } else {
-        None
-    };
-    let enclave_id = db::enclave::get_general_id(&state.chat).await?;
-    db::chat::create_room(
-        &state.chat,
-        name,
-        topic,
-        room_type,
-        invite_code.as_deref(),
-        enclave_id,
-    )
-    .await?;
-    Ok(Redirect::to("/admin/rooms").into_response())
 }
 
 pub async fn post_archive_room(
