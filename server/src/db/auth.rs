@@ -26,29 +26,15 @@ pub async fn find_user_by_username(
         "SELECT id, username, display_name, password_hash, role, \
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
-         created_at, updated_at, read_receipts_enabled \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| UserRecord {
-        id: r.get("id"),
-        username: r.get("username"),
-        display_name: r.get("display_name"),
-        password_hash: r.get("password_hash"),
-        role: r.get("role"),
-        is_banned: r.get("is_banned"),
-        ban_reason: r.get("ban_reason"),
-        banned_until: r.get("banned_until"),
-        is_muted: r.get("is_muted"),
-        muted_until: r.get("muted_until"),
-        mute_reason: r.get("mute_reason"),
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-        read_receipts_enabled: r.get("read_receipts_enabled"),
-    }))
+    Ok(row.map(row_to_user_record))
 }
 
 pub async fn find_user_by_id(
@@ -59,14 +45,19 @@ pub async fn find_user_by_id(
         "SELECT id, username, display_name, password_hash, role, \
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
-         created_at, updated_at, read_receipts_enabled \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| UserRecord {
+    Ok(row.map(row_to_user_record))
+}
+
+fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
+    UserRecord {
         id: r.get("id"),
         username: r.get("username"),
         display_name: r.get("display_name"),
@@ -81,7 +72,9 @@ pub async fn find_user_by_id(
         created_at: r.get("created_at"),
         updated_at: r.get("updated_at"),
         read_receipts_enabled: r.get("read_receipts_enabled"),
-    }))
+        bio: r.get("bio"),
+        avatar_ext: r.get("avatar_ext"),
+    }
 }
 
 pub async fn count_users(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
@@ -132,7 +125,8 @@ pub async fn get_user_by_session(
         "SELECT u.id, u.username, u.display_name, u.password_hash, u.role, \
          u.is_banned, u.ban_reason, u.banned_until, \
          u.is_muted, u.muted_until, u.mute_reason, \
-         u.created_at, u.updated_at, u.read_receipts_enabled \
+         u.created_at, u.updated_at, u.read_receipts_enabled, \
+         u.bio, u.avatar_ext \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -141,22 +135,7 @@ pub async fn get_user_by_session(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| UserRecord {
-        id: r.get("id"),
-        username: r.get("username"),
-        display_name: r.get("display_name"),
-        password_hash: r.get("password_hash"),
-        role: r.get("role"),
-        is_banned: r.get("is_banned"),
-        ban_reason: r.get("ban_reason"),
-        banned_until: r.get("banned_until"),
-        is_muted: r.get("is_muted"),
-        muted_until: r.get("muted_until"),
-        mute_reason: r.get("mute_reason"),
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-        read_receipts_enabled: r.get("read_receipts_enabled"),
-    }))
+    Ok(row.map(row_to_user_record))
 }
 
 pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error> {
@@ -180,31 +159,14 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
         "SELECT id, username, display_name, password_hash, role, \
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
-         created_at, updated_at, read_receipts_enabled \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|r| UserRecord {
-            id: r.get("id"),
-            username: r.get("username"),
-            display_name: r.get("display_name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            is_banned: r.get("is_banned"),
-            ban_reason: r.get("ban_reason"),
-            banned_until: r.get("banned_until"),
-            is_muted: r.get("is_muted"),
-            muted_until: r.get("muted_until"),
-            mute_reason: r.get("mute_reason"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-            read_receipts_enabled: r.get("read_receipts_enabled"),
-        })
-        .collect())
+    Ok(rows.into_iter().map(row_to_user_record).collect())
 }
 
 pub async fn delete_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
@@ -368,6 +330,36 @@ pub async fn unmute_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::E
     .bind(user_id)
     .execute(pool)
     .await?;
+    Ok(())
+}
+
+pub async fn update_user_profile(
+    pool: &SqlitePool,
+    user_id: &str,
+    display_name: Option<&str>,
+    bio: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET display_name = ?, bio = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(display_name)
+    .bind(bio)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn set_user_avatar_ext(
+    pool: &SqlitePool,
+    user_id: &str,
+    ext: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET avatar_ext = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(ext)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

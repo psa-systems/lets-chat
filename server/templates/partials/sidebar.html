@@ -1,7 +1,14 @@
 <aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
-  <div class="p-4 border-b border-slate-200">
-    <div class="font-semibold">lets-chat</div>
-    <div class="text-xs text-slate-500">{{ user.username }}</div>
+  <div class="p-4 border-b border-slate-200 flex items-center gap-2">
+    {% if user.avatar_ext.is_some() %}
+    <img src="/avatars/{{ user.id }}" alt="" class="h-8 w-8 rounded-full object-cover border border-slate-200">
+    {% else %}
+    <div class="h-8 w-8 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-sm font-semibold">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    {% endif %}
+    <div class="min-w-0">
+      <div class="font-semibold truncate">{{ user.display_label() }}</div>
+      <div class="text-xs text-slate-500 truncate">@{{ user.username }}</div>
+    </div>
   </div>
   <form class="p-2">
     <input
@@ -39,8 +46,13 @@
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
         <li>
-          <a href="/dm/{{ peer.id }}" class="flex items-center px-2 py-1 rounded hover:bg-slate-200">
-            <span>@ {{ peer.username }}</span>
+          <a href="/dm/{{ peer.id }}" class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200">
+            {% if peer.avatar_ext.is_some() %}
+            <img src="/avatars/{{ peer.id }}" alt="" class="h-6 w-6 rounded-full object-cover">
+            {% else %}
+            <div class="h-6 w-6 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-xs font-semibold">{% if let Some(c) = peer.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+            {% endif %}
+            <span class="truncate">{{ peer.label() }}</span>
             {% let kind = "dm" %}
             {% let id = peer.id.clone() %}
             {% let unread = peer.unread %}

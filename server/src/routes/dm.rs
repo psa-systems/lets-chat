@@ -83,20 +83,22 @@ pub async fn get_dm(
 
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
-    let mut username_cache: HashMap<String, String> = HashMap::new();
+    let mut author_cache: HashMap<String, (String, Option<String>, Option<String>)> =
+        HashMap::new();
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
     for m in raw_messages {
-        let username = if let Some(name) = username_cache.get(&m.user_id) {
-            name.clone()
+        let (username, display_name, avatar_ext) = if let Some(entry) = author_cache.get(&m.user_id)
+        {
+            entry.clone()
         } else {
-            let resolved = db::auth::find_user_by_id(&state.auth, &m.user_id)
-                .await?
-                .map(|r| r.username)
-                .unwrap_or_else(|| "(unknown)".to_string());
-            username_cache.insert(m.user_id.clone(), resolved.clone());
-            resolved
+            let entry = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
+                Some(r) => (r.username, r.display_name, r.avatar_ext),
+                None => ("(unknown)".to_string(), None, None),
+            };
+            author_cache.insert(m.user_id.clone(), entry.clone());
+            entry
         };
         let can_edit = m.user_id == user.id;
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
@@ -123,6 +125,8 @@ pub async fn get_dm(
             id: m.id,
             user_id: m.user_id.clone(),
             username,
+            display_name,
+            avatar_ext,
             created_at: m.created_at,
             edited_at: m.edited_at,
             body: m.body,

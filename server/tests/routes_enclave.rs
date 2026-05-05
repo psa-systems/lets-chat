@@ -12,6 +12,7 @@ async fn open_pool(name: &str) -> SqlitePool {
         "auth" => vec![
             include_str!("../migrations/auth/0001_create_tables.sql"),
             include_str!("../migrations/auth/0002_read_receipts.sql"),
+        include_str!("../migrations/auth/0003_profile_fields.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -23,7 +24,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0007_reactions.sql"),
             include_str!("../migrations/chat/0008_search.sql"),
             include_str!("../migrations/chat/0009_enclaves.sql"),
-        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
+            include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
         ],
         "settings" => vec![include_str!(
             "../migrations/settings/0001_create_tables.sql"
