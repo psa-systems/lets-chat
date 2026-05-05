@@ -19,6 +19,9 @@ pub struct UserRecord {
     pub read_receipts_enabled: bool,
     pub bio: Option<String>,
     pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+    pub last_active_at: String,
 }
 
 /// Public user info safe to send to the client.
@@ -37,6 +40,9 @@ pub struct User {
     pub read_receipts_enabled: bool,
     pub bio: Option<String>,
     pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+    pub last_active_at: String,
 }
 
 impl User {
@@ -65,6 +71,9 @@ impl From<UserRecord> for User {
             read_receipts_enabled: r.read_receipts_enabled,
             bio: r.bio,
             avatar_ext: r.avatar_ext,
+            status: r.status,
+            custom_status: r.custom_status,
+            last_active_at: r.last_active_at,
         }
     }
 }
