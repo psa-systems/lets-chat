@@ -36,3 +36,52 @@ pub async fn create_enclave(
     tx.commit().await?;
     Ok(id)
 }
+
+pub async fn get_enclave(pool: &SqlitePool, id: i64) -> Result<Option<Enclave>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at \
+         FROM enclaves WHERE id=?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.as_ref().map(map_enclave))
+}
+
+pub async fn get_enclave_by_invite_code(
+    pool: &SqlitePool,
+    code: &str,
+) -> Result<Option<Enclave>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at \
+         FROM enclaves WHERE invite_code = ?",
+    )
+    .bind(code)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.as_ref().map(map_enclave))
+}
+
+pub async fn get_membership(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<Option<EnclaveMembership>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT enclave_id, user_id, role, joined_at \
+         FROM enclave_members WHERE enclave_id=? AND user_id=?",
+    )
+    .bind(enclave_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(r) = row else { return Ok(None) };
+    let role_str: String = r.get("role");
+    let role = EnclaveRole::from_str(&role_str).map_err(|e| sqlx::Error::Decode(e.into()))?;
+    Ok(Some(EnclaveMembership {
+        enclave_id: r.get("enclave_id"),
+        user_id: r.get("user_id"),
+        role,
+        joined_at: r.get("joined_at"),
+    }))
+}
