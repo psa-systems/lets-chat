@@ -1,0 +1,26 @@
+<div id="status-events-slot" hx-swap-oob="innerHTML">
+  <script>
+    (function(){
+      var uid = {{ user_id_json|safe }};
+      var status = {{ status_json|safe }};
+      var custom = {{ custom_status_json|safe }};
+      var colorClass = status === 'dnd' ? 'bg-red-500'
+        : status === 'idle' ? 'bg-yellow-400'
+        : status === 'offline' ? 'bg-slate-400'
+        : 'bg-green-500';
+      var safeUid = uid.replace(/"/g, '\\"');
+      document.querySelectorAll('[data-user-status="' + safeUid + '"]').forEach(function(dot){
+        dot.classList.remove('bg-red-500','bg-yellow-400','bg-slate-400','bg-green-500');
+        dot.classList.add(colorClass);
+        var wrapper = dot.parentElement;
+        if (wrapper) {
+          if (custom) { wrapper.setAttribute('title', custom); }
+          else { wrapper.removeAttribute('title'); }
+        }
+      });
+      document.querySelectorAll('[data-user-custom="' + safeUid + '"]').forEach(function(slot){
+        slot.textContent = custom || '';
+      });
+    })();
+  </script>
+</div>

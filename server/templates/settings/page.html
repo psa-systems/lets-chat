@@ -23,11 +23,15 @@
     <h2 class="font-medium">Profile</h2>
     <div class="flex items-start gap-4">
       <div class="shrink-0">
-        {% if user.avatar_ext.is_some() %}
-        <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-slate-200">
-        {% else %}
-        <div class="h-16 w-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-        {% endif %}
+        <span class="relative inline-block"{% if let Some(t) = user.custom_status.as_ref() %} title="{{ t }}"{% endif %}>
+          {% if user.avatar_ext.is_some() %}
+          <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-slate-200">
+          {% else %}
+          <div class="h-16 w-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+          {% endif %}
+          <span data-user-status="{{ user.id }}" class="absolute bottom-0 right-0 h-4 w-4 rounded-full ring-2 ring-white {% if user.status == "dnd" %}bg-red-500{% else if user.status == "idle" %}bg-yellow-400{% else %}bg-green-500{% endif %}"></span>
+        </span>
+        <div class="text-xs text-slate-500 mt-1">Status: {{ user.status }}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
       </div>
       <div class="flex-1 space-y-2">
         <label class="block text-sm">

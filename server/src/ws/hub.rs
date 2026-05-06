@@ -45,12 +45,15 @@ impl Hub {
         }
     }
 
-    /// Register a new connection. Returns (conn_id, broadcast::Receiver).
+    /// Register a new connection. Returns (conn_id, broadcast::Receiver,
+    /// `is_first_for_user`). The boolean lets the caller broadcast a
+    /// presence-change event when the user transitions from no live tabs to
+    /// at least one without forcing the hub to know about persisted status.
     pub fn connect(
         &self,
         user_id: &str,
         username: &str,
-    ) -> (ConnId, broadcast::Receiver<ChatEvent>) {
+    ) -> (ConnId, broadcast::Receiver<ChatEvent>, bool) {
         let id = next_conn_id();
         let (tx, rx) = broadcast::channel(64);
         self.connections.insert(
@@ -61,28 +64,31 @@ impl Hub {
                 tx,
             },
         );
-        self.user_conns
-            .entry(user_id.to_string())
-            .or_default()
-            .insert(id);
-        (id, rx)
+        let mut entry = self.user_conns.entry(user_id.to_string()).or_default();
+        let is_first = entry.is_empty();
+        entry.insert(id);
+        (id, rx, is_first)
     }
 
-    /// Unregister a connection and remove from all rooms.
-    pub fn disconnect(&self, conn_id: ConnId) {
-        if let Some((_, conn)) = self.connections.remove(&conn_id) {
-            if let Some(mut conns) = self.user_conns.get_mut(&conn.user_id) {
-                conns.remove(&conn_id);
-                if conns.is_empty() {
-                    drop(conns);
-                    self.user_conns.remove(&conn.user_id);
-                }
+    /// Unregister a connection and remove from all rooms. Returns the user_id
+    /// when this disconnect removed the user's last live connection so the
+    /// caller can broadcast an offline presence event.
+    pub fn disconnect(&self, conn_id: ConnId) -> Option<String> {
+        let (_, conn) = self.connections.remove(&conn_id)?;
+        let mut became_offline: Option<String> = None;
+        if let Some(mut conns) = self.user_conns.get_mut(&conn.user_id) {
+            conns.remove(&conn_id);
+            if conns.is_empty() {
+                became_offline = Some(conn.user_id.clone());
+                drop(conns);
+                self.user_conns.remove(&conn.user_id);
             }
-            self.rooms.iter_mut().for_each(|mut entry| {
-                entry.value_mut().remove(&conn_id);
-            });
-            self.rooms.retain(|_, conns| !conns.is_empty());
         }
+        self.rooms.iter_mut().for_each(|mut entry| {
+            entry.value_mut().remove(&conn_id);
+        });
+        self.rooms.retain(|_, conns| !conns.is_empty());
+        became_offline
     }
 
     /// Subscribe a connection to a room.
@@ -138,6 +144,13 @@ impl Hub {
     /// public-room sidebar updates to all live sessions.
     pub fn list_connected_users(&self) -> Vec<String> {
         self.user_conns.iter().map(|e| e.key().clone()).collect()
+    }
+
+    /// True when `user_id` has at least one open WebSocket. Used by view
+    /// loaders to render an "offline" status circle for users with no live
+    /// session, regardless of their persisted status enum.
+    pub fn is_user_connected(&self, user_id: &str) -> bool {
+        self.user_conns.get(user_id).is_some_and(|c| !c.is_empty())
     }
 
     /// Broadcast to a specific user's connections (all their tabs/devices).

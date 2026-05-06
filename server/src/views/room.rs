@@ -9,6 +9,8 @@ pub struct MessageView {
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
     pub created_at: String,
     pub edited_at: Option<String>,
     pub body: String,

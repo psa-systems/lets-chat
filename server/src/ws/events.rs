@@ -95,6 +95,11 @@ pub enum ChatEvent {
     EnclaveInvitationResolved {
         invitee_id: String,
     },
+    UserStatusChanged {
+        user_id: String,
+        status: String,
+        custom_status: Option<String>,
+    },
 }
 
 /// Control frames sent from client to server.
