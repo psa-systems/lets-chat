@@ -28,7 +28,11 @@
       "Bash(awk '{sum+=$4} END {print \"Total tests passing:\", sum}')",
       "Bash(docker volume *)",
       "Bash(docker exec *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(./dev/cargo fmt *)",
+      "Read(//tmp/**)",
+      "Bash(./dev/cargo build *)",
+      "Bash(awk *)"
     ]
   }
 }
