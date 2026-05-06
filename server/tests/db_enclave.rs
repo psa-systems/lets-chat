@@ -19,6 +19,7 @@ async fn auth_pool() -> SqlitePool {
         include_str!("../migrations/auth/0004_user_status.sql"),
         include_str!("../migrations/auth/0005_profile_visibility.sql"),
         include_str!("../migrations/auth/0006_user_blocks.sql"),
+        include_str!("../migrations/auth/0007_notification_settings.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
@@ -45,6 +46,7 @@ async fn chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0009_enclaves.sql"),
         include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
         include_str!("../migrations/chat/0011_threads.sql"),
+        include_str!("../migrations/chat/0014_mentions.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
