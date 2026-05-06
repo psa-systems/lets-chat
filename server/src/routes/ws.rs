@@ -349,6 +349,15 @@ async fn render_new_message_or_bump(
     viewer: &User,
     subscribed: &Arc<Mutex<HashSet<i64>>>,
 ) -> Option<String> {
+    // Suppress live delivery from blocked authors. Skips both the foreground
+    // render and the sidebar unread bump so a blocked user cannot poke the
+    // viewer's UI.
+    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return None;
+    }
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
     if is_subscribed {
         // The viewer has the room open in the foreground, so the message is
@@ -466,6 +475,12 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
+    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &m.user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return None;
+    }
     let meta = super::load_author_meta(state, &m.user_id, &viewer.id)
         .await
         .ok()?;
@@ -536,6 +551,12 @@ async fn render_thread_reply(
     message: &models::Message,
     viewer: &User,
 ) -> Option<String> {
+    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return None;
+    }
     let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
         .await
         .ok()?;

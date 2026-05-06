@@ -126,7 +126,15 @@ pub async fn get_dm(
         .unwrap_or(0);
 
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
-    let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
+    // Filter blocked authors. In a DM the only candidate is the peer; if
+    // either party blocked the other we already returned above, so this is
+    // strictly defensive.
+    let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let raw_messages: Vec<_> = db::chat::list_messages(&state.chat, room_id)
+        .await?
+        .into_iter()
+        .filter(|m| !blocked_authors.contains(&m.user_id))
+        .collect();
     let reply_counts: HashMap<i64, i64> = db::chat::count_replies_for_room(&state.chat, room_id)
         .await?
         .into_iter()

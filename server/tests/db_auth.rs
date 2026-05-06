@@ -331,6 +331,38 @@ async fn test_block_and_unblock_round_trip() {
 }
 
 #[tokio::test]
+async fn test_list_blocked_ids_either_way_includes_both_directions() {
+    let pool = setup_pool().await;
+    let viewer = lets_chat::db::auth::create_user(&pool, "viewer", "h")
+        .await
+        .unwrap();
+    let blocked_by_viewer = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    let blocks_viewer = lets_chat::db::auth::create_user(&pool, "bob", "h")
+        .await
+        .unwrap();
+    let unrelated = lets_chat::db::auth::create_user(&pool, "carol", "h")
+        .await
+        .unwrap();
+
+    lets_chat::db::auth::block_user(&pool, &viewer, &blocked_by_viewer)
+        .await
+        .unwrap();
+    lets_chat::db::auth::block_user(&pool, &blocks_viewer, &viewer)
+        .await
+        .unwrap();
+
+    let ids = lets_chat::db::auth::list_blocked_ids_either_way(&pool, &viewer)
+        .await
+        .unwrap();
+    assert!(ids.contains(&blocked_by_viewer));
+    assert!(ids.contains(&blocks_viewer));
+    assert!(!ids.contains(&unrelated));
+    assert_eq!(ids.len(), 2);
+}
+
+#[tokio::test]
 async fn test_search_excludes_blocked_either_direction() {
     let pool = setup_pool().await;
     let viewer = lets_chat::db::auth::create_user(&pool, "viewer", "h")
