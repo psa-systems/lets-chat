@@ -225,14 +225,8 @@ pub async fn get_file(
         [
             (header::CONTENT_TYPE, row.mime_type.clone()),
             (header::CONTENT_DISPOSITION, disposition),
-            (
-                header::CONTENT_LENGTH,
-                row.size_bytes.to_string(),
-            ),
-            (
-                header::CACHE_CONTROL,
-                "private, max-age=86400".to_string(),
-            ),
+            (header::CONTENT_LENGTH, row.size_bytes.to_string()),
+            (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
         ],
         body,
     )
