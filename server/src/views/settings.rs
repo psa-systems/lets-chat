@@ -39,4 +39,6 @@ pub struct BlockedListPage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub blocked: &'a [BlockedUserView],
+    pub error: Option<&'a str>,
+    pub form_username: &'a str,
 }

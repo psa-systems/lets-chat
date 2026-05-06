@@ -388,7 +388,10 @@ pub fn build_router(state: AppState) -> Router {
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
-        .route("/settings/blocked", get(settings::get_blocked_list))
+        .route(
+            "/settings/blocked",
+            get(settings::get_blocked_list).post(settings::post_block_by_username),
+        )
         .route("/settings/profile", post(settings::post_profile))
         .route(
             "/settings/avatar/delete",
