@@ -36,7 +36,7 @@
       <ul class="mt-1">
         {% for room in sidebar_rooms %}
         <li>
-          <a href="/room/{{ room.id }}" class="flex items-center px-2 py-1 rounded hover:bg-slate-200">
+          <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% endif %}">
             <span># {{ room.name }}</span>
             {% let kind = "room" %}
             {% let id = room.id.to_string() %}
@@ -54,7 +54,7 @@
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
         <li>
-          <a href="/dm/{{ peer.id }}" class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200">
+          <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% endif %}">
             {% let avatar_user_id = peer.id.clone() %}
             {% let avatar_username = peer.username.clone() %}
             {% let avatar_ext = peer.avatar_ext.clone() %}

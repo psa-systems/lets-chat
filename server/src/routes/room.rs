@@ -150,8 +150,11 @@ pub async fn get_room(
     // Resolve the room's enclave so the switcher highlights the right icon
     // and the sidebar shows that enclave's rooms instead of DMs.
     let current_enclave = super::enclave_for_room(&state, room_id).await?;
-    let (sidebar_rooms, sidebar_peers, switcher) =
+    let (mut sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, current_enclave).await?;
+    if let Some(r) = sidebar_rooms.iter_mut().find(|r| r.id == room_id) {
+        r.active = true;
+    }
 
     let page = RoomPage {
         user: &user,

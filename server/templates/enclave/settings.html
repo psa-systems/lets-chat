@@ -52,7 +52,7 @@
     <ul class="mt-2 space-y-1">
       {% for m in members %}
       <li class="flex items-center justify-between gap-2">
-        <span>{{ m.user_id }}</span>
+        <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
         <span class="text-xs uppercase text-slate-500 mr-auto">{{ m.role.as_str() }}</span>
         {% if can_delete && m.role.as_str() != "owner" %}
         <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role" class="inline">
@@ -67,7 +67,7 @@
         <form method="post" action="/enclave/{{ enclave.id }}/transfer" class="inline">
           <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
           <button type="submit" class="text-xs text-blue-600"
-                  onclick="return confirm('Transfer ownership to {{ m.user_id }}?')">Transfer</button>
+                  onclick="return confirm('Transfer ownership to {{ m.label }}?')">Transfer</button>
         </form>
         {% endif %}
       </li>
