@@ -26,6 +26,7 @@ mod room;
 mod search;
 mod settings;
 mod status;
+mod unfurl;
 mod uploads;
 mod ws;
 
@@ -333,6 +334,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/avatars/{user_id}", get(avatar::get_avatar))
         .route("/api/upload", post(uploads::post_upload))
         .route("/api/files/{id}", get(uploads::get_file))
+        .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
