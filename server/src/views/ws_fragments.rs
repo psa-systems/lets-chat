@@ -97,6 +97,33 @@ pub struct ThreadStoppedTypingFragment {
     pub parent_id: i64,
 }
 
+/// OOB-appended notification trigger. The client's `#lc-notify-bus`
+/// MutationObserver consumes this element to fire a title flash, favicon
+/// dot, optional sound, and (when the tab is hidden) a browser
+/// Notification.
+#[derive(Template)]
+#[template(path = "ws/mentioned.html")]
+pub struct MentionedFragment<'a> {
+    pub kind: &'a str,
+    pub room_id: i64,
+    pub room_type: &'a str,
+    pub room_label: &'a str,
+    pub message_id: i64,
+    pub author_label: &'a str,
+    pub snippet: &'a str,
+    pub target_path: &'a str,
+}
+
+/// OOB-appended decrement signal: an earlier mention was retracted (the
+/// message was edited to remove the @-token, or deleted). The client
+/// decrements its in-memory unread-mention count for the room.
+#[derive(Template)]
+#[template(path = "ws/mention_cleared.html")]
+pub struct MentionClearedFragment {
+    pub room_id: i64,
+    pub message_id: i64,
+}
+
 /// Tiny inline script that updates every avatar status dot for a user across
 /// the rendered DOM (sidebar entries, message rows, DM headers). Uses a
 /// CSS-attribute selector instead of OOB-by-id because the same user's dot
@@ -157,7 +184,9 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveRoomAdded { .. }
         | ChatEvent::EnclaveRoomRemoved { .. }
         | ChatEvent::EnclaveInvitationCreated { .. }
-        | ChatEvent::EnclaveInvitationResolved { .. } => None,
+        | ChatEvent::EnclaveInvitationResolved { .. }
+        | ChatEvent::Mentioned { .. }
+        | ChatEvent::MentionCleared { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

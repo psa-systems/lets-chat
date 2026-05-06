@@ -119,6 +119,35 @@ pub enum ChatEvent {
         parent_id: i64,
         user_id: String,
     },
+    /// A user was @-mentioned in a room message, or a DM was sent to them.
+    /// Routed via `Hub::broadcast_to_user(mentioned_user_id, ...)`.
+    Mentioned {
+        /// "mention" for a real `@username` ping in a room; "dm" for an
+        /// implicit DM ping. The client uses this to label the notification.
+        kind: String,
+        room_id: i64,
+        /// "public" | "private" | "dm" - lets the client format the
+        /// notification title without an extra DB lookup.
+        room_type: String,
+        /// Display label for the room (e.g. "#general") or DM peer name.
+        room_label: String,
+        message_id: i64,
+        mentioned_user_id: String,
+        author_label: String,
+        /// First ~140 chars of the body, plain-text. Mention chips and links
+        /// are stripped to keep the notification readable.
+        snippet: String,
+        /// "/room/{id}" or "/dm/{peer_id}" - target path for the click handler.
+        target_path: String,
+    },
+    /// A previously-fired mention is no longer current (the message was
+    /// edited to remove the @-token, or the message was deleted). The client
+    /// decrements its in-memory unread-mention count for that room.
+    MentionCleared {
+        room_id: i64,
+        mentioned_user_id: String,
+        message_id: i64,
+    },
 }
 
 /// Control frames sent from client to server.

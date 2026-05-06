@@ -19,6 +19,10 @@ pub struct SettingsForm {
     pub read_receipts_enabled: Option<String>,
     #[serde(default)]
     pub is_profile_public: Option<String>,
+    #[serde(default)]
+    pub notify_browser_enabled: Option<String>,
+    #[serde(default)]
+    pub notify_sound_enabled: Option<String>,
 }
 
 pub async fn get_settings(
@@ -46,6 +50,9 @@ pub async fn post_settings(
     db::auth::set_read_receipts_enabled(&state.auth, &user.id, enabled).await?;
     let is_public = form.is_profile_public.is_some();
     db::auth::set_profile_public(&state.auth, &user.id, is_public).await?;
+    let browser = form.notify_browser_enabled.is_some();
+    let sound = form.notify_sound_enabled.is_some();
+    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound).await?;
     Ok(Redirect::to("/settings").into_response())
 }
 
