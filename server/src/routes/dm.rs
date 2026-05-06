@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::dm::DmPage;
+use crate::views::home::WelcomePage;
 use crate::views::html;
 use crate::views::room::{MessageView, ReactionView};
 use crate::ws::events::ChatEvent;
@@ -50,6 +51,27 @@ pub async fn get_dm(
     let room = match db::chat::find_dm_room(&state.chat, &user.id, &peer.id).await? {
         Some(r) => r,
         None => {
+            // A private profile cannot be DM'd by someone who has no prior
+            // conversation with them. Render Home with an inline error bubble
+            // so the user gets app chrome and a clear explanation rather than
+            // a bare 404.
+            if !peer.is_profile_public {
+                let (sidebar_rooms, sidebar_peers, switcher) =
+                    super::load_chrome(&state, &user, None).await?;
+                let msg = format!(
+                    "@{} has a private profile. You can't start a new DM with them.",
+                    peer.username
+                );
+                let page = WelcomePage {
+                    user: &user,
+                    sidebar_rooms: &sidebar_rooms,
+                    sidebar_peers: &sidebar_peers,
+                    switcher: &switcher,
+                    asset_version: &state.asset_version,
+                    flash_error: Some(&msg),
+                };
+                return Ok(html(&page)?.into_response());
+            }
             let dm_name = format!("@{}", peer.username);
             let r = db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
             // Notify both parties so their sidebars pick up the new DM live.

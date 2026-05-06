@@ -17,6 +17,8 @@ const MAX_BIO_CHARS: usize = 500;
 pub struct SettingsForm {
     #[serde(default)]
     pub read_receipts_enabled: Option<String>,
+    #[serde(default)]
+    pub is_profile_public: Option<String>,
 }
 
 pub async fn get_settings(
@@ -42,6 +44,8 @@ pub async fn post_settings(
 ) -> Result<Response, AppError> {
     let enabled = form.read_receipts_enabled.is_some();
     db::auth::set_read_receipts_enabled(&state.auth, &user.id, enabled).await?;
+    let is_public = form.is_profile_public.is_some();
+    db::auth::set_profile_public(&state.auth, &user.id, is_public).await?;
     Ok(Redirect::to("/settings").into_response())
 }
 
