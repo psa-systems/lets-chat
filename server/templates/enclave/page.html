@@ -3,7 +3,7 @@
 {% block title %}{{ enclave.name }} - lets-chat{% endblock %}
 
 {% block main %}
-<section class="p-6 max-w-4xl">
+<section class="flex-1 overflow-y-auto p-6 max-w-4xl">
   {% if let Some(msg) = flash_error %}
   <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
     {{ msg }}
