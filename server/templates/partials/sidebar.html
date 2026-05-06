@@ -19,27 +19,27 @@
     <div id="status-picker" class="mt-2"></div>
   </div>
   <div class="p-2 space-y-2">
-    <form>
+    <form class="relative" autocomplete="off">
       <input
         name="q"
         placeholder="Search messages..."
         hx-get="/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-        hx-target="#main"
+        hx-target="#search-msg-results"
         hx-swap="innerHTML"
-        hx-push-url="true"
         class="w-full border rounded px-2 py-1 text-sm">
+      <div id="search-msg-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
-    <form>
+    <form class="relative" autocomplete="off">
       <input
         name="q"
         placeholder="Search people..."
         hx-get="/users/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-        hx-target="#main"
+        hx-target="#search-people-results"
         hx-swap="innerHTML"
-        hx-push-url="true"
         class="w-full border rounded px-2 py-1 text-sm">
+      <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
   </div>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">

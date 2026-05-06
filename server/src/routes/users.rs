@@ -19,10 +19,9 @@ pub struct UserSearchQuery {
 
 /// GET /users/search?q=... - substring match against username and display_name.
 ///
-/// Returns a fragment (no surrounding layout). The sidebar's people-search
-/// input uses `hx-target="#main"` with `hx-swap="innerHTML"`, mirroring the
-/// message search at /search. An empty query renders an empty results panel
-/// without touching the database.
+/// Returns a popover fragment rendered into the sidebar's
+/// `#search-people-results` target. An empty query returns an empty body so
+/// the popover collapses via `empty:hidden`.
 pub async fn get_user_search(
     State(state): State<AppState>,
     AuthUser(viewer): AuthUser,
@@ -32,11 +31,7 @@ pub async fn get_user_search(
     let trimmed = query.trim();
 
     if trimmed.is_empty() {
-        let fragment = ProfileSearchFragment {
-            query: trimmed,
-            results: &[],
-        };
-        return html(&fragment);
+        return Ok(Html(String::new()));
     }
 
     let records = db::auth::search_users(&state.auth, trimmed, &viewer.id, MAX_RESULTS).await?;
