@@ -25,7 +25,95 @@ mod reactions;
 mod room;
 mod search;
 mod settings;
+mod status;
 mod ws;
+
+/// Override a persisted status with `"offline"` when the user has no live
+/// WebSocket. Online presence is hub-derived; the `users.status` column only
+/// stores the explicit user choice plus the idle auto-flip.
+pub(crate) fn effective_status(state: &AppState, user_id: &str, persisted: &str) -> String {
+    if state.hub.is_user_connected(user_id) {
+        persisted.to_string()
+    } else {
+        "offline".to_string()
+    }
+}
+
+/// Per-message author metadata cached by callers that build many MessageViews.
+/// Keeps the join across auth.db and chat.db to a single field per author.
+#[derive(Clone)]
+pub(crate) struct AuthorMeta {
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+}
+
+impl AuthorMeta {
+    pub fn unknown() -> Self {
+        Self {
+            username: "(unknown)".to_string(),
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+        }
+    }
+}
+
+impl From<crate::models::user::UserRecord> for AuthorMeta {
+    fn from(r: crate::models::user::UserRecord) -> Self {
+        Self {
+            username: r.username,
+            display_name: r.display_name,
+            avatar_ext: r.avatar_ext,
+            status: r.status,
+            custom_status: r.custom_status,
+        }
+    }
+}
+
+pub(crate) async fn load_author_meta(
+    state: &AppState,
+    user_id: &str,
+    viewer_id: &str,
+) -> Result<AuthorMeta, AppError> {
+    let mut meta = db::auth::find_user_by_id(&state.auth, user_id)
+        .await?
+        .map(AuthorMeta::from)
+        .unwrap_or_else(AuthorMeta::unknown);
+    // The viewer is by definition present (they are loading this page) even
+    // before their WebSocket finishes opening, so trust their persisted
+    // status rather than the hub's connection set.
+    if user_id != viewer_id {
+        meta.status = effective_status(state, user_id, &meta.status);
+    }
+    Ok(meta)
+}
+
+/// Refresh the caller's `last_active_at` and, if that bumped the row from
+/// idle back to active, broadcast `UserStatusChanged` so subscribers can
+/// update their UI. DND status is sticky and never flips here.
+pub(crate) async fn touch_user_and_maybe_broadcast(state: &AppState, user_id: &str) {
+    let flipped = match db::auth::touch_user_activity(&state.auth, user_id).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, user_id, "touch_user_activity failed");
+            return;
+        }
+    };
+    if !flipped {
+        return;
+    }
+    if let Ok(Some(record)) = db::auth::find_user_by_id(&state.auth, user_id).await {
+        state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+            user_id: record.id,
+            status: record.status,
+            custom_status: record.custom_status,
+        });
+    }
+}
 
 /// Build the sidebar's room and DM-peer view-models scoped to the caller's
 /// current location. When `current_enclave` is `None` (Home), the sidebar
@@ -65,12 +153,15 @@ pub(crate) async fn load_sidebar(
         let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
         for (room, peer_id) in &dm_rooms {
             if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
+                let effective = effective_status(state, &record.id, &record.status);
                 sidebar_peers.push(SidebarPeer {
                     id: record.id.clone(),
                     username: record.username.clone(),
                     display_name: record.display_name.clone(),
                     avatar_ext: record.avatar_ext.clone(),
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
+                    status: effective,
+                    custom_status: record.custom_status.clone(),
                 });
             }
         }
@@ -178,9 +269,23 @@ pub(crate) async fn broadcast_room_message(
         _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
     };
     for uid in recipients {
+        // OOB DOM updates always deliver - DND only suppresses attention-
+        // grabbing notifications (push/toast/sound). When that delivery path
+        // ships it should consult should_notify(state, uid) below before
+        // firing.
         state.hub.broadcast_to_user(&uid, event);
     }
     Ok(())
+}
+
+/// True when `user_id` is currently accepting attention-grabbing
+/// notifications. Returns false for DND users. v1 has no push/toast/sound
+/// path; this helper is the seam future delivery code must consult.
+#[allow(dead_code)]
+pub(crate) async fn should_notify(state: &AppState, user_id: &str) -> bool {
+    !db::auth::is_user_dnd(&state.auth, user_id)
+        .await
+        .unwrap_or(false)
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -225,6 +330,9 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
+        .route("/status", post(status::post_status))
+        .route("/status/picker", get(status::get_picker))
+        .route("/status/cancel", get(status::cancel_picker))
         .route("/ws", get(ws::ws_handler))
         .merge(enclave::router())
         .merge(admin::router())

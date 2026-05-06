@@ -74,6 +74,20 @@ pub struct SidebarUpdateFragment<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
 }
 
+/// Tiny inline script that updates every avatar status dot for a user across
+/// the rendered DOM (sidebar entries, message rows, DM headers). Uses a
+/// CSS-attribute selector instead of OOB-by-id because the same user's dot
+/// appears many times per page and HTMX OOB swaps only the first id match.
+/// Fields are pre-encoded as JSON literals to defend against quote/script
+/// injection in the user-controlled custom status text.
+#[derive(Template)]
+#[template(path = "ws/user_status_update.html")]
+pub struct UserStatusUpdateFragment {
+    pub user_id_json: String,
+    pub status_json: String,
+    pub custom_status_json: String,
+}
+
 /// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes for
 /// events that do not depend on the recipient. Per-recipient events
 /// (NewMessage, MessageEdited, ReactionAdded/Removed, DmRead,
@@ -105,5 +119,16 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveRoomRemoved { .. }
         | ChatEvent::EnclaveInvitationCreated { .. }
         | ChatEvent::EnclaveInvitationResolved { .. } => None,
+        ChatEvent::UserStatusChanged {
+            user_id,
+            status,
+            custom_status,
+        } => UserStatusUpdateFragment {
+            user_id_json: serde_json::to_string(user_id).ok()?,
+            status_json: serde_json::to_string(status).ok()?,
+            custom_status_json: serde_json::to_string(custom_status).ok()?,
+        }
+        .render()
+        .ok(),
     }
 }

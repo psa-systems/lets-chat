@@ -8,11 +8,13 @@
 <div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
-    {% if message.avatar_ext.is_some() %}
-    <img src="/avatars/{{ message.user_id }}" alt="" class="h-6 w-6 rounded-full object-cover">
-    {% else %}
-    <div class="h-6 w-6 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center text-xs font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-    {% endif %}
+    {% let avatar_user_id = message.user_id.clone() %}
+    {% let avatar_username = message.username.clone() %}
+    {% let avatar_ext = message.avatar_ext.clone() %}
+    {% let avatar_status = message.status.clone() %}
+    {% let avatar_custom_status = message.custom_status.clone() %}
+    {% let avatar_size = "h-6 w-6 text-xs" %}
+    {% include "partials/avatar.html" %}
     {% if message.user_id != message.viewer_id %}
     <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="Direct message {{ message.username }}">{{ message.label() }}</a>
     {% else %}

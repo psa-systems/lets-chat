@@ -9,12 +9,15 @@ pub async fn create_user(
     password_hash: &str,
 ) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)")
-        .bind(&id)
-        .bind(username)
-        .bind(password_hash)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, last_active_at) \
+         VALUES (?, ?, ?, datetime('now'))",
+    )
+    .bind(&id)
+    .bind(username)
+    .bind(password_hash)
+    .execute(pool)
+    .await?;
     Ok(id)
 }
 
@@ -27,7 +30,7 @@ pub async fn find_user_by_username(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext \
+         bio, avatar_ext, status, custom_status, last_active_at \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -46,7 +49,7 @@ pub async fn find_user_by_id(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext \
+         bio, avatar_ext, status, custom_status, last_active_at \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -74,7 +77,123 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         read_receipts_enabled: r.get("read_receipts_enabled"),
         bio: r.get("bio"),
         avatar_ext: r.get("avatar_ext"),
+        status: r.get("status"),
+        custom_status: r.get("custom_status"),
+        last_active_at: r.get("last_active_at"),
     }
+}
+
+/// Allowed values for the `users.status` column.
+pub const STATUS_ACTIVE: &str = "active";
+pub const STATUS_IDLE: &str = "idle";
+pub const STATUS_DND: &str = "dnd";
+pub const MAX_CUSTOM_STATUS_CHARS: usize = 50;
+
+pub fn is_valid_status(s: &str) -> bool {
+    matches!(s, STATUS_ACTIVE | STATUS_IDLE | STATUS_DND)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SetStatusError {
+    #[error("invalid status value")]
+    InvalidStatus,
+    #[error("custom status exceeds {0} characters")]
+    CustomTooLong(usize),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+}
+
+pub async fn set_user_status(
+    pool: &SqlitePool,
+    user_id: &str,
+    status: &str,
+    custom: Option<&str>,
+) -> Result<(), SetStatusError> {
+    if !is_valid_status(status) {
+        return Err(SetStatusError::InvalidStatus);
+    }
+    if let Some(c) = custom {
+        if c.chars().count() > MAX_CUSTOM_STATUS_CHARS {
+            return Err(SetStatusError::CustomTooLong(MAX_CUSTOM_STATUS_CHARS));
+        }
+    }
+    let now_clause = if status == STATUS_ACTIVE {
+        ", last_active_at = datetime('now')"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now'){now_clause} WHERE id = ?"
+    );
+    sqlx::query(&sql)
+        .bind(status)
+        .bind(custom)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Refresh `last_active_at`. If the user was `'idle'`, promote them back to
+/// `'active'`. DND is sticky: bumps the timestamp so the idle clock restarts
+/// once they leave DND, but never overwrites the status. Returns `true` only
+/// when the call actually flipped idle->active so the caller can broadcast.
+pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query("SELECT status FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some(r) = row else {
+        tx.commit().await?;
+        return Ok(false);
+    };
+    let current: String = r.get("status");
+    let flipped = current == STATUS_IDLE;
+    if current == STATUS_DND {
+        sqlx::query("UPDATE users SET last_active_at = datetime('now') WHERE id = ?")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query(
+            "UPDATE users SET last_active_at = datetime('now'), \
+             status = 'active', updated_at = datetime('now') WHERE id = ?",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(flipped)
+}
+
+/// Flip rows whose `status = 'active'` and whose `last_active_at` is older
+/// than `threshold_seconds` to `'idle'`. Returns the IDs that flipped.
+pub async fn mark_idle_users(
+    pool: &SqlitePool,
+    threshold_seconds: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let modifier = format!("-{threshold_seconds} seconds");
+    let rows = sqlx::query(
+        "UPDATE users SET status = 'idle', updated_at = datetime('now') \
+         WHERE status = 'active' AND last_active_at < datetime('now', ?) \
+         RETURNING id",
+    )
+    .bind(modifier)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
+pub async fn is_user_dnd(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT status FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row
+        .map(|r| r.get::<String, _>("status") == STATUS_DND)
+        .unwrap_or(false))
 }
 
 pub async fn count_users(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
@@ -126,7 +245,7 @@ pub async fn get_user_by_session(
          u.is_banned, u.ban_reason, u.banned_until, \
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
-         u.bio, u.avatar_ext \
+         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -160,7 +279,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext \
+         bio, avatar_ext, status, custom_status, last_active_at \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
