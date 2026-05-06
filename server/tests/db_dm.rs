@@ -80,6 +80,12 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         .await
         .expect("chat migration 10");
 
+    let chat_m11 = include_str!("../migrations/chat/0011_threads.sql");
+    sqlx::raw_sql(chat_m11)
+        .execute(&chat_pool)
+        .await
+        .expect("chat migration 11");
+
     (auth_pool, chat_pool)
 }
 

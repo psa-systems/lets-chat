@@ -9,4 +9,6 @@ pub struct Message {
     pub body: String,
     pub created_at: String,
     pub edited_at: Option<String>,
+    /// `Some(N)` when this message is a reply in the thread rooted at `N`.
+    pub parent_id: Option<i64>,
 }

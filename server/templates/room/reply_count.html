@@ -1,0 +1,13 @@
+<div id="reply-count-{{ message_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {% if reply_count > 0 %}
+  <button
+    hx-get="/room/{{ room_id }}/thread/{{ message_id }}"
+    hx-target="#thread-panel"
+    hx-swap="outerHTML"
+    class="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
+  >
+    <span>&#128172;</span>
+    <span>{{ reply_count }} {% if reply_count == 1 %}reply{% else %}replies{% endif %}</span>
+  </button>
+  {% endif %}
+</div>
