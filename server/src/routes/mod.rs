@@ -162,6 +162,12 @@ pub(crate) async fn load_sidebar(
                 .collect();
         let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
         for (room, peer_id) in &dm_rooms {
+            // Skip DMs with users who are blocked in either direction. The
+            // peer record may still exist; we just don't surface the DM in
+            // the sidebar so the conversation is effectively hidden.
+            if db::auth::is_blocked_either_way(&state.auth, &user.id, peer_id).await? {
+                continue;
+            }
             if let Some(record) = db::auth::find_user_by_id(&state.auth, peer_id).await? {
                 let effective = effective_status(state, &record.id, &record.status);
                 sidebar_peers.push(SidebarPeer {
@@ -376,10 +382,13 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/search", get(search::get_search))
         .route("/users/search", get(users::get_user_search))
+        .route("/users/{user_id}/block", post(users::post_block))
+        .route("/users/{user_id}/unblock", post(users::post_unblock))
         .route(
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
+        .route("/settings/blocked", get(settings::get_blocked_list))
         .route("/settings/profile", post(settings::post_profile))
         .route(
             "/settings/avatar/delete",

@@ -35,6 +35,12 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("Failed to run migration 5");
 
+    let migration6 = include_str!("../migrations/auth/0006_user_blocks.sql");
+    sqlx::raw_sql(migration6)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 6");
+
     pool
 }
 
@@ -277,6 +283,81 @@ async fn test_search_users_excludes_private_profiles() {
         .unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].username, "alicia");
+}
+
+#[tokio::test]
+async fn test_block_and_unblock_round_trip() {
+    let pool = setup_pool().await;
+    let a = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    let b = lets_chat::db::auth::create_user(&pool, "bob", "h")
+        .await
+        .unwrap();
+
+    assert!(!lets_chat::db::auth::did_block(&pool, &a, &b).await.unwrap());
+    assert!(!lets_chat::db::auth::is_blocked_either_way(&pool, &a, &b)
+        .await
+        .unwrap());
+
+    lets_chat::db::auth::block_user(&pool, &a, &b)
+        .await
+        .unwrap();
+    assert!(lets_chat::db::auth::did_block(&pool, &a, &b).await.unwrap());
+    assert!(lets_chat::db::auth::is_blocked_either_way(&pool, &a, &b)
+        .await
+        .unwrap());
+    assert!(lets_chat::db::auth::is_blocked_either_way(&pool, &b, &a)
+        .await
+        .unwrap());
+
+    // Idempotent.
+    lets_chat::db::auth::block_user(&pool, &a, &b)
+        .await
+        .unwrap();
+    let blocked = lets_chat::db::auth::list_blocked_users(&pool, &a)
+        .await
+        .unwrap();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].id, b);
+
+    lets_chat::db::auth::unblock_user(&pool, &a, &b)
+        .await
+        .unwrap();
+    assert!(!lets_chat::db::auth::did_block(&pool, &a, &b).await.unwrap());
+    assert!(!lets_chat::db::auth::is_blocked_either_way(&pool, &a, &b)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn test_search_excludes_blocked_either_direction() {
+    let pool = setup_pool().await;
+    let viewer = lets_chat::db::auth::create_user(&pool, "viewer", "h")
+        .await
+        .unwrap();
+    let blocked_by_viewer = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    let blocks_viewer = lets_chat::db::auth::create_user(&pool, "alicia", "h")
+        .await
+        .unwrap();
+    let _other = lets_chat::db::auth::create_user(&pool, "alma", "h")
+        .await
+        .unwrap();
+
+    lets_chat::db::auth::block_user(&pool, &viewer, &blocked_by_viewer)
+        .await
+        .unwrap();
+    lets_chat::db::auth::block_user(&pool, &blocks_viewer, &viewer)
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "al", &viewer, 50)
+        .await
+        .unwrap();
+    let names: Vec<&str> = hits.iter().map(|u| u.username.as_str()).collect();
+    assert_eq!(names, vec!["alma"]);
 }
 
 #[tokio::test]

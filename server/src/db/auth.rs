@@ -523,11 +523,18 @@ pub async fn search_users(
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
+           AND id NOT IN ( \
+             SELECT blocked_id FROM user_blocks WHERE blocker_id = ? \
+             UNION \
+             SELECT blocker_id FROM user_blocks WHERE blocked_id = ? \
+           ) \
            AND (username LIKE ? ESCAPE '\\' COLLATE NOCASE \
              OR display_name LIKE ? ESCAPE '\\' COLLATE NOCASE) \
          ORDER BY username COLLATE NOCASE \
          LIMIT ?",
     )
+    .bind(viewer_id)
+    .bind(viewer_id)
     .bind(viewer_id)
     .bind(&pattern)
     .bind(&pattern)
@@ -551,4 +558,94 @@ pub async fn set_profile_public(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Insert a block edge. No-op if it already exists. The CHECK constraint on
+/// the table prevents self-blocks at the SQL layer; route handlers should
+/// also validate so they can return a friendlier error than a constraint
+/// violation.
+pub async fn block_user(
+    pool: &SqlitePool,
+    blocker_id: &str,
+    blocked_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT OR IGNORE INTO user_blocks (blocker_id, blocked_id) VALUES (?, ?)")
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn unblock_user(
+    pool: &SqlitePool,
+    blocker_id: &str,
+    blocked_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?")
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// True when `viewer_id` has blocked `other_id` (one direction only). Used
+/// to drive the Block/Unblock button label.
+pub async fn did_block(
+    pool: &SqlitePool,
+    viewer_id: &str,
+    other_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT 1 FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?")
+        .bind(viewer_id)
+        .bind(other_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.is_some())
+}
+
+/// True when either user has blocked the other. The blocking effect is
+/// symmetric for visibility and messaging: the blocker should not see the
+/// blockee, and the blockee should not be able to see or contact the
+/// blocker.
+pub async fn is_blocked_either_way(
+    pool: &SqlitePool,
+    a: &str,
+    b: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT 1 FROM user_blocks \
+         WHERE (blocker_id = ? AND blocked_id = ?) \
+            OR (blocker_id = ? AND blocked_id = ?)",
+    )
+    .bind(a)
+    .bind(b)
+    .bind(b)
+    .bind(a)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// All users `blocker_id` has blocked, ordered by username.
+pub async fn list_blocked_users(
+    pool: &SqlitePool,
+    blocker_id: &str,
+) -> Result<Vec<UserRecord>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT u.id, u.username, u.display_name, u.password_hash, u.role, \
+         u.is_banned, u.ban_reason, u.banned_until, \
+         u.is_muted, u.muted_until, u.mute_reason, \
+         u.created_at, u.updated_at, u.read_receipts_enabled, \
+         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public \
+         FROM user_blocks b \
+         JOIN users u ON u.id = b.blocked_id \
+         WHERE b.blocker_id = ? \
+         ORDER BY u.username COLLATE NOCASE",
+    )
+    .bind(blocker_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_user_record).collect())
 }
