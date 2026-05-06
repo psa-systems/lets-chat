@@ -17,6 +17,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/chat/0009_enclaves.sql"),
         include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
         include_str!("../migrations/chat/0011_threads.sql"),
+        include_str!("../migrations/chat/0014_mentions.sql"),
     ]
     .iter()
     .enumerate()

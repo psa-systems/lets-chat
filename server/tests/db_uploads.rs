@@ -16,6 +16,7 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0011_threads.sql"),
         include_str!("../migrations/chat/0012_uploads.sql"),
         include_str!("../migrations/chat/0013_link_previews.sql"),
+        include_str!("../migrations/chat/0014_mentions.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
