@@ -15,7 +15,6 @@ use crate::ws::events::ChatEvent;
 struct PickerFragment<'a> {
     current_status: &'a str,
     current_custom: Option<&'a str>,
-    saved: bool,
 }
 
 #[derive(Template)]
@@ -33,7 +32,6 @@ pub async fn get_picker(AuthUser(user): AuthUser) -> Result<Html, AppError> {
     let frag = PickerFragment {
         current_status: &user.status,
         current_custom: user.custom_status.as_deref(),
-        saved: false,
     };
     html(&frag)
 }
@@ -51,8 +49,9 @@ pub struct StatusForm {
 }
 
 /// POST /status - persist the caller's status + custom text, broadcast the
-/// change so other viewers' sidebars refresh, and re-render the picker with a
-/// "Saved." confirmation.
+/// change so other viewers' sidebars refresh. Returns an empty body for the
+/// `#status-picker` slot (closing the dialog) plus an OOB swap for the
+/// caller's own avatar.
 pub async fn post_status(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -84,12 +83,6 @@ pub async fn post_status(
         custom_status: custom_owned.clone(),
     });
 
-    let picker = PickerFragment {
-        current_status: &form.status,
-        current_custom: custom_owned.as_deref(),
-        saved: true,
-    };
-    let picker_html = picker.render()?;
     let own_avatar = OwnAvatarOobFragment {
         user_id: user.id.clone(),
         username: user.username.clone(),
@@ -97,6 +90,5 @@ pub async fn post_status(
         status: form.status.clone(),
         custom_status: custom_owned,
     };
-    let body = format!("{}{}", picker_html, own_avatar.render()?);
-    Ok(Html(body))
+    Ok(Html(own_avatar.render()?))
 }
