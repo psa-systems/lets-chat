@@ -174,7 +174,11 @@ pub async fn get_dm(
     }
 
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_rooms, mut sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
+    if let Some(p) = sidebar_peers.iter_mut().find(|p| p.id == peer.id) {
+        p.active = true;
+    }
 
     let page = DmPage {
         user: &user,
