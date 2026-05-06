@@ -1,3 +1,4 @@
+pub mod attachment;
 pub mod enclave;
 pub mod invite;
 pub mod message;
@@ -9,6 +10,7 @@ pub mod session;
 pub mod settings;
 pub mod user;
 
+pub use attachment::Attachment;
 pub use invite::InviteCode;
 pub use message::Message;
 pub use mod_action::ModAction;

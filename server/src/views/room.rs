@@ -1,6 +1,6 @@
 use askama::Template;
 
-use crate::models::{Room, User};
+use crate::models::{Attachment, Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
 pub struct MessageView {
@@ -28,6 +28,9 @@ pub struct MessageView {
     /// read on this server. Renders an "Unread messages" divider above the
     /// message and tells the auto-scroll script to anchor here on load.
     pub show_unread_divider: bool,
+    /// File attachments linked to this message. Empty for plain text
+    /// messages; the template only renders attachment markup when non-empty.
+    pub attachments: Vec<Attachment>,
 }
 
 impl MessageView {
@@ -36,6 +39,14 @@ impl MessageView {
             Some(n) if !n.trim().is_empty() => n,
             _ => &self.username,
         }
+    }
+
+    /// True when the message has no body text and exactly one image
+    /// attachment. The template renders this as an unbubbled image (LC-3).
+    pub fn is_image_only(&self) -> bool {
+        self.body.trim().is_empty()
+            && self.attachments.len() == 1
+            && self.attachments[0].is_image()
     }
 }
 

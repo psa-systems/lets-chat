@@ -3,6 +3,7 @@ pub mod chat;
 pub mod enclave;
 pub mod moderation;
 pub mod settings;
+pub mod uploads;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;

@@ -411,6 +411,10 @@ async fn render_new_message(
         Some(m) => (m.display_name, m.avatar_ext, m.status, m.custom_status),
         None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None),
     };
+    let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         user_id: message.user_id.clone(),
@@ -429,6 +433,7 @@ async fn render_new_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        attachments,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -466,6 +471,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     );
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: m.id,
         user_id: m.user_id,
@@ -484,6 +493,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        attachments,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
