@@ -38,7 +38,7 @@ pub async fn get_user_search(
         return html(&fragment);
     }
 
-    let records = db::auth::search_users(&state.auth, trimmed, MAX_RESULTS).await?;
+    let records = db::auth::search_users(&state.auth, trimmed, &viewer.id, MAX_RESULTS).await?;
     let results: Vec<ProfileResult> = records
         .into_iter()
         .map(|r| {

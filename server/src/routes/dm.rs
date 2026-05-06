@@ -50,6 +50,11 @@ pub async fn get_dm(
     let room = match db::chat::find_dm_room(&state.chat, &user.id, &peer.id).await? {
         Some(r) => r,
         None => {
+            // A private profile cannot be DM'd by someone who has no prior
+            // conversation with them. Existing DMs continue to work.
+            if !peer.is_profile_public {
+                return Err(AppError::NotFound);
+            }
             let dm_name = format!("@{}", peer.username);
             let r = db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
             // Notify both parties so their sidebars pick up the new DM live.

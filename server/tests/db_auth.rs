@@ -29,6 +29,12 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("Failed to run migration 4");
 
+    let migration5 = include_str!("../migrations/auth/0005_profile_visibility.sql");
+    sqlx::raw_sql(migration5)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 5");
+
     pool
 }
 
@@ -174,7 +180,7 @@ async fn test_search_users_matches_username_substring_case_insensitive() {
         .await
         .unwrap();
 
-    let hits = lets_chat::db::auth::search_users(&pool, "ali", 50)
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", "viewer", 50)
         .await
         .unwrap();
     assert_eq!(hits.len(), 1);
@@ -194,7 +200,7 @@ async fn test_search_users_matches_display_name() {
         .await
         .unwrap();
 
-    let hits = lets_chat::db::auth::search_users(&pool, "jane", 50)
+    let hits = lets_chat::db::auth::search_users(&pool, "jane", "viewer", 50)
         .await
         .unwrap();
     assert_eq!(hits.len(), 1);
@@ -211,7 +217,7 @@ async fn test_search_users_excludes_banned() {
         .await
         .unwrap();
 
-    let hits = lets_chat::db::auth::search_users(&pool, "ali", 50)
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", "viewer", 50)
         .await
         .unwrap();
     assert!(hits.is_empty());
@@ -228,12 +234,12 @@ async fn test_search_users_escapes_like_wildcards() {
         .unwrap();
 
     // `%` would match every row if not escaped; with escaping it matches nothing.
-    let hits = lets_chat::db::auth::search_users(&pool, "%", 50)
+    let hits = lets_chat::db::auth::search_users(&pool, "%", "viewer", 50)
         .await
         .unwrap();
     assert!(hits.is_empty());
 
-    let hits = lets_chat::db::auth::search_users(&pool, "_", 50)
+    let hits = lets_chat::db::auth::search_users(&pool, "_", "viewer", 50)
         .await
         .unwrap();
     assert!(hits.is_empty());
@@ -247,8 +253,45 @@ async fn test_search_users_respects_limit() {
             .await
             .unwrap();
     }
-    let hits = lets_chat::db::auth::search_users(&pool, "user", 3)
+    let hits = lets_chat::db::auth::search_users(&pool, "user", "viewer", 3)
         .await
         .unwrap();
     assert_eq!(hits.len(), 3);
+}
+
+#[tokio::test]
+async fn test_search_users_excludes_private_profiles() {
+    let pool = setup_pool().await;
+    let alice_id = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    let _bob_id = lets_chat::db::auth::create_user(&pool, "alicia", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::set_profile_public(&pool, &alice_id, false)
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", "viewer", 50)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].username, "alicia");
+}
+
+#[tokio::test]
+async fn test_search_users_self_visible_when_private() {
+    let pool = setup_pool().await;
+    let alice_id = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::set_profile_public(&pool, &alice_id, false)
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", &alice_id, 50)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, alice_id);
 }
