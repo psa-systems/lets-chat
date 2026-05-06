@@ -1,5 +1,6 @@
 use askama::Template;
 
+use crate::db::mentions::MentionRef;
 use crate::models::{Attachment, Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
@@ -39,6 +40,10 @@ pub struct MessageView {
     /// File attachments linked to this message. Empty for plain text
     /// messages; the template only renders attachment markup when non-empty.
     pub attachments: Vec<Attachment>,
+    /// Resolved `@username` mentions in the body. Used by `body_html()` to
+    /// render mention chips inline. Empty for messages with no resolved
+    /// mentions (e.g. DMs, which don't write mention rows).
+    pub mentions: Vec<MentionRef>,
 }
 
 impl MessageView {
@@ -55,13 +60,11 @@ impl MessageView {
         self.body.trim().is_empty() && self.attachments.len() == 1 && self.attachments[0].is_image()
     }
 
-    /// HTML-escape the body, then wrap any detected URLs in `<a>` tags. The
-    /// template renders the result with `|safe` so the anchors aren't
-    /// double-escaped. Returning a String keeps the template free of
-    /// linkify-aware loops while still producing inline anchors for LC-3
-    /// link previews.
+    /// HTML-escape the body, render `@username` mentions as chips, then
+    /// wrap any detected URLs in `<a>` tags. The template renders the
+    /// result with `|safe` so the chips and anchors aren't double-escaped.
     pub fn body_html(&self) -> String {
-        linkify_body(&self.body)
+        render_body(&self.body, &self.mentions)
     }
 
     /// First URL in the body, or `None`. The template uses this to render
@@ -127,10 +130,121 @@ fn linkify_body(body: &str) -> String {
     out
 }
 
+/// Render `body` to HTML in three passes:
+/// 1. Substitute `@username` tokens (boundary-anchored, same shape as the
+///    server-side mention parser) that resolve to a known mention with a
+///    chip anchor that links to the user's profile. Tokens that don't
+///    resolve are emitted as escaped literal text.
+/// 2. Linkify URL runs in plain-text segments. Mention substitution runs
+///    BEFORE linkify so `@foo.com` doesn't accidentally become a URL.
+/// 3. Concatenate.
+///
+/// All output is HTML-escaped at the segment level; the chip and anchor
+/// markup is the only inserted HTML, and mentioned usernames are escaped
+/// before inclusion.
+fn render_body(body: &str, mentions: &[MentionRef]) -> String {
+    use std::collections::HashMap;
+    if mentions.is_empty() {
+        return linkify_body(body);
+    }
+    let lookup: HashMap<String, &MentionRef> = mentions
+        .iter()
+        .map(|m| (m.username.to_ascii_lowercase(), m))
+        .collect();
+    // Boundary-anchored mention regex matches the server-side parser shape.
+    // We capture the leading boundary character so we can preserve
+    // whitespace/start when rebuilding the string.
+    use std::sync::OnceLock;
+    static MENTION_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = MENTION_RE
+        .get_or_init(|| regex::Regex::new(r"(^|\s)@([A-Za-z0-9_-]{1,32})").expect("valid regex"));
+
+    let mut out = String::with_capacity(body.len() * 2);
+    let mut cursor = 0usize;
+    for cap in re.captures_iter(body) {
+        let whole = cap.get(0).unwrap();
+        let token = cap.get(2).unwrap();
+        let token_lower = token.as_str().to_ascii_lowercase();
+        if let Some(m) = lookup.get(&token_lower) {
+            // Emit text up to the boundary char.
+            let lead = cap.get(1).unwrap();
+            if whole.start() > cursor {
+                out.push_str(&linkify_body(&body[cursor..whole.start()]));
+            }
+            out.push_str(&html_escape(lead.as_str()));
+            out.push_str("<a href=\"/profile/");
+            out.push_str(&html_escape(&m.user_id));
+            out.push_str("\" class=\"font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1\">@");
+            out.push_str(&html_escape(&m.username));
+            out.push_str("</a>");
+            cursor = whole.end();
+        }
+        // Unknown token: leave for the trailing linkify pass to escape.
+    }
+    if cursor < body.len() {
+        out.push_str(&linkify_body(&body[cursor..]));
+    }
+    out
+}
+
 pub struct ReactionView {
     pub emoji: String,
     pub count: i64,
     pub viewer_reacted: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_body_emits_chip_and_link_without_double_escape() {
+        let mentions = vec![MentionRef {
+            user_id: "alice-id".into(),
+            username: "alice".into(),
+        }];
+        let out = render_body("hey @alice check https://example.com", &mentions);
+        // The chip is a real anchor (not escaped).
+        assert!(
+            out.contains(r#"<a href="/profile/alice-id" class="font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1">@alice</a>"#),
+            "missing mention chip: {out}"
+        );
+        // The URL is linkified as a real anchor too.
+        assert!(
+            out.contains(r#"<a href="https://example.com""#)
+                && out.contains(r#">https://example.com</a>"#),
+            "missing URL link: {out}"
+        );
+        // No escaped angle brackets anywhere.
+        assert!(!out.contains("&lt;a"), "anchor was escaped: {out}");
+        assert!(!out.contains("&gt;@alice"), "chip text was escaped: {out}");
+    }
+
+    #[test]
+    fn render_body_leaves_unknown_token_as_text() {
+        let out = render_body("ping @nobody", &[]);
+        // Unknown tokens fall through to linkify+escape: literal `@nobody`.
+        assert!(out.contains("@nobody"), "unknown token lost: {out}");
+        assert!(!out.contains("href=\"/profile/"));
+    }
+
+    #[test]
+    fn render_body_does_not_treat_email_as_mention() {
+        let mentions = vec![MentionRef {
+            user_id: "bar-id".into(),
+            username: "bar".into(),
+        }];
+        // Even though `bar` is a known mention, `foo@bar.com` has no
+        // boundary before `@`, so the chip pass must skip it. The text
+        // should appear as a plain string (linkified as part of any URL,
+        // but `foo@bar.com` is not a URL by linkify rules).
+        let out = render_body("ping foo@bar.com", &mentions);
+        assert!(
+            !out.contains("href=\"/profile/"),
+            "email matched chip: {out}"
+        );
+        assert!(out.contains("foo@bar.com"), "plain text lost: {out}");
+    }
 }
 
 #[derive(Template)]

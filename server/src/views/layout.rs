@@ -3,11 +3,14 @@
 // struct that extends it.
 
 /// One row in the sidebar's "Rooms" section. Carries the unread count so the
-/// included `partials/unread_badge.html` can render a badge per room.
+/// included `partials/unread_badge.html` can render a badge per room. Carries
+/// `mentions` so `partials/mention_badge.html` can render an `@N` chip when
+/// the viewer has unread mentions in this room.
 pub struct SidebarRoom {
     pub id: i64,
     pub name: String,
     pub unread: i64,
+    pub mentions: i64,
     pub active: bool,
 }
 
