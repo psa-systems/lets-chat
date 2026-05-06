@@ -36,7 +36,17 @@
     {% endif %}
   </span>
   {% endif %}
-  <div class="whitespace-pre-wrap leading-snug">{{ message.body }}</div>
+  {% if message.is_image_only() %}
+    {% let a = message.attachments[0].clone() %}
+    {% include "partials/attachment.html" %}
+  {% else %}
+    {% if !message.body.is_empty() %}
+    <div class="whitespace-pre-wrap leading-snug">{{ message.body }}</div>
+    {% endif %}
+    {% for a in message.attachments %}
+      {% include "partials/attachment.html" %}
+    {% endfor %}
+  {% endif %}
   <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}
