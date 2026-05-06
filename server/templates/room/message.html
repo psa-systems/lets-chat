@@ -41,7 +41,10 @@
     {% include "partials/attachment.html" %}
   {% else %}
     {% if !message.body.is_empty() %}
-    <div class="whitespace-pre-wrap leading-snug">{{ message.body }}</div>
+    <div class="whitespace-pre-wrap leading-snug">{{ message.body_html()|safe }}</div>
+    {% if let Some(u) = message.first_url_encoded() %}
+    <div class="mt-1" hx-get="/api/unfurl?url={{ u }}" hx-trigger="load once" hx-swap="innerHTML"></div>
+    {% endif %}
     {% endif %}
     {% for a in message.attachments %}
       {% include "partials/attachment.html" %}
