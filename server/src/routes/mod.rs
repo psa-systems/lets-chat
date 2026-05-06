@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     middleware,
     routing::{get, post},
     Router,
@@ -332,7 +333,12 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
-        .route("/api/upload", post(uploads::post_upload))
+        // The upload handler streams + caps bytes itself based on settings,
+        // so disable Axum's default 2 MiB body cap on this route only.
+        .route(
+            "/api/upload",
+            post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
+        )
         .route("/api/files/{id}", get(uploads::get_file))
         .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
