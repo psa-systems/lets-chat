@@ -217,6 +217,17 @@ pub async fn post_message(
         return Err(AppError::Forbidden);
     }
 
+    // For DMs, refuse the send if either user has blocked the other. The
+    // peer is the other room member.
+    if room.room_type == "dm" {
+        let members = db::chat::list_room_member_ids(&state.chat, room_id).await?;
+        if let Some(peer_id) = members.iter().find(|id| **id != user.id) {
+            if db::auth::is_blocked_either_way(&state.auth, &user.id, peer_id).await? {
+                return Err(AppError::Forbidden);
+            }
+        }
+    }
+
     // Validate any claimed attachment BEFORE the message insert so a stolen
     // file_id from another user can't slip a new message through.
     if let Some(file_id) = form.file_id {
@@ -559,6 +570,15 @@ pub async fn post_thread_reply(
     let is_admin = user.role == "admin";
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
+    }
+
+    if room.room_type == "dm" {
+        let members = db::chat::list_room_member_ids(&state.chat, room_id).await?;
+        if let Some(peer_id) = members.iter().find(|id| **id != user.id) {
+            if db::auth::is_blocked_either_way(&state.auth, &user.id, peer_id).await? {
+                return Err(AppError::Forbidden);
+            }
+        }
     }
 
     let parent = db::chat::get_message(&state.chat, parent_id)

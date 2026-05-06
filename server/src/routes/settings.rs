@@ -6,7 +6,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::settings::UserSettingsPage;
+use crate::views::settings::{BlockedListPage, BlockedUserView, UserSettingsPage};
 use crate::views::{html, Html};
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
@@ -145,6 +145,32 @@ pub async fn post_profile(
     }
 
     Ok(Redirect::to("/settings").into_response())
+}
+
+pub async fn get_blocked_list(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Html, AppError> {
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let records = db::auth::list_blocked_users(&state.auth, &user.id).await?;
+    let blocked: Vec<BlockedUserView> = records
+        .into_iter()
+        .map(|r| BlockedUserView {
+            id: r.id,
+            username: r.username,
+            display_name: r.display_name,
+            avatar_ext: r.avatar_ext,
+        })
+        .collect();
+    let page = BlockedListPage {
+        user: &user,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        blocked: &blocked,
+    };
+    html(&page)
 }
 
 pub async fn post_avatar_delete(

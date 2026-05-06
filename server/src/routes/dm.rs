@@ -45,6 +45,27 @@ pub async fn get_dm(
     let mut peer: User = peer_record.into();
     peer.status = super::effective_status(&state, &peer.id, &peer.status);
 
+    // If either party has blocked the other, render Home with an inline error
+    // bubble explaining why the conversation is unavailable. We deliberately
+    // give the same message regardless of which direction the block was
+    // placed so the blockee cannot probe whether the blocker has blocked
+    // them specifically.
+    let blocked = db::auth::is_blocked_either_way(&state.auth, &user.id, &peer.id).await?;
+    if blocked {
+        let (sidebar_rooms, sidebar_peers, switcher) =
+            super::load_chrome(&state, &user, None).await?;
+        let msg = format!("You can't message @{}.", peer.username);
+        let page = WelcomePage {
+            user: &user,
+            sidebar_rooms: &sidebar_rooms,
+            sidebar_peers: &sidebar_peers,
+            switcher: &switcher,
+            asset_version: &state.asset_version,
+            flash_error: Some(&msg),
+        };
+        return Ok(html(&page)?.into_response());
+    }
+
     // Find or create the underlying DM room. The DM room is named after the
     // peer relative to the creator; the rendered title uses peer.username
     // directly so the displayed name matches whoever the viewer is talking to.
