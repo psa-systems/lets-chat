@@ -70,38 +70,130 @@
     </button>
   </div>
 </form>
+<div id="lc-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-blue-900/40">
+  <div class="rounded-lg bg-white px-6 py-4 text-lg font-semibold text-slate-800 shadow-lg">Drop file to attach</div>
+</div>
 <script>
 (function(){
   var input = document.getElementById('lc-file');
   var staged = document.getElementById('lc-staged');
   var errSlot = document.getElementById('lc-upload-error');
   var hidden = document.querySelector('#composer input[name=file_id]');
-  function clear(){ hidden.value = ''; staged.textContent = ''; errSlot.textContent = ''; input.value = ''; }
-  window.__lcClearAttach = clear;
-  function fmt(n){ return n < 1024 ? n+'B' : (n/1024).toFixed(1)+'KB'; }
-  input.addEventListener('change', async function(){
-    var f = input.files && input.files[0];
-    if (!f) return;
+  var ta = document.querySelector('#composer textarea[name=body]');
+  var overlay = document.getElementById('lc-drop-overlay');
+  var currentObjectUrl = null;
+
+  function revokePreview(){
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+  }
+  function clear(){
+    revokePreview();
+    hidden.value = '';
+    staged.textContent = '';
     errSlot.textContent = '';
-    staged.textContent = 'Uploading ' + f.name + '...';
+    input.value = '';
+  }
+  window.__lcClearAttach = clear;
+
+  function fmt(n){ return n < 1024 ? n+'B' : (n/1024).toFixed(1)+'KB'; }
+
+  function showPreview(f){
+    revokePreview();
+    if (!f.type || !f.type.startsWith('image/')) {
+      staged.innerHTML = 'Uploading ' + f.name + '...';
+      return;
+    }
+    currentObjectUrl = URL.createObjectURL(f);
+    staged.innerHTML =
+      '<span class="inline-flex items-center gap-2">' +
+        '<img src="' + currentObjectUrl + '" alt="" class="h-12 w-12 rounded object-cover">' +
+        '<span>Uploading ' + f.name + '...</span>' +
+      '</span>';
+  }
+
+  async function uploadStaged(f){
+    errSlot.textContent = '';
+    showPreview(f);
     var fd = new FormData(); fd.append('file', f);
     try {
       var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
       if (!res.ok) {
         var msg = await res.text();
         errSlot.textContent = msg || ('upload failed: '+res.status);
+        revokePreview();
         staged.textContent = '';
         input.value = '';
         return;
       }
       var data = await res.json();
       hidden.value = data.file_id;
-      staged.innerHTML = 'Attached: ' + f.name + ' (' + fmt(f.size) + ') <button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>';
+      var preview = currentObjectUrl
+        ? '<img src="' + currentObjectUrl + '" alt="" class="h-12 w-12 rounded object-cover">'
+        : '';
+      staged.innerHTML =
+        '<span class="inline-flex items-center gap-2">' + preview +
+          '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
+          '<button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+        '</span>';
       document.getElementById('composer-send').disabled = false;
     } catch (e) {
       errSlot.textContent = 'upload failed';
+      revokePreview();
       input.value = '';
     }
+  }
+
+  input.addEventListener('change', function(){
+    var f = input.files && input.files[0];
+    if (f) uploadStaged(f);
   });
+
+  // Pasting an image straight into the composer should attach it. We do not
+  // intercept pastes that contain text only, so normal copy/paste still works.
+  ta.addEventListener('paste', function(e){
+    if (!e.clipboardData || !e.clipboardData.files || !e.clipboardData.files.length) return;
+    var f = e.clipboardData.files[0];
+    if (!f) return;
+    e.preventDefault();
+    uploadStaged(f);
+  });
+
+  // Drag/drop anywhere on the page while a composer is mounted. We use a
+  // counter rather than relying on `dragleave` for cleanup because dragleave
+  // fires for child elements as the cursor moves over them.
+  if (!window.__lcDropAttached) {
+    window.__lcDropAttached = true;
+    var dragCounter = 0;
+    document.addEventListener('dragenter', function(e){
+      if (!e.dataTransfer) return;
+      var has = false;
+      for (var i = 0; i < e.dataTransfer.types.length; i++) {
+        if (e.dataTransfer.types[i] === 'Files') { has = true; break; }
+      }
+      if (!has) return;
+      dragCounter++;
+      overlay.classList.remove('hidden');
+    });
+    document.addEventListener('dragleave', function(){
+      dragCounter = Math.max(0, dragCounter - 1);
+      if (dragCounter === 0) overlay.classList.add('hidden');
+    });
+    document.addEventListener('dragover', function(e){
+      if (e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1) {
+        e.preventDefault();
+      }
+    });
+    document.addEventListener('drop', function(e){
+      dragCounter = 0;
+      overlay.classList.add('hidden');
+      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      var f = e.dataTransfer.files[0];
+      if (f) uploadStaged(f);
+    });
+  }
 })();
 </script>
