@@ -1,6 +1,6 @@
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use std::collections::HashMap;
@@ -299,6 +299,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route(
+            "/room/{room_id}/thread/{message_id}",
+            get(room::get_thread_panel),
+        )
+        .route(
+            "/room/{room_id}/thread/{parent_id}/messages",
+            post(room::post_thread_reply),
+        )
+        .route("/thread-panel", delete(room::close_thread_panel))
         .route("/dm/{peer_id}", get(dm::get_dm))
         .route(
             "/messages/{message_id}",
