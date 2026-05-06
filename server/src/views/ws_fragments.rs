@@ -74,6 +74,29 @@ pub struct SidebarUpdateFragment<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
 }
 
+/// OOB-append a single thread reply into `#thread-replies-{parent_id}`. The
+/// container only exists in the DOM when the recipient has the thread panel
+/// open for that parent, so HTMX silently drops the swap otherwise.
+#[derive(Template)]
+#[template(path = "ws/thread_reply.html")]
+pub struct ThreadReplyOobFragment<'a> {
+    pub parent_id: i64,
+    pub message: &'a super::room::MessageView,
+}
+
+#[derive(Template)]
+#[template(path = "ws/thread_typing.html")]
+pub struct ThreadTypingFragment<'a> {
+    pub parent_id: i64,
+    pub username: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "ws/thread_stopped_typing.html")]
+pub struct ThreadStoppedTypingFragment {
+    pub parent_id: i64,
+}
+
 /// Tiny inline script that updates every avatar status dot for a user across
 /// the rendered DOM (sidebar entries, message rows, DM headers). Uses a
 /// CSS-attribute selector instead of OOB-by-id because the same user's dot
@@ -102,6 +125,21 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         .ok(),
         ChatEvent::UserTyping { username, .. } => TypingFragment { username }.render().ok(),
         ChatEvent::UserStoppedTyping { .. } => StoppedTypingFragment.render().ok(),
+        ChatEvent::ThreadTyping {
+            parent_id,
+            username,
+            ..
+        } => ThreadTypingFragment {
+            parent_id: *parent_id,
+            username,
+        }
+        .render()
+        .ok(),
+        ChatEvent::ThreadStoppedTyping { parent_id, .. } => ThreadStoppedTypingFragment {
+            parent_id: *parent_id,
+        }
+        .render()
+        .ok(),
         ChatEvent::NewMessage { .. }
         | ChatEvent::MessageEdited { .. }
         | ChatEvent::MessageRegrouped { .. }
@@ -113,6 +151,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::UserMuted { .. }
         | ChatEvent::UserBanned { .. }
         | ChatEvent::UserKicked { .. }
+        | ChatEvent::ThreadReply { .. }
         | ChatEvent::EnclaveMemberAdded { .. }
         | ChatEvent::EnclaveMemberRemoved { .. }
         | ChatEvent::EnclaveRoomAdded { .. }

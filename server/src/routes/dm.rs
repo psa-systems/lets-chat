@@ -84,6 +84,10 @@ pub async fn get_dm(
 
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
+    let reply_counts: HashMap<i64, i64> = db::chat::count_replies_for_room(&state.chat, room_id)
+        .await?
+        .into_iter()
+        .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
@@ -119,6 +123,7 @@ pub async fn get_dm(
         }
         messages.push(MessageView {
             id: m.id,
+            room_id: m.room_id,
             user_id: m.user_id.clone(),
             username: meta.username,
             display_name: meta.display_name,
@@ -135,6 +140,8 @@ pub async fn get_dm(
             seen_caption: None,
             is_follow_up,
             show_unread_divider,
+            reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
+            parent_id: m.parent_id,
         });
     }
 

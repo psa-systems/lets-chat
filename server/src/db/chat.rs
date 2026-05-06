@@ -30,7 +30,7 @@ pub fn is_follow_up_of(prior: Option<(&str, &str)>, curr: (&str, &str)) -> bool 
         && delta <= chrono::Duration::seconds(MESSAGE_GROUPING_WINDOW_SECONDS)
 }
 
-/// Raw message row from the chat DB — contains user_id but no author_name.
+/// Raw message row from the chat DB - contains user_id but no author_name.
 /// The server fn layer resolves the display name from the auth DB.
 #[derive(Debug, Clone)]
 pub struct RawMessage {
@@ -40,6 +40,9 @@ pub struct RawMessage {
     pub body: String,
     pub created_at: String,
     pub edited_at: Option<String>,
+    /// `Some(N)` when this message is a thread reply rooted at message `N`.
+    /// `None` for top-level messages that appear in the main room timeline.
+    pub parent_id: Option<i64>,
 }
 
 fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
@@ -100,8 +103,10 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at \
-         FROM messages WHERE room_id = ? AND deleted_at IS NULL ORDER BY id ASC",
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+         FROM messages \
+         WHERE room_id = ? AND deleted_at IS NULL AND parent_id IS NULL \
+         ORDER BY id ASC",
     )
     .bind(room_id)
     .fetch_all(pool)
@@ -116,8 +121,89 @@ pub async fn list_messages(
             body: row.get("body"),
             created_at: row.get("created_at"),
             edited_at: row.get("edited_at"),
+            parent_id: row.get("parent_id"),
         })
         .collect())
+}
+
+/// Replies in a thread, ordered chronologically. Excludes soft-deleted rows.
+/// Caller must verify access to the parent's room before calling.
+pub async fn list_thread_replies(
+    pool: &sqlx::SqlitePool,
+    parent_id: i64,
+) -> Result<Vec<RawMessage>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+         FROM messages \
+         WHERE parent_id = ? AND deleted_at IS NULL \
+         ORDER BY id ASC",
+    )
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| RawMessage {
+            id: row.get("id"),
+            room_id: row.get("room_id"),
+            user_id: row.get("user_id"),
+            body: row.get("body"),
+            created_at: row.get("created_at"),
+            edited_at: row.get("edited_at"),
+            parent_id: row.get("parent_id"),
+        })
+        .collect())
+}
+
+/// Reply count per top-level message in a room, returned as `(parent_id,
+/// reply_count)`. Used to render the "N replies" pill under each message.
+pub async fn count_replies_for_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT parent_id AS pid, COUNT(*) AS c \
+         FROM messages \
+         WHERE room_id = ? AND parent_id IS NOT NULL AND deleted_at IS NULL \
+         GROUP BY parent_id",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<i64, _>("pid"), r.get::<i64, _>("c")))
+        .collect())
+}
+
+pub async fn count_replies(pool: &sqlx::SqlitePool, parent_id: i64) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(*) AS c FROM messages \
+         WHERE parent_id = ? AND deleted_at IS NULL",
+    )
+    .bind(parent_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.get("c"))
+}
+
+pub async fn insert_reply(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    body: &str,
+    parent_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let result =
+        sqlx::query("INSERT INTO messages (room_id, user_id, body, parent_id) VALUES (?, ?, ?, ?)")
+            .bind(room_id)
+            .bind(user_id)
+            .bind(body)
+            .bind(parent_id)
+            .execute(pool)
+            .await?;
+    Ok(result.last_insert_rowid())
 }
 
 /// Fetch the most recent non-deleted message in `room_id` strictly before
@@ -130,9 +216,9 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
          FROM messages \
-         WHERE room_id = ? AND id < ? AND deleted_at IS NULL \
+         WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
     )
     .bind(room_id)
@@ -147,6 +233,7 @@ pub async fn prior_message_in_room(
         body: row.get("body"),
         created_at: row.get("created_at"),
         edited_at: row.get("edited_at"),
+        parent_id: row.get("parent_id"),
     }))
 }
 
@@ -159,9 +246,9 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
          FROM messages \
-         WHERE room_id = ? AND id > ? AND deleted_at IS NULL \
+         WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
     )
     .bind(room_id)
@@ -176,6 +263,7 @@ pub async fn next_message_in_room(
         body: row.get("body"),
         created_at: row.get("created_at"),
         edited_at: row.get("edited_at"),
+        parent_id: row.get("parent_id"),
     }))
 }
 
@@ -185,7 +273,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
          FROM messages WHERE id = ? AND deleted_at IS NULL",
     )
     .bind(message_id)
@@ -199,6 +287,7 @@ pub async fn get_message(
         body: row.get("body"),
         created_at: row.get("created_at"),
         edited_at: row.get("edited_at"),
+        parent_id: row.get("parent_id"),
     }))
 }
 
@@ -598,6 +687,7 @@ pub async fn list_dm_unread_counts(
            ON m.room_id = r.id \
           AND m.user_id != ? \
           AND m.deleted_at IS NULL \
+          AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type = 'dm' \
          GROUP BY r.id",
@@ -632,6 +722,7 @@ pub async fn list_room_unread_counts(
            ON m.room_id = r.id \
           AND m.user_id != ? \
           AND m.deleted_at IS NULL \
+          AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type != 'dm' \
          GROUP BY r.id"
@@ -645,6 +736,7 @@ pub async fn list_room_unread_counts(
            ON m.room_id = r.id \
           AND m.user_id != ? \
           AND m.deleted_at IS NULL \
+          AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type != 'dm' \
            AND (r.room_type = 'public' OR rm.user_id IS NOT NULL) \
@@ -679,6 +771,7 @@ pub async fn get_unread_count(
          WHERE m.room_id = ? \
            AND m.user_id != ? \
            AND m.deleted_at IS NULL \
+           AND m.parent_id IS NULL \
            AND m.id > COALESCE(s.last_read_message_id, 0)",
     )
     .bind(user_id)
