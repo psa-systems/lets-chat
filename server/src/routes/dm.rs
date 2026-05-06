@@ -198,6 +198,7 @@ pub async fn get_dm(
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
             attachments,
+            mentions: Vec::new(),
         });
     }
 
@@ -220,6 +221,7 @@ pub async fn get_dm(
     // the DM has no messages yet.
     if let Some(last) = messages.last() {
         db::chat::set_last_read(&state.chat, &user.id, room_id, last.id).await?;
+        db::mentions::mark_mentions_read_for_room(&state.chat, &user.id, room_id, last.id).await?;
         let event = ChatEvent::DmRead {
             room_id,
             user_id: user.id.clone(),

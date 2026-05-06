@@ -23,6 +23,8 @@ pub struct UserRecord {
     pub custom_status: Option<String>,
     pub last_active_at: String,
     pub is_profile_public: bool,
+    pub notify_browser_enabled: bool,
+    pub notify_sound_enabled: bool,
 }
 
 /// Public user info safe to send to the client.
@@ -45,6 +47,8 @@ pub struct User {
     pub custom_status: Option<String>,
     pub last_active_at: String,
     pub is_profile_public: bool,
+    pub notify_browser_enabled: bool,
+    pub notify_sound_enabled: bool,
 }
 
 impl User {
@@ -77,6 +81,8 @@ impl From<UserRecord> for User {
             custom_status: r.custom_status,
             last_active_at: r.last_active_at,
             is_profile_public: r.is_profile_public,
+            notify_browser_enabled: r.notify_browser_enabled,
+            notify_sound_enabled: r.notify_sound_enabled,
         }
     }
 }

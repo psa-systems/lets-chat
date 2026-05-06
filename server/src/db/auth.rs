@@ -32,7 +32,8 @@ pub async fn find_user_by_username(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -51,7 +52,8 @@ pub async fn find_user_by_id(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -83,6 +85,8 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         custom_status: r.get("custom_status"),
         last_active_at: r.get("last_active_at"),
         is_profile_public: r.get("is_profile_public"),
+        notify_browser_enabled: r.get::<i64, _>("notify_browser_enabled") != 0,
+        notify_sound_enabled: r.get::<i64, _>("notify_sound_enabled") != 0,
     }
 }
 
@@ -248,7 +252,8 @@ pub async fn get_user_by_session(
          u.is_banned, u.ban_reason, u.banned_until, \
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
-         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public \
+         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
+         u.notify_browser_enabled, u.notify_sound_enabled \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -282,7 +287,8 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -500,6 +506,37 @@ pub async fn set_read_receipts_enabled(
     Ok(())
 }
 
+pub async fn set_notification_prefs(
+    pool: &SqlitePool,
+    user_id: &str,
+    browser: bool,
+    sound: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users \
+            SET notify_browser_enabled = ?, \
+                notify_sound_enabled   = ?, \
+                updated_at             = datetime('now') \
+          WHERE id = ?",
+    )
+    .bind(browser as i32)
+    .bind(sound as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// All user IDs in the auth DB. Used by the autocomplete fallback when a
+/// public room has no enclave assigned.
+pub async fn list_user_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    let rows =
+        sqlx::query("SELECT id FROM users WHERE is_banned = 0 ORDER BY username COLLATE NOCASE")
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
 /// Case-insensitive substring match on username and display_name. Excludes
 /// banned users and private profiles (except the viewer themselves). Results
 /// sorted by username, capped at `limit`. SQL LIKE wildcards (`%`, `_`)
@@ -521,7 +558,8 @@ pub async fn search_users(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled \
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
@@ -661,7 +699,8 @@ pub async fn list_blocked_users(
          u.is_banned, u.ban_reason, u.banned_until, \
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
-         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public \
+         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
+         u.notify_browser_enabled, u.notify_sound_enabled \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
          WHERE b.blocker_id = ? \

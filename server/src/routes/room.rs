@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
-use crate::models::Message;
+use crate::models::{Message, User};
 use crate::state::AppState;
 use crate::views::room::{
     ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage, SingleMessageFragment,
@@ -102,6 +102,11 @@ pub async fn get_room(
     let mut attachments_by_message =
         db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
 
+    // Bulk-load mention rows so each MessageView can render @username chips
+    // without an N+1 query.
+    let mut mentions_by_message =
+        db::mentions::mentions_for_messages(&state.chat, &state.auth, &message_ids).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -117,6 +122,7 @@ pub async fn get_room(
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
         let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
+        let mentions = mentions_by_message.remove(&m.id).unwrap_or_default();
         let is_follow_up = db::chat::is_follow_up_of(
             prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
             (&m.user_id, &m.created_at),
@@ -149,6 +155,7 @@ pub async fn get_room(
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
             attachments,
+            mentions,
         });
     }
 
@@ -157,6 +164,7 @@ pub async fn get_room(
     // clear in real time. Skipped when the room has no messages.
     if let Some(last) = messages.last() {
         db::chat::set_last_read(&state.chat, &user.id, room_id, last.id).await?;
+        db::mentions::mark_mentions_read_for_room(&state.chat, &user.id, room_id, last.id).await?;
         let event = ChatEvent::DmRead {
             room_id,
             user_id: user.id.clone(),
@@ -278,14 +286,122 @@ pub async fn post_message(
     };
 
     let event = ChatEvent::NewMessage {
-        message,
+        message: message.clone(),
         is_dm: room.room_type == "dm",
     };
     state.hub.stop_typing(room_id, &user.id);
     super::broadcast_room_message(&state, &room, &event).await?;
 
+    // Mention extraction + fan-out. Only for non-DM rooms (DMs are implicit
+    // pings - we emit a Mentioned event below without writing mention rows).
+    if room.room_type != "dm" {
+        let tokens = db::mentions::parse_mention_tokens(body);
+        if !tokens.is_empty() {
+            let candidates = candidate_ids_for_room(&state, &room).await?;
+            let candidate_set: std::collections::HashSet<&str> =
+                candidates.iter().map(String::as_str).collect();
+            let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
+            for token in tokens {
+                if let Some(rec) = db::auth::find_user_by_username(&state.auth, &token).await? {
+                    if rec.id == user.id {
+                        continue;
+                    }
+                    if !candidate_set.contains(rec.id.as_str()) {
+                        continue;
+                    }
+                    targets.push(db::mentions::MentionRef {
+                        user_id: rec.id,
+                        username: rec.username,
+                    });
+                }
+            }
+            let (added, _removed) =
+                db::mentions::reconcile_mentions(&state.chat, new_id, room.id, &user.id, &targets)
+                    .await?;
+            let snippet = build_snippet(body);
+            let author_label = author_label(&user);
+            for t in &added {
+                let event = ChatEvent::Mentioned {
+                    kind: "mention".into(),
+                    room_id: room.id,
+                    room_type: room.room_type.clone(),
+                    room_label: format!("#{}", room.name),
+                    message_id: new_id,
+                    mentioned_user_id: t.user_id.clone(),
+                    author_label: author_label.clone(),
+                    snippet: snippet.clone(),
+                    target_path: format!("/room/{}", room.id),
+                };
+                state.hub.broadcast_to_user(&t.user_id, &event);
+            }
+        }
+    } else {
+        // DM: implicit mention. Notify the peer regardless of subscription
+        // state. No mention row is written; DM unread state already
+        // governs read tracking.
+        let members = db::chat::list_room_member_ids(&state.chat, room.id).await?;
+        if let Some(peer_id) = members.into_iter().find(|id| id != &user.id) {
+            let snippet = build_snippet(body);
+            let author_label = author_label(&user);
+            let event = ChatEvent::Mentioned {
+                kind: "dm".into(),
+                room_id: room.id,
+                room_type: "dm".into(),
+                room_label: author_label.clone(),
+                message_id: new_id,
+                mentioned_user_id: peer_id.clone(),
+                author_label,
+                snippet,
+                target_path: format!("/dm/{}", user.id),
+            };
+            state.hub.broadcast_to_user(&peer_id, &event);
+        }
+    }
+
     let fragment = ComposerFragment { room: &room };
     html(&fragment)
+}
+
+/// User IDs the caller can mention in this room. For private rooms / DMs,
+/// the room's explicit members. For public rooms in an enclave, the
+/// enclave's members. Mirrors `routes::mentions::candidate_ids` so the
+/// autocomplete and the actual insert agree.
+async fn candidate_ids_for_room(
+    state: &AppState,
+    room: &crate::models::Room,
+) -> Result<Vec<String>, AppError> {
+    if room.room_type == "private" || room.room_type == "dm" {
+        return Ok(db::chat::list_room_member_ids(&state.chat, room.id).await?);
+    }
+    if let Some(enclave_id) = super::enclave_for_room(state, room.id).await? {
+        let members = db::enclave::list_members(&state.chat, enclave_id).await?;
+        return Ok(members.into_iter().map(|m| m.user_id).collect());
+    }
+    Ok(db::auth::list_user_ids(&state.auth).await?)
+}
+
+/// `display_name` if set, else `username`. Used for `Mentioned.author_label`.
+fn author_label(user: &User) -> String {
+    user.display_name
+        .as_deref()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or(&user.username)
+        .to_string()
+}
+
+/// Build a short plain-text preview of the message body for the
+/// notification surface. Strips leading `@` chars from mention tokens so
+/// the snippet reads naturally; truncates at 140 chars with an ellipsis.
+fn build_snippet(body: &str) -> String {
+    let collapsed: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim();
+    let max = 140;
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        let cut: String = trimmed.chars().take(max).collect();
+        format!("{cut}...")
+    }
 }
 
 /// GET /messages/:id/edit - return the inline edit form for a message.
@@ -342,6 +458,10 @@ pub async fn get_single_message(
     );
     let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
     let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+        .await?
+        .remove(&m.id)
+        .unwrap_or_default();
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -364,6 +484,7 @@ pub async fn get_single_message(
         reply_count,
         parent_id: m.parent_id,
         attachments,
+        mentions,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -400,6 +521,64 @@ pub async fn patch_message(
     };
     state.hub.broadcast_to_room(m.room_id, &event);
 
+    // Reconcile mention rows. Skipped for DM rooms (no rows to reconcile).
+    let edited_room = db::chat::get_room(&state.chat, m.room_id).await?;
+    if let Some(ref edited_room) = edited_room {
+        if edited_room.room_type != "dm" {
+            let tokens = db::mentions::parse_mention_tokens(body);
+            let candidates = candidate_ids_for_room(&state, edited_room).await?;
+            let candidate_set: std::collections::HashSet<&str> =
+                candidates.iter().map(String::as_str).collect();
+            let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
+            for token in tokens {
+                if let Some(rec) = db::auth::find_user_by_username(&state.auth, &token).await? {
+                    if rec.id == user.id {
+                        continue;
+                    }
+                    if !candidate_set.contains(rec.id.as_str()) {
+                        continue;
+                    }
+                    targets.push(db::mentions::MentionRef {
+                        user_id: rec.id,
+                        username: rec.username,
+                    });
+                }
+            }
+            let (added, removed) = db::mentions::reconcile_mentions(
+                &state.chat,
+                message_id,
+                m.room_id,
+                &user.id,
+                &targets,
+            )
+            .await?;
+            let snippet = build_snippet(body);
+            let author_label = author_label(&user);
+            for t in &added {
+                let event = ChatEvent::Mentioned {
+                    kind: "mention".into(),
+                    room_id: m.room_id,
+                    room_type: edited_room.room_type.clone(),
+                    room_label: format!("#{}", edited_room.name),
+                    message_id,
+                    mentioned_user_id: t.user_id.clone(),
+                    author_label: author_label.clone(),
+                    snippet: snippet.clone(),
+                    target_path: format!("/room/{}", m.room_id),
+                };
+                state.hub.broadcast_to_user(&t.user_id, &event);
+            }
+            for t in &removed {
+                let event = ChatEvent::MentionCleared {
+                    room_id: m.room_id,
+                    mentioned_user_id: t.user_id.clone(),
+                    message_id,
+                };
+                state.hub.broadcast_to_user(&t.user_id, &event);
+            }
+        }
+    }
+
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
     let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
@@ -421,6 +600,10 @@ pub async fn patch_message(
     );
     let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
     let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+        .await?
+        .remove(&m.id)
+        .unwrap_or_default();
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -443,6 +626,7 @@ pub async fn patch_message(
         reply_count,
         parent_id: m.parent_id,
         attachments,
+        mentions,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -496,6 +680,8 @@ pub async fn get_thread_panel(
     all_ids.push(parent.id);
     let mut attachments_by_message =
         db::uploads::attachments_for_messages(&state.chat, &all_ids).await?;
+    let mut mentions_by_message =
+        db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
 
     let parent_view = MessageView {
         id: parent.id,
@@ -521,6 +707,7 @@ pub async fn get_thread_panel(
         attachments: attachments_by_message
             .remove(&parent.id)
             .unwrap_or_default(),
+        mentions: mentions_by_message.remove(&parent.id).unwrap_or_default(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -533,6 +720,7 @@ pub async fn get_thread_panel(
             entry
         };
         let attachments = attachments_by_message.remove(&r.id).unwrap_or_default();
+        let mentions = mentions_by_message.remove(&r.id).unwrap_or_default();
         replies.push(MessageView {
             id: r.id,
             room_id: r.room_id,
@@ -555,6 +743,7 @@ pub async fn get_thread_panel(
             reply_count: 0,
             parent_id: r.parent_id,
             attachments,
+            mentions,
         });
     }
 
@@ -665,6 +854,20 @@ pub async fn delete_message(
     // the prior state of `m` here lets the regrouping decision use the
     // pre-delete grouping invariant.
     let next = db::chat::next_message_in_room(&state.chat, m.room_id, message_id).await?;
+
+    // Drop any mention rows tied to this message and tell each mentioned
+    // user to decrement their unread mention count. Done BEFORE the
+    // soft-delete so the row lookup still sees the unread rows.
+    let cleared_for_users =
+        db::mentions::delete_mentions_for_message(&state.chat, message_id).await?;
+    for uid in &cleared_for_users {
+        let event = ChatEvent::MentionCleared {
+            room_id: m.room_id,
+            mentioned_user_id: uid.clone(),
+            message_id,
+        };
+        state.hub.broadcast_to_user(uid, &event);
+    }
 
     db::moderation::soft_delete_message(&state.chat, message_id, &user.id).await?;
 

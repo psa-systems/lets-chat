@@ -16,8 +16,9 @@ use crate::state::AppState;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
-    render_event, EditedMessageFragment, NewMessageFragment, ReactionUpdateFragment,
-    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment,
+    render_event, EditedMessageFragment, MentionClearedFragment, MentionedFragment,
+    NewMessageFragment, ReactionUpdateFragment, SeenIndicatorFragment, SidebarUpdateFragment,
+    ThreadReplyOobFragment, UnreadBadgeFragment,
 };
 use crate::ws::events::ChatEvent;
 
@@ -126,6 +127,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         &send_user,
                                     )
                                     .await
+                                }
+                                ChatEvent::Mentioned {
+                                    mentioned_user_id, ..
+                                } if mentioned_user_id == &send_user.id => render_mentioned(&e),
+                                ChatEvent::MentionCleared {
+                                    mentioned_user_id, ..
+                                } if mentioned_user_id == &send_user.id => {
+                                    render_mention_cleared(&e)
                                 }
                                 _ => render_event(&e),
                             };
@@ -370,6 +379,14 @@ async fn render_new_message_or_bump(
             if let Ok(read_at) =
                 db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
             {
+                db::mentions::mark_mentions_read_for_room(
+                    &state.chat,
+                    &viewer.id,
+                    message.room_id,
+                    message.id,
+                )
+                .await
+                .ok();
                 let event = ChatEvent::DmRead {
                     room_id: message.room_id,
                     user_id: viewer.id.clone(),
@@ -442,6 +459,11 @@ async fn render_new_message(
         .await
         .ok()
         .unwrap_or_default();
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[message.id])
+        .await
+        .ok()
+        .and_then(|mut m| m.remove(&message.id))
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -464,6 +486,7 @@ async fn render_new_message(
         reply_count: 0,
         parent_id: message.parent_id,
         attachments,
+        mentions,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -513,6 +536,11 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         .await
         .ok()
         .unwrap_or_default();
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+        .await
+        .ok()
+        .and_then(|mut x| x.remove(&m.id))
+        .unwrap_or_default();
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -535,6 +563,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         reply_count,
         parent_id,
         attachments,
+        mentions,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
@@ -564,6 +593,11 @@ async fn render_thread_reply(
         .await
         .ok()
         .unwrap_or_default();
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[message.id])
+        .await
+        .ok()
+        .and_then(|mut x| x.remove(&message.id))
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -586,6 +620,7 @@ async fn render_thread_reply(
         reply_count: 0,
         parent_id: Some(parent_id),
         attachments,
+        mentions,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
@@ -604,6 +639,55 @@ async fn render_thread_reply(
     .ok()?;
     html.push_str(&pill);
     Some(html)
+}
+
+/// Render a `Mentioned` event for the connected user. The hub's
+/// `broadcast_to_user` already filters by id; the additional guard in the
+/// caller is a belt-and-braces self-check.
+fn render_mentioned(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::Mentioned {
+        kind,
+        room_id,
+        room_type,
+        room_label,
+        message_id,
+        author_label,
+        snippet,
+        target_path,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    MentionedFragment {
+        kind,
+        room_id: *room_id,
+        room_type,
+        room_label,
+        message_id: *message_id,
+        author_label,
+        snippet,
+        target_path,
+    }
+    .render()
+    .ok()
+}
+
+fn render_mention_cleared(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::MentionCleared {
+        room_id,
+        message_id,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    MentionClearedFragment {
+        room_id: *room_id,
+        message_id: *message_id,
+    }
+    .render()
+    .ok()
 }
 
 /// Render a full sidebar OOB replacement for `viewer` reflecting current

@@ -55,6 +55,8 @@
             {% let id = room.id.to_string() %}
             {% let unread = room.unread %}
             {% include "partials/unread_badge.html" %}
+            {% let mentions = room.mentions %}
+            {% include "partials/mention_badge.html" %}
           </a>
         </li>
         {% endfor %}

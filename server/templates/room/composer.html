@@ -27,6 +27,7 @@
 >
   <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
   <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
+  <div id="lc-mention-popover" class="relative"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
     <span>Could not send.</span>
     <button type="submit" class="underline hover:no-underline">Retry</button>
@@ -77,6 +78,72 @@
 <div id="lc-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-blue-900/40">
   <div class="rounded-lg bg-white px-6 py-4 text-lg font-semibold text-slate-800 shadow-lg">Drop file to attach</div>
 </div>
+<script>
+(function(){
+  var ta = document.querySelector('#composer textarea[name=body]');
+  var slot = document.getElementById('lc-mention-popover');
+  if (!ta || !slot) return;
+  var roomId = {{ room.id }};
+  var TOKEN = /(^|\s)@([A-Za-z0-9_-]{0,32})$/;
+  var current = null;
+  function activeToken() {
+    var pos = ta.selectionStart;
+    var before = ta.value.slice(0, pos);
+    var m = before.match(TOKEN);
+    if (!m) return null;
+    var prefix = m[2];
+    var start = pos - prefix.length - 1;
+    return { start: start, end: pos, prefix: prefix };
+  }
+  function close() { current = null; slot.replaceChildren(); }
+  function refresh() {
+    current = activeToken();
+    if (!current) return close();
+    var url = '/users/mentions?room_id=' + roomId + '&q=' + encodeURIComponent(current.prefix);
+    if (window.htmx) {
+      htmx.ajax('GET', url, { target: '#lc-mention-popover', swap: 'innerHTML' });
+    }
+  }
+  function items() { return slot.querySelectorAll('button[data-username]'); }
+  function selected() { return slot.querySelector('button[aria-selected="true"]'); }
+  function select(btn) {
+    items().forEach(function(b){ b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
+    if (btn && btn.scrollIntoView) btn.scrollIntoView({ block: 'nearest' });
+  }
+  function insert(btn) {
+    if (!current || !btn) return close();
+    var u = btn.getAttribute('data-username');
+    var v = ta.value;
+    ta.value = v.slice(0, current.start) + '@' + u + ' ' + v.slice(current.end);
+    var pos = current.start + u.length + 2;
+    ta.selectionStart = ta.selectionEnd = pos;
+    close();
+    ta.dispatchEvent(new Event('input'));
+  }
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('blur', function(){ setTimeout(close, 100); });
+  ta.addEventListener('keydown', function(e){
+    var list = items();
+    if (!current || list.length === 0) return;
+    var sel = selected() || list[0];
+    var idx = Array.prototype.indexOf.call(list, sel);
+    if (e.key === 'ArrowDown')      { e.preventDefault(); e.stopPropagation(); select(list[Math.min(idx + 1, list.length - 1)]); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); e.stopPropagation(); select(list[Math.max(idx - 1, 0)]); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); insert(sel); }
+    else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); }
+  }, true);
+  document.body.addEventListener('htmx:afterSwap', function(e){
+    if (e.target && e.target.id === 'lc-mention-popover') {
+      var first = slot.querySelector('button[data-username]');
+      if (first) first.setAttribute('aria-selected', 'true');
+      slot.addEventListener('mousedown', function(ev){
+        var b = ev.target.closest('button[data-username]');
+        if (b) { ev.preventDefault(); insert(b); }
+      }, { once: true });
+    }
+  });
+})();
+</script>
 <script>
 (function(){
   var input = document.getElementById('lc-file');
