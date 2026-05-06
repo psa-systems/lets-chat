@@ -1,0 +1,23 @@
+{% if results.is_empty() %}
+<ul id="lc-mention-list" class="hidden"></ul>
+{% else %}
+<ul id="lc-mention-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg" role="listbox">
+  {% for s in results %}
+  <li role="option">
+    <button type="button"
+      class="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
+      data-username="{{ s.username }}">
+      {% if let Some(ext) = s.avatar_ext.as_ref() %}
+      <img src="/avatars/{{ s.user_id }}" alt="" class="h-5 w-5 rounded-full object-cover" data-ext="{{ ext }}">
+      {% else %}
+      <span class="h-5 w-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-semibold">{% if let Some(c) = s.username.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
+      {% endif %}
+      <span class="font-medium">{{ s.username }}</span>
+      {% if let Some(dn) = s.display_name.as_ref() %}
+      <span class="text-xs text-slate-500 truncate">{{ dn }}</span>
+      {% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

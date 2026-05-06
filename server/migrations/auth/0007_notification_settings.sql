@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN notify_browser_enabled INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN notify_sound_enabled   INTEGER NOT NULL DEFAULT 0;
