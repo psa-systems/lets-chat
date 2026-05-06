@@ -3,22 +3,65 @@
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
   hx-on::before-request="this.querySelector('input[name=body]').value = ''; window.__lcLastTyping = 0"
-  hx-on::after-request="this.querySelector('input[name=body]').focus()"
+  hx-on::after-request="this.querySelector('input[name=body]').focus(); window.__lcClearAttach && window.__lcClearAttach()"
   class="border-t border-slate-200 p-2"
 >
-  <input
-    name="body"
-    autocomplete="off"
-    autofocus
-    placeholder="Message #{{ room.name }}"
-    class="w-full border rounded px-3 py-2"
-    oninput="(function(){
-      var ws = window.__lcWS;
-      if (!ws) return;
-      var now = Date.now();
-      if (now - (window.__lcLastTyping || 0) < 2500) return;
-      window.__lcLastTyping = now;
-      ws.send(JSON.stringify({ type: 'typing', room_id: {{ room.id }} }));
-    })()"
-  >
+  <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
+  <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
+  <input type="hidden" name="file_id">
+  <div class="flex items-center gap-2">
+    <button type="button" title="Attach file"
+      class="px-2 py-1 text-slate-500 hover:text-slate-800"
+      onclick="document.getElementById('lc-file').click()">+</button>
+    <input id="lc-file" type="file" class="hidden">
+    <input
+      name="body"
+      autocomplete="off"
+      autofocus
+      placeholder="Message #{{ room.name }}"
+      class="flex-1 border rounded px-3 py-2"
+      oninput="(function(){
+        var ws = window.__lcWS;
+        if (!ws) return;
+        var now = Date.now();
+        if (now - (window.__lcLastTyping || 0) < 2500) return;
+        window.__lcLastTyping = now;
+        ws.send(JSON.stringify({ type: 'typing', room_id: {{ room.id }} }));
+      })()"
+    >
+  </div>
 </form>
+<script>
+(function(){
+  var input = document.getElementById('lc-file');
+  var staged = document.getElementById('lc-staged');
+  var errSlot = document.getElementById('lc-upload-error');
+  var hidden = document.querySelector('#composer input[name=file_id]');
+  function clear(){ hidden.value = ''; staged.textContent = ''; errSlot.textContent = ''; input.value = ''; }
+  window.__lcClearAttach = clear;
+  function fmt(n){ return n < 1024 ? n+'B' : (n/1024).toFixed(1)+'KB'; }
+  input.addEventListener('change', async function(){
+    var f = input.files && input.files[0];
+    if (!f) return;
+    errSlot.textContent = '';
+    staged.textContent = 'Uploading ' + f.name + '...';
+    var fd = new FormData(); fd.append('file', f);
+    try {
+      var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      if (!res.ok) {
+        var msg = await res.text();
+        errSlot.textContent = msg || ('upload failed: '+res.status);
+        staged.textContent = '';
+        input.value = '';
+        return;
+      }
+      var data = await res.json();
+      hidden.value = data.file_id;
+      staged.innerHTML = 'Attached: ' + f.name + ' (' + fmt(f.size) + ') <button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>';
+    } catch (e) {
+      errSlot.textContent = 'upload failed';
+      input.value = '';
+    }
+  });
+})();
+</script>
