@@ -36,3 +36,10 @@ mime_guess = "2"
 percent-encoding = "2"
 async-trait = "0.1"
 thiserror = "1"
+infer = "0.16"
+tokio-util = { version = "0.7", features = ["io"] }
+sha2 = "0.10"
+linkify = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream"] }
+scraper = "0.20"
+url = "2"

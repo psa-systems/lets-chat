@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, post},
     Router,
@@ -26,6 +27,8 @@ mod room;
 mod search;
 mod settings;
 mod status;
+mod unfurl;
+mod uploads;
 mod ws;
 
 /// Override a persisted status with `"offline"` when the user has no live
@@ -339,6 +342,14 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
+        // The upload handler streams + caps bytes itself based on settings,
+        // so disable Axum's default 2 MiB body cap on this route only.
+        .route(
+            "/api/upload",
+            post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/api/files/{id}", get(uploads::get_file))
+        .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
