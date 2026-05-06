@@ -27,6 +27,7 @@ mod avatar;
 mod dm;
 mod enclave;
 mod home;
+mod mentions;
 mod reactions;
 mod room;
 mod search;
@@ -143,10 +144,16 @@ pub(crate) async fn load_sidebar(
                 .await?
                 .into_iter()
                 .collect();
+        let mention_counts: HashMap<i64, i64> =
+            db::mentions::count_unread_mentions_per_room(&state.chat, &user.id)
+                .await?
+                .into_iter()
+                .collect();
         let sidebar_rooms: Vec<SidebarRoom> = rooms
             .into_iter()
             .map(|r| SidebarRoom {
                 unread: *room_unreads.get(&r.id).unwrap_or(&0),
+                mentions: *mention_counts.get(&r.id).unwrap_or(&0),
                 id: r.id,
                 name: r.name,
                 active: false,
@@ -382,6 +389,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/search", get(search::get_search))
         .route("/users/search", get(users::get_user_search))
+        .route("/users/mentions", get(mentions::get_autocomplete))
         .route("/users/{user_id}/block", post(users::post_block))
         .route("/users/{user_id}/unblock", post(users::post_unblock))
         .route(

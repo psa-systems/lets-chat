@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod chat;
 pub mod enclave;
+pub mod mentions;
 pub mod moderation;
 pub mod settings;
 pub mod uploads;
