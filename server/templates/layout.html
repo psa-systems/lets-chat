@@ -2,12 +2,43 @@
 
 {% block body %}
 <div hx-ext="ws" ws-connect="/ws" class="flex h-screen">
-  {% let oob = false %}
-  {% include "partials/enclave_switcher.html" %}
-  {% include "partials/sidebar.html" %}
+  <div id="lc-nav-panel" class="hidden md:flex fixed inset-y-0 left-0 z-30 md:static md:z-auto">
+    {% let oob = false %}
+    {% include "partials/enclave_switcher.html" %}
+    {% include "partials/sidebar.html" %}
+  </div>
+  <div id="lc-nav-backdrop" class="hidden fixed inset-0 z-20 bg-black/40 md:hidden" onclick="lcCloseNav()"></div>
   <main id="main" class="flex-1 flex flex-col overflow-hidden">
+    <button type="button" aria-label="Open navigation"
+      class="md:hidden inline-flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-slate-600 hover:text-slate-900"
+      onclick="lcOpenNav()">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+      </svg>
+      <span>Menu</span>
+    </button>
     {% block main %}{% endblock %}
   </main>
   <div id="status-events-slot" class="hidden"></div>
 </div>
+<script>
+function lcOpenNav(){
+  var p = document.getElementById('lc-nav-panel');
+  p.classList.remove('hidden');
+  p.classList.add('flex');
+  document.getElementById('lc-nav-backdrop').classList.remove('hidden');
+}
+function lcCloseNav(){
+  if (window.matchMedia('(min-width: 768px)').matches) return;
+  var p = document.getElementById('lc-nav-panel');
+  p.classList.add('hidden');
+  p.classList.remove('flex');
+  document.getElementById('lc-nav-backdrop').classList.add('hidden');
+}
+document.body.addEventListener('click', function(e){
+  if (window.matchMedia('(min-width: 768px)').matches) return;
+  var link = e.target.closest('#lc-nav-panel a');
+  if (link) lcCloseNav();
+});
+</script>
 {% endblock %}
