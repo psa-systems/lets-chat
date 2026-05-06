@@ -271,7 +271,9 @@ async fn test_search_scoped_to_enclave_excludes_other_enclaves() {
 }
 
 #[tokio::test]
-async fn test_search_home_returns_only_dms() {
+async fn test_search_home_excludes_rooms_outside_callers_enclaves() {
+    // u-a is not a member of any enclave. Their home search must return only
+    // the DM hit and skip the public room in General.
     let pool = setup_pool().await;
     let g = general_id(&pool).await;
     let public_room = lets_chat::db::chat::create_room(&pool, "p", None, "public", None, Some(g))
@@ -292,5 +294,141 @@ async fn test_search_home_returns_only_dms() {
     let results = lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1, "Home search must return DM message only");
+    assert_eq!(
+        results.len(),
+        1,
+        "non-member must not see rooms in enclaves they are not in"
+    );
+    assert_eq!(results[0].room_name, "@u-b");
+}
+
+#[tokio::test]
+async fn test_search_home_includes_public_rooms_in_callers_enclaves() {
+    // After joining General u-a's home search returns both the DM hit and
+    // the public room hit.
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    lets_chat::db::enclave::add_member(
+        &pool,
+        g,
+        "u-a",
+        lets_chat::models::enclave::EnclaveRole::Member,
+    )
+    .await
+    .unwrap();
+    let public_room =
+        lets_chat::db::chat::create_room(&pool, "rooms", None, "public", None, Some(g))
+            .await
+            .unwrap();
+    lets_chat::db::chat::insert_message(&pool, public_room, "u-other", "find me")
+        .await
+        .unwrap();
+    let dm = lets_chat::db::chat::create_dm_room(&pool, "@u-b", "u-a", "u-b")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, dm.id, "u-a", "find me")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("find").unwrap();
+    let mut results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+            .await
+            .unwrap();
+    results.sort_by(|a, b| a.room_name.cmp(&b.room_name));
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].room_name, "@u-b");
+    assert_eq!(results[1].room_name, "rooms");
+}
+
+#[tokio::test]
+async fn test_search_home_excludes_private_rooms_caller_is_not_in() {
+    // u-a is in the enclave but not in the private room; the private room hit
+    // must not appear.
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    lets_chat::db::enclave::add_member(
+        &pool,
+        g,
+        "u-a",
+        lets_chat::models::enclave::EnclaveRole::Member,
+    )
+    .await
+    .unwrap();
+    let private_room =
+        lets_chat::db::chat::create_room(&pool, "vault", None, "private", None, Some(g))
+            .await
+            .unwrap();
+    lets_chat::db::chat::insert_message(&pool, private_room, "u-other", "secret find")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("secret").unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+            .await
+            .unwrap();
+    assert!(results.is_empty());
+}
+
+#[tokio::test]
+async fn test_search_home_includes_private_rooms_caller_is_member_of() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    lets_chat::db::enclave::add_member(
+        &pool,
+        g,
+        "u-a",
+        lets_chat::models::enclave::EnclaveRole::Member,
+    )
+    .await
+    .unwrap();
+    let private_room =
+        lets_chat::db::chat::create_room(&pool, "team", None, "private", None, Some(g))
+            .await
+            .unwrap();
+    lets_chat::db::chat::add_room_member(&pool, private_room, "u-a")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, private_room, "u-a", "private hits")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("private").unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+            .await
+            .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].room_name, "team");
+}
+
+#[tokio::test]
+async fn test_search_home_admin_sees_all_non_dm_rooms() {
+    // A site admin's home search returns every non-DM room hit even without
+    // explicit enclave membership; their DM scope is still gated on
+    // room_members so they cannot quietly read foreign DMs.
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let public_room =
+        lets_chat::db::chat::create_room(&pool, "global", None, "public", None, Some(g))
+            .await
+            .unwrap();
+    lets_chat::db::chat::insert_message(&pool, public_room, "u-other", "find me")
+        .await
+        .unwrap();
+    let dm = lets_chat::db::chat::create_dm_room(&pool, "@u-b", "u-c", "u-b")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, dm.id, "u-c", "find me")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("find").unwrap();
+    let results =
+        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "admin-1", true)
+            .await
+            .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].room_name, "global");
 }
