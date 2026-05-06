@@ -67,6 +67,13 @@
       <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
       <span>Send and receive read receipts</span>
     </label>
+    <label class="flex items-start gap-2 cursor-pointer">
+      <input type="checkbox" name="is_profile_public" value="1" class="mt-0.5" {% if user.is_profile_public %}checked{% endif %}>
+      <span>
+        Public profile
+        <span class="block text-xs text-slate-500">When off, your profile is hidden from people search and others cannot start a new DM with you.</span>
+      </span>
+    </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 </section>
