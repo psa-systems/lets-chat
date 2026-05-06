@@ -1,3 +1,8 @@
+<!-- File input lives OUTSIDE the form: HTMX auto-switches to multipart
+     encoding the moment a file input is inside a form, which would break
+     the server's axum::Form parser. The JS uploads to /api/upload directly
+     and stashes the returned file_id in the hidden input below. -->
+<input id="lc-file" type="file" class="hidden">
 <form
   id="composer"
   hx-post="/room/{{ room.id }}/messages"
@@ -13,7 +18,6 @@
     <button type="button" title="Attach file"
       class="px-2 py-1 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
-    <input id="lc-file" type="file" class="hidden">
     <input
       name="body"
       autocomplete="off"
