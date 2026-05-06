@@ -17,6 +17,12 @@ use crate::ws::events::ChatEvent;
 #[derive(Deserialize)]
 pub struct MessageForm {
     pub body: String,
+    /// Orphan upload id from a prior `POST /api/upload`. When present, the
+    /// row's `uploader_id` must equal the caller and `message_id` must still
+    /// be NULL; the handler links the upload to the new message before
+    /// broadcasting.
+    #[serde(default)]
+    pub file_id: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -160,9 +166,10 @@ pub async fn post_message(
     Path(room_id): Path<i64>,
     axum::Form(form): axum::Form<MessageForm>,
 ) -> Result<Html, AppError> {
-    // Reject blank submissions outright.
     let body = form.body.trim();
-    if body.is_empty() {
+    // An attachment alone (no body) is a valid send (image-only messages);
+    // both empty body AND no attachment is rejected.
+    if body.is_empty() && form.file_id.is_none() {
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
 
@@ -186,7 +193,21 @@ pub async fn post_message(
         return Err(AppError::Forbidden);
     }
 
+    // Validate any claimed attachment BEFORE the message insert so a stolen
+    // file_id from another user can't slip a new message through.
+    if let Some(file_id) = form.file_id {
+        let (row, _) = db::uploads::get_upload(&state.chat, file_id)
+            .await?
+            .ok_or(AppError::BadRequest("unknown file_id".into()))?;
+        if row.uploader_id != user.id || row.message_id.is_some() {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     let new_id = db::chat::insert_message(&state.chat, room_id, &user.id, body).await?;
+    if let Some(file_id) = form.file_id {
+        db::uploads::link_upload_to_message(&state.chat, file_id, new_id).await?;
+    }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
 
     // Re-fetch the inserted row to pick up the server-assigned created_at.
