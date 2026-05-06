@@ -1,3 +1,7 @@
+use askama::Template;
+use axum::extract::{OriginalUri, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
@@ -8,12 +12,13 @@ use std::collections::HashMap;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::auth::inject_user;
+use crate::auth::{inject_user, OptionalUser};
 use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
 mod admin;
@@ -293,6 +298,41 @@ pub(crate) async fn should_notify(state: &AppState, user_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Fallback handler for routes that did not match any registered path. Renders
+/// a friendly 404 inside the normal app shell when the caller is logged in,
+/// otherwise sends them to /login like any other authenticated route would.
+pub(crate) async fn handle_not_found(
+    State(state): State<AppState>,
+    OptionalUser(user): OptionalUser,
+    OriginalUri(uri): OriginalUri,
+) -> Response {
+    let Some(user) = user else {
+        return Redirect::to("/login").into_response();
+    };
+    let chrome = match load_chrome(&state, &user, None).await {
+        Ok(c) => c,
+        Err(_) => return (StatusCode::NOT_FOUND, "Not Found").into_response(),
+    };
+    let (sidebar_rooms, sidebar_peers, switcher) = chrome;
+    let page = NotFoundPage {
+        user: &user,
+        path: Some(uri.path().to_string()),
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+    };
+    match page.render() {
+        Ok(body) => (
+            StatusCode::NOT_FOUND,
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            body,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Not Found").into_response(),
+    }
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(home::get_home))
@@ -359,6 +399,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(enclave::router())
         .merge(admin::router())
         .nest_service("/assets", ServeDir::new("server/assets"))
+        .fallback(handle_not_found)
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
