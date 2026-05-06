@@ -2,33 +2,72 @@
   id="composer"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
-  hx-on::before-request="this.querySelector('input[name=body]').value = ''; window.__lcLastTyping = 0"
-  hx-on::after-request="this.querySelector('input[name=body]').focus(); window.__lcClearAttach && window.__lcClearAttach()"
+  hx-on::after-request="
+    var ta = this.querySelector('textarea[name=body]');
+    var send = this.querySelector('#composer-send');
+    var err = this.querySelector('.composer-error');
+    if (event.detail.successful) {
+      ta.value = '';
+      ta.style.height = 'auto';
+      send.disabled = true;
+      err.classList.add('hidden');
+      window.__lcLastTyping = 0;
+      if (window.__lcClearAttach) window.__lcClearAttach();
+    } else {
+      err.classList.remove('hidden');
+    }
+    ta.focus();
+  "
   class="border-t border-slate-200 p-2"
 >
   <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
   <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
+  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
+    <span>Could not send.</span>
+    <button type="submit" class="underline hover:no-underline">Retry</button>
+  </div>
   <input type="hidden" name="file_id">
-  <div class="flex items-center gap-2">
+  <div class="flex items-end gap-2">
     <button type="button" title="Attach file"
-      class="px-2 py-1 text-slate-500 hover:text-slate-800"
+      class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
     <input id="lc-file" type="file" class="hidden">
-    <input
+    <textarea
       name="body"
+      rows="1"
       autocomplete="off"
       autofocus
       placeholder="Message #{{ room.name }}"
-      class="flex-1 border rounded px-3 py-2"
-      oninput="(function(){
+      class="flex-1 resize-none overflow-y-auto rounded border px-3 py-2 max-h-40"
+      oninput="
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+        document.getElementById('composer-send').disabled = !this.value.trim();
         var ws = window.__lcWS;
         if (!ws) return;
         var now = Date.now();
         if (now - (window.__lcLastTyping || 0) < 2500) return;
         window.__lcLastTyping = now;
         ws.send(JSON.stringify({ type: 'typing', room_id: {{ room.id }} }));
-      })()"
+      "
+      onkeydown="
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+          event.preventDefault();
+          if (this.value.trim()) this.form.requestSubmit();
+        }
+      "
+    ></textarea>
+    <button
+      id="composer-send"
+      type="submit"
+      disabled
+      class="rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      aria-label="Send message"
     >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.604.534l7.443.972c.336.044.336.526 0 .57l-7.443.972a.75.75 0 00-.604.534l-1.414 4.949a.75.75 0 00.826.95 28.74 28.74 0 0015.585-7.122.75.75 0 000-1.054A28.74 28.74 0 003.105 2.289z" />
+      </svg>
+    </button>
   </div>
 </form>
 <script>
@@ -58,6 +97,7 @@
       var data = await res.json();
       hidden.value = data.file_id;
       staged.innerHTML = 'Attached: ' + f.name + ' (' + fmt(f.size) + ') <button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>';
+      document.getElementById('composer-send').disabled = false;
     } catch (e) {
       errSlot.textContent = 'upload failed';
       input.value = '';
