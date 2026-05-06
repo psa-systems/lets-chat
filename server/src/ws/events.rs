@@ -100,6 +100,25 @@ pub enum ChatEvent {
         status: String,
         custom_status: Option<String>,
     },
+    /// New thread reply rooted at `parent_id`. Recipients with the panel open
+    /// for that parent append the reply; everyone updates the parent's
+    /// "N replies" pill.
+    ThreadReply {
+        parent_id: i64,
+        message: Message,
+    },
+    /// Typing indicator scoped to the thread panel.
+    ThreadTyping {
+        room_id: i64,
+        parent_id: i64,
+        user_id: String,
+        username: String,
+    },
+    ThreadStoppedTyping {
+        room_id: i64,
+        parent_id: i64,
+        user_id: String,
+    },
 }
 
 /// Control frames sent from client to server.
@@ -109,4 +128,5 @@ pub enum ClientControl {
     Subscribe { room_id: i64 },
     Unsubscribe { room_id: i64 },
     Typing { room_id: i64 },
+    ThreadTyping { room_id: i64, parent_id: i64 },
 }

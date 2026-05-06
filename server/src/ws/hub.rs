@@ -33,6 +33,10 @@ pub struct Hub {
     user_conns: DashMap<String, HashSet<ConnId>>,
     /// (room_id, user_id) -> last typing Instant (ephemeral, no DB)
     typing: DashMap<(i64, String), std::time::Instant>,
+    /// (room_id, parent_id, user_id) -> last typing Instant for thread typing.
+    /// Kept separate from `typing` so room-composer typing and thread-composer
+    /// typing don't bleed into each other's UI surfaces.
+    thread_typing: DashMap<(i64, i64, String), std::time::Instant>,
 }
 
 impl Hub {
@@ -42,6 +46,7 @@ impl Hub {
             rooms: DashMap::new(),
             user_conns: DashMap::new(),
             typing: DashMap::new(),
+            thread_typing: DashMap::new(),
         }
     }
 
@@ -206,6 +211,53 @@ impl Hub {
         if self.typing.remove(&key).is_some() {
             let event = ChatEvent::UserStoppedTyping {
                 room_id,
+                user_id: user_id.to_string(),
+            };
+            self.broadcast_to_room(room_id, &event);
+        }
+    }
+
+    /// Thread-scoped typing. Mirrors `notify_typing` but keys on parent_id so
+    /// the thread panel and room composer have distinct indicator state.
+    pub fn notify_thread_typing(self: &Arc<Self>, conn_id: ConnId, room_id: i64, parent_id: i64) {
+        let (user_id, username) = match self.connections.get(&conn_id) {
+            Some(c) => (c.user_id.clone(), c.username.clone()),
+            None => return,
+        };
+
+        let key = (room_id, parent_id, user_id.clone());
+        let is_new = !self.thread_typing.contains_key(&key);
+        self.thread_typing
+            .insert(key.clone(), std::time::Instant::now());
+
+        if is_new {
+            let event = ChatEvent::ThreadTyping {
+                room_id,
+                parent_id,
+                user_id: user_id.clone(),
+                username,
+            };
+            self.broadcast_to_room_except(room_id, &event, conn_id);
+        }
+
+        let hub = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            if let Some(entry) = hub.thread_typing.get(&key) {
+                if entry.elapsed() >= std::time::Duration::from_secs(5) {
+                    drop(entry);
+                    hub.stop_thread_typing(room_id, parent_id, &user_id);
+                }
+            }
+        });
+    }
+
+    pub fn stop_thread_typing(&self, room_id: i64, parent_id: i64, user_id: &str) {
+        let key = (room_id, parent_id, user_id.to_string());
+        if self.thread_typing.remove(&key).is_some() {
+            let event = ChatEvent::ThreadStoppedTyping {
+                room_id,
+                parent_id,
                 user_id: user_id.to_string(),
             };
             self.broadcast_to_room(room_id, &event);

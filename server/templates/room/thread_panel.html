@@ -1,0 +1,48 @@
+<aside id="thread-panel" class="w-96 border-l border-slate-200 flex flex-col bg-white">
+  <header class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+    <div class="font-semibold">Thread</div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-slate-400 hover:text-slate-700"
+      aria-label="Close thread"
+    >&#10005;</button>
+  </header>
+  <div class="border-b border-slate-200 px-3 py-2 bg-slate-50">
+    {% let parent_message = parent %}
+    {% let message = parent_message %}
+    {% include "room/thread_reply_inner.html" %}
+  </div>
+  <div id="thread-replies-{{ parent.id }}" class="flex-1 overflow-y-auto py-1">
+    {% for r in replies %}
+    {% let message = r %}
+    {% include "room/thread_reply_inner.html" %}
+    {% endfor %}
+  </div>
+  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-slate-500"></div>
+  <form
+    id="thread-composer-{{ parent.id }}"
+    hx-post="/room/{{ room.id }}/thread/{{ parent.id }}/messages"
+    hx-swap="none"
+    hx-on::before-request="this.querySelector('input[name=body]').value = ''; window.__lcLastThreadTyping = 0"
+    hx-on::after-request="this.querySelector('input[name=body]').focus()"
+    class="border-t border-slate-200 p-2"
+  >
+    <input
+      name="body"
+      autocomplete="off"
+      autofocus
+      placeholder="Reply..."
+      class="w-full border rounded px-3 py-1.5 text-sm"
+      oninput="(function(){
+        var ws = window.__lcWS;
+        if (!ws) return;
+        var now = Date.now();
+        if (now - (window.__lcLastThreadTyping || 0) < 2500) return;
+        window.__lcLastThreadTyping = now;
+        ws.send(JSON.stringify({ type: 'thread_typing', room_id: {{ room.id }}, parent_id: {{ parent.id }} }));
+      })()"
+    >
+  </form>
+</aside>

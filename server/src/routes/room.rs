@@ -10,6 +10,7 @@ use crate::models::Message;
 use crate::state::AppState;
 use crate::views::room::{
     ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage, SingleMessageFragment,
+    ThreadPanelClosedFragment, ThreadPanelFragment,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -65,6 +66,11 @@ pub async fn get_room(
             });
     }
 
+    let reply_counts: HashMap<i64, i64> = db::chat::count_replies_for_room(&state.chat, room_id)
+        .await?
+        .into_iter()
+        .collect();
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -91,6 +97,7 @@ pub async fn get_room(
         }
         messages.push(MessageView {
             id: m.id,
+            room_id: m.room_id,
             user_id: m.user_id.clone(),
             username: meta.username,
             display_name: meta.display_name,
@@ -107,6 +114,8 @@ pub async fn get_room(
             seen_caption: None,
             is_follow_up,
             show_unread_divider,
+            reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
+            parent_id: m.parent_id,
         });
     }
 
@@ -203,6 +212,7 @@ pub async fn post_message(
         body: raw.body,
         created_at: raw.created_at,
         edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
     };
 
     let event = ChatEvent::NewMessage {
@@ -265,8 +275,10 @@ pub async fn get_single_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (m.user_id.as_str(), m.created_at.as_str()),
     );
+    let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
+        room_id: m.room_id,
         user_id: m.user_id.clone(),
         username: meta.username,
         display_name: meta.display_name,
@@ -283,6 +295,8 @@ pub async fn get_single_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        reply_count,
+        parent_id: m.parent_id,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -338,8 +352,10 @@ pub async fn patch_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (m.user_id.as_str(), m.created_at.as_str()),
     );
+    let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
+        room_id: m.room_id,
         user_id: m.user_id.clone(),
         username: meta.username,
         display_name: meta.display_name,
@@ -356,12 +372,180 @@ pub async fn patch_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        reply_count,
+        parent_id: m.parent_id,
     };
     let fragment = SingleMessageFragment {
         message: &view,
         oob: false,
     };
     html(&fragment)
+}
+
+/// GET /room/:room_id/thread/:message_id - render the thread panel for a
+/// parent message. The same handler serves DM rooms (room.room_type=='dm')
+/// since access is gated by `is_room_accessible`.
+pub async fn get_thread_panel(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, message_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let parent = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if parent.room_id != room_id {
+        return Err(AppError::NotFound);
+    }
+    if parent.parent_id.is_some() {
+        return Err(AppError::BadRequest(
+            "thread root cannot itself be a reply".into(),
+        ));
+    }
+
+    let raw_replies = db::chat::list_thread_replies(&state.chat, message_id).await?;
+    let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
+    let parent_meta = super::load_author_meta(&state, &parent.user_id, &user.id).await?;
+    let parent_view = MessageView {
+        id: parent.id,
+        room_id: parent.room_id,
+        user_id: parent.user_id.clone(),
+        username: parent_meta.username,
+        display_name: parent_meta.display_name,
+        avatar_ext: parent_meta.avatar_ext,
+        status: parent_meta.status,
+        custom_status: parent_meta.custom_status,
+        created_at: parent.created_at.clone(),
+        edited_at: parent.edited_at.clone(),
+        body: parent.body.clone(),
+        reactions: Vec::new(),
+        can_edit: false,
+        can_delete: false,
+        viewer_id: user.id.clone(),
+        seen_caption: None,
+        is_follow_up: false,
+        show_unread_divider: false,
+        reply_count: 0,
+        parent_id: None,
+    };
+
+    let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
+    for r in raw_replies {
+        let meta = if let Some(entry) = author_cache.get(&r.user_id) {
+            entry.clone()
+        } else {
+            let entry = super::load_author_meta(&state, &r.user_id, &user.id).await?;
+            author_cache.insert(r.user_id.clone(), entry.clone());
+            entry
+        };
+        replies.push(MessageView {
+            id: r.id,
+            room_id: r.room_id,
+            user_id: r.user_id,
+            username: meta.username,
+            display_name: meta.display_name,
+            avatar_ext: meta.avatar_ext,
+            status: meta.status,
+            custom_status: meta.custom_status,
+            created_at: r.created_at,
+            edited_at: r.edited_at,
+            body: r.body,
+            reactions: Vec::new(),
+            can_edit: false,
+            can_delete: false,
+            viewer_id: user.id.clone(),
+            seen_caption: None,
+            is_follow_up: false,
+            show_unread_divider: false,
+            reply_count: 0,
+            parent_id: r.parent_id,
+        });
+    }
+
+    let fragment = ThreadPanelFragment {
+        room: &room,
+        parent: &parent_view,
+        replies: &replies,
+    };
+    html(&fragment)
+}
+
+/// POST /room/:room_id/thread/:parent_id/messages - post a reply into the
+/// thread rooted at parent_id. Reuses the same access predicate as posting
+/// a top-level message.
+pub async fn post_thread_reply(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+    axum::Form(form): axum::Form<MessageForm>,
+) -> Result<Response, AppError> {
+    let body = form.body.trim();
+    if body.is_empty() {
+        return Err(AppError::BadRequest("message body cannot be empty".into()));
+    }
+    if user.is_banned || user.is_muted {
+        return Err(AppError::Forbidden);
+    }
+
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let parent = db::chat::get_message(&state.chat, parent_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if parent.room_id != room_id {
+        return Err(AppError::NotFound);
+    }
+    if parent.parent_id.is_some() {
+        return Err(AppError::BadRequest(
+            "thread root cannot itself be a reply".into(),
+        ));
+    }
+
+    let new_id = db::chat::insert_reply(&state.chat, room_id, &user.id, body, parent_id).await?;
+    super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal("freshly inserted reply vanished".into()))?;
+    let author_name = db::auth::find_user_by_id(&state.auth, &raw.user_id)
+        .await?
+        .map(|r| r.username)
+        .unwrap_or_else(|| "(unknown)".to_string());
+    let message = Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: raw.user_id,
+        author_name,
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+    };
+    let event = ChatEvent::ThreadReply { parent_id, message };
+    state.hub.stop_thread_typing(room_id, parent_id, &user.id);
+    super::broadcast_room_message(&state, &room, &event).await?;
+
+    // Empty 204 - composer clears via hx-on::before-request, no body needed.
+    Ok(axum::http::StatusCode::NO_CONTENT.into_response())
+}
+
+/// DELETE /thread-panel - close the panel by replacing it with an empty
+/// hidden aside.
+pub async fn close_thread_panel() -> Result<Html, AppError> {
+    html(&ThreadPanelClosedFragment)
 }
 
 /// DELETE /messages/:id - soft-delete a message.

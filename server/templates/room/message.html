@@ -26,8 +26,8 @@
     {% endif %}
   </div>
   {% endif %}
-  {% if message.can_edit || message.can_delete %}
   <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
+    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Reply</button>
     {% if message.can_edit %}
     <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Edit</button>
     {% endif %}
@@ -35,13 +35,17 @@
     <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="Delete this message?" class="text-red-600 hover:underline">Delete</button>
     {% endif %}
   </span>
-  {% endif %}
   <div class="whitespace-pre-wrap leading-snug">{{ message.body }}</div>
   <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}
     {% include "partials/reaction_bar.html" %}
   </div>
+  {% let reply_count = message.reply_count %}
+  {% let message_id = message.id %}
+  {% let room_id = message.room_id %}
+  {% let oob = false %}
+  {% include "room/reply_count.html" %}
   {% if message.user_id == message.viewer_id %}
   <div id="seen-{{ message.id }}">
     {% if let Some(t) = message.seen_caption.as_ref() %}

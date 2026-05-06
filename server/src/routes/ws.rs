@@ -13,10 +13,11 @@ use crate::auth::OptionalUser;
 use crate::db;
 use crate::models::{self, User};
 use crate::state::AppState;
+use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, EditedMessageFragment, NewMessageFragment, ReactionUpdateFragment,
-    SeenIndicatorFragment, SidebarUpdateFragment, UnreadBadgeFragment,
+    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment,
 };
 use crate::ws::events::ChatEvent;
 
@@ -27,6 +28,8 @@ enum ClientFrame {
     Subscribe { room_id: i64 },
     #[serde(rename = "typing")]
     Typing { room_id: i64 },
+    #[serde(rename = "thread_typing")]
+    ThreadTyping { room_id: i64, parent_id: i64 },
 }
 
 pub async fn ws_handler(
@@ -115,6 +118,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         None
                                     }
                                 }
+                                ChatEvent::ThreadReply { parent_id, message } => {
+                                    render_thread_reply(
+                                        &send_state,
+                                        *parent_id,
+                                        message,
+                                        &send_user,
+                                    )
+                                    .await
+                                }
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -159,6 +171,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         ClientFrame::Typing { room_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
                                 state.hub.notify_typing(conn_id, room_id);
+                                super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+                            }
+                        }
+                        ClientFrame::ThreadTyping { room_id, parent_id } => {
+                            if subscribed.lock().unwrap().contains(&room_id) {
+                                state.hub.notify_thread_typing(conn_id, room_id, parent_id);
                                 super::touch_user_and_maybe_broadcast(&state, &user.id).await;
                             }
                         }
@@ -413,6 +431,7 @@ async fn render_new_message(
     };
     let view = MessageView {
         id: message.id,
+        room_id: message.room_id,
         user_id: message.user_id.clone(),
         username: message.author_name.clone(),
         display_name,
@@ -429,6 +448,8 @@ async fn render_new_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        reply_count: 0,
+        parent_id: message.parent_id,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -466,8 +487,11 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     );
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let reply_count = db::chat::count_replies(&state.chat, m.id).await.ok()?;
+    let parent_id = m.parent_id;
     let view = MessageView {
         id: m.id,
+        room_id: m.room_id,
         user_id: m.user_id,
         username: meta.username,
         display_name: meta.display_name,
@@ -484,8 +508,66 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        reply_count,
+        parent_id,
     };
     EditedMessageFragment { message: &view }.render().ok()
+}
+
+/// Render a thread reply for `viewer` along with an OOB update of the
+/// parent's reply-count pill in the main feed. The reply fragment targets
+/// `#thread-replies-{parent_id}`, which only exists in the DOM when the
+/// viewer has the thread panel open for that parent - HTMX silently drops
+/// the swap otherwise. The reply-count fragment targets `#reply-count-{parent_id}`,
+/// which lives under every top-level message in the main feed.
+async fn render_thread_reply(
+    state: &AppState,
+    parent_id: i64,
+    message: &models::Message,
+    viewer: &User,
+) -> Option<String> {
+    let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
+        .await
+        .ok()?;
+    let view = MessageView {
+        id: message.id,
+        room_id: message.room_id,
+        user_id: message.user_id.clone(),
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
+        created_at: message.created_at.clone(),
+        edited_at: message.edited_at.clone(),
+        body: message.body.clone(),
+        reactions: Vec::new(),
+        can_edit: false,
+        can_delete: false,
+        viewer_id: viewer.id.clone(),
+        seen_caption: None,
+        is_follow_up: false,
+        show_unread_divider: false,
+        reply_count: 0,
+        parent_id: Some(parent_id),
+    };
+    let mut html = ThreadReplyOobFragment {
+        parent_id,
+        message: &view,
+    }
+    .render()
+    .ok()?;
+    let count = db::chat::count_replies(&state.chat, parent_id).await.ok()?;
+    let pill = ReplyCountFragment {
+        message_id: parent_id,
+        room_id: message.room_id,
+        reply_count: count,
+        oob: true,
+    }
+    .render()
+    .ok()?;
+    html.push_str(&pill);
+    Some(html)
 }
 
 /// Render a full sidebar OOB replacement for `viewer` reflecting current
