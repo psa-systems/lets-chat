@@ -3,7 +3,8 @@
 {% block title %}Home - lets-chat{% endblock %}
 
 {% block main %}
-<section class="flex-1 overflow-y-auto p-6 max-w-2xl">
+<div class="flex-1 overflow-y-auto">
+<section class="p-6 max-w-2xl">
   <h1 class="text-2xl font-semibold">Welcome, {{ user.display_label() }}</h1>
   <p class="mt-2 text-slate-600">
     Pick a DM from the sidebar, or
@@ -14,4 +15,5 @@
     Pending invitations: <a href="/invitations" class="text-blue-600 hover:underline">view</a>.
   </p>
 </section>
+</div>
 {% endblock %}
