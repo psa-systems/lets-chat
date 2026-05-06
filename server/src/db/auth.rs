@@ -496,3 +496,39 @@ pub async fn set_read_receipts_enabled(
     .await?;
     Ok(())
 }
+
+/// Case-insensitive substring match on username and display_name. Excludes
+/// banned users. Results sorted by username, capped at `limit`. SQL LIKE
+/// wildcards (`%`, `_`) inside the input are escaped so callers cannot use
+/// them to broaden the match.
+pub async fn search_users(
+    pool: &SqlitePool,
+    q: &str,
+    limit: i64,
+) -> Result<Vec<UserRecord>, sqlx::Error> {
+    let escaped = q
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let pattern = format!("%{escaped}%");
+    let rows = sqlx::query(
+        "SELECT id, username, display_name, password_hash, role, \
+         is_banned, ban_reason, banned_until, \
+         is_muted, muted_until, mute_reason, \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext, status, custom_status, last_active_at \
+         FROM users \
+         WHERE is_banned = 0 \
+           AND (username LIKE ? ESCAPE '\\' COLLATE NOCASE \
+             OR display_name LIKE ? ESCAPE '\\' COLLATE NOCASE) \
+         ORDER BY username COLLATE NOCASE \
+         LIMIT ?",
+    )
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(row_to_user_record).collect())
+}

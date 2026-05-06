@@ -34,6 +34,7 @@ mod settings;
 mod status;
 mod unfurl;
 mod uploads;
+mod users;
 mod ws;
 
 /// Override a persisted status with `"offline"` when the user has no live
@@ -374,6 +375,7 @@ pub fn build_router(state: AppState) -> Router {
             post(reactions::toggle_reaction),
         )
         .route("/search", get(search::get_search))
+        .route("/users/search", get(users::get_user_search))
         .route(
             "/settings",
             get(settings::get_settings).post(settings::post_settings),

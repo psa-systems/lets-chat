@@ -18,17 +18,30 @@
     </div>
     <div id="status-picker" class="mt-2"></div>
   </div>
-  <form class="p-2">
-    <input
-      name="q"
-      placeholder="Search messages..."
-      hx-get="/search"
-      hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-      hx-target="#main"
-      hx-swap="innerHTML"
-      hx-push-url="true"
-      class="w-full border rounded px-2 py-1 text-sm">
-  </form>
+  <div class="p-2 space-y-2">
+    <form>
+      <input
+        name="q"
+        placeholder="Search messages..."
+        hx-get="/search"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-target="#main"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        class="w-full border rounded px-2 py-1 text-sm">
+    </form>
+    <form>
+      <input
+        name="q"
+        placeholder="Search people..."
+        hx-get="/users/search"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-target="#main"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        class="w-full border rounded px-2 py-1 text-sm">
+    </form>
+  </div>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">
     {% if !sidebar_rooms.is_empty() %}
     <section>
