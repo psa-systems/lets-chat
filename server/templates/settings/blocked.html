@@ -26,13 +26,7 @@
             value="{{ form_username }}"
             placeholder="username"
             class="block w-full border rounded px-2 py-1"
-            required
-            hx-get="/users/search"
-            hx-trigger="input changed delay:200ms"
-            hx-target="#block-search-results"
-            hx-swap="innerHTML"
-            hx-params="none"
-            hx-vals='js:{q: document.getElementById("block-username").value}'>
+            required>
           <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
         </div>
         <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">Block</button>
@@ -47,6 +41,28 @@
       var popover = document.getElementById('block-search-results');
       var input = document.getElementById('block-username');
       if (!popover || !input) return;
+      var debounceTimer;
+      var latestRequestId = 0;
+      input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+          var q = input.value.trim();
+          if (!q) {
+            popover.innerHTML = '';
+            return;
+          }
+          var requestId = ++latestRequestId;
+          fetch('/users/search?q=' + encodeURIComponent(q), {
+            credentials: 'same-origin',
+            headers: { 'HX-Request': 'true' }
+          })
+            .then(function(resp) { return resp.ok ? resp.text() : ''; })
+            .then(function(html) {
+              if (requestId !== latestRequestId) return;
+              popover.innerHTML = html;
+            });
+        }, 200);
+      });
       popover.addEventListener('click', function(e) {
         var link = e.target.closest('a[data-username]');
         if (!link) return;
