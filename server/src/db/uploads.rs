@@ -105,8 +105,7 @@ pub async fn attachments_for_messages(
     if message_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let placeholders = std::iter::repeat("?")
-        .take(message_ids.len())
+    let placeholders = std::iter::repeat_n("?", message_ids.len())
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(

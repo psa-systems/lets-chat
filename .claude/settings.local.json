@@ -19,7 +19,8 @@
       "Bash(./dev/cargo test *)",
       "Bash(docker --version)",
       "Bash(docker info *)",
-      "Bash(./dev/cargo check *)"
+      "Bash(./dev/cargo check *)",
+      "Bash(./dev/cargo clippy *)"
     ]
   }
 }

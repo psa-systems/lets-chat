@@ -26,6 +26,7 @@ mod room;
 mod search;
 mod settings;
 mod status;
+mod uploads;
 mod ws;
 
 /// Override a persisted status with `"offline"` when the user has no live
@@ -330,6 +331,8 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
+        .route("/api/upload", post(uploads::post_upload))
+        .route("/api/files/{id}", get(uploads::get_file))
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
