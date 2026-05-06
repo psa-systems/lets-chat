@@ -4,6 +4,7 @@ pub mod dm;
 pub mod enclave;
 pub mod home;
 pub mod layout;
+pub mod not_found;
 pub mod room;
 pub mod search;
 pub mod settings;
