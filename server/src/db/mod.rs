@@ -27,6 +27,15 @@ pub fn avatars_dir() -> PathBuf {
     p
 }
 
+/// Directory where user-uploaded attachments live (content-addressed by sha256).
+pub fn uploads_dir() -> PathBuf {
+    let p = PathBuf::from(data_dir()).join("uploads");
+    if let Err(e) = std::fs::create_dir_all(&p) {
+        tracing::warn!(error = %e, path = %p.display(), "failed to create uploads dir");
+    }
+    p
+}
+
 async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool {
     let dir = data_dir();
     std::fs::create_dir_all(dir).expect("Failed to create data directory");
