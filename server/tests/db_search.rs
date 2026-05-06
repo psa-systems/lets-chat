@@ -364,10 +364,9 @@ async fn test_search_home_excludes_private_rooms_caller_is_not_in() {
         .unwrap();
 
     let fts = lets_chat::db::chat::sanitize_fts_query("secret").unwrap();
-    let results =
-        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
-            .await
-            .unwrap();
+    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+        .await
+        .unwrap();
     assert!(results.is_empty());
 }
 
@@ -395,10 +394,9 @@ async fn test_search_home_includes_private_rooms_caller_is_member_of() {
         .unwrap();
 
     let fts = lets_chat::db::chat::sanitize_fts_query("private").unwrap();
-    let results =
-        lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
-            .await
-            .unwrap();
+    let results = lets_chat::db::chat::search_messages(&pool, &fts, None, None, true, "u-a", false)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].room_name, "team");
 }
