@@ -987,9 +987,13 @@ pub fn sanitize_fts_query(raw: &str) -> Option<String> {
 ///   The caller must be a member of the enclave; the route layer enforces this
 ///   before invoking the function. Private rooms still require room_members
 ///   unless `is_site_admin = true`.
-/// - `enclave_id_filter = None` and `home_dm_only = true`: only DM rooms the
-///   caller is a member of.
-/// - `enclave_id_filter = None` and `home_dm_only = false`: rejected upstream;
+/// - `enclave_id_filter = None` and `home_scope = true`: search every room
+///   the caller can read - DM rooms they are in, plus non-DM rooms in any
+///   enclave they belong to (with private rooms still gated on room_members).
+///   Site admins additionally see every non-DM room regardless of enclave
+///   membership; their DM scope still requires explicit room_members so they
+///   never silently page through other people's DMs.
+/// - `enclave_id_filter = None` and `home_scope = false`: rejected upstream;
 ///   this combination is not produced by the route handler.
 ///
 /// `room_id_filter` further narrows the result to a single room when set.
@@ -998,7 +1002,7 @@ pub async fn search_messages(
     fts_query: &str,
     room_id_filter: Option<i64>,
     enclave_id_filter: Option<i64>,
-    home_dm_only: bool,
+    home_scope: bool,
     caller_user_id: &str,
     is_site_admin: bool,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
@@ -1018,10 +1022,31 @@ pub async fn search_messages(
                  SELECT 1 FROM room_members rm \
                  WHERE rm.room_id = r.id AND rm.user_id = ?))"
         }
-    } else if home_dm_only {
-        "AND r.room_type = 'dm' \
-         AND EXISTS (SELECT 1 FROM room_members rm \
-                     WHERE rm.room_id = r.id AND rm.user_id = ?)"
+    } else if home_scope {
+        if is_site_admin {
+            "AND ( \
+                (r.room_type = 'dm' AND EXISTS (\
+                    SELECT 1 FROM room_members rm \
+                    WHERE rm.room_id = r.id AND rm.user_id = ?)) \
+                OR r.room_type != 'dm' \
+            )"
+        } else {
+            "AND ( \
+                (r.room_type = 'dm' AND EXISTS (\
+                    SELECT 1 FROM room_members rm \
+                    WHERE rm.room_id = r.id AND rm.user_id = ?)) \
+                OR ( \
+                    r.room_type != 'dm' \
+                    AND r.enclave_id IS NOT NULL \
+                    AND EXISTS (\
+                        SELECT 1 FROM enclave_members em \
+                        WHERE em.enclave_id = r.enclave_id AND em.user_id = ?) \
+                    AND (r.room_type = 'public' OR EXISTS (\
+                        SELECT 1 FROM room_members rm2 \
+                        WHERE rm2.room_id = r.id AND rm2.user_id = ?)) \
+                ) \
+            )"
+        }
     } else {
         // No usable scope; return nothing rather than leak global results.
         "AND 0 = 1"
@@ -1041,7 +1066,6 @@ pub async fn search_messages(
          LIMIT 50"
     );
 
-    // Bind order: fts_query, [room_id_filter], [enclave_id_filter], [caller_user_id]
     let mut q = sqlx::query(&sql).bind(fts_query);
     if let Some(rid) = room_id_filter {
         q = q.bind(rid);
@@ -1051,8 +1075,15 @@ pub async fn search_messages(
         if !is_site_admin {
             q = q.bind(caller_user_id);
         }
-    } else if home_dm_only {
-        q = q.bind(caller_user_id);
+    } else if home_scope {
+        if is_site_admin {
+            q = q.bind(caller_user_id);
+        } else {
+            q = q
+                .bind(caller_user_id)
+                .bind(caller_user_id)
+                .bind(caller_user_id);
+        }
     }
 
     let rows = q.fetch_all(pool).await?;
