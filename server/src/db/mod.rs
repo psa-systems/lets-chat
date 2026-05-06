@@ -11,8 +11,13 @@ use std::sync::OnceLock;
 
 static DATA_DIR: OnceLock<String> = OnceLock::new();
 
+/// Initialize the global data directory. Called once at startup from main.
+/// Idempotent for tests: a second call with the same string is a no-op; a
+/// second call with a different string is also silently ignored, since the
+/// first writer wins (`OnceLock` semantics) and the production caller is
+/// always main().
 pub fn set_data_dir(dir: String) {
-    DATA_DIR.set(dir).expect("data dir already set");
+    let _ = DATA_DIR.set(dir);
 }
 
 fn data_dir() -> &'static str {
