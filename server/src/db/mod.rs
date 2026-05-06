@@ -3,6 +3,7 @@ pub mod chat;
 pub mod enclave;
 pub mod moderation;
 pub mod settings;
+pub mod uploads;
 
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -10,8 +11,13 @@ use std::sync::OnceLock;
 
 static DATA_DIR: OnceLock<String> = OnceLock::new();
 
+/// Initialize the global data directory. Called once at startup from main.
+/// Idempotent for tests: a second call with the same string is a no-op; a
+/// second call with a different string is also silently ignored, since the
+/// first writer wins (`OnceLock` semantics) and the production caller is
+/// always main().
 pub fn set_data_dir(dir: String) {
-    DATA_DIR.set(dir).expect("data dir already set");
+    let _ = DATA_DIR.set(dir);
 }
 
 fn data_dir() -> &'static str {
@@ -23,6 +29,15 @@ pub fn avatars_dir() -> PathBuf {
     let p = PathBuf::from(data_dir()).join("avatars");
     if let Err(e) = std::fs::create_dir_all(&p) {
         tracing::warn!(error = %e, path = %p.display(), "failed to create avatars dir");
+    }
+    p
+}
+
+/// Directory where user-uploaded attachments live (content-addressed by sha256).
+pub fn uploads_dir() -> PathBuf {
+    let p = PathBuf::from(data_dir()).join("uploads");
+    if let Err(e) = std::fs::create_dir_all(&p) {
+        tracing::warn!(error = %e, path = %p.display(), "failed to create uploads dir");
     }
     p
 }

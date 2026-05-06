@@ -1,0 +1,17 @@
+{% if title.is_some() || description.is_some() || image_url.is_some() %}
+<a href="{{ url }}" target="_blank" rel="noopener noreferrer"
+   class="mt-1 flex gap-3 max-w-md border border-slate-200 rounded p-2 hover:bg-slate-50">
+  {% if let Some(img) = image_url %}
+  <img src="{{ img }}" alt="" class="h-16 w-16 rounded object-cover flex-none">
+  {% endif %}
+  <div class="flex-1 min-w-0">
+    {% if let Some(t) = title %}
+    <div class="text-sm font-medium truncate">{{ t }}</div>
+    {% endif %}
+    {% if let Some(d) = description %}
+    <div class="text-xs text-slate-500 line-clamp-2">{{ d }}</div>
+    {% endif %}
+    <div class="text-xs text-slate-400 truncate">{{ url }}</div>
+  </div>
+</a>
+{% endif %}

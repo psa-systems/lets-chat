@@ -89,6 +89,9 @@ pub async fn get_dm(
         .into_iter()
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
+    let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -121,6 +124,7 @@ pub async fn get_dm(
         if show_unread_divider {
             unread_divider_placed = true;
         }
+        let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
         messages.push(MessageView {
             id: m.id,
             room_id: m.room_id,
@@ -142,6 +146,7 @@ pub async fn get_dm(
             show_unread_divider,
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
+            attachments,
         });
     }
 

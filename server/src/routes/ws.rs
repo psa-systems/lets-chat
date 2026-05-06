@@ -429,6 +429,10 @@ async fn render_new_message(
         Some(m) => (m.display_name, m.avatar_ext, m.status, m.custom_status),
         None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None),
     };
+    let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -450,6 +454,7 @@ async fn render_new_message(
         show_unread_divider: false,
         reply_count: 0,
         parent_id: message.parent_id,
+        attachments,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -489,6 +494,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
     let reply_count = db::chat::count_replies(&state.chat, m.id).await.ok()?;
     let parent_id = m.parent_id;
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -510,6 +519,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         show_unread_divider: false,
         reply_count,
         parent_id,
+        attachments,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
@@ -529,6 +539,10 @@ async fn render_thread_reply(
     let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
         .await
         .ok()?;
+    let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -550,6 +564,7 @@ async fn render_thread_reply(
         show_unread_divider: false,
         reply_count: 0,
         parent_id: Some(parent_id),
+        attachments,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,

@@ -18,6 +18,12 @@ use crate::ws::events::ChatEvent;
 #[derive(Deserialize)]
 pub struct MessageForm {
     pub body: String,
+    /// Orphan upload id from a prior `POST /api/upload`. When present, the
+    /// row's `uploader_id` must equal the caller and `message_id` must still
+    /// be NULL; the handler links the upload to the new message before
+    /// broadcasting.
+    #[serde(default)]
+    pub file_id: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -71,6 +77,11 @@ pub async fn get_room(
         .into_iter()
         .collect();
 
+    // Bulk-load attachments for the page in a single query.
+    let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -85,6 +96,7 @@ pub async fn get_room(
         let can_edit = m.user_id == user.id;
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
+        let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
         let is_follow_up = db::chat::is_follow_up_of(
             prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
             (&m.user_id, &m.created_at),
@@ -116,6 +128,7 @@ pub async fn get_room(
             show_unread_divider,
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
+            attachments,
         });
     }
 
@@ -162,9 +175,10 @@ pub async fn post_message(
     Path(room_id): Path<i64>,
     axum::Form(form): axum::Form<MessageForm>,
 ) -> Result<Html, AppError> {
-    // Reject blank submissions outright.
     let body = form.body.trim();
-    if body.is_empty() {
+    // An attachment alone (no body) is a valid send (image-only messages);
+    // both empty body AND no attachment is rejected.
+    if body.is_empty() && form.file_id.is_none() {
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
 
@@ -188,7 +202,21 @@ pub async fn post_message(
         return Err(AppError::Forbidden);
     }
 
+    // Validate any claimed attachment BEFORE the message insert so a stolen
+    // file_id from another user can't slip a new message through.
+    if let Some(file_id) = form.file_id {
+        let (row, _) = db::uploads::get_upload(&state.chat, file_id)
+            .await?
+            .ok_or(AppError::BadRequest("unknown file_id".into()))?;
+        if row.uploader_id != user.id || row.message_id.is_some() {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     let new_id = db::chat::insert_message(&state.chat, room_id, &user.id, body).await?;
+    if let Some(file_id) = form.file_id {
+        db::uploads::link_upload_to_message(&state.chat, file_id, new_id).await?;
+    }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
 
     // Re-fetch the inserted row to pick up the server-assigned created_at.
@@ -276,6 +304,7 @@ pub async fn get_single_message(
         (m.user_id.as_str(), m.created_at.as_str()),
     );
     let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -297,6 +326,7 @@ pub async fn get_single_message(
         show_unread_divider: false,
         reply_count,
         parent_id: m.parent_id,
+        attachments,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -353,6 +383,7 @@ pub async fn patch_message(
         (m.user_id.as_str(), m.created_at.as_str()),
     );
     let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -374,6 +405,7 @@ pub async fn patch_message(
         show_unread_divider: false,
         reply_count,
         parent_id: m.parent_id,
+        attachments,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -413,6 +445,13 @@ pub async fn get_thread_panel(
     let raw_replies = db::chat::list_thread_replies(&state.chat, message_id).await?;
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let parent_meta = super::load_author_meta(&state, &parent.user_id, &user.id).await?;
+
+    // Bulk-load attachments for the parent and every reply in a single query.
+    let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
+    all_ids.push(parent.id);
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &all_ids).await?;
+
     let parent_view = MessageView {
         id: parent.id,
         room_id: parent.room_id,
@@ -434,6 +473,9 @@ pub async fn get_thread_panel(
         show_unread_divider: false,
         reply_count: 0,
         parent_id: None,
+        attachments: attachments_by_message
+            .remove(&parent.id)
+            .unwrap_or_default(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -445,6 +487,7 @@ pub async fn get_thread_panel(
             author_cache.insert(r.user_id.clone(), entry.clone());
             entry
         };
+        let attachments = attachments_by_message.remove(&r.id).unwrap_or_default();
         replies.push(MessageView {
             id: r.id,
             room_id: r.room_id,
@@ -466,6 +509,7 @@ pub async fn get_thread_panel(
             show_unread_divider: false,
             reply_count: 0,
             parent_id: r.parent_id,
+            attachments,
         });
     }
 
