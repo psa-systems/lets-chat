@@ -65,6 +65,11 @@ pub async fn get_room(
             });
     }
 
+    // Bulk-load attachments for the page in a single query.
+    let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -79,6 +84,7 @@ pub async fn get_room(
         let can_edit = m.user_id == user.id;
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
         let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
+        let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
         let is_follow_up = db::chat::is_follow_up_of(
             prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
             (&m.user_id, &m.created_at),
@@ -107,6 +113,7 @@ pub async fn get_room(
             seen_caption: None,
             is_follow_up,
             show_unread_divider,
+            attachments,
         });
     }
 
@@ -265,6 +272,7 @@ pub async fn get_single_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (m.user_id.as_str(), m.created_at.as_str()),
     );
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
@@ -283,6 +291,7 @@ pub async fn get_single_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        attachments,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -338,6 +347,7 @@ pub async fn patch_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (m.user_id.as_str(), m.created_at.as_str()),
     );
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
     let view = MessageView {
         id: m.id,
         user_id: m.user_id.clone(),
@@ -356,6 +366,7 @@ pub async fn patch_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        attachments,
     };
     let fragment = SingleMessageFragment {
         message: &view,

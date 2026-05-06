@@ -85,6 +85,9 @@ pub async fn get_dm(
     // Mirror routes/room.rs: load messages, resolve usernames, attach reactions.
     let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
+    let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -117,6 +120,7 @@ pub async fn get_dm(
         if show_unread_divider {
             unread_divider_placed = true;
         }
+        let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
         messages.push(MessageView {
             id: m.id,
             user_id: m.user_id.clone(),
@@ -135,6 +139,7 @@ pub async fn get_dm(
             seen_caption: None,
             is_follow_up,
             show_unread_divider,
+            attachments,
         });
     }
 
