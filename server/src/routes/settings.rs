@@ -151,7 +151,55 @@ pub async fn get_blocked_list(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    render_blocked_list(&state, &user, None, "").await
+}
+
+#[derive(Deserialize)]
+pub struct BlockByUsernameForm {
+    pub username: String,
+}
+
+/// POST /settings/blocked - block a user looked up by username. Lets the
+/// caller block users with private profiles, who would not appear in the
+/// public people-search results. Re-renders the page with an inline error
+/// when the username is blank, missing, or refers to the caller themselves.
+pub async fn post_block_by_username(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<BlockByUsernameForm>,
+) -> Result<Response, AppError> {
+    let raw = form.username.trim();
+    let trimmed = raw.strip_prefix('@').unwrap_or(raw);
+    if trimmed.is_empty() {
+        return render_blocked_list(&state, &user, Some("Enter a username."), "")
+            .await
+            .map(|h| h.into_response());
+    }
+    let target = match db::auth::find_user_by_username(&state.auth, trimmed).await? {
+        Some(t) => t,
+        None => {
+            let msg = format!("No user found with username @{trimmed}.");
+            return render_blocked_list(&state, &user, Some(&msg), trimmed)
+                .await
+                .map(|h| h.into_response());
+        }
+    };
+    if target.id == user.id {
+        return render_blocked_list(&state, &user, Some("You can't block yourself."), "")
+            .await
+            .map(|h| h.into_response());
+    }
+    db::auth::block_user(&state.auth, &user.id, &target.id).await?;
+    Ok(Redirect::to("/settings/blocked").into_response())
+}
+
+async fn render_blocked_list(
+    state: &AppState,
+    user: &crate::models::User,
+    error: Option<&str>,
+    form_username: &str,
+) -> Result<Html, AppError> {
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(state, user, None).await?;
     let records = db::auth::list_blocked_users(&state.auth, &user.id).await?;
     let blocked: Vec<BlockedUserView> = records
         .into_iter()
@@ -163,12 +211,14 @@ pub async fn get_blocked_list(
         })
         .collect();
     let page = BlockedListPage {
-        user: &user,
+        user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
         blocked: &blocked,
+        error,
+        form_username,
     };
     html(&page)
 }
