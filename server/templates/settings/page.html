@@ -74,6 +74,14 @@
         <span class="block text-xs text-slate-500">When off, your profile is hidden from people search and others cannot start a new DM with you.</span>
       </span>
     </label>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
+      <span>Show browser notifications when I am @mentioned or DM'd</span>
+    </label>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
+      <span>Play a sound on new mentions and DMs</span>
+    </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 
