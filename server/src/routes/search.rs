@@ -9,6 +9,12 @@ use crate::state::AppState;
 use crate::views::search::{ResultsFragment, SearchResult};
 use crate::views::{html, Html};
 
+/// Empty popover body. The sidebar's results container uses `empty:hidden`,
+/// so an empty body collapses the popover entirely.
+fn empty_popover() -> Html {
+    Html(String::new())
+}
+
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
@@ -17,11 +23,9 @@ pub struct SearchQuery {
 
 /// GET /search?q=... - full-text search over messages the caller can read.
 ///
-/// The response is a fragment (no surrounding layout). The sidebar input uses
-/// `hx-target="#main"` with `hx-swap="innerHTML"`, so the body of #main is
-/// replaced by this template. A direct browser hit (no HX-Request header)
-/// receives the same partial - a minor cosmetic trade-off accepted by the
-/// plan because users always reach search through the sidebar.
+/// The response is a popover fragment rendered into the sidebar's
+/// `#search-msg-results` target. An empty (or post-sanitisation empty) query
+/// returns an empty body so the popover collapses via `empty:hidden`.
 pub async fn get_search(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -30,28 +34,13 @@ pub async fn get_search(
     let query = q.unwrap_or_default();
     let trimmed = query.trim();
 
-    // Empty query -> empty results (no DB call). The header still shows the
-    // (empty) query string so the UI feels consistent.
     if trimmed.is_empty() {
-        let fragment = ResultsFragment {
-            query: trimmed,
-            results: &[],
-        };
-        return html(&fragment);
+        return Ok(empty_popover());
     }
 
-    // Sanitise the user's input into an FTS5-safe MATCH expression. If the
-    // input collapses to nothing after stripping FTS operators, treat it as
-    // an empty search.
     let fts_query = match db::chat::sanitize_fts_query(trimmed) {
         Some(q) => q,
-        None => {
-            let fragment = ResultsFragment {
-                query: trimmed,
-                results: &[],
-            };
-            return html(&fragment);
-        }
+        None => return Ok(empty_popover()),
     };
 
     let is_admin = user.role == "admin";
