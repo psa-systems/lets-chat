@@ -209,6 +209,7 @@ pub async fn post_message(
         message,
         is_dm: room.room_type == "dm",
     };
+    state.hub.stop_typing(room_id, &user.id);
     super::broadcast_room_message(&state, &room, &event).await?;
 
     let fragment = ComposerFragment { room: &room };

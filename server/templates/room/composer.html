@@ -2,7 +2,7 @@
   id="composer"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
-  hx-on::before-request="this.querySelector('input[name=body]').value = ''"
+  hx-on::before-request="this.querySelector('input[name=body]').value = ''; window.__lcLastTyping = 0"
   hx-on::after-request="this.querySelector('input[name=body]').focus()"
   class="border-t border-slate-200 p-2"
 >
@@ -12,5 +12,13 @@
     autofocus
     placeholder="Message #{{ room.name }}"
     class="w-full border rounded px-3 py-2"
+    oninput="(function(){
+      var ws = window.__lcWS;
+      if (!ws) return;
+      var now = Date.now();
+      if (now - (window.__lcLastTyping || 0) < 2500) return;
+      window.__lcLastTyping = now;
+      ws.send(JSON.stringify({ type: 'typing', room_id: {{ room.id }} }));
+    })()"
   >
 </form>
