@@ -30,7 +30,7 @@ pub async fn find_user_by_username(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -49,7 +49,7 @@ pub async fn find_user_by_id(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -80,6 +80,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         status: r.get("status"),
         custom_status: r.get("custom_status"),
         last_active_at: r.get("last_active_at"),
+        is_profile_public: r.get("is_profile_public"),
     }
 }
 
@@ -245,7 +246,7 @@ pub async fn get_user_by_session(
          u.is_banned, u.ban_reason, u.banned_until, \
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
-         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at \
+         u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -279,7 +280,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -498,12 +499,14 @@ pub async fn set_read_receipts_enabled(
 }
 
 /// Case-insensitive substring match on username and display_name. Excludes
-/// banned users. Results sorted by username, capped at `limit`. SQL LIKE
-/// wildcards (`%`, `_`) inside the input are escaped so callers cannot use
-/// them to broaden the match.
+/// banned users and private profiles (except the viewer themselves). Results
+/// sorted by username, capped at `limit`. SQL LIKE wildcards (`%`, `_`)
+/// inside the input are escaped so callers cannot use them to broaden the
+/// match.
 pub async fn search_users(
     pool: &SqlitePool,
     q: &str,
+    viewer_id: &str,
     limit: i64,
 ) -> Result<Vec<UserRecord>, sqlx::Error> {
     let escaped = q
@@ -516,14 +519,16 @@ pub async fn search_users(
          is_banned, ban_reason, banned_until, \
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
-         bio, avatar_ext, status, custom_status, last_active_at \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public \
          FROM users \
          WHERE is_banned = 0 \
+           AND (is_profile_public = 1 OR id = ?) \
            AND (username LIKE ? ESCAPE '\\' COLLATE NOCASE \
              OR display_name LIKE ? ESCAPE '\\' COLLATE NOCASE) \
          ORDER BY username COLLATE NOCASE \
          LIMIT ?",
     )
+    .bind(viewer_id)
     .bind(&pattern)
     .bind(&pattern)
     .bind(limit)
@@ -531,4 +536,19 @@ pub async fn search_users(
     .await?;
 
     Ok(rows.into_iter().map(row_to_user_record).collect())
+}
+
+pub async fn set_profile_public(
+    pool: &SqlitePool,
+    user_id: &str,
+    is_public: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET is_profile_public = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(is_public as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

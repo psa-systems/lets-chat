@@ -24,6 +24,11 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         .execute(&auth_pool)
         .await
         .expect("auth migration 4");
+    let auth_m5 = include_str!("../migrations/auth/0005_profile_visibility.sql");
+    sqlx::raw_sql(auth_m5)
+        .execute(&auth_pool)
+        .await
+        .expect("auth migration 5");
 
     let chat_pool = SqlitePool::connect("sqlite::memory:")
         .await

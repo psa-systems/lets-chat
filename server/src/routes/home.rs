@@ -41,6 +41,7 @@ pub async fn get_home(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        flash_error: None,
     };
     let body = html(&page)?;
     Ok(body.into_response())
