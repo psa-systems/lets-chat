@@ -24,7 +24,10 @@
       "Bash(just check-server *)",
       "Bash(just check-fmt *)",
       "Bash(just fmt *)",
-      "Bash(grep -rn *)"
+      "Bash(grep -rn *)",
+      "Bash(awk '{sum+=$4} END {print \"Total tests passing:\", sum}')",
+      "Bash(docker volume *)",
+      "Bash(docker exec *)"
     ]
   }
 }

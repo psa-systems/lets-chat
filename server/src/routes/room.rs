@@ -21,9 +21,21 @@ pub struct MessageForm {
     /// Orphan upload id from a prior `POST /api/upload`. When present, the
     /// row's `uploader_id` must equal the caller and `message_id` must still
     /// be NULL; the handler links the upload to the new message before
-    /// broadcasting.
-    #[serde(default)]
+    /// broadcasting. The composer always submits this field (even empty), so
+    /// the deserializer maps `""` -> None to keep blank sends working.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub file_id: Option<i64>,
+}
+
+fn empty_string_as_none<'de, D>(de: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(de)?;
+    match opt.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => s.parse::<i64>().map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 #[derive(Deserialize)]
