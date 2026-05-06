@@ -8,6 +8,7 @@ pub struct SidebarRoom {
     pub id: i64,
     pub name: String,
     pub unread: i64,
+    pub active: bool,
 }
 
 /// One row in the sidebar's "Direct messages" section. Carries the unread
@@ -21,6 +22,7 @@ pub struct SidebarPeer {
     pub unread: i64,
     pub status: String,
     pub custom_status: Option<String>,
+    pub active: bool,
 }
 
 impl SidebarPeer {

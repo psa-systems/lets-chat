@@ -143,6 +143,7 @@ pub(crate) async fn load_sidebar(
                 unread: *room_unreads.get(&r.id).unwrap_or(&0),
                 id: r.id,
                 name: r.name,
+                active: false,
             })
             .collect();
         (sidebar_rooms, Vec::new())
@@ -165,6 +166,7 @@ pub(crate) async fn load_sidebar(
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
                     status: effective,
                     custom_status: record.custom_status.clone(),
+                    active: false,
                 });
             }
         }

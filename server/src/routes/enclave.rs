@@ -43,14 +43,39 @@ fn flash_name_param(name: &str) -> String {
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
-use crate::models::enclave::EnclaveRole;
+use crate::models::enclave::{EnclaveMembership, EnclaveRole};
 use crate::models::User;
 use crate::perms::enclave_can_manage;
 use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
 use crate::state::AppState;
-use crate::views::enclave::{DiscoverPage, EnclavePage, EnclaveSettingsPage};
+use crate::views::enclave::{DiscoverPage, EnclaveMemberView, EnclavePage, EnclaveSettingsPage};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
+
+/// Resolve each membership row to an `EnclaveMemberView` carrying a
+/// human-readable label (display_name when set, otherwise `@username`,
+/// otherwise the raw user_id as a last resort).
+async fn resolve_member_views(
+    state: &AppState,
+    members: Vec<EnclaveMembership>,
+) -> Result<Vec<EnclaveMemberView>, AppError> {
+    let mut out = Vec::with_capacity(members.len());
+    for m in members {
+        let label = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
+            Some(rec) => match rec.display_name.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => format!("@{}", rec.username),
+            },
+            None => m.user_id.clone(),
+        };
+        out.push(EnclaveMemberView {
+            user_id: m.user_id,
+            label,
+            role: m.role,
+        });
+    }
+    Ok(out)
+}
 
 async fn broadcast_to_enclave(state: &AppState, enclave_id: i64, event: &ChatEvent) {
     if let Ok(members) = db::enclave::list_members(&state.chat, enclave_id).await {
@@ -166,13 +191,14 @@ pub async fn get_landing(
     }
     let can_manage = enclave_can_manage(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
+    let member_views = resolve_member_views(&state, members).await?;
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
     let (sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclavePage {
         user: &user,
         enclave: &enclave,
-        members: &members,
+        members: &member_views,
         rooms: &rooms,
         can_manage,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
@@ -403,12 +429,13 @@ pub async fn get_settings(
     }
     let can_delete = enclave_can_delete(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
+    let member_views = resolve_member_views(&state, members).await?;
     let (sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
-        members: &members,
+        members: &member_views,
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_rooms: &sidebar_rooms,
