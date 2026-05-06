@@ -44,8 +44,7 @@ pub async fn get_unfurl(
     AuthUser(_user): AuthUser,
     Query(params): Query<UnfurlParams>,
 ) -> Result<Response, AppError> {
-    let parsed = Url::parse(&params.url)
-        .map_err(|_| AppError::BadRequest("invalid URL".into()))?;
+    let parsed = Url::parse(&params.url).map_err(|_| AppError::BadRequest("invalid URL".into()))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Ok(empty_preview());
     }
@@ -206,8 +205,13 @@ fn parse_meta(html_str: &str) -> PageMeta {
 fn is_globally_routable(addr: IpAddr) -> bool {
     match addr {
         IpAddr::V4(v4) => {
-            if v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_broadcast()
-                || v4.is_documentation() || v4.is_unspecified() || v4.is_multicast()
+            if v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
+                || v4.is_multicast()
             {
                 return false;
             }

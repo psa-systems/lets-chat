@@ -95,10 +95,8 @@ fn multipart_body(field: &str, filename: &str, bytes: &[u8]) -> (String, Vec<u8>
     let mut body: Vec<u8> = Vec::new();
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(
-        format!(
-            "Content-Disposition: form-data; name=\"{field}\"; filename=\"{filename}\"\r\n"
-        )
-        .as_bytes(),
+        format!("Content-Disposition: form-data; name=\"{field}\"; filename=\"{filename}\"\r\n")
+            .as_bytes(),
     );
     body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
     body.extend_from_slice(bytes);
@@ -107,7 +105,12 @@ fn multipart_body(field: &str, filename: &str, bytes: &[u8]) -> (String, Vec<u8>
     (ctype, body)
 }
 
-async fn post_upload(app: Router, session: &str, filename: &str, bytes: &[u8]) -> (StatusCode, String) {
+async fn post_upload(
+    app: Router,
+    session: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> (StatusCode, String) {
     let (ctype, body) = multipart_body("file", filename, bytes);
     let req = Request::builder()
         .method(Method::POST)
@@ -295,7 +298,11 @@ async fn send_message_with_attachment_renders_inline_image() {
         .body(Body::from(form_body))
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "send message returned non-200");
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "send message returned non-200"
+    );
 
     // Re-render the room and assert the image partial is in the HTML.
     let req = Request::builder()

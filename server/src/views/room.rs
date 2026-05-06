@@ -44,9 +44,7 @@ impl MessageView {
     /// True when the message has no body text and exactly one image
     /// attachment. The template renders this as an unbubbled image (LC-3).
     pub fn is_image_only(&self) -> bool {
-        self.body.trim().is_empty()
-            && self.attachments.len() == 1
-            && self.attachments[0].is_image()
+        self.body.trim().is_empty() && self.attachments.len() == 1 && self.attachments[0].is_image()
     }
 
     /// HTML-escape the body, then wrap any detected URLs in `<a>` tags. The

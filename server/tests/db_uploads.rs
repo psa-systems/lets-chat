@@ -62,16 +62,10 @@ async fn link_upload_to_message_promotes_orphan() {
         .await
         .unwrap();
 
-    let upload_id = lets_chat::db::uploads::insert_upload(
-        &pool,
-        "user-a",
-        "p.png",
-        "image/png",
-        9,
-        "abc.png",
-    )
-    .await
-    .unwrap();
+    let upload_id =
+        lets_chat::db::uploads::insert_upload(&pool, "user-a", "p.png", "image/png", 9, "abc.png")
+            .await
+            .unwrap();
     lets_chat::db::uploads::link_upload_to_message(&pool, upload_id, mid)
         .await
         .unwrap();
