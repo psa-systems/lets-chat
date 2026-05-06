@@ -13,12 +13,26 @@
     or sending DMs to you, and hides their messages from you.
   </p>
 
-  <form method="post" action="/settings/blocked" class="max-w-xl space-y-2">
+  <form method="post" action="/settings/blocked" class="max-w-xl space-y-2" autocomplete="off">
     <label class="block text-sm">
       <span class="text-slate-600">Block by username</span>
       <span class="block text-xs text-slate-500">Enter the exact username, including for users with private profiles.</span>
       <div class="flex gap-2 mt-1">
-        <input type="text" name="username" value="{{ form_username }}" placeholder="username" class="block flex-1 border rounded px-2 py-1" required>
+        <div class="relative flex-1">
+          <input
+            type="text"
+            id="block-username"
+            name="username"
+            value="{{ form_username }}"
+            placeholder="username"
+            class="block w-full border rounded px-2 py-1"
+            required
+            hx-get="/users/search"
+            hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+            hx-target="#block-search-results"
+            hx-swap="innerHTML">
+          <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+        </div>
         <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">Block</button>
       </div>
     </label>
@@ -26,6 +40,26 @@
     <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ msg }}</div>
     {% endif %}
   </form>
+  <script>
+    (function() {
+      var popover = document.getElementById('block-search-results');
+      var input = document.getElementById('block-username');
+      if (!popover || !input) return;
+      popover.addEventListener('click', function(e) {
+        var link = e.target.closest('a[data-username]');
+        if (!link) return;
+        e.preventDefault();
+        input.value = link.getAttribute('data-username');
+        popover.innerHTML = '';
+        input.focus();
+      });
+      document.addEventListener('click', function(e) {
+        if (e.target === input) return;
+        if (popover.contains(e.target)) return;
+        popover.innerHTML = '';
+      });
+    })();
+  </script>
 
   {% if blocked.is_empty() %}
   <p class="text-slate-500">You haven't blocked anyone.</p>
