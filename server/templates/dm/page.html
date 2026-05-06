@@ -13,11 +13,15 @@
       {% let avatar_custom_status = peer.custom_status.clone() %}
       {% let avatar_size = "h-8 w-8 text-sm" %}
       {% include "partials/avatar.html" %}
-      <div>
+      <div class="flex-1">
         <h1 class="font-semibold">{{ peer.display_label() }}</h1>
         <div class="text-xs text-slate-500">@{{ peer.username }}</div>
         <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
       </div>
+      <form method="post" action="/users/{{ peer.id }}/block" onsubmit="return confirm('Block @{{ peer.username }}? They won\'t be able to message you and you won\'t see their messages.');">
+        <input type="hidden" name="return_to" value="/">
+        <button type="submit" class="text-xs text-slate-500 hover:text-red-600 hover:underline">Block</button>
+      </form>
     </header>
     {% include "room/messages.html" %}
     <div id="typing" class="px-4 text-xs text-slate-500"></div>

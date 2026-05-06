@@ -6,7 +6,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::settings::UserSettingsPage;
+use crate::views::settings::{BlockedListPage, BlockedUserView, UserSettingsPage};
 use crate::views::{html, Html};
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
@@ -145,6 +145,95 @@ pub async fn post_profile(
     }
 
     Ok(Redirect::to("/settings").into_response())
+}
+
+pub async fn get_blocked_list(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Html, AppError> {
+    render_blocked_list(&state, &user, None, "").await
+}
+
+#[derive(Deserialize)]
+pub struct BlockByUsernameForm {
+    pub username: String,
+}
+
+/// POST /settings/blocked - block a user looked up by username. Lets the
+/// caller block users with private profiles, who would not appear in the
+/// public people-search results. Re-renders the page with an inline error
+/// when the username is blank, missing, or refers to the caller themselves.
+pub async fn post_block_by_username(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<BlockByUsernameForm>,
+) -> Result<Response, AppError> {
+    let raw = form.username.trim();
+    let trimmed = raw.strip_prefix('@').unwrap_or(raw);
+    if trimmed.is_empty() {
+        return render_blocked_list(&state, &user, Some("Enter a username."), "")
+            .await
+            .map(|h| h.into_response());
+    }
+    let target = db::auth::find_user_by_username(&state.auth, trimmed).await?;
+    let unknown_msg = format!("No user found with username @{trimmed}.");
+    let Some(target) = target else {
+        return render_blocked_list(&state, &user, Some(&unknown_msg), trimmed)
+            .await
+            .map(|h| h.into_response());
+    };
+    if target.id == user.id {
+        return render_blocked_list(&state, &user, Some("You can't block yourself."), "")
+            .await
+            .map(|h| h.into_response());
+    }
+    // Privacy gate: only allow blocking by username when the target shares an
+    // enclave with the caller. Public profiles bypass this check because
+    // they're already discoverable through people-search. Without this gate,
+    // the username form leaks the existence of every account regardless of
+    // its privacy setting and lets an abuser pre-emptively block a private
+    // user purely from a guessed username. The error message intentionally
+    // matches the "user not found" branch so the response cannot
+    // distinguish the two cases.
+    if !target.is_profile_public
+        && !db::enclave::users_share_enclave(&state.chat, &user.id, &target.id).await?
+    {
+        return render_blocked_list(&state, &user, Some(&unknown_msg), trimmed)
+            .await
+            .map(|h| h.into_response());
+    }
+    db::auth::block_user(&state.auth, &user.id, &target.id).await?;
+    Ok(Redirect::to("/settings/blocked").into_response())
+}
+
+async fn render_blocked_list(
+    state: &AppState,
+    user: &crate::models::User,
+    error: Option<&str>,
+    form_username: &str,
+) -> Result<Html, AppError> {
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(state, user, None).await?;
+    let records = db::auth::list_blocked_users(&state.auth, &user.id).await?;
+    let blocked: Vec<BlockedUserView> = records
+        .into_iter()
+        .map(|r| BlockedUserView {
+            id: r.id,
+            username: r.username,
+            display_name: r.display_name,
+            avatar_ext: r.avatar_ext,
+        })
+        .collect();
+    let page = BlockedListPage {
+        user,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        blocked: &blocked,
+        error,
+        form_username,
+    };
+    html(&page)
 }
 
 pub async fn post_avatar_delete(

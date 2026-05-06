@@ -66,7 +66,8 @@ pub async fn get_search(
         }
     }
     let home_scope = enclave_id.is_none();
-    let rows = db::chat::search_messages(
+    let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let rows: Vec<_> = db::chat::search_messages(
         &state.chat,
         &fts_query,
         None,
@@ -75,7 +76,10 @@ pub async fn get_search(
         &user.id,
         is_admin,
     )
-    .await?;
+    .await?
+    .into_iter()
+    .filter(|r| !blocked_authors.contains(&r.user_id))
+    .collect();
 
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
     // search excludes DMs entirely, so this map is only consulted for non-

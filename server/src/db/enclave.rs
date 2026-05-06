@@ -438,6 +438,22 @@ pub async fn list_members(
     Ok(out)
 }
 
+/// True when `a` and `b` share at least one enclave. Used to gate
+/// username-based block lookups so a caller cannot probe for the existence
+/// of arbitrary private accounts.
+pub async fn users_share_enclave(pool: &SqlitePool, a: &str, b: &str) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT 1 FROM enclave_members m1 \
+         JOIN enclave_members m2 ON m2.enclave_id = m1.enclave_id \
+         WHERE m1.user_id = ? AND m2.user_id = ? LIMIT 1",
+    )
+    .bind(a)
+    .bind(b)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
 pub async fn get_membership(
     pool: &SqlitePool,
     enclave_id: i64,
