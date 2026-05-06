@@ -8,8 +8,8 @@
         : status === 'idle' ? 'bg-yellow-400'
         : status === 'offline' ? 'bg-slate-400'
         : 'bg-green-500';
-      var dots = document.querySelectorAll('[data-user-status="' + uid.replace(/"/g, '\\"') + '"]');
-      dots.forEach(function(dot){
+      var safeUid = uid.replace(/"/g, '\\"');
+      document.querySelectorAll('[data-user-status="' + safeUid + '"]').forEach(function(dot){
         dot.classList.remove('bg-red-500','bg-yellow-400','bg-slate-400','bg-green-500');
         dot.classList.add(colorClass);
         var wrapper = dot.parentElement;
@@ -17,6 +17,9 @@
           if (custom) { wrapper.setAttribute('title', custom); }
           else { wrapper.removeAttribute('title'); }
         }
+      });
+      document.querySelectorAll('[data-user-custom="' + safeUid + '"]').forEach(function(slot){
+        slot.textContent = custom || '';
       });
     })();
   </script>

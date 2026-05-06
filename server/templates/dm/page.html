@@ -14,6 +14,7 @@
   <div>
     <h1 class="font-semibold">{{ peer.display_label() }}</h1>
     <div class="text-xs text-slate-500">@{{ peer.username }}</div>
+    <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
   </div>
 </header>
 {% include "room/messages.html" %}
