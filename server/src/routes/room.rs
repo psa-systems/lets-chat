@@ -67,7 +67,15 @@ pub async fn get_room(
 
     // Load messages, then resolve each author's username from the auth DB.
     // Cache lookups by user_id to avoid duplicate queries for the same author.
-    let raw_messages = db::chat::list_messages(&state.chat, room_id).await?;
+    // Filter out messages authored by anyone the viewer has blocked (or who
+    // has blocked the viewer) so the room hides them everywhere, not just in
+    // DMs.
+    let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let raw_messages: Vec<_> = db::chat::list_messages(&state.chat, room_id)
+        .await?
+        .into_iter()
+        .filter(|m| !blocked_authors.contains(&m.user_id))
+        .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
 
     // Reactions for every message in the room, in a single query. Group them
@@ -310,6 +318,9 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    if db::auth::is_blocked_either_way(&state.auth, &user.id, &m.user_id).await? {
+        return Err(AppError::NotFound);
+    }
     let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
     let can_edit = m.user_id == user.id;
     let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
@@ -468,7 +479,15 @@ pub async fn get_thread_panel(
         ));
     }
 
-    let raw_replies = db::chat::list_thread_replies(&state.chat, message_id).await?;
+    let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    if blocked_authors.contains(&parent.user_id) {
+        return Err(AppError::NotFound);
+    }
+    let raw_replies: Vec<_> = db::chat::list_thread_replies(&state.chat, message_id)
+        .await?
+        .into_iter()
+        .filter(|r| !blocked_authors.contains(&r.user_id))
+        .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let parent_meta = super::load_author_meta(&state, &parent.user_id, &user.id).await?;
 

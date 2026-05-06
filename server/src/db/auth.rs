@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use sqlx::{Row, SqlitePool};
 
 use crate::models::invite::InviteCode;
@@ -626,6 +628,27 @@ pub async fn is_blocked_either_way(
     .fetch_optional(pool)
     .await?;
     Ok(row.is_some())
+}
+
+/// All user IDs that the viewer has blocked OR that have blocked the viewer.
+/// Used by message renderers to hide content authored by anyone in this set.
+pub async fn list_blocked_ids_either_way(
+    pool: &SqlitePool,
+    viewer_id: &str,
+) -> Result<HashSet<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT blocked_id AS other_id FROM user_blocks WHERE blocker_id = ? \
+         UNION \
+         SELECT blocker_id AS other_id FROM user_blocks WHERE blocked_id = ?",
+    )
+    .bind(viewer_id)
+    .bind(viewer_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| r.get::<String, _>("other_id"))
+        .collect())
 }
 
 /// All users `blocker_id` has blocked, ordered by username.
