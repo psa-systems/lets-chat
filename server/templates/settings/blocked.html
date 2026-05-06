@@ -28,9 +28,11 @@
             class="block w-full border rounded px-2 py-1"
             required
             hx-get="/users/search"
-            hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+            hx-trigger="input changed delay:200ms"
             hx-target="#block-search-results"
-            hx-swap="innerHTML">
+            hx-swap="innerHTML"
+            hx-params="none"
+            hx-vals='js:{q: document.getElementById("block-username").value}'>
           <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
         </div>
         <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">Block</button>
