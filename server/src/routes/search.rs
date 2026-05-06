@@ -65,13 +65,13 @@ pub async fn get_search(
             return Err(AppError::Forbidden);
         }
     }
-    let home_dm_only = enclave_id.is_none();
+    let home_scope = enclave_id.is_none();
     let rows = db::chat::search_messages(
         &state.chat,
         &fts_query,
         None,
         enclave_id,
-        home_dm_only,
+        home_scope,
         &user.id,
         is_admin,
     )
