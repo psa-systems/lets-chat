@@ -363,7 +363,7 @@ On receiving `ChatEvent::NewMessage`, call `mark_room_read` only if the user is 
 
 ---
 
-## Phase 13 — File & Image Uploads
+## Phase 13 — File & Image Uploads (done)
 
 **Goal:** Attach files and images to messages. Saved last — only phase with significant infrastructure risk due to the storage backend decision.
 
