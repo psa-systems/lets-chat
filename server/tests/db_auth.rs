@@ -160,3 +160,95 @@ async fn test_expired_session_returns_none() {
         .unwrap();
     assert!(session_user.is_none());
 }
+
+#[tokio::test]
+async fn test_search_users_matches_username_substring_case_insensitive() {
+    let pool = setup_pool().await;
+    lets_chat::db::auth::create_user(&pool, "Alice", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::create_user(&pool, "bob", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::create_user(&pool, "carol", "h")
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", 50)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].username, "Alice");
+}
+
+#[tokio::test]
+async fn test_search_users_matches_display_name() {
+    let pool = setup_pool().await;
+    let id = lets_chat::db::auth::create_user(&pool, "u1", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::update_user_profile(&pool, &id, Some("Jane Doe"), None)
+        .await
+        .unwrap();
+    lets_chat::db::auth::create_user(&pool, "other", "h")
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "jane", 50)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, id);
+}
+
+#[tokio::test]
+async fn test_search_users_excludes_banned() {
+    let pool = setup_pool().await;
+    let id = lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::ban_user(&pool, &id, Some("spam"))
+        .await
+        .unwrap();
+
+    let hits = lets_chat::db::auth::search_users(&pool, "ali", 50)
+        .await
+        .unwrap();
+    assert!(hits.is_empty());
+}
+
+#[tokio::test]
+async fn test_search_users_escapes_like_wildcards() {
+    let pool = setup_pool().await;
+    lets_chat::db::auth::create_user(&pool, "alice", "h")
+        .await
+        .unwrap();
+    lets_chat::db::auth::create_user(&pool, "bob", "h")
+        .await
+        .unwrap();
+
+    // `%` would match every row if not escaped; with escaping it matches nothing.
+    let hits = lets_chat::db::auth::search_users(&pool, "%", 50)
+        .await
+        .unwrap();
+    assert!(hits.is_empty());
+
+    let hits = lets_chat::db::auth::search_users(&pool, "_", 50)
+        .await
+        .unwrap();
+    assert!(hits.is_empty());
+}
+
+#[tokio::test]
+async fn test_search_users_respects_limit() {
+    let pool = setup_pool().await;
+    for n in 0..5 {
+        lets_chat::db::auth::create_user(&pool, &format!("user{n}"), "h")
+            .await
+            .unwrap();
+    }
+    let hits = lets_chat::db::auth::search_users(&pool, "user", 3)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 3);
+}
