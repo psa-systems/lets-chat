@@ -28,6 +28,7 @@ pub struct LoginForm {
 pub struct RegisterForm {
     pub username: String,
     pub password: String,
+    pub password_confirm: String,
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
@@ -128,6 +129,14 @@ pub async fn post_register(
             &headers,
             FormPage::Register,
             "Password must be at least 8 characters",
+        ));
+    }
+    if password != form.password_confirm.as_str() {
+        return Ok(form_error(
+            &state,
+            &headers,
+            FormPage::Register,
+            "Passwords do not match",
         ));
     }
 
