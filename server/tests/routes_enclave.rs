@@ -17,6 +17,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0005_profile_visibility.sql"),
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
+            include_str!("../migrations/auth/0008_two_factor.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -56,7 +57,7 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
     let user_id = db::auth::create_user(&auth, username, "hash")
         .await
         .unwrap();
-    sqlx::query("UPDATE users SET role=? WHERE id=?")
+    sqlx::query("UPDATE users SET role=?, totp_enabled=1 WHERE id=?")
         .bind(role)
         .bind(&user_id)
         .execute(&auth)
@@ -73,6 +74,7 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -86,7 +88,7 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
 
     let id1 = db::auth::create_user(&auth, "alice", "h1").await.unwrap();
     let id2 = db::auth::create_user(&auth, "bob", "h2").await.unwrap();
-    sqlx::query("UPDATE users SET role='user' WHERE id IN (?, ?)")
+    sqlx::query("UPDATE users SET role='user', totp_enabled=1 WHERE id IN (?, ?)")
         .bind(&id1)
         .bind(&id2)
         .execute(&auth)
@@ -116,6 +118,7 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
     (app, s1, id1, s2, id2)

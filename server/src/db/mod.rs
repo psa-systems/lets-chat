@@ -4,6 +4,7 @@ pub mod enclave;
 pub mod mentions;
 pub mod moderation;
 pub mod settings;
+pub mod two_factor;
 pub mod uploads;
 
 use sqlx::SqlitePool;

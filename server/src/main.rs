@@ -17,6 +17,7 @@ async fn main() {
         settings: db::open_settings_pool().await,
         hub: std::sync::Arc::new(Hub::new()),
         asset_version: compute_asset_version(),
+        secret_key: lets_chat::crypto::load_secret_key_from_env().map(std::sync::Arc::new),
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

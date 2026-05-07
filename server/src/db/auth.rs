@@ -33,7 +33,8 @@ pub async fn find_user_by_username(
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
-         notify_browser_enabled, notify_sound_enabled \
+         notify_browser_enabled, notify_sound_enabled, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -53,7 +54,8 @@ pub async fn find_user_by_id(
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
-         notify_browser_enabled, notify_sound_enabled \
+         notify_browser_enabled, notify_sound_enabled, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -87,6 +89,10 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         is_profile_public: r.get("is_profile_public"),
         notify_browser_enabled: r.get::<i64, _>("notify_browser_enabled") != 0,
         notify_sound_enabled: r.get::<i64, _>("notify_sound_enabled") != 0,
+        totp_secret_encrypted: r.get("totp_secret_encrypted"),
+        totp_nonce: r.get("totp_nonce"),
+        totp_enabled: r.get("totp_enabled"),
+        totp_recovery_hashes: r.get("totp_recovery_hashes"),
     }
 }
 
@@ -253,7 +259,8 @@ pub async fn get_user_by_session(
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
-         u.notify_browser_enabled, u.notify_sound_enabled \
+         u.notify_browser_enabled, u.notify_sound_enabled, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -288,7 +295,8 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
-         notify_browser_enabled, notify_sound_enabled \
+         notify_browser_enabled, notify_sound_enabled, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -559,7 +567,8 @@ pub async fn search_users(
          is_muted, muted_until, mute_reason, \
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
-         notify_browser_enabled, notify_sound_enabled \
+         notify_browser_enabled, notify_sound_enabled, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
@@ -700,7 +709,8 @@ pub async fn list_blocked_users(
          u.is_muted, u.muted_until, u.mute_reason, \
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
-         u.notify_browser_enabled, u.notify_sound_enabled \
+         u.notify_browser_enabled, u.notify_sound_enabled, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
          WHERE b.blocker_id = ? \
