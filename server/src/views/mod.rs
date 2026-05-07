@@ -9,6 +9,7 @@ pub mod not_found;
 pub mod room;
 pub mod search;
 pub mod settings;
+pub mod two_factor;
 pub mod users;
 pub mod ws_fragments;
 

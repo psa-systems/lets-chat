@@ -47,6 +47,37 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     }
 }
 
+/// Middleware: redirect any authenticated user without 2FA enabled to the
+/// enrollment page, with carve-outs for the auth flow itself, the enrollment
+/// page, and static assets so the user can actually complete setup. No-op
+/// when the deployment has no `LETS_CHAT_SECRET_KEY` configured, which
+/// disables 2FA entirely.
+pub async fn enforce_2fa_enrollment(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    if !state.two_factor_available() {
+        return next.run(req).await;
+    }
+    let path = req.uri().path();
+    let exempt = path == "/logout"
+        || path == "/login"
+        || path.starts_with("/login/")
+        || path == "/register"
+        || path == "/settings/2fa/setup"
+        || path.starts_with("/assets/")
+        || path.starts_with("/avatars/");
+    if !exempt {
+        if let Some(u) = req.extensions().get::<User>() {
+            if !u.totp_enabled {
+                return Redirect::to("/settings/2fa/setup").into_response();
+            }
+        }
+    }
+    next.run(req).await
+}
+
 /// Extractor for routes that may render either a public or authed page.
 pub struct OptionalUser(pub Option<User>);
 

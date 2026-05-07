@@ -15,6 +15,7 @@ services:
     environment:
       RUST_LOG: lets_chat=debug
       LETS_CHAT_DATA_DIR: /data
+      LETS_CHAT_SECRET_KEY: sghsgG8vVnvr9gddWwrL03
       BIND_ADDR: 0.0.0.0:8080
     volumes:
       - lets-chat-data:/data
