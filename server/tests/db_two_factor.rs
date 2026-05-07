@@ -167,6 +167,8 @@ async fn qr_secret_matches_displayed_secret() {
         "QR-embedded secret must match the manual-entry string"
     );
 
-    let manual_via_lib = totp_rs::Secret::Encoded(displayed.clone()).to_bytes().unwrap();
+    let manual_via_lib = totp_rs::Secret::Encoded(displayed.clone())
+        .to_bytes()
+        .unwrap();
     assert_eq!(manual_via_lib, raw, "round-trip back to the original bytes");
 }
