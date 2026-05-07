@@ -29,6 +29,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0005_profile_visibility.sql"),
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
+            include_str!("../migrations/auth/0008_two_factor.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -79,8 +80,13 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
     let settings = open_pool("settings").await;
     let viewer_id = db::auth::create_user(&auth, viewer, "hash").await.unwrap();
     let peer_id = db::auth::create_user(&auth, peer, "hash").await.unwrap();
-    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+    sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
         .bind(&viewer_id)
+        .execute(&auth)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
+        .bind(&peer_id)
         .execute(&auth)
         .await
         .unwrap();
@@ -95,6 +101,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
     TestApp {

@@ -65,6 +65,22 @@ pub async fn post_login(
         ));
     }
 
+    if record.totp_enabled && state.two_factor_available() {
+        let pending = db::two_factor::create_pending_2fa(&state.auth, &record.id).await?;
+        let cookie = crate::routes::two_factor::build_pending_cookie(pending);
+        let jar = jar.add(cookie);
+        if is_htmx(&headers) {
+            let mut resp = Response::builder()
+                .status(200)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            resp.headers_mut()
+                .insert("HX-Redirect", HeaderValue::from_static("/login/2fa"));
+            return Ok((jar, resp).into_response());
+        }
+        return Ok((jar, Redirect::to("/login/2fa")).into_response());
+    }
+
     let token = db::auth::create_session(&state.auth, &record.id).await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);

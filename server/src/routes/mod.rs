@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::auth::{inject_user, OptionalUser};
+use crate::auth::{enforce_2fa_enrollment, inject_user, OptionalUser};
 use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
@@ -33,6 +33,7 @@ mod room;
 mod search;
 mod settings;
 mod status;
+pub(crate) mod two_factor;
 mod unfurl;
 mod uploads;
 mod users;
@@ -352,6 +353,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(home::get_home))
         .route("/login", get(auth::get_login).post(auth::post_login))
         .route(
+            "/login/2fa",
+            get(two_factor::get_login_challenge).post(two_factor::post_login_challenge),
+        )
+        .route(
+            "/login/recovery",
+            get(two_factor::get_login_recovery).post(two_factor::post_login_recovery),
+        )
+        .route(
             "/register",
             get(auth::get_register).post(auth::post_register),
         )
@@ -397,6 +406,10 @@ pub fn build_router(state: AppState) -> Router {
             get(settings::get_settings).post(settings::post_settings),
         )
         .route(
+            "/settings/2fa/setup",
+            get(two_factor::get_setup).post(two_factor::post_setup),
+        )
+        .route(
             "/settings/blocked",
             get(settings::get_blocked_list).post(settings::post_block_by_username),
         )
@@ -422,6 +435,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(admin::router())
         .nest_service("/assets", ServeDir::new("server/assets"))
         .fallback(handle_not_found)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            enforce_2fa_enrollment,
+        ))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
