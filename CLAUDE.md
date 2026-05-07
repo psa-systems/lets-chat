@@ -6,6 +6,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **lets-chat** is a self-hosted fullstack chat application written entirely in Rust. The frontend is server-rendered HTML using Askama templates with HTMX for interactivity; the backend is Axum; persistence is split across three SQLite databases. It compiles to a single binary serving HTTP, WebSocket, and static assets.
 
+## Build Modes
+
+The server supports two mutually exclusive Cargo features:
+
+### Standalone Mode (default)
+Self-hosted deployment with built-in user management:
+- Public `/register` page
+- `/login` form-based password auth (Argon2id) with optional TOTP 2FA
+- `/admin` pages (first registered user is auto-promoted to admin)
+
+```bash
+cargo build --release --features standalone -p lets-chat-server
+# Binary: target/release/lets-chat
+```
+
+### SaaS Mode
+Lightweight deployment integrated with a parent SaaS application:
+- No `/register` route; users are provisioned by the parent app
+- No `/admin` pages
+- `/webhooks/maintenance` endpoint accepts maintenance signals from the parent app
+- Identity is derived from the parent app's signed cookie (HMAC + JWT)
+
+```bash
+cargo build --release --no-default-features --features saas -p lets-chat-server
+# Binary: target/release/lets-chat-saas
+```
+
+The two binaries share `src/main.rs`. Mode-specific code is gated with `#[cfg(feature = "standalone")]` or `#[cfg(feature = "saas")]`. The Docker image accepts `--build-arg BUILD_MODE=saas` to switch modes; the runtime stage always installs the binary as `/usr/local/bin/lets-chat` regardless of mode. `.env.standalone` and `.env.saas` document the required environment variables for each mode and must stay in sync when shared variables change.
+
 ## Commands
 
 All common tasks are defined in `justfile`. Run `just --list` to see all recipes.
@@ -14,26 +43,32 @@ The host has no Rust or Bun installed. The recipes invoke the `./dev/cargo`, `./
 
 ```nu
 # Development
-just dev-web-local          # Local dev server in a container at http://localhost:18080
-just dev-web                # Docker dev with Traefik at https://{USER}-chat.a8n.run
+just dev-web-local          # Local dev server (standalone) on http://localhost:18080
+just dev-web-local-saas     # Local dev server (saas) on http://localhost:18080
+just dev-web                # Docker dev (standalone) with Traefik at https://{USER}-chat.a8n.run
+just dev-web-saas           # Docker dev (saas) with Traefik
 just dev-web-down           # Stop Docker dev environment
 just dev-desktop            # Desktop wrapper (Tao+Wry) pointed at the local server
 
 # Checks & Formatting
-just check                  # Run all checks: server, desktop, clippy, fmt
+just check                  # Run all checks: server (both modes), desktop, clippy (both modes), fmt
 just fmt                    # cargo fmt --all
 
 # Build
-just build                  # Release binary (includes Tailwind CSS rebuild)
+just build                  # Release binary, standalone (includes Tailwind CSS rebuild)
+just build-saas             # Release binary, saas
 just build-css              # Rebuild Tailwind CSS only (via bun)
 
 # Tests
-just test                   # cargo test --workspace (uses in-memory SQLite pools)
+just test                   # cargo test --workspace (standalone)
+just test-saas              # cargo test --workspace (saas)
 just verify                 # Build release binary and verify GET /login returns 200 with a form
 
 # Docker
-just build-docker           # Build local Docker image
-just check-docker           # Validate Docker image builds correctly
+just build-docker           # Build local Docker image (standalone)
+just build-docker-saas      # Build local Docker image (saas)
+just check-docker           # Validate standalone Docker image builds correctly
+just check-docker-saas      # Validate saas Docker image builds correctly
 ```
 
 ### Running a single test

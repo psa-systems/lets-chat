@@ -21,6 +21,7 @@ use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
+#[cfg(feature = "standalone")]
 mod admin;
 mod auth;
 mod avatar;
@@ -30,6 +31,8 @@ mod home;
 mod mentions;
 mod reactions;
 mod room;
+#[cfg(feature = "saas")]
+mod saas_auth;
 mod search;
 mod settings;
 mod status;
@@ -349,7 +352,7 @@ pub(crate) async fn handle_not_found(
 }
 
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/", get(home::get_home))
         .route("/login", get(auth::get_login).post(auth::post_login))
         .route(
@@ -359,10 +362,6 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/login/recovery",
             get(two_factor::get_login_recovery).post(two_factor::post_login_recovery),
-        )
-        .route(
-            "/register",
-            get(auth::get_register).post(auth::post_register),
         )
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
@@ -431,8 +430,20 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
         .route("/ws", get(ws::ws_handler))
-        .merge(enclave::router())
-        .merge(admin::router())
+        .merge(enclave::router());
+
+    #[cfg(feature = "standalone")]
+    let router = router
+        .route(
+            "/register",
+            get(auth::get_register).post(auth::post_register),
+        )
+        .merge(admin::router());
+
+    #[cfg(feature = "saas")]
+    let router = router.merge(saas_auth::router());
+
+    router
         .nest_service("/assets", ServeDir::new("server/assets"))
         .fallback(handle_not_found)
         .layer(middleware::from_fn_with_state(
