@@ -17,6 +17,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0005_profile_visibility.sql"),
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
+            include_str!("../migrations/auth/0008_two_factor.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -49,7 +50,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
     let settings = open_pool("settings").await;
 
     let user_id = db::auth::create_user(&auth, "tester", "h").await.unwrap();
-    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+    sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
         .bind(&user_id)
         .execute(&auth)
         .await
@@ -65,6 +66,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     (routes::build_router(state), session, user_id)
 }

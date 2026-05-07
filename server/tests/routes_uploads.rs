@@ -43,6 +43,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0005_profile_visibility.sql"),
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
+            include_str!("../migrations/auth/0008_two_factor.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -80,6 +81,11 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
     let user_id = db::auth::create_user(&auth, username, "hash")
         .await
         .unwrap();
+    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
+        .bind(&user_id)
+        .execute(&auth)
+        .await
+        .unwrap();
     let session_token = db::auth::create_session(&auth, &user_id).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
@@ -90,6 +96,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -173,6 +180,7 @@ async fn upload_anonymous_redirects_to_login() {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
 
@@ -224,6 +232,12 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
 
     let id_a = db::auth::create_user(&auth, "alice3", "h").await.unwrap();
     let id_b = db::auth::create_user(&auth, "bob3", "h").await.unwrap();
+    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id IN (?, ?)")
+        .bind(&id_a)
+        .bind(&id_b)
+        .execute(&auth)
+        .await
+        .unwrap();
     let sess_a = db::auth::create_session(&auth, &id_a).await.unwrap();
     let sess_b = db::auth::create_session(&auth, &id_b).await.unwrap();
     // Both users need general-enclave membership before they can post in
@@ -248,6 +262,7 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        secret_key: Some(Arc::new([0u8; 32])),
     };
     let app = routes::build_router(state);
     (app, sess_a, id_a, sess_b, id_b)

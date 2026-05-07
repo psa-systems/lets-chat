@@ -11,4 +11,13 @@ pub struct AppState {
     pub settings: SqlitePool,
     pub hub: Arc<Hub>,
     pub asset_version: String,
+    pub secret_key: Option<Arc<[u8; 32]>>,
+}
+
+impl AppState {
+    /// True when a stable encryption key is configured. 2FA flows are
+    /// off-limits without one.
+    pub fn two_factor_available(&self) -> bool {
+        self.secret_key.is_some()
+    }
 }

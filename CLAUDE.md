@@ -101,7 +101,7 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `LETS_CHAT_DATA_DIR` | `/data` | Directory for SQLite `.db` files |
 | `BIND_ADDR` | `0.0.0.0:8080` | Server listen address |
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
-| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting SMTP password in settings |
+| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting TOTP secrets at rest (SHA-256 of this string is the 32-byte key). Unset or empty disables two-factor authentication entirely - the setup page and login challenge return 404, and the enforcement middleware is a no-op. |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens |
 
 ## Workspace Layout
