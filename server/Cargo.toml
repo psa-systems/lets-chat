@@ -2,14 +2,26 @@
 name = "lets-chat-server"
 version.workspace = true
 edition.workspace = true
+default-run = "lets-chat"
 
 [[bin]]
 name = "lets-chat"
 path = "src/main.rs"
+required-features = ["standalone"]
+
+[[bin]]
+name = "lets-chat-saas"
+path = "src/main.rs"
+required-features = ["saas"]
 
 [lib]
 name = "lets_chat"
 path = "src/lib.rs"
+
+[features]
+default = ["standalone"]
+standalone = []
+saas = ["dep:hmac", "dep:hex", "dep:jsonwebtoken"]
 
 [dependencies]
 serde = { workspace = true }
@@ -46,3 +58,6 @@ url = "2"
 regex = "1"
 totp-rs = { version = "5", features = ["qr", "otpauth", "gen_secret"] }
 aes-gcm = "0.10"
+hmac = { version = "0.12", optional = true }
+hex = { version = "0.4", optional = true }
+jsonwebtoken = { version = "9", optional = true }

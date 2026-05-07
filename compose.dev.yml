@@ -10,6 +10,8 @@ services:
     build:
       context: .
       dockerfile: ci-build/Dockerfile.web
+      args:
+        BUILD_MODE: ${BUILD_MODE:-standalone}
     container_name: dev-lets-chat-app-${USER}
     restart: unless-stopped
     environment:
