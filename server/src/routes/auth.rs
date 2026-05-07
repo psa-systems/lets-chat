@@ -1,6 +1,6 @@
-use argon2::password_hash::{
-    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-};
+#[cfg(feature = "standalone")]
+use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+use argon2::password_hash::{PasswordHash, PasswordVerifier};
 use argon2::Argon2;
 use askama::Template;
 use axum::extract::State;
@@ -15,7 +15,9 @@ use crate::auth::SESSION_COOKIE;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::auth::{FormErrors, LoginPage, RegisterPage};
+#[cfg(feature = "standalone")]
+use crate::views::auth::RegisterPage;
+use crate::views::auth::{FormErrors, LoginPage};
 use crate::views::{html, Html};
 
 #[derive(Deserialize)]
@@ -24,6 +26,7 @@ pub struct LoginForm {
     pub password: String,
 }
 
+#[cfg(feature = "standalone")]
 #[derive(Deserialize)]
 pub struct RegisterForm {
     pub username: String,
@@ -99,6 +102,7 @@ pub async fn post_login(
     }
 }
 
+#[cfg(feature = "standalone")]
 pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppError> {
     let page = RegisterPage {
         error: None,
@@ -107,6 +111,7 @@ pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppErro
     html(&page)
 }
 
+#[cfg(feature = "standalone")]
 pub async fn post_register(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -215,6 +220,7 @@ fn is_htmx(headers: &HeaderMap) -> bool {
 
 enum FormPage {
     Login,
+    #[cfg(feature = "standalone")]
     Register,
 }
 
@@ -228,6 +234,7 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
                 asset_version: &state.asset_version,
             }
             .render(),
+            #[cfg(feature = "standalone")]
             FormPage::Register => RegisterPage {
                 error: Some(msg),
                 asset_version: &state.asset_version,
@@ -253,6 +260,7 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
 /// user in the system. The check + update is wrapped in a single transaction
 /// to avoid a race where two concurrent registrations both observe a count
 /// past 1 and neither bootstraps the admin.
+#[cfg(feature = "standalone")]
 async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<bool, AppError> {
     let mut tx = state.auth.begin().await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
@@ -273,6 +281,7 @@ async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<
     Ok(promoted)
 }
 
+#[cfg(feature = "standalone")]
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -291,6 +300,7 @@ fn verify_password(hash: &str, password: &str) -> bool {
         .is_ok()
 }
 
+#[cfg(feature = "standalone")]
 fn is_unique_violation(err: &sqlx::Error) -> bool {
     matches!(err, sqlx::Error::Database(db_err) if db_err.is_unique_violation())
 }

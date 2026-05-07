@@ -7,6 +7,12 @@
 #   4. css     - run Tailwind via Bun to produce tailwind-built.css.
 #   5. builder - compile the release server binary using cached deps.
 #   6. runtime - minimal Debian image with binary, assets, and migrations.
+#
+# BUILD_MODE selects the cargo feature set and binary:
+#   - standalone (default): self-hosted with built-in registration/login/admin.
+#   - saas:                 external auth via parent app cookie; no register/admin.
+
+ARG BUILD_MODE=standalone
 
 FROM rust:1.88-slim-bookworm AS chef
 RUN apt-get update \
@@ -20,8 +26,14 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
+ARG BUILD_MODE
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json -p lets-chat-server
+RUN set -eux; \
+    if [ "$BUILD_MODE" = "saas" ]; then \
+      cargo chef cook --release --no-default-features --features saas --recipe-path recipe.json -p lets-chat-server; \
+    else \
+      cargo chef cook --release --features standalone --recipe-path recipe.json -p lets-chat-server; \
+    fi
 
 FROM oven/bun:1 AS css
 WORKDIR /app/server
@@ -32,11 +44,19 @@ RUN bun install --frozen-lockfile \
     && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
 FROM chef AS builder
+ARG BUILD_MODE
 COPY . .
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY --from=css /app/server/assets/tailwind-built.css server/assets/tailwind-built.css
-RUN cargo build --release -p lets-chat-server
+RUN set -eux; \
+    if [ "$BUILD_MODE" = "saas" ]; then \
+      cargo build --release --no-default-features --features saas -p lets-chat-server; \
+      cp target/release/lets-chat-saas /app/lets-chat; \
+    else \
+      cargo build --release --features standalone -p lets-chat-server; \
+      cp target/release/lets-chat /app/lets-chat; \
+    fi
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
@@ -49,7 +69,7 @@ RUN useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app /data
 
 WORKDIR /app
-COPY --from=builder --chown=appuser:appuser /app/target/release/lets-chat /usr/local/bin/lets-chat
+COPY --from=builder --chown=appuser:appuser /app/lets-chat /usr/local/bin/lets-chat
 COPY --from=builder --chown=appuser:appuser /app/server/assets /app/server/assets
 COPY --from=builder --chown=appuser:appuser /app/server/migrations /app/server/migrations
 
