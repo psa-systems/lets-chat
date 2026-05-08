@@ -1,10 +1,27 @@
 use std::net::SocketAddr;
 
-use lets_chat::{db, routes, state::AppState, ws::events::ChatEvent, ws::hub::Hub};
+use lets_chat::{db, routes, state::AppState, version, ws::events::ChatEvent, ws::hub::Hub};
+
+#[cfg(feature = "saas")]
+const APP_NAME: &str = "lets-chat-saas";
+#[cfg(not(feature = "saas"))]
+const APP_NAME: &str = "lets-chat";
 
 #[tokio::main]
 async fn main() {
+    if wants_version_flag() {
+        println!("{}", version::banner(APP_NAME));
+        return;
+    }
     init_tracing();
+    tracing::info!(
+        app = APP_NAME,
+        version = version::VERSION,
+        git_version = version::GIT_VERSION,
+        git_hash = version::GIT_HASH,
+        build_date = version::BUILD_DATE,
+        "build info"
+    );
     let data_dir = parse_data_dir()
         .or_else(|| std::env::var("LETS_CHAT_DATA_DIR").ok())
         .unwrap_or_else(|| "/data".to_string());
@@ -101,4 +118,10 @@ fn parse_data_dir() -> Option<String> {
     args.windows(2)
         .find(|pair| pair[0] == "--data-dir")
         .map(|pair| pair[1].clone())
+}
+
+fn wants_version_flag() -> bool {
+    std::env::args()
+        .skip(1)
+        .any(|a| a == "--version" || a == "-V")
 }

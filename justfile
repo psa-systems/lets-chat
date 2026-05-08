@@ -30,13 +30,18 @@ check-clippy-saas:
 check-fmt:
     ./dev/cargo fmt --check
 
+# Build args for Docker image builds: inject git metadata so the binary can
+# report its exact version. .git is excluded from the Docker context, so the
+# args must be computed on the host and forwarded.
+docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
+
 # Build Docker image for validation (standalone)
 check-docker:
-    docker buildx build --tag lets-chat:check -f ci-build/Dockerfile.web .
+    docker buildx build --tag lets-chat:check {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
 # Build Docker image for validation (saas)
 check-docker-saas:
-    docker buildx build --tag lets-chat-saas:check --build-arg BUILD_MODE=saas -f ci-build/Dockerfile.web .
+    docker buildx build --tag lets-chat-saas:check --build-arg BUILD_MODE=saas {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
 # Build Tailwind CSS from source
 build-css:
@@ -53,21 +58,21 @@ build-saas: build-css
 
 # Build Docker image (standalone)
 build-docker: build-css
-    docker buildx build --tag lets-chat:local -f ci-build/Dockerfile.web .
+    docker buildx build --tag lets-chat:local {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
 # Build Docker image (saas)
 build-docker-saas: build-css
-    docker buildx build --tag lets-chat-saas:local --build-arg BUILD_MODE=saas -f ci-build/Dockerfile.web .
+    docker buildx build --tag lets-chat-saas:local --build-arg BUILD_MODE=saas {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
 # Start development server (web, standalone) via Docker with Traefik
 dev-web:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=standalone docker compose -f compose.dev.yml up --build
+    BUILD_MODE=standalone GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
 
 # Start development server (web, saas) via Docker with Traefik
 dev-web-saas:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=saas docker compose -f compose.dev.yml up --build
+    BUILD_MODE=saas GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
 
 # Stop dev-web containers
 dev-web-down:

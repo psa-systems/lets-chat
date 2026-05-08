@@ -9,6 +9,12 @@
 # via `docker create` + `docker cp`.
 
 FROM rust:1.88-slim-bookworm AS builder
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         pkg-config \
