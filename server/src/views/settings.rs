@@ -12,6 +12,10 @@ pub struct UserSettingsPage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub saved: bool,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
 }
 
 pub struct BlockedUserView {

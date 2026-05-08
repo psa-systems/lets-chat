@@ -91,6 +91,16 @@
       <a href="/settings/blocked" class="text-blue-600 hover:underline">Manage blocked users</a>
     </p>
   </div>
+
+  <div>
+    <h2 class="font-medium mb-2">About</h2>
+    <dl class="text-sm text-slate-700 space-y-1">
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Version</dt><dd>{{ app_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Release</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Commit</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">Built</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
+    </dl>
+  </div>
 </section>
 </div>
 {% endblock %}
