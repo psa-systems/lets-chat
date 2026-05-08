@@ -6,6 +6,7 @@ pub mod home;
 pub mod layout;
 pub mod mentions;
 pub mod not_found;
+pub mod notify_prefs;
 pub mod room;
 pub mod search;
 pub mod settings;

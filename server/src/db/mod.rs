@@ -3,6 +3,7 @@ pub mod chat;
 pub mod enclave;
 pub mod mentions;
 pub mod moderation;
+pub mod notifications;
 pub mod settings;
 pub mod two_factor;
 pub mod uploads;

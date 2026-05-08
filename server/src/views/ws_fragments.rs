@@ -50,6 +50,12 @@ pub struct UnreadBadgeFragment<'a> {
     pub kind: &'a str,
     pub id: &'a str,
     pub unread: i64,
+    /// "none" | "except_mentions" | "all". The WS badge is rendered for
+    /// background recipients in the chat path, where the mute filter in
+    /// `render_new_message_or_bump` has already short-circuited muted rooms.
+    /// Pass `"none"` here so the template logic stays unified with the
+    /// page-render include site.
+    pub mute_mode: &'a str,
 }
 
 /// Out-of-band swap that updates the "Seen HH:MM" caption under one DM
@@ -186,7 +192,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveInvitationCreated { .. }
         | ChatEvent::EnclaveInvitationResolved { .. }
         | ChatEvent::Mentioned { .. }
-        | ChatEvent::MentionCleared { .. } => None,
+        | ChatEvent::MentionCleared { .. }
+        | ChatEvent::RoomNotifyPrefsChanged { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

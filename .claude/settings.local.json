@@ -32,7 +32,18 @@
       "Bash(./dev/cargo fmt *)",
       "Read(//tmp/**)",
       "Bash(./dev/cargo build *)",
-      "Bash(awk *)"
+      "Bash(awk *)",
+      "Bash(just check-server-saas *)",
+      "Bash(just check-clippy *)",
+      "Bash(just check-clippy-saas *)",
+      "Bash(just test *)",
+      "Bash(CARGO_BUILD_JOBS=2 just test)",
+      "Bash(just build-css *)",
+      "Bash(HOST_PORT=18080 ./dev/server-up --release -p lets-chat-server)",
+      "Bash(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/login)",
+      "Bash(curl --silent http://127.0.0.1:18080/login)",
+      "Bash(dmesg)",
+      "Bash(docker rm *)"
     ]
   }
 }

@@ -30,6 +30,7 @@ mod dm;
 mod enclave;
 mod home;
 mod mentions;
+mod notify_prefs;
 mod reactions;
 mod room;
 #[cfg(feature = "saas")]
@@ -154,11 +155,19 @@ pub(crate) async fn load_sidebar(
                 .await?
                 .into_iter()
                 .collect();
+        let mute_modes: HashMap<i64, db::notifications::MuteMode> =
+            db::notifications::room_mute_modes_for_user(&state.chat, &user.id).await?;
         let sidebar_rooms: Vec<SidebarRoom> = rooms
             .into_iter()
             .map(|r| SidebarRoom {
                 unread: *room_unreads.get(&r.id).unwrap_or(&0),
                 mentions: *mention_counts.get(&r.id).unwrap_or(&0),
+                mute_mode: mute_modes
+                    .get(&r.id)
+                    .copied()
+                    .unwrap_or(db::notifications::MuteMode::None)
+                    .as_str()
+                    .to_string(),
                 id: r.id,
                 name: r.name,
                 active: false,
@@ -367,6 +376,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route(
+            "/room/{room_id}/notify-prefs",
+            post(notify_prefs::post_notify_prefs),
+        )
         .route(
             "/room/{room_id}/thread/{message_id}",
             get(room::get_thread_panel),

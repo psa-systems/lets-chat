@@ -257,6 +257,9 @@ pub struct RoomPage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub messages: &'a [MessageView],
     pub asset_version: &'a str,
+    /// Viewer's per-room mute mode for this room. Drives the notify
+    /// dropdown's selected radio and button label.
+    pub mute_mode: &'a str,
 }
 
 #[derive(Template)]
