@@ -5,6 +5,9 @@ use askama::Template;
 pub struct LoginPage<'a> {
     pub error: Option<&'a str>,
     pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub build_date: &'a str,
 }
 
 #[derive(Template)]
@@ -12,6 +15,9 @@ pub struct LoginPage<'a> {
 pub struct RegisterPage<'a> {
     pub error: Option<&'a str>,
     pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub build_date: &'a str,
 }
 
 #[derive(Template)]

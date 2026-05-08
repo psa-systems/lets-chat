@@ -13,6 +13,9 @@
 #   - saas:                 external auth via parent app cookie; no register/admin.
 
 ARG BUILD_MODE=standalone
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
 
 FROM rust:1.88-slim-bookworm AS chef
 RUN apt-get update \
@@ -45,6 +48,12 @@ RUN bun install --frozen-lockfile \
 
 FROM chef AS builder
 ARG BUILD_MODE
+ARG GIT_HASH
+ARG GIT_VERSION
+ARG BUILD_DATE
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
 COPY . .
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
