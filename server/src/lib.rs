@@ -7,5 +7,6 @@ pub mod models;
 pub mod perms;
 pub mod routes;
 pub mod state;
+pub mod version;
 pub mod views;
 pub mod ws;

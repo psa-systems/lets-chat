@@ -6,6 +6,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::version;
 use crate::views::settings::{BlockedListPage, BlockedUserView, UserSettingsPage};
 use crate::views::{html, Html};
 
@@ -37,6 +38,10 @@ pub async fn get_settings(
         switcher: &switcher,
         asset_version: &state.asset_version,
         saved: false,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
     };
     html(&page)
 }

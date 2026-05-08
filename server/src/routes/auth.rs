@@ -15,6 +15,7 @@ use crate::auth::SESSION_COOKIE;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::version;
 #[cfg(feature = "standalone")]
 use crate::views::auth::RegisterPage;
 use crate::views::auth::{FormErrors, LoginPage};
@@ -38,6 +39,9 @@ pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> 
     let page = LoginPage {
         error: None,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        build_date: version::BUILD_DATE,
     };
     html(&page)
 }
@@ -107,6 +111,9 @@ pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppErro
     let page = RegisterPage {
         error: None,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        build_date: version::BUILD_DATE,
     };
     html(&page)
 }
@@ -232,12 +239,18 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
             FormPage::Login => LoginPage {
                 error: Some(msg),
                 asset_version: &state.asset_version,
+                app_version: version::VERSION,
+                git_hash: version::GIT_HASH,
+                build_date: version::BUILD_DATE,
             }
             .render(),
             #[cfg(feature = "standalone")]
             FormPage::Register => RegisterPage {
                 error: Some(msg),
                 asset_version: &state.asset_version,
+                app_version: version::VERSION,
+                git_hash: version::GIT_HASH,
+                build_date: version::BUILD_DATE,
             }
             .render(),
         }

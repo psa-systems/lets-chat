@@ -20,6 +20,17 @@ set -euo pipefail
 
 EXTRA_ARGS=()
 
+# Compute build metadata on the host (the rust:slim container has no git).
+# build.rs reads these env vars first and falls back to "unknown" otherwise.
+GIT_HASH=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+GIT_VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "$GIT_HASH")
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EXTRA_ARGS+=(
+    -e "GIT_HASH=$GIT_HASH"
+    -e "GIT_VERSION=$GIT_VERSION"
+    -e "BUILD_DATE=$BUILD_DATE"
+)
+
 # Forward LETS_CHAT_SERVER_URL so the desktop binary opens the right window.
 if [ -n "${LETS_CHAT_SERVER_URL:-}" ]; then
     EXTRA_ARGS+=(-e "LETS_CHAT_SERVER_URL=${LETS_CHAT_SERVER_URL}")

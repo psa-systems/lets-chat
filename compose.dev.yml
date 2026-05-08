@@ -12,6 +12,9 @@ services:
       dockerfile: ci-build/Dockerfile.web
       args:
         BUILD_MODE: ${BUILD_MODE:-standalone}
+        GIT_HASH: ${GIT_HASH:-unknown}
+        GIT_VERSION: ${GIT_VERSION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: dev-lets-chat-app-${USER}
     restart: unless-stopped
     environment:

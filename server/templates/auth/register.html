@@ -33,6 +33,7 @@
     </label>
     <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Create account</button>
     <p class="text-sm text-center">Have an account? <a href="/login" class="text-blue-600 hover:underline">Sign in</a>.</p>
+    <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>
 {% endblock %}
