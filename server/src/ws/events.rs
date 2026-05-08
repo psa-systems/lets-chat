@@ -148,6 +148,15 @@ pub enum ChatEvent {
         mentioned_user_id: String,
         message_id: i64,
     },
+    /// Per-user notification of a notify-prefs change. Recipients re-render
+    /// their sidebar OOB so the muted-room class flips and badges hide/show
+    /// across all of their open tabs. Routed via
+    /// `Hub::broadcast_to_user(user_id, ...)`.
+    RoomNotifyPrefsChanged {
+        user_id: String,
+        room_id: i64,
+        mute_mode: String,
+    },
 }
 
 /// Control frames sent from client to server.

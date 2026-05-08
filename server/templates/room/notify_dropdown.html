@@ -1,0 +1,59 @@
+<div class="relative shrink-0">
+  <button type="button"
+    id="lc-notify-toggle-{{ room.id }}"
+    class="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    aria-haspopup="menu"
+    aria-expanded="false"
+    aria-controls="lc-notify-menu-{{ room.id }}">
+    {% if mute_mode == "none" %}Unmuted
+    {% else if mute_mode == "except_mentions" %}Muted (mentions on)
+    {% else %}Muted{% endif %}
+  </button>
+  <div id="lc-notify-menu-{{ room.id }}"
+    role="menu"
+    aria-labelledby="lc-notify-toggle-{{ room.id }}"
+    hidden
+    class="absolute right-0 z-30 mt-1 w-64 rounded border border-slate-200 bg-white p-2 shadow-lg text-sm">
+    <form hx-post="/room/{{ room.id }}/notify-prefs"
+          hx-trigger="change from:input"
+          hx-target="#lc-room-header"
+          hx-swap="outerHTML"
+          class="space-y-1">
+      <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
+        <input type="radio" name="mute_mode" value="none" {% if mute_mode == "none" %}checked{% endif %} class="mt-1">
+        <span><span class="font-medium">Unmuted</span><br><span class="text-xs text-slate-500">All notifications.</span></span>
+      </label>
+      <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
+        <input type="radio" name="mute_mode" value="except_mentions" {% if mute_mode == "except_mentions" %}checked{% endif %} class="mt-1">
+        <span><span class="font-medium">Muted (mentions on)</span><br><span class="text-xs text-slate-500">Only @-mentions notify.</span></span>
+      </label>
+      <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
+        <input type="radio" name="mute_mode" value="all" {% if mute_mode == "all" %}checked{% endif %} class="mt-1">
+        <span><span class="font-medium">Muted</span><br><span class="text-xs text-slate-500">No notifications, even mentions.</span></span>
+      </label>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  // Disclosure pattern: toggle button + menu div with proper ARIA. Tab cycles
+  // through radios via default browser behavior. Escape closes. Click outside
+  // closes. After change, HTMX swaps #lc-room-header so the entire dropdown
+  // is replaced; the wired-flag guards against double-binding.
+  var btn = document.getElementById('lc-notify-toggle-{{ room.id }}');
+  var menu = document.getElementById('lc-notify-menu-{{ room.id }}');
+  if (!btn || !menu || btn.dataset.lcWired === '1') return;
+  btn.dataset.lcWired = '1';
+  function close(){ btn.setAttribute('aria-expanded', 'false'); menu.hidden = true; }
+  function open(){ btn.setAttribute('aria-expanded', 'true'); menu.hidden = false;
+    var first = menu.querySelector('input[type=radio]:checked, input[type=radio]'); if (first) first.focus(); }
+  btn.addEventListener('click', function(){ menu.hidden ? open() : close(); });
+  menu.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); }
+  });
+  document.addEventListener('click', function(e){
+    if (menu.hidden) return;
+    if (!menu.contains(e.target) && e.target !== btn) close();
+  });
+})();
+</script>
