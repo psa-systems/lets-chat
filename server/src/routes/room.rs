@@ -184,6 +184,11 @@ pub async fn get_room(
         r.active = true;
     }
 
+    let mute_mode = db::notifications::room_mute_mode(&state.chat, &user.id, room_id)
+        .await
+        .unwrap_or(db::notifications::MuteMode::None)
+        .as_str();
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -192,6 +197,7 @@ pub async fn get_room(
         switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
+        mute_mode,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
