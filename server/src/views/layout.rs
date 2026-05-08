@@ -11,6 +11,9 @@ pub struct SidebarRoom {
     pub name: String,
     pub unread: i64,
     pub mentions: i64,
+    /// "none" | "except_mentions" | "all". Carried as a string (not a Rust
+    /// enum) because Askama templates compare against literals.
+    pub mute_mode: String,
     pub active: bool,
 }
 

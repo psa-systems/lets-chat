@@ -129,12 +129,42 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     .await
                                 }
                                 ChatEvent::Mentioned {
-                                    mentioned_user_id, ..
-                                } if mentioned_user_id == &send_user.id => render_mentioned(&e),
+                                    mentioned_user_id,
+                                    kind,
+                                    room_id,
+                                    ..
+                                } if mentioned_user_id == &send_user.id => {
+                                    // DM-kind mentions bypass the mute check
+                                    // (DM mute is a separate phase). For room
+                                    // mentions, MuteMode::All suppresses the
+                                    // event entirely; other modes allow it.
+                                    let allow = if kind == "dm" {
+                                        true
+                                    } else {
+                                        db::notifications::room_mute_mode(
+                                            &send_state.chat,
+                                            &send_user.id,
+                                            *room_id,
+                                        )
+                                        .await
+                                        .unwrap_or(db::notifications::MuteMode::None)
+                                        .allows_room_mention()
+                                    };
+                                    if allow {
+                                        render_mentioned(&e)
+                                    } else {
+                                        None
+                                    }
+                                }
                                 ChatEvent::MentionCleared {
                                     mentioned_user_id, ..
                                 } if mentioned_user_id == &send_user.id => {
                                     render_mention_cleared(&e)
+                                }
+                                ChatEvent::RoomNotifyPrefsChanged { user_id, .. }
+                                    if user_id == &send_user.id =>
+                                {
+                                    render_sidebar(&send_state, &send_user).await
                                 }
                                 _ => render_event(&e),
                             };
@@ -226,6 +256,7 @@ async fn render_unread_badge(
             kind: "dm",
             id: &peer_id,
             unread,
+            mute_mode: "none",
         }
         .render()
         .ok()
@@ -235,6 +266,7 @@ async fn render_unread_badge(
             kind: "room",
             id: &id_str,
             unread,
+            mute_mode: "none",
         }
         .render()
         .ok()
@@ -399,6 +431,16 @@ async fn render_new_message_or_bump(
         return render_new_message(state, message, viewer).await;
     }
     if message.user_id == viewer.id {
+        return None;
+    }
+    // Muted rooms suppress the sidebar unread bump for background recipients.
+    // The foreground branch above is intentionally left untouched: viewers
+    // with the room open still see new messages and still advance their read
+    // watermark.
+    let mode = db::notifications::room_mute_mode(&state.chat, &viewer.id, message.room_id)
+        .await
+        .unwrap_or(db::notifications::MuteMode::None);
+    if !mode.allows_unread_bump() {
         return None;
     }
     let room = db::chat::get_room(&state.chat, message.room_id)
