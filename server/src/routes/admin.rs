@@ -9,6 +9,7 @@ use crate::auth::AdminUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, EnclavesPage, InvitesPage,
     ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
@@ -63,6 +64,10 @@ pub async fn get_enclaves(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "enclaves",
         enclaves: &enclaves,
     };
@@ -103,6 +108,10 @@ pub async fn get_settings(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "settings",
         smtp_host,
         smtp_port,
@@ -157,6 +166,10 @@ pub async fn get_users(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "users",
         users: &users,
     };
@@ -292,6 +305,10 @@ pub async fn get_invites(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "invites",
         invites: &invites,
     };
@@ -380,6 +397,10 @@ pub async fn get_rooms(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "rooms",
         rooms_admin: &rooms_admin,
     };
@@ -496,6 +517,10 @@ pub async fn get_modlog(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
         section: "modlog",
         entries: &entries,
     };
