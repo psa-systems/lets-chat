@@ -17,6 +17,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
+use crate::version;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
@@ -430,6 +431,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
         .route("/ws", get(ws::ws_handler))
+        .route("/version", get(get_version))
         .merge(enclave::router());
 
     #[cfg(feature = "standalone")]
@@ -453,4 +455,15 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Public diagnostic endpoint. Returns the build metadata baked in by
+/// `server/build.rs` so operators can confirm exactly what is running.
+async fn get_version() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({
+        "version": version::VERSION,
+        "git_version": version::GIT_VERSION,
+        "git_hash": version::GIT_HASH,
+        "build_date": version::BUILD_DATE,
+    }))
 }

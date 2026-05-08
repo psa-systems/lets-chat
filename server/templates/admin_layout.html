@@ -1,13 +1,14 @@
 {% extends "layout.html" %}
 
 {% block main %}
-<nav class="border-b border-slate-200 px-4 py-2 flex gap-4 text-sm">
+<nav class="border-b border-slate-200 px-4 py-2 flex gap-4 text-sm items-center">
   <a href="/admin" class="{% if section == "settings" %}font-semibold{% endif %}">Settings</a>
   <a href="/admin/users" class="{% if section == "users" %}font-semibold{% endif %}">Users</a>
   <a href="/admin/invites" class="{% if section == "invites" %}font-semibold{% endif %}">Invites</a>
   <a href="/admin/rooms" class="{% if section == "rooms" %}font-semibold{% endif %}">Rooms</a>
   <a href="/admin/enclaves" class="{% if section == "enclaves" %}font-semibold{% endif %}">Enclaves</a>
   <a href="/admin/modlog" class="{% if section == "modlog" %}font-semibold{% endif %}">Mod log</a>
+  <span class="ml-auto text-xs text-slate-400 font-mono" title="Release {{ git_version }} - built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
 </nav>
 <div class="flex-1 overflow-y-auto p-4">
   {% block admin_main %}{% endblock %}

@@ -66,6 +66,7 @@ pub async fn enforce_2fa_enrollment(
         || path.starts_with("/login/")
         || path == "/register"
         || path == "/settings/2fa/setup"
+        || path == "/version"
         || path.starts_with("/assets/")
         || path.starts_with("/avatars/");
     if !exempt {
