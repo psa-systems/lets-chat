@@ -12,6 +12,7 @@ pub struct UserSettingsPage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub saved: bool,
+    pub push_available: bool,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub git_version: &'a str,
