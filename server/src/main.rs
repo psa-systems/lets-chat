@@ -28,13 +28,52 @@ async fn main() {
     tracing::info!(%data_dir, "starting lets-chat");
     db::set_data_dir(data_dir);
 
+    let auth_pool = db::open_auth_pool().await;
+    let chat_pool = db::open_chat_pool().await;
+    let settings_pool = db::open_settings_pool().await;
+    let secret_key = lets_chat::crypto::load_secret_key_from_env().map(std::sync::Arc::new);
+
+    // VAPID keypair: generate on first boot when a secret key is set, then
+    // hold an `Arc` of the decrypted keypair for the lifetime of the process.
+    // Without a secret key Push stays disabled (parallels the 2FA pattern).
+    let vapid: Option<std::sync::Arc<lets_chat::db::vapid::VapidKeypair>> =
+        match secret_key.as_ref() {
+            Some(key) => {
+                match lets_chat::db::vapid::load_or_generate(&settings_pool, key.as_ref()).await {
+                    Ok(kp) => Some(std::sync::Arc::new(kp)),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "vapid keypair load failed; push disabled");
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+    let push_contact = std::env::var("LETS_CHAT_PUSH_CONTACT")
+        .unwrap_or_else(|_| "mailto:admin@localhost".to_string());
+    let push_client: std::sync::Arc<dyn lets_chat::push::PushClient> = match vapid.as_ref() {
+        Some(kp) => std::sync::Arc::new(lets_chat::push::ReqwestPushClient::new(
+            kp.clone(),
+            push_contact,
+        )),
+        None => std::sync::Arc::new(lets_chat::push::ReqwestPushClient::new(
+            std::sync::Arc::new(lets_chat::db::vapid::VapidKeypair {
+                public_key_b64url: String::new(),
+                private_key_bytes: vec![0u8; 32],
+            }),
+            push_contact,
+        )),
+    };
+
     let state = AppState {
-        auth: db::open_auth_pool().await,
-        chat: db::open_chat_pool().await,
-        settings: db::open_settings_pool().await,
+        auth: auth_pool,
+        chat: chat_pool,
+        settings: settings_pool,
         hub: std::sync::Arc::new(Hub::new()),
         asset_version: compute_asset_version(),
-        secret_key: lets_chat::crypto::load_secret_key_from_env().map(std::sync::Arc::new),
+        secret_key,
+        vapid,
+        push_client,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
