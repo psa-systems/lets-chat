@@ -24,7 +24,8 @@
   <div id="lc-mention-counts" class="hidden"
        data-base-title="lets-chat"
        data-browser-enabled="{% if user.notify_browser_enabled %}1{% else %}0{% endif %}"
-       data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"></div>
+       data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"
+       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
 </div>
 <script>
 (function(){
@@ -38,8 +39,44 @@
   var baseTitle = cfg.getAttribute('data-base-title') || document.title;
   var browserEnabled = cfg.getAttribute('data-browser-enabled') === '1';
   var soundEnabled = cfg.getAttribute('data-sound-enabled') === '1';
+  var pushEnabled = cfg.getAttribute('data-push-enabled') === '1';
   var counts = {};               // room_id -> unread mention count
   var permPrompted = false;      // gate the one-shot Notification permission prompt
+  var pushTried = false;         // gate the one-shot service-worker registration
+  function urlBase64ToUint8Array(s){
+    var pad = '='.repeat((4 - s.length % 4) % 4);
+    var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(b64);
+    var arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  async function tryRegisterPush(){
+    if (pushTried || !pushEnabled) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    pushTried = true;
+    try {
+      var resp = await fetch('/push/vapid-public-key');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      var existing = await reg.pushManager.getSubscription();
+      var sub = existing || await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(data.key),
+      });
+      var json = sub.toJSON();
+      await fetch('/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        }),
+      });
+    } catch (e) { console.warn('push registration failed', e); }
+  }
   // Title + favicon reflect the running total; called after every event.
   function refresh(){
     var n = 0; for (var k in counts) n += counts[k];
@@ -60,9 +97,15 @@
     if (!browserEnabled || !('Notification' in window)) return;
     if (Notification.permission === 'denied') return;
     if (Notification.permission !== 'granted') {
-      if (!permPrompted) { permPrompted = true; Notification.requestPermission(); }
+      if (!permPrompted) {
+        permPrompted = true;
+        Notification.requestPermission().then(function(p){
+          if (p === 'granted') tryRegisterPush();
+        });
+      }
       return;
     }
+    tryRegisterPush();
     var title = d.kind === 'dm' ? 'Direct message from ' + d.author : d.author + ' mentioned you in ' + d.roomLabel;
     try {
       var n = new Notification(title, { body: d.snippet, tag: 'lc-' + d.target });
