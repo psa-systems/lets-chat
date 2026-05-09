@@ -43,7 +43,28 @@
       "Bash(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/login)",
       "Bash(curl --silent http://127.0.0.1:18080/login)",
       "Bash(dmesg)",
-      "Bash(docker rm *)"
+      "Bash(docker rm *)",
+      "Bash(python3 *)",
+      "Bash(curl -fsSL https://docs.rs/crate/web-push/0.11.0/source/Cargo.toml.orig)",
+      "Bash(curl -fsSL https://crates.io/api/v1/crates/web-push)",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/pimeys/rust-web-push/v0.11.0/Cargo.toml\")",
+      "Bash(./dev/cargo tree *)",
+      "Bash(curl -fsSL https://raw.githubusercontent.com/mozilla/rust-ece/v2.3.1/Cargo.toml)",
+      "Bash(curl -fsSL \"https://crates.io/api/v1/crates/ece\")",
+      "Bash(curl -fsSL \"https://docs.rs/crate/ece/latest/source/Cargo.toml\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/mozilla/rust-ece/main/Cargo.toml\")",
+      "Bash(curl -fsSL \"https://crates.io/api/v1/crates/web-push-native\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/main/Cargo.toml\")",
+      "Bash(curl -fsSL \"https://docs.rs/crate/web-push-native/0.4.0\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/master/web-push-native/Cargo.toml\")",
+      "Bash(curl -fsSL \"https://api.github.com/repos/leotaku/web-push-native\")",
+      "Bash(curl -fsSL 'https://api.github.com/repos/leotaku/web-push-native')",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/$\\(curl -fsSL 'https://api.github.com/repos/leotaku/web-push-native')",
+      "Bash(curl -fsSL \"https://api.github.com/repos/leotaku/web-push-native/contents/\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/master/web_push/Cargo.toml\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/master/web_push/src/lib.rs\")",
+      "Bash(curl -fsSL \"https://raw.githubusercontent.com/jedisct1/rust-jwt-simple/master/src/algorithms/ecdsa.rs\")",
+      "Bash(just verify *)"
     ]
   }
 }

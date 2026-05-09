@@ -58,6 +58,10 @@ url = "2"
 regex = "1"
 totp-rs = { version = "5", features = ["qr", "otpauth", "gen_secret"] }
 aes-gcm = "0.10"
+web-push-native = "0.4"
+p256 = { version = "0.13", features = ["pkcs8", "pem", "ecdh"] }
+bytes = "1"
+base64 = "0.22"
 hmac = { version = "0.12", optional = true }
 hex = { version = "0.4", optional = true }
 jsonwebtoken = { version = "9", optional = true }
