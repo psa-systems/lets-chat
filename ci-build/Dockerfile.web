@@ -20,6 +20,13 @@ RUN cargo binstall dioxus-cli@0.7.3 --no-confirm
 # Install WASM target for client build
 RUN rustup target add wasm32-unknown-unknown
 
+# Cap concurrent rustc / build-script processes. See the matching
+# block in Dockerfile.desktop-linux for the rationale; the desktop
+# and OCI builds share the same CI host, so both must clamp.
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
+
 # --- Dependency caching (server-side only) ---
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs

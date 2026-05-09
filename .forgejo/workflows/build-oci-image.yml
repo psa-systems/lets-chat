@@ -73,8 +73,21 @@ jobs:
           let registry = $env.IMAGE_REGISTRY
           let tag_args = ($tags | each {|tag| [-t $"($registry)/($image):($tag)"]} | flatten)
           let cache_from = $"type=registry,ref=($registry)/($image):latest"
+          # nproc/2 cap on cargo workers. See the matching block in
+          # build-desktop-linux.yml for rationale.
+          let jobs = ((sys cpu | length) / 2 | into int)
+          print $"CARGO_BUILD_JOBS=($jobs)"
           print $"Building and pushing ($image) with tags: ($tags_str)"
-          ^docker buildx build --push --cache-from $cache_from --cache-to type=inline ...$tag_args -f ci-build/Dockerfile.web .
+          (
+            ^docker buildx build
+              --push
+              --cache-from $cache_from
+              --cache-to type=inline
+              --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              ...$tag_args
+              -f ci-build/Dockerfile.web
+              .
+          )
 
       - name: Print image URLs
         shell: nu {0}
