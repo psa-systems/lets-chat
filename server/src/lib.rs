@@ -5,6 +5,7 @@ pub mod error;
 pub mod last_visited;
 pub mod models;
 pub mod perms;
+pub mod push;
 pub mod routes;
 pub mod state;
 pub mod version;
