@@ -24,6 +24,8 @@ pub struct SettingsForm {
     pub notify_browser_enabled: Option<String>,
     #[serde(default)]
     pub notify_sound_enabled: Option<String>,
+    #[serde(default)]
+    pub notify_push_enabled: Option<String>,
 }
 
 pub async fn get_settings(
@@ -38,6 +40,7 @@ pub async fn get_settings(
         switcher: &switcher,
         asset_version: &state.asset_version,
         saved: false,
+        push_available: state.push_available(),
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
@@ -57,7 +60,11 @@ pub async fn post_settings(
     db::auth::set_profile_public(&state.auth, &user.id, is_public).await?;
     let browser = form.notify_browser_enabled.is_some();
     let sound = form.notify_sound_enabled.is_some();
-    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound).await?;
+    // Defend against a manually-crafted POST while push is unavailable: even
+    // if the client checks the box, the column stays 0 unless the server has
+    // VAPID keys ready.
+    let push = form.notify_push_enabled.is_some() && state.push_available();
+    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push).await?;
     Ok(Redirect::to("/settings").into_response())
 }
 
