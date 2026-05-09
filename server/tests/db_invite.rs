@@ -53,6 +53,12 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("Failed to run migration 8");
 
+    let migration9 = include_str!("../migrations/auth/0009_push_subscriptions.sql");
+    sqlx::raw_sql(migration9)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 9");
+
     pool
 }
 

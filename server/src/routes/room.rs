@@ -339,6 +339,7 @@ pub async fn post_message(
                     target_path: format!("/room/{}", room.id),
                 };
                 state.hub.broadcast_to_user(&t.user_id, &event);
+                crate::push::dispatch(&state, &t.user_id, &event).await;
             }
         }
     } else {
@@ -361,6 +362,9 @@ pub async fn post_message(
                 target_path: format!("/dm/{}", user.id),
             };
             state.hub.broadcast_to_user(&peer_id, &event);
+            // FUTURE: when the DM-mute phase lands, this bypass becomes
+            // conditional on dm_mute_state(user, peer).
+            crate::push::dispatch(&state, &peer_id, &event).await;
         }
     }
 
@@ -573,6 +577,7 @@ pub async fn patch_message(
                     target_path: format!("/room/{}", m.room_id),
                 };
                 state.hub.broadcast_to_user(&t.user_id, &event);
+                crate::push::dispatch(&state, &t.user_id, &event).await;
             }
             for t in &removed {
                 let event = ChatEvent::MentionCleared {
