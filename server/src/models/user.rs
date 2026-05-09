@@ -25,6 +25,7 @@ pub struct UserRecord {
     pub is_profile_public: bool,
     pub notify_browser_enabled: bool,
     pub notify_sound_enabled: bool,
+    pub notify_push_enabled: bool,
     pub totp_secret_encrypted: Option<Vec<u8>>,
     pub totp_nonce: Option<Vec<u8>>,
     pub totp_enabled: bool,
@@ -53,6 +54,7 @@ pub struct User {
     pub is_profile_public: bool,
     pub notify_browser_enabled: bool,
     pub notify_sound_enabled: bool,
+    pub notify_push_enabled: bool,
     pub totp_enabled: bool,
 }
 
@@ -88,6 +90,7 @@ impl From<UserRecord> for User {
             is_profile_public: r.is_profile_public,
             notify_browser_enabled: r.notify_browser_enabled,
             notify_sound_enabled: r.notify_sound_enabled,
+            notify_push_enabled: r.notify_push_enabled,
             totp_enabled: r.totp_enabled,
         }
     }

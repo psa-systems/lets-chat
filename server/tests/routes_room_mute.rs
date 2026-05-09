@@ -31,6 +31,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
             include_str!("../migrations/auth/0008_two_factor.sql"),
+            include_str!("../migrations/auth/0009_push_subscriptions.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -52,6 +53,7 @@ async fn open_pool(name: &str) -> SqlitePool {
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
+            include_str!("../migrations/settings/0003_vapid_keypair.sql"),
         ],
         _ => unreachable!(),
     };
@@ -100,6 +102,8 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
     };
     let app = routes::build_router(state);
     TestApp {
@@ -297,6 +301,8 @@ async fn post_to_inaccessible_private_room_returns_403() {
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
     };
     let app = routes::build_router(state);
     let status = post_notify_prefs(&app, &alice_session, private_id, "all").await;

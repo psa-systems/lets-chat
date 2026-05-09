@@ -82,6 +82,19 @@
       <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
       <span>Play a sound on new mentions and DMs</span>
     </label>
+    <label class="flex items-start gap-2 cursor-pointer">
+      <input type="checkbox" name="notify_push_enabled" value="1" class="mt-0.5"
+        {% if user.notify_push_enabled %}checked{% endif %}
+        {% if !push_available %}disabled{% endif %}>
+      <span>
+        Enable push notifications (works when tab is closed)
+        {% if !push_available %}
+        <span class="block text-xs text-slate-500">Unavailable: server is not configured for push.</span>
+        {% else %}
+        <span class="block text-xs text-slate-500">A browser permission prompt will appear on the next mention.</span>
+        {% endif %}
+      </span>
+    </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 

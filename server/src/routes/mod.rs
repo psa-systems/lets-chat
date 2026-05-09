@@ -31,6 +31,7 @@ mod enclave;
 mod home;
 mod mentions;
 mod notify_prefs;
+mod push;
 mod reactions;
 mod room;
 #[cfg(feature = "saas")]
@@ -432,6 +433,9 @@ pub fn build_router(state: AppState) -> Router {
             post(settings::post_avatar_delete),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
+        .route("/sw.js", get(push::get_service_worker))
+        .route("/push/vapid-public-key", get(push::get_vapid_public_key))
+        .route("/push/subscribe", post(push::post_subscribe))
         // The upload handler streams + caps bytes itself based on settings,
         // so disable Axum's default 2 MiB body cap on this route only.
         .route(
