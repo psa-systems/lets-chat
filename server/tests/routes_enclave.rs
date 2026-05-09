@@ -18,6 +18,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0006_user_blocks.sql"),
             include_str!("../migrations/auth/0007_notification_settings.sql"),
             include_str!("../migrations/auth/0008_two_factor.sql"),
+            include_str!("../migrations/auth/0009_push_subscriptions.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -76,6 +77,8 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -120,6 +123,8 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
     };
     let app = routes::build_router(state);
     (app, s1, id1, s2, id2)
