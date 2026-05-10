@@ -169,4 +169,145 @@ document.body.addEventListener('click', function(e){
   if (link) lcCloseNav();
 });
 </script>
+<script>
+(function(){
+  // ----- 1. Reconnect-delay override -----------------------------
+  // Capped jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s,
+  // 30s, 30s... +/-20% jitter. Replaces the extension's default
+  // `full-jitter` which is uncapped (exceeds 30s after ~6 retries
+  // and 17min after ~10).
+  if (window.htmx) {
+    htmx.config.wsReconnectDelay = function(retryCount) {
+      var base = Math.min(1000 * Math.pow(2, retryCount), 30000);
+      var jitter = 0.8 + Math.random() * 0.4; // [0.8, 1.2)
+      return Math.round(base * jitter);
+    };
+  }
+
+  // ----- 2. Tiny extension to expose wrapper.init() --------------
+  // wrapper.publicInterface exposes only send/sendImmediately/queue.
+  // To force a reconnect from the half-open watchdog we need
+  // wrapper.init(), reachable only via the extension API's
+  // getInternalData on the [ws-connect] element.
+  // FUTURE: if htmx-ext-ws changes wrapper API (specifically
+  // wrapper.init), this extension breaks. Failure mode: watchdog
+  // disabled, falls back to onclose-only detection.
+  if (window.htmx && htmx.defineExtension) {
+    htmx.defineExtension('lc-ws-reconnect', {
+      init: function(api) {
+        window.__lcReconnectWS = function() {
+          var elt = document.querySelector('[ws-connect]');
+          if (!elt) return;
+          var data = api.getInternalData(elt);
+          if (data && data.webSocket && data.webSocket.init) {
+            data.webSocket.init();
+          }
+        };
+      }
+    });
+  }
+
+  // ----- 3. Banner state machine ---------------------------------
+  var bannerEl = document.getElementById('lc-conn-status');
+  var textEl   = document.getElementById('lc-conn-status-text');
+  if (!bannerEl || !textEl) return;
+
+  var state = 'connected';   // 'connected' | 'reconnecting' | 'failed-long'
+  var rawSocket = null;       // captured from htmx:wsOpen
+  var watchdog = null;        // 60s half-open detector
+  var escalateTimer = null;   // 5min "still trying" escalation
+  var WATCHDOG_MS = 60 * 1000;
+  var ESCALATE_MS = 5 * 60 * 1000;
+
+  function setBanner(next, msg) {
+    bannerEl.setAttribute('data-state', next);
+    textEl.textContent = msg || '';
+  }
+
+  function startWatchdog() {
+    clearTimeout(watchdog);
+    watchdog = setTimeout(function(){
+      // Half-open: no inbound traffic in WATCHDOG_MS. Force the
+      // socket closed; our htmx:wsClose handler will trigger the
+      // reconnect (the extension only auto-reconnects for codes
+      // 1006/1012/1013, which we cannot set from user code).
+      try { if (rawSocket) rawSocket.close(4000, 'lc-half-open'); } catch (e) {}
+    }, WATCHDOG_MS);
+  }
+
+  function enterReconnecting() {
+    if (state === 'reconnecting' || state === 'failed-long') return;
+    state = 'reconnecting';
+    setBanner('reconnecting', 'Connection lost. Reconnecting...');
+    clearTimeout(escalateTimer);
+    escalateTimer = setTimeout(function(){
+      if (state === 'reconnecting') {
+        state = 'failed-long';
+        setBanner('failed-long', 'Still trying to reconnect. Check your internet connection.');
+      }
+    }, ESCALATE_MS);
+  }
+
+  function enterConnected(wasReconnecting) {
+    var prev = state;
+    state = 'connected';
+    clearTimeout(escalateTimer);
+    if (wasReconnecting || prev !== 'connected') {
+      setBanner('connected-flash', 'Connected');
+      setTimeout(function(){
+        if (state === 'connected') setBanner('hidden', '');
+      }, 500);
+      // Soft-refresh the current page so the user sees missed
+      // content. select:'#main' extracts just the <main> from the
+      // full-page response; without it we would nest the layout
+      // into #main. Smoke-test directive (phase 18 plan): verify
+      // whether this is load-bearing vs. subscribe re-fire being
+      // sufficient; drop in a follow-up if not.
+      if (window.htmx && document.getElementById('main')) {
+        try {
+          htmx.ajax('GET', location.pathname + location.search, {
+            target: '#main',
+            swap: 'outerHTML',
+            select: '#main'
+          });
+        } catch (e) { /* navigation away is fine */ }
+      }
+    } else {
+      setBanner('hidden', '');
+    }
+  }
+
+  document.body.addEventListener('htmx:wsOpen', function(evt){
+    rawSocket = (evt.detail && evt.detail.event) ? evt.detail.event.target : null;
+    var wasReconnecting = (state !== 'connected');
+    enterConnected(wasReconnecting);
+    startWatchdog();
+  });
+
+  document.body.addEventListener('htmx:wsAfterMessage', function(){
+    // Any inbound text frame (real OOB swap or `<!-- ping -->`)
+    // counts as proof of life.
+    if (state !== 'connected') enterConnected(true);
+    startWatchdog();
+  });
+
+  function handleDrop(evt){
+    enterReconnecting();
+    clearTimeout(watchdog);
+    // The extension auto-reconnects only for codes [1006, 1012, 1013].
+    // For any other close code (clean close, 1011 server error, our
+    // own 4000 from the watchdog), force a manual reconnect via the
+    // companion extension above.
+    var code = evt && evt.detail && evt.detail.event && evt.detail.event.code;
+    var autoReconnects = (code === 1006 || code === 1012 || code === 1013);
+    if (!autoReconnects && window.__lcReconnectWS) {
+      // Schedule on the next tick so the extension's own onclose
+      // bookkeeping has finished first.
+      setTimeout(window.__lcReconnectWS, 0);
+    }
+  }
+  document.body.addEventListener('htmx:wsClose', handleDrop);
+  document.body.addEventListener('htmx:wsError', handleDrop);
+})();
+</script>
 {% endblock %}
