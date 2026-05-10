@@ -174,6 +174,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // visibility flip in this tab.
                                     render_sidebar(&send_state, &send_user).await
                                 }
+                                ChatEvent::MessagePinned { room_id, .. }
+                                | ChatEvent::MessageUnpinned { room_id, .. } => {
+                                    // Pin/unpin events fan out to every
+                                    // subscriber of the affected room. We
+                                    // rebuild the strip fragment for this
+                                    // viewer (so the pinner display label is
+                                    // resolved against this user's auth view)
+                                    // and emit the OOB swap. The strip is
+                                    // room-scoped, not user-scoped, so the
+                                    // viewer-id check is unnecessary.
+                                    render_pinned_strip(&send_state, &send_user, *room_id).await
+                                }
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -541,6 +553,7 @@ async fn render_new_message(
         parent_id: message.parent_id,
         attachments,
         mentions,
+        is_pinned: false,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -618,6 +631,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         parent_id,
         attachments,
         mentions,
+        is_pinned: false,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
@@ -675,6 +689,7 @@ async fn render_thread_reply(
         parent_id: Some(parent_id),
         attachments,
         mentions,
+        is_pinned: false,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
@@ -759,4 +774,25 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     }
     .render()
     .ok()
+}
+
+/// Build the OOB-tagged pinned strip for `viewer`'s context in `room_id`.
+/// Picks the right URL (room vs DM) based on the room's type and the
+/// viewer's perspective so the "See all (N) pinned" link in the
+/// broadcast points where the receiving tab expects to navigate.
+async fn render_pinned_strip(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
+    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let pin_path = if room.room_type == "dm" {
+        let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
+            .await
+            .ok()??;
+        format!("/dm/{peer_id}/pins")
+    } else {
+        format!("/room/{room_id}/pins")
+    };
+    super::pinned::build_strip_fragment(state, room_id, pin_path, true)
+        .await
+        .ok()?
+        .render()
+        .ok()
 }

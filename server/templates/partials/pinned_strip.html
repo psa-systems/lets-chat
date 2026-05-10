@@ -1,0 +1,25 @@
+<div id="lc-pinned-strip-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-slate-200 bg-amber-50{% endif %}">
+  {% if total_count > 0 %}
+  <ul class="px-4 py-2 space-y-1 text-sm">
+    {% for p in top_pins %}
+    <li class="flex items-center gap-2">
+      <span class="text-amber-700 shrink-0" aria-hidden="true">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 1a1 1 0 011 1v3.586l3.207 3.207A1 1 0 0114 10.5H11v6.586a1 1 0 11-2 0V10.5H6a1 1 0 01-.707-1.707L8.5 5.586V2a1 1 0 011-1z"/>
+        </svg>
+      </span>
+      <a href="#msg-{{ p.message_id }}" class="flex-1 truncate text-slate-700 hover:underline">
+        <span class="font-medium">{{ p.author_label }}:</span>
+        {{ p.snippet }}
+      </a>
+      <span class="text-xs text-slate-500 shrink-0">{{ p.pinned_at }}</span>
+    </li>
+    {% endfor %}
+    {% if has_more %}
+    <li>
+      <a href="{{ pin_path }}" class="text-xs text-blue-700 hover:underline">See all ({{ total_count }}) pinned</a>
+    </li>
+    {% endif %}
+  </ul>
+  {% endif %}
+</div>

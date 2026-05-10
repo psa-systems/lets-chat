@@ -18,4 +18,7 @@ pub struct DmPage<'a> {
     /// "none" | "all". Drives the `Mute` checkbox `checked` state in the
     /// DM header partial.
     pub mute_mode: String,
+    /// Pre-rendered pinned-strip HTML (or empty string when there are
+    /// zero pins). Same shape as `RoomPage::pinned_strip_html`.
+    pub pinned_strip_html: String,
 }

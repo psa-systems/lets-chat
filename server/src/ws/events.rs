@@ -170,6 +170,22 @@ pub enum ChatEvent {
         peer_user_id: String,
         muted: bool,
     },
+    /// A message was pinned in a room (or DM, which is just a room with
+    /// `room_type = 'dm'`). Routed via `Hub::broadcast_to_room(room_id, ...)`
+    /// so every subscriber to the room re-renders their pinned-strip.
+    MessagePinned {
+        room_id: i64,
+        message_id: i64,
+        pinned_by: String,
+    },
+    /// The inverse of `MessagePinned`. Recipients re-render the strip; the
+    /// strip render filters by `messages.deleted_at IS NULL` so a soft-
+    /// deleted message that was pinned naturally drops out without a
+    /// dedicated event.
+    MessageUnpinned {
+        room_id: i64,
+        message_id: i64,
+    },
 }
 
 /// Control frames sent from client to server.

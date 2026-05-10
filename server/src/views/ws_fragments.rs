@@ -194,7 +194,9 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::Mentioned { .. }
         | ChatEvent::MentionCleared { .. }
         | ChatEvent::RoomNotifyPrefsChanged { .. }
-        | ChatEvent::DmMuteChanged { .. } => None,
+        | ChatEvent::DmMuteChanged { .. }
+        | ChatEvent::MessagePinned { .. }
+        | ChatEvent::MessageUnpinned { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

@@ -32,6 +32,7 @@ mod enclave;
 mod home;
 mod mentions;
 mod notify_prefs;
+mod pinned;
 mod push;
 mod reactions;
 mod room;
@@ -401,6 +402,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/thread-panel", delete(room::close_thread_panel))
         .route("/dm/{peer_id}", get(dm::get_dm))
         .route("/dm/{peer_id}/mute", post(dm_mute::post_dm_mute))
+        .route("/dm/{peer_id}/pins", get(pinned::get_dm_pins))
+        .route("/room/{room_id}/pins", get(pinned::get_room_pins))
+        .route(
+            "/messages/{message_id}/pin",
+            post(pinned::post_pin).delete(pinned::delete_pin),
+        )
         .route(
             "/messages/{message_id}",
             get(room::get_single_message)
