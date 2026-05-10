@@ -555,8 +555,7 @@ pub async fn display_names_for_ids(
     let placeholders = std::iter::repeat_n("?", ids.len())
         .collect::<Vec<_>>()
         .join(",");
-    let sql =
-        format!("SELECT id, username, display_name FROM users WHERE id IN ({placeholders})");
+    let sql = format!("SELECT id, username, display_name FROM users WHERE id IN ({placeholders})");
     let mut q = sqlx::query(&sql);
     for id in ids {
         q = q.bind(id);
