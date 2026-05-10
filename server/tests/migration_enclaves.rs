@@ -1,0 +1,93 @@
+use sqlx::{Row, SqlitePool};
+
+async fn fresh_pool() -> SqlitePool {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    for sql in [
+        include_str!("../migrations/chat/0001_create_tables.sql"),
+        include_str!("../migrations/chat/0002_moderation.sql"),
+        include_str!("../migrations/chat/0003_dms.sql"),
+        include_str!("../migrations/chat/0004_message_editing.sql"),
+        include_str!("../migrations/chat/0005_private_rooms.sql"),
+        include_str!("../migrations/chat/0006_read_receipts.sql"),
+        include_str!("../migrations/chat/0007_reactions.sql"),
+        include_str!("../migrations/chat/0008_search.sql"),
+        include_str!("../migrations/chat/0009_enclaves.sql"),
+        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+    }
+    pool
+}
+
+#[tokio::test]
+async fn migration_creates_general_and_moves_rooms() {
+    let pool = fresh_pool().await;
+
+    let general_id: i64 = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+
+    let row = sqlx::query("SELECT name, created_by FROM enclaves WHERE id=?")
+        .bind(general_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(row.get::<String, _>("name"), "General");
+    assert_eq!(row.get::<String, _>("created_by"), "system");
+
+    let n: i64 = sqlx::query(
+        "SELECT COUNT(*) AS c FROM rooms WHERE enclave_id IS NULL AND room_type != 'dm'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("c");
+    assert_eq!(
+        n, 0,
+        "every non-DM room must be in an enclave after migration"
+    );
+
+    let m: i64 = sqlx::query(
+        "SELECT COUNT(*) AS c FROM rooms WHERE enclave_id = ? AND name IN ('general','random')",
+    )
+    .bind(general_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("c");
+    assert_eq!(m, 2);
+
+    let members: i64 = sqlx::query("SELECT COUNT(*) AS c FROM enclave_members")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("c");
+    assert_eq!(members, 0, "membership backfill is a separate step");
+}
+
+#[tokio::test]
+async fn migration_partial_unique_owner_index_enforced() {
+    let pool = fresh_pool().await;
+    let general_id: i64 = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+
+    sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u1', 'owner')",
+    )
+    .bind(general_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let dup = sqlx::query(
+        "INSERT INTO enclave_members (enclave_id, user_id, role) VALUES (?, 'u2', 'owner')",
+    )
+    .bind(general_id)
+    .execute(&pool)
+    .await;
+    assert!(dup.is_err(), "two owners per enclave must be rejected");
+}

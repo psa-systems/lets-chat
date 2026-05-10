@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+
+{% block title %}Not found - lets-chat{% endblock %}
+
+{% block main %}
+<section class="p-6 max-w-2xl">
+  <h1 class="text-2xl font-semibold">Page not found</h1>
+  <p class="mt-2 text-slate-600">
+    {% if let Some(p) = path.as_ref() %}
+    Nothing exists at <code class="rounded bg-slate-100 px-1 py-0.5">{{ p }}</code>.
+    {% else %}
+    The page you were looking for does not exist.
+    {% endif %}
+  </p>
+  <p class="mt-4">
+    <a href="/" class="text-blue-600 hover:underline">Back to home</a>
+  </p>
+</section>
+{% endblock %}

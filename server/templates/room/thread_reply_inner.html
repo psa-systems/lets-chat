@@ -1,0 +1,18 @@
+{# Single thread reply row. Avatar, header, body, reactions only. #}
+<div id="msg-{{ message.id }}" class="px-3 py-1.5 hover:bg-slate-100 group">
+  <div class="flex items-center gap-2">
+    {% let avatar_user_id = message.user_id.clone() %}
+    {% let avatar_username = message.username.clone() %}
+    {% let avatar_ext = message.avatar_ext.clone() %}
+    {% let avatar_status = message.status.clone() %}
+    {% let avatar_custom_status = message.custom_status.clone() %}
+    {% let avatar_size = "h-5 w-5 text-xs" %}
+    {% include "partials/avatar.html" %}
+    <span class="font-medium text-sm">{{ message.label() }}</span>
+    <span class="text-xs text-slate-500">{{ message.created_at }}</span>
+    {% if message.edited_at.is_some() %}
+    <span class="text-xs text-slate-400">(edited)</span>
+    {% endif %}
+  </div>
+  <div class="whitespace-pre-wrap leading-snug text-sm pl-7">{{ message.body }}</div>
+</div>

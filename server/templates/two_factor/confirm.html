@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Save your recovery codes - lets-chat{% endblock %}
+
+{% block body %}
+<main class="h-screen overflow-y-auto p-6">
+  <div class="min-h-full flex items-center justify-center">
+  <div class="w-full max-w-md space-y-4 bg-white p-6 rounded shadow">
+    <h1 class="text-xl font-semibold">Save your recovery codes</h1>
+    <p class="text-sm text-slate-600">
+      Each code works once. Store them somewhere safe. If you lose your authenticator,
+      a recovery code is the only way back into your account.
+    </p>
+    <ul class="grid grid-cols-2 gap-2 font-mono text-sm bg-slate-100 p-4 rounded">
+      {% for c in codes %}
+      <li class="text-center">{{ c }}</li>
+      {% endfor %}
+    </ul>
+    <p class="text-xs text-red-600">
+      You will not see these again. Copy them now.
+    </p>
+    <a href="/" class="block w-full text-center bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+      I saved my codes - continue
+    </a>
+  </div>
+  </div>
+</main>
+{% endblock %}

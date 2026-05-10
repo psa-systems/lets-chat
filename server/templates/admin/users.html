@@ -1,0 +1,22 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Users - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">Users</h1>
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2">Username</th>
+      <th class="py-2">Role</th>
+      <th class="py-2">Status</th>
+      <th class="py-2 text-right">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    {% include "admin/user_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

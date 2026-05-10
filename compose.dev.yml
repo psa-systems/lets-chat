@@ -1,4 +1,7 @@
 ---
+# Developer Docker Compose: builds via the same multi-stage Dockerfile as
+# production, then attaches the running container to the shared Traefik
+# network so it is reachable at https://${USER}-chat.a8n.run.
 name: chat-${USER}
 
 services:
@@ -6,21 +9,28 @@ services:
   app:
     build:
       context: .
+      dockerfile: ci-build/Dockerfile.web
+      args:
+        BUILD_MODE: ${BUILD_MODE:-standalone}
+        GIT_HASH: ${GIT_HASH:-unknown}
+        GIT_VERSION: ${GIT_VERSION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    container_name: dev-lets-chat-app-${USER}
     restart: unless-stopped
     environment:
-      RUST_LOG: debug
+      RUST_LOG: lets_chat=debug
+      LETS_CHAT_DATA_DIR: /data
+      LETS_CHAT_SECRET_KEY: sghsgG8vVnvr9gddWwrL03
+      BIND_ADDR: 0.0.0.0:8080
     volumes:
-      - ./src:/app/src
-      - ./assets:/app/assets
-      - ./tests:/app/tests
-      - ./Cargo.toml:/app/Cargo.toml
-      - ./Cargo.lock:/app/Cargo.lock
-      - ./migrations:/app/migrations
-      - cargo_target:/app/target
-      - lets_chat_data:/data
+      - lets-chat-data:/data
     networks:
       - default
       - network-traefik-public
+    # Sequence form (not mapping) so Compose interpolates ${USER} in the
+    # router/service name segments. Compose v2 does NOT substitute variables
+    # inside YAML mapping keys, only in values; sequence items are values
+    # end-to-end, so the whole "key=value" string gets interpolated.
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=network-traefik-public"
@@ -31,8 +41,7 @@ services:
       - "traefik.http.services.chat-${USER}.loadbalancer.server.port=8080"
 
 volumes:
-  cargo_target:
-  lets_chat_data:
+  lets-chat-data:
 
 networks:
   network-traefik-public:

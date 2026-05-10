@@ -1,0 +1,69 @@
+{% if message.show_unread_divider %}
+<div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-red-600">
+  <span class="h-px flex-1 bg-red-300"></span>
+  <span>Unread messages</span>
+  <span class="h-px flex-1 bg-red-300"></span>
+</div>
+{% endif %}
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
+  {% if !message.is_follow_up %}
+  <div class="flex items-center gap-2">
+    {% let avatar_user_id = message.user_id.clone() %}
+    {% let avatar_username = message.username.clone() %}
+    {% let avatar_ext = message.avatar_ext.clone() %}
+    {% let avatar_status = message.status.clone() %}
+    {% let avatar_custom_status = message.custom_status.clone() %}
+    {% let avatar_size = "h-6 w-6 text-xs" %}
+    {% include "partials/avatar.html" %}
+    {% if message.user_id != message.viewer_id %}
+    <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="Direct message {{ message.username }}">{{ message.label() }}</a>
+    {% else %}
+    <span class="font-medium">{{ message.label() }}</span>
+    {% endif %}
+    <span class="text-xs text-slate-500">{{ message.created_at }}</span>
+    {% if message.edited_at.is_some() %}
+    <span class="text-xs text-slate-400">(edited)</span>
+    {% endif %}
+  </div>
+  {% endif %}
+  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
+    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Reply</button>
+    {% if message.can_edit %}
+    <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Edit</button>
+    {% endif %}
+    {% if message.can_delete %}
+    <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="Delete this message?" class="text-red-600 hover:underline">Delete</button>
+    {% endif %}
+  </span>
+  {% if message.is_image_only() %}
+    {% let a = message.attachments[0].clone() %}
+    {% include "partials/attachment.html" %}
+  {% else %}
+    {% if !message.body.is_empty() %}
+    <div class="whitespace-pre-wrap leading-snug">{{ message.body_html()|safe }}</div>
+    {% if let Some(u) = message.first_url_encoded() %}
+    <div class="mt-1" hx-get="/api/unfurl?url={{ u }}" hx-trigger="load once" hx-swap="innerHTML"></div>
+    {% endif %}
+    {% endif %}
+    {% for a in message.attachments %}
+      {% include "partials/attachment.html" %}
+    {% endfor %}
+  {% endif %}
+  <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
+    {% let message_id = message.id %}
+    {% let reactions = message.reactions.as_slice() %}
+    {% include "partials/reaction_bar.html" %}
+  </div>
+  {% let reply_count = message.reply_count %}
+  {% let message_id = message.id %}
+  {% let room_id = message.room_id %}
+  {% let oob = false %}
+  {% include "room/reply_count.html" %}
+  {% if message.user_id == message.viewer_id %}
+  <div id="seen-{{ message.id }}">
+    {% if let Some(t) = message.seen_caption.as_ref() %}
+    <div class="text-xs text-slate-400">Seen {{ t }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

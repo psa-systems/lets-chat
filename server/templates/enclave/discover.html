@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+
+{% block title %}Discover enclaves - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex-1 overflow-y-auto">
+<section class="p-6 max-w-2xl space-y-6">
+  {% if let Some(msg) = flash_error %}
+  <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+    {{ msg }}
+  </div>
+  {% endif %}
+  <header>
+    <h1 class="text-2xl font-semibold">Enclaves</h1>
+    <p class="text-slate-600 mt-1">Top-level groups of rooms. Create one, join via code, or browse public ones.</p>
+  </header>
+
+  <section class="border rounded p-4">
+    <h2 class="font-semibold">Create</h2>
+    <form method="post" action="/enclaves" class="mt-2 space-y-2">
+      <input name="name" placeholder="Enclave name" class="w-full border rounded px-2 py-1" required>
+      <input name="description" placeholder="Description (optional)" class="w-full border rounded px-2 py-1">
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1">Create</button>
+    </form>
+  </section>
+
+  <section class="border rounded p-4">
+    <h2 class="font-semibold">Join by invite code</h2>
+    <form method="post" action="/enclaves/join" class="mt-2 flex gap-2">
+      <input name="code" placeholder="invite code" class="flex-1 border rounded px-2 py-1 font-mono" required>
+      <button type="submit" class="bg-slate-200 rounded px-3 py-1">Join</button>
+    </form>
+  </section>
+
+  <section>
+    <h2 class="font-semibold">Public enclaves</h2>
+    {% if enclaves.is_empty() %}
+    <p class="text-slate-600 mt-2">No public enclaves yet. Set yours public from its settings page.</p>
+    {% else %}
+    <ul class="mt-2 space-y-2">
+      {% for e in enclaves %}
+      <li class="flex items-center justify-between border rounded p-3">
+        <div>
+          <div class="font-medium">{{ e.name }}</div>
+          {% if let Some(d) = e.description %}<div class="text-sm text-slate-600">{{ d }}</div>{% endif %}
+        </div>
+        <form method="post" action="/enclaves/discover/{{ e.id }}/join">
+          <button type="submit" class="text-sm bg-slate-200 rounded px-3 py-1">Join</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</section>
+</div>
+{% endblock %}

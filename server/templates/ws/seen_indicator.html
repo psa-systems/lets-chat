@@ -1,0 +1,5 @@
+<div id="seen-{{ message_id }}" hx-swap-oob="outerHTML">
+  {% if let Some(c) = caption.as_ref() %}
+  <div class="text-xs text-slate-400">Seen {{ c }}</div>
+  {% endif %}
+</div>

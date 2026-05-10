@@ -1,0 +1,12 @@
+[package]
+name = "lets-chat-desktop"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "lets-chat-desktop"
+path = "src/main.rs"
+
+[dependencies]
+tao = "0.30"
+wry = "0.46"

@@ -1,0 +1,5 @@
+{% if unread > 0 && mute_mode == "none" %}
+<span id="unread-{{ kind }}-{{ id }}" hx-swap-oob="outerHTML" class="ml-auto text-xs bg-blue-600 text-white rounded px-2">{{ unread }}</span>
+{% else %}
+<span id="unread-{{ kind }}-{{ id }}" hx-swap-oob="outerHTML"></span>
+{% endif %}

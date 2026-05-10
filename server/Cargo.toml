@@ -1,0 +1,67 @@
+[package]
+name = "lets-chat-server"
+version.workspace = true
+edition.workspace = true
+default-run = "lets-chat"
+
+[[bin]]
+name = "lets-chat"
+path = "src/main.rs"
+required-features = ["standalone"]
+
+[[bin]]
+name = "lets-chat-saas"
+path = "src/main.rs"
+required-features = ["saas"]
+
+[lib]
+name = "lets_chat"
+path = "src/lib.rs"
+
+[features]
+default = ["standalone"]
+standalone = []
+saas = ["dep:hmac", "dep:hex", "dep:jsonwebtoken"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+
+axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
+http = "1"
+askama = "0.12"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
+argon2 = "0.5"
+rand = "0.8"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dashmap = "6"
+time = "0.3"
+mime_guess = "2"
+percent-encoding = "2"
+async-trait = "0.1"
+thiserror = "1"
+infer = "0.16"
+tokio-util = { version = "0.7", features = ["io"] }
+sha2 = "0.10"
+linkify = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream"] }
+scraper = "0.20"
+url = "2"
+regex = "1"
+totp-rs = { version = "5", features = ["qr", "otpauth", "gen_secret"] }
+aes-gcm = "0.10"
+web-push-native = "0.4"
+p256 = { version = "0.13", features = ["pkcs8", "pem", "ecdh"] }
+bytes = "1"
+base64 = "0.22"
+hmac = { version = "0.12", optional = true }
+hex = { version = "0.4", optional = true }
+jsonwebtoken = { version = "9", optional = true }
