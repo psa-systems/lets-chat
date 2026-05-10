@@ -17,7 +17,7 @@ ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
 
-FROM rust:1.88-slim-bookworm AS chef
+FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS chef
 
 # Cap concurrent rustc / build-script processes. The desktop and OCI
 # builds run in parallel on the same CI runner; without a cap each
@@ -32,7 +32,6 @@ RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN cargo install cargo-chef --locked --version 0.1.68
 WORKDIR /app
 
 FROM chef AS planner

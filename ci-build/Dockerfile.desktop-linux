@@ -8,7 +8,7 @@
 # /build/target/release/lets-chat-desktop, which the CI workflow extracts
 # via `docker create` + `docker cp`.
 
-FROM rust:1.88-slim-bookworm AS builder
+FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS builder
 ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
