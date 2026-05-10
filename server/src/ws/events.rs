@@ -157,6 +157,19 @@ pub enum ChatEvent {
         room_id: i64,
         mute_mode: String,
     },
+    /// Per-user notification of a DM-mute toggle. Recipients re-render their
+    /// sidebar OOB so the muted-peer class flips and badges hide/show across
+    /// all of their open tabs. Routed via
+    /// `Hub::broadcast_to_user(user_id, ...)`.
+    DmMuteChanged {
+        /// The room id of the affected DM (the canonical key for the
+        /// (muter, dm_room_id) row in `room_notification_settings`).
+        dm_room_id: i64,
+        /// The peer of the affected DM. Carried for clarity; the sidebar
+        /// re-render does not consult it directly.
+        peer_user_id: String,
+        muted: bool,
+    },
 }
 
 /// Control frames sent from client to server.
