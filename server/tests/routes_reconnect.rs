@@ -77,7 +77,9 @@ async fn app_with_logged_in_user() -> (Router, String) {
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
-    let user_id = db::auth::create_user(&auth, "viewer", "hash").await.unwrap();
+    let user_id = db::auth::create_user(&auth, "viewer", "hash")
+        .await
+        .unwrap();
     let session = db::auth::create_session(&auth, &user_id).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
