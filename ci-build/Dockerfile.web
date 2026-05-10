@@ -1,68 +1,103 @@
-# Build stage. The base image bundles Rust 1.93 + WASM target + bun
-# + cargo-binstall + dioxus-cli (pinned). See niceguyit/oci-images/rust-builder.
-FROM ghcr.io/niceguyit/rust-builder-dioxus:v1.0.0-dioxus0.7.7-rust1.93-trixie AS builder
+# syntax=docker/dockerfile:1.6
 
-WORKDIR /build
+# Multi-stage build:
+#   1. chef    - cargo-chef installer (planner + cacher share this base).
+#   2. planner - generate recipe.json describing the dependency graph.
+#   3. cacher  - cook dependencies for lets-chat-server (cached layer).
+#   4. css     - run Tailwind via Bun to produce tailwind-built.css.
+#   5. builder - compile the release server binary using cached deps.
+#   6. runtime - minimal Debian image with binary, assets, and migrations.
+#
+# BUILD_MODE selects the cargo feature set and binary:
+#   - standalone (default): self-hosted with built-in registration/login/admin.
+#   - saas:                 external auth via parent app cookie; no register/admin.
 
-# Cap concurrent rustc / build-script processes. See the matching
-# block in Dockerfile.desktop-linux for the rationale; the desktop
-# and OCI builds share the same CI host, so both must clamp.
+ARG BUILD_MODE=standalone
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+
+FROM rust:1.88-slim-bookworm AS chef
+
+# Cap concurrent rustc / build-script processes. The desktop and OCI
+# builds run in parallel on the same CI runner; without a cap each
+# container reads the host's nproc and queues that many cargo
+# workers, oversubscribing the runner. nproc/2 lets the two builds
+# share the host without stepping on each other. Overridable via
+# `--build-arg CARGO_BUILD_JOBS=N` for ad-hoc local builds.
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
 
-# --- Dependency caching (server-side only) ---
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --release \
-    && rm -rf src target/release/deps/lets_chat*
-
-# --- Full build with dioxus ---
-# Copy source code (respects .dockerignore)
-COPY . .
-
-# Build Tailwind CSS (tailwind-built.css is gitignored, must be generated)
-RUN bun install --frozen-lockfile && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
-
-# Build fullstack app (server binary + WASM client bundle)
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    dx build --release --platform web
-
-# Create consistent output path
-RUN ln -s /build/target/dx/lets-chat/release/web /build/dx-output
-
-# Runtime stage (must match builder glibc version)
-FROM debian:trixie-slim
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install --yes --no-install-recommends \
-    ca-certificates tzdata curl \
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd --create-home --uid 1001 appuser
-
-# Create standard directory structure:
-#   /app    — application binary, static assets, and WASM client (read-only)
-#   /data   — persistent application data (Docker volume)
-#   /config — application configuration (Docker volume)
-RUN mkdir -p /app/assets /data /config
-
+RUN cargo install cargo-chef --locked --version 0.1.68
 WORKDIR /app
 
-# Copy dx build output (server binary + public/ with index.html and WASM/JS)
-COPY --from=builder /build/dx-output/ /app/
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Copy WASM/JS assets to /app/assets/ for the ServeDir("/assets") route in main.rs
-RUN cp /app/public/assets/* /app/assets/ 2>/dev/null || true
+FROM chef AS cacher
+ARG BUILD_MODE
+COPY --from=planner /app/recipe.json recipe.json
+RUN set -eux; \
+    if [ "$BUILD_MODE" = "saas" ]; then \
+      cargo chef cook --release --no-default-features --features saas --recipe-path recipe.json -p lets-chat-server; \
+    else \
+      cargo chef cook --release --features standalone --recipe-path recipe.json -p lets-chat-server; \
+    fi
 
-# Set ownership of all standard directories
-RUN chown -R appuser:appuser /app /data /config
+FROM oven/bun:1 AS css
+WORKDIR /app/server
+COPY server/package.json server/bun.lock server/tailwind.config.js ./
+COPY server/assets ./assets
+COPY server/templates ./templates
+RUN bun install --frozen-lockfile \
+    && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
+
+FROM chef AS builder
+ARG BUILD_MODE
+ARG GIT_HASH
+ARG GIT_VERSION
+ARG BUILD_DATE
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
+COPY . .
+COPY --from=cacher /app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
+COPY --from=css /app/server/assets/tailwind-built.css server/assets/tailwind-built.css
+RUN set -eux; \
+    if [ "$BUILD_MODE" = "saas" ]; then \
+      cargo build --release --no-default-features --features saas -p lets-chat-server; \
+      cp target/release/lets-chat-saas /app/lets-chat; \
+    else \
+      cargo build --release --features standalone -p lets-chat-server; \
+      cp target/release/lets-chat /app/lets-chat; \
+    fi
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates curl tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root runtime user; /data is volume-mounted and must be writable.
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /app/server /data \
+    && chown -R appuser:appuser /app /data
+
+WORKDIR /app
+COPY --from=builder --chown=appuser:appuser /app/lets-chat /usr/local/bin/lets-chat
+COPY --from=builder --chown=appuser:appuser /app/server/assets /app/server/assets
+COPY --from=builder --chown=appuser:appuser /app/server/migrations /app/server/migrations
 
 USER appuser
+
+ENV LETS_CHAT_DATA_DIR=/data \
+    BIND_ADDR=0.0.0.0:8080 \
+    RUST_LOG=lets_chat=info
 
 LABEL org.opencontainers.image.source=https://dev.a8n.run/a8n-tools/lets-chat
 LABEL org.opencontainers.image.description="lets-chat"
@@ -70,6 +105,6 @@ LABEL org.opencontainers.image.description="lets-chat"
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD curl --fail --silent http://localhost:8080/login >/dev/null || exit 1
 
-ENTRYPOINT ["/app/lets-chat"]
+ENTRYPOINT ["lets-chat"]

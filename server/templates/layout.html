@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div hx-ext="ws" ws-connect="/ws" class="flex h-screen">
+  <div id="lc-nav-panel" class="hidden md:flex fixed inset-y-0 left-0 z-30 md:static md:z-auto">
+    {% let oob = false %}
+    {% include "partials/enclave_switcher.html" %}
+    {% include "partials/sidebar.html" %}
+  </div>
+  <div id="lc-nav-backdrop" class="hidden fixed inset-0 z-20 bg-black/40 md:hidden" onclick="lcCloseNav()"></div>
+  <main id="main" class="flex-1 flex flex-col overflow-hidden min-h-0">
+    <button type="button" aria-label="Open navigation"
+      class="md:hidden inline-flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-slate-600 hover:text-slate-900"
+      onclick="lcOpenNav()">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+      </svg>
+      <span>Menu</span>
+    </button>
+    {% block main %}{% endblock %}
+  </main>
+  <div id="status-events-slot" class="hidden"></div>
+  <div id="lc-notify-bus" class="hidden"></div>
+  <div id="lc-mention-counts" class="hidden"
+       data-base-title="lets-chat"
+       data-browser-enabled="{% if user.notify_browser_enabled %}1{% else %}0{% endif %}"
+       data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"
+       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
+</div>
+<script>
+(function(){
+  // Hidden DOM "bus": every Mentioned/MentionCleared WS frame is rendered as
+  // a <div data-event=...> appended here. We watch it, translate each child
+  // into title flash + favicon dot + (background-only) sound + browser
+  // notification, then drain.
+  var bus = document.getElementById('lc-notify-bus');
+  var cfg = document.getElementById('lc-mention-counts');
+  if (!bus || !cfg) return;
+  var baseTitle = cfg.getAttribute('data-base-title') || document.title;
+  var browserEnabled = cfg.getAttribute('data-browser-enabled') === '1';
+  var soundEnabled = cfg.getAttribute('data-sound-enabled') === '1';
+  var pushEnabled = cfg.getAttribute('data-push-enabled') === '1';
+  var counts = {};               // room_id -> unread mention count
+  var permPrompted = false;      // gate the one-shot Notification permission prompt
+  var pushTried = false;         // gate the one-shot service-worker registration
+  function urlBase64ToUint8Array(s){
+    var pad = '='.repeat((4 - s.length % 4) % 4);
+    var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(b64);
+    var arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  async function tryRegisterPush(){
+    if (pushTried || !pushEnabled) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    pushTried = true;
+    try {
+      var resp = await fetch('/push/vapid-public-key');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      var existing = await reg.pushManager.getSubscription();
+      var sub = existing || await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(data.key),
+      });
+      var json = sub.toJSON();
+      await fetch('/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        }),
+      });
+    } catch (e) { console.warn('push registration failed', e); }
+  }
+  // Title + favicon reflect the running total; called after every event.
+  function refresh(){
+    var n = 0; for (var k in counts) n += counts[k];
+    document.title = n > 0 ? '(' + n + ') ' + baseTitle : baseTitle;
+    var link = document.getElementById('lc-favicon');
+    if (link) link.href = n > 0 ? '/assets/favicon-dot.svg' : '/assets/favicon.svg';
+  }
+  // OOB-style replace of the sidebar mention chip. n=0 collapses to an empty span.
+  function paintBadge(roomId, n){
+    var el = document.getElementById('mention-room-' + roomId);
+    if (!el) return;
+    el.outerHTML = n > 0
+      ? '<span id="mention-room-' + roomId + '" class="ml-1 text-[10px] font-bold uppercase bg-red-600 text-white rounded px-1.5">@' + n + '</span>'
+      : '<span id="mention-room-' + roomId + '"></span>';
+  }
+  // Browser Notification API: lazy-prompt for permission on the first qualifying event.
+  function fireNotification(d){
+    if (!browserEnabled || !('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission !== 'granted') {
+      if (!permPrompted) {
+        permPrompted = true;
+        Notification.requestPermission().then(function(p){
+          if (p === 'granted') tryRegisterPush();
+        });
+      }
+      return;
+    }
+    tryRegisterPush();
+    var title = d.kind === 'dm' ? 'Direct message from ' + d.author : d.author + ' mentioned you in ' + d.roomLabel;
+    try {
+      var n = new Notification(title, { body: d.snippet, tag: 'lc-' + d.target });
+      n.onclick = function(){ window.focus(); location.assign(d.target); n.close(); };
+    } catch (e) {}
+  }
+  function playSound(){
+    if (!soundEnabled) return;
+    try { var p = new Audio('/assets/notify.ogg').play(); if (p && p.catch) p.catch(function(){}); } catch (e) {}
+  }
+  // Translate one bus child into all of its side effects.
+  function process(node){
+    var ev = node.getAttribute('data-event');
+    var roomId = node.getAttribute('data-room-id');
+    if (ev === 'mentioned') {
+      counts[roomId] = (counts[roomId] || 0) + 1;
+      var target = node.getAttribute('data-target');
+      var bg = document.hidden || location.pathname !== target;
+      if (bg) {
+        fireNotification({
+          kind: node.getAttribute('data-kind'),
+          roomLabel: node.getAttribute('data-room-label'),
+          author: node.getAttribute('data-author'),
+          snippet: node.getAttribute('data-snippet'),
+          target: target
+        });
+        playSound();
+      }
+      // DMs don't show a sidebar @ chip - the existing DM unread badge covers them.
+      if (node.getAttribute('data-kind') !== 'dm') paintBadge(roomId, counts[roomId]);
+    } else if (ev === 'mention_cleared') {
+      if (counts[roomId]) counts[roomId] = Math.max(0, counts[roomId] - 1);
+      paintBadge(roomId, counts[roomId] || 0);
+    }
+    refresh();
+  }
+  new MutationObserver(function(muts){
+    muts.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 1) process(n); }); });
+    bus.replaceChildren();
+  }).observe(bus, { childList: true });
+})();
+</script>
+<script>
+function lcOpenNav(){
+  var p = document.getElementById('lc-nav-panel');
+  p.classList.remove('hidden');
+  p.classList.add('flex');
+  document.getElementById('lc-nav-backdrop').classList.remove('hidden');
+}
+function lcCloseNav(){
+  if (window.matchMedia('(min-width: 768px)').matches) return;
+  var p = document.getElementById('lc-nav-panel');
+  p.classList.add('hidden');
+  p.classList.remove('flex');
+  document.getElementById('lc-nav-backdrop').classList.add('hidden');
+}
+document.body.addEventListener('click', function(e){
+  if (window.matchMedia('(min-width: 768px)').matches) return;
+  var link = e.target.closest('#lc-nav-panel a');
+  if (link) lcCloseNav();
+});
+</script>
+{% endblock %}

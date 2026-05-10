@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+
+{% block title %}#{{ room.name }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-col flex-1 overflow-hidden">
+    {% include "partials/room_header.html" %}
+    {% include "room/messages.html" %}
+    <div id="typing" class="px-4 text-xs text-slate-500"></div>
+    {% include "room/composer.html" %}
+  </div>
+  <aside id="thread-panel" class="hidden"></aside>
+</div>
+<script>
+document.body.addEventListener('htmx:wsOpen', function(evt) {
+  window.__lcWS = evt.detail.socketWrapper;
+  evt.detail.socketWrapper.send(JSON.stringify({
+    type: 'subscribe',
+    room_id: {{ room.id }}
+  }));
+});
+</script>
+{% include "partials/auto_scroll.html" %}
+{% endblock %}

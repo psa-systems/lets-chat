@@ -1,0 +1,87 @@
+<aside id="thread-panel" class="w-96 border-l border-slate-200 flex flex-col bg-white">
+  <header class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+    <div class="font-semibold">Thread</div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-slate-400 hover:text-slate-700"
+      aria-label="Close thread"
+    >&#10005;</button>
+  </header>
+  <div class="border-b border-slate-200 px-3 py-2 bg-slate-50">
+    {% let parent_message = parent %}
+    {% let message = parent_message %}
+    {% include "room/thread_reply_inner.html" %}
+  </div>
+  <div id="thread-replies-{{ parent.id }}" class="flex-1 overflow-y-auto py-1">
+    {% for r in replies %}
+    {% let message = r %}
+    {% include "room/thread_reply_inner.html" %}
+    {% endfor %}
+  </div>
+  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-slate-500"></div>
+  <form
+    id="thread-composer-{{ parent.id }}"
+    hx-post="/room/{{ room.id }}/thread/{{ parent.id }}/messages"
+    hx-swap="none"
+    hx-on::after-request="
+      var ta = this.querySelector('textarea[name=body]');
+      var send = this.querySelector('.thread-send');
+      var err = this.querySelector('.thread-error');
+      if (event.detail.successful) {
+        ta.value = '';
+        ta.style.height = 'auto';
+        send.disabled = true;
+        err.classList.add('hidden');
+        window.__lcLastThreadTyping = 0;
+      } else {
+        err.classList.remove('hidden');
+      }
+      ta.focus();
+    "
+    class="border-t border-slate-200 p-2"
+  >
+    <div class="thread-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
+      <span>Could not send.</span>
+      <button type="submit" class="underline hover:no-underline">Retry</button>
+    </div>
+    <div class="flex items-end gap-2">
+      <textarea
+        name="body"
+        rows="1"
+        autocomplete="off"
+        autofocus
+        placeholder="Reply..."
+        class="flex-1 resize-none overflow-y-auto rounded border px-3 py-1.5 text-sm max-h-32"
+        oninput="
+          this.style.height = 'auto';
+          this.style.height = Math.min(this.scrollHeight, 128) + 'px';
+          this.form.querySelector('.thread-send').disabled = !this.value.trim();
+          var ws = window.__lcWS;
+          if (!ws) return;
+          var now = Date.now();
+          if (now - (window.__lcLastThreadTyping || 0) < 2500) return;
+          window.__lcLastThreadTyping = now;
+          ws.send(JSON.stringify({ type: 'thread_typing', room_id: {{ room.id }}, parent_id: {{ parent.id }} }));
+        "
+        onkeydown="
+          if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            if (this.value.trim()) this.form.requestSubmit();
+          }
+        "
+      ></textarea>
+      <button
+        type="submit"
+        disabled
+        class="thread-send rounded bg-blue-600 px-2 py-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Send reply"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+          <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.604.534l7.443.972c.336.044.336.526 0 .57l-7.443.972a.75.75 0 00-.604.534l-1.414 4.949a.75.75 0 00.826.95 28.74 28.74 0 0015.585-7.122.75.75 0 000-1.054A28.74 28.74 0 003.105 2.289z" />
+        </svg>
+      </button>
+    </div>
+  </form>
+</aside>

@@ -1,10 +1,20 @@
-# Build stage for Dioxus desktop application (Linux/glibc + WebKitGTK).
-# The base image bundles Rust 1.93 + WASM target + bun + cargo-binstall
-# + dioxus-cli + GTK/WebKitGTK/libxdo/appindicator/librsvg.
-# See niceguyit/oci-images/rust-builder.
-FROM ghcr.io/niceguyit/rust-builder-dioxus-desktop:v1.0.0-dioxus0.7.7-rust1.93-trixie AS builder
+# syntax=docker/dockerfile:1.6
 
-WORKDIR /build
+# Build the lets-chat-desktop binary for Linux x86_64.
+#
+# The desktop crate is a Tao + Wry webview wrapper that links against system
+# GTK / WebKit2GTK / Soup libraries, so the build image installs those plus
+# the usual native build deps. The runtime artifact is the single binary at
+# /build/target/release/lets-chat-desktop, which the CI workflow extracts
+# via `docker create` + `docker cp`.
+
+FROM rust:1.88-slim-bookworm AS builder
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
 
 # Cap concurrent rustc / build-script processes. The desktop and OCI
 # builds run in parallel on the same CI runner; without a cap each
@@ -16,21 +26,16 @@ ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
 
-# --- Dependency caching (server-side only) ---
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --release \
-    && rm -rf src target/release/deps/lets_chat*
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        pkg-config \
+        libgtk-3-dev \
+        libwebkit2gtk-4.1-dev \
+        libsoup-3.0-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# --- Full build with dioxus ---
+WORKDIR /build
 COPY . .
 
-# Build Tailwind CSS
-RUN bun install --frozen-lockfile && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
-
-# Build desktop app
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    dx build --release --platform desktop --features client --no-default-features
+RUN cargo build --release -p lets-chat-desktop

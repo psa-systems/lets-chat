@@ -1,0 +1,96 @@
+<div id="status-picker-inner" class="border border-slate-300 rounded p-2 bg-white text-sm space-y-2 shadow" tabindex="-1">
+  <form hx-post="/status" hx-target="#status-picker" hx-swap="innerHTML" class="space-y-2">
+    <fieldset class="flex flex-col gap-1">
+      <legend class="sr-only">Presence</legend>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" name="status" value="active"{% if current_status == "active" %} checked{% endif %}>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
+        <span>Active</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" name="status" value="idle"{% if current_status == "idle" %} checked{% endif %}>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-yellow-400"></span>
+        <span>Idle</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" name="status" value="dnd"{% if current_status == "dnd" %} checked{% endif %}>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
+        <span>Do not disturb</span>
+      </label>
+    </fieldset>
+    <label class="block">
+      <span class="flex justify-between text-xs text-slate-500">
+        <span>Custom status (optional)</span>
+        <span id="status-counter">{% if let Some(t) = current_custom %}{{ t.chars().count() }}{% else %}0{% endif %} / 50</span>
+      </span>
+      <div class="relative mt-1">
+        <input
+          id="status-custom-input"
+          type="text"
+          name="custom_status"
+          maxlength="50"
+          value="{% if let Some(t) = current_custom %}{{ t }}{% endif %}"
+          class="block w-full rounded border px-2 py-1 pr-7"
+          oninput="
+            var n = this.value.length;
+            var c = document.getElementById('status-counter');
+            c.textContent = n + ' / 50';
+            c.classList.toggle('text-red-600', n >= 45);
+            document.getElementById('status-clear-custom').classList.toggle('hidden', n === 0);
+          "
+        >
+        <button
+          id="status-clear-custom"
+          type="button"
+          aria-label="Clear custom status"
+          class="absolute inset-y-0 right-1 flex items-center text-slate-400 hover:text-slate-700{% if current_custom.is_none() %} hidden{% endif %}"
+          onclick="
+            var i = document.getElementById('status-custom-input');
+            i.value = '';
+            i.dispatchEvent(new Event('input'));
+            i.focus();
+          "
+        >&#10005;</button>
+      </div>
+    </label>
+    <div class="flex gap-2">
+      <button type="submit" class="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">Save</button>
+      <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-slate-500 hover:text-slate-700">Close</button>
+    </div>
+  </form>
+</div>
+<script>
+(function(){
+  var inner = document.getElementById('status-picker-inner');
+  if (!inner) return;
+  var slot = document.getElementById('status-picker');
+  var trigger = document.getElementById('own-avatar-wrapper');
+  function cleanup(){
+    document.removeEventListener('keydown', onKey);
+    document.removeEventListener('mousedown', onMouseDown, true);
+    if (obs) obs.disconnect();
+  }
+  function close(){
+    if (window.htmx) htmx.ajax('GET','/status/cancel',{target:'#status-picker',swap:'innerHTML'});
+    cleanup();
+  }
+  function onKey(e){
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      if (trigger) trigger.focus();
+    }
+  }
+  function onMouseDown(e){
+    if (inner.contains(e.target)) return;
+    if (trigger && trigger.contains(e.target)) return;
+    close();
+  }
+  document.addEventListener('keydown', onKey);
+  setTimeout(function(){ document.addEventListener('mousedown', onMouseDown, true); }, 0);
+  var obs = new MutationObserver(function(){
+    if (!document.body.contains(inner)) cleanup();
+  });
+  if (slot) obs.observe(slot, {childList: true, subtree: true});
+})();
+</script>

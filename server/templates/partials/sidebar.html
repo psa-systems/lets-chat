@@ -1,0 +1,104 @@
+<aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
+  <div class="p-4 border-b border-slate-200">
+    <div class="flex items-center gap-2">
+      <button id="own-avatar-wrapper" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" title="Set status">
+        {% let avatar_user_id = user.id.clone() %}
+        {% let avatar_username = user.username.clone() %}
+        {% let avatar_ext = user.avatar_ext.clone() %}
+        {% let avatar_status = user.status.clone() %}
+        {% let avatar_custom_status = user.custom_status.clone() %}
+        {% let avatar_size = "h-8 w-8 text-sm" %}
+        {% include "partials/avatar.html" %}
+      </button>
+      <div class="min-w-0">
+        <div class="font-semibold truncate">{{ user.display_label() }}</div>
+        <div class="text-xs text-slate-500 truncate">@{{ user.username }}</div>
+        <div data-user-custom="{{ user.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+      </div>
+    </div>
+    <div id="status-picker" class="mt-2"></div>
+  </div>
+  <div class="p-2 space-y-2">
+    <form class="relative" autocomplete="off">
+      <input
+        name="q"
+        placeholder="Search messages..."
+        hx-get="/search"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-target="#search-msg-results"
+        hx-swap="innerHTML"
+        class="w-full border rounded px-2 py-1 text-sm">
+      <div id="search-msg-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+    </form>
+    <form class="relative" autocomplete="off">
+      <input
+        name="q"
+        placeholder="Search people..."
+        hx-get="/users/search"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-target="#search-people-results"
+        hx-swap="innerHTML"
+        class="w-full border rounded px-2 py-1 text-sm">
+      <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+    </form>
+  </div>
+  <nav class="flex-1 overflow-y-auto p-2 space-y-4">
+    {% if !sidebar_rooms.is_empty() %}
+    <section>
+      <h2 class="text-xs uppercase text-slate-500 px-2">Rooms</h2>
+      <ul class="mt-1">
+        {% for room in sidebar_rooms %}
+        <li>
+          <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-slate-400{% endif %}">
+            <span># {{ room.name }}</span>
+            {% let kind = "room" %}
+            {% let id = room.id.to_string() %}
+            {% let unread = room.unread %}
+            {% let mute_mode = room.mute_mode.as_str() %}
+            {% include "partials/unread_badge.html" %}
+            {% let mentions = room.mentions %}
+            {% include "partials/mention_badge.html" %}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% if !sidebar_peers.is_empty() %}
+    <section>
+      <h2 class="text-xs uppercase text-slate-500 px-2">Direct messages</h2>
+      <ul class="mt-1">
+        {% for peer in sidebar_peers %}
+        <li>
+          <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-slate-400{% endif %}">
+            {% let avatar_user_id = peer.id.clone() %}
+            {% let avatar_username = peer.username.clone() %}
+            {% let avatar_ext = peer.avatar_ext.clone() %}
+            {% let avatar_status = peer.status.clone() %}
+            {% let avatar_custom_status = peer.custom_status.clone() %}
+            {% let avatar_size = "h-6 w-6 text-xs" %}
+            {% include "partials/avatar.html" %}
+            <div class="min-w-0 flex-1">
+              <div class="truncate">{{ peer.label() }}</div>
+              <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+            </div>
+            {% let kind = "dm" %}
+            {% let id = peer.id.clone() %}
+            {% let unread = peer.unread %}
+            {% let mute_mode = peer.mute_mode.as_str() %}
+            {% include "partials/unread_badge.html" %}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </nav>
+  <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
+    {% if user.role == "admin" || user.role == "moderator" %}
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}Admin{% else %}Moderate{% endif %}</a>
+    {% endif %}
+    <a href="/settings" class="text-slate-600 hover:underline">Settings</a>
+    <a href="/logout" class="text-slate-600 hover:underline">Sign out</a>
+  </div>
+</aside>

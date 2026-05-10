@@ -1,0 +1,29 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Rooms - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">Rooms</h1>
+
+<p class="text-sm text-slate-600 mb-6">
+  Create rooms inside an enclave via the per-enclave landing page. This view is
+  read-only and intended for global moderation.
+</p>
+
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2">Name</th>
+      <th class="py-2">Type</th>
+      <th class="py-2">Members</th>
+      <th class="py-2">Invite</th>
+      <th class="py-2 text-right">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rooms_admin %}
+    {% include "admin/room_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

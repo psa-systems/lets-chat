@@ -1,0 +1,8 @@
+<span class="relative inline-block shrink-0"{% if let Some(t) = avatar_custom_status %} title="{{ t }}"{% endif %}>
+  {% if avatar_ext.is_some() %}
+  <img src="/avatars/{{ avatar_user_id }}" alt="" class="{{ avatar_size }} rounded-full object-cover">
+  {% else %}
+  <div class="{{ avatar_size }} rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-semibold">{% if let Some(c) = avatar_username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+  {% endif %}
+  <span data-user-status="{{ avatar_user_id }}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white {% if avatar_status == "dnd" %}bg-red-500{% else if avatar_status == "idle" %}bg-yellow-400{% else if avatar_status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
+</span>
