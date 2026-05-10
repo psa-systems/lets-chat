@@ -1,25 +1,10 @@
-# Build stage for Dioxus desktop application (Linux/glibc + WebKitGTK)
-FROM rust:1.93-slim-trixie AS builder
+# Build stage for Dioxus desktop application (Linux/glibc + WebKitGTK).
+# The base image bundles Rust 1.93 + WASM target + bun + cargo-binstall
+# + dioxus-cli + GTK/WebKitGTK/libxdo/appindicator/librsvg.
+# See niceguyit/oci-images/rust-builder.
+FROM ghcr.io/niceguyit/rust-builder-dioxus-desktop:v1.0.0-dioxus0.7.7-rust1.93-trixie AS builder
 
 WORKDIR /build
-
-# Install build dependencies:
-#   - WebKitGTK and GTK for the Dioxus desktop renderer (wry)
-#   - Bun for Tailwind CSS generation
-#   - Standard build tools
-RUN apt-get update && apt-get install --yes --no-install-recommends \
-    curl pkg-config libssl-dev unzip lld build-essential \
-    libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Bun
-RUN curl --fail --location --silent --show-error https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
-
-# Install cargo-binstall, then use it to fetch pre-built dioxus-cli
-RUN curl --location --silent --show-error https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
-    | tar --extract --gzip --directory /usr/local/cargo/bin
-RUN cargo binstall dioxus-cli@0.7.7 --no-confirm
 
 # Cap concurrent rustc / build-script processes. The desktop and OCI
 # builds run in parallel on the same CI runner; without a cap each
