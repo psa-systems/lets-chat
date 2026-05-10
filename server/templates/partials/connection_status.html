@@ -1,0 +1,33 @@
+<div id="lc-conn-status" data-state="hidden"
+     class="fixed top-0 inset-x-0 z-50 pointer-events-none
+            transition-opacity duration-500">
+  <div id="lc-conn-status-pill"
+       class="mx-auto max-w-2xl mt-2 rounded-md px-3 py-1.5
+              text-sm text-center shadow-md
+              flex items-center justify-center gap-2">
+    <span id="lc-conn-status-spinner" class="hidden">
+      <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24"
+           fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" stroke="currentColor"
+                stroke-width="3" stroke-opacity="0.25"></circle>
+        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor"
+              stroke-width="3" stroke-linecap="round"></path>
+      </svg>
+    </span>
+    <span id="lc-conn-status-text"></span>
+  </div>
+</div>
+<style>
+/* Tailwind's data-attribute variant is not configured in this project;
+   a small <style> block keeps the partial self-contained without
+   touching the bun/tailwind build. */
+#lc-conn-status[data-state="hidden"]            { opacity: 0; }
+#lc-conn-status[data-state="reconnecting"]      { opacity: 1; }
+#lc-conn-status[data-state="failed-long"]       { opacity: 1; }
+#lc-conn-status[data-state="connected-flash"]   { opacity: 1; }
+#lc-conn-status[data-state="reconnecting"]    #lc-conn-status-pill { background-color: #fef3c7; color: #78350f; }
+#lc-conn-status[data-state="failed-long"]     #lc-conn-status-pill { background-color: #fee2e2; color: #7f1d1d; }
+#lc-conn-status[data-state="connected-flash"] #lc-conn-status-pill { background-color: #dcfce7; color: #14532d; }
+#lc-conn-status[data-state="reconnecting"]    #lc-conn-status-spinner,
+#lc-conn-status[data-state="failed-long"]     #lc-conn-status-spinner { display: inline-flex; }
+</style>
