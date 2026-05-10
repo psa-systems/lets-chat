@@ -28,6 +28,10 @@ pub struct SidebarPeer {
     pub unread: i64,
     pub status: String,
     pub custom_status: Option<String>,
+    /// "none" | "all". DMs only ever take these two; mirrors
+    /// `SidebarRoom::mute_mode` so the sidebar template applies the same
+    /// greyed-link treatment uniformly.
+    pub mute_mode: String,
     pub active: bool,
 }
 

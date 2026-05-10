@@ -182,6 +182,8 @@ pub(crate) async fn load_sidebar(
                 .await?
                 .into_iter()
                 .collect();
+        let dm_mute_modes: HashMap<i64, db::notifications::MuteMode> =
+            db::notifications::room_mute_modes_for_user(&state.chat, &user.id).await?;
         let mut sidebar_peers: Vec<SidebarPeer> = Vec::with_capacity(dm_rooms.len());
         for (room, peer_id) in &dm_rooms {
             // Skip DMs with users who are blocked in either direction. The
@@ -200,6 +202,12 @@ pub(crate) async fn load_sidebar(
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
                     status: effective,
                     custom_status: record.custom_status.clone(),
+                    mute_mode: dm_mute_modes
+                        .get(&room.id)
+                        .copied()
+                        .unwrap_or(db::notifications::MuteMode::None)
+                        .as_str()
+                        .to_string(),
                     active: false,
                 });
             }
