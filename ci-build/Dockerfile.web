@@ -77,7 +77,7 @@ RUN set -eux; \
       cp target/release/lets-chat /app/lets-chat; \
     fi
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl tzdata \
     && rm -rf /var/lib/apt/lists/*
