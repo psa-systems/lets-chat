@@ -51,7 +51,7 @@ async fn private_key_is_not_stored_plaintext() {
     let key = test_secret_key();
     let kp = vapid::load_or_generate(&pool, &key).await.unwrap();
     let row: (Vec<u8>,) =
-        sqlx::query_as("SELECT private_key_pem_encrypted FROM vapid_keypair WHERE id = 1")
+        sqlx::query_as("SELECT private_key_encrypted FROM vapid_keypair WHERE id = 1")
             .fetch_one(&pool)
             .await
             .unwrap();

@@ -89,7 +89,7 @@
       <span>
         Enable push notifications (works when tab is closed)
         {% if !push_available %}
-        <span class="block text-xs text-slate-500">Unavailable: server is not configured for push.</span>
+        <span class="block text-xs text-slate-500">Unavailable: set the <code class="font-mono">LETS_CHAT_SECRET_KEY</code> environment variable on the server and restart to enable push notifications.</span>
         {% else %}
         <span class="block text-xs text-slate-500">A browser permission prompt will appear on the next mention.</span>
         {% endif %}
