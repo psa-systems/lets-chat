@@ -193,7 +193,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveInvitationResolved { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::MentionCleared { .. }
-        | ChatEvent::RoomNotifyPrefsChanged { .. } => None,
+        | ChatEvent::RoomNotifyPrefsChanged { .. }
+        | ChatEvent::DmMuteChanged { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

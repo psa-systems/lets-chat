@@ -362,8 +362,10 @@ pub async fn post_message(
                 target_path: format!("/dm/{}", user.id),
             };
             state.hub.broadcast_to_user(&peer_id, &event);
-            // FUTURE: when the DM-mute phase lands, this bypass becomes
-            // conditional on dm_mute_state(user, peer).
+            // Mute is enforced downstream: the WS `Mentioned` arm and
+            // `push::dispatch` both consult `room_mute_mode(peer_id,
+            // dm_room_id)` and drop the event when the peer has muted
+            // this DM.
             crate::push::dispatch(&state, &peer_id, &event).await;
         }
     }

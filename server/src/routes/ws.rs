@@ -130,26 +130,24 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                                 ChatEvent::Mentioned {
                                     mentioned_user_id,
-                                    kind,
                                     room_id,
                                     ..
                                 } if mentioned_user_id == &send_user.id => {
-                                    // DM-kind mentions bypass the mute check
-                                    // (DM mute is a separate phase). For room
-                                    // mentions, MuteMode::All suppresses the
-                                    // event entirely; other modes allow it.
-                                    let allow = if kind == "dm" {
-                                        true
-                                    } else {
-                                        db::notifications::room_mute_mode(
-                                            &send_state.chat,
-                                            &send_user.id,
-                                            *room_id,
-                                        )
-                                        .await
-                                        .unwrap_or(db::notifications::MuteMode::None)
-                                        .allows_room_mention()
-                                    };
+                                    // `MuteMode::All` suppresses the event
+                                    // entirely for both room and DM kinds.
+                                    // `ExceptMentions` falls through to render;
+                                    // it is unreachable for DM rooms via the
+                                    // API (`set_dm_mute` only writes None/All)
+                                    // but a corrupt row would render rather
+                                    // than crash.
+                                    let allow = db::notifications::room_mute_mode(
+                                        &send_state.chat,
+                                        &send_user.id,
+                                        *room_id,
+                                    )
+                                    .await
+                                    .unwrap_or(db::notifications::MuteMode::None)
+                                    .allows_room_mention();
                                     if allow {
                                         render_mentioned(&e)
                                     } else {
@@ -164,6 +162,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::RoomNotifyPrefsChanged { user_id, .. }
                                     if user_id == &send_user.id =>
                                 {
+                                    render_sidebar(&send_state, &send_user).await
+                                }
+                                ChatEvent::DmMuteChanged { .. } => {
+                                    // Routed only via
+                                    // `Hub::broadcast_to_user(muter_id, ...)`,
+                                    // so reaching this arm already implies
+                                    // the recipient is the muter. Re-render
+                                    // the sidebar OOB so the peer row's
+                                    // greyed-link class and unread-badge
+                                    // visibility flip in this tab.
                                     render_sidebar(&send_state, &send_user).await
                                 }
                                 _ => render_event(&e),
