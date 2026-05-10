@@ -45,6 +45,10 @@ jobs:
           docker version
           docker buildx version
 
+      - name: Set up buildx builder
+        run: |
+          docker buildx create --name container-builder --driver docker-container --use
+
       - name: Set environment variables
         shell: nu {0}
         run: |
@@ -72,7 +76,9 @@ jobs:
           let image = "lets-chat"
           let registry = $env.IMAGE_REGISTRY
           let tag_args = ($tags | each {|tag| [-t $"($registry)/($image):($tag)"]} | flatten)
-          let cache_from = $"type=registry,ref=($registry)/($image):latest"
+          let cache_ref = $"($registry)/($image):buildcache"
+          let cache_from = $"type=registry,ref=($cache_ref)"
+          let cache_to = $"type=registry,ref=($cache_ref),mode=max,ignore-error=true"
           # nproc/2 cap on cargo workers. See the matching block in
           # build-desktop-linux.yml for rationale.
           let jobs = ((sys cpu | length) / 2 | into int)
@@ -82,7 +88,7 @@ jobs:
             ^docker buildx build
               --push
               --cache-from $cache_from
-              --cache-to type=inline
+              --cache-to $cache_to
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
               ...$tag_args
               -f ci-build/Dockerfile.web
