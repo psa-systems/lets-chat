@@ -70,7 +70,7 @@
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
         <li>
-          <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% endif %}">
+          <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-slate-400{% endif %}">
             {% let avatar_user_id = peer.id.clone() %}
             {% let avatar_username = peer.username.clone() %}
             {% let avatar_ext = peer.avatar_ext.clone() %}
@@ -85,7 +85,7 @@
             {% let kind = "dm" %}
             {% let id = peer.id.clone() %}
             {% let unread = peer.unread %}
-            {% let mute_mode = "none" %}
+            {% let mute_mode = peer.mute_mode.as_str() %}
             {% include "partials/unread_badge.html" %}
           </a>
         </li>
