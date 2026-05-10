@@ -238,6 +238,12 @@ pub async fn get_dm(
         p.active = true;
     }
 
+    let mute_mode = db::notifications::room_mute_mode(&state.chat, &user.id, room.id)
+        .await
+        .unwrap_or(db::notifications::MuteMode::None)
+        .as_str()
+        .to_string();
+
     let page = DmPage {
         user: &user,
         peer: &peer,
@@ -247,6 +253,7 @@ pub async fn get_dm(
         switcher: &switcher,
         messages: &messages,
         asset_version: &state.asset_version,
+        mute_mode,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

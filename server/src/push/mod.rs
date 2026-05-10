@@ -143,7 +143,9 @@ impl PushClient for MockPushClient {
 /// subscription for `recipient_user_id`. Honors:
 ///   1. global Push availability (`state.vapid` is some)
 ///   2. per-user `notify_push_enabled`
-///   3. per-room mute mode (DM kind bypasses the room check)
+///   3. per-room mute mode (a row in `room_notification_settings` for the
+///      `(recipient, room_id)` pair, which covers DM rooms uniformly since
+///      a DM is a row in `rooms` with `room_type = 'dm'`)
 ///
 /// Each subscription send runs as its own `tokio::spawn` task. Failures
 /// are logged at warn level. 410-Gone deletes the row inline.
@@ -151,7 +153,7 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
     if state.vapid.is_none() {
         return;
     }
-    let ChatEvent::Mentioned { kind, room_id, .. } = event else {
+    let ChatEvent::Mentioned { room_id, .. } = event else {
         return;
     };
 
@@ -163,15 +165,11 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         return;
     }
 
-    if kind != "dm" {
-        // FUTURE: when the DM-mute phase lands, this bypass becomes
-        // conditional on dm_mute_state(user, peer).
-        let mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, *room_id)
-            .await
-            .unwrap_or(MuteMode::None);
-        if matches!(mode, MuteMode::All) {
-            return;
-        }
+    let mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, *room_id)
+        .await
+        .unwrap_or(MuteMode::None);
+    if matches!(mode, MuteMode::All) {
+        return;
     }
 
     let subs = match db::push_subscriptions::for_user(&state.auth, recipient_user_id).await {
