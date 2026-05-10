@@ -2,6 +2,7 @@
 
 {% block body %}
 <div hx-ext="ws" ws-connect="/ws" class="flex h-screen">
+  {% include "partials/connection_status.html" %}
   <div id="lc-nav-panel" class="hidden md:flex fixed inset-y-0 left-0 z-30 md:static md:z-auto">
     {% let oob = false %}
     {% include "partials/enclave_switcher.html" %}
