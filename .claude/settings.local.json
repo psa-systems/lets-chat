@@ -64,7 +64,9 @@
       "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/master/web_push/Cargo.toml\")",
       "Bash(curl -fsSL \"https://raw.githubusercontent.com/leotaku/web-push-native/master/web_push/src/lib.rs\")",
       "Bash(curl -fsSL \"https://raw.githubusercontent.com/jedisct1/rust-jwt-simple/master/src/algorithms/ecdsa.rs\")",
-      "Bash(just verify *)"
+      "Bash(just verify *)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }
