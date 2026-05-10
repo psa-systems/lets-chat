@@ -92,15 +92,42 @@ pub async fn room_mute_modes_for_user(
         .collect())
 }
 
+/// Internal helper: assert the room exists and matches the expected kind
+/// (DM or not-DM). Returns `sqlx::Error::Protocol` on mismatch so callers
+/// can surface a 400 at the route layer when needed; the same signature
+/// works for both setters.
+async fn assert_room_kind(
+    pool: &SqlitePool,
+    room_id: i64,
+    expect_dm: bool,
+) -> Result<(), sqlx::Error> {
+    let kind: Option<String> = sqlx::query_scalar("SELECT room_type FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    let kind =
+        kind.ok_or_else(|| sqlx::Error::Protocol(format!("room {room_id} not found").into()))?;
+    let is_dm = kind == "dm";
+    if is_dm != expect_dm {
+        let want = if expect_dm { "dm" } else { "non-dm" };
+        return Err(sqlx::Error::Protocol(
+            format!("room {room_id} is '{kind}', expected {want}").into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Upsert the mute mode. `MuteMode::None` removes the row instead of writing
 /// the literal `'none'` so absence-default stays the schema invariant - empty
-/// table = nobody has muted anything.
+/// table = nobody has muted anything. Rejects DM rooms; per-DM mute uses
+/// `set_dm_mute` instead.
 pub async fn set_room_mute_mode(
     pool: &SqlitePool,
     user_id: &str,
     room_id: i64,
     mode: MuteMode,
 ) -> Result<(), sqlx::Error> {
+    assert_room_kind(pool, room_id, false).await?;
     if matches!(mode, MuteMode::None) {
         return delete_room_mute_setting(pool, user_id, room_id).await;
     }
@@ -118,6 +145,35 @@ pub async fn set_room_mute_mode(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Toggle the mute state for a DM room. `muted = true` writes
+/// `MuteMode::All`; `false` deletes the row (absence = unmuted). Rejects
+/// non-DM rooms via `assert_room_kind`.
+pub async fn set_dm_mute(
+    pool: &SqlitePool,
+    user_id: &str,
+    dm_room_id: i64,
+    muted: bool,
+) -> Result<(), sqlx::Error> {
+    assert_room_kind(pool, dm_room_id, true).await?;
+    if muted {
+        sqlx::query(
+            "INSERT INTO room_notification_settings \
+                 (user_id, room_id, mute_mode, updated_at) \
+             VALUES (?, ?, 'all', datetime('now')) \
+             ON CONFLICT(user_id, room_id) DO UPDATE SET \
+                 mute_mode = 'all', \
+                 updated_at = datetime('now')",
+        )
+        .bind(user_id)
+        .bind(dm_room_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    } else {
+        delete_room_mute_setting(pool, user_id, dm_room_id).await
+    }
 }
 
 pub async fn delete_room_mute_setting(
