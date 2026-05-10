@@ -1,6 +1,7 @@
 ---
 
-# Validate code on every push and pull request: clippy, fmt, build, tests.
+# Validate code on every push and pull request: fmt, clippy, build, tests.
+# Mirrors the local `just check` + `just test` recipes (which use ./dev/cargo).
 name: Check
 
 on:
@@ -28,17 +29,17 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      - name: Clippy
+      - name: Clippy (workspace, standalone)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Check server build
-        run: cargo check --features server --no-default-features
+      - name: Clippy (server, saas)
+        run: cargo clippy --all-targets -p lets-chat-server --no-default-features --features saas -- -D warnings
 
-      - name: Check web/WASM build
-        run: cargo check --target wasm32-unknown-unknown
+      - name: Build (workspace, standalone)
+        run: cargo build --all-targets
 
-      - name: Build
-        run: cargo build --features server --no-default-features --all-targets
+      - name: Build (server, saas)
+        run: cargo build -p lets-chat-server --no-default-features --features saas
 
-      - name: Unit tests
-        run: cargo test --lib --features server --no-default-features
+      - name: Unit tests (server, standalone)
+        run: cargo test --lib -p lets-chat-server
