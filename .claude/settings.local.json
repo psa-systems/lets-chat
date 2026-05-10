@@ -67,7 +67,13 @@
       "Bash(just verify *)",
       "WebFetch(domain:crates.io)",
       "WebFetch(domain:api.github.com)",
-      "Bash(just --list)"
+      "Bash(just --list)",
+      "Bash(just check *)",
+      "Bash(curl --silent --output /dev/null --max-time 1 --fail http://127.0.0.1:18080/login)",
+      "Bash(HOST_PORT=18080 docker run --init --name lets-chat-rewrite-server-debug --user __CMDSUB_OUTPUT__:__CMDSUB_OUTPUT__ -p 127.0.0.1:18080:8080 -v __TRACKED_VAR__:/work -w /work -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git -v lets-chat-rewrite-target:/cargo-target -v lets-chat-rewrite-data:/data -e CARGO_HOME=/usr/local/cargo -e CARGO_TARGET_DIR=/cargo-target -e LETS_CHAT_DATA_DIR=/data -e BIND_ADDR=0.0.0.0:8080 -e RUST_LOG=lets_chat=debug rust:1.88-slim-bookworm cargo run --release -p lets-chat-server)",
+      "Bash(./dev/server-down)",
+      "Read(//home/long/.config/**)",
+      "Bash(gh auth *)"
     ]
   }
 }
