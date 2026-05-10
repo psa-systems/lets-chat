@@ -34,7 +34,9 @@ RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(
 # --- Dependency caching (server-side only) ---
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --release \
     && rm -rf src target/release/deps/lets_chat*
 
 # --- Full build with dioxus ---
@@ -44,4 +46,6 @@ COPY . .
 RUN bun install --frozen-lockfile && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
 # Build desktop app
-RUN dx build --release --platform desktop --features client --no-default-features
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    dx build --release --platform desktop --features client --no-default-features
