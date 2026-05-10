@@ -25,6 +25,11 @@ jobs:
           rustup component add clippy rustfmt
           rustup target add wasm32-unknown-unknown
 
+      - name: Cache Rust build
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Check formatting
         run: cargo fmt --check
 
