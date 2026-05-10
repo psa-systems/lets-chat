@@ -18,6 +18,17 @@ ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
 
 FROM rust:1.88-slim-bookworm AS chef
+
+# Cap concurrent rustc / build-script processes. The desktop and OCI
+# builds run in parallel on the same CI runner; without a cap each
+# container reads the host's nproc and queues that many cargo
+# workers, oversubscribing the runner. nproc/2 lets the two builds
+# share the host without stepping on each other. Overridable via
+# `--build-arg CARGO_BUILD_JOBS=N` for ad-hoc local builds.
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
+
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*

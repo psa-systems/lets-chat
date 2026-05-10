@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Clone the repository
-        uses: https://code.forgejo.org/actions/checkout@v3
+        uses: https://code.forgejo.org/actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -47,6 +47,10 @@ jobs:
         run: |
           docker version
           docker buildx version
+
+      - name: Set up buildx builder
+        run: |
+          docker buildx create --name container-builder --driver docker-container --use
 
       - name: Set environment variables
         shell: nu {0}
@@ -75,9 +79,24 @@ jobs:
           let image = "lets-chat"
           let registry = $env.IMAGE_REGISTRY
           let tag_args = ($tags | each {|tag| [-t $"($registry)/($image):($tag)"]} | flatten)
-          let cache_from = $"type=registry,ref=($registry)/($image):latest"
+          let cache_ref = $"($registry)/($image):buildcache"
+          let cache_from = $"type=registry,ref=($cache_ref)"
+          let cache_to = $"type=registry,ref=($cache_ref),mode=max,ignore-error=true"
+          # nproc/2 cap on cargo workers. See the matching block in
+          # build-desktop-linux.yml for rationale.
+          let jobs = ((sys cpu | length) / 2 | into int)
+          print $"CARGO_BUILD_JOBS=($jobs)"
           print $"Building and pushing ($image) with tags: ($tags_str)"
-          ^docker buildx build --push --cache-from $cache_from --cache-to type=inline ...$tag_args -f ci-build/Dockerfile.web .
+          (
+            ^docker buildx build
+              --push
+              --cache-from $cache_from
+              --cache-to $cache_to
+              --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              ...$tag_args
+              -f ci-build/Dockerfile.web
+              .
+          )
 
       - name: Print image URLs
         shell: nu {0}

@@ -1,0 +1,49 @@
+---
+
+# Validate code on every push and pull request: clippy, fmt, build, tests.
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: clippy + fmt + tests
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Install Rust toolchain
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache Rust build
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Check server build
+        run: cargo check --features server --no-default-features
+
+      - name: Check web/WASM build
+        run: cargo check --target wasm32-unknown-unknown
+
+      - name: Build
+        run: cargo build --features server --no-default-features --all-targets
+
+      - name: Unit tests
+        run: cargo test --lib --features server --no-default-features
