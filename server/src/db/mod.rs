@@ -4,6 +4,7 @@ pub mod enclave;
 pub mod mentions;
 pub mod moderation;
 pub mod notifications;
+pub mod pinned;
 pub mod push_subscriptions;
 pub mod settings;
 pub mod two_factor;
