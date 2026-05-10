@@ -27,6 +27,7 @@ mod admin;
 mod auth;
 mod avatar;
 mod dm;
+mod dm_mute;
 mod enclave;
 mod home;
 mod mentions;
@@ -399,6 +400,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/thread-panel", delete(room::close_thread_panel))
         .route("/dm/{peer_id}", get(dm::get_dm))
+        .route("/dm/{peer_id}/mute", post(dm_mute::post_dm_mute))
         .route(
             "/messages/{message_id}",
             get(room::get_single_message)
