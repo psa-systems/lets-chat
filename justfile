@@ -2,6 +2,20 @@
 default:
     @just --list
 
+# Install the git pre-commit hook (run once per fresh clone). Writes a stub at .git/hooks/pre-commit that execs `just pre-commit`. Bypass with `git commit --no-verify`.
+install-hooks:
+    #!/usr/bin/env nu
+    let hook = ".git/hooks/pre-commit"
+    # Remove first so a leftover symlink from an older install does not get
+    # written through to its target file. `try` swallows the not-found case.
+    try { rm $hook }
+    "#!/usr/bin/env sh\nexec just pre-commit\n" | save $hook
+    ^chmod +x $hook
+    print $"Wrote ($hook) -> just pre-commit"
+
+# Run the workspace checks + tests via the existing `./dev/cargo` Docker wrapper. Aggregates `just check` (fmt + standalone/saas server checks + desktop + clippy) and `just test` (server tests, standalone), so a green run mirrors the in-repo `dev/cargo`-based check pipeline.
+pre-commit: check test
+
 # Run all checks
 check: check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
