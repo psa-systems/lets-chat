@@ -20,11 +20,6 @@ jobs:
       - name: Clone the repository
         uses: https://code.forgejo.org/actions/checkout@v5
 
-      - name: Install Rust toolchain
-        run: |
-          rustup component add clippy rustfmt
-          rustup target add wasm32-unknown-unknown
-
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
