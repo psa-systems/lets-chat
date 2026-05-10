@@ -105,14 +105,13 @@ async fn assert_room_kind(
         .bind(room_id)
         .fetch_optional(pool)
         .await?;
-    let kind =
-        kind.ok_or_else(|| sqlx::Error::Protocol(format!("room {room_id} not found").into()))?;
+    let kind = kind.ok_or_else(|| sqlx::Error::Protocol(format!("room {room_id} not found")))?;
     let is_dm = kind == "dm";
     if is_dm != expect_dm {
         let want = if expect_dm { "dm" } else { "non-dm" };
-        return Err(sqlx::Error::Protocol(
-            format!("room {room_id} is '{kind}', expected {want}").into(),
-        ));
+        return Err(sqlx::Error::Protocol(format!(
+            "room {room_id} is '{kind}', expected {want}"
+        )));
     }
     Ok(())
 }

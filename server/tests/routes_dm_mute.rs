@@ -220,9 +220,7 @@ async fn post_with_muted_absent_deletes_row() {
 
     // Empty body: no `muted` field present == unchecked.
     assert_eq!(
-        post_mute_full(&t.app, &t.session, &t.peer_id, "")
-            .await
-            .0,
+        post_mute_full(&t.app, &t.session, &t.peer_id, "").await.0,
         StatusCode::OK
     );
     assert_eq!(count_mute_rows(&t.chat, &t.viewer_id, dm_id).await, 0);
