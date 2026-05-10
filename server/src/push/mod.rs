@@ -139,18 +139,6 @@ impl PushClient for MockPushClient {
     }
 }
 
-/// Test-only `PushClient` that always returns `EndpointGone`. Used in
-/// the dispatch integration test that asserts inline 410 cleanup.
-#[derive(Default)]
-pub struct AlwaysGoneClient;
-
-#[async_trait]
-impl PushClient for AlwaysGoneClient {
-    async fn send(&self, sub: &PushSubscription, _payload: Bytes) -> Result<(), PushError> {
-        Err(PushError::EndpointGone(sub.endpoint.clone()))
-    }
-}
-
 /// Fan out a single `Mentioned`-equivalent Push to every registered
 /// subscription for `recipient_user_id`. Honors:
 ///   1. global Push availability (`state.vapid` is some)

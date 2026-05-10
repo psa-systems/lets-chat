@@ -56,15 +56,15 @@ async fn load(
     secret_key: &[u8; 32],
 ) -> Result<Option<VapidKeypair>, VapidError> {
     let row = sqlx::query(
-        "SELECT public_key_b64url, private_key_pem_encrypted, private_key_pem_nonce \
+        "SELECT public_key_b64url, private_key_encrypted, private_key_nonce \
            FROM vapid_keypair WHERE id = 1",
     )
     .fetch_optional(pool)
     .await?;
     let Some(r) = row else { return Ok(None) };
     let public_key_b64url: String = r.get("public_key_b64url");
-    let encrypted: Vec<u8> = r.get("private_key_pem_encrypted");
-    let nonce: Vec<u8> = r.get("private_key_pem_nonce");
+    let encrypted: Vec<u8> = r.get("private_key_encrypted");
+    let nonce: Vec<u8> = r.get("private_key_nonce");
     let private_key_bytes = crypto::open(secret_key, &nonce, &encrypted)?;
     if private_key_bytes.len() != 32 {
         return Err(VapidError::KeyEncoding);
@@ -83,7 +83,7 @@ async fn persist(
     let (encrypted, nonce) = crypto::seal(secret_key, &kp.private_key_bytes)?;
     sqlx::query(
         "INSERT INTO vapid_keypair \
-             (id, public_key_b64url, private_key_pem_encrypted, private_key_pem_nonce) \
+             (id, public_key_b64url, private_key_encrypted, private_key_nonce) \
          VALUES (1, ?, ?, ?) \
          ON CONFLICT(id) DO NOTHING",
     )
