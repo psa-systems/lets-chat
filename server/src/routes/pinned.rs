@@ -8,9 +8,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
-use crate::views::pinned::{
-    PinnedListPage, PinnedListRow, PinnedStripFragment, PinnedStripRow,
-};
+use crate::views::pinned::{PinnedListPage, PinnedListRow, PinnedStripFragment, PinnedStripRow};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -26,7 +24,13 @@ const SNIPPET_MAX_CHARS: usize = 80;
 fn snippet_for(body: &str) -> String {
     let collapsed: String = body
         .chars()
-        .map(|c| if c.is_control() || c == '\n' || c == '\r' { ' ' } else { c })
+        .map(|c| {
+            if c.is_control() || c == '\n' || c == '\r' {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -147,10 +151,7 @@ async fn resolve_author_labels(
 /// Resolve the message that the URL refers to, returning the room id or
 /// 404 for nonexistent / soft-deleted messages. Common to the POST and
 /// DELETE handlers.
-async fn room_id_for_url_message(
-    state: &AppState,
-    message_id: i64,
-) -> Result<i64, AppError> {
+async fn room_id_for_url_message(state: &AppState, message_id: i64) -> Result<i64, AppError> {
     db::pinned::room_for_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)
@@ -160,11 +161,7 @@ async fn room_id_for_url_message(
 /// existing `is_room_accessible` check used by the page handlers and
 /// the message handlers; the room-membership semantics already cover
 /// both private rooms (member-only) and DMs (both parties).
-async fn require_room_access(
-    state: &AppState,
-    user: &User,
-    room_id: i64,
-) -> Result<(), AppError> {
+async fn require_room_access(state: &AppState, user: &User, room_id: i64) -> Result<(), AppError> {
     let is_admin = user.role == "admin";
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);

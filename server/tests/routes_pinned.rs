@@ -404,5 +404,8 @@ async fn get_room_pins_lists_all_in_newest_first_order() {
     let p1 = body.find("first body").expect("first body present");
     let p2 = body.find("second body").expect("second body present");
     let p3 = body.find("third body").expect("third body present");
-    assert!(p3 < p2 && p2 < p1, "expected newest-first ordering: third < second < first, got {p1}/{p2}/{p3}");
+    assert!(
+        p3 < p2 && p2 < p1,
+        "expected newest-first ordering: third < second < first, got {p1}/{p2}/{p3}"
+    );
 }

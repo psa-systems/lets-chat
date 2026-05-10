@@ -51,14 +51,12 @@ pub async fn pin_message(
         return Err(sqlx::Error::Protocol("pin cap reached".into()));
     }
 
-    sqlx::query(
-        "INSERT INTO pinned_messages (message_id, room_id, pinned_by) VALUES (?, ?, ?)",
-    )
-    .bind(message_id)
-    .bind(room_id)
-    .bind(pinned_by)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO pinned_messages (message_id, room_id, pinned_by) VALUES (?, ?, ?)")
+        .bind(message_id)
+        .bind(room_id)
+        .bind(pinned_by)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -152,11 +150,10 @@ pub async fn room_for_message(
     pool: &SqlitePool,
     message_id: i64,
 ) -> Result<Option<i64>, sqlx::Error> {
-    let opt: Option<i64> = sqlx::query_scalar(
-        "SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(message_id)
-    .fetch_optional(pool)
-    .await?;
+    let opt: Option<i64> =
+        sqlx::query_scalar("SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL")
+            .bind(message_id)
+            .fetch_optional(pool)
+            .await?;
     Ok(opt)
 }
