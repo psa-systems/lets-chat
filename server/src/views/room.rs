@@ -44,6 +44,11 @@ pub struct MessageView {
     /// render mention chips inline. Empty for messages with no resolved
     /// mentions (e.g. DMs, which don't write mention rows).
     pub mentions: Vec<MentionRef>,
+    /// True when this message currently has a row in `pinned_messages`.
+    /// Drives the Pin / Unpin flip in the hover menu. Page-render call
+    /// sites populate this from a single bulk lookup; per-message render
+    /// sites (post, edit, delete broadcasts) look it up individually.
+    pub is_pinned: bool,
 }
 
 impl MessageView {
@@ -260,6 +265,10 @@ pub struct RoomPage<'a> {
     /// Viewer's per-room mute mode for this room. Drives the notify
     /// dropdown's selected radio and button label.
     pub mute_mode: &'a str,
+    /// Pre-rendered pinned-strip HTML (or empty string when there are
+    /// zero pins). Built by the route handler from `db::pinned` so the
+    /// template just inlines the markup verbatim with `|safe`.
+    pub pinned_strip_html: String,
 }
 
 #[derive(Template)]
