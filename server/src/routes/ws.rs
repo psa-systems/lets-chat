@@ -187,7 +187,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                     }
                 }
                 _ = ping.tick() => {
-                    if tx.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    // Send an HTML-comment text frame as the heartbeat. The
+                    // client uses any inbound `htmx:wsAfterMessage` to reset its
+                    // half-open watchdog. Comments are not `fragment.children`
+                    // for `htmx-ext-ws`, so the swap path renders a no-op.
+                    if tx.send(Message::Text("<!-- ping -->".into())).await.is_err() {
                         break;
                     }
                 }
