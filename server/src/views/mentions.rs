@@ -61,3 +61,16 @@ impl MentionSuggestion {
 pub struct MentionPopoverFragment<'a> {
     pub results: &'a [MentionSuggestion],
 }
+
+/// Composer-slot fragment rendered by `GET /api/rooms/:room_id/broadcast-count`.
+/// `count` is the number of recipients who would receive the broadcast if
+/// the message were sent right now (post mute / DND filtering). `room_name`
+/// is included in the visible label so the user knows which room they're
+/// about to ping. `count == 0` is handled by the template (empty body so
+/// the slot collapses visually while keeping its `min-h-[1rem]` reservation).
+#[derive(Template)]
+#[template(path = "partials/broadcast_count.html")]
+pub struct BroadcastCountFragment<'a> {
+    pub count: i64,
+    pub room_name: &'a str,
+}

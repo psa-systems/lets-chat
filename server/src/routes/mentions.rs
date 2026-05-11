@@ -5,7 +5,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::mentions::{MentionPopoverFragment, MentionSuggestion};
+use crate::views::mentions::{BroadcastCountFragment, MentionPopoverFragment, MentionSuggestion};
 use crate::views::{html, Html};
 
 const MAX: usize = 8;
@@ -101,6 +101,69 @@ pub async fn get_autocomplete(
     }
 
     let frag = MentionPopoverFragment { results: &results };
+    html(&frag)
+}
+
+#[derive(Deserialize)]
+pub struct BroadcastCountQuery {
+    pub token: String,
+}
+
+/// GET /api/rooms/:room_id/broadcast-count?token=here|channel
+///
+/// Live "this will notify N people" probe fired by the composer when the
+/// active token at the cursor is a broadcast token. Returns an HTML
+/// fragment (not JSON) so the composer can swap it directly into the
+/// `#lc-broadcast-count` slot via `htmx.ajax`. Token validation rejects
+/// anything other than `here` / `channel` with 400; DM rooms also return
+/// 400 because broadcast resolution is a no-op there.
+///
+/// Reuses the same resolver helpers that `post_message` uses, so the count
+/// shown to the sender equals the number of mention rows that would be
+/// written. Cost: one bulk auth query + one hub presence pass for `@here`,
+/// or just the auth bulk for `@channel`. Both clear the scale budget
+/// comfortably at the v1 scale ceiling (200-person rooms).
+pub async fn get_broadcast_count(
+    State(state): State<AppState>,
+    AuthUser(viewer): AuthUser,
+    axum::extract::Path(room_id): axum::extract::Path<i64>,
+    Query(BroadcastCountQuery { token }): Query<BroadcastCountQuery>,
+) -> Result<Html, AppError> {
+    let token_lower = token.to_ascii_lowercase();
+    if token_lower != "here" && token_lower != "channel" {
+        return Err(AppError::BadRequest(
+            "token must be 'here' or 'channel'".into(),
+        ));
+    }
+
+    let is_admin = viewer.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &viewer.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.room_type == "dm" {
+        return Err(AppError::BadRequest(
+            "broadcast tokens are not valid in DM rooms".into(),
+        ));
+    }
+
+    let count = if token_lower == "here" {
+        super::room::resolve_here_targets(&state, &room, &viewer.id)
+            .await?
+            .len() as i64
+    } else {
+        super::room::resolve_channel_targets(&state, &room, &viewer.id)
+            .await?
+            .len() as i64
+    };
+
+    let frag = BroadcastCountFragment {
+        count,
+        room_name: &room.name,
+    };
     html(&frag)
 }
 

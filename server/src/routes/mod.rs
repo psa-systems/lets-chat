@@ -505,6 +505,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/search", get(search::get_search))
         .route("/users/search", get(users::get_user_search))
         .route("/users/mentions", get(mentions::get_autocomplete))
+        .route(
+            "/api/rooms/{room_id}/broadcast-count",
+            get(mentions::get_broadcast_count),
+        )
         .route("/users/{user_id}/block", post(users::post_block))
         .route("/users/{user_id}/unblock", post(users::post_unblock))
         .route(

@@ -408,7 +408,7 @@ async fn candidate_ids_for_room(
 
 /// Resolve `@channel` against `room`: every candidate member except the
 /// author. One bulk auth lookup for usernames.
-async fn resolve_channel_targets(
+pub(crate) async fn resolve_channel_targets(
     state: &AppState,
     room: &crate::models::Room,
     author_id: &str,
@@ -547,7 +547,7 @@ async fn resolve_tokens_for_room(
 /// one live WebSocket connection AND whose persisted status is not DND.
 /// Excludes the author. Idle is intentionally included - idle is "stepped
 /// away briefly," not "do not interrupt."
-async fn resolve_here_targets(
+pub(crate) async fn resolve_here_targets(
     state: &AppState,
     room: &crate::models::Room,
     author_id: &str,
