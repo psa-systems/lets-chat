@@ -463,56 +463,14 @@ pub async fn get_single_message(
     if db::auth::is_blocked_either_way(&state.auth, &user.id, &m.user_id).await? {
         return Err(AppError::NotFound);
     }
-    let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
-    let can_edit = m.user_id == user.id;
-    let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
-    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
-        .await?
-        .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
-        .collect();
-    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
-    let is_follow_up = db::chat::is_follow_up_of(
-        prior
-            .as_ref()
-            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
-        (m.user_id.as_str(), m.created_at.as_str()),
-    );
-    let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
-    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
-    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
-        .await?
-        .remove(&m.id)
-        .unwrap_or_default();
-    let view = MessageView {
-        id: m.id,
-        room_id: m.room_id,
-        user_id: m.user_id.clone(),
-        username: meta.username,
-        display_name: meta.display_name,
-        avatar_ext: meta.avatar_ext,
-        status: meta.status,
-        custom_status: meta.custom_status,
-        created_at: m.created_at,
-        edited_at: m.edited_at,
-        body: m.body,
-        reactions,
-        can_edit,
-        can_delete,
-        viewer_id: user.id.clone(),
-        seen_caption: None,
-        is_follow_up,
-        show_unread_divider: false,
-        reply_count,
-        parent_id: m.parent_id,
-        attachments,
-        mentions,
-        is_pinned: false,
-    };
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, m.room_id).await?;
+    let view = super::load_message_view_for_viewer(
+        &state,
+        &user,
+        message_id,
+        pinned_ids.contains(&message_id),
+    )
+    .await?;
     let fragment = SingleMessageFragment {
         message: &view,
         oob: false,
