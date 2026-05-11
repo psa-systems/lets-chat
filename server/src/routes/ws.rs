@@ -174,18 +174,37 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // visibility flip in this tab.
                                     render_sidebar(&send_state, &send_user).await
                                 }
-                                ChatEvent::MessagePinned { room_id, .. }
-                                | ChatEvent::MessageUnpinned { room_id, .. } => {
-                                    // Pin/unpin events fan out to every
-                                    // subscriber of the affected room. We
-                                    // rebuild the strip fragment for this
-                                    // viewer (so the pinner display label is
-                                    // resolved against this user's auth view)
-                                    // and emit the OOB swap. The strip is
-                                    // room-scoped, not user-scoped, so the
-                                    // viewer-id check is unnecessary.
-                                    render_pinned_strip(&send_state, &send_user, *room_id).await
+                                ChatEvent::MessagePinned {
+                                    room_id,
+                                    message_id,
+                                    ..
+                                } => {
+                                    // Fan out: re-render this viewer's
+                                    // bubble OOB (so its hover menu flips
+                                    // Pin -> Unpin) and the pinned-strip
+                                    // OOB. Per-viewer because can_edit/
+                                    // can_delete and the strip's "See all"
+                                    // URL depend on identity.
+                                    render_pin_event(
+                                        &send_state,
+                                        &send_user,
+                                        *room_id,
+                                        *message_id,
+                                        true,
+                                    )
+                                    .await
                                 }
+                                ChatEvent::MessageUnpinned {
+                                    room_id,
+                                    message_id,
+                                } => render_pin_event(
+                                    &send_state,
+                                    &send_user,
+                                    *room_id,
+                                    *message_id,
+                                    false,
+                                )
+                                .await,
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -776,11 +795,23 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     .ok()
 }
 
-/// Build the OOB-tagged pinned strip for `viewer`'s context in `room_id`.
-/// Picks the right URL (room vs DM) based on the room's type and the
-/// viewer's perspective so the "See all (N) pinned" link in the
-/// broadcast points where the receiving tab expects to navigate.
-async fn render_pinned_strip(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
+/// Build the OOB fragments for a MessagePinned / MessageUnpinned event:
+/// the re-rendered message bubble (OOB so its hover menu flips for this
+/// viewer) followed by the pinned strip (also OOB). Returns the two
+/// fragments concatenated in one Text frame. The bubble OOB swap is a
+/// no-op for subscribers who don't currently have `#msg-{id}` in their
+/// DOM (e.g. the message scrolled off, or this viewer is on a different
+/// page) - htmx silently drops unmatched OOB targets. If the message has
+/// been deleted between the mutation and the broadcast, the bubble part
+/// is skipped and only the strip is emitted.
+async fn render_pin_event(
+    state: &AppState,
+    viewer: &User,
+    room_id: i64,
+    message_id: i64,
+    is_pinned: bool,
+) -> Option<String> {
+    use askama::Template;
     let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
     let pin_path = if room.room_type == "dm" {
         let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
@@ -790,9 +821,21 @@ async fn render_pinned_strip(state: &AppState, viewer: &User, room_id: i64) -> O
     } else {
         format!("/room/{room_id}/pins")
     };
-    super::pinned::build_strip_fragment(state, room_id, pin_path, true)
+    let strip_html = super::pinned::build_strip_fragment(state, room_id, pin_path, true)
         .await
         .ok()?
         .render()
-        .ok()
+        .ok()?;
+    let bubble_html =
+        match super::load_message_view_for_viewer(state, viewer, message_id, is_pinned).await {
+            Ok(view) => crate::views::room::SingleMessageFragment {
+                message: &view,
+                oob: true,
+            }
+            .render()
+            .ok()
+            .unwrap_or_default(),
+            Err(_) => String::new(),
+        };
+    Some(format!("{bubble_html}{strip_html}"))
 }
