@@ -436,50 +436,28 @@ pub(crate) async fn resolve_channel_targets(
         .collect())
 }
 
-/// Maximum number of concurrent Push HTTP requests in flight from a single
-/// mention fan-out. Sized for a 200-person `@channel` to settle without
-/// hammering FCM / Mozilla autopush: 16 outer × ~3 subs per recipient = up
-/// to ~48 concurrent HTTP requests at peak. The WS broadcast does not flow
-/// through this limit - it's local mpsc and stays unbounded.
-const FANOUT_CONCURRENCY: usize = 16;
-
-/// Bounded fan-out of per-user mention notifications.
+/// Fan out per-user mention notifications. WS broadcasts fire inline
+/// (local mpsc, microseconds at any scale). Push dispatches are spawned
+/// fire-and-forget so the HTTP handler returns immediately; the actual
+/// network-call concurrency cap lives inside `push::dispatch` at the per-
+/// subscription send boundary (see `crate::push::PUSH_FANOUT_CONCURRENCY`).
 ///
-/// Splits the work in two phases: (1) fire every WS `broadcast_to_user`
-/// synchronously - it's a local mpsc send, microseconds at any scale, no
-/// reason to gate it; (2) dispatch the Push side under a `Semaphore` cap
-/// so a 200-person `@channel` doesn't enqueue 200 simultaneous HTTPS sends.
-/// `join_all` blocks until every Push task settles; failures are logged
-/// inside `crate::push::dispatch` and never propagate.
+/// That layering matters: capping at this outer level would force
+/// per-user dispatches to serialize their internal sub-fan-out, regressing
+/// the common single-recipient case (a `@username` to a user with 3
+/// devices would block the HTTP response for 3 sequential push round-
+/// trips). Capping at the inner level binds the only metric that matters
+/// (concurrent HTTP to push services) without that latency cost.
 async fn fanout_mention_events(state: &AppState, events: Vec<(String, ChatEvent)>) {
-    use std::sync::Arc;
-    use tokio::sync::Semaphore;
-    use tokio::task::JoinSet;
-    // Phase 1: WS broadcasts. Cheap, ordered, no concurrency gate.
     for (user_id, event) in &events {
         state.hub.broadcast_to_user(user_id, event);
     }
-    if events.is_empty() {
-        return;
-    }
-    // Phase 2: Push dispatches. Cap concurrency.
-    let sem = Arc::new(Semaphore::new(FANOUT_CONCURRENCY));
-    let mut joinset: JoinSet<()> = JoinSet::new();
     for (user_id, event) in events {
-        let sem = sem.clone();
         let send_state = state.clone();
-        joinset.spawn(async move {
-            // `acquire_owned` keeps the permit alive for the task's
-            // lifetime via the Arc clone; the semaphore is never closed in
-            // this path, so the expect is unreachable in practice.
-            let _permit = sem
-                .acquire_owned()
-                .await
-                .expect("fan-out semaphore not closed");
+        tokio::spawn(async move {
             crate::push::dispatch(&send_state, &user_id, &event).await;
         });
     }
-    while joinset.join_next().await.is_some() {}
 }
 
 /// Walk a parsed token list and return a deduped `Vec<MentionRef>` for
