@@ -33,6 +33,11 @@
     {% else %}
     <button hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-amber-700 hover:underline">Pin</button>
     {% endif %}
+    {% if message.is_bookmarked %}
+    <button hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">Unsave</button>
+    {% else %}
+    <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">Save</button>
+    {% endif %}
     {% if message.can_edit %}
     <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Edit</button>
     {% endif %}
