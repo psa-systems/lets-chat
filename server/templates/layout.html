@@ -176,6 +176,10 @@ document.body.addEventListener('click', function(e){
 });
 </script>
 <script>
+// Persistent-shell script: same lifetime rationale as the two scripts above.
+// The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
+// htmx:wsError, the watchdog timers, and the lc-ws-reconnect extension are
+// all lifetime-of-page by design.
 (function(){
   // ----- 1. Reconnect-delay override -----------------------------
   // Capped jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s,
