@@ -335,21 +335,26 @@ pub async fn post_message(
                     .await?;
             let snippet = build_snippet(body);
             let author_label = author_label(&user);
-            for t in &added {
-                let event = ChatEvent::Mentioned {
-                    kind: "mention".into(),
-                    room_id: room.id,
-                    room_type: room.room_type.clone(),
-                    room_label: format!("#{}", room.name),
-                    message_id: new_id,
-                    mentioned_user_id: t.user_id.clone(),
-                    author_label: author_label.clone(),
-                    snippet: snippet.clone(),
-                    target_path: format!("/room/{}", room.id),
-                };
-                state.hub.broadcast_to_user(&t.user_id, &event);
-                crate::push::dispatch(&state, &t.user_id, &event).await;
-            }
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: room.id,
+                            room_type: room.room_type.clone(),
+                            room_label: format!("#{}", room.name),
+                            message_id: new_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: author_label.clone(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", room.id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(&state, events).await;
         }
     } else {
         // DM: implicit mention. Notify the peer regardless of subscription
@@ -429,6 +434,52 @@ async fn resolve_channel_targets(
                 })
         })
         .collect())
+}
+
+/// Maximum number of concurrent Push HTTP requests in flight from a single
+/// mention fan-out. Sized for a 200-person `@channel` to settle without
+/// hammering FCM / Mozilla autopush: 16 outer × ~3 subs per recipient = up
+/// to ~48 concurrent HTTP requests at peak. The WS broadcast does not flow
+/// through this limit - it's local mpsc and stays unbounded.
+const FANOUT_CONCURRENCY: usize = 16;
+
+/// Bounded fan-out of per-user mention notifications.
+///
+/// Splits the work in two phases: (1) fire every WS `broadcast_to_user`
+/// synchronously - it's a local mpsc send, microseconds at any scale, no
+/// reason to gate it; (2) dispatch the Push side under a `Semaphore` cap
+/// so a 200-person `@channel` doesn't enqueue 200 simultaneous HTTPS sends.
+/// `join_all` blocks until every Push task settles; failures are logged
+/// inside `crate::push::dispatch` and never propagate.
+async fn fanout_mention_events(state: &AppState, events: Vec<(String, ChatEvent)>) {
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
+    // Phase 1: WS broadcasts. Cheap, ordered, no concurrency gate.
+    for (user_id, event) in &events {
+        state.hub.broadcast_to_user(user_id, event);
+    }
+    if events.is_empty() {
+        return;
+    }
+    // Phase 2: Push dispatches. Cap concurrency.
+    let sem = Arc::new(Semaphore::new(FANOUT_CONCURRENCY));
+    let mut joinset: JoinSet<()> = JoinSet::new();
+    for (user_id, event) in events {
+        let sem = sem.clone();
+        let send_state = state.clone();
+        joinset.spawn(async move {
+            // `acquire_owned` keeps the permit alive for the task's
+            // lifetime via the Arc clone; the semaphore is never closed in
+            // this path, so the expect is unreachable in practice.
+            let _permit = sem
+                .acquire_owned()
+                .await
+                .expect("fan-out semaphore not closed");
+            crate::push::dispatch(&send_state, &user_id, &event).await;
+        });
+    }
+    while joinset.join_next().await.is_some() {}
 }
 
 /// Walk a parsed token list and return a deduped `Vec<MentionRef>` for
@@ -653,21 +704,28 @@ pub async fn patch_message(
             .await?;
             let snippet = build_snippet(body);
             let author_label = author_label(&user);
-            for t in &added {
-                let event = ChatEvent::Mentioned {
-                    kind: "mention".into(),
-                    room_id: m.room_id,
-                    room_type: edited_room.room_type.clone(),
-                    room_label: format!("#{}", edited_room.name),
-                    message_id,
-                    mentioned_user_id: t.user_id.clone(),
-                    author_label: author_label.clone(),
-                    snippet: snippet.clone(),
-                    target_path: format!("/room/{}", m.room_id),
-                };
-                state.hub.broadcast_to_user(&t.user_id, &event);
-                crate::push::dispatch(&state, &t.user_id, &event).await;
-            }
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: m.room_id,
+                            room_type: edited_room.room_type.clone(),
+                            room_label: format!("#{}", edited_room.name),
+                            message_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: author_label.clone(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", m.room_id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(&state, events).await;
+            // MentionCleared events are WS-only (no Push, no badge attention)
+            // and cheap to fire inline. Keep them sequential.
             for t in &removed {
                 let event = ChatEvent::MentionCleared {
                     room_id: m.room_id,
