@@ -1,0 +1,45 @@
+---
+
+# Validate code on every push and pull request: fmt, clippy, build, tests.
+# Mirrors the local `just check` + `just test` recipes (which use ./dev/cargo).
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: clippy + fmt + tests
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Cache Rust build
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy (workspace, standalone)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Clippy (server, saas)
+        run: cargo clippy --all-targets -p lets-chat-server --no-default-features --features saas -- -D warnings
+
+      - name: Build (workspace, standalone)
+        run: cargo build --all-targets
+
+      - name: Build (server, saas)
+        run: cargo build -p lets-chat-server --no-default-features --features saas
+
+      - name: Unit tests (server, standalone)
+        run: cargo test --lib -p lets-chat-server
