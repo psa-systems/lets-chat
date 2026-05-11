@@ -95,7 +95,7 @@ pub async fn get_picker(
     }
 
     let body = format!(
-        r##"<div class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{id}/reactions/cancel" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
+        r##"<div id="picker-{id}" class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{id}/reactions/cancel" hx-target="#picker-{id}" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
         id = message_id,
         buttons = buttons,
     );
