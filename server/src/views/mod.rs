@@ -5,6 +5,7 @@ pub mod dm_header;
 pub mod enclave;
 pub mod home;
 pub mod layout;
+pub mod markdown;
 pub mod mentions;
 pub mod not_found;
 pub mod notify_prefs;
