@@ -76,6 +76,55 @@
     </ul>
   </section>
 
+  <section class="space-y-3">
+    <h2 class="font-semibold">Custom emojis</h2>
+    <p class="text-sm text-slate-600">
+      Type <code class="font-mono bg-slate-100 px-1 rounded">:shortcode:</code> in any message or reaction. Visible to every member of this enclave.
+    </p>
+    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-slate-50">
+      <div class="text-sm">
+        {% if enclave.share_emojis_globally %}
+        <strong>Shared:</strong> these emojis resolve in other enclaves and DMs.
+        {% else %}
+        <strong>Private:</strong> these emojis only resolve in this enclave's rooms.
+        {% endif %}
+      </div>
+      <form method="post" action="/enclave/{{ enclave.id }}/share-emojis">
+        <button name="share" value="{% if enclave.share_emojis_globally %}0{% else %}1{% endif %}"
+                type="submit" class="text-sm bg-slate-200 rounded px-3 py-1">
+          {% if enclave.share_emojis_globally %}Stop sharing{% else %}Share globally{% endif %}
+        </button>
+      </form>
+    </div>
+    {% if emojis.is_empty() %}
+    <p class="text-sm text-slate-500 italic">No custom emojis yet.</p>
+    {% else %}
+    <ul class="grid grid-cols-2 gap-2">
+      {% for e in emojis %}
+      <li class="flex items-center gap-2 border rounded p-2">
+        <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
+        <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
+        <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="inline">
+          <button type="submit" class="text-xs text-red-600 hover:underline"
+                  onclick="return confirm('Delete :{{ e.shortcode }}:?')">Delete</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" action="/enclave/{{ enclave.id }}/emojis" enctype="multipart/form-data" class="space-y-2 border-t pt-3">
+      <label class="block">
+        <span class="text-sm">Shortcode (lowercase letters, digits, underscore; 2-32 chars)</span>
+        <input name="shortcode" pattern="[a-z0-9_]{2,32}" required class="w-full border rounded px-2 py-1 font-mono text-sm">
+      </label>
+      <label class="block">
+        <span class="text-sm">Image (png, gif, webp; up to 256 KiB)</span>
+        <input type="file" name="file" accept="image/png,image/gif,image/webp" required class="block text-sm">
+      </label>
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1">Add emoji</button>
+    </form>
+  </section>
+
   {% if can_delete %}
   <form method="post" action="/enclave/{{ enclave.id }}/delete" class="pt-6 border-t">
     <button type="submit" class="text-red-600"

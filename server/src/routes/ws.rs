@@ -493,16 +493,19 @@ async fn render_new_message_or_bump(
 }
 
 async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await
+        .ok()??;
+    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let counts = db::chat::list_reactions(&state.chat, message_id, user_id)
         .await
         .ok()?;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
+        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &emojis))
         .collect();
     ReactionUpdateFragment {
         message_id,
@@ -549,6 +552,10 @@ async fn render_new_message(
         .ok()
         .and_then(|mut m| m.remove(&message.id))
         .unwrap_or_default();
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, message.room_id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -573,6 +580,7 @@ async fn render_new_message(
         attachments,
         mentions,
         is_pinned: false,
+        custom_emojis,
     };
     NewMessageFragment { message: &view }.render().ok()
 }
@@ -593,16 +601,16 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let meta = super::load_author_meta(state, &m.user_id, &viewer.id)
         .await
         .ok()?;
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
         .ok()?;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
+        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id)
         .await
@@ -651,6 +659,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         attachments,
         mentions,
         is_pinned: false,
+        custom_emojis,
     };
     EditedMessageFragment { message: &view }.render().ok()
 }
@@ -685,6 +694,10 @@ async fn render_thread_reply(
         .ok()
         .and_then(|mut x| x.remove(&message.id))
         .unwrap_or_default();
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, message.room_id)
+        .await
+        .ok()
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -709,6 +722,7 @@ async fn render_thread_reply(
         attachments,
         mentions,
         is_pinned: false,
+        custom_emojis,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
