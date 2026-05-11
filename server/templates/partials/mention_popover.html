@@ -7,6 +7,13 @@
     <button type="button"
       class="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
       data-username="{{ s.username }}">
+      {% if s.kind == "broadcast" %}
+      <span class="h-5 w-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold" aria-hidden="true">@</span>
+      <span class="font-semibold">@{{ s.username }}</span>
+      {% if let Some(sub) = s.subtitle %}
+      <span class="text-xs text-slate-500 truncate">{{ sub }}</span>
+      {% endif %}
+      {% else %}
       {% if let Some(ext) = s.avatar_ext.as_ref() %}
       <img src="/avatars/{{ s.user_id }}" alt="" class="h-5 w-5 rounded-full object-cover" data-ext="{{ ext }}">
       {% else %}
@@ -15,6 +22,7 @@
       <span class="font-medium">{{ s.username }}</span>
       {% if let Some(dn) = s.display_name.as_ref() %}
       <span class="text-xs text-slate-500 truncate">{{ dn }}</span>
+      {% endif %}
       {% endif %}
     </button>
   </li>
