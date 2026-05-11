@@ -29,6 +29,10 @@
        data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
 </div>
 <script>
+// Persistent-shell script: lives in layout.html, runs once per full browser
+// page load, never re-rendered by in-place swaps (the reconnect soft-refresh
+// targets #main, which is below this script). No htmx:beforeCleanupElement
+// teardown needed; the observer + state are intentionally lifetime-of-page.
 (function(){
   // Hidden DOM "bus": every Mentioned/MentionCleared WS frame is rendered as
   // a <div data-event=...> appended here. We watch it, translate each child
@@ -150,6 +154,8 @@
 })();
 </script>
 <script>
+// Persistent-shell script: same lifetime rationale as the notification-bus
+// IIFE above. The document.body click listener is intentionally permanent.
 function lcOpenNav(){
   var p = document.getElementById('lc-nav-panel');
   p.classList.remove('hidden');
@@ -170,6 +176,10 @@ document.body.addEventListener('click', function(e){
 });
 </script>
 <script>
+// Persistent-shell script: same lifetime rationale as the two scripts above.
+// The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
+// htmx:wsError, the watchdog timers, and the lc-ws-reconnect extension are
+// all lifetime-of-page by design.
 (function(){
   // ----- 1. Reconnect-delay override -----------------------------
   // Capped jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s,
