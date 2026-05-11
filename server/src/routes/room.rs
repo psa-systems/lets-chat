@@ -115,6 +115,9 @@ pub async fn get_room(
     // Bulk-load the set of currently-pinned message ids so the bubble's
     // hover menu shows Pin vs Unpin without an N+1 lookup.
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
+    // Same shape for the viewer's bookmarks in this room - per-viewer state.
+    let bookmarked_ids =
+        db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
 
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
@@ -166,6 +169,7 @@ pub async fn get_room(
             attachments,
             mentions,
             is_pinned: pinned_ids.contains(&m.id),
+            is_bookmarked: bookmarked_ids.contains(&m.id),
             custom_emojis: custom_emojis.clone(),
         });
     }
@@ -470,11 +474,13 @@ pub async fn get_single_message(
         return Err(AppError::NotFound);
     }
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, m.room_id).await?;
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;
     let view = super::load_message_view_for_viewer(
         &state,
         &user,
         message_id,
         pinned_ids.contains(&message_id),
+        is_bookmarked,
     )
     .await?;
     let fragment = SingleMessageFragment {
@@ -617,6 +623,7 @@ pub async fn patch_message(
         attachments,
         mentions,
         is_pinned: false,
+        is_bookmarked: db::bookmarks::is_bookmarked(&state.chat, &user.id, m.id).await?,
         custom_emojis,
     };
     let fragment = SingleMessageFragment {
@@ -674,6 +681,8 @@ pub async fn get_thread_panel(
     let mut mentions_by_message =
         db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let bookmarked_ids =
+        db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
 
     let parent_view = MessageView {
         id: parent.id,
@@ -701,6 +710,7 @@ pub async fn get_thread_panel(
             .unwrap_or_default(),
         mentions: mentions_by_message.remove(&parent.id).unwrap_or_default(),
         is_pinned: false,
+        is_bookmarked: bookmarked_ids.contains(&parent.id),
         custom_emojis: custom_emojis.clone(),
     };
 
@@ -715,6 +725,7 @@ pub async fn get_thread_panel(
         };
         let attachments = attachments_by_message.remove(&r.id).unwrap_or_default();
         let mentions = mentions_by_message.remove(&r.id).unwrap_or_default();
+        let r_id = r.id;
         replies.push(MessageView {
             id: r.id,
             room_id: r.room_id,
@@ -739,6 +750,7 @@ pub async fn get_thread_panel(
             attachments,
             mentions,
             is_pinned: false,
+            is_bookmarked: bookmarked_ids.contains(&r_id),
             custom_emojis: custom_emojis.clone(),
         });
     }

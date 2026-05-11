@@ -266,7 +266,10 @@ async fn render_pin_response(
     message_id: i64,
     is_pinned: bool,
 ) -> Result<Response, AppError> {
-    let view = super::load_message_view_for_viewer(state, user, message_id, is_pinned).await?;
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;
+    let view =
+        super::load_message_view_for_viewer(state, user, message_id, is_pinned, is_bookmarked)
+            .await?;
     let bubble = SingleMessageFragment {
         message: &view,
         oob: false,

@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod bookmarks;
 pub mod dm;
 pub mod dm_header;
 pub mod enclave;

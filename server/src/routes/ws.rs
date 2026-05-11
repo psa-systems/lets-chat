@@ -580,6 +580,7 @@ async fn render_new_message(
         attachments,
         mentions,
         is_pinned: false,
+        is_bookmarked: false,
         custom_emojis,
     };
     NewMessageFragment { message: &view }.render().ok()
@@ -635,6 +636,13 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         .ok()
         .and_then(|mut x| x.remove(&m.id))
         .unwrap_or_default();
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, m.room_id)
+        .await
+        .ok()
+        .unwrap_or_default();
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, m.id)
+        .await
+        .unwrap_or(false);
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -658,7 +666,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         parent_id,
         attachments,
         mentions,
-        is_pinned: false,
+        is_pinned: pinned_ids.contains(&m.id),
+        is_bookmarked,
         custom_emojis,
     };
     EditedMessageFragment { message: &view }.render().ok()
@@ -722,6 +731,7 @@ async fn render_thread_reply(
         attachments,
         mentions,
         is_pinned: false,
+        is_bookmarked: false,
         custom_emojis,
     };
     let mut html = ThreadReplyOobFragment {
@@ -840,16 +850,26 @@ async fn render_pin_event(
         .ok()?
         .render()
         .ok()?;
-    let bubble_html =
-        match super::load_message_view_for_viewer(state, viewer, message_id, is_pinned).await {
-            Ok(view) => crate::views::room::SingleMessageFragment {
-                message: &view,
-                oob: true,
-            }
-            .render()
-            .ok()
-            .unwrap_or_default(),
-            Err(_) => String::new(),
-        };
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, message_id)
+        .await
+        .unwrap_or(false);
+    let bubble_html = match super::load_message_view_for_viewer(
+        state,
+        viewer,
+        message_id,
+        is_pinned,
+        is_bookmarked,
+    )
+    .await
+    {
+        Ok(view) => crate::views::room::SingleMessageFragment {
+            message: &view,
+            oob: true,
+        }
+        .render()
+        .ok()
+        .unwrap_or_default(),
+        Err(_) => String::new(),
+    };
     Some(format!("{bubble_html}{strip_html}"))
 }
