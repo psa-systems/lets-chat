@@ -412,6 +412,22 @@ mod tests {
     }
 
     #[test]
+    fn render_body_chips_broadcast_tokens_in_dm_body() {
+        // DM bodies go through the same renderer as room bodies; the renderer
+        // has no room-context parameter and intentionally does not branch on
+        // room type. Posting `@here` in a DM writes no mention rows and fires
+        // no broadcast events (the DM gate in the resolver path skips them),
+        // but the chip still renders as text styling. Phase 21 decision:
+        // "option A" - chip everywhere; a DM is implicitly one-on-one and the
+        // chip-without-effect is honest about what was typed.
+        let out = render_body("can we sync @here?", &[], &[]);
+        assert!(
+            out.contains(">@here</span>"),
+            "DM body did not chip @here (option A regression): {out}"
+        );
+    }
+
+    #[test]
     fn render_body_email_does_not_become_broadcast_chip() {
         // `foo@here.example.com` is an email-shaped string with `here` after
         // `@`. The boundary regex prevents it from matching, same as for
