@@ -9,8 +9,10 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::pinned::{PinnedListPage, PinnedListRow, PinnedStripFragment, PinnedStripRow};
+use crate::views::room::SingleMessageFragment;
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
+use askama::Template;
 
 /// Header-strip render cap. Keeps the strip narrow even on rooms with many pins.
 const STRIP_TOP_N: i64 = 3;
@@ -193,10 +195,10 @@ async fn pin_path_for_room(
 /// POST /messages/{message_id}/pin
 ///
 /// Pin the message. Idempotent: pinning an already-pinned message is a
-/// successful no-op. Returns just the OOB strip fragment so the
-/// requesting tab updates the strip live; the message bubble's hover
-/// menu only needs to flip on the next page render (or via the WS
-/// MessagePinned event in another tab).
+/// successful no-op. Returns the re-rendered message bubble (so the
+/// acting tab's hover menu flips Pin -> Unpin via `hx-target=#msg-{id}`
+/// outerHTML swap) plus the OOB pinned-strip fragment. Other tabs and
+/// other room members receive a matching OOB pair via the WS broadcast.
 pub async fn post_pin(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -225,14 +227,13 @@ pub async fn post_pin(
         },
     );
 
-    let pin_path = pin_path_for_room(&state, &user, room_id).await?;
-    let strip = build_strip_fragment(&state, room_id, pin_path, true).await?;
-    Ok(Html(strip.render()?).into_response())
+    render_pin_response(&state, &user, room_id, message_id, true).await
 }
 
 /// DELETE /messages/{message_id}/pin
 ///
-/// Unpin the message. Idempotent. Returns the OOB strip fragment.
+/// Unpin the message. Idempotent. Returns the re-rendered bubble plus the
+/// OOB pinned-strip fragment (mirror of `post_pin`).
 pub async fn delete_pin(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -251,9 +252,31 @@ pub async fn delete_pin(
         },
     );
 
-    let pin_path = pin_path_for_room(&state, &user, room_id).await?;
-    let strip = build_strip_fragment(&state, room_id, pin_path, true).await?;
-    Ok(Html(strip.render()?).into_response())
+    render_pin_response(&state, &user, room_id, message_id, false).await
+}
+
+/// Build the HTTP response body for pin/unpin: the re-rendered bubble
+/// (primary swap target via the button's `hx-target`) concatenated with
+/// the OOB strip fragment. The bubble carries `oob=false` so HTMX uses
+/// the button's `hx-target="#msg-{id}"` to do the outerHTML swap.
+async fn render_pin_response(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    message_id: i64,
+    is_pinned: bool,
+) -> Result<Response, AppError> {
+    let view = super::load_message_view_for_viewer(state, user, message_id, is_pinned).await?;
+    let bubble = SingleMessageFragment {
+        message: &view,
+        oob: false,
+    }
+    .render()?;
+    let pin_path = pin_path_for_room(state, user, room_id).await?;
+    let strip_html = build_strip_fragment(state, room_id, pin_path, true)
+        .await?
+        .render()?;
+    Ok(Html(format!("{bubble}{strip_html}")).into_response())
 }
 
 /// GET /room/{room_id}/pins

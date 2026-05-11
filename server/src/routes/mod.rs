@@ -111,6 +111,74 @@ pub(crate) async fn load_author_meta(
     Ok(meta)
 }
 
+/// Build a complete `MessageView` for one message as seen by `viewer`.
+/// Resolves author meta, reactions, follow-up grouping, reply count,
+/// attachments, and mentions. Returns `AppError::NotFound` if the message
+/// does not exist. `is_pinned` is passed in by the caller so handlers that
+/// already know the post-mutation pin state (pin/unpin) don't pay an extra
+/// query; callers that don't care can pass `false`.
+pub(crate) async fn load_message_view_for_viewer(
+    state: &AppState,
+    viewer: &User,
+    message_id: i64,
+    is_pinned: bool,
+) -> Result<crate::views::room::MessageView, AppError> {
+    use crate::views::room::{MessageView, ReactionView};
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let meta = load_author_meta(state, &m.user_id, &viewer.id).await?;
+    let can_edit = m.user_id == viewer.id;
+    let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
+        .await?
+        .into_iter()
+        .map(|r| ReactionView {
+            emoji: r.emoji,
+            count: r.count,
+            viewer_reacted: r.reacted_by_me,
+        })
+        .collect();
+    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior
+            .as_ref()
+            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
+        (m.user_id.as_str(), m.created_at.as_str()),
+    );
+    let reply_count = db::chat::count_replies(&state.chat, m.id).await?;
+    let attachments = db::uploads::attachments_for_message(&state.chat, m.id).await?;
+    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+        .await?
+        .remove(&m.id)
+        .unwrap_or_default();
+    Ok(MessageView {
+        id: m.id,
+        room_id: m.room_id,
+        user_id: m.user_id.clone(),
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
+        created_at: m.created_at,
+        edited_at: m.edited_at,
+        body: m.body,
+        reactions,
+        can_edit,
+        can_delete,
+        viewer_id: viewer.id.clone(),
+        seen_caption: None,
+        is_follow_up,
+        show_unread_divider: false,
+        reply_count,
+        parent_id: m.parent_id,
+        attachments,
+        mentions,
+        is_pinned,
+    })
+}
+
 /// Refresh the caller's `last_active_at` and, if that bumped the row from
 /// idle back to active, broadcast `UserStatusChanged` so subscribers can
 /// update their UI. DND status is sticky and never flips here.
