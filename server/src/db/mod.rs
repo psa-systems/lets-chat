@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod chat;
+pub mod custom_emojis;
 pub mod enclave;
 pub mod mentions;
 pub mod moderation;

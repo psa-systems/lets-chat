@@ -34,6 +34,10 @@ pub struct Enclave {
     pub invite_code: Option<String>,
     pub created_by: String,
     pub created_at: String,
+    /// When true, this enclave's custom emojis resolve in every other room
+    /// (other enclaves and DMs). A room's own emojis still win on shortcode
+    /// collisions; sharing only expands the universe of resolvable tokens.
+    pub share_emojis_globally: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,4 +1,4 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::Router;
@@ -93,6 +93,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclaves/discover/{id}/join", post(post_discover_join))
         .route("/enclaves/join", post(post_join_by_code))
         .route("/enclave/{id}/visibility", post(post_visibility))
+        .route("/enclave/{id}/share-emojis", post(post_share_emojis))
         .route(
             "/enclave/{id}/invite-code",
             post(post_invite_code).delete(delete_invite_code),
@@ -124,6 +125,17 @@ pub fn router() -> Router<AppState> {
         .route(
             "/enclave/{id}/rooms/{room_id}/members/{user_id}/remove",
             post(post_remove_room_member),
+        )
+        // Custom emoji upload streams its own multipart body; disable Axum's
+        // default 2 MiB cap on this route so the 256 KiB handler limit is
+        // the only ceiling.
+        .route(
+            "/enclave/{id}/emojis",
+            post(super::custom_emojis::post_upload).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/enclave/{id}/emojis/{emoji_id}/delete",
+            post(super::custom_emojis::post_delete),
         )
 }
 
@@ -240,6 +252,25 @@ pub async fn post_visibility(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_public(&state.chat, id, form.is_public == "1").await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+#[derive(Deserialize)]
+pub struct ShareEmojisForm {
+    pub share: String,
+}
+
+/// Toggle whether the enclave's custom emojis resolve outside its own
+/// rooms. Gated on `enclave_can_manage`. Existing membership requirements
+/// for posting and joining are unaffected; only emoji lookup changes.
+pub async fn post_share_emojis(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<ShareEmojisForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    db::enclave::set_share_emojis_globally(&state.chat, id, form.share == "1").await?;
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
@@ -430,12 +461,14 @@ pub async fn get_settings(
     let can_delete = enclave_can_delete(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
+    let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
     let (sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
         members: &member_views,
+        emojis: &emojis,
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_rooms: &sidebar_rooms,
