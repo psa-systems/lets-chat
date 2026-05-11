@@ -212,9 +212,9 @@ pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRe
     use std::collections::HashMap;
     let emoji_map: HashMap<&str, &EmojiRef> =
         emojis.iter().map(|e| (e.shortcode.as_str(), e)).collect();
-    if mentions.is_empty() {
-        return linkify_body(body, &emoji_map);
-    }
+    // No early-return on empty mentions: `@here` / `@channel` render as
+    // broadcast chips without needing a MentionRef, so the loop must run
+    // even when no user mentions are resolved.
     let lookup: HashMap<String, &MentionRef> = mentions
         .iter()
         .map(|m| (m.username.to_ascii_lowercase(), m))
@@ -233,6 +233,25 @@ pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRe
         let whole = cap.get(0).unwrap();
         let token = cap.get(2).unwrap();
         let token_lower = token.as_str().to_ascii_lowercase();
+        // Broadcast tokens render as chips without consulting the mentions
+        // lookup. The resolver step has already written mention rows for the
+        // resolved users; here we just turn the literal `@here` / `@channel`
+        // in the body text into a span. No profile link because there is no
+        // user behind the token. Same color as a user mention so the recipient
+        // is not distracted by visual differentiation; v1 treats both as one
+        // mention class.
+        if token_lower == "here" || token_lower == "channel" {
+            let lead = cap.get(1).unwrap();
+            if whole.start() > cursor {
+                out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
+            }
+            out.push_str(&html_escape(lead.as_str()));
+            out.push_str("<span class=\"font-medium text-blue-700 bg-blue-50 rounded px-1\">@");
+            out.push_str(&html_escape(&token_lower));
+            out.push_str("</span>");
+            cursor = whole.end();
+            continue;
+        }
         if let Some(m) = lookup.get(&token_lower) {
             // Emit text up to the boundary char.
             let lead = cap.get(1).unwrap();
@@ -348,6 +367,61 @@ mod tests {
         // Unknown tokens fall through to linkify+escape: literal `@nobody`.
         assert!(out.contains("@nobody"), "unknown token lost: {out}");
         assert!(!out.contains("href=\"/profile/"));
+    }
+
+    #[test]
+    fn render_body_emits_broadcast_chip_without_mention_lookup() {
+        // @here and @channel are rendered unconditionally as broadcast chips:
+        // no MentionRef entry needed, no profile link. This is what makes the
+        // chip appear in the body even though resolved mention rows carry the
+        // real users' usernames (not the broadcast token).
+        let out = render_body("hey @here and @channel quick update", &[], &[]);
+        assert!(
+            out.contains(
+                r#"<span class="font-medium text-blue-700 bg-blue-50 rounded px-1">@here</span>"#
+            ),
+            "missing @here chip: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<span class="font-medium text-blue-700 bg-blue-50 rounded px-1">@channel</span>"#
+            ),
+            "missing @channel chip: {out}"
+        );
+        // Broadcast chips have no profile link.
+        assert!(
+            !out.contains(r#"href="/profile/here""#) && !out.contains(r#"href="/profile/channel""#),
+            "broadcast token rendered with profile link: {out}"
+        );
+    }
+
+    #[test]
+    fn render_body_broadcast_chip_is_case_insensitive() {
+        // The mention parser is case-insensitive in its token-lookup pass
+        // (note the `to_ascii_lowercase` in render_body). Mirror that for
+        // broadcast tokens so `@Here` and `@CHANNEL` also render as chips.
+        let out = render_body("attn @Here and @CHANNEL", &[], &[]);
+        assert!(
+            out.contains(">@here</span>"),
+            "@Here did not normalize: {out}"
+        );
+        assert!(
+            out.contains(">@channel</span>"),
+            "@CHANNEL did not normalize: {out}"
+        );
+    }
+
+    #[test]
+    fn render_body_email_does_not_become_broadcast_chip() {
+        // `foo@here.example.com` is an email-shaped string with `here` after
+        // `@`. The boundary regex prevents it from matching, same as for
+        // user tokens. Guard against a regression where someone "simplifies"
+        // the broadcast branch and drops the boundary check.
+        let out = render_body("contact foo@here.example.com", &[], &[]);
+        assert!(
+            !out.contains(">@here</span>"),
+            "email became broadcast chip: {out}"
+        );
     }
 
     #[test]

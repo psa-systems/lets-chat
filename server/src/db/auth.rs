@@ -571,6 +571,40 @@ pub async fn display_names_for_ids(
     Ok(map)
 }
 
+/// Bulk-load id + username + status for a set of user ids. Used by
+/// `@here` resolution to filter out DND users in one query rather than N.
+/// Banned users are excluded (same as `list_user_ids`); their messages and
+/// mentions are hidden everywhere else, so they should not receive a
+/// broadcast ping either.
+pub async fn usernames_and_status_for_ids(
+    pool: &SqlitePool,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, (String, String)>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT id, username, status FROM users \
+         WHERE id IN ({placeholders}) AND is_banned = 0"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut map = std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        let id: String = r.get("id");
+        let username: String = r.get("username");
+        let status: String = r.get("status");
+        map.insert(id, (username, status));
+    }
+    Ok(map)
+}
+
 /// All user IDs in the auth DB. Used by the autocomplete fallback when a
 /// public room has no enclave assigned.
 pub async fn list_user_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
