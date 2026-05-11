@@ -4,6 +4,7 @@ use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
 use crate::models::{Attachment, Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::markdown;
 
 pub struct MessageView {
     pub id: i64,
@@ -70,11 +71,13 @@ impl MessageView {
         self.body.trim().is_empty() && self.attachments.len() == 1 && self.attachments[0].is_image()
     }
 
-    /// HTML-escape the body, render `@username` mentions as chips, then
-    /// wrap any detected URLs in `<a>` tags. The template renders the
-    /// result with `|safe` so the chips and anchors aren't double-escaped.
+    /// Render the body as CommonMark markdown with fenced code blocks
+    /// syntax-highlighted. Inline text segments still flow through the chat
+    /// pipeline: `@username` mentions become chips, `:shortcode:` tokens
+    /// become custom-emoji images, and bare URLs are linkified. The template
+    /// renders the result with `|safe`.
     pub fn body_html(&self) -> String {
-        render_body(&self.body, &self.mentions, &self.custom_emojis)
+        markdown::render(&self.body, &self.mentions, &self.custom_emojis)
     }
 
     /// First URL in the body, or `None`. The template uses this to render
@@ -98,7 +101,7 @@ impl MessageView {
     }
 }
 
-fn html_escape(s: &str) -> String {
+pub(crate) fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -113,7 +116,10 @@ fn html_escape(s: &str) -> String {
     out
 }
 
-fn linkify_body(body: &str, emoji_map: &std::collections::HashMap<&str, &EmojiRef>) -> String {
+pub(crate) fn linkify_body(
+    body: &str,
+    emoji_map: &std::collections::HashMap<&str, &EmojiRef>,
+) -> String {
     let finder = linkify::LinkFinder::new();
     let mut out = String::with_capacity(body.len());
     let mut cursor = 0usize;
@@ -143,7 +149,7 @@ fn linkify_body(body: &str, emoji_map: &std::collections::HashMap<&str, &EmojiRe
 /// Render the `:shortcode:` syntax for custom emojis as `<img>` tags inside
 /// the supplied plain-text segment. Text outside any matched token is
 /// HTML-escaped; unknown shortcodes are emitted as literal escaped text.
-fn emojify_and_escape(
+pub(crate) fn emojify_and_escape(
     s: &str,
     emoji_map: &std::collections::HashMap<&str, &EmojiRef>,
     out: &mut String,
@@ -197,7 +203,7 @@ pub(crate) fn render_emoji_img(emoji: &EmojiRef) -> String {
 /// All output is HTML-escaped at the segment level; the chip and anchor
 /// markup is the only inserted HTML, and mentioned usernames are escaped
 /// before inclusion.
-fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
     use std::collections::HashMap;
     let emoji_map: HashMap<&str, &EmojiRef> =
         emojis.iter().map(|e| (e.shortcode.as_str(), e)).collect();
