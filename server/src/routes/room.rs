@@ -416,6 +416,74 @@ async fn candidate_ids_for_room(
     Ok(db::auth::list_user_ids(&state.auth).await?)
 }
 
+/// Resolve `@channel` against `room`: every candidate member except the
+/// author. One bulk auth lookup for usernames.
+async fn resolve_channel_targets(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let candidates = candidate_ids_for_room(state, room).await?;
+    let filtered: Vec<String> = candidates
+        .into_iter()
+        .filter(|id| id != author_id)
+        .collect();
+    if filtered.is_empty() {
+        return Ok(Vec::new());
+    }
+    let id_refs: Vec<&str> = filtered.iter().map(String::as_str).collect();
+    let names = db::auth::display_names_for_ids(&state.auth, &id_refs).await?;
+    Ok(filtered
+        .into_iter()
+        .filter_map(|id| {
+            names
+                .get(&id)
+                .map(|(uname, _dname)| db::mentions::MentionRef {
+                    user_id: id,
+                    username: uname.clone(),
+                })
+        })
+        .collect())
+}
+
+/// Resolve `@here` against `room`: every candidate member who has at least
+/// one live WebSocket connection AND whose persisted status is not DND.
+/// Excludes the author. Idle is intentionally included - idle is "stepped
+/// away briefly," not "do not interrupt."
+async fn resolve_here_targets(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let candidates = candidate_ids_for_room(state, room).await?;
+    // First filter: cheap, in-memory hub check + author exclusion.
+    let connected: Vec<String> = candidates
+        .into_iter()
+        .filter(|id| id != author_id && state.hub.is_user_connected(id))
+        .collect();
+    if connected.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Second filter: bulk auth lookup to drop DND users and resolve usernames.
+    let id_refs: Vec<&str> = connected.iter().map(String::as_str).collect();
+    let rows = db::auth::usernames_and_status_for_ids(&state.auth, &id_refs).await?;
+    Ok(connected
+        .into_iter()
+        .filter_map(|id| {
+            rows.get(&id).and_then(|(uname, status)| {
+                if status == db::auth::STATUS_DND {
+                    None
+                } else {
+                    Some(db::mentions::MentionRef {
+                        user_id: id,
+                        username: uname.clone(),
+                    })
+                }
+            })
+        })
+        .collect())
+}
+
 /// `display_name` if set, else `username`. Used for `Mentioned.author_label`.
 fn author_label(user: &User) -> String {
     user.display_name
