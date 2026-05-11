@@ -181,6 +181,18 @@ async fn pin_room_message_returns_oob_strip() {
         body.contains("important update"),
         "snippet missing from strip: {body}"
     );
+    // Bubble re-render is the acting tab's hover-menu flip. Without it,
+    // the user sees "Pin" persist in the menu until they switch rooms.
+    assert!(
+        body.contains(&format!(r#"id="msg-{msg}""#)),
+        "re-rendered bubble missing: {body}"
+    );
+    assert!(
+        body.contains(&format!(
+            r#"hx-delete="/messages/{msg}/pin""#
+        )),
+        "bubble's Unpin button missing - hover menu did not flip: {body}"
+    );
 
     // The DB now reflects the pin.
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pinned_messages WHERE room_id = ?")
@@ -211,6 +223,15 @@ async fn unpin_room_message_returns_oob_strip() {
     assert!(
         body.contains(&format!(r#"id="lc-pinned-strip-{room}""#)),
         "OOB strip wrapper missing on unpin: {body}"
+    );
+    // Bubble flips Unpin -> Pin (hx-post) on the unpin reply too.
+    assert!(
+        body.contains(&format!(r#"id="msg-{msg}""#)),
+        "re-rendered bubble missing on unpin: {body}"
+    );
+    assert!(
+        body.contains(&format!(r#"hx-post="/messages/{msg}/pin""#)),
+        "bubble's Pin button missing - hover menu did not flip after unpin: {body}"
     );
 
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pinned_messages WHERE message_id = ?")
