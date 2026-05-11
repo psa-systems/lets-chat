@@ -26,6 +26,7 @@ use crate::ws::events::ChatEvent;
 mod admin;
 mod auth;
 mod avatar;
+mod bookmarks;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
@@ -123,6 +124,7 @@ pub(crate) async fn load_message_view_for_viewer(
     viewer: &User,
     message_id: i64,
     is_pinned: bool,
+    is_bookmarked: bool,
 ) -> Result<crate::views::room::MessageView, AppError> {
     use crate::views::room::{MessageView, ReactionView};
     let m = db::chat::get_message(&state.chat, message_id)
@@ -174,6 +176,7 @@ pub(crate) async fn load_message_view_for_viewer(
         attachments,
         mentions,
         is_pinned,
+        is_bookmarked,
         custom_emojis,
     })
 }
@@ -475,6 +478,11 @@ pub fn build_router(state: AppState) -> Router {
             "/messages/{message_id}/pin",
             post(pinned::post_pin).delete(pinned::delete_pin),
         )
+        .route(
+            "/messages/{message_id}/bookmark",
+            post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
+        )
+        .route("/saved", get(bookmarks::get_saved))
         .route(
             "/messages/{message_id}",
             get(room::get_single_message)

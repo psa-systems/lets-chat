@@ -51,6 +51,11 @@ pub struct MessageView {
     /// sites populate this from a single bulk lookup; per-message render
     /// sites (post, edit, delete broadcasts) look it up individually.
     pub is_pinned: bool,
+    /// True when the viewing user has bookmarked this message. Drives the
+    /// Save / Unsave flip in the hover menu. Per-viewer state, so the
+    /// page render path looks it up in bulk for the current viewer and
+    /// per-message renders query it for the specific viewer.
+    pub is_bookmarked: bool,
     /// Custom emoji set in the message's enclave, used by `body_html()` to
     /// rewrite `:shortcode:` tokens into `<img>` tags. Empty for DM messages
     /// and any non-enclave room; unknown shortcodes pass through as text.
