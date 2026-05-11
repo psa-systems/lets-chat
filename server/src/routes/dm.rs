@@ -143,6 +143,9 @@ pub async fn get_dm(
     let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
     let mut attachments_by_message =
         db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
+    // Bulk-load the set of currently-pinned message ids so the bubble's
+    // hover menu shows Pin vs Unpin without an N+1 lookup.
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -199,6 +202,7 @@ pub async fn get_dm(
             parent_id: m.parent_id,
             attachments,
             mentions: Vec::new(),
+            is_pinned: pinned_ids.contains(&m.id),
         });
     }
 
@@ -244,6 +248,13 @@ pub async fn get_dm(
         .as_str()
         .to_string();
 
+    // Pre-render the pinned strip. The DM strip's "See all" link uses
+    // the dm-keyed URL so the navigation lands on `/dm/{peer_id}/pins`.
+    let pin_path = format!("/dm/{}/pins", peer.id);
+    let pinned_strip_html = super::pinned::build_strip_fragment(&state, room.id, pin_path, false)
+        .await?
+        .render()?;
+
     let page = DmPage {
         user: &user,
         peer: &peer,
@@ -254,6 +265,7 @@ pub async fn get_dm(
         messages: &messages,
         asset_version: &state.asset_version,
         mute_mode,
+        pinned_strip_html,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

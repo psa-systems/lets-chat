@@ -539,6 +539,38 @@ pub async fn set_notification_prefs(
     Ok(())
 }
 
+/// Bulk-resolve display fields for a set of user ids in a single query.
+/// Returns a map keyed by user id with `(username, display_name)`.
+/// Missing ids are absent from the map; callers fall back to the raw id
+/// for unknown / deleted users. Used by callers that already have the
+/// id list in hand (e.g. pinned-message render) to avoid N+1 lookups
+/// across the chat/auth pool boundary.
+pub async fn display_names_for_ids(
+    pool: &SqlitePool,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, (String, Option<String>)>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!("SELECT id, username, display_name FROM users WHERE id IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut map = std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        let id: String = r.get("id");
+        let username: String = r.get("username");
+        let display_name: Option<String> = r.get("display_name");
+        map.insert(id, (username, display_name));
+    }
+    Ok(map)
+}
+
 /// All user IDs in the auth DB. Used by the autocomplete fallback when a
 /// public room has no enclave assigned.
 pub async fn list_user_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {

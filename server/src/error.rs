@@ -8,6 +8,8 @@ pub enum AppError {
     NotFound,
     #[error("forbidden")]
     Forbidden,
+    #[error("conflict: {0}")]
+    Conflict(String),
     #[error("bad request: {0}")]
     BadRequest(String),
     #[error("unauthorized")]
@@ -23,6 +25,7 @@ impl IntoResponse for AppError {
         match self {
             AppError::NotFound => (StatusCode::NOT_FOUND, "Not Found").into_response(),
             AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden").into_response(),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg).into_response(),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
             AppError::Internal(msg) => {

@@ -107,6 +107,10 @@ pub async fn get_room(
     let mut mentions_by_message =
         db::mentions::mentions_for_messages(&state.chat, &state.auth, &message_ids).await?;
 
+    // Bulk-load the set of currently-pinned message ids so the bubble's
+    // hover menu shows Pin vs Unpin without an N+1 lookup.
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -156,6 +160,7 @@ pub async fn get_room(
             parent_id: m.parent_id,
             attachments,
             mentions,
+            is_pinned: pinned_ids.contains(&m.id),
         });
     }
 
@@ -189,6 +194,14 @@ pub async fn get_room(
         .unwrap_or(db::notifications::MuteMode::None)
         .as_str();
 
+    // Pre-render the pinned strip so the page template can inline it
+    // verbatim. Builder resolves author labels in a single bulk auth
+    // lookup (see `routes::pinned::resolve_author_labels`).
+    let pin_path = format!("/room/{room_id}/pins");
+    let pinned_strip_html = super::pinned::build_strip_fragment(&state, room_id, pin_path, false)
+        .await?
+        .render()?;
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -198,6 +211,7 @@ pub async fn get_room(
         messages: &messages,
         asset_version: &state.asset_version,
         mute_mode,
+        pinned_strip_html,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -497,6 +511,7 @@ pub async fn get_single_message(
         parent_id: m.parent_id,
         attachments,
         mentions,
+        is_pinned: false,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -640,6 +655,7 @@ pub async fn patch_message(
         parent_id: m.parent_id,
         attachments,
         mentions,
+        is_pinned: false,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -721,6 +737,7 @@ pub async fn get_thread_panel(
             .remove(&parent.id)
             .unwrap_or_default(),
         mentions: mentions_by_message.remove(&parent.id).unwrap_or_default(),
+        is_pinned: false,
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -757,6 +774,7 @@ pub async fn get_thread_panel(
             parent_id: r.parent_id,
             attachments,
             mentions,
+            is_pinned: false,
         });
     }
 
