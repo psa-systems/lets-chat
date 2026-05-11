@@ -1,4 +1,4 @@
-<div class="relative shrink-0">
+<div class="relative shrink-0" data-lc-cleanup-root>
   <button type="button"
     id="lc-notify-toggle-{{ room.id }}"
     class="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -39,7 +39,8 @@
   // Disclosure pattern: toggle button + menu div with proper ARIA. Tab cycles
   // through radios via default browser behavior. Escape closes. Click outside
   // closes. After change, HTMX swaps #lc-room-header so the entire dropdown
-  // is replaced; the wired-flag guards against double-binding.
+  // is replaced; the wired-flag guards against double-binding within a single
+  // render, and the teardown below catches the cross-render leak.
   var btn = document.getElementById('lc-notify-toggle-{{ room.id }}');
   var menu = document.getElementById('lc-notify-menu-{{ room.id }}');
   if (!btn || !menu || btn.dataset.lcWired === '1') return;
@@ -51,9 +52,19 @@
   menu.addEventListener('keydown', function(e){
     if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); }
   });
-  document.addEventListener('click', function(e){
+  function onDocClick(e){
     if (menu.hidden) return;
     if (!menu.contains(e.target) && e.target !== btn) close();
-  });
+  }
+  document.addEventListener('click', onDocClick);
+  // Teardown: the btn/menu listeners die with their elements when the room
+  // header swap removes them; the document.click listener does not, so drop
+  // it here. The cleanup-root is the dropdown wrapper div above.
+  function teardown() {
+    document.removeEventListener('click', onDocClick);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
