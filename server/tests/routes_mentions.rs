@@ -296,6 +296,82 @@ async fn autocomplete_broadcast_tokens_absent_in_dm_room() {
 }
 
 #[tokio::test]
+async fn broadcast_count_channel_returns_member_count() {
+    // viewer + alice are both in the General enclave; @channel should
+    // resolve to 1 (alice; viewer is the author so excluded).
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=channel")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains("1 person in #general"),
+        "expected singular '1 person': {body}"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_count_here_with_no_one_online_renders_empty() {
+    // No one has opened a WS connection in this test, so @here resolves to
+    // zero recipients. The endpoint returns an empty body so the composer
+    // slot collapses without a misleading "0 people" line.
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=here")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap())
+        .trim()
+        .to_string();
+    assert!(
+        body.is_empty(),
+        "expected empty body for 0 recipients: {body:?}"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_count_rejects_unknown_token() {
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=admins")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn broadcast_count_rejects_dm_room() {
+    let t = app_with_two_users("viewer", "alice").await;
+    let dm_room = db::chat::create_dm_room(&t.chat, "viewer-alice-dm", &t.viewer_id, &t.peer_id)
+        .await
+        .unwrap();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!(
+            "/api/rooms/{}/broadcast-count?token=channel",
+            dm_room.id
+        ))
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn autocomplete_requires_auth() {
     let t = app_with_two_users("viewer", "alice").await;
     let req = Request::builder()
