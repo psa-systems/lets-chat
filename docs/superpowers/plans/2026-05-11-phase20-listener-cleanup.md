@@ -119,14 +119,13 @@ This convention surfaces in CLAUDE.md alongside the canonical template so future
 8. **Document the pattern in CLAUDE.md.** Add a new section "Inline script teardown" (sibling of the Tailwind CSS section) with:
    - The canonical template
    - The persistent-shell exception
-   - A short rationale (why this matters in this codebase given the lack of `hx-boost`)
+   - A short rationale: explicitly call out that this codebase does NOT use `hx-boost` today, so the only in-place re-render triggers are the reconnect soft-refresh and targeted fragment swaps. Flag that the teardown pattern becomes **load-bearing** if anyone ever enables `hx-boost`, because at that point every sidebar click would re-render `#main` and accumulate one listener per script per navigation.
 
 9. **Verify.** `just check` (server + clippy + fmt) + `just test` standalone + `just test-saas` + `just verify`. No Rust changed, so this is mainly a "did we break a template" check via the test suite (which renders most templates as part of route tests).
 
 10. **Manual smoke** (cannot automate without a browser harness):
-    - Open `#general` in two tabs.
-    - In tab 1, throttle network in DevTools to force a WS drop and reconnect. After reconnect, the soft-refresh should run.
-    - Check DevTools "Memory" → "Listeners" count on `document.body` before and after; it should be stable, not growing.
+    - **Reconnect-path single-fire smoke (highest signal — this is the path the bug bites today):** open `#general`. Use DevTools "Offline" toggle to drop the WS connection. Wait for the reconnect banner to flip back to Connected. Repeat 5 times in a row. Then from a second tab (or a second user) send one message to `#general`. The message should render **exactly once** in tab 1. Before the fix, the `htmx:wsOpen` subscribe-frame body listener would have accumulated 5 copies of itself, causing the room subscribe to fire 5 times. After the fix, it should fire exactly once.
+    - In tab 1, throttle network in DevTools to force a WS drop and reconnect. After reconnect, the soft-refresh should run. Check DevTools "Memory" → "Listeners" count on `document.body` before and after; it should be stable, not growing.
     - Open the notify-dropdown, change mute mode 5 times. Click outside between changes. The dropdown should still close on outside-click (no missing-listener regression).
     - Type `@` in the composer, verify mention popover still works after the soft-refresh has happened at least once.
     - Settings → Blocked users page: open, leave, return. Username search should still work.
