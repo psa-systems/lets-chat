@@ -9,6 +9,9 @@ use crate::views::room::{ReactionBarFragment, ReactionView};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
+// percent_encoding is already a transitive dep via the workspace; the picker
+// uses it to URL-encode shortcodes/glyphs into the reactions path segment.
+
 /// POST /messages/:message_id/reactions/:emoji
 /// Toggle the caller's reaction for the given emoji on the given message.
 /// Broadcasts a ReactionAdded or ReactionRemoved event to subscribers and
@@ -40,14 +43,11 @@ pub async fn toggle_reaction(
     };
     state.hub.broadcast_to_room(m.room_id, &event);
 
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let counts = db::chat::list_reactions(&state.chat, message_id, &user.id).await?;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
+        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
         .collect();
     let fragment = ReactionBarFragment {
         message_id,
@@ -57,26 +57,49 @@ pub async fn toggle_reaction(
 }
 
 /// GET /messages/:message_id/reactions/picker
-/// Return an inline emoji picker that replaces the `+` button.
-pub async fn get_picker(Path(message_id): Path<i64>) -> Response {
-    let emojis = ["👍", "❤", "😂", "🎉", "😮", "😢"];
-    let buttons: String = emojis
-        .iter()
-        .map(|e| {
-            format!(
-                r##"<button hx-post="/messages/{id}/reactions/{e}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
+/// Return an inline emoji picker that replaces the `+` button. The picker
+/// surfaces a small unicode default set plus every custom emoji defined in
+/// the message's enclave (DMs and non-enclave rooms see unicode only).
+pub async fn get_picker(
+    State(state): State<AppState>,
+    Path(message_id): Path<i64>,
+) -> Result<Response, AppError> {
+    let unicode_defaults = ["👍", "❤", "😂", "🎉", "😮", "😢"];
+    let mut buttons = String::new();
+    for e in &unicode_defaults {
+        let encoded = percent_encoding::utf8_percent_encode(e, percent_encoding::NON_ALPHANUMERIC);
+        buttons.push_str(&format!(
+            r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
+            id = message_id,
+            enc = encoded,
+            e = e,
+        ));
+    }
+
+    if let Some(m) = db::chat::get_message(&state.chat, message_id).await? {
+        let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+        for emoji in &emojis {
+            let key = format!(":{}:", emoji.shortcode);
+            let encoded =
+                percent_encoding::utf8_percent_encode(&key, percent_encoding::NON_ALPHANUMERIC);
+            // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
+            // so it is safe to inline into the markup without escaping.
+            buttons.push_str(&format!(
+                r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
                 id = message_id,
-                e = e
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("");
+                enc = encoded,
+                code = emoji.shortcode,
+                eid = emoji.id,
+            ));
+        }
+    }
+
     let body = format!(
-        r##"<div class="inline-flex gap-1">{buttons}<button hx-get="/messages/{id}/reactions/cancel" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
+        r##"<div class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{id}/reactions/cancel" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
         id = message_id,
         buttons = buttons,
     );
-    axum::response::Html(body).into_response()
+    Ok(axum::response::Html(body).into_response())
 }
 
 /// GET /messages/:message_id/reactions/cancel

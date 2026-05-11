@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod custom_emoji;
 pub mod enclave;
 pub mod invite;
 pub mod message;
@@ -11,6 +12,7 @@ pub mod settings;
 pub mod user;
 
 pub use attachment::Attachment;
+pub use custom_emoji::{CustomEmoji, EmojiRef};
 pub use invite::InviteCode;
 pub use message::Message;
 pub use mod_action::ModAction;

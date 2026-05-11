@@ -26,6 +26,7 @@ use crate::ws::events::ChatEvent;
 mod admin;
 mod auth;
 mod avatar;
+mod custom_emojis;
 mod dm;
 mod dm_mute;
 mod enclave;
@@ -130,14 +131,11 @@ pub(crate) async fn load_message_view_for_viewer(
     let meta = load_author_meta(state, &m.user_id, &viewer.id).await?;
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await?
         .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
+        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
     let is_follow_up = db::chat::is_follow_up_of(
@@ -176,6 +174,7 @@ pub(crate) async fn load_message_view_for_viewer(
         attachments,
         mentions,
         is_pinned,
+        custom_emojis,
     })
 }
 
@@ -528,6 +527,7 @@ pub fn build_router(state: AppState) -> Router {
             post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/files/{id}", get(uploads::get_file))
+        .route("/api/emojis/{id}", get(custom_emojis::get_emoji))
         .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
