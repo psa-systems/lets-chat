@@ -1,6 +1,7 @@
 use askama::Template;
 
 use crate::db::mentions::MentionRef;
+use crate::models::custom_emoji::EmojiRef;
 use crate::models::{Attachment, Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
@@ -49,6 +50,10 @@ pub struct MessageView {
     /// sites populate this from a single bulk lookup; per-message render
     /// sites (post, edit, delete broadcasts) look it up individually.
     pub is_pinned: bool,
+    /// Custom emoji set in the message's enclave, used by `body_html()` to
+    /// rewrite `:shortcode:` tokens into `<img>` tags. Empty for DM messages
+    /// and any non-enclave room; unknown shortcodes pass through as text.
+    pub custom_emojis: Vec<EmojiRef>,
 }
 
 impl MessageView {
@@ -69,7 +74,7 @@ impl MessageView {
     /// wrap any detected URLs in `<a>` tags. The template renders the
     /// result with `|safe` so the chips and anchors aren't double-escaped.
     pub fn body_html(&self) -> String {
-        render_body(&self.body, &self.mentions)
+        render_body(&self.body, &self.mentions, &self.custom_emojis)
     }
 
     /// First URL in the body, or `None`. The template uses this to render
@@ -108,7 +113,7 @@ fn html_escape(s: &str) -> String {
     out
 }
 
-fn linkify_body(body: &str) -> String {
+fn linkify_body(body: &str, emoji_map: &std::collections::HashMap<&str, &EmojiRef>) -> String {
     let finder = linkify::LinkFinder::new();
     let mut out = String::with_capacity(body.len());
     let mut cursor = 0usize;
@@ -119,7 +124,7 @@ fn linkify_body(body: &str) -> String {
         let start = link.start();
         let end = link.end();
         if start > cursor {
-            out.push_str(&html_escape(&body[cursor..start]));
+            emojify_and_escape(&body[cursor..start], emoji_map, &mut out);
         }
         let url = link.as_str();
         out.push_str("<a href=\"");
@@ -130,9 +135,54 @@ fn linkify_body(body: &str) -> String {
         cursor = end;
     }
     if cursor < body.len() {
-        out.push_str(&html_escape(&body[cursor..]));
+        emojify_and_escape(&body[cursor..], emoji_map, &mut out);
     }
     out
+}
+
+/// Render the `:shortcode:` syntax for custom emojis as `<img>` tags inside
+/// the supplied plain-text segment. Text outside any matched token is
+/// HTML-escaped; unknown shortcodes are emitted as literal escaped text.
+fn emojify_and_escape(
+    s: &str,
+    emoji_map: &std::collections::HashMap<&str, &EmojiRef>,
+    out: &mut String,
+) {
+    if emoji_map.is_empty() {
+        out.push_str(&html_escape(s));
+        return;
+    }
+    use std::sync::OnceLock;
+    static EMOJI_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = EMOJI_RE
+        .get_or_init(|| regex::Regex::new(r":([a-z0-9_]{2,32}):").expect("valid emoji regex"));
+    let mut cursor = 0usize;
+    for cap in re.captures_iter(s) {
+        let whole = cap.get(0).unwrap();
+        let shortcode = cap.get(1).unwrap().as_str();
+        let Some(emoji) = emoji_map.get(shortcode) else {
+            continue;
+        };
+        if whole.start() > cursor {
+            out.push_str(&html_escape(&s[cursor..whole.start()]));
+        }
+        out.push_str(&render_emoji_img(emoji));
+        cursor = whole.end();
+    }
+    if cursor < s.len() {
+        out.push_str(&html_escape(&s[cursor..]));
+    }
+}
+
+/// HTML for a single inline custom emoji. Inline width keeps the bubble
+/// height stable; `alt` text preserves the typed token for screen readers
+/// and copy-paste.
+pub(crate) fn render_emoji_img(emoji: &EmojiRef) -> String {
+    format!(
+        r#"<img class="custom-emoji inline-block h-5 w-5 align-text-bottom" src="/api/emojis/{id}" alt=":{code}:" title=":{code}:">"#,
+        id = emoji.id,
+        code = html_escape(&emoji.shortcode),
+    )
 }
 
 /// Render `body` to HTML in three passes:
@@ -147,10 +197,12 @@ fn linkify_body(body: &str) -> String {
 /// All output is HTML-escaped at the segment level; the chip and anchor
 /// markup is the only inserted HTML, and mentioned usernames are escaped
 /// before inclusion.
-fn render_body(body: &str, mentions: &[MentionRef]) -> String {
+fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
     use std::collections::HashMap;
+    let emoji_map: HashMap<&str, &EmojiRef> =
+        emojis.iter().map(|e| (e.shortcode.as_str(), e)).collect();
     if mentions.is_empty() {
-        return linkify_body(body);
+        return linkify_body(body, &emoji_map);
     }
     let lookup: HashMap<String, &MentionRef> = mentions
         .iter()
@@ -174,7 +226,7 @@ fn render_body(body: &str, mentions: &[MentionRef]) -> String {
             // Emit text up to the boundary char.
             let lead = cap.get(1).unwrap();
             if whole.start() > cursor {
-                out.push_str(&linkify_body(&body[cursor..whole.start()]));
+                out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
             }
             out.push_str(&html_escape(lead.as_str()));
             out.push_str("<a href=\"/profile/");
@@ -187,7 +239,7 @@ fn render_body(body: &str, mentions: &[MentionRef]) -> String {
         // Unknown token: leave for the trailing linkify pass to escape.
     }
     if cursor < body.len() {
-        out.push_str(&linkify_body(&body[cursor..]));
+        out.push_str(&linkify_body(&body[cursor..], &emoji_map));
     }
     out
 }
@@ -196,6 +248,60 @@ pub struct ReactionView {
     pub emoji: String,
     pub count: i64,
     pub viewer_reacted: bool,
+    /// Pre-rendered display HTML for the emoji glyph. Custom emojis become
+    /// `<img>` tags; unicode emojis become the escaped text glyph. The
+    /// template renders this with `|safe`.
+    pub display_html: String,
+}
+
+impl ReactionView {
+    /// Build a ReactionView with the display HTML pre-rendered against the
+    /// supplied enclave emoji set. Pass an empty slice in DM contexts (or
+    /// any room without an enclave); unknown shortcodes fall through to
+    /// escaped text so the bar still renders.
+    pub fn new(emoji: String, count: i64, viewer_reacted: bool, emojis: &[EmojiRef]) -> Self {
+        let display_html = Self::render_emoji(&emoji, emojis);
+        Self {
+            emoji,
+            count,
+            viewer_reacted,
+            display_html,
+        }
+    }
+
+    /// Render an emoji string for the reaction bar. Custom emoji shortcodes
+    /// have shape `:foo:` and are looked up in the supplied set; anything
+    /// else (unicode glyphs, unknown shortcodes) falls back to escaped text.
+    pub fn render_emoji(emoji: &str, emojis: &[EmojiRef]) -> String {
+        if let Some(code) = strip_shortcode(emoji) {
+            for e in emojis {
+                if e.shortcode == code {
+                    return render_emoji_img(e);
+                }
+            }
+        }
+        html_escape(emoji)
+    }
+}
+
+/// Return the inner shortcode when `s` has shape `:foo:` with a valid charset.
+/// Returns None otherwise so the caller can fall back to text rendering.
+pub fn strip_shortcode(s: &str) -> Option<&str> {
+    let bytes = s.as_bytes();
+    if bytes.len() < 4 || bytes[0] != b':' || bytes[bytes.len() - 1] != b':' {
+        return None;
+    }
+    let inner = &s[1..s.len() - 1];
+    if inner.len() < 2 || inner.len() > 32 {
+        return None;
+    }
+    if !inner
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        return None;
+    }
+    Some(inner)
 }
 
 #[cfg(test)]
@@ -208,7 +314,7 @@ mod tests {
             user_id: "alice-id".into(),
             username: "alice".into(),
         }];
-        let out = render_body("hey @alice check https://example.com", &mentions);
+        let out = render_body("hey @alice check https://example.com", &mentions, &[]);
         // The chip is a real anchor (not escaped).
         assert!(
             out.contains(r#"<a href="/profile/alice-id" class="font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1">@alice</a>"#),
@@ -227,7 +333,7 @@ mod tests {
 
     #[test]
     fn render_body_leaves_unknown_token_as_text() {
-        let out = render_body("ping @nobody", &[]);
+        let out = render_body("ping @nobody", &[], &[]);
         // Unknown tokens fall through to linkify+escape: literal `@nobody`.
         assert!(out.contains("@nobody"), "unknown token lost: {out}");
         assert!(!out.contains("href=\"/profile/"));
@@ -243,12 +349,63 @@ mod tests {
         // boundary before `@`, so the chip pass must skip it. The text
         // should appear as a plain string (linkified as part of any URL,
         // but `foo@bar.com` is not a URL by linkify rules).
-        let out = render_body("ping foo@bar.com", &mentions);
+        let out = render_body("ping foo@bar.com", &mentions, &[]);
         assert!(
             !out.contains("href=\"/profile/"),
             "email matched chip: {out}"
         );
         assert!(out.contains("foo@bar.com"), "plain text lost: {out}");
+    }
+
+    #[test]
+    fn render_body_substitutes_known_custom_emoji() {
+        let emojis = vec![EmojiRef {
+            id: 42,
+            shortcode: "party".into(),
+        }];
+        let out = render_body("hello :party: world", &[], &emojis);
+        assert!(out.contains("src=\"/api/emojis/42\""), "no img: {out}");
+        assert!(out.contains("alt=\":party:\""), "no alt: {out}");
+        // Surrounding plain text is preserved and escaped.
+        assert!(out.contains("hello "), "leading text lost: {out}");
+        assert!(out.contains(" world"), "trailing text lost: {out}");
+    }
+
+    #[test]
+    fn render_body_leaves_unknown_shortcode_as_text() {
+        let out = render_body("plain :missing: text", &[], &[]);
+        // Unknown shortcode passes through as literal escaped text.
+        assert!(out.contains(":missing:"), "shortcode lost: {out}");
+    }
+
+    #[test]
+    fn render_body_does_not_substitute_emoji_inside_url() {
+        let emojis = vec![EmojiRef {
+            id: 1,
+            shortcode: "foo".into(),
+        }];
+        let out = render_body("see https://example.com/:foo:.png ok", &[], &emojis);
+        // The url is fully linkified - the :foo: inside the path should not
+        // become an img tag because the linkify pass owns that range.
+        assert!(
+            !out.contains("src=\"/api/emojis/1\""),
+            "emoji leaked into url: {out}"
+        );
+        assert!(
+            out.contains("href=\"https://example.com/:foo:.png\""),
+            "url lost: {out}"
+        );
+    }
+
+    #[test]
+    fn strip_shortcode_validates() {
+        assert_eq!(strip_shortcode(":ok:"), Some("ok"));
+        assert_eq!(strip_shortcode(":party_42:"), Some("party_42"));
+        assert_eq!(strip_shortcode("👍"), None);
+        assert_eq!(strip_shortcode(":Bad:"), None);
+        assert_eq!(strip_shortcode(":a:"), None);
+        assert_eq!(strip_shortcode("foo"), None);
+        assert_eq!(strip_shortcode(":no-dash:"), None);
     }
 }
 

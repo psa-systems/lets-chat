@@ -78,6 +78,10 @@ pub async fn get_room(
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
 
+    // Load the enclave's custom emoji set once for the whole page. Reactions
+    // and message bodies share the same map, so a single lookup serves both.
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+
     // Reactions for every message in the room, in a single query. Group them
     // by message_id so we can attach to each MessageView below.
     let mut reactions_by_message: HashMap<i64, Vec<ReactionView>> = HashMap::new();
@@ -85,11 +89,12 @@ pub async fn get_room(
         reactions_by_message
             .entry(mid)
             .or_default()
-            .push(ReactionView {
-                emoji: r.emoji,
-                count: r.count,
-                viewer_reacted: r.reacted_by_me,
-            });
+            .push(ReactionView::new(
+                r.emoji,
+                r.count,
+                r.reacted_by_me,
+                &custom_emojis,
+            ));
     }
 
     let reply_counts: HashMap<i64, i64> = db::chat::count_replies_for_room(&state.chat, room_id)
@@ -161,6 +166,7 @@ pub async fn get_room(
             attachments,
             mentions,
             is_pinned: pinned_ids.contains(&m.id),
+            custom_emojis: custom_emojis.clone(),
         });
     }
 
@@ -568,14 +574,11 @@ pub async fn patch_message(
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
     let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
         .into_iter()
-        .map(|r| ReactionView {
-            emoji: r.emoji,
-            count: r.count,
-            viewer_reacted: r.reacted_by_me,
-        })
+        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
     let is_follow_up = db::chat::is_follow_up_of(
@@ -614,6 +617,7 @@ pub async fn patch_message(
         attachments,
         mentions,
         is_pinned: false,
+        custom_emojis,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -669,6 +673,7 @@ pub async fn get_thread_panel(
         db::uploads::attachments_for_messages(&state.chat, &all_ids).await?;
     let mut mentions_by_message =
         db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
+    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
 
     let parent_view = MessageView {
         id: parent.id,
@@ -696,6 +701,7 @@ pub async fn get_thread_panel(
             .unwrap_or_default(),
         mentions: mentions_by_message.remove(&parent.id).unwrap_or_default(),
         is_pinned: false,
+        custom_emojis: custom_emojis.clone(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -733,6 +739,7 @@ pub async fn get_thread_panel(
             attachments,
             mentions,
             is_pinned: false,
+            custom_emojis: custom_emojis.clone(),
         });
     }
 

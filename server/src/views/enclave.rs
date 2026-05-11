@@ -1,5 +1,6 @@
 use askama::Template;
 
+use crate::models::custom_emoji::CustomEmoji;
 use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveRole};
 use crate::models::{Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
@@ -34,6 +35,7 @@ pub struct EnclaveSettingsPage<'a> {
     pub user: &'a User,
     pub enclave: &'a Enclave,
     pub members: &'a [EnclaveMemberView],
+    pub emojis: &'a [CustomEmoji],
     pub can_delete: bool,
     pub flash_error: Option<&'a str>,
     pub sidebar_rooms: &'a [SidebarRoom],

@@ -146,6 +146,9 @@ pub async fn get_dm(
     // Bulk-load the set of currently-pinned message ids so the bubble's
     // hover menu shows Pin vs Unpin without an N+1 lookup.
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
+    // DMs have no enclave of their own but still resolve `:shortcode:` for
+    // any enclave that opted into global sharing.
+    let shared_emojis = db::custom_emojis::refs_globally_shared(&state.chat).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -162,11 +165,7 @@ pub async fn get_dm(
         let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
             .await?
             .into_iter()
-            .map(|r| ReactionView {
-                emoji: r.emoji,
-                count: r.count,
-                viewer_reacted: r.reacted_by_me,
-            })
+            .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &shared_emojis))
             .collect();
         let is_follow_up = db::chat::is_follow_up_of(
             prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
@@ -203,6 +202,7 @@ pub async fn get_dm(
             attachments,
             mentions: Vec::new(),
             is_pinned: pinned_ids.contains(&m.id),
+            custom_emojis: shared_emojis.clone(),
         });
     }
 
