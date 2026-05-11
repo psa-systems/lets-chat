@@ -71,11 +71,24 @@
         popover.innerHTML = '';
         input.focus();
       });
-      document.addEventListener('click', function(e) {
+      function onDocClick(e) {
         if (e.target === input) return;
         if (popover.contains(e.target)) return;
         popover.innerHTML = '';
-      });
+      }
+      document.addEventListener('click', onDocClick);
+      // Teardown: the input/popover listeners die with their elements; the
+      // document.click listener and any pending debounce timer do not, so
+      // drop them here. Bumping latestRequestId discards an already-in-flight
+      // fetch's writeback if it resolves after teardown.
+      function teardown() {
+        clearTimeout(debounceTimer);
+        latestRequestId++;
+        document.removeEventListener('click', onDocClick);
+      }
+      var root = document.currentScript.closest('[data-lc-cleanup-root]')
+              || document.currentScript.parentElement;
+      root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
     })();
   </script>
 
