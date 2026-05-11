@@ -188,9 +188,7 @@ async fn pin_room_message_returns_oob_strip() {
         "re-rendered bubble missing: {body}"
     );
     assert!(
-        body.contains(&format!(
-            r#"hx-delete="/messages/{msg}/pin""#
-        )),
+        body.contains(&format!(r#"hx-delete="/messages/{msg}/pin""#)),
         "bubble's Unpin button missing - hover menu did not flip: {body}"
     );
 

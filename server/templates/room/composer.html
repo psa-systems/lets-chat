@@ -5,6 +5,7 @@
 <input id="lc-file" type="file" class="hidden">
 <form
   id="composer"
+  data-lc-cleanup-root
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
   hx-on::after-request="
@@ -132,7 +133,7 @@
     else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); insert(sel); }
     else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); }
   }, true);
-  document.body.addEventListener('htmx:afterSwap', function(e){
+  function onAfterSwap(e){
     if (e.target && e.target.id === 'lc-mention-popover') {
       var first = slot.querySelector('button[data-username]');
       if (first) first.setAttribute('aria-selected', 'true');
@@ -141,7 +142,16 @@
         if (b) { ev.preventDefault(); insert(b); }
       }, { once: true });
     }
-  });
+  }
+  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  // Teardown: the ta-bound listeners die with the textarea on swap; the body
+  // listener does not, so drop it here. Cleanup-root is #composer (form).
+  function teardown() {
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
 <script>

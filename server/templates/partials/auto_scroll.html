@@ -13,9 +13,8 @@
   }
 
   // Track scroll position so we know whether the user is parked at the bottom.
-  messages.addEventListener('scroll', function() {
-    wasAtBottom = isAtBottom();
-  });
+  function onScroll() { wasAtBottom = isAtBottom(); }
+  messages.addEventListener('scroll', onScroll);
 
   // Initial paint: anchor at the unread divider if there is one, otherwise
   // jump to the newest message.
@@ -30,18 +29,28 @@
 
   // Capture stickiness BEFORE htmx mutates the DOM, then restore after.
   // htmx:beforeSwap fires for all swaps (regular + OOB) on the body level.
-  document.body.addEventListener('htmx:beforeSwap', function() {
-    wasAtBottom = isAtBottom();
-  });
-  document.body.addEventListener('htmx:afterSwap', function() {
-    if (wasAtBottom) scrollToBottom();
-  });
+  function onBeforeSwap() { wasAtBottom = isAtBottom(); }
+  function onAfterSwap() { if (wasAtBottom) scrollToBottom(); }
+  document.body.addEventListener('htmx:beforeSwap', onBeforeSwap);
+  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
   // OOB swaps (new messages over WS) take a separate event path.
-  document.body.addEventListener('htmx:oobBeforeSwap', function() {
-    wasAtBottom = isAtBottom();
-  });
-  document.body.addEventListener('htmx:oobAfterSwap', function() {
-    if (wasAtBottom) scrollToBottom();
-  });
+  document.body.addEventListener('htmx:oobBeforeSwap', onBeforeSwap);
+  document.body.addEventListener('htmx:oobAfterSwap', onAfterSwap);
+
+  // Teardown: when #main is replaced by the WS reconnect soft-refresh (the
+  // only in-place re-render path that reaches scripts under #main today),
+  // htmx fires htmx:beforeCleanupElement on every descendant. Drop the four
+  // body listeners we attached so the next render's IIFE does not double-fire.
+  // The messages-scroll listener goes with the #messages element naturally.
+  function teardown() {
+    messages.removeEventListener('scroll', onScroll);
+    document.body.removeEventListener('htmx:beforeSwap', onBeforeSwap);
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+    document.body.removeEventListener('htmx:oobBeforeSwap', onBeforeSwap);
+    document.body.removeEventListener('htmx:oobAfterSwap', onAfterSwap);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>

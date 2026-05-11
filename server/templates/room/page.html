@@ -14,13 +14,25 @@
   <aside id="thread-panel" class="hidden"></aside>
 </div>
 <script>
-document.body.addEventListener('htmx:wsOpen', function(evt) {
-  window.__lcWS = evt.detail.socketWrapper;
-  evt.detail.socketWrapper.send(JSON.stringify({
-    type: 'subscribe',
-    room_id: {{ room.id }}
-  }));
-});
+(function() {
+  function onWsOpen(evt) {
+    window.__lcWS = evt.detail.socketWrapper;
+    evt.detail.socketWrapper.send(JSON.stringify({
+      type: 'subscribe',
+      room_id: {{ room.id }}
+    }));
+  }
+  document.body.addEventListener('htmx:wsOpen', onWsOpen);
+  // Teardown when #main is swapped (e.g. by the reconnect soft-refresh).
+  // Without this, every soft-refresh would add another wsOpen listener and
+  // the subscribe frame would fire N times per reconnect.
+  function teardown() {
+    document.body.removeEventListener('htmx:wsOpen', onWsOpen);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
 </script>
 {% include "partials/auto_scroll.html" %}
 {% endblock %}
