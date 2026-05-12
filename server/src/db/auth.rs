@@ -628,18 +628,57 @@ pub async fn set_notification_prefs(
     browser: bool,
     sound: bool,
     push: bool,
+    email_digest: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE users \
-            SET notify_browser_enabled = ?, \
-                notify_sound_enabled   = ?, \
-                notify_push_enabled    = ?, \
-                updated_at             = datetime('now') \
+            SET notify_browser_enabled       = ?, \
+                notify_sound_enabled         = ?, \
+                notify_push_enabled          = ?, \
+                notify_email_digest_enabled  = ?, \
+                updated_at                   = datetime('now') \
           WHERE id = ?",
     )
     .bind(browser as i32)
     .bind(sound as i32)
     .bind(push as i32)
+    .bind(email_digest as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Set `users.email` for `user_id`. An empty input is stored as `NULL`
+/// (the digest tick treats both as "no recipient"). The route handler
+/// already trims and basic-validates the input; this function only
+/// commits to the row.
+pub async fn set_email(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(email)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Toggle the digest-opt-in flag for `user_id`. Used by the register
+/// flow when the operator has flipped `default_notify_email_digest` to
+/// `1`: new users start opted in, but the column default in the schema
+/// is `0` so this helper performs the targeted update.
+pub async fn set_notify_email_digest_enabled(
+    pool: &SqlitePool,
+    user_id: &str,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET notify_email_digest_enabled = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(enabled as i32)
     .bind(user_id)
     .execute(pool)
     .await?;

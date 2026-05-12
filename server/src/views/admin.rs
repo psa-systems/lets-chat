@@ -117,6 +117,11 @@ pub struct SettingsPage<'a> {
     /// renders without anchor tags (see templates/email/digest.{html,txt})
     /// and the admin page shows `base_url_missing_banner`.
     pub public_base_url: String,
+    /// Whether newly-registered users start with the email-digest
+    /// preference flipped on. Stored as a string "0" / "1" in the
+    /// `settings` table under `default_notify_email_digest`; the admin
+    /// toggle posts to a dedicated endpoint that flips it.
+    pub default_notify_email_digest: bool,
     pub saved: bool,
     /// Banner copy explaining why email is currently disabled. None when
     /// email is fully operational (key + SMTP both present and decryptable).

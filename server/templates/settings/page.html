@@ -95,6 +95,28 @@
         {% endif %}
       </span>
     </label>
+    <div class="border-t border-slate-200 pt-3 space-y-3">
+      <label class="block text-sm">
+        <span class="text-slate-600">Email address for digests</span>
+        <input type="email" name="email" value="{{ current_email }}"
+               placeholder="you@example.com"
+               class="mt-1 block w-full border border-slate-300 rounded px-2 py-1 text-sm">
+        <span class="block text-xs text-slate-500 mt-1">Only used to send the email digest below. Leave blank to never receive email.</span>
+      </label>
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" name="notify_email_digest_enabled" value="1" class="mt-0.5"
+          {% if user.notify_email_digest_enabled %}checked{% endif %}
+          {% if !email_available %}disabled{% endif %}>
+        <span>
+          Email me a digest of missed mentions and DMs
+          {% if !email_available %}
+          <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+          {% else %}
+          <span class="block text-xs text-slate-500">Sent at most once per offline session (after at least an hour of inactivity).</span>
+          {% endif %}
+        </span>
+      </label>
+    </div>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 

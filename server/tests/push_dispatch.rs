@@ -122,7 +122,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
 }
 
 async fn enable_push(state: &AppState, user_id: &str) {
-    db::auth::set_notification_prefs(&state.auth, user_id, true, false, true)
+    db::auth::set_notification_prefs(&state.auth, user_id, true, false, true, false)
         .await
         .unwrap();
 }
