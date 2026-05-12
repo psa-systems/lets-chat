@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod crypto;
 pub mod db;
+pub mod email;
 pub mod error;
 pub mod last_visited;
 pub mod models;
