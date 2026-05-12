@@ -3,6 +3,7 @@ pub mod crypto;
 pub mod db;
 pub mod error;
 pub mod last_visited;
+pub mod mail;
 pub mod models;
 pub mod perms;
 pub mod push;
