@@ -324,47 +324,37 @@ pub async fn post_message(
 
     // Mention extraction + fan-out. Only for non-DM rooms (DMs are implicit
     // pings - we emit a Mentioned event below without writing mention rows).
+    // Token resolution covers `@username`, `@here`, and `@channel` via the
+    // shared resolver; broadcast tokens write one row per resolved user.
     if room.room_type != "dm" {
         let tokens = db::mentions::parse_mention_tokens(body);
         if !tokens.is_empty() {
-            let candidates = candidate_ids_for_room(&state, &room).await?;
-            let candidate_set: std::collections::HashSet<&str> =
-                candidates.iter().map(String::as_str).collect();
-            let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
-            for token in tokens {
-                if let Some(rec) = db::auth::find_user_by_username(&state.auth, &token).await? {
-                    if rec.id == user.id {
-                        continue;
-                    }
-                    if !candidate_set.contains(rec.id.as_str()) {
-                        continue;
-                    }
-                    targets.push(db::mentions::MentionRef {
-                        user_id: rec.id,
-                        username: rec.username,
-                    });
-                }
-            }
+            let targets = resolve_tokens_for_room(&state, &room, &user.id, &tokens).await?;
             let (added, _removed) =
                 db::mentions::reconcile_mentions(&state.chat, new_id, room.id, &user.id, &targets)
                     .await?;
             let snippet = build_snippet(body);
             let author_label = author_label(&user);
-            for t in &added {
-                let event = ChatEvent::Mentioned {
-                    kind: "mention".into(),
-                    room_id: room.id,
-                    room_type: room.room_type.clone(),
-                    room_label: format!("#{}", room.name),
-                    message_id: new_id,
-                    mentioned_user_id: t.user_id.clone(),
-                    author_label: author_label.clone(),
-                    snippet: snippet.clone(),
-                    target_path: format!("/room/{}", room.id),
-                };
-                state.hub.broadcast_to_user(&t.user_id, &event);
-                crate::push::dispatch(&state, &t.user_id, &event).await;
-            }
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: room.id,
+                            room_type: room.room_type.clone(),
+                            room_label: format!("#{}", room.name),
+                            message_id: new_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: author_label.clone(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", room.id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(&state, events).await;
         }
     } else {
         // DM: implicit mention. Notify the peer regardless of subscription
@@ -414,6 +404,159 @@ async fn candidate_ids_for_room(
         return Ok(members.into_iter().map(|m| m.user_id).collect());
     }
     Ok(db::auth::list_user_ids(&state.auth).await?)
+}
+
+/// Resolve `@channel` against `room`: every candidate member except the
+/// author. One bulk auth lookup for usernames.
+pub(crate) async fn resolve_channel_targets(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let candidates = candidate_ids_for_room(state, room).await?;
+    let filtered: Vec<String> = candidates
+        .into_iter()
+        .filter(|id| id != author_id)
+        .collect();
+    if filtered.is_empty() {
+        return Ok(Vec::new());
+    }
+    let id_refs: Vec<&str> = filtered.iter().map(String::as_str).collect();
+    let names = db::auth::display_names_for_ids(&state.auth, &id_refs).await?;
+    Ok(filtered
+        .into_iter()
+        .filter_map(|id| {
+            names
+                .get(&id)
+                .map(|(uname, _dname)| db::mentions::MentionRef {
+                    user_id: id,
+                    username: uname.clone(),
+                })
+        })
+        .collect())
+}
+
+/// Fan out per-user mention notifications. WS broadcasts fire inline
+/// (local mpsc, microseconds at any scale). Push dispatches are spawned
+/// fire-and-forget so the HTTP handler returns immediately; the actual
+/// network-call concurrency cap lives inside `push::dispatch` at the per-
+/// subscription send boundary (see `crate::push::PUSH_FANOUT_CONCURRENCY`).
+///
+/// That layering matters: capping at this outer level would force
+/// per-user dispatches to serialize their internal sub-fan-out, regressing
+/// the common single-recipient case (a `@username` to a user with 3
+/// devices would block the HTTP response for 3 sequential push round-
+/// trips). Capping at the inner level binds the only metric that matters
+/// (concurrent HTTP to push services) without that latency cost.
+async fn fanout_mention_events(state: &AppState, events: Vec<(String, ChatEvent)>) {
+    for (user_id, event) in &events {
+        state.hub.broadcast_to_user(user_id, event);
+    }
+    for (user_id, event) in events {
+        let send_state = state.clone();
+        tokio::spawn(async move {
+            crate::push::dispatch(&send_state, &user_id, &event).await;
+        });
+    }
+}
+
+/// Walk a parsed token list and return a deduped `Vec<MentionRef>` for
+/// `room`. Branches on each token: `@here` and `@channel` (case-
+/// insensitive) go through the broadcast resolvers; every other token is
+/// treated as a `@username` and looked up via the auth pool. Self-mentions
+/// and candidates outside the room's accessibility set are dropped. Final
+/// dedup by user_id ensures a user matched by both `@here` and `@username`
+/// writes one row, not two.
+///
+/// Caller is responsible for the DM gate: this helper is non-DM only.
+async fn resolve_tokens_for_room(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+    tokens: &[String],
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let mut here_seen = false;
+    let mut channel_seen = false;
+    let mut user_tokens: Vec<&str> = Vec::new();
+    for t in tokens {
+        match t.to_ascii_lowercase().as_str() {
+            "here" => here_seen = true,
+            "channel" => channel_seen = true,
+            _ => user_tokens.push(t.as_str()),
+        }
+    }
+
+    let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
+    if here_seen {
+        targets.extend(resolve_here_targets(state, room, author_id).await?);
+    }
+    if channel_seen {
+        targets.extend(resolve_channel_targets(state, room, author_id).await?);
+    }
+    if !user_tokens.is_empty() {
+        let candidates = candidate_ids_for_room(state, room).await?;
+        let candidate_set: std::collections::HashSet<&str> =
+            candidates.iter().map(String::as_str).collect();
+        for token in user_tokens {
+            if let Some(rec) = db::auth::find_user_by_username(&state.auth, token).await? {
+                if rec.id == author_id {
+                    continue;
+                }
+                if !candidate_set.contains(rec.id.as_str()) {
+                    continue;
+                }
+                targets.push(db::mentions::MentionRef {
+                    user_id: rec.id,
+                    username: rec.username,
+                });
+            }
+        }
+    }
+
+    // Dedup by user_id, preserving first-occurrence order. A user matched
+    // by both @here and @username (or by @here and @channel) should get one
+    // row, not two.
+    let mut seen = std::collections::HashSet::new();
+    targets.retain(|m| seen.insert(m.user_id.clone()));
+    Ok(targets)
+}
+
+/// Resolve `@here` against `room`: every candidate member who has at least
+/// one live WebSocket connection AND whose persisted status is not DND.
+/// Excludes the author. Idle is intentionally included - idle is "stepped
+/// away briefly," not "do not interrupt."
+pub(crate) async fn resolve_here_targets(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let candidates = candidate_ids_for_room(state, room).await?;
+    // First filter: cheap, in-memory hub check + author exclusion.
+    let connected: Vec<String> = candidates
+        .into_iter()
+        .filter(|id| id != author_id && state.hub.is_user_connected(id))
+        .collect();
+    if connected.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Second filter: bulk auth lookup to drop DND users and resolve usernames.
+    let id_refs: Vec<&str> = connected.iter().map(String::as_str).collect();
+    let rows = db::auth::usernames_and_status_for_ids(&state.auth, &id_refs).await?;
+    Ok(connected
+        .into_iter()
+        .filter_map(|id| {
+            rows.get(&id).and_then(|(uname, status)| {
+                if status == db::auth::STATUS_DND {
+                    None
+                } else {
+                    Some(db::mentions::MentionRef {
+                        user_id: id,
+                        username: uname.clone(),
+                    })
+                }
+            })
+        })
+        .collect())
 }
 
 /// `display_name` if set, else `username`. Used for `Mentioned.author_label`.
@@ -519,28 +662,16 @@ pub async fn patch_message(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // Reconcile mention rows. Skipped for DM rooms (no rows to reconcile).
+    // Token resolution goes through the same helper as post_message so an
+    // edit that adds/removes `@here` / `@channel` / `@username` diffs through
+    // reconcile_mentions correctly (rows for users in both sets keep their
+    // read_at; rows newly resolved get inserted; rows no longer resolved get
+    // deleted with a MentionCleared event).
     let edited_room = db::chat::get_room(&state.chat, m.room_id).await?;
     if let Some(ref edited_room) = edited_room {
         if edited_room.room_type != "dm" {
             let tokens = db::mentions::parse_mention_tokens(body);
-            let candidates = candidate_ids_for_room(&state, edited_room).await?;
-            let candidate_set: std::collections::HashSet<&str> =
-                candidates.iter().map(String::as_str).collect();
-            let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
-            for token in tokens {
-                if let Some(rec) = db::auth::find_user_by_username(&state.auth, &token).await? {
-                    if rec.id == user.id {
-                        continue;
-                    }
-                    if !candidate_set.contains(rec.id.as_str()) {
-                        continue;
-                    }
-                    targets.push(db::mentions::MentionRef {
-                        user_id: rec.id,
-                        username: rec.username,
-                    });
-                }
-            }
+            let targets = resolve_tokens_for_room(&state, edited_room, &user.id, &tokens).await?;
             let (added, removed) = db::mentions::reconcile_mentions(
                 &state.chat,
                 message_id,
@@ -551,21 +682,28 @@ pub async fn patch_message(
             .await?;
             let snippet = build_snippet(body);
             let author_label = author_label(&user);
-            for t in &added {
-                let event = ChatEvent::Mentioned {
-                    kind: "mention".into(),
-                    room_id: m.room_id,
-                    room_type: edited_room.room_type.clone(),
-                    room_label: format!("#{}", edited_room.name),
-                    message_id,
-                    mentioned_user_id: t.user_id.clone(),
-                    author_label: author_label.clone(),
-                    snippet: snippet.clone(),
-                    target_path: format!("/room/{}", m.room_id),
-                };
-                state.hub.broadcast_to_user(&t.user_id, &event);
-                crate::push::dispatch(&state, &t.user_id, &event).await;
-            }
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: m.room_id,
+                            room_type: edited_room.room_type.clone(),
+                            room_label: format!("#{}", edited_room.name),
+                            message_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: author_label.clone(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", m.room_id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(&state, events).await;
+            // MentionCleared events are WS-only (no Push, no badge attention)
+            // and cheap to fire inline. Keep them sequential.
             for t in &removed {
                 let event = ChatEvent::MentionCleared {
                     room_id: m.room_id,

@@ -139,6 +139,27 @@ impl PushClient for MockPushClient {
     }
 }
 
+/// Process-global cap on the number of concurrent `client.send()` calls in
+/// flight at any moment. Sized for a single-server deployment talking to
+/// FCM / Mozilla autopush from one origin: well within typical per-server
+/// rate caps, and enough headroom that an `@channel` in a large room
+/// settles in a few seconds rather than serializing one push at a time.
+/// If operator demand surfaces, this can become a setting; v1 hardcodes it.
+pub const PUSH_FANOUT_CONCURRENCY: usize = 16;
+
+/// Singleton Semaphore enforcing `PUSH_FANOUT_CONCURRENCY`. Lives at the
+/// process scope: one cap per running server (or per integration-test
+/// binary, since each `tests/*.rs` becomes its own binary). The permit is
+/// acquired INSIDE each spawned send task so the cap binds the actual
+/// network calls, not orchestration. This keeps `dispatch` fire-and-forget
+/// so the HTTP handler that triggered the mention does not block waiting
+/// for push-service round-trips.
+fn push_fanout_sem() -> &'static tokio::sync::Semaphore {
+    use std::sync::OnceLock;
+    static SEM: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    SEM.get_or_init(|| tokio::sync::Semaphore::new(PUSH_FANOUT_CONCURRENCY))
+}
+
 /// Fan out a single `Mentioned`-equivalent Push to every registered
 /// subscription for `recipient_user_id`. Honors:
 ///   1. global Push availability (`state.vapid` is some)
@@ -147,8 +168,22 @@ impl PushClient for MockPushClient {
 ///      `(recipient, room_id)` pair, which covers DM rooms uniformly since
 ///      a DM is a row in `rooms` with `room_type = 'dm'`)
 ///
-/// Each subscription send runs as its own `tokio::spawn` task. Failures
-/// are logged at warn level. 410-Gone deletes the row inline.
+/// Each subscription send runs as its own `tokio::spawn` task. The spawned
+/// task acquires a permit from the process-global `push_fanout_sem` BEFORE
+/// calling `client.send()`, so concurrent network calls across the entire
+/// process are capped at `PUSH_FANOUT_CONCURRENCY`. Tasks that cannot
+/// acquire a permit immediately await it; they never drop work.
+///
+/// Failures are logged at warn level. 410-Gone deletes the row inline.
+///
+/// This is fire-and-forget: `dispatch` returns once the spawn-loop is done
+/// (microseconds). The HTTP handler that called it does not wait for any
+/// push to settle; a user mentioning someone with three devices pays
+/// roughly the same response time as mentioning someone with one device.
+///
+/// No "recall Push" path on edit: once a push is en-route to the device
+/// vendor, the OS owns the notification. Same semantics as `@username`
+/// today; documented here for future readers.
 pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEvent) {
     if state.vapid.is_none() {
         return;
@@ -195,6 +230,14 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         let auth_pool = state.auth.clone();
         let payload = payload.clone();
         tokio::spawn(async move {
+            // Acquire here, not at the dispatch entry, so the cap binds
+            // the actual network calls regardless of how many concurrent
+            // dispatches are in flight. The semaphore is never closed;
+            // the expect is unreachable in practice.
+            let _permit = push_fanout_sem()
+                .acquire()
+                .await
+                .expect("push fan-out semaphore not closed");
             match client.send(&sub, payload).await {
                 Ok(()) => {
                     let _ = db::push_subscriptions::bump_last_seen(&auth_pool, &sub.endpoint).await;

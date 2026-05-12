@@ -12,6 +12,7 @@
     var ta = this.querySelector('textarea[name=body]');
     var send = this.querySelector('#composer-send');
     var err = this.querySelector('.composer-error');
+    var bcast = document.getElementById('lc-broadcast-count');
     if (event.detail.successful) {
       ta.value = '';
       ta.style.height = 'auto';
@@ -19,6 +20,7 @@
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
+      if (bcast) bcast.innerHTML = '';
     } else {
       err.classList.remove('hidden');
     }
@@ -27,6 +29,7 @@
   class="border-t border-slate-200 p-2"
 >
   <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
+  <div id="lc-broadcast-count" class="mb-1 text-xs text-slate-500 px-1 min-h-[1rem]"></div>
   <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
   <div id="lc-mention-popover" class="relative"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
@@ -83,10 +86,43 @@
 (function(){
   var ta = document.querySelector('#composer textarea[name=body]');
   var slot = document.getElementById('lc-mention-popover');
+  var bcastSlot = document.getElementById('lc-broadcast-count');
   if (!ta || !slot) return;
   var roomId = {{ room.id }};
   var TOKEN = /(^|\s)@([A-Za-z0-9_-]{0,32})$/;
   var current = null;
+  // Debounce handle for the broadcast-count probe. The probe fires only
+  // when the active token at the cursor is exactly `here` or `channel`
+  // (case-insensitive). Any character typed after the token - including
+  // a space - moves the cursor past the token-end anchor in the TOKEN
+  // regex, activeToken() returns null, and we clear the slot. That is
+  // the "friction at the moment of typing the broadcast token" rule:
+  // once the user has moved on, the friction has done its job.
+  var bcastTimer = null;
+  function clearBroadcastSlot() {
+    if (bcastTimer) { clearTimeout(bcastTimer); bcastTimer = null; }
+    if (bcastSlot) bcastSlot.innerHTML = '';
+  }
+  function refreshBroadcastCount() {
+    if (!bcastSlot) return;
+    var tok = activeToken();
+    if (!tok) return clearBroadcastSlot();
+    var prefixLower = tok.prefix.toLowerCase();
+    if (prefixLower !== 'here' && prefixLower !== 'channel') {
+      return clearBroadcastSlot();
+    }
+    if (bcastTimer) clearTimeout(bcastTimer);
+    bcastTimer = setTimeout(function(){
+      bcastTimer = null;
+      if (window.htmx) {
+        htmx.ajax(
+          'GET',
+          '/api/rooms/' + roomId + '/broadcast-count?token=' + prefixLower,
+          { target: '#lc-broadcast-count', swap: 'innerHTML' }
+        );
+      }
+    }, 300);
+  }
   function activeToken() {
     var pos = ta.selectionStart;
     var before = ta.value.slice(0, pos);
@@ -122,7 +158,12 @@
     ta.dispatchEvent(new Event('input'));
   }
   ta.addEventListener('input', refresh);
+  ta.addEventListener('input', refreshBroadcastCount);
   ta.addEventListener('blur', function(){ setTimeout(close, 100); });
+  // Broadcast count clears on blur too, on the same delay as the
+  // autocomplete close so a click on a mention suggestion still has time
+  // to land before the slot wipes.
+  ta.addEventListener('blur', function(){ setTimeout(clearBroadcastSlot, 100); });
   ta.addEventListener('keydown', function(e){
     var list = items();
     if (!current || list.length === 0) return;
@@ -145,9 +186,12 @@
   }
   document.body.addEventListener('htmx:afterSwap', onAfterSwap);
   // Teardown: the ta-bound listeners die with the textarea on swap; the body
-  // listener does not, so drop it here. Cleanup-root is #composer (form).
+  // listener does not, so drop it here. Also cancel any pending broadcast
+  // debounce so a stray fire after #composer is gone doesn't try to swap
+  // into a missing slot. Cleanup-root is #composer (form).
   function teardown() {
     document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+    if (bcastTimer) { clearTimeout(bcastTimer); bcastTimer = null; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;

@@ -5,7 +5,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::mentions::{MentionPopoverFragment, MentionSuggestion};
+use crate::views::mentions::{BroadcastCountFragment, MentionPopoverFragment, MentionSuggestion};
 use crate::views::{html, Html};
 
 const MAX: usize = 8;
@@ -19,10 +19,16 @@ pub struct AutocompleteQuery {
 
 /// GET /users/mentions?room_id=&q=
 ///
-/// Returns a small `<ul>` of users the caller is allowed to @ in `room_id`.
-/// Empty/whitespace `q` returns up to `MAX` candidates (e.g. all room
-/// members for a private room). Always returns 200 with an HTML body so
-/// the composer's `htmx.ajax(...)` can swap directly into the popover slot.
+/// Returns a small `<ul>` of mention candidates the caller is allowed to use
+/// in `room_id`. Broadcast tokens (`@here`, `@channel`) always come first
+/// (Slack-style: higher-stakes tokens deserve the visibility, including when
+/// the prefix matches both a broadcast token and a real username - `@h`
+/// puts `@here` above `@harry`). Broadcast tokens are suppressed in DM
+/// rooms because broadcast resolution is a no-op there.
+///
+/// Empty/whitespace `q` returns up to `MAX` candidates total. Always returns
+/// 200 with an HTML body so the composer's `htmx.ajax(...)` can swap
+/// directly into the popover slot.
 pub async fn get_autocomplete(
     State(state): State<AppState>,
     AuthUser(viewer): AuthUser,
@@ -35,11 +41,33 @@ pub async fn get_autocomplete(
         return Err(AppError::Forbidden);
     }
 
-    let candidate_ids = candidate_ids(&state, room_id).await?;
     let q_lower = trimmed.to_ascii_lowercase();
-
-    let viewer_id = viewer.id.clone();
     let mut results: Vec<MentionSuggestion> = Vec::with_capacity(MAX);
+
+    // Broadcast suggestions go first. Non-DM rooms only - the resolver path
+    // in routes/room.rs skips broadcast resolution for DMs, so showing the
+    // tokens there would be a silent no-op confusing to the user.
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.room_type != "dm" {
+        if "here".starts_with(&q_lower) {
+            results.push(MentionSuggestion::broadcast(
+                "here",
+                "Notify online members",
+            ));
+        }
+        if "channel".starts_with(&q_lower) {
+            results.push(MentionSuggestion::broadcast(
+                "channel",
+                "Notify the entire room",
+            ));
+        }
+    }
+
+    // User suggestions fill the remainder.
+    let candidate_ids = candidate_ids(&state, room_id).await?;
+    let viewer_id = viewer.id.clone();
     for id in candidate_ids {
         if id == viewer_id {
             continue;
@@ -64,15 +92,78 @@ pub async fn get_autocomplete(
                 continue;
             }
         }
-        results.push(MentionSuggestion {
-            user_id: rec.id,
-            username: rec.username,
-            display_name: rec.display_name,
-            avatar_ext: rec.avatar_ext,
-        });
+        results.push(MentionSuggestion::user(
+            rec.id,
+            rec.username,
+            rec.display_name,
+            rec.avatar_ext,
+        ));
     }
 
     let frag = MentionPopoverFragment { results: &results };
+    html(&frag)
+}
+
+#[derive(Deserialize)]
+pub struct BroadcastCountQuery {
+    pub token: String,
+}
+
+/// GET /api/rooms/:room_id/broadcast-count?token=here|channel
+///
+/// Live "this will notify N people" probe fired by the composer when the
+/// active token at the cursor is a broadcast token. Returns an HTML
+/// fragment (not JSON) so the composer can swap it directly into the
+/// `#lc-broadcast-count` slot via `htmx.ajax`. Token validation rejects
+/// anything other than `here` / `channel` with 400; DM rooms also return
+/// 400 because broadcast resolution is a no-op there.
+///
+/// Reuses the same resolver helpers that `post_message` uses, so the count
+/// shown to the sender equals the number of mention rows that would be
+/// written. Cost: one bulk auth query + one hub presence pass for `@here`,
+/// or just the auth bulk for `@channel`. Both clear the scale budget
+/// comfortably at the v1 scale ceiling (200-person rooms).
+pub async fn get_broadcast_count(
+    State(state): State<AppState>,
+    AuthUser(viewer): AuthUser,
+    axum::extract::Path(room_id): axum::extract::Path<i64>,
+    Query(BroadcastCountQuery { token }): Query<BroadcastCountQuery>,
+) -> Result<Html, AppError> {
+    let token_lower = token.to_ascii_lowercase();
+    if token_lower != "here" && token_lower != "channel" {
+        return Err(AppError::BadRequest(
+            "token must be 'here' or 'channel'".into(),
+        ));
+    }
+
+    let is_admin = viewer.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &viewer.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.room_type == "dm" {
+        return Err(AppError::BadRequest(
+            "broadcast tokens are not valid in DM rooms".into(),
+        ));
+    }
+
+    let count = if token_lower == "here" {
+        super::room::resolve_here_targets(&state, &room, &viewer.id)
+            .await?
+            .len() as i64
+    } else {
+        super::room::resolve_channel_targets(&state, &room, &viewer.id)
+            .await?
+            .len() as i64
+    };
+
+    let frag = BroadcastCountFragment {
+        count,
+        room_name: &room.name,
+    };
     html(&frag)
 }
 
