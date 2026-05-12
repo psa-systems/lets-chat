@@ -532,6 +532,10 @@ pub fn build_router(state: AppState) -> Router {
             "/settings/avatar/delete",
             post(settings::post_avatar_delete),
         )
+        .route(
+            "/settings/sessions/{session_id}/revoke",
+            post(settings::post_session_revoke),
+        )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
         .route("/sw.js", get(push::get_service_worker))
         .route("/push/vapid-public-key", get(push::get_vapid_public_key))

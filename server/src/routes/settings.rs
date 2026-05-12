@@ -1,13 +1,14 @@
-use axum::extract::{Multipart, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
+use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, CurrentSessionId, SESSION_COOKIE};
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
-use crate::views::settings::{BlockedListPage, BlockedUserView, UserSettingsPage};
+use crate::views::settings::{BlockedListPage, BlockedUserView, SessionView, UserSettingsPage};
 use crate::views::{html, Html};
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
@@ -25,6 +26,8 @@ pub struct SettingsQuery {
     pub password_error: Option<String>,
     #[serde(default)]
     pub verify_sent: Option<String>,
+    #[serde(default)]
+    pub session_revoked: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +48,7 @@ pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Query(q): Query<SettingsQuery>,
+    jar: CookieJar,
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
@@ -53,6 +57,8 @@ pub async fn get_settings(
         .is_some();
     let email_verification_available = cfg!(feature = "standalone") && state.mail_available();
     let password_error = q.password_error.as_deref().and_then(password_error_message);
+    let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
+    let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -68,12 +74,105 @@ pub async fn get_settings(
         password_change_available: cfg!(feature = "standalone"),
         password_changed: q.password_changed.is_some(),
         password_error,
+        sessions: &sessions,
+        session_revoked: q.session_revoked.is_some(),
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
     };
     html(&page)
+}
+
+async fn build_session_views(
+    state: &AppState,
+    user_id: &str,
+    current_session: Option<&str>,
+) -> Result<Vec<SessionView>, AppError> {
+    let rows = db::auth::list_sessions_for_user(&state.auth, user_id).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let label = summarize_user_agent(r.user_agent.as_deref());
+            let last_seen = r.last_seen_at.unwrap_or_else(|| r.created_at.clone());
+            SessionView {
+                is_current: current_session == Some(r.id.as_str()),
+                id: r.id,
+                label,
+                ip: r.ip,
+                last_seen,
+                created: r.created_at,
+            }
+        })
+        .collect())
+}
+
+/// Reduce a User-Agent string to a "{browser} on {os}" label. Worst case
+/// (unrecognized UA), we fall back to a generic "Unknown device" string;
+/// the row still has its IP + first-seen timestamp so it remains
+/// identifiable. We deliberately do not parse with a heavyweight UA
+/// database: the rough family is enough to let the user spot a session
+/// they did not create.
+fn summarize_user_agent(ua: Option<&str>) -> String {
+    let Some(ua) = ua else {
+        return "Unknown device".to_string();
+    };
+    let lower = ua.to_ascii_lowercase();
+    let os = if lower.contains("windows") {
+        "Windows"
+    } else if lower.contains("android") {
+        "Android"
+    } else if lower.contains("iphone") || lower.contains("ipad") || lower.contains("ios") {
+        "iOS"
+    } else if lower.contains("mac os") || lower.contains("macintosh") {
+        "macOS"
+    } else if lower.contains("linux") {
+        "Linux"
+    } else {
+        "Unknown OS"
+    };
+    let browser = if lower.contains("edg/") {
+        "Edge"
+    } else if lower.contains("opr/") || lower.contains("opera") {
+        "Opera"
+    } else if lower.contains("firefox") {
+        "Firefox"
+    } else if lower.contains("chrome") && !lower.contains("chromium") {
+        "Chrome"
+    } else if lower.contains("chromium") {
+        "Chromium"
+    } else if lower.contains("safari") {
+        "Safari"
+    } else if lower.contains("lets-chat-desktop") {
+        "Let's Chat desktop"
+    } else {
+        "Browser"
+    };
+    format!("{browser} on {os}")
+}
+
+/// POST /settings/sessions/{id}/revoke - delete a specific session belonging
+/// to the signed-in user. Refuses to revoke the current request's own
+/// session (use logout for that) so a stray click here does not
+/// invalidate the cookie the user is holding.
+pub async fn post_session_revoke(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(session_id): Path<String>,
+    current: Option<axum::extract::Extension<CurrentSessionId>>,
+) -> Result<Response, AppError> {
+    if let Some(axum::extract::Extension(CurrentSessionId(cur))) = current {
+        if cur == session_id {
+            return Err(AppError::BadRequest(
+                "Use Log out to end the current session.".to_string(),
+            ));
+        }
+    }
+    let removed = db::auth::delete_session_for_user(&state.auth, &session_id, &user.id).await?;
+    if removed {
+        state.last_seen_ledger.remove(&session_id);
+    }
+    Ok(Redirect::to("/settings?session_revoked=1").into_response())
 }
 
 /// Map a short error code carried in the redirect query string to a human
