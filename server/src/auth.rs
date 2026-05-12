@@ -68,13 +68,21 @@ pub struct CurrentSessionId(pub String);
 /// resulting `User` into request extensions when the session is valid and the
 /// account is not banned. Also bumps `sessions.last_seen_at` at most once
 /// per `LAST_SEEN_DEBOUNCE` per session.
+///
+/// Each step is timed and logged on a slow threshold so we can pin down
+/// which phase (DB lookup vs. downstream handler) is responsible for the
+/// occasional multi-second hangs on /settings and /ws.
 pub async fn inject_user(
     State(state): State<AppState>,
     jar: CookieJar,
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    const SLOW: Duration = Duration::from_secs(2);
+    let path = req.uri().path().to_string();
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
+
+    let started = Instant::now();
     let user = match token.as_deref() {
         Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
             Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
@@ -82,20 +90,34 @@ pub async fn inject_user(
         },
         None => None,
     };
+    let session_lookup = started.elapsed();
+    if session_lookup >= SLOW {
+        tracing::warn!(
+            %path,
+            ms = session_lookup.as_millis() as u64,
+            "inject_user: session lookup slow"
+        );
+    }
+
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
         if should_touch_last_seen(&state.last_seen_ledger, &t) {
-            // Hand off to the bg writer rather than spawning a fresh
-            // task per request. Per-request spawns saturate the SQLite
-            // pool under load: with N concurrent requests we'd queue N
-            // write attempts on a pool that can only serve writes
-            // serially, and every HTTP request waiting for a pool
-            // connection starves until the queue drains.
             state.bg.touch_session(&t);
         }
         req.extensions_mut().insert(CurrentSessionId(t));
     }
-    next.run(req).await
+
+    let after_setup = Instant::now();
+    let resp = next.run(req).await;
+    let downstream = after_setup.elapsed();
+    if downstream >= SLOW {
+        tracing::warn!(
+            %path,
+            ms = downstream.as_millis() as u64,
+            "inject_user: downstream handler slow"
+        );
+    }
+    resp
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
