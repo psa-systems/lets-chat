@@ -75,7 +75,8 @@
       "Read(//home/long/.config/**)",
       "Bash(gh auth *)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(./dev/cargo clean *)"
     ]
   }
 }
