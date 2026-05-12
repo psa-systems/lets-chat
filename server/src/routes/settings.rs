@@ -42,6 +42,8 @@ pub struct SettingsForm {
     pub notify_sound_enabled: Option<String>,
     #[serde(default)]
     pub notify_push_enabled: Option<String>,
+    #[serde(default)]
+    pub notify_email_digest_enabled: Option<String>,
 }
 
 pub async fn get_settings(
@@ -71,6 +73,7 @@ pub async fn get_settings(
         email_verified,
         email_verification_available,
         email_verify_sent: q.verify_sent.is_some(),
+        email_available: state.mail_available(),
         password_change_available: cfg!(feature = "standalone"),
         password_changed: q.password_changed.is_some(),
         password_error,
@@ -286,7 +289,13 @@ pub async fn post_settings(
     // if the client checks the box, the column stays 0 unless the server has
     // VAPID keys ready.
     let push = form.notify_push_enabled.is_some() && state.push_available();
-    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push).await?;
+    // Same defence for digest: respect the operator gate even if the
+    // client lies. Without a configured email transport at startup,
+    // flipping the checkbox would silently do nothing useful anyway.
+    let email_digest = form.notify_email_digest_enabled.is_some() && state.mail_available();
+    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push, email_digest)
+        .await?;
+
     Ok(Redirect::to("/settings").into_response())
 }
 

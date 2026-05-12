@@ -95,6 +95,51 @@ impl Mailer {
             .map_err(|e| MailError::Smtp(e.to_string()))?;
         Ok(())
     }
+
+    /// Send a `multipart/alternative` message with both plaintext and HTML
+    /// bodies. Used by the email digest where the snippet rendering wants
+    /// HTML formatting (bolded mentions, anchor tags) while remaining
+    /// readable in plaintext-only mail clients.
+    pub async fn send_multipart(
+        &self,
+        to: &str,
+        subject: &str,
+        text_body: &str,
+        html_body: &str,
+    ) -> Result<(), MailError> {
+        use lettre::message::{MultiPart, SinglePart};
+
+        let from = self
+            .from
+            .parse()
+            .map_err(|e: lettre::address::AddressError| MailError::Address(e.to_string()))?;
+        let to_addr = to
+            .parse()
+            .map_err(|e: lettre::address::AddressError| MailError::Address(e.to_string()))?;
+        let message = Message::builder()
+            .from(from)
+            .to(to_addr)
+            .subject(subject)
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(text_body.to_string()),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_HTML)
+                            .body(html_body.to_string()),
+                    ),
+            )
+            .map_err(|e| MailError::Build(e.to_string()))?;
+        self.transport
+            .send(message)
+            .await
+            .map_err(|e| MailError::Smtp(e.to_string()))?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -77,6 +77,12 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("Failed to run migration 12");
 
+    let migration13 = include_str!("../migrations/auth/0013_digest_columns.sql");
+    sqlx::raw_sql(migration13)
+        .execute(&pool)
+        .await
+        .expect("auth migration 13");
+
     pool
 }
 

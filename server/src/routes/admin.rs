@@ -21,6 +21,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
+        .route(
+            "/admin/settings/email-digest-default",
+            post(post_email_digest_default),
+        )
         .route("/admin/users", get(get_users))
         .route("/admin/users/{id}/ban", post(post_ban))
         .route("/admin/users/{id}/unban", post(post_unban))
@@ -102,6 +106,11 @@ pub async fn get_settings(
     let smtp_from = db::settings::get_setting(&state.settings, "smtp_from")
         .await?
         .unwrap_or_default();
+    let default_notify_email_digest =
+        db::settings::get_setting(&state.settings, "default_notify_email_digest")
+            .await?
+            .as_deref()
+            == Some("1");
     let page = SettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -117,6 +126,7 @@ pub async fn get_settings(
         smtp_port,
         smtp_user,
         smtp_from,
+        default_notify_email_digest,
         saved: false,
     };
     html(&page)
@@ -134,6 +144,31 @@ pub async fn post_settings(
     if !form.smtp_pass.is_empty() {
         db::settings::set_setting(&state.settings, "smtp_pass", &form.smtp_pass).await?;
     }
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct EmailDigestDefaultForm {
+    /// Form-checkbox convention: a checked box submits the field, an
+    /// unchecked box omits it.
+    #[serde(default)]
+    pub default_notify_email_digest: Option<String>,
+}
+
+/// Flip the "new users start with digest enabled" instance default.
+/// Existing users are NOT retroactively changed; only the registration
+/// flow consults this key.
+pub async fn post_email_digest_default(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    axum::Form(form): axum::Form<EmailDigestDefaultForm>,
+) -> Result<Response, AppError> {
+    let value = if form.default_notify_email_digest.is_some() {
+        "1"
+    } else {
+        "0"
+    };
+    db::settings::set_setting(&state.settings, "default_notify_email_digest", value).await?;
     Ok(Redirect::to("/admin/settings").into_response())
 }
 

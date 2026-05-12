@@ -109,6 +109,10 @@ pub struct SettingsPage<'a> {
     pub smtp_port: String,
     pub smtp_user: String,
     pub smtp_from: String,
+    /// Whether newly-registered users start with the email-digest
+    /// preference flipped on. Stored as a string "0" / "1" in the
+    /// `settings` table under `default_notify_email_digest`.
+    pub default_notify_email_digest: bool,
     pub saved: bool,
 }
 

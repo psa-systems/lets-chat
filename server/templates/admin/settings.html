@@ -35,4 +35,19 @@
   </div>
   <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
 </form>
+
+<h2 class="text-base font-semibold mt-8 mb-3">Defaults for new users</h2>
+<form method="post" action="/admin/settings/email-digest-default" class="max-w-lg space-y-2">
+  <label class="flex items-start gap-2 cursor-pointer">
+    <input type="checkbox" name="default_notify_email_digest" value="1" class="mt-0.5"
+      {% if default_notify_email_digest %}checked{% endif %}>
+    <span>
+      New users start with email digest enabled
+      <span class="block text-xs text-slate-500 mt-1">
+        Off by default for privacy. Only affects future registrations; existing users are not changed. Email digest also requires SMTP configured via environment variables.
+      </span>
+    </span>
+  </label>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save default</button>
+</form>
 {% endblock %}
