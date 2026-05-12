@@ -62,6 +62,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         }
     }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+    // Record that the in-app notification surface is alive for this user.
+    // Bumped again, throttled, on each outbound Mentioned frame in the send
+    // task below. Consumed by the email-digest "missed" predicate alongside
+    // `last_active_at`; does not influence idle-flip.
+    db::auth::bump_last_ws_seen(&state.auth, &user.id).await;
     let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
     // Per-connection memory of which own-authored DM message currently shows
     // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous
@@ -76,6 +81,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
+        // Per-connection throttle for `last_ws_seen_at` bumps. The
+        // connection-open bump just happened in the parent handler, so the
+        // next bump is allowed in WS_BUMP_THROTTLE from now.
+        const WS_BUMP_THROTTLE: Duration = Duration::from_secs(300);
+        let mut last_ws_bump: std::time::Instant = std::time::Instant::now();
         loop {
             tokio::select! {
                 evt = rx.recv() => {
@@ -149,6 +159,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     .unwrap_or(db::notifications::MuteMode::None)
                                     .allows_room_mention();
                                     if allow {
+                                        // The in-app surface is about to fire
+                                        // for this user. Record it for the
+                                        // digest, throttled per-connection so
+                                        // bursty rooms do not amplify writes.
+                                        if last_ws_bump.elapsed() >= WS_BUMP_THROTTLE {
+                                            db::auth::bump_last_ws_seen(
+                                                &send_state.auth,
+                                                &send_user.id,
+                                            )
+                                            .await;
+                                            last_ws_bump = std::time::Instant::now();
+                                        }
                                         render_mentioned(&e)
                                     } else {
                                         None

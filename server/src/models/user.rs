@@ -26,6 +26,9 @@ pub struct UserRecord {
     pub notify_browser_enabled: bool,
     pub notify_sound_enabled: bool,
     pub notify_push_enabled: bool,
+    pub notify_email_digest_enabled: bool,
+    pub last_ws_seen_at: Option<String>,
+    pub last_digest_sent_at: Option<String>,
     pub totp_secret_encrypted: Option<Vec<u8>>,
     pub totp_nonce: Option<Vec<u8>>,
     pub totp_enabled: bool,
@@ -55,6 +58,7 @@ pub struct User {
     pub notify_browser_enabled: bool,
     pub notify_sound_enabled: bool,
     pub notify_push_enabled: bool,
+    pub notify_email_digest_enabled: bool,
     pub totp_enabled: bool,
 }
 
@@ -91,6 +95,7 @@ impl From<UserRecord> for User {
             notify_browser_enabled: r.notify_browser_enabled,
             notify_sound_enabled: r.notify_sound_enabled,
             notify_push_enabled: r.notify_push_enabled,
+            notify_email_digest_enabled: r.notify_email_digest_enabled,
             totp_enabled: r.totp_enabled,
         }
     }
