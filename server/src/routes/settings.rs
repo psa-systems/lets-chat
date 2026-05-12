@@ -23,6 +23,8 @@ pub struct SettingsQuery {
     pub password_changed: Option<String>,
     #[serde(default)]
     pub password_error: Option<String>,
+    #[serde(default)]
+    pub verify_sent: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -46,6 +48,10 @@ pub async fn get_settings(
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
+    let email_verified = db::auth::get_user_email_verified_at(&state.auth, &user.id)
+        .await?
+        .is_some();
+    let email_verification_available = cfg!(feature = "standalone") && state.mail_available();
     let password_error = q.password_error.as_deref().and_then(password_error_message);
     let page = UserSettingsPage {
         user: &user,
@@ -56,6 +62,9 @@ pub async fn get_settings(
         saved: false,
         push_available: state.push_available(),
         email,
+        email_verified,
+        email_verification_available,
+        email_verify_sent: q.verify_sent.is_some(),
         password_change_available: cfg!(feature = "standalone"),
         password_changed: q.password_changed.is_some(),
         password_error,
@@ -199,6 +208,9 @@ pub async fn post_profile(
     .await?;
 
     if email_present {
+        // Snapshot the existing value so we can tell whether the address
+        // genuinely changed - only then do we issue a new verification mail.
+        let prev_email = db::auth::get_user_email(&state.auth, &user.id).await?;
         if let Err(e) = db::auth::set_user_email(&state.auth, &user.id, email.as_deref()).await {
             if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
                 return Err(AppError::Conflict(
@@ -206,6 +218,25 @@ pub async fn post_profile(
                 ));
             }
             return Err(e.into());
+        }
+
+        let changed = prev_email.as_deref() != email.as_deref();
+        if changed {
+            // Burn outstanding verification tokens tied to the prior
+            // address; `set_user_email` already cleared `email_verified_at`
+            // when the value actually changed.
+            #[cfg(feature = "standalone")]
+            db::email_verification::invalidate_all_for_user(&state.auth, &user.id).await?;
+            #[cfg(feature = "standalone")]
+            if let Some(addr) = email.as_deref() {
+                if state.mail_available() {
+                    crate::routes::email_verification::spawn_dispatch(
+                        &state,
+                        user.id.clone(),
+                        addr.to_string(),
+                    );
+                }
+            }
         }
     }
 
