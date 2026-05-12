@@ -70,21 +70,21 @@ async fn main() {
     // useless without it) AND the SMTP row has a non-empty host. Mirrors
     // the VAPID/Push gating model: feature presence is determined by
     // configuration completeness, not env-var feature flags.
-    let email_client: Option<std::sync::Arc<dyn lets_chat::email::EmailClient>> =
-        match secret_key.as_ref() {
-            Some(key) => match lets_chat::db::smtp_settings::load(&settings_pool, key.as_ref()).await
-            {
-                Ok(Some(cfg)) if !cfg.host.is_empty() => Some(std::sync::Arc::new(
-                    lets_chat::email::LettreEmailClient::new(cfg),
-                )),
-                Ok(_) => None,
-                Err(e) => {
-                    tracing::warn!(error = %e, "smtp settings load failed; email disabled");
-                    None
-                }
-            },
-            None => None,
-        };
+    let email_client: Option<std::sync::Arc<dyn lets_chat::email::EmailClient>> = match secret_key
+        .as_ref()
+    {
+        Some(key) => match lets_chat::db::smtp_settings::load(&settings_pool, key.as_ref()).await {
+            Ok(Some(cfg)) if !cfg.host.is_empty() => Some(std::sync::Arc::new(
+                lets_chat::email::LettreEmailClient::new(cfg),
+            )),
+            Ok(_) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, "smtp settings load failed; email disabled");
+                None
+            }
+        },
+        None => None,
+    };
 
     let state = AppState {
         auth: auth_pool,

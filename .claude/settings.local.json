@@ -74,7 +74,8 @@
       "Bash(./dev/server-down)",
       "Read(//home/long/.config/**)",
       "Bash(gh auth *)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

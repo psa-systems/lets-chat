@@ -98,16 +98,18 @@ impl EmailClient for LettreEmailClient {
             )
             .map_err(|e| EmailError::Build(format!("{e}")))?;
 
-        let mut builder: lettre::transport::smtp::AsyncSmtpTransportBuilder = match self
-            .config
-            .tls_mode
-        {
-            TlsMode::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&self.config.host)
-                .map_err(|e| EmailError::Transport(format!("starttls relay: {e}")))?,
-            TlsMode::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)
-                .map_err(|e| EmailError::Transport(format!("tls relay: {e}")))?,
-            TlsMode::None => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&self.config.host),
-        };
+        let mut builder: lettre::transport::smtp::AsyncSmtpTransportBuilder =
+            match self.config.tls_mode {
+                TlsMode::StartTls => {
+                    AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&self.config.host)
+                        .map_err(|e| EmailError::Transport(format!("starttls relay: {e}")))?
+                }
+                TlsMode::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)
+                    .map_err(|e| EmailError::Transport(format!("tls relay: {e}")))?,
+                TlsMode::None => {
+                    AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&self.config.host)
+                }
+            };
         builder = builder.port(self.config.port);
         if let (Some(user), Some(pass)) = (&self.config.username, &self.config.password) {
             if !user.is_empty() && !pass.is_empty() {
