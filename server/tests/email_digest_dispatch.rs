@@ -263,6 +263,62 @@ async fn second_tick_with_no_new_activity_does_not_resend() {
 }
 
 #[tokio::test]
+async fn new_offline_session_after_activity_re_fires_the_digest() {
+    // The "one digest per offline session" property has two halves:
+    // (a) same session does not double-fire (covered above), and
+    // (b) a *new* offline session after the user came back online and
+    //     then went offline again must re-fire.
+    //
+    // (b) is the half this test pins. We cannot wait an hour in CI, so
+    // we simulate the elapsed time by back-dating columns directly:
+    // - `last_digest_sent_at` = 2h ago (an earlier tick sent the first
+    //   digest)
+    // - `last_active_at` / `last_ws_seen_at` = 90min ago (alice was
+    //   active 30min after that send, then went offline)
+    //
+    // Both predicates now hold: the activity floor sits inside the
+    // 1h-quiet-period window, AND `last_digest_sent_at < activity
+    // floor`, so the self-resetting comparator opens the door.
+    let h = build_harness().await;
+
+    // First tick: fires.
+    digest::run_tick(&h.state, DigestConfig::default())
+        .await
+        .unwrap();
+    assert_eq!(h.mock.taken().len(), 1, "first tick should fire");
+
+    // Simulate the gap. We move the previous send back to 2h ago and
+    // advance the activity floor to 90min ago (after the simulated
+    // send) so the self-comparator reopens eligibility.
+    sqlx::query(
+        "UPDATE users \
+            SET last_digest_sent_at = datetime('now', '-2 hours'), \
+                last_active_at = datetime('now', '-90 minutes'), \
+                last_ws_seen_at = datetime('now', '-90 minutes') \
+          WHERE id = ?",
+    )
+    .bind(&h.alice_id)
+    .execute(&h.state.auth)
+    .await
+    .unwrap();
+
+    digest::run_tick(&h.state, DigestConfig::default())
+        .await
+        .unwrap();
+    let sent = h.mock.taken();
+    assert_eq!(
+        sent.len(),
+        1,
+        "second tick should fire because a new offline session began"
+    );
+    // The same outstanding mention is included again - the digest does
+    // not mark mentions as read, so the unread set persists across
+    // sessions. This is the intended UX: if alice never opened the app
+    // between sessions, the reminder repeats.
+    assert!(sent[0].text_body.contains("Hey @alice can you review?"));
+}
+
+#[tokio::test]
 async fn tick_skips_user_who_has_no_email_address() {
     let h = build_harness().await;
     // Wipe the email column to simulate the case where the user has
