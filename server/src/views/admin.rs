@@ -109,7 +109,22 @@ pub struct SettingsPage<'a> {
     pub smtp_port: String,
     pub smtp_user: String,
     pub smtp_from: String,
+    /// One of "starttls" | "tls" | "none". Drives the `<select>` rendering.
+    pub smtp_tls_mode: String,
     pub saved: bool,
+    /// Banner copy explaining why email is currently disabled. None when
+    /// email is fully operational (key + SMTP both present and decryptable).
+    pub disabled_banner: Option<&'static str>,
+    /// Populated by the "Send test email" POST handler. None on a plain GET.
+    pub test_result: Option<TestEmailResult>,
+}
+
+/// Outcome of an admin test-email send. Rendered as a green-or-red banner
+/// at the top of the SMTP form so the operator sees the SMTP error verbatim
+/// instead of an opaque HTTP status code.
+pub struct TestEmailResult {
+    pub ok: bool,
+    pub message: String,
 }
 
 pub struct AdminEnclaveView {

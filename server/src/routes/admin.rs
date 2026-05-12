@@ -7,12 +7,15 @@ use serde::Deserialize;
 
 use crate::auth::AdminUser;
 use crate::db;
+use crate::db::smtp_settings::{SmtpConfigInput, TlsMode};
+use crate::email::EmailMessage;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, EnclavesPage, InvitesPage,
-    ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
+    ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, TestEmailResult, UserRowFragment,
+    UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -21,6 +24,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
+        .route("/admin/settings/smtp/test", post(post_smtp_test))
         .route("/admin/users", get(get_users))
         .route("/admin/users/{id}/ban", post(post_ban))
         .route("/admin/users/{id}/unban", post(post_unban))
@@ -83,27 +87,77 @@ pub struct SettingsForm {
     pub smtp_user: String,
     pub smtp_from: String,
     pub smtp_pass: String,
+    pub tls_mode: String,
 }
 
-pub async fn get_settings(
-    State(state): State<AppState>,
-    AdminUser(user): AdminUser,
+#[derive(Deserialize)]
+pub struct SmtpTestForm {
+    pub test_to: String,
+}
+
+async fn render_settings_page(
+    state: &AppState,
+    user: &crate::models::User,
+    saved: bool,
+    test_result: Option<TestEmailResult>,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
-    let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
-        .await?
-        .unwrap_or_default();
-    let smtp_port = db::settings::get_setting(&state.settings, "smtp_port")
-        .await?
-        .unwrap_or_else(|| "587".to_string());
-    let smtp_user = db::settings::get_setting(&state.settings, "smtp_user")
-        .await?
-        .unwrap_or_default();
-    let smtp_from = db::settings::get_setting(&state.settings, "smtp_from")
-        .await?
-        .unwrap_or_default();
+    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(state, user, None).await?;
+
+    // Load the singleton SMTP row. If the secret key is missing, we can
+    // still read host/port/user/from to show in the form; only the
+    // password column is encrypted, and load() leaves it as None when
+    // decryption fails. To keep the GET handler simple, gate the entire
+    // load on the secret key: without it the form renders empty and the
+    // disabled banner explains why.
+    let (smtp_host, smtp_port, smtp_user, smtp_from, smtp_tls_mode) =
+        match state.secret_key.as_ref() {
+            Some(key) => match db::smtp_settings::load(&state.settings, key.as_ref()).await {
+                Ok(Some(cfg)) => (
+                    cfg.host,
+                    cfg.port.to_string(),
+                    cfg.username.unwrap_or_default(),
+                    cfg.from_address,
+                    cfg.tls_mode.as_str().to_string(),
+                ),
+                Ok(None) | Err(_) => (
+                    String::new(),
+                    "587".to_string(),
+                    String::new(),
+                    String::new(),
+                    "starttls".to_string(),
+                ),
+            },
+            None => (
+                String::new(),
+                "587".to_string(),
+                String::new(),
+                String::new(),
+                "starttls".to_string(),
+            ),
+        };
+
+    // Pick at most one banner explaining why email is unavailable.
+    // Precedence: missing secret key (operator must fix env) beats
+    // unconfigured SMTP (operator must fill in the form) beats
+    // load-failure-with-key-set (operator should re-enter password).
+    let disabled_banner: Option<&'static str> = if state.secret_key.is_none() {
+        Some(
+            "Email sending is disabled because LETS_CHAT_SECRET_KEY is not set. \
+             Set it in the environment and restart the server.",
+        )
+    } else if smtp_host.is_empty() {
+        Some("SMTP is not configured. Fill in the fields below and save.")
+    } else if !state.email_available() {
+        Some(
+            "Email could not be initialised at startup. If you rotated \
+             LETS_CHAT_SECRET_KEY, re-enter the SMTP password and restart.",
+        )
+    } else {
+        None
+    };
+
     let page = SettingsPage {
-        user: &user,
+        user,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -117,9 +171,19 @@ pub async fn get_settings(
         smtp_port,
         smtp_user,
         smtp_from,
-        saved: false,
+        smtp_tls_mode,
+        saved,
+        disabled_banner,
+        test_result,
     };
     html(&page)
+}
+
+pub async fn get_settings(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_settings_page(&state, &user, false, None).await
 }
 
 pub async fn post_settings(
@@ -127,14 +191,146 @@ pub async fn post_settings(
     AdminUser(_user): AdminUser,
     axum::Form(form): axum::Form<SettingsForm>,
 ) -> Result<Response, AppError> {
-    db::settings::set_setting(&state.settings, "smtp_host", &form.smtp_host).await?;
-    db::settings::set_setting(&state.settings, "smtp_port", &form.smtp_port).await?;
-    db::settings::set_setting(&state.settings, "smtp_user", &form.smtp_user).await?;
-    db::settings::set_setting(&state.settings, "smtp_from", &form.smtp_from).await?;
-    if !form.smtp_pass.is_empty() {
-        db::settings::set_setting(&state.settings, "smtp_pass", &form.smtp_pass).await?;
-    }
+    let Some(key) = state.secret_key.as_ref() else {
+        return Err(AppError::BadRequest(
+            "LETS_CHAT_SECRET_KEY is not set; cannot save SMTP settings".into(),
+        ));
+    };
+    let port: u16 = form.smtp_port.parse().map_err(|_| {
+        AppError::BadRequest(format!(
+            "smtp_port: '{}' is not a valid port",
+            form.smtp_port
+        ))
+    })?;
+    let input = SmtpConfigInput {
+        host: form.smtp_host.trim().to_string(),
+        port,
+        username: trim_to_none(&form.smtp_user),
+        // form.smtp_pass empty means "leave existing alone" (see
+        // db::smtp_settings::save). Match the existing UX where a blank
+        // password field is "keep current."
+        password: if form.smtp_pass.is_empty() {
+            None
+        } else {
+            Some(form.smtp_pass)
+        },
+        from_address: form.smtp_from.trim().to_string(),
+        tls_mode: TlsMode::parse(form.tls_mode.trim()),
+    };
+    db::smtp_settings::save(&state.settings, key.as_ref(), &input).await?;
     Ok(Redirect::to("/admin/settings").into_response())
+}
+
+/// Send a hardcoded one-line test email to a recipient supplied in the
+/// form. Bypasses the `state.email_client` snapshot so the operator can
+/// verify a just-saved SMTP config without restarting the server. In
+/// tests, `state.email_client` is a `MockEmailClient` and is used in
+/// preference to constructing a real lettre transport: that keeps
+/// integration tests free of any DNS / network dependency.
+pub async fn post_smtp_test(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    axum::Form(form): axum::Form<SmtpTestForm>,
+) -> Result<Html, AppError> {
+    let to_addr = form.test_to.trim();
+    if to_addr.is_empty() {
+        return render_settings_page(
+            &state,
+            &user,
+            false,
+            Some(TestEmailResult {
+                ok: false,
+                message: "Recipient address is required.".into(),
+            }),
+        )
+        .await;
+    }
+    // The handler uses `state.email_client` rather than constructing a
+    // fresh transport from the current DB row. Consequence: after the
+    // operator saves SMTP settings, they must restart the server before
+    // the "Send test email" button reflects the new config. This is
+    // documented in the template. The simpler model avoids splitting
+    // the prod and test code paths through a `cfg!` switch and lets
+    // integration tests inject a `MockEmailClient` cleanly.
+    let Some(client) = state.email_client.as_ref().cloned() else {
+        return render_settings_page(
+            &state,
+            &user,
+            false,
+            Some(TestEmailResult {
+                ok: false,
+                message: if state.secret_key.is_none() {
+                    "Email is disabled: LETS_CHAT_SECRET_KEY is not set.".into()
+                } else {
+                    "Email is not initialised. Save SMTP settings, then restart the server.".into()
+                },
+            }),
+        )
+        .await;
+    };
+    let from = match state.secret_key.as_ref() {
+        Some(key) => db::smtp_settings::load(&state.settings, key.as_ref())
+            .await?
+            .map(|c| c.from_address)
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+    if from.is_empty() {
+        return render_settings_page(
+            &state,
+            &user,
+            false,
+            Some(TestEmailResult {
+                ok: false,
+                message: "From address is empty. Save it in the form and restart first.".into(),
+            }),
+        )
+        .await;
+    }
+
+    let msg = EmailMessage {
+        to: to_addr.to_string(),
+        from,
+        subject: "lets-chat: SMTP test email".to_string(),
+        text_body: format!(
+            "This is a test email from lets-chat triggered by admin user '{}'.\n\
+             If you received this, your SMTP settings are working.\n",
+            user.username
+        ),
+        html_body: format!(
+            "<p>This is a test email from lets-chat triggered by admin user \
+             <strong>{}</strong>.</p>\
+             <p>If you received this, your SMTP settings are working.</p>",
+            askama_escape(&user.username)
+        ),
+    };
+    let result = match client.send(msg).await {
+        Ok(()) => TestEmailResult {
+            ok: true,
+            message: format!("Test email sent to {to_addr}."),
+        },
+        Err(e) => TestEmailResult {
+            ok: false,
+            message: format!("Send failed: {e}"),
+        },
+    };
+    render_settings_page(&state, &user, false, Some(result)).await
+}
+
+fn trim_to_none(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
+}
+
+fn askama_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 // Users ---------------------------------------------------------------------
