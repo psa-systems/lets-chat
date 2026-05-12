@@ -118,19 +118,7 @@ fn summarize_user_agent(ua: Option<&str>) -> String {
         return "Unknown device".to_string();
     };
     let lower = ua.to_ascii_lowercase();
-    let os = if lower.contains("windows") {
-        "Windows"
-    } else if lower.contains("android") {
-        "Android"
-    } else if lower.contains("iphone") || lower.contains("ipad") || lower.contains("ios") {
-        "iOS"
-    } else if lower.contains("mac os") || lower.contains("macintosh") {
-        "macOS"
-    } else if lower.contains("linux") {
-        "Linux"
-    } else {
-        "Unknown OS"
-    };
+    let os = detect_os(&lower);
     let browser = if lower.contains("edg/") {
         "Edge"
     } else if lower.contains("opr/") || lower.contains("opera") {
@@ -149,6 +137,101 @@ fn summarize_user_agent(ua: Option<&str>) -> String {
         "Browser"
     };
     format!("{browser} on {os}")
+}
+
+/// OS detection. Order matters: Android UAs contain "Linux", and iPadOS in
+/// "desktop mode" advertises "Mac OS X". Check the more specific tokens
+/// first, then fall through to general families.
+fn detect_os(lower: &str) -> String {
+    // ChromeOS first - its UA looks like "X11; CrOS x86_64 14541.0.0" with
+    // no "linux" token, so a naive Linux check misses it entirely.
+    if lower.contains("cros") {
+        return "ChromeOS".to_string();
+    }
+    // iPadOS in desktop-site mode reports "Macintosh; Intel Mac OS X" but
+    // keeps the "ipad" token in some builds; check Apple-mobile tokens
+    // before macOS so we do not relabel iPads as Macs.
+    if lower.contains("iphone") {
+        return version_after(lower, "iphone os ")
+            .or_else(|| version_after(lower, "os "))
+            .map(|v| format!("iOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "iOS".to_string());
+    }
+    if lower.contains("ipad") {
+        return version_after(lower, "os ")
+            .map(|v| format!("iPadOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "iPadOS".to_string());
+    }
+    // Android before Linux: Android UAs include "Linux; Android 14; ..."
+    if lower.contains("android") {
+        return version_after(lower, "android ")
+            .map(|v| format!("Android {v}"))
+            .unwrap_or_else(|| "Android".to_string());
+    }
+    if lower.contains("windows nt") {
+        // Microsoft did not bump the NT version for Windows 11, so the UA
+        // cannot distinguish 10 from 11. Label both as "Windows 10/11" to
+        // avoid lying to the user.
+        return match version_after(lower, "windows nt ").as_deref() {
+            Some("10.0") => "Windows 10/11".to_string(),
+            Some("6.3") => "Windows 8.1".to_string(),
+            Some("6.2") => "Windows 8".to_string(),
+            Some("6.1") => "Windows 7".to_string(),
+            Some(v) => format!("Windows NT {v}"),
+            None => "Windows".to_string(),
+        };
+    }
+    if lower.contains("windows") {
+        return "Windows".to_string();
+    }
+    if lower.contains("mac os x") || lower.contains("macintosh") {
+        return version_after(lower, "mac os x ")
+            .map(|v| format!("macOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "macOS".to_string());
+    }
+    if lower.contains("freebsd") {
+        return "FreeBSD".to_string();
+    }
+    if lower.contains("openbsd") {
+        return "OpenBSD".to_string();
+    }
+    if lower.contains("netbsd") {
+        return "NetBSD".to_string();
+    }
+    if lower.contains("fuchsia") {
+        return "Fuchsia".to_string();
+    }
+    if lower.contains("linux") {
+        return "Linux".to_string();
+    }
+    if lower.contains("x11") || lower.contains("unix") {
+        return "Unix".to_string();
+    }
+    "Unknown OS".to_string()
+}
+
+/// Return the version token that immediately follows `prefix` in `s`. The
+/// token runs until the next character that is not a digit, `.`, or `_`
+/// (Apple uses underscores). Returns `None` if the prefix is missing or
+/// the following character is not a digit.
+fn version_after(s: &str, prefix: &str) -> Option<String> {
+    let idx = s.find(prefix)?;
+    let tail = &s[idx + prefix.len()..];
+    let end = tail
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '_'))
+        .unwrap_or(tail.len());
+    let token = &tail[..end];
+    if token.chars().next()?.is_ascii_digit() {
+        Some(token.to_string())
+    } else {
+        None
+    }
+}
+
+/// Apple UAs use underscores in version numbers ("10_15_7"); render them
+/// with dots so the result looks like the canonical version string.
+fn normalize_apple_version(v: &str) -> String {
+    v.replace('_', ".")
 }
 
 /// POST /settings/sessions/{id}/revoke - delete a specific session belonging
@@ -564,4 +647,87 @@ fn sniff_image_ext(bytes: &[u8]) -> Option<&'static str> {
         return Some("webp");
     }
     None
+}
+
+#[cfg(test)]
+mod ua_tests {
+    use super::summarize_user_agent;
+
+    fn label(ua: &str) -> String {
+        summarize_user_agent(Some(ua))
+    }
+
+    #[test]
+    fn windows_chrome() {
+        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+        assert_eq!(label(ua), "Chrome on Windows 10/11");
+    }
+
+    #[test]
+    fn windows_seven_firefox() {
+        let ua = "Mozilla/5.0 (Windows NT 6.1; rv:109.0) Gecko/20100101 Firefox/115.0";
+        assert_eq!(label(ua), "Firefox on Windows 7");
+    }
+
+    #[test]
+    fn macos_safari_with_version() {
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15";
+        assert_eq!(label(ua), "Safari on macOS 14.3");
+    }
+
+    #[test]
+    fn iphone_safari_with_version() {
+        let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1";
+        assert_eq!(label(ua), "Safari on iOS 17.3");
+    }
+
+    #[test]
+    fn ipad_safari_with_version() {
+        let ua = "Mozilla/5.0 (iPad; CPU OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1";
+        assert_eq!(label(ua), "Safari on iPadOS 17.3");
+    }
+
+    #[test]
+    fn android_chrome_with_version() {
+        let ua = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36";
+        assert_eq!(label(ua), "Chrome on Android 14");
+    }
+
+    #[test]
+    fn chromeos_chrome() {
+        // ChromeOS sits behind a generic X11 token with no "Linux" string;
+        // the older code reported "Browser on Unknown OS" here.
+        let ua = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+        assert_eq!(label(ua), "Chrome on ChromeOS");
+    }
+
+    #[test]
+    fn linux_firefox() {
+        let ua = "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0";
+        assert_eq!(label(ua), "Firefox on Linux");
+    }
+
+    #[test]
+    fn freebsd_firefox() {
+        let ua = "Mozilla/5.0 (X11; FreeBSD amd64; rv:121.0) Gecko/20100101 Firefox/121.0";
+        assert_eq!(label(ua), "Firefox on FreeBSD");
+    }
+
+    #[test]
+    fn edge_on_windows() {
+        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0";
+        assert_eq!(label(ua), "Edge on Windows 10/11");
+    }
+
+    #[test]
+    fn x11_only_falls_back_to_unix() {
+        let ua = "Mozilla/5.0 (X11; U; OpenIndiana) AppleWebKit/537.36";
+        assert_eq!(label(ua), "Browser on Unix");
+    }
+
+    #[test]
+    fn empty_or_unknown_stays_generic() {
+        assert_eq!(label("curl/8.5"), "Browser on Unknown OS");
+        assert_eq!(summarize_user_agent(None), "Unknown device");
+    }
 }
