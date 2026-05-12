@@ -101,6 +101,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         .await
         .unwrap();
     // Seeded "general" room is id 1.
+    let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth,
         chat,
@@ -109,6 +110,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(fake_vapid()),
         push_client: client,

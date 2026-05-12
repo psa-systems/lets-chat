@@ -105,6 +105,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         .await
         .unwrap();
     let chat_for_test = chat.clone();
+    let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth,
         chat,
@@ -113,6 +114,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
