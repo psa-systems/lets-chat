@@ -4,29 +4,9 @@
 
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">SMTP settings</h1>
-
-{% if let Some(banner) = disabled_banner %}
-<div class="mb-4 p-3 rounded bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
-  {{ banner }}
-</div>
-{% endif %}
-
-{% if let Some(tr) = test_result %}
-{% if tr.ok %}
-<div class="mb-4 p-3 rounded bg-green-50 border border-green-200 text-green-800 text-sm">{{ tr.message }}</div>
-{% else %}
-<div class="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-800 text-sm">{{ tr.message }}</div>
-{% endif %}
-{% endif %}
-
 {% if saved %}
 <div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">Settings saved.</div>
 {% endif %}
-
-<p class="text-xs text-slate-500 mb-3">
-  Changes take effect after the server restarts. Save first, then restart, then use the test-email form below to verify.
-</p>
-
 <form method="post" action="/admin/settings" class="max-w-lg space-y-4">
   <div>
     <label class="block text-sm font-medium mb-1" for="smtp_host">SMTP host</label>
@@ -49,42 +29,11 @@
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="public_base_url">Public site URL</label>
-    <input id="public_base_url" name="public_base_url" type="url" value="{{ public_base_url }}"
-           placeholder="https://chat.example.com"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">
-      Externally-reachable URL of this server. Used in email digest deep links. Leave blank to send digests without clickable links.
-    </p>
-  </div>
-  <div>
-    <label class="block text-sm font-medium mb-1" for="tls_mode">TLS mode</label>
-    <select id="tls_mode" name="tls_mode"
-            class="w-full border border-slate-300 rounded px-2 py-1 text-sm bg-white">
-      <option value="starttls"{% if smtp_tls_mode == "starttls" %} selected{% endif %}>STARTTLS (port 587, recommended)</option>
-      <option value="tls"{% if smtp_tls_mode == "tls" %} selected{% endif %}>Implicit TLS (port 465)</option>
-      <option value="none"{% if smtp_tls_mode == "none" %} selected{% endif %}>None (localhost relay only)</option>
-    </select>
-  </div>
-  <div>
     <label class="block text-sm font-medium mb-1" for="smtp_pass">SMTP password (write-only)</label>
     <input id="smtp_pass" name="smtp_pass" type="password" value="" placeholder="leave blank to keep existing"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">
-      Stored encrypted at rest under <code>LETS_CHAT_SECRET_KEY</code>. Leave blank when re-saving to preserve the existing password.
-    </p>
   </div>
   <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
-</form>
-
-<h2 class="text-base font-semibold mt-8 mb-3">Send test email</h2>
-<p class="text-xs text-slate-500 mb-3">
-  Sends a one-line test message to the address below using the currently-saved SMTP settings. Use this to verify changes without affecting any user.
-</p>
-<form method="post" action="/admin/settings/smtp/test" class="max-w-lg flex gap-2">
-  <input name="test_to" type="email" placeholder="you@example.com" required
-         class="flex-1 border border-slate-300 rounded px-2 py-1 text-sm">
-  <button type="submit" class="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-800 text-sm">Send test</button>
 </form>
 
 <h2 class="text-base font-semibold mt-8 mb-3">Defaults for new users</h2>
@@ -95,7 +44,7 @@
     <span>
       New users start with email digest enabled
       <span class="block text-xs text-slate-500 mt-1">
-        Off by default for privacy. Flip this on for instances where the operator knows everyone wants the digest. Only affects future registrations; existing users are not changed.
+        Off by default for privacy. Only affects future registrations; existing users are not changed. Email digest also requires SMTP configured via environment variables.
       </span>
     </span>
   </label>

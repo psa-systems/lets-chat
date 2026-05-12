@@ -24,8 +24,10 @@ async fn setup_auth_pool() -> SqlitePool {
         include_str!("../migrations/auth/0007_notification_settings.sql"),
         include_str!("../migrations/auth/0008_two_factor.sql"),
         include_str!("../migrations/auth/0009_push_subscriptions.sql"),
-        include_str!("../migrations/auth/0010_digest_columns.sql"),
-        include_str!("../migrations/auth/0011_user_email.sql"),
+        include_str!("../migrations/auth/0010_password_reset.sql"),
+        include_str!("../migrations/auth/0011_email_verification.sql"),
+        include_str!("../migrations/auth/0012_session_metadata.sql"),
+        include_str!("../migrations/auth/0013_digest_columns.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
@@ -156,7 +158,7 @@ async fn set_email_round_trip_with_null_for_empty() {
         .unwrap();
     assert!(rec.email.is_none());
 
-    lets_chat::db::auth::set_email(&auth, &id, Some("alice@example.com"))
+    lets_chat::db::auth::set_user_email(&auth, &id, Some("alice@example.com"))
         .await
         .unwrap();
     let rec = lets_chat::db::auth::find_user_by_id(&auth, &id)
@@ -168,7 +170,7 @@ async fn set_email_round_trip_with_null_for_empty() {
     // Clearing the field stores NULL, not the empty string. The
     // eligibility query filters both equivalently, but downstream code
     // can rely on "NULL means unset" without also checking for "".
-    lets_chat::db::auth::set_email(&auth, &id, None)
+    lets_chat::db::auth::set_user_email(&auth, &id, None)
         .await
         .unwrap();
     let rec = lets_chat::db::auth::find_user_by_id(&auth, &id)

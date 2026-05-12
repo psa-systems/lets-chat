@@ -158,33 +158,36 @@ pub async fn set_user_status(
 /// `'active'`. DND is sticky: bumps the timestamp so the idle clock restarts
 /// once they leave DND, but never overwrites the status. Returns `true` only
 /// when the call actually flipped idle->active so the caller can broadcast.
+///
+/// Implemented as two single-statement updates rather than a SELECT-then-
+/// UPDATE transaction: under chat load this runs on every WebSocket message
+/// and every room visit, so holding a write lock for the duration of a
+/// round-trip multiplies contention and produces `SQLITE_BUSY` even with
+/// WAL + busy_timeout enabled. The first statement only matches idle rows
+/// and never the DND row, so the DND-sticky guarantee is preserved.
 pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let row = sqlx::query("SELECT status FROM users WHERE id = ?")
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let Some(r) = row else {
-        tx.commit().await?;
-        return Ok(false);
-    };
-    let current: String = r.get("status");
-    let flipped = current == STATUS_IDLE;
-    if current == STATUS_DND {
+    let flipped = sqlx::query(
+        "UPDATE users \
+         SET status = 'active', \
+             last_active_at = datetime('now'), \
+             updated_at = datetime('now') \
+         WHERE id = ? AND status = 'idle'",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?
+    .rows_affected()
+        > 0;
+
+    if !flipped {
+        // The user was already active or in DND; just refresh the activity
+        // timestamp without touching `status`. A missing user row is a no-op.
         sqlx::query("UPDATE users SET last_active_at = datetime('now') WHERE id = ?")
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(pool)
             .await?;
-    } else {
-        sqlx::query(
-            "UPDATE users SET last_active_at = datetime('now'), \
-             status = 'active', updated_at = datetime('now') WHERE id = ?",
-        )
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
     }
-    tx.commit().await?;
+
     Ok(flipped)
 }
 
@@ -335,7 +338,20 @@ pub async fn set_user_role(
     Ok(())
 }
 
+/// Issue a session token for `user_id` with no captured origin metadata.
+/// Production code should prefer `create_session_with_origin` so the
+/// settings sessions list can show a meaningful row; this no-origin variant
+/// stays for tests and legacy paths.
 pub async fn create_session(pool: &SqlitePool, user_id: &str) -> Result<String, sqlx::Error> {
+    create_session_with_origin(pool, user_id, None, None).await
+}
+
+pub async fn create_session_with_origin(
+    pool: &SqlitePool,
+    user_id: &str,
+    user_agent: Option<&str>,
+    ip: Option<&str>,
+) -> Result<String, sqlx::Error> {
     use rand::Rng;
     let token: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
@@ -344,15 +360,85 @@ pub async fn create_session(pool: &SqlitePool, user_id: &str) -> Result<String, 
         .collect();
 
     sqlx::query(
-        "INSERT INTO sessions (id, user_id, expires_at) \
-         VALUES (?, ?, datetime('now', '+30 days'))",
+        "INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, last_seen_at) \
+         VALUES (?, ?, datetime('now', '+30 days'), ?, ?, datetime('now'))",
     )
     .bind(&token)
     .bind(user_id)
+    .bind(user_agent)
+    .bind(ip)
     .execute(pool)
     .await?;
 
     Ok(token)
+}
+
+/// Bump `last_seen_at` for a live session. Called from the auth middleware on
+/// every authed request; throttled by `LAST_SEEN_REFRESH_SECONDS` so the write
+/// rate stays well below the read rate.
+pub async fn touch_session_last_seen(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE sessions SET last_seen_at = datetime('now') WHERE id = ?")
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionRow {
+    pub id: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub last_seen_at: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip: Option<String>,
+}
+
+/// List a user's live sessions (expiry-filtered), newest activity first.
+pub async fn list_sessions_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<SessionRow>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, created_at, expires_at, last_seen_at, user_agent, ip \
+         FROM sessions \
+         WHERE user_id = ? AND expires_at > datetime('now') \
+         ORDER BY COALESCE(last_seen_at, created_at) DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| SessionRow {
+            id: r.get("id"),
+            created_at: r.get("created_at"),
+            expires_at: r.get("expires_at"),
+            last_seen_at: r.try_get("last_seen_at").ok(),
+            user_agent: r.try_get("user_agent").ok(),
+            ip: r.try_get("ip").ok(),
+        })
+        .collect())
+}
+
+/// Delete a single session, scoped to the owning user. Returns `true` if a
+/// row was actually removed. The user-scope guard prevents one user from
+/// revoking another user's session by guessing or replaying a session ID.
+pub async fn delete_session_for_user(
+    pool: &SqlitePool,
+    session_id: &str,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query("DELETE FROM sessions WHERE id = ? AND user_id = ?")
+        .bind(session_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
 }
 
 pub async fn get_user_by_session(
@@ -649,23 +735,6 @@ pub async fn set_notification_prefs(
     Ok(())
 }
 
-/// Set `users.email` for `user_id`. An empty input is stored as `NULL`
-/// (the digest tick treats both as "no recipient"). The route handler
-/// already trims and basic-validates the input; this function only
-/// commits to the row.
-pub async fn set_email(
-    pool: &SqlitePool,
-    user_id: &str,
-    email: Option<&str>,
-) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
-        .bind(email)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
 /// Toggle the digest-opt-in flag for `user_id`. Used by the register
 /// flow when the operator has flipped `default_notify_email_digest` to
 /// `1`: new users start opted in, but the column default in the schema
@@ -913,6 +982,114 @@ pub async fn list_blocked_ids_either_way(
         .into_iter()
         .map(|r| r.get::<String, _>("other_id"))
         .collect())
+}
+
+/// Look up the user_id whose email matches `email` (case-insensitive). Used
+/// by the password-reset request handler to map an inbound email address to
+/// the account that should receive a reset link. Returns `None` for unknown
+/// addresses; the caller still returns 200 to avoid email enumeration.
+pub async fn find_user_id_by_email(
+    pool: &SqlitePool,
+    email: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT id FROM users WHERE email = ? COLLATE NOCASE AND is_banned = 0")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.get::<String, _>("id")))
+}
+
+/// Fetch the configured email for a user, or `None` if unset. Used to render
+/// the email on the profile settings page and to address outbound mail.
+pub async fn get_user_email(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT email FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<String>, _>("email")))
+}
+
+/// Update (or clear with `None`) a user's email. Returns `Err` with a unique
+/// violation if another row already owns this address; the caller maps that
+/// to a friendly form error.
+///
+/// If the address actually changes (case-sensitive compare against the
+/// stored value), `email_verified_at` is cleared in the same statement so a
+/// previously verified address never silently transfers its verified state
+/// to a new one. Re-saving the same address is a no-op.
+pub async fn set_user_email(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET \
+            email = ?1, \
+            email_verified_at = CASE \
+                WHEN COALESCE(email, '') = COALESCE(?1, '') THEN email_verified_at \
+                ELSE NULL \
+            END, \
+            updated_at = datetime('now') \
+         WHERE id = ?2",
+    )
+    .bind(email)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Fetch the verified-at timestamp for a user's email, or `None` if the
+/// current email is unverified (or no email is set).
+pub async fn get_user_email_verified_at(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT email_verified_at FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<String>, _>("email_verified_at")))
+}
+
+/// Stamp the user's email as verified, but only when their currently-stored
+/// address still matches `email`. The guard prevents a token issued before
+/// an in-flight email change from verifying the new address. Returns the
+/// number of rows updated so the caller can detect a no-op (token stale
+/// relative to the current email).
+pub async fn mark_email_verified(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET email_verified_at = datetime('now'), updated_at = datetime('now') \
+         WHERE id = ? AND email = ?",
+    )
+    .bind(user_id)
+    .bind(email)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
+/// Overwrite a user's password hash. Used by the reset flow after a token
+/// has been validated. Callers should also delete every session for this
+/// user so any existing logged-in browser is force-signed-out.
+pub async fn set_password_hash(
+    pool: &SqlitePool,
+    user_id: &str,
+    password_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(password_hash)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// All users `blocker_id` has blocked, ordered by username.

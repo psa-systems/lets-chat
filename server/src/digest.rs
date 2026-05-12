@@ -167,8 +167,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use sqlx::{Row, SqlitePool};
 
-use crate::email::{EmailClient, EmailMessage};
 use crate::error::AppError;
+use crate::mail::Mailer;
 use crate::state::AppState;
 use crate::views::email_digest::{
     DigestDmSection, DigestHtml, DigestItem, DigestRoomSection, DigestText,
@@ -197,49 +197,30 @@ impl Default for DigestConfig {
 
 /// One pass of the digest scheduler.
 ///
-/// Short-circuits when `state.email_client` is `None` (the operator has
-/// not configured email). Otherwise loads candidate users, fetches their
-/// missed activity, renders multipart bodies, and dispatches one email
-/// per candidate via the trait. The "one digest per offline session"
-/// predicate lives in `db::auth::find_digest_candidates`; this function
-/// only needs to mark `last_digest_sent_at` on success to make the
-/// predicate self-reset on the next activity bump.
+/// Short-circuits when `state.mailer` is `None` (the operator has not
+/// configured SMTP via env vars). Otherwise loads candidate users,
+/// fetches their missed activity, renders multipart bodies, and
+/// dispatches one email per candidate through the shared `Mailer`.
+/// The "one digest per offline session" predicate lives in
+/// `db::auth::find_digest_candidates`; this function only needs to mark
+/// `last_digest_sent_at` on success to make the predicate self-reset on
+/// the next activity bump.
 ///
-/// Errors are logged at warn and skipped per-user. A single bad recipient
-/// must not stop the rest of the tick from processing.
+/// Errors are logged at warn and skipped per-user. A single bad
+/// recipient must not stop the rest of the tick from processing.
 pub async fn run_tick(state: &AppState, cfg: DigestConfig) -> Result<(), AppError> {
-    let Some(client) = state.email_client.as_ref().cloned() else {
-        tracing::debug!("digest tick: email_client is None, skipping");
+    let Some(mailer) = state.mailer.as_ref() else {
+        tracing::debug!("digest tick: mailer is None, skipping");
         return Ok(());
     };
 
-    // Load the operator-supplied site URL once per tick. Empty is fine:
-    // the templates render without anchor tags in that case. Plus the
-    // SMTP from address; if empty, abort the whole tick because we cannot
-    // send anything without a From header.
-    let server_url = crate::db::settings::get_setting(&state.settings, "public_base_url")
-        .await?
-        .unwrap_or_default();
-    let from_address = match state.secret_key.as_ref() {
-        Some(key) => crate::db::smtp_settings::load(&state.settings, key.as_ref())
-            .await?
-            .map(|c| c.from_address)
-            .unwrap_or_default(),
-        None => String::new(),
-    };
-    if from_address.is_empty() {
-        tracing::warn!("digest tick: SMTP from_address is empty; skipping");
-        return Ok(());
-    }
-
+    let server_url = state.base_url.as_str();
     let candidates =
         crate::db::auth::find_digest_candidates(&state.auth, cfg.quiet_period_secs).await?;
     tracing::debug!(count = candidates.len(), "digest tick: candidates");
 
     for candidate in candidates {
-        if let Err(e) =
-            send_one_digest(state, &client, &candidate, &server_url, &from_address, &cfg).await
-        {
+        if let Err(e) = send_one_digest(state, mailer, &candidate, server_url, &cfg).await {
             tracing::warn!(
                 error = %e,
                 user_id = %candidate.id,
@@ -256,10 +237,9 @@ pub async fn run_tick(state: &AppState, cfg: DigestConfig) -> Result<(), AppErro
 /// caller logs and continues to the next candidate.
 async fn send_one_digest(
     state: &AppState,
-    client: &std::sync::Arc<dyn EmailClient>,
+    mailer: &Mailer,
     candidate: &crate::db::auth::DigestCandidate,
     server_url: &str,
-    from_address: &str,
     cfg: &DigestConfig,
 ) -> Result<(), AppError> {
     let mentions = load_missed_mentions(
@@ -331,15 +311,8 @@ async fn send_one_digest(
     let dm_count: usize = dm_sections.iter().map(|s| s.items.len()).sum();
     let subject = build_subject(mention_count, dm_count);
 
-    let msg = EmailMessage {
-        to: candidate.email.clone(),
-        from: from_address.to_string(),
-        subject,
-        text_body,
-        html_body,
-    };
-    client
-        .send(msg)
+    mailer
+        .send_multipart(&candidate.email, &subject, &text_body, &html_body)
         .await
         .map_err(|e| AppError::Internal(format!("smtp send: {e}")))?;
     crate::db::auth::set_last_digest_sent_at(&state.auth, &candidate.id).await?;

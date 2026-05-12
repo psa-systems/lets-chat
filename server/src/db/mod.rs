@@ -2,21 +2,25 @@ pub mod auth;
 pub mod bookmarks;
 pub mod chat;
 pub mod custom_emojis;
+pub mod email_verification;
 pub mod enclave;
 pub mod mentions;
 pub mod moderation;
 pub mod notifications;
+pub mod password_reset;
 pub mod pinned;
 pub mod push_subscriptions;
 pub mod settings;
-pub mod smtp_settings;
 pub mod two_factor;
 pub mod uploads;
 pub mod vapid;
 
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 static DATA_DIR: OnceLock<String> = OnceLock::new();
 
@@ -54,7 +58,21 @@ pub fn uploads_dir() -> PathBuf {
 async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool {
     let dir = data_dir();
     std::fs::create_dir_all(dir).expect("Failed to create data directory");
-    let pool = SqlitePool::connect(&format!("sqlite:{}/{}.db?mode=rwc", dir, name))
+    // WAL allows readers to proceed while a writer holds the file, and
+    // `busy_timeout` makes contending writers wait for the lock instead
+    // of immediately returning SQLITE_BUSY. Without these the auth pool
+    // hits "database is locked" any time activity-touch, session
+    // last-seen, and a normal write collide in the same instant.
+    let url = format!("sqlite:{}/{}.db", dir, name);
+    let opts = SqliteConnectOptions::from_str(&url)
+        .unwrap_or_else(|e| panic!("invalid {} db url: {}", name, e))
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(Duration::from_secs(5));
+    let pool = SqlitePoolOptions::new()
+        .max_connections(16)
+        .connect_with(opts)
         .await
         .unwrap_or_else(|e| panic!("Failed to connect to {} DB: {}", name, e));
     migrator

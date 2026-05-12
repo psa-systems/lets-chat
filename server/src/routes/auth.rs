@@ -33,6 +33,8 @@ pub struct RegisterForm {
     pub username: String,
     pub password: String,
     pub password_confirm: String,
+    #[serde(default)]
+    pub email: Option<String>,
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
@@ -89,7 +91,10 @@ pub async fn post_login(
         return Ok((jar, Redirect::to("/login/2fa")).into_response());
     }
 
-    let token = db::auth::create_session(&state.auth, &record.id).await?;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let token =
+        db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
+            .await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 
@@ -152,6 +157,23 @@ pub async fn post_register(
         ));
     }
 
+    let email = form
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if let Some(ref e) = email {
+        if e.chars().count() > 254 || !looks_like_email_register(e) {
+            return Ok(form_error(
+                &state,
+                &headers,
+                FormPage::Register,
+                "Email address is not valid",
+            ));
+        }
+    }
+
     let password_hash = match hash_password(password) {
         Ok(h) => h,
         Err(e) => return Err(AppError::Internal(format!("hash: {}", e))),
@@ -172,20 +194,44 @@ pub async fn post_register(
         }
     };
 
+    if let Some(ref e) = email {
+        if let Err(err) = db::auth::set_user_email(&state.auth, &user_id, Some(e)).await {
+            if is_unique_violation(&err) {
+                // Roll back the freshly created user so the username does not
+                // get squatted by a registration attempt that ultimately
+                // failed validation.
+                let _ = db::auth::delete_user(&state.auth, &user_id).await;
+                return Ok(form_error(
+                    &state,
+                    &headers,
+                    FormPage::Register,
+                    "That email address is already in use",
+                ));
+            }
+            return Err(AppError::Internal(format!("set_user_email: {}", err)));
+        }
+
+        // Kick off a verification email when SMTP is configured. The send
+        // is fire-and-forget: registration must succeed even if the relay
+        // is unreachable, and the user can resend from settings later.
+        if state.mail_available() {
+            crate::routes::email_verification::spawn_dispatch(&state, user_id.clone(), e.clone());
+        }
+    }
+
     // Apply the admin-configured default for new users. The migration
     // defaults `notify_email_digest_enabled` to 0; this hook overrides
     // it when the operator has flipped `default_notify_email_digest`.
     // Failure to apply is logged but not fatal: the worst case is the
     // user has to opt in manually.
-    match db::settings::get_setting(&state.settings, "default_notify_email_digest").await {
-        Ok(Some(ref v)) if v == "1" => {
+    if let Ok(Some(ref v)) = db::settings::get_setting(&state.settings, "default_notify_email_digest").await {
+        if v == "1" {
             if let Err(e) =
                 db::auth::set_notify_email_digest_enabled(&state.auth, &user_id, true).await
             {
                 tracing::warn!(error = %e, user_id = %user_id, "default digest opt-in apply failed");
             }
         }
-        _ => {}
     }
 
     let promoted = promote_first_user_to_admin(&state, &user_id).await?;
@@ -196,7 +242,10 @@ pub async fn post_register(
         }
     }
 
-    let token = db::auth::create_session(&state.auth, &user_id).await?;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let token =
+        db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
+            .await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 
@@ -332,4 +381,28 @@ fn verify_password(hash: &str, password: &str) -> bool {
 #[cfg(feature = "standalone")]
 fn is_unique_violation(err: &sqlx::Error) -> bool {
     matches!(err, sqlx::Error::Database(db_err) if db_err.is_unique_violation())
+}
+
+/// Mirrors `settings::looks_like_email`. Duplicated here to keep the
+/// standalone auth flow free of cross-module dependencies on the settings
+/// route. Loose syntactic check, not RFC validation.
+#[cfg(feature = "standalone")]
+fn looks_like_email_register(s: &str) -> bool {
+    if s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let mut parts = s.split('@');
+    let local = match parts.next() {
+        Some(l) if !l.is_empty() => l,
+        _ => return false,
+    };
+    let domain = match parts.next() {
+        Some(d) if !d.is_empty() => d,
+        _ => return false,
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    let _ = local;
+    domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }

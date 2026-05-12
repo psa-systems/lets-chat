@@ -32,8 +32,10 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0007_notification_settings.sql"),
             include_str!("../migrations/auth/0008_two_factor.sql"),
             include_str!("../migrations/auth/0009_push_subscriptions.sql"),
-            include_str!("../migrations/auth/0010_digest_columns.sql"),
-            include_str!("../migrations/auth/0011_user_email.sql"),
+            include_str!("../migrations/auth/0010_password_reset.sql"),
+            include_str!("../migrations/auth/0011_email_verification.sql"),
+            include_str!("../migrations/auth/0012_session_metadata.sql"),
+            include_str!("../migrations/auth/0013_digest_columns.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -60,7 +62,6 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
-            include_str!("../migrations/settings/0004_smtp_settings.sql"),
         ],
         _ => unreachable!(),
     };
@@ -107,10 +108,13 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
+        last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         secret_key: None,
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
-        email_client: None,
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     let app = routes::build_router(state);
     TestApp {

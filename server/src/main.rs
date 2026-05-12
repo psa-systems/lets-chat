@@ -65,26 +65,17 @@ async fn main() {
         )),
     };
 
-    // Email transport: built only when LETS_CHAT_SECRET_KEY is set (the
-    // stored SMTP password is AES-GCM-encrypted under that key and is
-    // useless without it) AND the SMTP row has a non-empty host. Mirrors
-    // the VAPID/Push gating model: feature presence is determined by
-    // configuration completeness, not env-var feature flags.
-    let email_client: Option<std::sync::Arc<dyn lets_chat::email::EmailClient>> = match secret_key
-        .as_ref()
-    {
-        Some(key) => match lets_chat::db::smtp_settings::load(&settings_pool, key.as_ref()).await {
-            Ok(Some(cfg)) if !cfg.host.is_empty() => Some(std::sync::Arc::new(
-                lets_chat::email::LettreEmailClient::new(cfg),
-            )),
-            Ok(_) => None,
-            Err(e) => {
-                tracing::warn!(error = %e, "smtp settings load failed; email disabled");
-                None
-            }
-        },
-        None => None,
-    };
+    let mailer = lets_chat::mail::Mailer::from_env();
+    if mailer.is_some() {
+        tracing::info!("SMTP mailer configured");
+    } else {
+        tracing::info!("SMTP mailer not configured; password reset and digest disabled");
+    }
+    let base_url = std::env::var("LETS_CHAT_BASE_URL")
+        .ok()
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://localhost:8080".to_string());
 
     let state = AppState {
         auth: auth_pool,
@@ -92,10 +83,13 @@ async fn main() {
         settings: settings_pool,
         hub: std::sync::Arc::new(Hub::new()),
         asset_version: compute_asset_version(),
+        last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         secret_key,
         vapid,
         push_client,
-        email_client,
+        mailer,
+        base_url,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
@@ -175,11 +169,11 @@ fn spawn_idle_scanner(state: AppState) {
     });
 }
 
-/// Hourly tick that calls `email::digest::run_tick`. Internal short-circuit
-/// when `state.email_client` is `None` makes this safe to spawn even on
+/// Hourly tick that calls `digest::run_tick`. Internal short-circuit
+/// when `state.mailer` is `None` makes this safe to spawn even on
 /// deployments without SMTP configured. Modeled on `spawn_idle_scanner`.
 fn spawn_digest_sender(state: AppState) {
-    let cfg = lets_chat::email::digest::DigestConfig::default();
+    let cfg = lets_chat::digest::DigestConfig::default();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
         // Skip the immediate fire: tokio::time::interval fires once at
@@ -188,7 +182,7 @@ fn spawn_digest_sender(state: AppState) {
         tick.tick().await;
         loop {
             tick.tick().await;
-            if let Err(e) = lets_chat::email::digest::run_tick(&state, cfg).await {
+            if let Err(e) = lets_chat::digest::run_tick(&state, cfg).await {
                 tracing::warn!(error = %e, "digest tick failed");
             }
         }
