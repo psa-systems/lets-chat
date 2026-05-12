@@ -84,6 +84,7 @@ async fn main() {
         hub: std::sync::Arc::new(Hub::new()),
         asset_version: compute_asset_version(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         secret_key,
         vapid,
         push_client,

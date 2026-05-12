@@ -106,6 +106,7 @@ async fn app_with_two_users() -> TestApp {
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         secret_key: None,
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),

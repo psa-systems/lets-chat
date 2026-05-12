@@ -19,6 +19,10 @@ pub struct AppState {
     /// across the auth middleware so a busy session does not write the
     /// column on every request.
     pub last_seen_ledger: LastSeenLedger,
+    /// In-memory write-debounce ledger for `users.last_active_at`. Same
+    /// shape as `last_seen_ledger`; collapses WS/room-visit storms into at
+    /// most one write per user per debounce window.
+    pub activity_ledger: LastSeenLedger,
     pub secret_key: Option<Arc<[u8; 32]>>,
     /// `Some` when `LETS_CHAT_SECRET_KEY` is set AND the VAPID keypair
     /// has been generated/loaded. `None` disables Push entirely (no
