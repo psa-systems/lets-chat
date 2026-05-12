@@ -79,6 +79,10 @@ just check-docker-saas      # Validate saas Docker image builds correctly
 
 Test files live in `server/tests/` and use in-memory SQLite pools - no setup required.
 
+### Test parallelism in the Docker dev container
+
+`just test` invokes `cargo test` with the default job count, which can OOM-kill the linker (`collect2: fatal error: ld terminated with signal 15`) when many test binaries link in parallel inside the dev container. If you hit this, run `./dev/cargo test -p lets-chat-server --jobs 2` directly. The compile step is unaffected; only the parallel link step blows up.
+
 ## Architecture
 
 ### Technology Stack
