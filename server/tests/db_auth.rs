@@ -59,6 +59,24 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("Failed to run migration 9");
 
+    let migration10 = include_str!("../migrations/auth/0010_password_reset.sql");
+    sqlx::raw_sql(migration10)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 10");
+
+    let migration11 = include_str!("../migrations/auth/0011_email_verification.sql");
+    sqlx::raw_sql(migration11)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 11");
+
+    let migration12 = include_str!("../migrations/auth/0012_session_metadata.sql");
+    sqlx::raw_sql(migration12)
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 12");
+
     pool
 }
 

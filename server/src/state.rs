@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use sqlx::SqlitePool;
 
+use crate::auth::LastSeenLedger;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
 use crate::push::PushClient;
@@ -14,6 +15,10 @@ pub struct AppState {
     pub settings: SqlitePool,
     pub hub: Arc<Hub>,
     pub asset_version: String,
+    /// In-memory write-debounce ledger for `sessions.last_seen_at`. Shared
+    /// across the auth middleware so a busy session does not write the
+    /// column on every request.
+    pub last_seen_ledger: LastSeenLedger,
     pub secret_key: Option<Arc<[u8; 32]>>,
     /// `Some` when `LETS_CHAT_SECRET_KEY` is set AND the VAPID keypair
     /// has been generated/loaded. `None` disables Push entirely (no
