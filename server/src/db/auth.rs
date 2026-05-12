@@ -152,33 +152,36 @@ pub async fn set_user_status(
 /// `'active'`. DND is sticky: bumps the timestamp so the idle clock restarts
 /// once they leave DND, but never overwrites the status. Returns `true` only
 /// when the call actually flipped idle->active so the caller can broadcast.
+///
+/// Implemented as two single-statement updates rather than a SELECT-then-
+/// UPDATE transaction: under chat load this runs on every WebSocket message
+/// and every room visit, so holding a write lock for the duration of a
+/// round-trip multiplies contention and produces `SQLITE_BUSY` even with
+/// WAL + busy_timeout enabled. The first statement only matches idle rows
+/// and never the DND row, so the DND-sticky guarantee is preserved.
 pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let row = sqlx::query("SELECT status FROM users WHERE id = ?")
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let Some(r) = row else {
-        tx.commit().await?;
-        return Ok(false);
-    };
-    let current: String = r.get("status");
-    let flipped = current == STATUS_IDLE;
-    if current == STATUS_DND {
+    let flipped = sqlx::query(
+        "UPDATE users \
+         SET status = 'active', \
+             last_active_at = datetime('now'), \
+             updated_at = datetime('now') \
+         WHERE id = ? AND status = 'idle'",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?
+    .rows_affected()
+        > 0;
+
+    if !flipped {
+        // The user was already active or in DND; just refresh the activity
+        // timestamp without touching `status`. A missing user row is a no-op.
         sqlx::query("UPDATE users SET last_active_at = datetime('now') WHERE id = ?")
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(pool)
             .await?;
-    } else {
-        sqlx::query(
-            "UPDATE users SET last_active_at = datetime('now'), \
-             status = 'active', updated_at = datetime('now') WHERE id = ?",
-        )
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
     }
-    tx.commit().await?;
+
     Ok(flipped)
 }
 

@@ -108,6 +108,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(fake_vapid()),
         push_client: client,

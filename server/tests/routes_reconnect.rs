@@ -98,6 +98,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         // 2FA disabled keeps GET / off the TOTP-setup redirect path so we
         // can render the layout straight up. This test is about the
         // banner partial rendering, not auth flow.
