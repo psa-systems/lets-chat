@@ -69,20 +69,42 @@ pub struct CurrentSessionId(pub String);
 /// account is not banned. Also bumps `sessions.last_seen_at` at most once
 /// per `LAST_SEEN_DEBOUNCE` per session.
 ///
-/// Each step is timed and logged on a slow threshold so we can pin down
-/// which phase (DB lookup vs. downstream handler) is responsible for the
-/// occasional multi-second hangs on /settings and /ws.
+/// Each phase is wrapped in a watchdog: a sibling task fires a warn log
+/// the moment the phase exceeds 3 s, regardless of whether it ever
+/// completes. After-the-fact logging is useless for hangs: the warn
+/// only fires once the await returns, so a phase stuck forever would
+/// produce no output at all without the watchdog.
 pub async fn inject_user(
     State(state): State<AppState>,
     jar: CookieJar,
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    const SLOW: Duration = Duration::from_secs(2);
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    const PHASE_WATCHDOG: Duration = Duration::from_secs(3);
+
+    fn spawn_phase_watchdog(phase: &'static str, path: String) -> Arc<AtomicBool> {
+        let done = Arc::new(AtomicBool::new(false));
+        let done_for_task = done.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(PHASE_WATCHDOG).await;
+            if !done_for_task.load(Ordering::SeqCst) {
+                tracing::warn!(
+                    phase,
+                    %path,
+                    waited_ms = PHASE_WATCHDOG.as_millis() as u64,
+                    "inject_user phase still running"
+                );
+            }
+        });
+        done
+    }
+
     let path = req.uri().path().to_string();
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
 
-    let started = Instant::now();
+    let lookup_done = spawn_phase_watchdog("session_lookup", path.clone());
     let user = match token.as_deref() {
         Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
             Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
@@ -90,14 +112,7 @@ pub async fn inject_user(
         },
         None => None,
     };
-    let session_lookup = started.elapsed();
-    if session_lookup >= SLOW {
-        tracing::warn!(
-            %path,
-            ms = session_lookup.as_millis() as u64,
-            "inject_user: session lookup slow"
-        );
-    }
+    lookup_done.store(true, Ordering::SeqCst);
 
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
@@ -107,16 +122,9 @@ pub async fn inject_user(
         req.extensions_mut().insert(CurrentSessionId(t));
     }
 
-    let after_setup = Instant::now();
+    let downstream_done = spawn_phase_watchdog("downstream_handler", path);
     let resp = next.run(req).await;
-    let downstream = after_setup.elapsed();
-    if downstream >= SLOW {
-        tracing::warn!(
-            %path,
-            ms = downstream.as_millis() as u64,
-            "inject_user: downstream handler slow"
-        );
-    }
+    downstream_done.store(true, Ordering::SeqCst);
     resp
 }
 
