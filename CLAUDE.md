@@ -6,35 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **lets-chat** is a self-hosted fullstack chat application written entirely in Rust. The frontend is server-rendered HTML using Askama templates with HTMX for interactivity; the backend is Axum; persistence is split across three SQLite databases. It compiles to a single binary serving HTTP, WebSocket, and static assets.
 
-## Build Modes
-
-The server supports two mutually exclusive Cargo features:
-
-### Standalone Mode (default)
-Self-hosted deployment with built-in user management:
-- Public `/register` page
-- `/login` form-based password auth (Argon2id) with optional TOTP 2FA
-- `/admin` pages (first registered user is auto-promoted to admin)
-
-```bash
-cargo build --release --features standalone -p lets-chat-server
-# Binary: target/release/lets-chat
-```
-
-### SaaS Mode
-Lightweight deployment integrated with a parent SaaS application:
-- No `/register` route; users are provisioned by the parent app
-- No `/admin` pages
-- `/webhooks/maintenance` endpoint accepts maintenance signals from the parent app
-- Identity is derived from the parent app's signed cookie (HMAC + JWT)
-
-```bash
-cargo build --release --no-default-features --features saas -p lets-chat-server
-# Binary: target/release/lets-chat-saas
-```
-
-The two binaries share `src/main.rs`. Mode-specific code is gated with `#[cfg(feature = "standalone")]` or `#[cfg(feature = "saas")]`. The Docker image accepts `--build-arg BUILD_MODE=saas` to switch modes; the runtime stage always installs the binary as `/usr/local/bin/lets-chat` regardless of mode. `.env.standalone` and `.env.saas` document the required environment variables for each mode and must stay in sync when shared variables change.
-
 ## Commands
 
 All common tasks are defined in `justfile`. Run `just --list` to see all recipes.
@@ -43,32 +14,26 @@ The host has no Rust or Bun installed. The recipes invoke the `./dev/cargo`, `./
 
 ```nu
 # Development
-just dev-web-local          # Local dev server (standalone) on http://localhost:18080
-just dev-web-local-saas     # Local dev server (saas) on http://localhost:18080
-just dev-web                # Docker dev (standalone) with Traefik at https://{USER}-chat.a8n.run
-just dev-web-saas           # Docker dev (saas) with Traefik
+just dev-web-local          # Local dev server in a container at http://localhost:18080
+just dev-web                # Docker dev with Traefik at https://{USER}-chat.a8n.run
 just dev-web-down           # Stop Docker dev environment
 just dev-desktop            # Desktop wrapper (Tao+Wry) pointed at the local server
 
 # Checks & Formatting
-just check                  # Run all checks: server (both modes), desktop, clippy (both modes), fmt
+just check                  # Run all checks: server, desktop, clippy, fmt
 just fmt                    # cargo fmt --all
 
 # Build
-just build                  # Release binary, standalone (includes Tailwind CSS rebuild)
-just build-saas             # Release binary, saas
+just build                  # Release binary (includes Tailwind CSS rebuild)
 just build-css              # Rebuild Tailwind CSS only (via bun)
 
 # Tests
-just test                   # cargo test --workspace (standalone)
-just test-saas              # cargo test --workspace (saas)
+just test                   # cargo test --workspace (uses in-memory SQLite pools)
 just verify                 # Build release binary and verify GET /login returns 200 with a form
 
 # Docker
-just build-docker           # Build local Docker image (standalone)
-just build-docker-saas      # Build local Docker image (saas)
-just check-docker           # Validate standalone Docker image builds correctly
-just check-docker-saas      # Validate saas Docker image builds correctly
+just build-docker           # Build local Docker image
+just check-docker           # Validate Docker image builds correctly
 ```
 
 ### Running a single test
@@ -78,10 +43,6 @@ just check-docker-saas      # Validate saas Docker image builds correctly
 ```
 
 Test files live in `server/tests/` and use in-memory SQLite pools - no setup required.
-
-### Test parallelism in the Docker dev container
-
-`just test` invokes `cargo test` with the default job count, which can OOM-kill the linker (`collect2: fatal error: ld terminated with signal 15`) when many test binaries link in parallel inside the dev container. If you hit this, run `./dev/cargo test -p lets-chat-server --jobs 2` directly. The compile step is unaffected; only the parallel link step blows up.
 
 ## Architecture
 
@@ -140,7 +101,7 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `LETS_CHAT_DATA_DIR` | `/data` | Directory for SQLite `.db` files |
 | `BIND_ADDR` | `0.0.0.0:8080` | Server listen address |
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
-| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting TOTP secrets at rest (SHA-256 of this string is the 32-byte key). Unset or empty disables two-factor authentication entirely - the setup page and login challenge return 404, and the enforcement middleware is a no-op. |
+| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting SMTP password in settings |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens |
 
 ## Workspace Layout
@@ -155,49 +116,3 @@ There are no Cargo features for platform selection. Server-only code lives under
 ## Tailwind CSS
 
 Tailwind is compiled by Bun (`server/package.json` scripts). The output `server/assets/tailwind-built.css` is gitignored and regenerated by `just build-css` or `just build`. Run `just build-css` after changing class names if the dev server does not pick them up automatically.
-
-## Inline script teardown
-
-Inline `<script>` blocks in templates that attach listeners to `document`, `document.body`, or `window`, or that hold timers / `MutationObserver` instances, must register a teardown via `htmx:beforeCleanupElement` so that re-renders do not accumulate handlers. Element-bound listeners (on a textarea, button, or any node inside the fragment) do not need teardown; they go with the element on swap.
-
-Canonical template:
-
-```javascript
-(function() {
-  // setup
-  function onSwap(evt) { /* body listener body */ }
-  document.body.addEventListener('htmx:afterSwap', onSwap);
-
-  // teardown
-  function teardown() {
-    document.body.removeEventListener('htmx:afterSwap', onSwap);
-    // clearTimeout(...), observer.disconnect(), etc.
-  }
-  var root = document.currentScript.closest('[data-lc-cleanup-root]')
-          || document.currentScript.parentElement;
-  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
-})();
-```
-
-Default root is `document.currentScript.parentElement`. When the script is a sibling of its logical owner (e.g. a form or wrapper div), tag the owner with `data-lc-cleanup-root` so the lookup picks it up. Examples in the codebase: `room/notify_dropdown.html`, `room/composer.html`.
-
-### Why this matters in this codebase
-
-Today there is **no `hx-boost` anywhere in this app** (sidebar links are plain `<a href>`, so room/DM navigation is a full browser reload that throws away all JS state). The only in-place re-render paths that reach inline scripts are:
-
-1. The WS reconnect soft-refresh in `layout.html` (`htmx.ajax(..., {target:'#main', select:'#main'})`), which re-mounts everything under `#main`.
-2. Targeted fragment swaps like the notify-dropdown's `hx-target="#lc-room-header" hx-swap="outerHTML"`.
-
-So the accumulation is real but currently small. **If anyone ever adds `hx-boost`** (on the body or on sidebar links to make navigation feel snappier), the teardown pattern immediately becomes load-bearing: every sidebar click would re-mount `#main` and add one listener per inline script per navigation, and within minutes of use the app would be firing duplicate handlers for every event. Keep the teardown pattern intact; do not skip it on the grounds that "this script only runs once per page" - that invariant could disappear in a single PR.
-
-### Persistent-shell exception
-
-Scripts in `layout.html` are outside `#main` and run only at full browser page load - never re-rendered by any in-place swap in this app today. They intentionally have no teardown. Mark them with a one-line comment so future readers do not "fix" them by mistake:
-
-```javascript
-// Persistent-shell script: lives in layout.html, runs once per full browser
-// page load, never re-rendered by in-place swaps. No htmx:beforeCleanupElement
-// teardown needed; the listeners/state are intentionally lifetime-of-page.
-```
-
-If `hx-boost` is added later, re-evaluate these scripts too - they may need teardown then.

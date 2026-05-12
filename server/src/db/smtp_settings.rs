@@ -82,7 +82,10 @@ pub struct SmtpConfigInput {
 /// Decryption failure (wrong key, corrupted row) returns `Err`. That state
 /// is operator-visible: the admin page renders a banner, the digest tick
 /// logs and skips.
-pub async fn load(pool: &SqlitePool, secret_key: &[u8; 32]) -> Result<Option<SmtpConfig>, AppError> {
+pub async fn load(
+    pool: &SqlitePool,
+    secret_key: &[u8; 32],
+) -> Result<Option<SmtpConfig>, AppError> {
     let row = sqlx::query(
         "SELECT host, port, username, password_encrypted, password_nonce, \
                 from_address, tls_mode \
