@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Reset password - lets-chat{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center p-6">
+  <form
+    method="post"
+    action="/reset/{{ token }}"
+    hx-post="/reset/{{ token }}"
+    hx-target="#form-errors"
+    hx-target-4*="#form-errors"
+    hx-swap="innerHTML"
+    class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
+  >
+    <h1 class="text-xl font-semibold">Choose a new password</h1>
+    <div id="form-errors">
+      {% if let Some(error) = error %}
+      <p class="text-red-600 text-sm">{{ error }}</p>
+      {% endif %}
+    </div>
+    <label class="block">
+      <span class="text-sm">New password</span>
+      <input type="password" name="password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
+    </label>
+    <label class="block">
+      <span class="text-sm">Confirm new password</span>
+      <input type="password" name="password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
+    </label>
+    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save new password</button>
+    <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
+  </form>
+</main>
+{% endblock %}

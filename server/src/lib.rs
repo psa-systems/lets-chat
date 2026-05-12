@@ -1,9 +1,10 @@
 pub mod auth;
 pub mod crypto;
 pub mod db;
-pub mod email;
+pub mod digest;
 pub mod error;
 pub mod last_visited;
+pub mod mail;
 pub mod models;
 pub mod perms;
 pub mod push;

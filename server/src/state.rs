@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use sqlx::SqlitePool;
 
+use crate::auth::LastSeenLedger;
 use crate::db::vapid::VapidKeypair;
-use crate::email::EmailClient;
+use crate::mail::Mailer;
 use crate::push::PushClient;
 use crate::ws::hub::Hub;
 
@@ -14,6 +15,14 @@ pub struct AppState {
     pub settings: SqlitePool,
     pub hub: Arc<Hub>,
     pub asset_version: String,
+    /// In-memory write-debounce ledger for `sessions.last_seen_at`. Shared
+    /// across the auth middleware so a busy session does not write the
+    /// column on every request.
+    pub last_seen_ledger: LastSeenLedger,
+    /// In-memory write-debounce ledger for `users.last_active_at`. Same
+    /// shape as `last_seen_ledger`; collapses WS/room-visit storms into at
+    /// most one write per user per debounce window.
+    pub activity_ledger: LastSeenLedger,
     pub secret_key: Option<Arc<[u8; 32]>>,
     /// `Some` when `LETS_CHAT_SECRET_KEY` is set AND the VAPID keypair
     /// has been generated/loaded. `None` disables Push entirely (no
@@ -22,14 +31,14 @@ pub struct AppState {
     /// Always present. When `vapid` is `None`, the dispatch helper
     /// short-circuits before any client method is called.
     pub push_client: Arc<dyn PushClient>,
-    /// `Some` when `LETS_CHAT_SECRET_KEY` is set AND the SMTP row has a
-    /// non-empty `host`. `None` disables email entirely: the digest tick
-    /// is a no-op, the settings checkbox renders disabled, and the admin
-    /// SMTP page surfaces a banner explaining why. Snapshot taken at
-    /// startup; the admin "Send test email" route bypasses this and
-    /// reloads the current config so the operator can verify a change
-    /// without restarting.
-    pub email_client: Option<Arc<dyn EmailClient>>,
+    /// `Some` when `LETS_CHAT_SMTP_URL` + `LETS_CHAT_SMTP_FROM` are set.
+    /// `None` disables outbound mail; password reset routes return 404
+    /// and the digest tick short-circuits.
+    pub mailer: Option<Mailer>,
+    /// Absolute base URL used to build links inside outbound mail
+    /// (password reset, email verification, and digest deep links).
+    /// Defaults to `http://localhost:8080`.
+    pub base_url: String,
 }
 
 impl AppState {
@@ -43,11 +52,9 @@ impl AppState {
     pub fn push_available(&self) -> bool {
         self.vapid.is_some()
     }
-    /// True when a usable email transport has been constructed at
-    /// startup. False when LETS_CHAT_SECRET_KEY is unset, or when the
-    /// SMTP row has an empty host. Drives the settings checkbox's
-    /// disabled state and the digest tick's short-circuit.
-    pub fn email_available(&self) -> bool {
-        self.email_client.is_some()
+    /// True when an SMTP mailer has been configured. Password reset,
+    /// email verification, and email digest are off-limits without one.
+    pub fn mail_available(&self) -> bool {
+        self.mailer.is_some()
     }
 }

@@ -47,6 +47,24 @@
       <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block text-sm">
+      <span class="text-slate-600">Email</span>
+      <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
+      <span class="text-xs text-slate-500">Used only for password reset. Leave blank to remove.</span>
+      {% if email_verification_available && email.is_some() %}
+      <div class="mt-1 flex items-center gap-2 text-xs">
+        {% if email_verified %}
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">Verified</span>
+        {% else %}
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Unverified</span>
+        <button type="submit" form="email-verify-resend" class="text-blue-600 hover:underline">Resend verification email</button>
+        {% endif %}
+      </div>
+      {% if email_verify_sent %}
+      <p class="text-xs text-green-700 mt-1">If your account has an unverified email on file, we sent a fresh verification link.</p>
+      {% endif %}
+      {% endif %}
+    </label>
+    <label class="block text-sm">
       <span class="text-slate-600">Bio</span>
       <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
     </label>
@@ -59,6 +77,9 @@
   </form>
   {% if user.avatar_ext.is_some() %}
   <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
+  {% endif %}
+  {% if email_verification_available %}
+  <form id="email-verify-resend" method="post" action="/verify-email/resend" class="hidden"></form>
   {% endif %}
 
   <form method="post" action="/settings" class="space-y-4">
@@ -95,30 +116,79 @@
         {% endif %}
       </span>
     </label>
-    <div class="border-t border-slate-200 pt-3 space-y-3">
-      <label class="block text-sm">
-        <span class="text-slate-600">Email address for digests</span>
-        <input type="email" name="email" value="{{ current_email }}"
-               placeholder="you@example.com"
-               class="mt-1 block w-full border border-slate-300 rounded px-2 py-1 text-sm">
-        <span class="block text-xs text-slate-500 mt-1">Only used to send the email digest below. Leave blank to never receive email.</span>
-      </label>
-      <label class="flex items-start gap-2 cursor-pointer">
-        <input type="checkbox" name="notify_email_digest_enabled" value="1" class="mt-0.5"
-          {% if user.notify_email_digest_enabled %}checked{% endif %}
-          {% if !email_available %}disabled{% endif %}>
-        <span>
-          Email me a digest of missed mentions and DMs
-          {% if !email_available %}
-          <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
-          {% else %}
-          <span class="block text-xs text-slate-500">Sent at most once per offline session (after at least an hour of inactivity).</span>
-          {% endif %}
-        </span>
-      </label>
-    </div>
+    <label class="flex items-start gap-2 cursor-pointer">
+      <input type="checkbox" name="notify_email_digest_enabled" value="1" class="mt-0.5"
+        {% if user.notify_email_digest_enabled %}checked{% endif %}
+        {% if !email_available %}disabled{% endif %}>
+      <span>
+        Email me a digest of missed mentions and DMs
+        {% if !email_available %}
+        <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+        {% else %}
+        <span class="block text-xs text-slate-500">Sent at most once per offline session (after at least an hour of inactivity). Set your email address above to receive them.</span>
+        {% endif %}
+      </span>
+    </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
+
+  {% if password_change_available %}
+  <form method="post" action="/settings/password" class="space-y-4">
+    <h2 class="font-medium">Change password</h2>
+    {% if password_changed %}
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Password updated.</div>
+    {% endif %}
+    {% if let Some(err) = password_error %}
+    <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ err }}</div>
+    {% endif %}
+    <label class="block text-sm">
+      <span class="text-slate-600">Current password</span>
+      <input type="password" name="current_password" required class="mt-1 block w-full border rounded px-2 py-1" autocomplete="current-password">
+    </label>
+    <label class="block text-sm">
+      <span class="text-slate-600">New password</span>
+      <input type="password" name="new_password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
+    </label>
+    <label class="block text-sm">
+      <span class="text-slate-600">Confirm new password</span>
+      <input type="password" name="new_password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
+    </label>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Update password</button>
+  </form>
+  {% endif %}
+
+  <div class="space-y-3">
+    <h2 class="font-medium">Active sessions</h2>
+    <p class="text-sm text-slate-600">Every device signed in to this account. Revoke any session you do not recognize. Logging out ends the current one.</p>
+    {% if session_revoked %}
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Session revoked.</div>
+    {% endif %}
+    <ul class="divide-y border rounded">
+      {% for s in sessions %}
+      <li class="flex items-start justify-between gap-4 px-3 py-2 text-sm">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-medium">{{ s.label }}</span>
+            {% if s.is_current %}
+            <span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">This device</span>
+            {% endif %}
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">
+            Last seen {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} from {{ ip }}{% endif %}
+          </div>
+          <div class="text-xs text-slate-400">Signed in {{ s.created }} UTC</div>
+        </div>
+        {% if s.is_current %}
+        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-slate-400 cursor-not-allowed">Revoke</button>
+        {% else %}
+        <form method="post" action="/settings/sessions/{{ s.id }}/revoke">
+          <button type="submit" class="px-2 py-1 text-xs border rounded text-red-700 border-red-300 hover:bg-red-50">Revoke</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
 
   <div>
     <h2 class="font-medium mb-2">Privacy</h2>

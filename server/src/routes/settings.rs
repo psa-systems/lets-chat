@@ -1,18 +1,34 @@
-use axum::extract::{Multipart, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
+use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, CurrentSessionId, SESSION_COOKIE};
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
-use crate::views::settings::{BlockedListPage, BlockedUserView, UserSettingsPage};
+use crate::views::settings::{BlockedListPage, BlockedUserView, SessionView, UserSettingsPage};
 use crate::views::{html, Html};
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
 const MAX_DISPLAY_NAME_CHARS: usize = 64;
 const MAX_BIO_CHARS: usize = 500;
+const MAX_EMAIL_CHARS: usize = 254;
+#[cfg(feature = "standalone")]
+const MIN_PASSWORD_CHARS: usize = 8;
+
+#[derive(Deserialize, Default)]
+pub struct SettingsQuery {
+    #[serde(default)]
+    pub password_changed: Option<String>,
+    #[serde(default)]
+    pub password_error: Option<String>,
+    #[serde(default)]
+    pub verify_sent: Option<String>,
+    #[serde(default)]
+    pub session_revoked: Option<String>,
+}
 
 #[derive(Deserialize)]
 pub struct SettingsForm {
@@ -28,26 +44,23 @@ pub struct SettingsForm {
     pub notify_push_enabled: Option<String>,
     #[serde(default)]
     pub notify_email_digest_enabled: Option<String>,
-    /// Trimmed at save time. Empty string stores `NULL` and disables
-    /// digest delivery for this user regardless of the checkbox state.
-    #[serde(default)]
-    pub email: String,
 }
 
 pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    Query(q): Query<SettingsQuery>,
+    jar: CookieJar,
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
-    // The public `User` projection does NOT carry `email` (recipient
-    // metadata, not identity). Look up the raw record here so we can
-    // pre-populate the form. Falling back to empty string keeps the
-    // template trivial when the row went missing between extractor and
-    // this call.
-    let current_email = db::auth::find_user_by_id(&state.auth, &user.id)
+    let email = db::auth::get_user_email(&state.auth, &user.id).await?;
+    let email_verified = db::auth::get_user_email_verified_at(&state.auth, &user.id)
         .await?
-        .and_then(|r| r.email)
-        .unwrap_or_default();
+        .is_some();
+    let email_verification_available = cfg!(feature = "standalone") && state.mail_available();
+    let password_error = q.password_error.as_deref().and_then(password_error_message);
+    let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
+    let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -56,14 +69,209 @@ pub async fn get_settings(
         asset_version: &state.asset_version,
         saved: false,
         push_available: state.push_available(),
-        email_available: state.email_available(),
-        current_email,
+        email,
+        email_verified,
+        email_verification_available,
+        email_verify_sent: q.verify_sent.is_some(),
+        email_available: state.mail_available(),
+        password_change_available: cfg!(feature = "standalone"),
+        password_changed: q.password_changed.is_some(),
+        password_error,
+        sessions: &sessions,
+        session_revoked: q.session_revoked.is_some(),
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
     };
     html(&page)
+}
+
+async fn build_session_views(
+    state: &AppState,
+    user_id: &str,
+    current_session: Option<&str>,
+) -> Result<Vec<SessionView>, AppError> {
+    let rows = db::auth::list_sessions_for_user(&state.auth, user_id).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let label = summarize_user_agent(r.user_agent.as_deref());
+            let last_seen = r.last_seen_at.unwrap_or_else(|| r.created_at.clone());
+            SessionView {
+                is_current: current_session == Some(r.id.as_str()),
+                id: r.id,
+                label,
+                ip: r.ip,
+                last_seen,
+                created: r.created_at,
+            }
+        })
+        .collect())
+}
+
+/// Reduce a User-Agent string to a "{browser} on {os}" label. Worst case
+/// (unrecognized UA), we fall back to a generic "Unknown device" string;
+/// the row still has its IP + first-seen timestamp so it remains
+/// identifiable. We deliberately do not parse with a heavyweight UA
+/// database: the rough family is enough to let the user spot a session
+/// they did not create.
+fn summarize_user_agent(ua: Option<&str>) -> String {
+    let Some(ua) = ua else {
+        return "Unknown device".to_string();
+    };
+    let lower = ua.to_ascii_lowercase();
+    let os = detect_os(&lower);
+    let browser = if lower.contains("edg/") {
+        "Edge"
+    } else if lower.contains("opr/") || lower.contains("opera") {
+        "Opera"
+    } else if lower.contains("firefox") {
+        "Firefox"
+    } else if lower.contains("chrome") && !lower.contains("chromium") {
+        "Chrome"
+    } else if lower.contains("chromium") {
+        "Chromium"
+    } else if lower.contains("safari") {
+        "Safari"
+    } else if lower.contains("lets-chat-desktop") {
+        "Let's Chat desktop"
+    } else {
+        "Browser"
+    };
+    format!("{browser} on {os}")
+}
+
+/// OS detection. Order matters: Android UAs contain "Linux", and iPadOS in
+/// "desktop mode" advertises "Mac OS X". Check the more specific tokens
+/// first, then fall through to general families.
+fn detect_os(lower: &str) -> String {
+    // ChromeOS first - its UA looks like "X11; CrOS x86_64 14541.0.0" with
+    // no "linux" token, so a naive Linux check misses it entirely.
+    if lower.contains("cros") {
+        return "ChromeOS".to_string();
+    }
+    // iPadOS in desktop-site mode reports "Macintosh; Intel Mac OS X" but
+    // keeps the "ipad" token in some builds; check Apple-mobile tokens
+    // before macOS so we do not relabel iPads as Macs.
+    if lower.contains("iphone") {
+        return version_after(lower, "iphone os ")
+            .or_else(|| version_after(lower, "os "))
+            .map(|v| format!("iOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "iOS".to_string());
+    }
+    if lower.contains("ipad") {
+        return version_after(lower, "os ")
+            .map(|v| format!("iPadOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "iPadOS".to_string());
+    }
+    // Android before Linux: Android UAs include "Linux; Android 14; ..."
+    if lower.contains("android") {
+        return version_after(lower, "android ")
+            .map(|v| format!("Android {v}"))
+            .unwrap_or_else(|| "Android".to_string());
+    }
+    if lower.contains("windows nt") {
+        // Microsoft did not bump the NT version for Windows 11, so the UA
+        // cannot distinguish 10 from 11. Label both as "Windows 10/11" to
+        // avoid lying to the user.
+        return match version_after(lower, "windows nt ").as_deref() {
+            Some("10.0") => "Windows 10/11".to_string(),
+            Some("6.3") => "Windows 8.1".to_string(),
+            Some("6.2") => "Windows 8".to_string(),
+            Some("6.1") => "Windows 7".to_string(),
+            Some(v) => format!("Windows NT {v}"),
+            None => "Windows".to_string(),
+        };
+    }
+    if lower.contains("windows") {
+        return "Windows".to_string();
+    }
+    if lower.contains("mac os x") || lower.contains("macintosh") {
+        return version_after(lower, "mac os x ")
+            .map(|v| format!("macOS {}", normalize_apple_version(&v)))
+            .unwrap_or_else(|| "macOS".to_string());
+    }
+    if lower.contains("freebsd") {
+        return "FreeBSD".to_string();
+    }
+    if lower.contains("openbsd") {
+        return "OpenBSD".to_string();
+    }
+    if lower.contains("netbsd") {
+        return "NetBSD".to_string();
+    }
+    if lower.contains("fuchsia") {
+        return "Fuchsia".to_string();
+    }
+    if lower.contains("linux") {
+        return "Linux".to_string();
+    }
+    if lower.contains("x11") || lower.contains("unix") {
+        return "Unix".to_string();
+    }
+    "Unknown OS".to_string()
+}
+
+/// Return the version token that immediately follows `prefix` in `s`. The
+/// token runs until the next character that is not a digit, `.`, or `_`
+/// (Apple uses underscores). Returns `None` if the prefix is missing or
+/// the following character is not a digit.
+fn version_after(s: &str, prefix: &str) -> Option<String> {
+    let idx = s.find(prefix)?;
+    let tail = &s[idx + prefix.len()..];
+    let end = tail
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '_'))
+        .unwrap_or(tail.len());
+    let token = &tail[..end];
+    if token.chars().next()?.is_ascii_digit() {
+        Some(token.to_string())
+    } else {
+        None
+    }
+}
+
+/// Apple UAs use underscores in version numbers ("10_15_7"); render them
+/// with dots so the result looks like the canonical version string.
+fn normalize_apple_version(v: &str) -> String {
+    v.replace('_', ".")
+}
+
+/// POST /settings/sessions/{id}/revoke - delete a specific session belonging
+/// to the signed-in user. Refuses to revoke the current request's own
+/// session (use logout for that) so a stray click here does not
+/// invalidate the cookie the user is holding.
+pub async fn post_session_revoke(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(session_id): Path<String>,
+    current: Option<axum::extract::Extension<CurrentSessionId>>,
+) -> Result<Response, AppError> {
+    if let Some(axum::extract::Extension(CurrentSessionId(cur))) = current {
+        if cur == session_id {
+            return Err(AppError::BadRequest(
+                "Use Log out to end the current session.".to_string(),
+            ));
+        }
+    }
+    let removed = db::auth::delete_session_for_user(&state.auth, &session_id, &user.id).await?;
+    if removed {
+        state.last_seen_ledger.remove(&session_id);
+    }
+    Ok(Redirect::to("/settings?session_revoked=1").into_response())
+}
+
+/// Map a short error code carried in the redirect query string to a human
+/// message. Codes (not full sentences) keep URLs tidy and let translations
+/// live alongside other UI copy in the future.
+fn password_error_message(code: &str) -> Option<&'static str> {
+    match code {
+        "incorrect" => Some("Current password is incorrect"),
+        "short" => Some("New password must be at least 8 characters"),
+        "mismatch" => Some("New passwords do not match"),
+        "same" => Some("New password must differ from the current password"),
+        _ => None,
+    }
 }
 
 pub async fn post_settings(
@@ -84,31 +292,9 @@ pub async fn post_settings(
     // Same defence for digest: respect the operator gate even if the
     // client lies. Without a configured email transport at startup,
     // flipping the checkbox would silently do nothing useful anyway.
-    let email_digest = form.notify_email_digest_enabled.is_some() && state.email_available();
+    let email_digest = form.notify_email_digest_enabled.is_some() && state.mail_available();
     db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push, email_digest)
         .await?;
-
-    // Email address. Empty string -> NULL so the eligibility query
-    // filters this user out cleanly. Very small validation here:
-    // require the trimmed value to contain exactly one '@' if non-
-    // empty, which is the lightest possible check that catches
-    // obvious typos. RFC-5321 strict validation would reject some
-    // valid addresses; the upstream MTA is the authority on
-    // deliverability anyway.
-    let trimmed = form.email.trim();
-    let email_to_store: Option<&str> = if trimmed.is_empty() {
-        None
-    } else if trimmed.matches('@').count() == 1
-        && !trimmed.starts_with('@')
-        && !trimmed.ends_with('@')
-    {
-        Some(trimmed)
-    } else {
-        return Err(AppError::BadRequest(
-            "email must be a single address like 'you@example.com'".into(),
-        ));
-    };
-    db::auth::set_email(&state.auth, &user.id, email_to_store).await?;
 
     Ok(Redirect::to("/settings").into_response())
 }
@@ -121,6 +307,8 @@ pub async fn post_profile(
     let mut display_name: Option<String> = None;
     let mut bio: Option<String> = None;
     let mut avatar_bytes: Option<Vec<u8>> = None;
+    let mut email_present = false;
+    let mut email: Option<String> = None;
 
     while let Some(field) = multipart
         .next_field()
@@ -162,6 +350,29 @@ pub async fn post_profile(
                     Some(trimmed.to_string())
                 };
             }
+            "email" => {
+                email_present = true;
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("email: {e}")))?;
+                let trimmed = v.trim();
+                if trimmed.is_empty() {
+                    email = None;
+                } else {
+                    if trimmed.chars().count() > MAX_EMAIL_CHARS {
+                        return Err(AppError::BadRequest(format!(
+                            "email exceeds {MAX_EMAIL_CHARS} characters"
+                        )));
+                    }
+                    if !looks_like_email(trimmed) {
+                        return Err(AppError::BadRequest(
+                            "email address is not valid".to_string(),
+                        ));
+                    }
+                    email = Some(trimmed.to_string());
+                }
+            }
             "avatar" => {
                 let bytes = field
                     .bytes()
@@ -186,6 +397,39 @@ pub async fn post_profile(
         bio.as_deref(),
     )
     .await?;
+
+    if email_present {
+        // Snapshot the existing value so we can tell whether the address
+        // genuinely changed - only then do we issue a new verification mail.
+        let prev_email = db::auth::get_user_email(&state.auth, &user.id).await?;
+        if let Err(e) = db::auth::set_user_email(&state.auth, &user.id, email.as_deref()).await {
+            if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
+                return Err(AppError::Conflict(
+                    "That email address is already in use".to_string(),
+                ));
+            }
+            return Err(e.into());
+        }
+
+        let changed = prev_email.as_deref() != email.as_deref();
+        if changed {
+            // Burn outstanding verification tokens tied to the prior
+            // address; `set_user_email` already cleared `email_verified_at`
+            // when the value actually changed.
+            #[cfg(feature = "standalone")]
+            db::email_verification::invalidate_all_for_user(&state.auth, &user.id).await?;
+            #[cfg(feature = "standalone")]
+            if let Some(addr) = email.as_deref() {
+                if state.mail_available() {
+                    crate::routes::email_verification::spawn_dispatch(
+                        &state,
+                        user.id.clone(),
+                        addr.to_string(),
+                    );
+                }
+            }
+        }
+    }
 
     if let Some(bytes) = avatar_bytes {
         let new_ext = sniff_image_ext(&bytes)
@@ -300,6 +544,71 @@ async fn render_blocked_list(
     html(&page)
 }
 
+#[cfg(feature = "standalone")]
+#[derive(Deserialize)]
+pub struct PasswordForm {
+    pub current_password: String,
+    pub new_password: String,
+    pub new_password_confirm: String,
+}
+
+/// POST /settings/password - change the signed-in user's password. On any
+/// validation failure redirect back to /settings with a `password_error`
+/// query param; on success redirect with `password_changed=1` so the page
+/// can show a confirmation banner. The current session cookie stays valid;
+/// invalidating sibling sessions is a future improvement and is already
+/// handled by the email-reset path.
+#[cfg(feature = "standalone")]
+pub async fn post_password(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<PasswordForm>,
+) -> Result<Response, AppError> {
+    let record = db::auth::find_user_by_id(&state.auth, &user.id)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    if !verify_password(&record.password_hash, &form.current_password) {
+        return Ok(Redirect::to("/settings?password_error=incorrect").into_response());
+    }
+    if form.new_password.len() < MIN_PASSWORD_CHARS {
+        return Ok(Redirect::to("/settings?password_error=short").into_response());
+    }
+    if form.new_password != form.new_password_confirm {
+        return Ok(Redirect::to("/settings?password_error=mismatch").into_response());
+    }
+    if form.new_password == form.current_password {
+        return Ok(Redirect::to("/settings?password_error=same").into_response());
+    }
+    let hash =
+        hash_password(&form.new_password).map_err(|e| AppError::Internal(format!("hash: {e}")))?;
+    db::auth::set_password_hash(&state.auth, &user.id, &hash).await?;
+    Ok(Redirect::to("/settings?password_changed=1").into_response())
+}
+
+#[cfg(feature = "standalone")]
+fn verify_password(hash: &str, password: &str) -> bool {
+    use argon2::password_hash::{PasswordHash, PasswordVerifier};
+    use argon2::Argon2;
+    let parsed = match PasswordHash::new(hash) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok()
+}
+
+#[cfg(feature = "standalone")]
+fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+    use argon2::Argon2;
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    Ok(argon2
+        .hash_password(password.as_bytes(), &salt)?
+        .to_string())
+}
+
 pub async fn post_avatar_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -310,6 +619,30 @@ pub async fn post_avatar_delete(
     }
     db::auth::set_user_avatar_ext(&state.auth, &user.id, None).await?;
     Ok(Redirect::to("/settings").into_response())
+}
+
+/// Very loose syntactic check: requires exactly one `@`, non-empty local and
+/// domain parts, a dot in the domain, and no whitespace. Real validity is
+/// proven only by successful delivery; the goal here is to reject obvious
+/// typos before they hit the SMTP transport.
+fn looks_like_email(s: &str) -> bool {
+    if s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let mut parts = s.split('@');
+    let local = match parts.next() {
+        Some(l) if !l.is_empty() => l,
+        _ => return false,
+    };
+    let domain = match parts.next() {
+        Some(d) if !d.is_empty() => d,
+        _ => return false,
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    let _ = local;
+    domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 fn sniff_image_ext(bytes: &[u8]) -> Option<&'static str> {
@@ -323,4 +656,87 @@ fn sniff_image_ext(bytes: &[u8]) -> Option<&'static str> {
         return Some("webp");
     }
     None
+}
+
+#[cfg(test)]
+mod ua_tests {
+    use super::summarize_user_agent;
+
+    fn label(ua: &str) -> String {
+        summarize_user_agent(Some(ua))
+    }
+
+    #[test]
+    fn windows_chrome() {
+        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+        assert_eq!(label(ua), "Chrome on Windows 10/11");
+    }
+
+    #[test]
+    fn windows_seven_firefox() {
+        let ua = "Mozilla/5.0 (Windows NT 6.1; rv:109.0) Gecko/20100101 Firefox/115.0";
+        assert_eq!(label(ua), "Firefox on Windows 7");
+    }
+
+    #[test]
+    fn macos_safari_with_version() {
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15";
+        assert_eq!(label(ua), "Safari on macOS 14.3");
+    }
+
+    #[test]
+    fn iphone_safari_with_version() {
+        let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1";
+        assert_eq!(label(ua), "Safari on iOS 17.3");
+    }
+
+    #[test]
+    fn ipad_safari_with_version() {
+        let ua = "Mozilla/5.0 (iPad; CPU OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1";
+        assert_eq!(label(ua), "Safari on iPadOS 17.3");
+    }
+
+    #[test]
+    fn android_chrome_with_version() {
+        let ua = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36";
+        assert_eq!(label(ua), "Chrome on Android 14");
+    }
+
+    #[test]
+    fn chromeos_chrome() {
+        // ChromeOS sits behind a generic X11 token with no "Linux" string;
+        // the older code reported "Browser on Unknown OS" here.
+        let ua = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+        assert_eq!(label(ua), "Chrome on ChromeOS");
+    }
+
+    #[test]
+    fn linux_firefox() {
+        let ua = "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0";
+        assert_eq!(label(ua), "Firefox on Linux");
+    }
+
+    #[test]
+    fn freebsd_firefox() {
+        let ua = "Mozilla/5.0 (X11; FreeBSD amd64; rv:121.0) Gecko/20100101 Firefox/121.0";
+        assert_eq!(label(ua), "Firefox on FreeBSD");
+    }
+
+    #[test]
+    fn edge_on_windows() {
+        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0";
+        assert_eq!(label(ua), "Edge on Windows 10/11");
+    }
+
+    #[test]
+    fn x11_only_falls_back_to_unix() {
+        let ua = "Mozilla/5.0 (X11; U; OpenIndiana) AppleWebKit/537.36";
+        assert_eq!(label(ua), "Browser on Unix");
+    }
+
+    #[test]
+    fn empty_or_unknown_stays_generic() {
+        assert_eq!(label("curl/8.5"), "Browser on Unknown OS");
+        assert_eq!(summarize_user_agent(None), "Unknown device");
+    }
 }
