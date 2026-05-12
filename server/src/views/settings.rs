@@ -13,6 +13,13 @@ pub struct UserSettingsPage<'a> {
     pub asset_version: &'a str,
     pub saved: bool,
     pub push_available: bool,
+    /// Mirror of `state.email_available()`. Drives the disabled state
+    /// of the email-digest checkbox and the help-text branch that
+    /// explains why opting in is currently a no-op.
+    pub email_available: bool,
+    /// Current value of `users.email` for this user (or empty string if
+    /// not set). Pre-populates the email input on the settings page.
+    pub current_email: String,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub git_version: &'a str,

@@ -26,6 +26,12 @@ pub struct SettingsForm {
     pub notify_sound_enabled: Option<String>,
     #[serde(default)]
     pub notify_push_enabled: Option<String>,
+    #[serde(default)]
+    pub notify_email_digest_enabled: Option<String>,
+    /// Trimmed at save time. Empty string stores `NULL` and disables
+    /// digest delivery for this user regardless of the checkbox state.
+    #[serde(default)]
+    pub email: String,
 }
 
 pub async fn get_settings(
@@ -33,6 +39,15 @@ pub async fn get_settings(
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    // The public `User` projection does NOT carry `email` (recipient
+    // metadata, not identity). Look up the raw record here so we can
+    // pre-populate the form. Falling back to empty string keeps the
+    // template trivial when the row went missing between extractor and
+    // this call.
+    let current_email = db::auth::find_user_by_id(&state.auth, &user.id)
+        .await?
+        .and_then(|r| r.email)
+        .unwrap_or_default();
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -41,6 +56,8 @@ pub async fn get_settings(
         asset_version: &state.asset_version,
         saved: false,
         push_available: state.push_available(),
+        email_available: state.email_available(),
+        current_email,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
@@ -64,7 +81,35 @@ pub async fn post_settings(
     // if the client checks the box, the column stays 0 unless the server has
     // VAPID keys ready.
     let push = form.notify_push_enabled.is_some() && state.push_available();
-    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push).await?;
+    // Same defence for digest: respect the operator gate even if the
+    // client lies. Without a configured email transport at startup,
+    // flipping the checkbox would silently do nothing useful anyway.
+    let email_digest = form.notify_email_digest_enabled.is_some() && state.email_available();
+    db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push, email_digest)
+        .await?;
+
+    // Email address. Empty string -> NULL so the eligibility query
+    // filters this user out cleanly. Very small validation here:
+    // require the trimmed value to contain exactly one '@' if non-
+    // empty, which is the lightest possible check that catches
+    // obvious typos. RFC-5321 strict validation would reject some
+    // valid addresses; the upstream MTA is the authority on
+    // deliverability anyway.
+    let trimmed = form.email.trim();
+    let email_to_store: Option<&str> = if trimmed.is_empty() {
+        None
+    } else if trimmed.matches('@').count() == 1
+        && !trimmed.starts_with('@')
+        && !trimmed.ends_with('@')
+    {
+        Some(trimmed)
+    } else {
+        return Err(AppError::BadRequest(
+            "email must be a single address like 'you@example.com'".into(),
+        ));
+    };
+    db::auth::set_email(&state.auth, &user.id, email_to_store).await?;
+
     Ok(Redirect::to("/settings").into_response())
 }
 

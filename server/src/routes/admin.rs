@@ -25,6 +25,10 @@ pub fn router() -> Router<AppState> {
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/smtp/test", post(post_smtp_test))
+        .route(
+            "/admin/settings/email-digest-default",
+            post(post_email_digest_default),
+        )
         .route("/admin/users", get(get_users))
         .route("/admin/users/{id}/ban", post(post_ban))
         .route("/admin/users/{id}/unban", post(post_unban))
@@ -119,6 +123,11 @@ async fn render_settings_page(
     let public_base_url = db::settings::get_setting(&state.settings, "public_base_url")
         .await?
         .unwrap_or_default();
+    let default_notify_email_digest =
+        db::settings::get_setting(&state.settings, "default_notify_email_digest")
+            .await?
+            .as_deref()
+            == Some("1");
 
     let (smtp_host, smtp_port, smtp_user, smtp_from, smtp_tls_mode) =
         match state.secret_key.as_ref() {
@@ -194,6 +203,7 @@ async fn render_settings_page(
         smtp_from,
         smtp_tls_mode,
         public_base_url,
+        default_notify_email_digest,
         saved,
         disabled_banner,
         test_result,
@@ -346,6 +356,32 @@ pub async fn post_smtp_test(
         },
     };
     render_settings_page(&state, &user, false, Some(result)).await
+}
+
+#[derive(Deserialize)]
+pub struct EmailDigestDefaultForm {
+    /// Form-checkbox convention: a checked box submits the field, an
+    /// unchecked box omits it. Serde `default` makes the missing case
+    /// `None`, which `is_some()` treats as off.
+    #[serde(default)]
+    pub default_notify_email_digest: Option<String>,
+}
+
+/// Flip the "new users start with digest enabled" instance default.
+/// Existing users are NOT retroactively changed; only the registration
+/// flow consults this key.
+pub async fn post_email_digest_default(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    axum::Form(form): axum::Form<EmailDigestDefaultForm>,
+) -> Result<Response, AppError> {
+    let value = if form.default_notify_email_digest.is_some() {
+        "1"
+    } else {
+        "0"
+    };
+    db::settings::set_setting(&state.settings, "default_notify_email_digest", value).await?;
+    Ok(Redirect::to("/admin/settings").into_response())
 }
 
 fn trim_to_none(s: &str) -> Option<String> {
