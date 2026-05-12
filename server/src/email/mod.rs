@@ -14,6 +14,8 @@
 //!     tests in `server/tests/` can instantiate it; the release binary
 //!     never references it.
 
+pub mod digest;
+
 use std::sync::Arc;
 
 use crate::db::smtp_settings::{SmtpConfig, TlsMode};

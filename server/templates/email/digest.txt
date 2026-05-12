@@ -1,0 +1,37 @@
+You have unread activity in lets-chat. Here is a summary of what you missed while you were away.
+
+{% if !dm_sections.is_empty() -%}
+=== Direct messages ===
+
+{% for section in dm_sections -%}
+From {{ section.peer_username }}
+  ({{ server_url }}/dm/{{ section.peer_id }})
+{% for item in section.items -%}
+  {{ item.author }} at {{ item.created_at }}:
+    {{ item.snippet_plain }}
+    -> {{ item.deep_link }}
+{% endfor %}
+{% endfor -%}
+{% endif -%}
+
+{% if !room_sections.is_empty() -%}
+=== Mentions ===
+
+{% for section in room_sections -%}
+#{{ section.room_name }}
+  ({{ server_url }}/room/{{ section.room_id }})
+{% for item in section.items -%}
+  {{ item.author }} at {{ item.created_at }}:
+    {{ item.snippet_plain }}
+    -> {{ item.deep_link }}
+{% endfor %}
+{% endfor -%}
+{% endif -%}
+
+{% if overflow_count > 0 -%}
+...and {{ overflow_count }} more. Open {{ server_url }}/ to see them.
+
+{% endif -%}
+---
+You are receiving this because email digests are enabled for your account.
+Change your notification preferences at {{ server_url }}/settings.
