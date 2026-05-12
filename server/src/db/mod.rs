@@ -70,8 +70,15 @@ async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool 
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
         .busy_timeout(Duration::from_secs(5));
+    // Pre-open a small set of connections so the first burst of requests
+    // does not pay the SQLite open + PRAGMA cost serially, and shorten
+    // the acquire timeout so a saturated pool surfaces as a fast 500 in
+    // the logs instead of stalling the response for the default 30 s.
     let pool = SqlitePoolOptions::new()
         .max_connections(16)
+        .min_connections(4)
+        .acquire_timeout(Duration::from_secs(3))
+        .test_before_acquire(false)
         .connect_with(opts)
         .await
         .unwrap_or_else(|e| panic!("Failed to connect to {} DB: {}", name, e));

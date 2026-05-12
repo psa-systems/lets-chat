@@ -616,8 +616,33 @@ pub fn build_router(state: AppState) -> Router {
             enforce_2fa_enrollment,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
+        .layer(middleware::from_fn(log_slow_requests))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Middleware: time every request and emit a warn-level log when the
+/// total time exceeds `SLOW_REQUEST_THRESHOLD`. Lets operators identify
+/// which endpoint is responsible for "page took forever to load" reports
+/// without enabling debug-level tower-http tracing across the board.
+async fn log_slow_requests(req: axum::extract::Request, next: middleware::Next) -> Response {
+    use std::time::{Duration, Instant};
+    const SLOW_REQUEST_THRESHOLD: Duration = Duration::from_millis(1000);
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let started = Instant::now();
+    let resp = next.run(req).await;
+    let elapsed = started.elapsed();
+    if elapsed >= SLOW_REQUEST_THRESHOLD {
+        tracing::warn!(
+            method = %method,
+            path = %uri.path(),
+            status = resp.status().as_u16(),
+            duration_ms = elapsed.as_millis() as u64,
+            "slow request"
+        );
+    }
+    resp
 }
 
 /// Public diagnostic endpoint. Returns the build metadata baked in by
