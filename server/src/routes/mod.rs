@@ -621,25 +621,67 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// Middleware: time every request and emit a warn-level log when the
-/// total time exceeds `SLOW_REQUEST_THRESHOLD`. Lets operators identify
-/// which endpoint is responsible for "page took forever to load" reports
-/// without enabling debug-level tower-http tracing across the board.
+/// Middleware: instrument every request with two signals.
+///
+/// 1. A watchdog task. If the handler has not produced a response after
+///    `WATCHDOG_THRESHOLD`, emit a warn log right then so operators can
+///    see *which* endpoint is currently stuck. Without this, a handler
+///    that hangs forever produces zero log output (the after-the-fact
+///    "slow request" log only fires once the handler returns).
+/// 2. An after-the-fact slow-request log with the final duration and
+///    status code, suppressed when the watchdog already fired so we do
+///    not double-log every long request.
 async fn log_slow_requests(req: axum::extract::Request, next: middleware::Next) -> Response {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
-    const SLOW_REQUEST_THRESHOLD: Duration = Duration::from_millis(1000);
+    const WATCHDOG_THRESHOLD: Duration = Duration::from_secs(5);
+
     let method = req.method().clone();
     let uri = req.uri().clone();
     let started = Instant::now();
+
+    let watchdog_fired = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    {
+        let watchdog_fired = watchdog_fired.clone();
+        let done = done.clone();
+        let method = method.clone();
+        let path = uri.path().to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(WATCHDOG_THRESHOLD).await;
+            if !done.load(Ordering::SeqCst) {
+                watchdog_fired.store(true, Ordering::SeqCst);
+                tracing::warn!(
+                    method = %method,
+                    path = %path,
+                    waited_ms = WATCHDOG_THRESHOLD.as_millis() as u64,
+                    "request still in-flight after watchdog threshold; handler is stuck"
+                );
+            }
+        });
+    }
+
     let resp = next.run(req).await;
+    done.store(true, Ordering::SeqCst);
+
     let elapsed = started.elapsed();
-    if elapsed >= SLOW_REQUEST_THRESHOLD {
+    if elapsed >= WATCHDOG_THRESHOLD {
         tracing::warn!(
             method = %method,
             path = %uri.path(),
             status = resp.status().as_u16(),
             duration_ms = elapsed.as_millis() as u64,
-            "slow request"
+            watchdog_fired = watchdog_fired.load(Ordering::SeqCst),
+            "slow request completed"
+        );
+    } else if elapsed >= Duration::from_millis(1000) {
+        tracing::info!(
+            method = %method,
+            path = %uri.path(),
+            status = resp.status().as_u16(),
+            duration_ms = elapsed.as_millis() as u64,
+            "request >1s"
         );
     }
     resp
