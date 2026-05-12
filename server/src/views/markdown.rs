@@ -97,13 +97,25 @@ pub fn render(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Strin
     out
 }
 
+static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
+
+/// Eagerly load syntect's bundled syntaxes and themes. Both sets are
+/// deserialized from large embedded byte arrays; the first synchronous
+/// `get_or_init` call inside an async handler blocks the calling tokio
+/// worker thread for several seconds and starves every other task
+/// scheduled on the runtime until it completes. Calling this at startup
+/// before the server binds means the cold-load cost is paid once,
+/// inline, where it cannot interfere with request serving.
+pub fn warm_syntect() {
+    let _ = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+    let _ = THEME_SET.get_or_init(ThemeSet::load_defaults);
+}
+
 /// Syntax-highlight a fenced code block to a self-contained `<pre>` element
 /// with inline styles. Unknown languages fall back to plain-text highlighting
 /// (escaped body in a `<pre><code>`).
 fn highlight_code(code: &str, lang: &str) -> String {
-    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
-    static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
-
     let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
     let ts = THEME_SET.get_or_init(ThemeSet::load_defaults);
     let theme = ts
