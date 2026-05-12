@@ -58,6 +58,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_smtp_settings.sql"),
         ],
         _ => unreachable!(),
     };
@@ -106,6 +107,7 @@ async fn app_with_two_users() -> TestApp {
         secret_key: None,
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        email_client: None,
     };
     let app = routes::build_router(state);
     TestApp {

@@ -75,6 +75,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_smtp_settings.sql"),
         ],
         _ => unreachable!(),
     };
@@ -168,6 +169,7 @@ async fn setup_app_with_users_and_client(
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: push_client.clone(),
+        email_client: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -548,6 +550,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(vapid),
         push_client: counting.clone() as Arc<dyn PushClient>,
+        email_client: None,
     };
     let app = routes::build_router(state);
 

@@ -76,6 +76,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        email_client: None,
     };
     (routes::build_router(state), session, user_id)
 }

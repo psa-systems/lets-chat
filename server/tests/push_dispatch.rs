@@ -60,6 +60,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_smtp_settings.sql"),
         ],
         _ => unreachable!(),
     };
@@ -108,6 +109,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(fake_vapid()),
         push_client: client,
+        email_client: None,
     };
     Fixture {
         state,
