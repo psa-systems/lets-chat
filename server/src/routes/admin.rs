@@ -148,9 +148,19 @@ async fn render_settings_page(
     } else if smtp_host.is_empty() {
         Some("SMTP is not configured. Fill in the fields below and save.")
     } else if !state.email_available() {
+        // Fires for two reasons, in order of likelihood:
+        // 1. The operator just saved SMTP settings but has not restarted
+        //    yet. `state.email_client` is a snapshot taken at startup,
+        //    so any save-then-render-this-page sequence lands here until
+        //    the next process restart. This is the common case and the
+        //    banner leads with it explicitly so operators do not assume
+        //    their config is broken.
+        // 2. LETS_CHAT_SECRET_KEY was rotated, so the encrypted password
+        //    column no longer decrypts. The parenthetical covers this.
         Some(
-            "Email could not be initialised at startup. If you rotated \
-             LETS_CHAT_SECRET_KEY, re-enter the SMTP password and restart.",
+            "SMTP config not active in this process. Saved changes apply only after \
+             a server restart. (If you rotated LETS_CHAT_SECRET_KEY, the stored SMTP \
+             password also needs to be re-entered before the restart.)",
         )
     } else {
         None
