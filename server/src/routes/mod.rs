@@ -189,20 +189,28 @@ pub(crate) async fn load_message_view_for_viewer(
 /// idle back to active, broadcast `UserStatusChanged` so subscribers can
 /// update their UI. DND status is sticky and never flips here.
 ///
-/// Calls are debounced per-user: this function fires on every WebSocket
-/// message and every room visit, but the idle threshold is 30 minutes, so
-/// updating the column more than once per minute per user just produces
-/// write-lock contention without changing any observable behaviour. The
-/// first call after a long quiet period bypasses the debounce (no prior
-/// entry in the ledger), so idle->active transitions are still instant.
+/// Hot path (active or DND user): defer the column write to the bg
+/// writer. The handler returns immediately and never touches the
+/// SQLite pool, so a burst of WS messages cannot exhaust connections.
+///
+/// Cold path (no prior entry, or entry older than the debounce window):
+/// run `touch_user_activity` inline so an idle->active flip is observed
+/// and broadcast right away. The cold path runs at most once per user
+/// per debounce window, which is rare even under load.
 pub(crate) async fn touch_user_and_maybe_broadcast(state: &AppState, user_id: &str) {
     use std::time::{Duration, Instant};
     const ACTIVITY_DEBOUNCE: Duration = Duration::from_secs(30);
 
-    if let Some(prev) = state.activity_ledger.get(user_id) {
-        if Instant::now().duration_since(*prev) < ACTIVITY_DEBOUNCE {
-            return;
-        }
+    let stale = match state.activity_ledger.get(user_id) {
+        Some(prev) => Instant::now().duration_since(*prev) >= ACTIVITY_DEBOUNCE,
+        None => true,
+    };
+    if !stale {
+        // Routine "stay active" touch: send to the background writer
+        // and return. The bg worker batches these into one UPDATE per
+        // tick across all touched users.
+        state.bg.touch_user(user_id);
+        return;
     }
     state
         .activity_ledger

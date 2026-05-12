@@ -85,11 +85,13 @@ pub async fn inject_user(
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
         if should_touch_last_seen(&state.last_seen_ledger, &t) {
-            let pool = state.auth.clone();
-            let id = t.clone();
-            tokio::spawn(async move {
-                let _ = db::auth::touch_session_last_seen(&pool, &id).await;
-            });
+            // Hand off to the bg writer rather than spawning a fresh
+            // task per request. Per-request spawns saturate the SQLite
+            // pool under load: with N concurrent requests we'd queue N
+            // write attempts on a pool that can only serve writes
+            // serially, and every HTTP request waiting for a pool
+            // connection starves until the queue drains.
+            state.bg.touch_session(&t);
         }
         req.extensions_mut().insert(CurrentSessionId(t));
     }

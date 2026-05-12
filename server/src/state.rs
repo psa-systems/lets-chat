@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sqlx::SqlitePool;
 
 use crate::auth::LastSeenLedger;
+use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
 use crate::push::PushClient;
@@ -23,6 +24,10 @@ pub struct AppState {
     /// shape as `last_seen_ledger`; collapses WS/room-visit storms into at
     /// most one write per user per debounce window.
     pub activity_ledger: LastSeenLedger,
+    /// Background writer for high-frequency, low-value column updates
+    /// (session last-seen, user activity). Handlers send a touch via the
+    /// channel; one worker task batches them onto a single writer.
+    pub bg: BgWriter,
     pub secret_key: Option<Arc<[u8; 32]>>,
     /// `Some` when `LETS_CHAT_SECRET_KEY` is set AND the VAPID keypair
     /// has been generated/loaded. `None` disables Push entirely (no

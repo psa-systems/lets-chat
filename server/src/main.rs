@@ -77,6 +77,7 @@ async fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://localhost:8080".to_string());
 
+    let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -85,6 +86,7 @@ async fn main() {
         asset_version: compute_asset_version(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg,
         secret_key,
         vapid,
         push_client,

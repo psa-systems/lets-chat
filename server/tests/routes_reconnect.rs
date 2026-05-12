@@ -91,6 +91,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
+    let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth,
         chat,
@@ -99,6 +100,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         // 2FA disabled keeps GET / off the TOTP-setup redirect path so we
         // can render the layout straight up. This test is about the
         // banner partial rendering, not auth flow.
