@@ -34,7 +34,7 @@ pub async fn find_user_by_username(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -56,7 +56,7 @@ pub async fn find_user_by_id(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE id = ?",
     )
@@ -95,6 +95,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         notify_email_digest_enabled: r.get::<i64, _>("notify_email_digest_enabled") != 0,
         last_ws_seen_at: r.get("last_ws_seen_at"),
         last_digest_sent_at: r.get("last_digest_sent_at"),
+        email: r.get("email"),
         totp_secret_encrypted: r.get("totp_secret_encrypted"),
         totp_nonce: r.get("totp_nonce"),
         totp_enabled: r.get("totp_enabled"),
@@ -210,6 +211,64 @@ pub async fn bump_last_ws_seen(pool: &SqlitePool, user_id: &str) {
     }
 }
 
+/// A single row in the eligibility query result. The tick reads these
+/// off and then runs per-user "what did they miss" queries against the
+/// chat pool, so we project only the fields the tick actually needs.
+#[derive(Debug, Clone)]
+pub struct DigestCandidate {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    /// MAX(last_active_at, COALESCE(last_ws_seen_at, '')). The tick uses
+    /// it as the lower bound on "missed" mention/DM created_at, AND as
+    /// the comparison point for `last_digest_sent_at`.
+    pub activity_floor: String,
+}
+
+/// Find users currently eligible for an email-digest send. A user is
+/// eligible iff:
+/// - `notify_email_digest_enabled = 1`
+/// - they have a non-empty email address
+/// - both `last_active_at` and `last_ws_seen_at` are older than
+///   `quiet_period_secs` (no HTTP activity AND no WS pings recently)
+/// - either no digest has ever been sent, or the last digest predates
+///   the user's most recent activity (i.e. they came back online and
+///   went offline again; "one digest per offline session")
+///
+/// The `MAX(a, COALESCE(b, ''))` shape works because lets-chat stores
+/// timestamps as ISO 8601 strings, which sort lexicographically the
+/// same as chronologically. The `COALESCE` lets users who have never
+/// connected via WS still qualify (their floor is `last_active_at`
+/// alone).
+pub async fn find_digest_candidates(
+    pool: &SqlitePool,
+    quiet_period_secs: i64,
+) -> Result<Vec<DigestCandidate>, sqlx::Error> {
+    let quiet_modifier = format!("-{quiet_period_secs} seconds");
+    let rows = sqlx::query(
+        "SELECT id, username, email, \
+                MAX(last_active_at, COALESCE(last_ws_seen_at, '')) AS activity_floor \
+           FROM users \
+          WHERE notify_email_digest_enabled = 1 \
+            AND email IS NOT NULL AND email <> '' \
+            AND MAX(last_active_at, COALESCE(last_ws_seen_at, '')) < datetime('now', ?) \
+            AND (last_digest_sent_at IS NULL \
+                 OR last_digest_sent_at < MAX(last_active_at, COALESCE(last_ws_seen_at, '')))",
+    )
+    .bind(quiet_modifier)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| DigestCandidate {
+            id: r.get("id"),
+            username: r.get("username"),
+            email: r.get("email"),
+            activity_floor: r.get("activity_floor"),
+        })
+        .collect())
+}
+
 /// Mark a digest as just sent for `user_id`. The digest tick gates eligibility
 /// with `last_digest_sent_at < MAX(last_active_at, last_ws_seen_at)`, so this
 /// timestamp self-resets the moment the user comes back online and bumps
@@ -307,7 +366,7 @@ pub async fn get_user_by_session(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
-         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, \
+         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -344,7 +403,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users ORDER BY created_at ASC",
     )
@@ -686,7 +745,7 @@ pub async fn search_users(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users \
          WHERE is_banned = 0 \
@@ -829,7 +888,7 @@ pub async fn list_blocked_users(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
-         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, \
+         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \

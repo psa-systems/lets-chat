@@ -1,4 +1,4 @@
-//! Email-digest content primitives (phase 22 task 3).
+//! Email-digest content primitives (phase 22 tasks 3 + 4).
 //!
 //! `build_snippet` is the only public entry point in this file today. It
 //! takes a raw message body and returns a `(plaintext, html)` pair suitable
@@ -157,6 +157,463 @@ fn apply_mention_bold(escaped: &str, re: &regex::Regex) -> String {
         out.push_str(&escaped[cursor..]);
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// Tick (task 4): orchestrate eligibility + per-user fetch + send.
+// ---------------------------------------------------------------------------
+
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+use sqlx::{Row, SqlitePool};
+
+use crate::email::{EmailClient, EmailMessage};
+use crate::error::AppError;
+use crate::state::AppState;
+use crate::views::email_digest::{
+    DigestDmSection, DigestHtml, DigestItem, DigestRoomSection, DigestText,
+};
+use askama::Template;
+
+/// Per-tick configuration. Held as a struct so the scheduler in
+/// `main.rs` can pin the constants in one place without sprinkling
+/// magic numbers through this module.
+#[derive(Debug, Clone, Copy)]
+pub struct DigestConfig {
+    pub quiet_period_secs: i64,
+    pub max_items: usize,
+    pub time_window_days: i64,
+}
+
+impl Default for DigestConfig {
+    fn default() -> Self {
+        Self {
+            quiet_period_secs: 3600,
+            max_items: 50,
+            time_window_days: 7,
+        }
+    }
+}
+
+/// One pass of the digest scheduler.
+///
+/// Short-circuits when `state.email_client` is `None` (the operator has
+/// not configured email). Otherwise loads candidate users, fetches their
+/// missed activity, renders multipart bodies, and dispatches one email
+/// per candidate via the trait. The "one digest per offline session"
+/// predicate lives in `db::auth::find_digest_candidates`; this function
+/// only needs to mark `last_digest_sent_at` on success to make the
+/// predicate self-reset on the next activity bump.
+///
+/// Errors are logged at warn and skipped per-user. A single bad recipient
+/// must not stop the rest of the tick from processing.
+pub async fn run_tick(state: &AppState, cfg: DigestConfig) -> Result<(), AppError> {
+    let Some(client) = state.email_client.as_ref().cloned() else {
+        tracing::debug!("digest tick: email_client is None, skipping");
+        return Ok(());
+    };
+
+    // Load the operator-supplied site URL once per tick. Empty is fine:
+    // the templates render without anchor tags in that case. Plus the
+    // SMTP from address; if empty, abort the whole tick because we cannot
+    // send anything without a From header.
+    let server_url = crate::db::settings::get_setting(&state.settings, "public_base_url")
+        .await?
+        .unwrap_or_default();
+    let from_address = match state.secret_key.as_ref() {
+        Some(key) => crate::db::smtp_settings::load(&state.settings, key.as_ref())
+            .await?
+            .map(|c| c.from_address)
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+    if from_address.is_empty() {
+        tracing::warn!("digest tick: SMTP from_address is empty; skipping");
+        return Ok(());
+    }
+
+    let candidates =
+        crate::db::auth::find_digest_candidates(&state.auth, cfg.quiet_period_secs).await?;
+    tracing::debug!(count = candidates.len(), "digest tick: candidates");
+
+    for candidate in candidates {
+        if let Err(e) =
+            send_one_digest(state, &client, &candidate, &server_url, &from_address, &cfg).await
+        {
+            tracing::warn!(
+                error = %e,
+                user_id = %candidate.id,
+                "digest send failed for user; will retry next tick"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Build and send a digest for a single candidate. Returns `Ok(())` if
+/// the user had nothing missed (no-op) OR if the send succeeded. Returns
+/// `Err` only on a real failure (DB error, mail transport error). The
+/// caller logs and continues to the next candidate.
+async fn send_one_digest(
+    state: &AppState,
+    client: &std::sync::Arc<dyn EmailClient>,
+    candidate: &crate::db::auth::DigestCandidate,
+    server_url: &str,
+    from_address: &str,
+    cfg: &DigestConfig,
+) -> Result<(), AppError> {
+    let mentions = load_missed_mentions(
+        &state.chat,
+        &candidate.id,
+        &candidate.activity_floor,
+        cfg.time_window_days,
+    )
+    .await?;
+    let dms = load_missed_dms(
+        &state.chat,
+        &candidate.id,
+        &candidate.activity_floor,
+        cfg.time_window_days,
+    )
+    .await?;
+
+    if mentions.is_empty() && dms.is_empty() {
+        // Either the activity got muted/read between candidate-selection
+        // and this point, or the candidate had no real misses. Either way
+        // do not mark `last_digest_sent_at`: the eligibility predicate
+        // already re-checks the floor on each tick.
+        return Ok(());
+    }
+
+    // Bulk-resolve every author + peer id in one auth-pool round trip.
+    let mut id_set: HashSet<&str> = HashSet::new();
+    for m in &mentions {
+        id_set.insert(m.author_id.as_str());
+    }
+    for d in &dms {
+        id_set.insert(d.author_id.as_str());
+        id_set.insert(d.peer_id.as_str());
+    }
+    let id_vec: Vec<&str> = id_set.into_iter().collect();
+    let name_map = crate::db::auth::display_names_for_ids(&state.auth, &id_vec).await?;
+
+    // Build sections, applying the per-digest item cap. DMs come first
+    // (higher signal than channel mentions); within each section, the
+    // SQL already ordered by created_at, so we preserve oldest-first
+    // ordering during grouping.
+    let mut budget = cfg.max_items;
+    let mut overflow = 0usize;
+
+    let (dm_sections, dm_overflow) = build_dm_sections(&dms, &name_map, server_url, &mut budget);
+    overflow += dm_overflow;
+    let (room_sections, room_overflow) =
+        build_room_sections(&mentions, &name_map, server_url, &mut budget);
+    overflow += room_overflow;
+
+    let html_body = DigestHtml {
+        server_url,
+        dm_sections: &dm_sections,
+        room_sections: &room_sections,
+        overflow_count: overflow,
+    }
+    .render()
+    .map_err(|e| AppError::Internal(format!("digest html render: {e}")))?;
+    let text_body = DigestText {
+        server_url,
+        dm_sections: &dm_sections,
+        room_sections: &room_sections,
+        overflow_count: overflow,
+    }
+    .render()
+    .map_err(|e| AppError::Internal(format!("digest text render: {e}")))?;
+
+    let mention_count: usize = room_sections.iter().map(|s| s.items.len()).sum();
+    let dm_count: usize = dm_sections.iter().map(|s| s.items.len()).sum();
+    let subject = build_subject(mention_count, dm_count);
+
+    let msg = EmailMessage {
+        to: candidate.email.clone(),
+        from: from_address.to_string(),
+        subject,
+        text_body,
+        html_body,
+    };
+    client
+        .send(msg)
+        .await
+        .map_err(|e| AppError::Internal(format!("smtp send: {e}")))?;
+    crate::db::auth::set_last_digest_sent_at(&state.auth, &candidate.id).await?;
+    Ok(())
+}
+
+fn build_subject(mention_count: usize, dm_count: usize) -> String {
+    let mentions_clause = match mention_count {
+        0 => None,
+        1 => Some("1 new mention".to_string()),
+        n => Some(format!("{n} new mentions")),
+    };
+    let dms_clause = match dm_count {
+        0 => None,
+        1 => Some("1 direct message".to_string()),
+        n => Some(format!("{n} direct messages")),
+    };
+    let body = match (mentions_clause, dms_clause) {
+        (Some(m), Some(d)) => format!("{m} and {d}"),
+        (Some(m), None) => m,
+        (None, Some(d)) => d,
+        // Caller already short-circuits when both lists are empty, so
+        // this branch is unreachable in practice; fall back to a generic
+        // subject rather than panic.
+        (None, None) => "new activity".to_string(),
+    };
+    format!("[lets-chat] {body}")
+}
+
+/// Group raw mention rows by room and apply the `budget` cap. The cap
+/// counts items across all sections together; once budget hits 0, the
+/// remaining items are added to `overflow` so the digest can render
+/// "...and N more."
+fn build_room_sections(
+    mentions: &[MissedMention],
+    name_map: &HashMap<String, (String, Option<String>)>,
+    server_url: &str,
+    budget: &mut usize,
+) -> (Vec<DigestRoomSection>, usize) {
+    let mut by_room: BTreeMap<i64, DigestRoomSection> = BTreeMap::new();
+    let mut overflow = 0usize;
+    for m in mentions {
+        if *budget == 0 {
+            overflow += 1;
+            continue;
+        }
+        let section = by_room
+            .entry(m.room_id)
+            .or_insert_with(|| DigestRoomSection {
+                room_name: m.room_name.clone(),
+                room_id: m.room_id,
+                items: Vec::new(),
+            });
+        section.items.push(build_item(
+            m.message_id,
+            &m.author_id,
+            &m.body,
+            &m.created_at,
+            name_map,
+            deep_link_room(server_url, m.room_id, m.message_id),
+        ));
+        *budget -= 1;
+    }
+    (by_room.into_values().collect(), overflow)
+}
+
+fn build_dm_sections(
+    dms: &[MissedDm],
+    name_map: &HashMap<String, (String, Option<String>)>,
+    server_url: &str,
+    budget: &mut usize,
+) -> (Vec<DigestDmSection>, usize) {
+    let mut by_peer: BTreeMap<String, DigestDmSection> = BTreeMap::new();
+    let mut overflow = 0usize;
+    for d in dms {
+        if *budget == 0 {
+            overflow += 1;
+            continue;
+        }
+        let section = by_peer
+            .entry(d.peer_id.clone())
+            .or_insert_with(|| DigestDmSection {
+                peer_username: name_map
+                    .get(&d.peer_id)
+                    .map(|(u, _)| u.clone())
+                    .unwrap_or_else(|| d.peer_id.clone()),
+                peer_id: d.peer_id.clone(),
+                items: Vec::new(),
+            });
+        section.items.push(build_item(
+            d.message_id,
+            &d.author_id,
+            &d.body,
+            &d.created_at,
+            name_map,
+            deep_link_dm(server_url, &d.peer_id, d.message_id),
+        ));
+        *budget -= 1;
+    }
+    (by_peer.into_values().collect(), overflow)
+}
+
+fn build_item(
+    message_id: i64,
+    author_id: &str,
+    body: &str,
+    created_at: &str,
+    name_map: &HashMap<String, (String, Option<String>)>,
+    deep_link: String,
+) -> DigestItem {
+    let author = name_map
+        .get(author_id)
+        .map(|(u, _)| u.clone())
+        .unwrap_or_else(|| author_id.to_string());
+    let (snippet_plain, snippet_html) = build_snippet(body);
+    DigestItem {
+        message_id,
+        author,
+        created_at: format_timestamp(created_at),
+        snippet_plain,
+        snippet_html,
+        deep_link,
+    }
+}
+
+/// Render an ISO 8601 / sqlite-`datetime('now')` string as a short
+/// human-friendly "Mon 14:23" form. Falls back to the raw input on parse
+/// error so the digest never panics; mail clients display whatever made
+/// it through.
+fn format_timestamp(ts: &str) -> String {
+    use chrono::{DateTime, NaiveDateTime, Utc};
+    // SQLite datetime('now') emits "YYYY-MM-DD HH:MM:SS" without timezone.
+    // chrono parses that as NaiveDateTime. Treat it as UTC for the
+    // weekday/HH:MM rendering; we are not trying to localise per
+    // recipient (yet) - that is a follow-up if it ever matters.
+    if let Ok(naive) = NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S") {
+        let dt: DateTime<Utc> = naive.and_utc();
+        return dt.format("%a %H:%M").to_string();
+    }
+    if let Ok(dt) = DateTime::parse_from_rfc3339(ts) {
+        return dt.format("%a %H:%M").to_string();
+    }
+    ts.to_string()
+}
+
+fn deep_link_room(server_url: &str, room_id: i64, message_id: i64) -> String {
+    if server_url.is_empty() {
+        return String::new();
+    }
+    format!("{server_url}/room/{room_id}#m{message_id}")
+}
+
+fn deep_link_dm(server_url: &str, peer_id: &str, message_id: i64) -> String {
+    if server_url.is_empty() {
+        return String::new();
+    }
+    format!("{server_url}/dm/{peer_id}#m{message_id}")
+}
+
+#[derive(Debug, Clone)]
+struct MissedMention {
+    room_id: i64,
+    room_name: String,
+    message_id: i64,
+    author_id: String,
+    body: String,
+    created_at: String,
+}
+
+#[derive(Debug, Clone)]
+struct MissedDm {
+    peer_id: String,
+    message_id: i64,
+    author_id: String,
+    body: String,
+    created_at: String,
+}
+
+/// Load unread room mentions in the digest window. Mute predicate:
+/// absence of a `room_notification_settings` row OR a row with
+/// `mute_mode <> 'all'`. `'except_mentions'` is allowed through because
+/// it explicitly lets @mentions land while suppressing ambient unread.
+async fn load_missed_mentions(
+    chat_pool: &SqlitePool,
+    user_id: &str,
+    activity_floor: &str,
+    time_window_days: i64,
+) -> Result<Vec<MissedMention>, AppError> {
+    let window_modifier = format!("-{time_window_days} days");
+    let rows = sqlx::query(
+        "SELECT m.message_id, m.room_id, msg.body, msg.user_id AS author_id, \
+                msg.created_at, r.name AS room_name \
+           FROM mentions m \
+           JOIN messages msg ON msg.id = m.message_id \
+           JOIN rooms    r   ON r.id = m.room_id \
+           LEFT JOIN room_notification_settings rns \
+                  ON rns.user_id = m.mentioned_user_id AND rns.room_id = m.room_id \
+          WHERE m.mentioned_user_id = ? \
+            AND m.read_at IS NULL \
+            AND msg.deleted_at IS NULL \
+            AND msg.created_at > ? \
+            AND msg.created_at > datetime('now', ?) \
+            AND (rns.mute_mode IS NULL OR rns.mute_mode <> 'all') \
+          ORDER BY r.id, msg.created_at",
+    )
+    .bind(user_id)
+    .bind(activity_floor)
+    .bind(window_modifier)
+    .fetch_all(chat_pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| MissedMention {
+            room_id: r.get("room_id"),
+            room_name: r.get("room_name"),
+            message_id: r.get("message_id"),
+            author_id: r.get("author_id"),
+            body: r.get("body"),
+            created_at: r.get("created_at"),
+        })
+        .collect())
+}
+
+/// Load unread DM messages from `dm_read_state` watermark. Mute uses the
+/// shared `room_notification_settings` table - DM mute writes `'all'` to
+/// the same table keyed by the DM's room id (see `db::notifications::set_dm_mute`).
+async fn load_missed_dms(
+    chat_pool: &SqlitePool,
+    user_id: &str,
+    activity_floor: &str,
+    time_window_days: i64,
+) -> Result<Vec<MissedDm>, AppError> {
+    let window_modifier = format!("-{time_window_days} days");
+    let rows = sqlx::query(
+        "SELECT msg.id AS message_id, \
+                peer.user_id AS peer_id, \
+                msg.user_id AS author_id, msg.body, msg.created_at \
+           FROM messages msg \
+           JOIN rooms r ON r.id = msg.room_id AND r.room_type = 'dm' \
+           JOIN room_members rm_self \
+                  ON rm_self.room_id = r.id AND rm_self.user_id = ? \
+           JOIN room_members peer \
+                  ON peer.room_id = r.id AND peer.user_id <> ? \
+           LEFT JOIN dm_read_state s \
+                  ON s.user_id = ? AND s.room_id = r.id \
+           LEFT JOIN room_notification_settings rns \
+                  ON rns.user_id = ? AND rns.room_id = r.id \
+          WHERE msg.user_id <> ? \
+            AND msg.deleted_at IS NULL \
+            AND msg.id > COALESCE(s.last_read_message_id, 0) \
+            AND msg.created_at > ? \
+            AND msg.created_at > datetime('now', ?) \
+            AND (rns.mute_mode IS NULL OR rns.mute_mode <> 'all') \
+          ORDER BY peer.user_id, msg.created_at",
+    )
+    .bind(user_id)
+    .bind(user_id)
+    .bind(user_id)
+    .bind(user_id)
+    .bind(user_id)
+    .bind(activity_floor)
+    .bind(window_modifier)
+    .fetch_all(chat_pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| MissedDm {
+            peer_id: r.get("peer_id"),
+            message_id: r.get("message_id"),
+            author_id: r.get("author_id"),
+            body: r.get("body"),
+            created_at: r.get("created_at"),
+        })
+        .collect())
 }
 
 fn html_escape(s: &str) -> String {

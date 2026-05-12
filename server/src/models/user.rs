@@ -29,6 +29,11 @@ pub struct UserRecord {
     pub notify_email_digest_enabled: bool,
     pub last_ws_seen_at: Option<String>,
     pub last_digest_sent_at: Option<String>,
+    /// Optional notification address. Used by the email digest tick and
+    /// eventually by other email features. Deliberately NOT mirrored
+    /// onto the public `User` projection - email is recipient metadata,
+    /// not identity, and should not flow into handler/template contexts.
+    pub email: Option<String>,
     pub totp_secret_encrypted: Option<Vec<u8>>,
     pub totp_nonce: Option<Vec<u8>>,
     pub totp_enabled: bool,

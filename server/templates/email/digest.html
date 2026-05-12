@@ -6,12 +6,12 @@
 {% if !dm_sections.is_empty() %}
 <h2 style="border-bottom: 1px solid #ccc; padding-bottom: 4px;">Direct messages</h2>
 {% for section in dm_sections %}
-<h3>From {{ section.peer_username }} <a href="{{ server_url }}/dm/{{ section.peer_id }}">(open thread)</a></h3>
+<h3>From {{ section.peer_username }}{% if !server_url.is_empty() %} <a href="{{ server_url }}/dm/{{ section.peer_id }}">(open thread)</a>{% endif %}</h3>
 {% for item in section.items %}
 <p style="margin: 4px 0 4px 16px;">
   <strong>{{ item.author }}</strong> <span style="color: #666;">at {{ item.created_at }}</span>:
   {{ item.snippet_html|safe }}
-  <a href="{{ item.deep_link }}" style="color: #666; margin-left: 4px;">(view)</a>
+  {% if !server_url.is_empty() %}<a href="{{ item.deep_link }}" style="color: #666; margin-left: 4px;">(view)</a>{% endif %}
 </p>
 {% endfor %}
 {% endfor %}
@@ -20,12 +20,12 @@
 {% if !room_sections.is_empty() %}
 <h2 style="border-bottom: 1px solid #ccc; padding-bottom: 4px;">Mentions</h2>
 {% for section in room_sections %}
-<h3>#{{ section.room_name }} <a href="{{ server_url }}/room/{{ section.room_id }}">(open room)</a></h3>
+<h3>#{{ section.room_name }}{% if !server_url.is_empty() %} <a href="{{ server_url }}/room/{{ section.room_id }}">(open room)</a>{% endif %}</h3>
 {% for item in section.items %}
 <p style="margin: 4px 0 4px 16px;">
   <strong>{{ item.author }}</strong> <span style="color: #666;">at {{ item.created_at }}</span>:
   {{ item.snippet_html|safe }}
-  <a href="{{ item.deep_link }}" style="color: #666; margin-left: 4px;">(view)</a>
+  {% if !server_url.is_empty() %}<a href="{{ item.deep_link }}" style="color: #666; margin-left: 4px;">(view)</a>{% endif %}
 </p>
 {% endfor %}
 {% endfor %}
@@ -33,14 +33,14 @@
 
 {% if overflow_count > 0 %}
 <p style="margin-top: 16px; font-style: italic; color: #666;">
-  ...and {{ overflow_count }} more. <a href="{{ server_url }}/">Open lets-chat</a> to see them.
+  ...and {{ overflow_count }} more.{% if !server_url.is_empty() %} <a href="{{ server_url }}/">Open lets-chat</a> to see them.{% else %} Open lets-chat to see them.{% endif %}
 </p>
 {% endif %}
 
 <hr style="margin-top: 24px; border: none; border-top: 1px solid #eee;">
 <p style="font-size: 12px; color: #999;">
   You are receiving this because email digests are enabled for your account.
-  <a href="{{ server_url }}/settings" style="color: #999;">Change your notification preferences</a>.
+  {% if !server_url.is_empty() %}<a href="{{ server_url }}/settings" style="color: #999;">Change your notification preferences</a>.{% else %}Change your notification preferences in the lets-chat settings page.{% endif %}
 </p>
 </body>
 </html>

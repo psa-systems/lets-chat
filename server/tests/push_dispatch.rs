@@ -34,6 +34,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0008_two_factor.sql"),
             include_str!("../migrations/auth/0009_push_subscriptions.sql"),
             include_str!("../migrations/auth/0010_digest_columns.sql"),
+            include_str!("../migrations/auth/0011_user_email.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),

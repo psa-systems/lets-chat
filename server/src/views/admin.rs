@@ -111,6 +111,12 @@ pub struct SettingsPage<'a> {
     pub smtp_from: String,
     /// One of "starttls" | "tls" | "none". Drives the `<select>` rendering.
     pub smtp_tls_mode: String,
+    /// Operator-supplied externally-reachable URL of this server. Used
+    /// by the email digest to construct deep links back into the app.
+    /// Empty string when not yet configured; in that case the digest
+    /// renders without anchor tags (see templates/email/digest.{html,txt})
+    /// and the admin page shows `base_url_missing_banner`.
+    pub public_base_url: String,
     pub saved: bool,
     /// Banner copy explaining why email is currently disabled. None when
     /// email is fully operational (key + SMTP both present and decryptable).

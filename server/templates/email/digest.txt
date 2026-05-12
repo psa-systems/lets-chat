@@ -5,11 +5,15 @@ You have unread activity in lets-chat. Here is a summary of what you missed whil
 
 {% for section in dm_sections -%}
 From {{ section.peer_username }}
+{% if !server_url.is_empty() -%}
   ({{ server_url }}/dm/{{ section.peer_id }})
+{% endif -%}
 {% for item in section.items -%}
   {{ item.author }} at {{ item.created_at }}:
     {{ item.snippet_plain }}
+{% if !server_url.is_empty() -%}
     -> {{ item.deep_link }}
+{% endif -%}
 {% endfor %}
 {% endfor -%}
 {% endif -%}
@@ -19,19 +23,27 @@ From {{ section.peer_username }}
 
 {% for section in room_sections -%}
 #{{ section.room_name }}
+{% if !server_url.is_empty() -%}
   ({{ server_url }}/room/{{ section.room_id }})
+{% endif -%}
 {% for item in section.items -%}
   {{ item.author }} at {{ item.created_at }}:
     {{ item.snippet_plain }}
+{% if !server_url.is_empty() -%}
     -> {{ item.deep_link }}
+{% endif -%}
 {% endfor %}
 {% endfor -%}
 {% endif -%}
 
 {% if overflow_count > 0 -%}
-...and {{ overflow_count }} more. Open {{ server_url }}/ to see them.
+...and {{ overflow_count }} more.{% if !server_url.is_empty() %} Open {{ server_url }}/ to see them.{% else %} Open lets-chat to see them.{% endif %}
 
 {% endif -%}
 ---
 You are receiving this because email digests are enabled for your account.
+{% if !server_url.is_empty() -%}
 Change your notification preferences at {{ server_url }}/settings.
+{% else -%}
+Change your notification preferences in the lets-chat settings page.
+{% endif -%}

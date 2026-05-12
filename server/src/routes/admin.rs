@@ -88,6 +88,13 @@ pub struct SettingsForm {
     pub smtp_from: String,
     pub smtp_pass: String,
     pub tls_mode: String,
+    /// Externally-reachable base URL of this server (e.g.
+    /// `https://chat.example.com`). Stored in the generic `settings`
+    /// key-value table as `public_base_url`. Used by the email digest
+    /// to build deep links. Empty is allowed: digest still sends, items
+    /// are not clickable. A trailing slash is stripped on save so the
+    /// digest can always concatenate with `/room/...` etc.
+    pub public_base_url: String,
 }
 
 #[derive(Deserialize)]
@@ -109,6 +116,10 @@ async fn render_settings_page(
     // decryption fails. To keep the GET handler simple, gate the entire
     // load on the secret key: without it the form renders empty and the
     // disabled banner explains why.
+    let public_base_url = db::settings::get_setting(&state.settings, "public_base_url")
+        .await?
+        .unwrap_or_default();
+
     let (smtp_host, smtp_port, smtp_user, smtp_from, smtp_tls_mode) =
         match state.secret_key.as_ref() {
             Some(key) => match db::smtp_settings::load(&state.settings, key.as_ref()).await {
@@ -182,6 +193,7 @@ async fn render_settings_page(
         smtp_user,
         smtp_from,
         smtp_tls_mode,
+        public_base_url,
         saved,
         disabled_banner,
         test_result,
@@ -228,6 +240,15 @@ pub async fn post_settings(
         tls_mode: TlsMode::parse(form.tls_mode.trim()),
     };
     db::smtp_settings::save(&state.settings, key.as_ref(), &input).await?;
+
+    // Public site URL: stored separately in the generic settings table.
+    // Normalise: trim, strip exactly one trailing slash if present so the
+    // digest can do `format!("{base}/room/...")` without worrying about
+    // double slashes. Operator can clear it by submitting blank.
+    let base = form.public_base_url.trim();
+    let base = base.strip_suffix('/').unwrap_or(base);
+    db::settings::set_setting(&state.settings, "public_base_url", base).await?;
+
     Ok(Redirect::to("/admin/settings").into_response())
 }
 
