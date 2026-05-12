@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sqlx::SqlitePool;
 
 use crate::db::vapid::VapidKeypair;
+use crate::mail::Mailer;
 use crate::push::PushClient;
 use crate::ws::hub::Hub;
 
@@ -21,6 +22,12 @@ pub struct AppState {
     /// Always present. When `vapid` is `None`, the dispatch helper
     /// short-circuits before any client method is called.
     pub push_client: Arc<dyn PushClient>,
+    /// `Some` when `LETS_CHAT_SMTP_URL` + `LETS_CHAT_SMTP_FROM` are set.
+    /// `None` disables outbound mail; password reset routes return 404.
+    pub mailer: Option<Mailer>,
+    /// Absolute base URL used to build links inside outbound mail
+    /// (e.g. password reset). Defaults to `http://localhost:8080`.
+    pub base_url: String,
 }
 
 impl AppState {
@@ -33,5 +40,10 @@ impl AppState {
     /// fan-out / subscription routes are operational.
     pub fn push_available(&self) -> bool {
         self.vapid.is_some()
+    }
+    /// True when an SMTP mailer has been configured. Password reset flows
+    /// are off-limits without one.
+    pub fn mail_available(&self) -> bool {
+        self.mailer.is_some()
     }
 }

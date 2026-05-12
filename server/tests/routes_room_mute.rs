@@ -108,6 +108,8 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     let app = routes::build_router(state);
     TestApp {
@@ -307,6 +309,8 @@ async fn post_to_inaccessible_private_room_returns_403() {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     let app = routes::build_router(state);
     let status = post_notify_prefs(&app, &alice_session, private_id, "all").await;

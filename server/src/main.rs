@@ -65,6 +65,18 @@ async fn main() {
         )),
     };
 
+    let mailer = lets_chat::mail::Mailer::from_env();
+    if mailer.is_some() {
+        tracing::info!("SMTP mailer configured");
+    } else {
+        tracing::info!("SMTP mailer not configured; password reset disabled");
+    }
+    let base_url = std::env::var("LETS_CHAT_BASE_URL")
+        .ok()
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://localhost:8080".to_string());
+
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -74,6 +86,8 @@ async fn main() {
         secret_key,
         vapid,
         push_client,
+        mailer,
+        base_url,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

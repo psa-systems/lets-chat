@@ -13,6 +13,12 @@ pub struct UserSettingsPage<'a> {
     pub asset_version: &'a str,
     pub saved: bool,
     pub push_available: bool,
+    pub email: Option<String>,
+    /// Hide the password-change form entirely in SaaS mode, where identity
+    /// is owned by the parent app.
+    pub password_change_available: bool,
+    pub password_changed: bool,
+    pub password_error: Option<&'a str>,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub git_version: &'a str,

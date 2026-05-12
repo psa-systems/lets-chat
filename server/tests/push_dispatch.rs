@@ -107,6 +107,8 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(fake_vapid()),
         push_client: client,
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     Fixture {
         state,

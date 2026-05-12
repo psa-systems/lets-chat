@@ -47,6 +47,11 @@
       <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block text-sm">
+      <span class="text-slate-600">Email</span>
+      <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
+      <span class="text-xs text-slate-500">Used only for password reset. Leave blank to remove.</span>
+    </label>
+    <label class="block text-sm">
       <span class="text-slate-600">Bio</span>
       <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
     </label>
@@ -97,6 +102,31 @@
     </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
+
+  {% if password_change_available %}
+  <form method="post" action="/settings/password" class="space-y-4">
+    <h2 class="font-medium">Change password</h2>
+    {% if password_changed %}
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Password updated.</div>
+    {% endif %}
+    {% if let Some(err) = password_error %}
+    <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ err }}</div>
+    {% endif %}
+    <label class="block text-sm">
+      <span class="text-slate-600">Current password</span>
+      <input type="password" name="current_password" required class="mt-1 block w-full border rounded px-2 py-1" autocomplete="current-password">
+    </label>
+    <label class="block text-sm">
+      <span class="text-slate-600">New password</span>
+      <input type="password" name="new_password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
+    </label>
+    <label class="block text-sm">
+      <span class="text-slate-600">Confirm new password</span>
+      <input type="password" name="new_password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
+    </label>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Update password</button>
+  </form>
+  {% endif %}
 
   <div>
     <h2 class="font-medium mb-2">Privacy</h2>
