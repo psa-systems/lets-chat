@@ -75,6 +75,8 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     (routes::build_router(state), session, user_id)
 }

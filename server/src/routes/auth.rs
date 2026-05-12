@@ -33,6 +33,8 @@ pub struct RegisterForm {
     pub username: String,
     pub password: String,
     pub password_confirm: String,
+    #[serde(default)]
+    pub email: Option<String>,
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
@@ -152,6 +154,23 @@ pub async fn post_register(
         ));
     }
 
+    let email = form
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if let Some(ref e) = email {
+        if e.chars().count() > 254 || !looks_like_email_register(e) {
+            return Ok(form_error(
+                &state,
+                &headers,
+                FormPage::Register,
+                "Email address is not valid",
+            ));
+        }
+    }
+
     let password_hash = match hash_password(password) {
         Ok(h) => h,
         Err(e) => return Err(AppError::Internal(format!("hash: {}", e))),
@@ -171,6 +190,24 @@ pub async fn post_register(
             return Err(AppError::Internal(format!("register: {}", e)));
         }
     };
+
+    if let Some(ref e) = email {
+        if let Err(err) = db::auth::set_user_email(&state.auth, &user_id, Some(e)).await {
+            if is_unique_violation(&err) {
+                // Roll back the freshly created user so the username does not
+                // get squatted by a registration attempt that ultimately
+                // failed validation.
+                let _ = db::auth::delete_user(&state.auth, &user_id).await;
+                return Ok(form_error(
+                    &state,
+                    &headers,
+                    FormPage::Register,
+                    "That email address is already in use",
+                ));
+            }
+            return Err(AppError::Internal(format!("set_user_email: {}", err)));
+        }
+    }
 
     let promoted = promote_first_user_to_admin(&state, &user_id).await?;
 
@@ -316,4 +353,28 @@ fn verify_password(hash: &str, password: &str) -> bool {
 #[cfg(feature = "standalone")]
 fn is_unique_violation(err: &sqlx::Error) -> bool {
     matches!(err, sqlx::Error::Database(db_err) if db_err.is_unique_violation())
+}
+
+/// Mirrors `settings::looks_like_email`. Duplicated here to keep the
+/// standalone auth flow free of cross-module dependencies on the settings
+/// route. Loose syntactic check, not RFC validation.
+#[cfg(feature = "standalone")]
+fn looks_like_email_register(s: &str) -> bool {
+    if s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let mut parts = s.split('@');
+    let local = match parts.next() {
+        Some(l) if !l.is_empty() => l,
+        _ => return false,
+    };
+    let domain = match parts.next() {
+        Some(d) if !d.is_empty() => d,
+        _ => return false,
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    let _ = local;
+    domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }

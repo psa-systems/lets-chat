@@ -34,6 +34,8 @@ mod enclave;
 mod home;
 mod mentions;
 mod notify_prefs;
+#[cfg(feature = "standalone")]
+mod password_reset;
 mod pinned;
 mod push;
 mod reactions;
@@ -554,6 +556,15 @@ pub fn build_router(state: AppState) -> Router {
             "/register",
             get(auth::get_register).post(auth::post_register),
         )
+        .route(
+            "/forgot",
+            get(password_reset::get_forgot).post(password_reset::post_forgot),
+        )
+        .route(
+            "/reset/{token}",
+            get(password_reset::get_reset).post(password_reset::post_reset),
+        )
+        .route("/settings/password", post(settings::post_password))
         .merge(admin::router());
 
     #[cfg(feature = "saas")]

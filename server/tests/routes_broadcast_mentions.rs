@@ -167,6 +167,8 @@ async fn setup_app_with_users_and_client(
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: push_client.clone(),
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     let app = routes::build_router(state);
     TestApp {
@@ -547,6 +549,8 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(vapid),
         push_client: counting.clone() as Arc<dyn PushClient>,
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
     };
     let app = routes::build_router(state);
 
