@@ -188,7 +188,26 @@ pub(crate) async fn load_message_view_for_viewer(
 /// Refresh the caller's `last_active_at` and, if that bumped the row from
 /// idle back to active, broadcast `UserStatusChanged` so subscribers can
 /// update their UI. DND status is sticky and never flips here.
+///
+/// Calls are debounced per-user: this function fires on every WebSocket
+/// message and every room visit, but the idle threshold is 30 minutes, so
+/// updating the column more than once per minute per user just produces
+/// write-lock contention without changing any observable behaviour. The
+/// first call after a long quiet period bypasses the debounce (no prior
+/// entry in the ledger), so idle->active transitions are still instant.
 pub(crate) async fn touch_user_and_maybe_broadcast(state: &AppState, user_id: &str) {
+    use std::time::{Duration, Instant};
+    const ACTIVITY_DEBOUNCE: Duration = Duration::from_secs(30);
+
+    if let Some(prev) = state.activity_ledger.get(user_id) {
+        if Instant::now().duration_since(*prev) < ACTIVITY_DEBOUNCE {
+            return;
+        }
+    }
+    state
+        .activity_ledger
+        .insert(user_id.to_string(), Instant::now());
+
     let flipped = match db::auth::touch_user_activity(&state.auth, user_id).await {
         Ok(v) => v,
         Err(e) => {
@@ -531,6 +550,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/settings/avatar/delete",
             post(settings::post_avatar_delete),
+        )
+        .route(
+            "/settings/sessions/{session_id}/revoke",
+            post(settings::post_session_revoke),
         )
         .route("/avatars/{user_id}", get(avatar::get_avatar))
         .route("/sw.js", get(push::get_service_worker))

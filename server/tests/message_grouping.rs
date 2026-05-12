@@ -16,6 +16,9 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
         include_str!("../migrations/auth/0007_notification_settings.sql"),
         include_str!("../migrations/auth/0008_two_factor.sql"),
         include_str!("../migrations/auth/0009_push_subscriptions.sql"),
+        include_str!("../migrations/auth/0010_password_reset.sql"),
+        include_str!("../migrations/auth/0011_email_verification.sql"),
+        include_str!("../migrations/auth/0012_session_metadata.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&auth_pool).await.unwrap();
     }
