@@ -1,4 +1,4 @@
-use axum::extract::{Multipart, State};
+use axum::extract::{Multipart, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
@@ -13,6 +13,17 @@ use crate::views::{html, Html};
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
 const MAX_DISPLAY_NAME_CHARS: usize = 64;
 const MAX_BIO_CHARS: usize = 500;
+const MAX_EMAIL_CHARS: usize = 254;
+#[cfg(feature = "standalone")]
+const MIN_PASSWORD_CHARS: usize = 8;
+
+#[derive(Deserialize, Default)]
+pub struct SettingsQuery {
+    #[serde(default)]
+    pub password_changed: Option<String>,
+    #[serde(default)]
+    pub password_error: Option<String>,
+}
 
 #[derive(Deserialize)]
 pub struct SettingsForm {
@@ -31,8 +42,11 @@ pub struct SettingsForm {
 pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    Query(q): Query<SettingsQuery>,
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let email = db::auth::get_user_email(&state.auth, &user.id).await?;
+    let password_error = q.password_error.as_deref().and_then(password_error_message);
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -41,12 +55,29 @@ pub async fn get_settings(
         asset_version: &state.asset_version,
         saved: false,
         push_available: state.push_available(),
+        email,
+        password_change_available: cfg!(feature = "standalone"),
+        password_changed: q.password_changed.is_some(),
+        password_error,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
     };
     html(&page)
+}
+
+/// Map a short error code carried in the redirect query string to a human
+/// message. Codes (not full sentences) keep URLs tidy and let translations
+/// live alongside other UI copy in the future.
+fn password_error_message(code: &str) -> Option<&'static str> {
+    match code {
+        "incorrect" => Some("Current password is incorrect"),
+        "short" => Some("New password must be at least 8 characters"),
+        "mismatch" => Some("New passwords do not match"),
+        "same" => Some("New password must differ from the current password"),
+        _ => None,
+    }
 }
 
 pub async fn post_settings(
@@ -76,6 +107,8 @@ pub async fn post_profile(
     let mut display_name: Option<String> = None;
     let mut bio: Option<String> = None;
     let mut avatar_bytes: Option<Vec<u8>> = None;
+    let mut email_present = false;
+    let mut email: Option<String> = None;
 
     while let Some(field) = multipart
         .next_field()
@@ -117,6 +150,29 @@ pub async fn post_profile(
                     Some(trimmed.to_string())
                 };
             }
+            "email" => {
+                email_present = true;
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("email: {e}")))?;
+                let trimmed = v.trim();
+                if trimmed.is_empty() {
+                    email = None;
+                } else {
+                    if trimmed.chars().count() > MAX_EMAIL_CHARS {
+                        return Err(AppError::BadRequest(format!(
+                            "email exceeds {MAX_EMAIL_CHARS} characters"
+                        )));
+                    }
+                    if !looks_like_email(trimmed) {
+                        return Err(AppError::BadRequest(
+                            "email address is not valid".to_string(),
+                        ));
+                    }
+                    email = Some(trimmed.to_string());
+                }
+            }
             "avatar" => {
                 let bytes = field
                     .bytes()
@@ -141,6 +197,17 @@ pub async fn post_profile(
         bio.as_deref(),
     )
     .await?;
+
+    if email_present {
+        if let Err(e) = db::auth::set_user_email(&state.auth, &user.id, email.as_deref()).await {
+            if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
+                return Err(AppError::Conflict(
+                    "That email address is already in use".to_string(),
+                ));
+            }
+            return Err(e.into());
+        }
+    }
 
     if let Some(bytes) = avatar_bytes {
         let new_ext = sniff_image_ext(&bytes)
@@ -255,6 +322,71 @@ async fn render_blocked_list(
     html(&page)
 }
 
+#[cfg(feature = "standalone")]
+#[derive(Deserialize)]
+pub struct PasswordForm {
+    pub current_password: String,
+    pub new_password: String,
+    pub new_password_confirm: String,
+}
+
+/// POST /settings/password - change the signed-in user's password. On any
+/// validation failure redirect back to /settings with a `password_error`
+/// query param; on success redirect with `password_changed=1` so the page
+/// can show a confirmation banner. The current session cookie stays valid;
+/// invalidating sibling sessions is a future improvement and is already
+/// handled by the email-reset path.
+#[cfg(feature = "standalone")]
+pub async fn post_password(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<PasswordForm>,
+) -> Result<Response, AppError> {
+    let record = db::auth::find_user_by_id(&state.auth, &user.id)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    if !verify_password(&record.password_hash, &form.current_password) {
+        return Ok(Redirect::to("/settings?password_error=incorrect").into_response());
+    }
+    if form.new_password.len() < MIN_PASSWORD_CHARS {
+        return Ok(Redirect::to("/settings?password_error=short").into_response());
+    }
+    if form.new_password != form.new_password_confirm {
+        return Ok(Redirect::to("/settings?password_error=mismatch").into_response());
+    }
+    if form.new_password == form.current_password {
+        return Ok(Redirect::to("/settings?password_error=same").into_response());
+    }
+    let hash =
+        hash_password(&form.new_password).map_err(|e| AppError::Internal(format!("hash: {e}")))?;
+    db::auth::set_password_hash(&state.auth, &user.id, &hash).await?;
+    Ok(Redirect::to("/settings?password_changed=1").into_response())
+}
+
+#[cfg(feature = "standalone")]
+fn verify_password(hash: &str, password: &str) -> bool {
+    use argon2::password_hash::{PasswordHash, PasswordVerifier};
+    use argon2::Argon2;
+    let parsed = match PasswordHash::new(hash) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok()
+}
+
+#[cfg(feature = "standalone")]
+fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+    use argon2::Argon2;
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    Ok(argon2
+        .hash_password(password.as_bytes(), &salt)?
+        .to_string())
+}
+
 pub async fn post_avatar_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -265,6 +397,30 @@ pub async fn post_avatar_delete(
     }
     db::auth::set_user_avatar_ext(&state.auth, &user.id, None).await?;
     Ok(Redirect::to("/settings").into_response())
+}
+
+/// Very loose syntactic check: requires exactly one `@`, non-empty local and
+/// domain parts, a dot in the domain, and no whitespace. Real validity is
+/// proven only by successful delivery; the goal here is to reject obvious
+/// typos before they hit the SMTP transport.
+fn looks_like_email(s: &str) -> bool {
+    if s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let mut parts = s.split('@');
+    let local = match parts.next() {
+        Some(l) if !l.is_empty() => l,
+        _ => return false,
+    };
+    let domain = match parts.next() {
+        Some(d) if !d.is_empty() => d,
+        _ => return false,
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    let _ = local;
+    domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 fn sniff_image_ext(bytes: &[u8]) -> Option<&'static str> {

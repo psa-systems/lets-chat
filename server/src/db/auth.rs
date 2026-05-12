@@ -768,6 +768,66 @@ pub async fn list_blocked_ids_either_way(
         .collect())
 }
 
+/// Look up the user_id whose email matches `email` (case-insensitive). Used
+/// by the password-reset request handler to map an inbound email address to
+/// the account that should receive a reset link. Returns `None` for unknown
+/// addresses; the caller still returns 200 to avoid email enumeration.
+pub async fn find_user_id_by_email(
+    pool: &SqlitePool,
+    email: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT id FROM users WHERE email = ? COLLATE NOCASE AND is_banned = 0")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.get::<String, _>("id")))
+}
+
+/// Fetch the configured email for a user, or `None` if unset. Used to render
+/// the email on the profile settings page and to address outbound mail.
+pub async fn get_user_email(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT email FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<String>, _>("email")))
+}
+
+/// Update (or clear with `None`) a user's email. Returns `Err` with a unique
+/// violation if another row already owns this address; the caller maps that
+/// to a friendly form error.
+pub async fn set_user_email(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(email)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Overwrite a user's password hash. Used by the reset flow after a token
+/// has been validated. Callers should also delete every session for this
+/// user so any existing logged-in browser is force-signed-out.
+pub async fn set_password_hash(
+    pool: &SqlitePool,
+    user_id: &str,
+    password_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(password_hash)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// All users `blocker_id` has blocked, ordered by username.
 pub async fn list_blocked_users(
     pool: &SqlitePool,
