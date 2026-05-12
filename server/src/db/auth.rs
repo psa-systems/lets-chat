@@ -152,33 +152,36 @@ pub async fn set_user_status(
 /// `'active'`. DND is sticky: bumps the timestamp so the idle clock restarts
 /// once they leave DND, but never overwrites the status. Returns `true` only
 /// when the call actually flipped idle->active so the caller can broadcast.
+///
+/// Implemented as two single-statement updates rather than a SELECT-then-
+/// UPDATE transaction: under chat load this runs on every WebSocket message
+/// and every room visit, so holding a write lock for the duration of a
+/// round-trip multiplies contention and produces `SQLITE_BUSY` even with
+/// WAL + busy_timeout enabled. The first statement only matches idle rows
+/// and never the DND row, so the DND-sticky guarantee is preserved.
 pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let row = sqlx::query("SELECT status FROM users WHERE id = ?")
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let Some(r) = row else {
-        tx.commit().await?;
-        return Ok(false);
-    };
-    let current: String = r.get("status");
-    let flipped = current == STATUS_IDLE;
-    if current == STATUS_DND {
+    let flipped = sqlx::query(
+        "UPDATE users \
+         SET status = 'active', \
+             last_active_at = datetime('now'), \
+             updated_at = datetime('now') \
+         WHERE id = ? AND status = 'idle'",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?
+    .rows_affected()
+        > 0;
+
+    if !flipped {
+        // The user was already active or in DND; just refresh the activity
+        // timestamp without touching `status`. A missing user row is a no-op.
         sqlx::query("UPDATE users SET last_active_at = datetime('now') WHERE id = ?")
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(pool)
             .await?;
-    } else {
-        sqlx::query(
-            "UPDATE users SET last_active_at = datetime('now'), \
-             status = 'active', updated_at = datetime('now') WHERE id = ?",
-        )
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
     }
-    tx.commit().await?;
+
     Ok(flipped)
 }
 
@@ -230,7 +233,20 @@ pub async fn set_user_role(
     Ok(())
 }
 
+/// Issue a session token for `user_id` with no captured origin metadata.
+/// Production code should prefer `create_session_with_origin` so the
+/// settings sessions list can show a meaningful row; this no-origin variant
+/// stays for tests and legacy paths.
 pub async fn create_session(pool: &SqlitePool, user_id: &str) -> Result<String, sqlx::Error> {
+    create_session_with_origin(pool, user_id, None, None).await
+}
+
+pub async fn create_session_with_origin(
+    pool: &SqlitePool,
+    user_id: &str,
+    user_agent: Option<&str>,
+    ip: Option<&str>,
+) -> Result<String, sqlx::Error> {
     use rand::Rng;
     let token: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
@@ -239,15 +255,85 @@ pub async fn create_session(pool: &SqlitePool, user_id: &str) -> Result<String, 
         .collect();
 
     sqlx::query(
-        "INSERT INTO sessions (id, user_id, expires_at) \
-         VALUES (?, ?, datetime('now', '+30 days'))",
+        "INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, last_seen_at) \
+         VALUES (?, ?, datetime('now', '+30 days'), ?, ?, datetime('now'))",
     )
     .bind(&token)
     .bind(user_id)
+    .bind(user_agent)
+    .bind(ip)
     .execute(pool)
     .await?;
 
     Ok(token)
+}
+
+/// Bump `last_seen_at` for a live session. Called from the auth middleware on
+/// every authed request; throttled by `LAST_SEEN_REFRESH_SECONDS` so the write
+/// rate stays well below the read rate.
+pub async fn touch_session_last_seen(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE sessions SET last_seen_at = datetime('now') WHERE id = ?")
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionRow {
+    pub id: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub last_seen_at: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip: Option<String>,
+}
+
+/// List a user's live sessions (expiry-filtered), newest activity first.
+pub async fn list_sessions_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<SessionRow>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, created_at, expires_at, last_seen_at, user_agent, ip \
+         FROM sessions \
+         WHERE user_id = ? AND expires_at > datetime('now') \
+         ORDER BY COALESCE(last_seen_at, created_at) DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| SessionRow {
+            id: r.get("id"),
+            created_at: r.get("created_at"),
+            expires_at: r.get("expires_at"),
+            last_seen_at: r.try_get("last_seen_at").ok(),
+            user_agent: r.try_get("user_agent").ok(),
+            ip: r.try_get("ip").ok(),
+        })
+        .collect())
+}
+
+/// Delete a single session, scoped to the owning user. Returns `true` if a
+/// row was actually removed. The user-scope guard prevents one user from
+/// revoking another user's session by guessing or replaying a session ID.
+pub async fn delete_session_for_user(
+    pool: &SqlitePool,
+    session_id: &str,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query("DELETE FROM sessions WHERE id = ? AND user_id = ?")
+        .bind(session_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
 }
 
 pub async fn get_user_by_session(

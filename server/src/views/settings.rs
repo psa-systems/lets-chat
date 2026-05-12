@@ -3,6 +3,16 @@ use askama::Template;
 use crate::models::User;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
+/// One row in the sessions list on the settings page.
+pub struct SessionView {
+    pub id: String,
+    pub label: String,
+    pub ip: Option<String>,
+    pub last_seen: String,
+    pub created: String,
+    pub is_current: bool,
+}
+
 #[derive(Template)]
 #[template(path = "settings/page.html")]
 pub struct UserSettingsPage<'a> {
@@ -29,6 +39,12 @@ pub struct UserSettingsPage<'a> {
     pub password_change_available: bool,
     pub password_changed: bool,
     pub password_error: Option<&'a str>,
+    /// Live sessions for this user, sorted newest activity first. The row
+    /// matching the request's session cookie has `is_current = true` so the
+    /// template can mark it and disable its revoke button.
+    pub sessions: &'a [SessionView],
+    /// Flash set by `?session_revoked=1` after a successful revoke.
+    pub session_revoked: bool,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub git_version: &'a str,

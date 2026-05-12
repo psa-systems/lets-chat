@@ -91,7 +91,10 @@ pub async fn post_login(
         return Ok((jar, Redirect::to("/login/2fa")).into_response());
     }
 
-    let token = db::auth::create_session(&state.auth, &record.id).await?;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let token =
+        db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
+            .await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 
@@ -224,7 +227,10 @@ pub async fn post_register(
         }
     }
 
-    let token = db::auth::create_session(&state.auth, &user_id).await?;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let token =
+        db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
+            .await?;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 

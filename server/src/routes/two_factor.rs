@@ -256,7 +256,10 @@ async fn finalize_2fa_login(
     pending_token: &str,
     user_id: &str,
 ) -> Result<Response, AppError> {
-    let session = db::auth::create_session(&state.auth, user_id).await?;
+    let (ua, ip) = crate::auth::extract_session_origin(headers);
+    let session =
+        db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())
+            .await?;
     let _ = db::two_factor::delete_pending_2fa(&state.auth, pending_token).await;
 
     let session_cookie = build_session_cookie(session);
