@@ -210,6 +210,168 @@ async fn autocomplete_excludes_self() {
 }
 
 #[tokio::test]
+async fn autocomplete_lists_broadcast_tokens_first_with_empty_prefix() {
+    // Empty prefix: both broadcast tokens appear, and they appear ABOVE the
+    // user row (Slack pattern - broadcast tokens are higher-stakes and get
+    // the visibility). The general room (id=1) is public; the seeded user
+    // "alice" is a member of the General enclave.
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/users/mentions?room_id=1&q=")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).into_owned();
+    let here_at = body.find(r#"data-username="here""#).expect("missing @here");
+    let channel_at = body
+        .find(r#"data-username="channel""#)
+        .expect("missing @channel");
+    let alice_at = body
+        .find(r#"data-username="alice""#)
+        .expect("missing @alice");
+    assert!(
+        here_at < alice_at && channel_at < alice_at,
+        "broadcast tokens did not sort above user row: here@{here_at} channel@{channel_at} alice@{alice_at}"
+    );
+}
+
+#[tokio::test]
+async fn autocomplete_broadcast_prefix_matches_letter_h() {
+    // Typing `@h` puts `@here` in the dropdown alongside any matching user
+    // ("alice" does not match, but the existence of user rows is not the
+    // assertion - the assertion is that @here is visible even though it
+    // could compete with `@harry`-style usernames at this prefix).
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/users/mentions?room_id=1&q=h")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    let body =
+        String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains(r#"data-username="here""#),
+        "@here missing for q=h: {body}"
+    );
+    assert!(
+        !body.contains(r#"data-username="channel""#),
+        "@channel should not match prefix h: {body}"
+    );
+}
+
+#[tokio::test]
+async fn autocomplete_broadcast_tokens_absent_in_dm_room() {
+    // DMs gate broadcast resolution; surfacing the tokens in the autocomplete
+    // would be a confusing no-op. The route must hide them when the room is
+    // a DM.
+    let t = app_with_two_users("viewer", "alice").await;
+    let dm_room = db::chat::create_dm_room(&t.chat, "viewer-alice-dm", &t.viewer_id, &t.peer_id)
+        .await
+        .unwrap();
+    let dm_room_id = dm_room.id;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/users/mentions?room_id={dm_room_id}&q="))
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        !body.contains(r#"data-username="here""#),
+        "@here leaked into DM autocomplete: {body}"
+    );
+    assert!(
+        !body.contains(r#"data-username="channel""#),
+        "@channel leaked into DM autocomplete: {body}"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_count_channel_returns_member_count() {
+    // viewer + alice are both in the General enclave; @channel should
+    // resolve to 1 (alice; viewer is the author so excluded).
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=channel")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains("1 person in #general"),
+        "expected singular '1 person': {body}"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_count_here_with_no_one_online_renders_empty() {
+    // No one has opened a WS connection in this test, so @here resolves to
+    // zero recipients. The endpoint returns an empty body so the composer
+    // slot collapses without a misleading "0 people" line.
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=here")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = String::from_utf8_lossy(&to_bytes(resp.into_body(), 1 << 20).await.unwrap())
+        .trim()
+        .to_string();
+    assert!(
+        body.is_empty(),
+        "expected empty body for 0 recipients: {body:?}"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_count_rejects_unknown_token() {
+    let t = app_with_two_users("viewer", "alice").await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/rooms/1/broadcast-count?token=admins")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn broadcast_count_rejects_dm_room() {
+    let t = app_with_two_users("viewer", "alice").await;
+    let dm_room = db::chat::create_dm_room(&t.chat, "viewer-alice-dm", &t.viewer_id, &t.peer_id)
+        .await
+        .unwrap();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!(
+            "/api/rooms/{}/broadcast-count?token=channel",
+            dm_room.id
+        ))
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn autocomplete_requires_auth() {
     let t = app_with_two_users("viewer", "alice").await;
     let req = Request::builder()
