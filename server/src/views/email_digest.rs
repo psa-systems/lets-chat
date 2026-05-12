@@ -174,6 +174,60 @@ mod tests {
     }
 
     #[test]
+    fn empty_server_url_renders_items_without_anchor_wrappers() {
+        // Graceful degradation when the operator has not set
+        // `public_base_url`: items still appear, but the templates omit
+        // `<a href>` markup so we do not emit `<a href="">` (which some
+        // clients render as malformed link text).
+        let dms = vec![DigestDmSection {
+            peer_username: "bob".into(),
+            peer_id: "user-bob".into(),
+            items: vec![sample_item(
+                "bob",
+                "Mon 14:00",
+                "hello",
+                // Deep link will be ignored by the template because the
+                // server_url is empty. We still pass it through so the
+                // tick code does not have to branch on emptiness.
+                "https://ignored.example/dm/user-bob#m1",
+            )],
+        }];
+        let html = DigestHtml {
+            server_url: "",
+            dm_sections: &dms,
+            room_sections: &[],
+            overflow_count: 0,
+        }
+        .render()
+        .unwrap();
+        // No anchor tags at all when server_url is empty.
+        assert!(!html.contains("<a "), "expected no anchor tags; got {html}");
+        // Item content still rendered.
+        assert!(html.contains("From bob"));
+        assert!(html.contains("hello"));
+
+        let txt = DigestText {
+            server_url: "",
+            dm_sections: &dms,
+            room_sections: &[],
+            overflow_count: 0,
+        }
+        .render()
+        .unwrap();
+        // Plaintext omits the `-> https://...` link line and the
+        // `(server_url/dm/...)` section subtitle.
+        assert!(
+            !txt.contains("->"),
+            "plaintext should not emit a link line: {txt}"
+        );
+        assert!(
+            !txt.contains("ignored.example"),
+            "plaintext should not leak the deep-link URL: {txt}"
+        );
+        assert!(txt.contains("From bob"));
+    }
+
+    #[test]
     fn plaintext_mirrors_html_content_without_markup() {
         let dms = vec![DigestDmSection {
             peer_username: "bob".into(),

@@ -49,6 +49,15 @@
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
+    <label class="block text-sm font-medium mb-1" for="public_base_url">Public site URL</label>
+    <input id="public_base_url" name="public_base_url" type="url" value="{{ public_base_url }}"
+           placeholder="https://chat.example.com"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">
+      Externally-reachable URL of this server. Used in email digest deep links. Leave blank to send digests without clickable links.
+    </p>
+  </div>
+  <div>
     <label class="block text-sm font-medium mb-1" for="tls_mode">TLS mode</label>
     <select id="tls_mode" name="tls_mode"
             class="w-full border border-slate-300 rounded px-2 py-1 text-sm bg-white">
