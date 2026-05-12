@@ -224,7 +224,9 @@ pub async fn post_register(
     // it when the operator has flipped `default_notify_email_digest`.
     // Failure to apply is logged but not fatal: the worst case is the
     // user has to opt in manually.
-    if let Ok(Some(ref v)) = db::settings::get_setting(&state.settings, "default_notify_email_digest").await {
+    if let Ok(Some(ref v)) =
+        db::settings::get_setting(&state.settings, "default_notify_email_digest").await
+    {
         if v == "1" {
             if let Err(e) =
                 db::auth::set_notify_email_digest_enabled(&state.auth, &user_id, true).await
