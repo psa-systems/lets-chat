@@ -102,6 +102,7 @@ pub async fn inject_user(
     }
 
     let path = req.uri().path().to_string();
+    tracing::debug!(%path, "inject_user enter");
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
 
     let lookup_done = spawn_phase_watchdog("session_lookup", path.clone());

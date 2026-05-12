@@ -662,6 +662,7 @@ async fn log_slow_requests(req: axum::extract::Request, next: middleware::Next) 
         });
     }
 
+    tracing::debug!(%method, path = %uri.path(), "log_slow_requests: entering next.run");
     let resp = next.run(req).await;
     done.store(true, Ordering::SeqCst);
 
