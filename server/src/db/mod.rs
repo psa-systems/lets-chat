@@ -2,6 +2,7 @@ pub mod auth;
 pub mod bookmarks;
 pub mod chat;
 pub mod custom_emojis;
+pub mod email_verification;
 pub mod enclave;
 pub mod mentions;
 pub mod moderation;
