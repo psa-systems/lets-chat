@@ -98,6 +98,14 @@ async fn main() {
         tracing::warn!(error = %e, "enclave backfill failed at startup");
     }
 
+    // Eagerly load syntect's bundled syntax and theme sets on a blocking
+    // thread before we start serving traffic. The deserialization takes
+    // several seconds; doing it lazily inside the first markdown render
+    // would freeze a tokio worker thread mid-request and starve any task
+    // already scheduled on that thread.
+    let warm = tokio::task::spawn_blocking(lets_chat::views::markdown::warm_syntect);
+    let _ = warm.await;
+
     spawn_idle_scanner(state.clone());
     spawn_pool_stats_logger(state.clone());
 
