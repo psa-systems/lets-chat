@@ -34,6 +34,7 @@ pub async fn find_user_by_username(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -55,6 +56,7 @@ pub async fn find_user_by_id(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE id = ?",
     )
@@ -90,6 +92,10 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         notify_browser_enabled: r.get::<i64, _>("notify_browser_enabled") != 0,
         notify_sound_enabled: r.get::<i64, _>("notify_sound_enabled") != 0,
         notify_push_enabled: r.get::<i64, _>("notify_push_enabled") != 0,
+        notify_email_digest_enabled: r.get::<i64, _>("notify_email_digest_enabled") != 0,
+        last_ws_seen_at: r.get("last_ws_seen_at"),
+        last_digest_sent_at: r.get("last_digest_sent_at"),
+        email: r.get("email"),
         totp_secret_encrypted: r.get("totp_secret_encrypted"),
         totp_nonce: r.get("totp_nonce"),
         totp_enabled: r.get("totp_enabled"),
@@ -185,8 +191,107 @@ pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<boo
     Ok(flipped)
 }
 
+/// Bump `users.last_ws_seen_at` to `now()` for `user_id`. Called from the
+/// WebSocket path to record that the in-app notification surface had a chance
+/// to fire for this user (connection-open or an outbound `Mentioned` frame
+/// reaching the client). The digest "missed" predicate consults this column
+/// alongside `last_active_at` to decide whether to email about a mention.
+///
+/// Idle status (see `mark_idle_users`) deliberately does NOT consult this
+/// column. The two timestamps serve different purposes:
+/// - `last_active_at` is "the user interacted with the app via HTTP."
+/// - `last_ws_seen_at` is "the user's app was alive enough to surface a ping."
+///
+/// Errors are logged at warn but not propagated: the WS hot path should not
+/// fail because a side-effect DB write hit a snag.
+pub async fn bump_last_ws_seen(pool: &SqlitePool, user_id: &str) {
+    if let Err(e) = sqlx::query("UPDATE users SET last_ws_seen_at = datetime('now') WHERE id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await
+    {
+        tracing::warn!(error = %e, user_id = %user_id, "bump_last_ws_seen failed");
+    }
+}
+
+/// A single row in the eligibility query result. The tick reads these
+/// off and then runs per-user "what did they miss" queries against the
+/// chat pool, so we project only the fields the tick actually needs.
+#[derive(Debug, Clone)]
+pub struct DigestCandidate {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    /// MAX(last_active_at, COALESCE(last_ws_seen_at, '')). The tick uses
+    /// it as the lower bound on "missed" mention/DM created_at, AND as
+    /// the comparison point for `last_digest_sent_at`.
+    pub activity_floor: String,
+}
+
+/// Find users currently eligible for an email-digest send. A user is
+/// eligible iff:
+/// - `notify_email_digest_enabled = 1`
+/// - they have a non-empty email address
+/// - both `last_active_at` and `last_ws_seen_at` are older than
+///   `quiet_period_secs` (no HTTP activity AND no WS pings recently)
+/// - either no digest has ever been sent, or the last digest predates
+///   the user's most recent activity (i.e. they came back online and
+///   went offline again; "one digest per offline session")
+///
+/// The `MAX(a, COALESCE(b, ''))` shape works because lets-chat stores
+/// timestamps as ISO 8601 strings, which sort lexicographically the
+/// same as chronologically. The `COALESCE` lets users who have never
+/// connected via WS still qualify (their floor is `last_active_at`
+/// alone).
+pub async fn find_digest_candidates(
+    pool: &SqlitePool,
+    quiet_period_secs: i64,
+) -> Result<Vec<DigestCandidate>, sqlx::Error> {
+    let quiet_modifier = format!("-{quiet_period_secs} seconds");
+    let rows = sqlx::query(
+        "SELECT id, username, email, \
+                MAX(last_active_at, COALESCE(last_ws_seen_at, '')) AS activity_floor \
+           FROM users \
+          WHERE notify_email_digest_enabled = 1 \
+            AND email IS NOT NULL AND email <> '' \
+            AND MAX(last_active_at, COALESCE(last_ws_seen_at, '')) < datetime('now', ?) \
+            AND (last_digest_sent_at IS NULL \
+                 OR last_digest_sent_at < MAX(last_active_at, COALESCE(last_ws_seen_at, '')))",
+    )
+    .bind(quiet_modifier)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| DigestCandidate {
+            id: r.get("id"),
+            username: r.get("username"),
+            email: r.get("email"),
+            activity_floor: r.get("activity_floor"),
+        })
+        .collect())
+}
+
+/// Mark a digest as just sent for `user_id`. The digest tick gates eligibility
+/// with `last_digest_sent_at < MAX(last_active_at, last_ws_seen_at)`, so this
+/// timestamp self-resets the moment the user comes back online and bumps
+/// either activity column. One digest per offline session.
+pub async fn set_last_digest_sent_at(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET last_digest_sent_at = datetime('now') WHERE id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Flip rows whose `status = 'active'` and whose `last_active_at` is older
 /// than `threshold_seconds` to `'idle'`. Returns the IDs that flipped.
+///
+/// Idle status reflects HTTP-request activity only (`last_active_at`). The
+/// separate `last_ws_seen_at` column is the digest's "in-app surface was
+/// alive" signal; it deliberately does NOT participate in idle-flip, so a
+/// user with a tab open in a busy room continues to flip to idle after
+/// `threshold_seconds` of no HTTP interaction.
 pub async fn mark_idle_users(
     pool: &SqlitePool,
     threshold_seconds: i64,
@@ -347,6 +452,7 @@ pub async fn get_user_by_session(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
+         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -383,6 +489,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users ORDER BY created_at ASC",
     )
@@ -607,18 +714,40 @@ pub async fn set_notification_prefs(
     browser: bool,
     sound: bool,
     push: bool,
+    email_digest: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE users \
-            SET notify_browser_enabled = ?, \
-                notify_sound_enabled   = ?, \
-                notify_push_enabled    = ?, \
-                updated_at             = datetime('now') \
+            SET notify_browser_enabled       = ?, \
+                notify_sound_enabled         = ?, \
+                notify_push_enabled          = ?, \
+                notify_email_digest_enabled  = ?, \
+                updated_at                   = datetime('now') \
           WHERE id = ?",
     )
     .bind(browser as i32)
     .bind(sound as i32)
     .bind(push as i32)
+    .bind(email_digest as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Toggle the digest-opt-in flag for `user_id`. Used by the register
+/// flow when the operator has flipped `default_notify_email_digest` to
+/// `1`: new users start opted in, but the column default in the schema
+/// is `0` so this helper performs the targeted update.
+pub async fn set_notify_email_digest_enabled(
+    pool: &SqlitePool,
+    user_id: &str,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET notify_email_digest_enabled = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(enabled as i32)
     .bind(user_id)
     .execute(pool)
     .await?;
@@ -724,6 +853,7 @@ pub async fn search_users(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users \
          WHERE is_banned = 0 \
@@ -974,6 +1104,7 @@ pub async fn list_blocked_users(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
+         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \

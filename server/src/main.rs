@@ -69,7 +69,7 @@ async fn main() {
     if mailer.is_some() {
         tracing::info!("SMTP mailer configured");
     } else {
-        tracing::info!("SMTP mailer not configured; password reset disabled");
+        tracing::info!("SMTP mailer not configured; password reset and digest disabled");
     }
     let base_url = std::env::var("LETS_CHAT_BASE_URL")
         .ok()
@@ -97,6 +97,7 @@ async fn main() {
     }
 
     spawn_idle_scanner(state.clone());
+    spawn_digest_sender(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -163,6 +164,26 @@ fn spawn_idle_scanner(state: AppState) {
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "idle scan failed"),
+            }
+        }
+    });
+}
+
+/// Hourly tick that calls `digest::run_tick`. Internal short-circuit
+/// when `state.mailer` is `None` makes this safe to spawn even on
+/// deployments without SMTP configured. Modeled on `spawn_idle_scanner`.
+fn spawn_digest_sender(state: AppState) {
+    let cfg = lets_chat::digest::DigestConfig::default();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        // Skip the immediate fire: tokio::time::interval fires once at
+        // creation time. We want the first run an hour after boot so the
+        // server is fully up and any startup hiccups have settled.
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            if let Err(e) = lets_chat::digest::run_tick(&state, cfg).await {
+                tracing::warn!(error = %e, "digest tick failed");
             }
         }
     });

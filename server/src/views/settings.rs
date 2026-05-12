@@ -34,6 +34,10 @@ pub struct UserSettingsPage<'a> {
     /// Flash set by the resend redirect: render a small "we sent a fresh
     /// link" notice next to the email field.
     pub email_verify_sent: bool,
+    /// Mirror of `state.mail_available()`. Drives the disabled state of
+    /// the email-digest checkbox and the help-text branch that explains
+    /// why opting in is currently a no-op.
+    pub email_available: bool,
     /// Hide the password-change form entirely in SaaS mode, where identity
     /// is owned by the parent app.
     pub password_change_available: bool,

@@ -32,10 +32,12 @@ pub struct AppState {
     /// short-circuits before any client method is called.
     pub push_client: Arc<dyn PushClient>,
     /// `Some` when `LETS_CHAT_SMTP_URL` + `LETS_CHAT_SMTP_FROM` are set.
-    /// `None` disables outbound mail; password reset routes return 404.
+    /// `None` disables outbound mail; password reset routes return 404
+    /// and the digest tick short-circuits.
     pub mailer: Option<Mailer>,
     /// Absolute base URL used to build links inside outbound mail
-    /// (e.g. password reset). Defaults to `http://localhost:8080`.
+    /// (password reset, email verification, and digest deep links).
+    /// Defaults to `http://localhost:8080`.
     pub base_url: String,
 }
 
@@ -50,8 +52,8 @@ impl AppState {
     pub fn push_available(&self) -> bool {
         self.vapid.is_some()
     }
-    /// True when an SMTP mailer has been configured. Password reset flows
-    /// are off-limits without one.
+    /// True when an SMTP mailer has been configured. Password reset,
+    /// email verification, and email digest are off-limits without one.
     pub fn mail_available(&self) -> bool {
         self.mailer.is_some()
     }

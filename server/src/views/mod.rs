@@ -3,6 +3,7 @@ pub mod auth;
 pub mod bookmarks;
 pub mod dm;
 pub mod dm_header;
+pub mod email_digest;
 pub mod enclave;
 pub mod home;
 pub mod layout;

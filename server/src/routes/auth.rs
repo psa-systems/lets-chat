@@ -219,6 +219,21 @@ pub async fn post_register(
         }
     }
 
+    // Apply the admin-configured default for new users. The migration
+    // defaults `notify_email_digest_enabled` to 0; this hook overrides
+    // it when the operator has flipped `default_notify_email_digest`.
+    // Failure to apply is logged but not fatal: the worst case is the
+    // user has to opt in manually.
+    if let Ok(Some(ref v)) = db::settings::get_setting(&state.settings, "default_notify_email_digest").await {
+        if v == "1" {
+            if let Err(e) =
+                db::auth::set_notify_email_digest_enabled(&state.auth, &user_id, true).await
+            {
+                tracing::warn!(error = %e, user_id = %user_id, "default digest opt-in apply failed");
+            }
+        }
+    }
+
     let promoted = promote_first_user_to_admin(&state, &user_id).await?;
 
     if promoted {

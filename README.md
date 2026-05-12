@@ -11,7 +11,8 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 - Emoji reactions and read receipts
 - Full-text message search
 - Moderator tools: mute, ban, kick, delete messages
-- Admin panel: user management, room management, SMTP settings
+- Admin panel: user management, room management, settings
+- Email digest of missed mentions and DMs (off by default per user)
 - Role-based access: Admin > Moderator > User
 
 ## Quick Start
@@ -51,10 +52,12 @@ Run `just --list` to see all available recipes.
 | `BIND_ADDR` | `0.0.0.0:8080` | Server listen address |
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
 | `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID key, 2FA TOTP secrets). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
+| `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used in outbound emails (password reset, email verification, digest deep links). |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_FROM` / `SMTP_USERNAME` / `SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
 
 ### `LETS_CHAT_SECRET_KEY`
 
-Encrypts at-rest secrets used by features that store sensitive data: today, Web Push (VAPID private key) and 2FA (per-user TOTP secrets). Future encrypted-at-rest features will reuse the same key.
+Encrypts at-rest secrets used by features that store sensitive data: Web Push (VAPID private key) and 2FA (per-user TOTP secrets). Future encrypted-at-rest features will reuse the same key. (SMTP credentials are passed via environment variables, not the database, so they do not depend on this key.)
 
 **Format.** Any non-empty string. The server SHA-256-hashes it to derive a 32-byte AES-256-GCM key, so length and encoding don't matter; entropy does. Use at least 32 random bytes.
 
@@ -83,6 +86,44 @@ head -c 32 /dev/urandom | base64
 - *2FA:* same lockout as the lost-key case above; clear the affected `users` columns to unblock login.
 
 **Storage.** Treat it like a database password. Use Docker `--env-file`, your deployment's secret manager, or a `.env` file with restricted permissions. Don't bake it into a committed `compose.yml`.
+
+## Email digests
+
+Sends each opted-in user one email summarising mentions and DMs they missed while offline.
+
+### Operator setup
+
+Three things must be configured for the feature to be fully functional.
+
+1. **SMTP environment variables**. The same set used by password reset and email verification. All required to enable outbound mail:
+   - `SMTP_HOST`
+   - `SMTP_PORT`
+   - `SMTP_TLS` (one of `tls` / `starttls` / `none`)
+   - `SMTP_FROM`
+   - `SMTP_USERNAME` and `SMTP_PASSWORD` together (optional pair; both unset means the relay is opened unauthenticated)
+2. **`LETS_CHAT_BASE_URL`** in the environment, e.g. `https://chat.example.com`. Used to construct clickable deep links in the email body. Defaults to `http://localhost:8080` if unset; the digest still sends with that URL but the links will only work for local development.
+3. **(Optional) "New users start with email digest enabled"** at `/admin/settings`. Off by default. Flipping it on only affects users who register after the flip; existing users are unchanged. Users can override their own preference at `/settings`.
+
+Changes to SMTP env vars take effect on the next server restart.
+
+### User opt-in
+
+1. Sign in and go to `/settings`.
+2. Enter and verify an email address (the existing email-verification flow).
+3. Tick "Email me a digest of missed mentions and DMs".
+4. Save preferences.
+
+Users with no email address on file are skipped by the digest tick regardless of the checkbox state. Muted rooms (`mute_mode = 'all'`) and muted DMs are excluded; `mute_mode = 'except_mentions'` rooms still contribute their mentions.
+
+### Delivery semantics
+
+- **Cadence**: hourly background tick. First fire one hour after server start.
+- **Quiet period**: 1 hour. The user must have had neither HTTP activity (`last_active_at`) nor WebSocket activity (`last_ws_seen_at`) within the last hour.
+- **One digest per offline session**: the tick gates on `last_digest_sent_at < MAX(last_active_at, last_ws_seen_at)`. As soon as the user comes back online and bumps either column, the gate self-resets, so the next offline session is eligible for one more email.
+- **Time window**: 7 days. Activity older than 7 days never appears in a digest.
+- **Item cap**: 50 across all sections combined. Overflow renders as a "... and N more" footer.
+- **Subject**: `[lets-chat] N new mentions and M direct messages` (zero clauses dropped).
+- **Format**: `multipart/alternative` with both `text/plain` and `text/html` parts.
 
 ## Tech Stack
 
