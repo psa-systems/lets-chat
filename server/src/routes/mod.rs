@@ -30,6 +30,8 @@ mod bookmarks;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
+#[cfg(feature = "standalone")]
+pub(crate) mod email_verification;
 mod enclave;
 mod home;
 mod mentions;
@@ -563,6 +565,11 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/reset/{token}",
             get(password_reset::get_reset).post(password_reset::post_reset),
+        )
+        .route("/verify-email/{token}", get(email_verification::get_verify))
+        .route(
+            "/verify-email/resend",
+            post(email_verification::post_resend),
         )
         .route("/settings/password", post(settings::post_password))
         .merge(admin::router());

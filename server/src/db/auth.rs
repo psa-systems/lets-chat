@@ -799,17 +799,65 @@ pub async fn get_user_email(
 /// Update (or clear with `None`) a user's email. Returns `Err` with a unique
 /// violation if another row already owns this address; the caller maps that
 /// to a friendly form error.
+///
+/// If the address actually changes (case-sensitive compare against the
+/// stored value), `email_verified_at` is cleared in the same statement so a
+/// previously verified address never silently transfers its verified state
+/// to a new one. Re-saving the same address is a no-op.
 pub async fn set_user_email(
     pool: &SqlitePool,
     user_id: &str,
     email: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
-        .bind(email)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET \
+            email = ?1, \
+            email_verified_at = CASE \
+                WHEN COALESCE(email, '') = COALESCE(?1, '') THEN email_verified_at \
+                ELSE NULL \
+            END, \
+            updated_at = datetime('now') \
+         WHERE id = ?2",
+    )
+    .bind(email)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     Ok(())
+}
+
+/// Fetch the verified-at timestamp for a user's email, or `None` if the
+/// current email is unverified (or no email is set).
+pub async fn get_user_email_verified_at(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT email_verified_at FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<String>, _>("email_verified_at")))
+}
+
+/// Stamp the user's email as verified, but only when their currently-stored
+/// address still matches `email`. The guard prevents a token issued before
+/// an in-flight email change from verifying the new address. Returns the
+/// number of rows updated so the caller can detect a no-op (token stale
+/// relative to the current email).
+pub async fn mark_email_verified(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET email_verified_at = datetime('now'), updated_at = datetime('now') \
+         WHERE id = ? AND email = ?",
+    )
+    .bind(user_id)
+    .bind(email)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
 }
 
 /// Overwrite a user's password hash. Used by the reset flow after a token
