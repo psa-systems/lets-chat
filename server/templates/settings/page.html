@@ -50,6 +50,19 @@
       <span class="text-slate-600">Email</span>
       <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
       <span class="text-xs text-slate-500">Used only for password reset. Leave blank to remove.</span>
+      {% if email_verification_available && email.is_some() %}
+      <div class="mt-1 flex items-center gap-2 text-xs">
+        {% if email_verified %}
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">Verified</span>
+        {% else %}
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Unverified</span>
+        <button type="submit" form="email-verify-resend" class="text-blue-600 hover:underline">Resend verification email</button>
+        {% endif %}
+      </div>
+      {% if email_verify_sent %}
+      <p class="text-xs text-green-700 mt-1">If your account has an unverified email on file, we sent a fresh verification link.</p>
+      {% endif %}
+      {% endif %}
     </label>
     <label class="block text-sm">
       <span class="text-slate-600">Bio</span>
@@ -64,6 +77,9 @@
   </form>
   {% if user.avatar_ext.is_some() %}
   <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
+  {% endif %}
+  {% if email_verification_available %}
+  <form id="email-verify-resend" method="post" action="/verify-email/resend" class="hidden"></form>
   {% endif %}
 
   <form method="post" action="/settings" class="space-y-4">

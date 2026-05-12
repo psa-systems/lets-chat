@@ -207,6 +207,13 @@ pub async fn post_register(
             }
             return Err(AppError::Internal(format!("set_user_email: {}", err)));
         }
+
+        // Kick off a verification email when SMTP is configured. The send
+        // is fire-and-forget: registration must succeed even if the relay
+        // is unreachable, and the user can resend from settings later.
+        if state.mail_available() {
+            crate::routes::email_verification::spawn_dispatch(&state, user_id.clone(), e.clone());
+        }
     }
 
     let promoted = promote_first_user_to_admin(&state, &user_id).await?;
