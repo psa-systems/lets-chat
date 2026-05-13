@@ -116,6 +116,7 @@ async fn main() {
 
     spawn_idle_scanner(state.clone());
     spawn_digest_sender(state.clone());
+    spawn_orphan_sweeper(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -202,6 +203,34 @@ fn spawn_digest_sender(state: AppState) {
             tick.tick().await;
             if let Err(e) = lets_chat::digest::run_tick(&state, cfg).await {
                 tracing::warn!(error = %e, "digest tick failed");
+            }
+        }
+    });
+}
+
+/// Hourly tick that calls `uploads::sweep::run_orphan_sweep` with the
+/// 24-hour threshold. Modeled on `spawn_digest_sender`. The sweep itself
+/// short-circuits cheaply when there are no candidates, so this stays quiet
+/// on idle deployments.
+fn spawn_orphan_sweeper(state: AppState) {
+    const TICK_SECS: u64 = 3600;
+    const THRESHOLD_HOURS: i64 = 24;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::uploads::sweep::run_orphan_sweep(&state, THRESHOLD_HOURS).await {
+                Ok(stats) if stats.rows_deleted > 0 || stats.errors > 0 => {
+                    tracing::info!(
+                        rows = stats.rows_deleted,
+                        files = stats.files_deleted,
+                        errors = stats.errors,
+                        "orphan sweep complete",
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "orphan sweep failed"),
             }
         }
     });

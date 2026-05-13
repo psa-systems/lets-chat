@@ -146,6 +146,58 @@ pub async fn attachments_for_message(
     Ok(map.into_iter().next().map(|(_, v)| v).unwrap_or_default())
 }
 
+// ── Orphan GC + admin queries ─────────────────────────────────────────────────
+
+/// Select orphans (`message_id IS NULL`) whose `created_at` is older than
+/// `hours` ago. Uses `idx_file_uploads_orphan`.
+pub async fn select_orphans_older_than(
+    pool: &SqlitePool,
+    hours: i64,
+) -> Result<Vec<(i64, String)>, sqlx::Error> {
+    let modifier = format!("-{hours} hours");
+    let rows = sqlx::query(
+        "SELECT id, storage_path FROM file_uploads \
+         WHERE message_id IS NULL AND created_at < datetime('now', ?)",
+    )
+    .bind(modifier)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("id"), r.get("storage_path")))
+        .collect())
+}
+
+/// Count rows that share `storage_path` with the given row id (excluded).
+/// The sweeper calls this inside a `BEGIN IMMEDIATE` transaction to decide
+/// whether the on-disk file is still referenced. Takes
+/// `&mut SqliteConnection` so the count and the row-delete share the
+/// transaction handle.
+pub async fn count_uploads_sharing_path(
+    conn: &mut sqlx::SqliteConnection,
+    storage_path: &str,
+    exclude_id: i64,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM file_uploads WHERE storage_path = ? AND id <> ?")
+        .bind(storage_path)
+        .bind(exclude_id)
+        .fetch_one(&mut *conn)
+        .await
+}
+
+/// Delete the row at `id`. Used by the orphan sweeper; takes
+/// `&mut SqliteConnection` for transaction sharing.
+pub async fn delete_upload_row(
+    conn: &mut sqlx::SqliteConnection,
+    id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM file_uploads WHERE id = ?")
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 // ── Link preview cache ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
