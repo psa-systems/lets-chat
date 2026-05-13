@@ -39,10 +39,14 @@ pub async fn ws_handler(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
 ) -> impl IntoResponse {
+    tracing::info!("ws_handler enter");
     let Some(user) = user else {
+        tracing::info!("ws_handler: no user, returning 401");
         return (http::StatusCode::UNAUTHORIZED, "no session").into_response();
     };
-    ws.on_upgrade(move |socket| handle_socket(socket, state, user))
+    let resp = ws.on_upgrade(move |socket| handle_socket(socket, state, user));
+    tracing::info!("ws_handler returning upgrade response");
+    resp
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
