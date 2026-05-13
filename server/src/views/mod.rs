@@ -34,6 +34,25 @@ impl IntoResponse for Html {
 }
 
 /// Render an Askama template into an `Html` response wrapper.
+///
+/// On the multi-thread tokio runtime we hand the synchronous render off
+/// via `block_in_place`, so the syntect-heavy `body_html()` calls inside
+/// the template do not pin a worker thread for seconds at a time and
+/// starve every other task scheduled on it. Under chat load several
+/// concurrent room renders could otherwise pin all worker threads
+/// simultaneously, leaving no thread free to poll incoming requests and
+/// producing the multi-minute "page is loading" stalls.
+///
+/// On the current-thread runtime (used by `#[tokio::test]`) we render
+/// inline: `block_in_place` panics there, and the test workload is
+/// single-shot anyway.
 pub fn html<T: Template>(template: &T) -> Result<Html, AppError> {
-    Ok(Html(template.render()?))
+    use tokio::runtime::{Handle, RuntimeFlavor};
+    let rendered = match Handle::try_current() {
+        Ok(h) if matches!(h.runtime_flavor(), RuntimeFlavor::MultiThread) => {
+            tokio::task::block_in_place(|| template.render())
+        }
+        _ => template.render(),
+    }?;
+    Ok(Html(rendered))
 }
