@@ -11,3 +11,30 @@ pub fn thumbnail_semaphore() -> &'static tokio::sync::Semaphore {
     static SEM: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
     SEM.get_or_init(|| tokio::sync::Semaphore::new(THUMBNAIL_CONCURRENCY))
 }
+
+/// Derive the preview filename from a content-addressed storage name. The
+/// pipeline write side and the serve-route read side share this convention,
+/// so the on-disk file the upload writes is the file the serve route looks
+/// for. `"abc.jpg"` becomes `"abc_preview.jpg"`.
+pub fn preview_storage_name(storage_name: &str) -> String {
+    match storage_name.rsplit_once('.') {
+        Some((stem, ext)) => format!("{stem}_preview.{ext}"),
+        None => format!("{storage_name}_preview"),
+    }
+}
+
+/// Map a storage-name extension to its canonical MIME. Serve-time uses this
+/// to derive the Content-Type for `?size=preview` independently of the DB
+/// row's `mime_type`; today they match for every supported format, but a
+/// future format where preview-mime ≠ original-mime (e.g. HEIC → JPEG
+/// transcode) would otherwise quietly serve the wrong Content-Type.
+pub fn mime_for_storage_path(storage_name: &str) -> Option<&'static str> {
+    let (_, ext) = storage_name.rsplit_once('.')?;
+    match ext {
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "png" => Some("image/png"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
