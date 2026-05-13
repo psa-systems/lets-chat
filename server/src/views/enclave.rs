@@ -56,6 +56,74 @@ pub struct DiscoverPage<'a> {
     pub asset_version: &'a str,
 }
 
+/// One candidate row in the enclave-invite typeahead. Carries the same
+/// fields the user-search popover uses (so we can reuse the avatar partial
+/// without spreading raw user_ids into the template) plus a per-row state
+/// flag: already-a-member rows render a disabled pill instead of an Invite
+/// button, and already-invited rows render "Invited" instead. The route
+/// resolves these flags so the template stays presentation-only.
+pub struct EnclaveInviteCandidate {
+    pub id: String,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+    pub state: EnclaveInviteCandidateState,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum EnclaveInviteCandidateState {
+    /// Not yet a member or invitee; the Invite button is active.
+    Invitable,
+    /// Already a confirmed member of the enclave.
+    AlreadyMember,
+    /// Has an outstanding invitation that has not yet been accepted/declined.
+    AlreadyInvited,
+    /// The caller is looking at themselves. We don't let users self-invite.
+    Self_,
+}
+
+impl EnclaveInviteCandidate {
+    pub fn label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
+    pub fn is_invitable(&self) -> bool {
+        matches!(self.state, EnclaveInviteCandidateState::Invitable)
+    }
+    pub fn is_member(&self) -> bool {
+        matches!(self.state, EnclaveInviteCandidateState::AlreadyMember)
+    }
+    pub fn is_invited(&self) -> bool {
+        matches!(self.state, EnclaveInviteCandidateState::AlreadyInvited)
+    }
+    pub fn is_self(&self) -> bool {
+        matches!(self.state, EnclaveInviteCandidateState::Self_)
+    }
+}
+
+#[derive(Template)]
+#[template(path = "enclave/invite_search.html")]
+pub struct EnclaveInviteSearchFragment<'a> {
+    pub enclave_id: i64,
+    pub query: &'a str,
+    pub results: &'a [EnclaveInviteCandidate],
+}
+
+/// Per-row response returned by `POST /enclave/{id}/invite`. The typeahead
+/// row swaps itself with this fragment via `hx-swap="outerHTML"`. `ok` is
+/// true on a successful invite (renders "Invited"), false on a validation
+/// error (renders an inline red message).
+#[derive(Template)]
+#[template(path = "enclave/invite_row_result.html")]
+pub struct EnclaveInviteRowResult<'a> {
+    pub ok: bool,
+    pub message: &'a str,
+}
+
 #[derive(Template)]
 #[template(path = "invitations/page.html")]
 pub struct InvitationsPage<'a> {

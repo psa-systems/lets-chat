@@ -48,7 +48,10 @@ use crate::models::User;
 use crate::perms::enclave_can_manage;
 use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
 use crate::state::AppState;
-use crate::views::enclave::{DiscoverPage, EnclaveMemberView, EnclavePage, EnclaveSettingsPage};
+use crate::views::enclave::{
+    DiscoverPage, EnclaveInviteCandidate, EnclaveInviteCandidateState, EnclaveInviteRowResult,
+    EnclaveInviteSearchFragment, EnclaveMemberView, EnclavePage, EnclaveSettingsPage,
+};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -99,6 +102,7 @@ pub fn router() -> Router<AppState> {
             post(post_invite_code).delete(delete_invite_code),
         )
         .route("/enclave/{id}/invite", post(post_invite))
+        .route("/enclave/{id}/invite/search", get(get_invite_search))
         .route("/invitations", get(get_invitations))
         .route("/invitations/{id}/accept", post(post_invitation_accept))
         .route("/invitations/{id}/decline", post(post_invitation_decline))
@@ -361,7 +365,72 @@ pub async fn post_join_by_code(
 
 #[derive(Deserialize)]
 pub struct InviteForm {
-    pub username: String,
+    pub user_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct InviteSearchQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+}
+
+/// GET /enclave/{id}/invite/search?q=... - typeahead candidates for inviting
+/// a new member. Mirrors `/users/search`: blank query returns an empty body
+/// so the popover collapses via `empty:hidden`. Each row carries enough
+/// state for the template to render an Invite button, a "Member" pill, or
+/// an "Invited" pill, all without per-row queries.
+pub async fn get_invite_search(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    Query(InviteSearchQuery { q }): Query<InviteSearchQuery>,
+) -> Result<Html, AppError> {
+    require_manage(&state, &user, id).await?;
+    let query = q.unwrap_or_default();
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Html(String::new()));
+    }
+
+    let records = db::auth::search_users(&state.auth, trimmed, &user.id, 50).await?;
+    let members = db::enclave::list_members(&state.chat, id).await?;
+    let member_ids: std::collections::HashSet<String> =
+        members.into_iter().map(|m| m.user_id).collect();
+    let invited_ids: std::collections::HashSet<String> =
+        db::enclave::pending_invitee_ids_for_enclave(&state.chat, id)
+            .await?
+            .into_iter()
+            .collect();
+
+    let results: Vec<EnclaveInviteCandidate> = records
+        .into_iter()
+        .map(|r| {
+            let state_flag = if r.id == user.id {
+                EnclaveInviteCandidateState::Self_
+            } else if member_ids.contains(&r.id) {
+                EnclaveInviteCandidateState::AlreadyMember
+            } else if invited_ids.contains(&r.id) {
+                EnclaveInviteCandidateState::AlreadyInvited
+            } else {
+                EnclaveInviteCandidateState::Invitable
+            };
+            EnclaveInviteCandidate {
+                id: r.id,
+                username: r.username,
+                display_name: r.display_name,
+                avatar_ext: r.avatar_ext,
+                status: r.status,
+                custom_status: r.custom_status,
+                state: state_flag,
+            }
+        })
+        .collect();
+
+    html(&EnclaveInviteSearchFragment {
+        enclave_id: id,
+        query: trimmed,
+        results: &results,
+    })
 }
 
 pub async fn post_invite(
@@ -369,22 +438,47 @@ pub async fn post_invite(
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
     axum::Form(form): axum::Form<InviteForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Html, AppError> {
     require_manage(&state, &user, id).await?;
-    let Some(target) = db::auth::find_user_by_username(&state.auth, form.username.trim()).await?
-    else {
-        return Err(AppError::BadRequest("user not found".into()));
+    let target_id = form.user_id.trim();
+    if target_id.is_empty() {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "Pick a person.",
+        });
+    }
+    let Some(target) = db::auth::find_user_by_id(&state.auth, target_id).await? else {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "User not found.",
+        });
     };
+    if target.id == user.id {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "You can't invite yourself.",
+        });
+    }
     if db::enclave::get_membership(&state.chat, id, &target.id)
         .await?
         .is_some()
     {
-        return Err(AppError::BadRequest("user is already a member".into()));
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "Already a member.",
+        });
     }
     if let Err(e) = db::enclave::create_invitation(&state.chat, id, &target.id, &user.id).await {
-        if !matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
-            return Err(e.into());
+        // A second click on the same Invite button (or a concurrent request)
+        // races on `(enclave_id, invitee_id)`. Surface it as the friendly
+        // "already invited" state rather than a 500.
+        if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
+            return html(&EnclaveInviteRowResult {
+                ok: true,
+                message: "Invited",
+            });
         }
+        return Err(e.into());
     }
     state.hub.broadcast_to_user(
         &target.id,
@@ -392,7 +486,10 @@ pub async fn post_invite(
             invitee_id: target.id.clone(),
         },
     );
-    Ok(Redirect::to(&format!("/enclave/{id}")))
+    html(&EnclaveInviteRowResult {
+        ok: true,
+        message: "Invited",
+    })
 }
 
 pub async fn post_invitation_accept(
