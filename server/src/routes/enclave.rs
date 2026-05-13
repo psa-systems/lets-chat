@@ -459,6 +459,32 @@ pub async fn post_invite(
             message: "You can't invite yourself.",
         });
     }
+    // Mirror the discovery filters that the typeahead applies, so a hand-
+    // crafted POST cannot bypass them. Without this gate a manager could
+    // construct a request to invite a user who set their profile private,
+    // a user they have a mutual block with, or a banned account - none of
+    // which would have appeared in the typeahead in the first place. The
+    // returned message is deliberately generic for the private/block cases
+    // so the response cannot be used to probe block state or to enumerate
+    // users with private profiles.
+    if target.is_banned {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "User not found.",
+        });
+    }
+    if !target.is_profile_public {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "User not found.",
+        });
+    }
+    if db::auth::is_blocked_either_way(&state.auth, &user.id, &target.id).await? {
+        return html(&EnclaveInviteRowResult {
+            ok: false,
+            message: "User not found.",
+        });
+    }
     if db::enclave::get_membership(&state.chat, id, &target.id)
         .await?
         .is_some()
