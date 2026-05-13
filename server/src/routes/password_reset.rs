@@ -15,6 +15,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::auth::{ForgotPage, FormErrors, ResetPage};
+use crate::views::email_auth::{PasswordResetHtml, PasswordResetText};
 use crate::views::{html, Html};
 
 /// Always-200 placeholder shown after the user submits `/forgot`. We never
@@ -96,22 +97,19 @@ async fn dispatch_reset(state: &AppState, email: &str) -> Result<(), String> {
         .map_err(|e| format!("create_token: {e}"))?;
     let link = format!("{}/reset/{}", state.base_url, token);
     let subject = "Reset your lets-chat password";
-    let body = format!(
-        "Hi,\n\n\
-         Someone (hopefully you) asked to reset the lets-chat password for this \
-         email address. Open the link below to choose a new password:\n\n\
-         {link}\n\n\
-         This link expires in {ttl} minutes and can only be used once. If you \
-         did not request a reset, you can safely ignore this email.\n",
-        link = link,
-        ttl = db::password_reset::RESET_TTL_MINUTES,
-    );
+    let ttl = db::password_reset::RESET_TTL_MINUTES;
+    let text = PasswordResetText { link: &link, ttl }
+        .render()
+        .map_err(|e| format!("render text: {e}"))?;
+    let html_body = PasswordResetHtml { link: &link, ttl }
+        .render()
+        .map_err(|e| format!("render html: {e}"))?;
     let mailer = state
         .mailer
         .as_ref()
         .ok_or_else(|| "mailer not configured".to_string())?;
     mailer
-        .send(email, subject, &body)
+        .send_multipart(email, subject, &text, &html_body)
         .await
         .map_err(|e| format!("send: {e}"))?;
     Ok(())
