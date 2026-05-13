@@ -228,6 +228,7 @@ All three subfeatures share one image-processing pipeline and one storage layout
   - Linked row is never touched: insert linked row at `created_at = 'now', -100 days'`, run sweep, row still present.
   - Missing file is treated as success: insert orphan with `storage_path = "nonexistent.png"`, no file on disk, run sweep, row is deleted without error.
   - Preview file is also removed: place both `abc.png` and `abc_preview.png` on disk, sole-referencing orphan past threshold, run sweep, both files gone.
+  - Original present, preview absent: place only `abc.png` (no `abc_preview.png`), sole-referencing orphan past threshold, run sweep, row gone and `abc.png` is removed; the missing preview is treated as success not error. Pins the Task 3 "preview write failed, original committed" recovery path.
 - [ ] Extend `server/tests/routes_uploads.rs`:
   - **Preview regeneration on dedup hit**: insert a row with `storage_path = "xyz.png"`, place `xyz.png` on disk but NOT `xyz_preview.png` (simulating pre-phase data). Upload the same PNG bytes as a different user via `POST /api/upload`. Assert the response is 200 and `xyz_preview.png` now exists.
   - Upload a JPEG with synthetic EXIF GPS, then `GET /api/files/:id` (no preview), parse the response body with `kamadak-exif`, assert no GPS fields. (End-to-end EXIF-strip assertion through the HTTP boundary.)
