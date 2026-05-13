@@ -13,6 +13,7 @@
     var send = this.querySelector('#composer-send');
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
+    var qbar = document.getElementById('composer-quote-bar');
     if (event.detail.successful) {
       ta.value = '';
       ta.style.height = 'auto';
@@ -21,6 +22,7 @@
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
       if (bcast) bcast.innerHTML = '';
+      if (qbar) qbar.innerHTML = '';
     } else {
       err.classList.remove('hidden');
     }
@@ -30,6 +32,7 @@
 >
   <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
   <div id="lc-broadcast-count" class="mb-1 text-xs text-slate-500 px-1 min-h-[1rem]"></div>
+  <div id="composer-quote-bar"></div>
   <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
   <div id="lc-mention-popover" class="relative"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">

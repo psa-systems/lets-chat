@@ -1,5 +1,6 @@
 use askama::Template;
 
+use crate::db;
 use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
 use crate::models::{Attachment, Room, User};
@@ -60,6 +61,26 @@ pub struct MessageView {
     /// rewrite `:shortcode:` tokens into `<img>` tags. Empty for DM messages
     /// and any non-enclave room; unknown shortcodes pass through as text.
     pub custom_emojis: Vec<EmojiRef>,
+    /// `Some(...)` when this message quote-replies to an earlier message;
+    /// renders as an inline chip above the body that links back to the
+    /// original. `None` for plain top-level messages.
+    pub quote_preview: Option<QuotePreview>,
+}
+
+/// Inline preview of the message a quote-reply is responding to. Rendered
+/// above the reply's own body. Carries only what's needed to draw the chip;
+/// the full message is reachable via `id` for clients that want to scroll
+/// to it. `author_label` is the original author's display name (or
+/// username), and `body_excerpt` is a plain-text, already-HTML-escaped
+/// snippet truncated to a render-friendly length. `deleted` lets the
+/// template render a stub when the quoted row was soft-deleted between
+/// the reply being written and being displayed.
+#[derive(Debug, Clone)]
+pub struct QuotePreview {
+    pub id: i64,
+    pub author_label: String,
+    pub body_excerpt: String,
+    pub deleted: bool,
 }
 
 impl MessageView {
@@ -314,6 +335,121 @@ impl ReactionView {
     }
 }
 
+/// Max characters of the quoted body shown inline in a quote-reply chip.
+/// Past this point we append an ellipsis so the chip stays a single, scan-
+/// able line in dense message lists.
+const QUOTE_EXCERPT_MAX_CHARS: usize = 140;
+
+/// Resolve a single `quote_id` to a [`QuotePreview`] for rendering. Returns
+/// `Ok(None)` when the referenced row has been hard-deleted (the FK
+/// `ON DELETE SET NULL` removes the column value rather than the row), and
+/// `Ok(Some(deleted: true))` when the row exists but is soft-deleted so the
+/// chip renders as a "(message deleted)" stub.
+///
+/// Use [`build_quote_previews_bulk`] when rendering many messages at once
+/// to avoid N+1 lookups.
+pub async fn build_quote_preview(
+    chat_pool: &sqlx::SqlitePool,
+    auth_pool: &sqlx::SqlitePool,
+    quote_id: i64,
+) -> Result<Option<QuotePreview>, sqlx::Error> {
+    let map = build_quote_previews_bulk(chat_pool, auth_pool, &[quote_id]).await?;
+    Ok(map.into_iter().next().map(|(_, v)| v))
+}
+
+/// Bulk variant of [`build_quote_preview`]. Issues one `SELECT ... IN (...)`
+/// for the message rows and one batched display-name lookup. The returned
+/// map is keyed by `quote_id` (the id of the quoted message, NOT the
+/// quoting message) so callers can index it directly from `RawMessage.quote_id`.
+pub async fn build_quote_previews_bulk(
+    chat_pool: &sqlx::SqlitePool,
+    auth_pool: &sqlx::SqlitePool,
+    quote_ids: &[i64],
+) -> Result<std::collections::HashMap<i64, QuotePreview>, sqlx::Error> {
+    use sqlx::Row;
+    use std::collections::HashMap;
+
+    let mut deduped: Vec<i64> = quote_ids.to_vec();
+    deduped.sort_unstable();
+    deduped.dedup();
+    if deduped.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = std::iter::repeat("?")
+        .take(deduped.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql =
+        format!("SELECT id, user_id, body, deleted_at FROM messages WHERE id IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for id in &deduped {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(chat_pool).await?;
+
+    let mut user_ids: Vec<String> = rows.iter().map(|r| r.get::<String, _>("user_id")).collect();
+    user_ids.sort();
+    user_ids.dedup();
+    let user_id_refs: Vec<&str> = user_ids.iter().map(String::as_str).collect();
+    let name_map = db::auth::display_names_for_ids(auth_pool, &user_id_refs).await?;
+
+    let mut out: HashMap<i64, QuotePreview> = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let id: i64 = row.get("id");
+        let user_id: String = row.get("user_id");
+        let body: String = row.get("body");
+        let deleted_at: Option<String> = row.get("deleted_at");
+        let author_label = name_map
+            .get(&user_id)
+            .map(|(username, display)| {
+                display
+                    .as_deref()
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or(username.as_str())
+                    .to_string()
+            })
+            .unwrap_or_else(|| "(unknown)".to_string());
+        let excerpt = if deleted_at.is_some() {
+            String::new()
+        } else {
+            excerpt_for_quote(&body)
+        };
+        out.insert(
+            id,
+            QuotePreview {
+                id,
+                author_label,
+                body_excerpt: excerpt,
+                deleted: deleted_at.is_some(),
+            },
+        );
+    }
+    Ok(out)
+}
+
+/// Collapse a message body to a single-line plain-text excerpt suitable for
+/// inline display inside a quote-reply chip. Newlines become spaces and the
+/// result is truncated to `QUOTE_EXCERPT_MAX_CHARS` at a char boundary with
+/// an ellipsis appended. The result is plain text - HTML escaping happens
+/// in the template via Askama's default auto-escape, so this function does
+/// not pre-escape (which would double-encode).
+fn excerpt_for_quote(body: &str) -> String {
+    let flat = body.replace('\r', " ").replace('\n', " ");
+    let trimmed = flat.trim();
+    let mut out = String::new();
+    let mut count = 0usize;
+    for c in trimmed.chars() {
+        if count >= QUOTE_EXCERPT_MAX_CHARS {
+            out.push('\u{2026}');
+            break;
+        }
+        out.push(c);
+        count += 1;
+    }
+    out
+}
+
 /// Return the inner shortcode when `s` has shape `:foo:` with a valid charset.
 /// Returns None otherwise so the caller can fall back to text rendering.
 pub fn strip_shortcode(s: &str) -> Option<&str> {
@@ -337,6 +473,28 @@ pub fn strip_shortcode(s: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn excerpt_collapses_newlines_and_trims() {
+        let out = excerpt_for_quote("  hi\nthere\r\nfriend  ");
+        assert_eq!(out, "hi there  friend");
+    }
+
+    #[test]
+    fn excerpt_truncates_with_ellipsis_past_limit() {
+        let long = "a".repeat(QUOTE_EXCERPT_MAX_CHARS + 10);
+        let out = excerpt_for_quote(&long);
+        let chars: Vec<char> = out.chars().collect();
+        assert_eq!(chars.len(), QUOTE_EXCERPT_MAX_CHARS + 1);
+        assert_eq!(chars.last(), Some(&'\u{2026}'));
+    }
+
+    #[test]
+    fn excerpt_leaves_html_unescaped_for_template_to_escape() {
+        // Pre-escaping here would double-encode because Askama auto-escapes.
+        let out = excerpt_for_quote("<b>bold</b>");
+        assert_eq!(out, "<b>bold</b>");
+    }
 
     #[test]
     fn render_body_emits_chip_and_link_without_double_escape() {
@@ -586,4 +744,15 @@ pub struct ReplyCountFragment {
     pub room_id: i64,
     pub reply_count: i64,
     pub oob: bool,
+}
+
+/// Chip that drops into `#composer-quote-bar` when the user clicks "Quote"
+/// on a message. Carries the hidden `quote_id` input that the composer's
+/// next submit picks up alongside the body and any file_id.
+#[derive(Template)]
+#[template(path = "room/composer_quote_chip.html")]
+pub struct ComposerQuoteChip {
+    pub quote_id: i64,
+    pub author_label: String,
+    pub body_excerpt: String,
 }
