@@ -115,7 +115,6 @@ async fn main() {
     let _ = warm.await;
 
     spawn_idle_scanner(state.clone());
-    spawn_pool_stats_logger(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -183,30 +182,6 @@ fn spawn_idle_scanner(state: AppState) {
                 }
                 Err(e) => tracing::warn!(error = %e, "idle scan failed"),
             }
-        }
-    });
-}
-
-/// Emit a tracing event every 30 s with current SQLite pool sizes for
-/// auth/chat/settings. Use these numbers to confirm or rule out pool
-/// exhaustion when investigating "page is slow to load" reports: if the
-/// auth pool sits at `size == 16` with `idle == 0` for long stretches,
-/// requests are queuing on `pool.acquire()`.
-fn spawn_pool_stats_logger(state: AppState) {
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
-        tick.tick().await;
-        loop {
-            tick.tick().await;
-            tracing::info!(
-                auth_size = state.auth.size(),
-                auth_idle = state.auth.num_idle(),
-                chat_size = state.chat.size(),
-                chat_idle = state.chat.num_idle(),
-                settings_size = state.settings.size(),
-                settings_idle = state.settings.num_idle(),
-                "pool stats"
-            );
         }
     });
 }

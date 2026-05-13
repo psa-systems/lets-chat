@@ -50,24 +50,15 @@ pub async fn get_settings(
     Query(q): Query<SettingsQuery>,
     jar: CookieJar,
 ) -> Result<Html, AppError> {
-    tracing::info!("get_settings enter");
-    let chrome_start = std::time::Instant::now();
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
-    tracing::info!(
-        elapsed_ms = chrome_start.elapsed().as_millis() as u64,
-        "get_settings: load_chrome done"
-    );
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
-    tracing::info!("get_settings: email done");
     let email_verified = db::auth::get_user_email_verified_at(&state.auth, &user.id)
         .await?
         .is_some();
-    tracing::info!("get_settings: email_verified done");
     let email_verification_available = cfg!(feature = "standalone") && state.mail_available();
     let password_error = q.password_error.as_deref().and_then(password_error_message);
     let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
     let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
-    tracing::info!("get_settings: sessions done");
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -90,13 +81,7 @@ pub async fn get_settings(
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
     };
-    let render_start = std::time::Instant::now();
-    let result = html(&page);
-    tracing::info!(
-        elapsed_ms = render_start.elapsed().as_millis() as u64,
-        "get_settings: html render done"
-    );
-    result
+    html(&page)
 }
 
 async fn build_session_views(
