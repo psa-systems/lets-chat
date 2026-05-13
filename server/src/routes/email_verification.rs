@@ -3,12 +3,15 @@
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Redirect, Response};
 
+use askama::Template;
+
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::auth::VerifyEmailResultPage;
+use crate::views::email_auth::{VerifyEmailHtml, VerifyEmailText};
 use crate::views::{html, Html};
 
 /// Best-effort dispatch of a verification email. Called from the register
@@ -28,22 +31,19 @@ pub async fn dispatch_verification(
         .map_err(|e| format!("create_token: {e}"))?;
     let link = format!("{}/verify-email/{}", state.base_url, token);
     let subject = "Verify your lets-chat email";
-    let body = format!(
-        "Hi,\n\n\
-         Please confirm this email address belongs to your lets-chat account \
-         by opening the link below:\n\n\
-         {link}\n\n\
-         This link expires in {hours} hours. If you did not create this account, \
-         you can safely ignore this email.\n",
-        link = link,
-        hours = db::email_verification::VERIFY_TTL_MINUTES / 60,
-    );
+    let hours = db::email_verification::VERIFY_TTL_MINUTES / 60;
+    let text = VerifyEmailText { link: &link, hours }
+        .render()
+        .map_err(|e| format!("render text: {e}"))?;
+    let html_body = VerifyEmailHtml { link: &link, hours }
+        .render()
+        .map_err(|e| format!("render html: {e}"))?;
     let mailer = state
         .mailer
         .as_ref()
         .ok_or_else(|| "mailer not configured".to_string())?;
     mailer
-        .send(email, subject, &body)
+        .send_multipart(email, subject, &text, &html_body)
         .await
         .map_err(|e| format!("send: {e}"))?;
     Ok(())
