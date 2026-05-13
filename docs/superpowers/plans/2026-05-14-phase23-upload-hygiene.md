@@ -269,6 +269,7 @@ All three subfeatures share one image-processing pipeline and one storage layout
 
 ## Out of scope
 
+- Retroactive EXIF stripping of pre-Phase-23 originals. The admin "Regenerate thumbnails" action is preview-only by design: pre-Phase-23 originals are content-addressed by their un-stripped bytes, so re-encoding them now would break the DB→disk mapping. The Phase 23 strip pass only applies to NEW uploads. A separate operator action that re-hashes and migrates rows could fill this gap if anyone needs it; it is not in this phase.
 - Audio / video thumbnailing or waveforms.
 - External image services or CDN integration. Local processing only.
 - GC of uploads from hard-deleted messages. This phase scopes orphan to `message_id IS NULL`; the soft-delete vs hard-delete cleanup question is a separate future phase if it ever materialises.
