@@ -68,3 +68,7 @@ lettre = { version = "0.11", default-features = false, features = ["smtp-transpo
 hmac = { version = "0.12", optional = true }
 hex = { version = "0.4", optional = true }
 jsonwebtoken = { version = "9", optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+
+[dev-dependencies]
+kamadak-exif = "0.5"
