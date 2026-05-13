@@ -80,12 +80,13 @@ pub async fn inject_user(
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    const PHASE_WATCHDOG: Duration = Duration::from_secs(3);
+    const PHASE_WATCHDOG: Duration = Duration::from_secs(1);
 
     let path = req.uri().path().to_string();
     tracing::debug!(%path, "inject_user enter");
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
 
+    let lookup_start = Instant::now();
     let user = {
         let path = path.clone();
         let fut = async {
@@ -98,20 +99,24 @@ pub async fn inject_user(
             }
         };
         tokio::pin!(fut);
-        let start = Instant::now();
         loop {
             tokio::select! {
                 result = &mut fut => break result,
                 _ = tokio::time::sleep(PHASE_WATCHDOG) => {
                     tracing::warn!(
                         %path,
-                        elapsed_ms = start.elapsed().as_millis() as u64,
+                        elapsed_ms = lookup_start.elapsed().as_millis() as u64,
                         "inject_user phase still running: session_lookup",
                     );
                 }
             }
         }
     };
+    tracing::info!(
+        %path,
+        elapsed_ms = lookup_start.elapsed().as_millis() as u64,
+        "inject_user phase done: session_lookup",
+    );
 
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
@@ -121,21 +126,27 @@ pub async fn inject_user(
         req.extensions_mut().insert(CurrentSessionId(t));
     }
 
+    let downstream_start = Instant::now();
     let fut = next.run(req);
     tokio::pin!(fut);
-    let start = Instant::now();
-    loop {
+    let resp = loop {
         tokio::select! {
             result = &mut fut => break result,
             _ = tokio::time::sleep(PHASE_WATCHDOG) => {
                 tracing::warn!(
                     %path,
-                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    elapsed_ms = downstream_start.elapsed().as_millis() as u64,
                     "inject_user phase still running: downstream_handler",
                 );
             }
         }
-    }
+    };
+    tracing::info!(
+        %path,
+        elapsed_ms = downstream_start.elapsed().as_millis() as u64,
+        "inject_user phase done: downstream_handler",
+    );
+    resp
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
