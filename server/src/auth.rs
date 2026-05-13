@@ -80,10 +80,32 @@ pub async fn inject_user(
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
     const PHASE_WATCHDOG: Duration = Duration::from_secs(1);
 
     let path = req.uri().path().to_string();
     tracing::debug!(%path, "inject_user enter");
+
+    // Independent watchdog spawned at request start so we can distinguish
+    // "inject_user task suspended" from "phase took longer than 5 s but
+    // task is still being polled". An in-task tokio::select! sleep only
+    // fires when the task itself gets polled; this one runs as its own
+    // task and fires regardless of the parent.
+    let done = Arc::new(AtomicBool::new(false));
+    {
+        let done = done.clone();
+        let path = path.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            if !done.load(Ordering::SeqCst) {
+                tracing::warn!(
+                    %path,
+                    "inject_user OUTER watchdog: task suspended for 5s (still inside inject_user)"
+                );
+            }
+        });
+    }
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
 
     let lookup_start = Instant::now();
@@ -125,10 +147,12 @@ pub async fn inject_user(
         }
         req.extensions_mut().insert(CurrentSessionId(t));
     }
+    tracing::debug!(%path, "inject_user: post-lookup setup done, entering downstream loop");
 
     let downstream_start = Instant::now();
     let fut = next.run(req);
     tokio::pin!(fut);
+    tracing::debug!(%path, "inject_user: downstream fut pinned, about to poll");
     let resp = loop {
         tokio::select! {
             result = &mut fut => break result,
@@ -146,6 +170,7 @@ pub async fn inject_user(
         elapsed_ms = downstream_start.elapsed().as_millis() as u64,
         "inject_user phase done: downstream_handler",
     );
+    done.store(true, Ordering::SeqCst);
     resp
 }
 
