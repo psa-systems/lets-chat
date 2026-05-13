@@ -58,10 +58,18 @@
         {% endfor %}
       </ul>
       {% if can_manage %}
-      <form method="post" action="/enclave/{{ enclave.id }}/invite" class="mt-3 flex gap-2">
-        <input name="username" placeholder="Invite by username" class="border rounded px-2 py-1 text-sm flex-1" required>
-        <button type="submit" class="text-sm bg-slate-200 rounded px-2 py-1">Invite</button>
-      </form>
+      <div class="relative mt-3" autocomplete="off">
+        <input
+          name="q"
+          placeholder="Invite by username..."
+          hx-get="/enclave/{{ enclave.id }}/invite/search"
+          hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+          hx-target="#enclave-invite-results"
+          hx-swap="innerHTML"
+          autocomplete="off"
+          class="w-full border rounded px-2 py-1 text-sm">
+        <div id="enclave-invite-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+      </div>
       <a href="/enclave/{{ enclave.id }}/settings" class="text-sm text-blue-600 hover:underline mt-3 inline-block">Enclave settings</a>
       {% endif %}
     </section>

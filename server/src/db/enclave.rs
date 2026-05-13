@@ -255,6 +255,20 @@ pub async fn create_invitation(
     Ok(res.last_insert_rowid())
 }
 
+/// Return the set of user ids that currently have an outstanding invitation
+/// to `enclave_id`. Used by the invite typeahead to render "Invited" instead
+/// of the Invite button without a per-row lookup.
+pub async fn pending_invitee_ids_for_enclave(
+    pool: &SqlitePool,
+    enclave_id: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query("SELECT invitee_id FROM enclave_invitations WHERE enclave_id = ?")
+        .bind(enclave_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(|r| r.get("invitee_id")).collect())
+}
+
 pub async fn list_invitations_for_user(
     pool: &SqlitePool,
     user_id: &str,
