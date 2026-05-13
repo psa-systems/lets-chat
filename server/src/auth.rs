@@ -68,78 +68,20 @@ pub struct CurrentSessionId(pub String);
 /// resulting `User` into request extensions when the session is valid and the
 /// account is not banned. Also bumps `sessions.last_seen_at` at most once
 /// per `LAST_SEEN_DEBOUNCE` per session.
-///
-/// Each phase is wrapped in a watchdog: a sibling task fires a warn log
-/// the moment the phase exceeds 3 s, regardless of whether it ever
-/// completes. After-the-fact logging is useless for hangs: the warn
-/// only fires once the await returns, so a phase stuck forever would
-/// produce no output at all without the watchdog.
 pub async fn inject_user(
     State(state): State<AppState>,
     jar: CookieJar,
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
-    const PHASE_WATCHDOG: Duration = Duration::from_secs(1);
-
-    let path = req.uri().path().to_string();
-    tracing::debug!(%path, "inject_user enter");
-
-    // Independent watchdog spawned at request start so we can distinguish
-    // "inject_user task suspended" from "phase took longer than 5 s but
-    // task is still being polled". An in-task tokio::select! sleep only
-    // fires when the task itself gets polled; this one runs as its own
-    // task and fires regardless of the parent.
-    let done = Arc::new(AtomicBool::new(false));
-    {
-        let done = done.clone();
-        let path = path.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            if !done.load(Ordering::SeqCst) {
-                tracing::warn!(
-                    %path,
-                    "inject_user OUTER watchdog: task suspended for 5s (still inside inject_user)"
-                );
-            }
-        });
-    }
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
-
-    let lookup_start = Instant::now();
-    let user = {
-        let path = path.clone();
-        let fut = async {
-            match token.as_deref() {
-                Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
-                    Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
-                    _ => None,
-                },
-                None => None,
-            }
-        };
-        tokio::pin!(fut);
-        loop {
-            tokio::select! {
-                result = &mut fut => break result,
-                _ = tokio::time::sleep(PHASE_WATCHDOG) => {
-                    tracing::warn!(
-                        %path,
-                        elapsed_ms = lookup_start.elapsed().as_millis() as u64,
-                        "inject_user phase still running: session_lookup",
-                    );
-                }
-            }
-        }
+    let user = match token.as_deref() {
+        Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
+            Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
+            _ => None,
+        },
+        None => None,
     };
-    tracing::info!(
-        %path,
-        elapsed_ms = lookup_start.elapsed().as_millis() as u64,
-        "inject_user phase done: session_lookup",
-    );
-
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
         if should_touch_last_seen(&state.last_seen_ledger, &t) {
@@ -147,31 +89,7 @@ pub async fn inject_user(
         }
         req.extensions_mut().insert(CurrentSessionId(t));
     }
-    tracing::debug!(%path, "inject_user: post-lookup setup done, entering downstream loop");
-
-    let downstream_start = Instant::now();
-    let fut = next.run(req);
-    tokio::pin!(fut);
-    tracing::debug!(%path, "inject_user: downstream fut pinned, about to poll");
-    let resp = loop {
-        tokio::select! {
-            result = &mut fut => break result,
-            _ = tokio::time::sleep(PHASE_WATCHDOG) => {
-                tracing::warn!(
-                    %path,
-                    elapsed_ms = downstream_start.elapsed().as_millis() as u64,
-                    "inject_user phase still running: downstream_handler",
-                );
-            }
-        }
-    };
-    tracing::info!(
-        %path,
-        elapsed_ms = downstream_start.elapsed().as_millis() as u64,
-        "inject_user phase done: downstream_handler",
-    );
-    done.store(true, Ordering::SeqCst);
-    resp
+    next.run(req).await
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
@@ -217,13 +135,10 @@ pub async fn enforce_2fa_enrollment(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let path = req.uri().path().to_string();
-    tracing::debug!(%path, "enforce_2fa enter");
     if !state.two_factor_available() {
-        let r = next.run(req).await;
-        tracing::debug!(%path, "enforce_2fa: next.run done (no 2fa)");
-        return r;
+        return next.run(req).await;
     }
+    let path = req.uri().path();
     let exempt = path == "/logout"
         || path == "/login"
         || path.starts_with("/login/")
@@ -237,15 +152,11 @@ pub async fn enforce_2fa_enrollment(
     if !exempt {
         if let Some(u) = req.extensions().get::<User>() {
             if !u.totp_enabled {
-                tracing::debug!(%path, "enforce_2fa: redirecting to 2fa setup");
                 return Redirect::to("/settings/2fa/setup").into_response();
             }
         }
     }
-    tracing::debug!(%path, "enforce_2fa: passing through to next.run");
-    let r = next.run(req).await;
-    tracing::debug!(%path, "enforce_2fa: next.run done");
-    r
+    next.run(req).await
 }
 
 /// Extractor for routes that may render either a public or authed page.
