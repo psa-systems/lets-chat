@@ -178,46 +178,47 @@ document.body.addEventListener('click', function(e){
 <script>
 // Persistent-shell script: same lifetime rationale as the two scripts above.
 // The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
-// htmx:wsError, the watchdog timers, and the lc-ws-reconnect extension are
+// htmx:wsError, the watchdog timers, and the manual-reconnect helper are
 // all lifetime-of-page by design.
 (function(){
-  // ----- 1. Reconnect-delay override -----------------------------
-  // Capped jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s,
-  // 30s, 30s... +/-20% jitter. Replaces the extension's default
-  // `full-jitter` which is uncapped (exceeds 30s after ~6 retries
-  // and 17min after ~10).
-  if (window.htmx) {
+  // ----- 1. htmx-dependent setup ---------------------------------
+  // This inline script executes during body parsing, BEFORE the deferred
+  // htmx.min.js in <head> has loaded, so `window.htmx` is undefined here.
+  // Defer anything that needs htmx until DOMContentLoaded, which fires
+  // after every deferred script in the document has executed.
+  function onReady(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  onReady(function() {
+    if (!window.htmx) return;
+    // Capped jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s,
+    // 30s... +/-20% jitter. Replaces the extension's default
+    // `full-jitter` which is uncapped (exceeds 30s after ~6 retries).
     htmx.config.wsReconnectDelay = function(retryCount) {
       var base = Math.min(1000 * Math.pow(2, retryCount), 30000);
       var jitter = 0.8 + Math.random() * 0.4; // [0.8, 1.2)
       return Math.round(base * jitter);
     };
-  }
-
-  // ----- 2. Tiny extension to expose wrapper.init() --------------
-  // wrapper.publicInterface exposes only send/sendImmediately/queue.
-  // To force a reconnect from the half-open watchdog we need
-  // wrapper.init(), reachable only via the extension API's
-  // getInternalData on the [ws-connect] element.
-  // FUTURE: if htmx-ext-ws changes wrapper API (specifically
-  // wrapper.init), this extension breaks. Failure mode: watchdog
-  // disabled, falls back to onclose-only detection.
-  if (window.htmx && htmx.defineExtension) {
-    htmx.defineExtension('lc-ws-reconnect', {
-      init: function(api) {
-        window.__lcReconnectWS = function() {
-          var elt = document.querySelector('[ws-connect]');
-          if (!elt) return;
-          var data = api.getInternalData(elt);
-          if (data && data.webSocket && data.webSocket.init) {
-            data.webSocket.init();
-          }
-        };
+    // Force a reconnect for close codes the htmx-ext-ws extension would
+    // otherwise ignore (anything outside 1006/1012/1013, e.g. a clean
+    // server-initiated 1000/1001 close on container shutdown, or the
+    // watchdog's 4000). The extension stashes its wrapper under the
+    // `htmx-internal-data` property on the [ws-connect] element; reading
+    // it directly avoids defining a companion extension, which would
+    // have to be registered *before* htmx processes the body and so
+    // could not be set up from this same inline script.
+    window.__lcReconnectWS = function() {
+      var elt = document.querySelector('[ws-connect]');
+      if (!elt) return;
+      var data = elt['htmx-internal-data'];
+      if (data && data.webSocket && data.webSocket.init) {
+        data.webSocket.init();
       }
-    });
-  }
+    };
+  });
 
-  // ----- 3. Banner state machine ---------------------------------
+  // ----- 2. Banner state machine ---------------------------------
   var bannerEl = document.getElementById('lc-conn-status');
   var textEl   = document.getElementById('lc-conn-status-text');
   if (!bannerEl || !textEl) return;
@@ -270,9 +271,7 @@ document.body.addEventListener('click', function(e){
       // Soft-refresh the current page so the user sees missed
       // content. select:'#main' extracts just the <main> from the
       // full-page response; without it we would nest the layout
-      // into #main. Smoke-test directive (phase 18 plan): verify
-      // whether this is load-bearing vs. subscribe re-fire being
-      // sufficient; drop in a follow-up if not.
+      // into #main.
       if (window.htmx && document.getElementById('main')) {
         try {
           htmx.ajax('GET', location.pathname + location.search, {
@@ -301,13 +300,13 @@ document.body.addEventListener('click', function(e){
     startWatchdog();
   });
 
-  function handleDrop(evt){
+  document.body.addEventListener('htmx:wsClose', function(evt){
     enterReconnecting();
     clearTimeout(watchdog);
     // The extension auto-reconnects only for codes [1006, 1012, 1013].
-    // For any other close code (clean close, 1011 server error, our
-    // own 4000 from the watchdog), force a manual reconnect via the
-    // companion extension above.
+    // For any other close code (clean 1000/1001 from server shutdown,
+    // 1011 server error, our own 4000 from the watchdog), force a
+    // manual reconnect via __lcReconnectWS.
     var code = evt && evt.detail && evt.detail.event && evt.detail.event.code;
     var autoReconnects = (code === 1006 || code === 1012 || code === 1013);
     if (!autoReconnects && window.__lcReconnectWS) {
@@ -315,9 +314,17 @@ document.body.addEventListener('click', function(e){
       // bookkeeping has finished first.
       setTimeout(window.__lcReconnectWS, 0);
     }
-  }
-  document.body.addEventListener('htmx:wsClose', handleDrop);
-  document.body.addEventListener('htmx:wsError', handleDrop);
+  });
+
+  // wsError carries `evt.detail.error` (no `event` with a close code) and
+  // always precedes wsClose, so it only updates the UI; the reconnect
+  // decision is made when wsClose arrives. Triggering a manual reconnect
+  // here too would race with the close handler and create overlapping
+  // socket attempts.
+  document.body.addEventListener('htmx:wsError', function(){
+    enterReconnecting();
+    clearTimeout(watchdog);
+  });
 })();
 </script>
 {% endblock %}
