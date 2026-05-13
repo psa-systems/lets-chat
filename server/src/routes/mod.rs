@@ -159,6 +159,10 @@ pub(crate) async fn load_message_view_for_viewer(
         .await?
         .remove(&m.id)
         .unwrap_or_default();
+    let quote_preview = match m.quote_id {
+        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
+        None => None,
+    };
     Ok(MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -185,6 +189,7 @@ pub(crate) async fn load_message_view_for_viewer(
         is_pinned,
         is_bookmarked,
         custom_emojis,
+        quote_preview,
     })
 }
 
@@ -504,6 +509,10 @@ pub fn build_router(state: AppState) -> Router {
             post(room::post_thread_reply),
         )
         .route("/thread-panel", delete(room::close_thread_panel))
+        .route(
+            "/room/{room_id}/composer-quote/{message_id}",
+            get(room::get_composer_quote),
+        )
         .route("/dm/{peer_id}", get(dm::get_dm))
         .route("/dm/{peer_id}/mute", post(dm_mute::post_dm_mute))
         .route("/dm/{peer_id}/pins", get(pinned::get_dm_pins))

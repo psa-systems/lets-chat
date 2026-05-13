@@ -151,6 +151,9 @@ pub async fn get_dm(
     // DMs have no enclave of their own but still resolve `:shortcode:` for
     // any enclave that opted into global sharing.
     let shared_emojis = db::custom_emojis::refs_globally_shared(&state.chat).await?;
+    let quote_ids: Vec<i64> = raw_messages.iter().filter_map(|m| m.quote_id).collect();
+    let quote_preview_map =
+        crate::views::room::build_quote_previews_bulk(&state.chat, &state.auth, &quote_ids).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -206,6 +209,9 @@ pub async fn get_dm(
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
             custom_emojis: shared_emojis.clone(),
+            quote_preview: m
+                .quote_id
+                .and_then(|qid| quote_preview_map.get(&qid).cloned()),
         });
     }
 
