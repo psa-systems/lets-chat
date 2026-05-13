@@ -70,6 +70,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         .await
         .unwrap();
 
+    let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth,
         chat,
@@ -78,6 +79,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),

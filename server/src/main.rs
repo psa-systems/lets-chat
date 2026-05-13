@@ -7,7 +7,15 @@ const APP_NAME: &str = "lets-chat-saas";
 #[cfg(not(feature = "saas"))]
 const APP_NAME: &str = "lets-chat";
 
-#[tokio::main]
+// Use a generous worker pool: the chat template render path is fully
+// synchronous CPU work (pulldown_cmark + syntect), and even with the
+// markdown cache and `block_in_place` wrap, a burst of cache-miss
+// renders across concurrent broadcasts can pin every worker. Default
+// `worker_threads = num_cpus` (often 4 in a container) leaves no spare
+// thread to poll fresh /ws or HTTP upgrades, which manifested as
+// multi-minute "page is loading" stalls. 32 is well above the steady-
+// state need and costs only a handful of stack pages.
+#[tokio::main(flavor = "multi_thread", worker_threads = 32)]
 async fn main() {
     if wants_version_flag() {
         println!("{}", version::banner(APP_NAME));
@@ -77,6 +85,7 @@ async fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://localhost:8080".to_string());
 
+    let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -85,6 +94,7 @@ async fn main() {
         asset_version: compute_asset_version(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg,
         secret_key,
         vapid,
         push_client,
@@ -95,6 +105,14 @@ async fn main() {
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
         tracing::warn!(error = %e, "enclave backfill failed at startup");
     }
+
+    // Eagerly load syntect's bundled syntax and theme sets on a blocking
+    // thread before we start serving traffic. The deserialization takes
+    // several seconds; doing it lazily inside the first markdown render
+    // would freeze a tokio worker thread mid-request and starve any task
+    // already scheduled on that thread.
+    let warm = tokio::task::spawn_blocking(lets_chat::views::markdown::warm_syntect);
+    let _ = warm.await;
 
     spawn_idle_scanner(state.clone());
     spawn_digest_sender(state.clone());

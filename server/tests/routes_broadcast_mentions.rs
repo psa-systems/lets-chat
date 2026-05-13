@@ -162,6 +162,7 @@ async fn setup_app_with_users_and_client(
     }
 
     let hub = Arc::new(Hub::new());
+    let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth: auth.clone(),
         chat: chat.clone(),
@@ -170,6 +171,7 @@ async fn setup_app_with_users_and_client(
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
         push_client: push_client.clone(),
@@ -546,6 +548,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         public_key_b64url: "AAA".into(),
         private_key_bytes: vec![1u8; 32],
     });
+    let bg = lets_chat::bg::spawn(t.auth.clone());
     let state = AppState {
         auth: t.auth.clone(),
         chat: t.chat.clone(),
@@ -554,6 +557,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(vapid),
         push_client: counting.clone() as Arc<dyn PushClient>,
