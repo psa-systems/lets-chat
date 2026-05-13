@@ -1,0 +1,14 @@
+<div class="lc-quote-bar">
+  <input type="hidden" name="quote_id" value="{{ quote_id }}">
+  <div class="lc-quote-bar-inner">
+    <span class="lc-quote-bar-label">Replying to</span>
+    <span class="lc-quote-bar-author">{{ author_label }}</span>
+    <span class="lc-quote-bar-excerpt">{{ body_excerpt }}</span>
+  </div>
+  <button type="button"
+          aria-label="Cancel quote-reply"
+          class="lc-quote-bar-clear"
+          onclick="document.getElementById('composer-quote-bar').innerHTML = '';">
+    x
+  </button>
+</div>

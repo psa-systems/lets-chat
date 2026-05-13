@@ -27,6 +27,9 @@
   </div>
   {% endif %}
   <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
+    {% if message.parent_id.is_none() %}
+    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-slate-600 hover:underline">Quote</button>
+    {% endif %}
     <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Reply</button>
     {% if message.is_pinned %}
     <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-amber-700 hover:underline">Unpin</button>
@@ -45,6 +48,16 @@
     <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="Delete this message?" class="text-red-600 hover:underline">Delete</button>
     {% endif %}
   </span>
+  {% if let Some(qp) = message.quote_preview.as_ref() %}
+    <a href="#msg-{{ qp.id }}" class="lc-quote-chip">
+      {% if qp.deleted %}
+        <span class="lc-quote-deleted">(quoted message was deleted)</span>
+      {% else %}
+        <span class="lc-quote-author">{{ qp.author_label }}</span>
+        <span class="lc-quote-excerpt">{{ qp.body_excerpt }}</span>
+      {% endif %}
+    </a>
+  {% endif %}
   {% if message.is_image_only() %}
     {% let a = message.attachments[0].clone() %}
     {% include "partials/attachment.html" %}

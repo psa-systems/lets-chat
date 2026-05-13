@@ -9,8 +9,8 @@ use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
 use crate::views::room::{
-    ComposerFragment, EditFormFragment, MessageView, ReactionView, RoomPage, SingleMessageFragment,
-    ThreadPanelClosedFragment, ThreadPanelFragment,
+    ComposerFragment, ComposerQuoteChip, EditFormFragment, MessageView, ReactionView, RoomPage,
+    SingleMessageFragment, ThreadPanelClosedFragment, ThreadPanelFragment,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -25,6 +25,11 @@ pub struct MessageForm {
     /// the deserializer maps `""` -> None to keep blank sends working.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub file_id: Option<i64>,
+    /// Optional id of the earlier message this send is quote-replying to.
+    /// Same blank-string handling as `file_id`: the composer always submits
+    /// the field (so empty deserializes as `None`).
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub quote_id: Option<i64>,
 }
 
 fn empty_string_as_none<'de, D>(de: D) -> Result<Option<i64>, D::Error>
@@ -119,6 +124,12 @@ pub async fn get_room(
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
 
+    // Resolve quote-reply previews for every message that quotes one, in a
+    // single bulk lookup keyed by the quoted message's id.
+    let quote_ids: Vec<i64> = raw_messages.iter().filter_map(|m| m.quote_id).collect();
+    let quote_preview_map =
+        crate::views::room::build_quote_previews_bulk(&state.chat, &state.auth, &quote_ids).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -171,6 +182,9 @@ pub async fn get_room(
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
             custom_emojis: custom_emojis.clone(),
+            quote_preview: m
+                .quote_id
+                .and_then(|qid| quote_preview_map.get(&qid).cloned()),
         });
     }
 
@@ -285,7 +299,30 @@ pub async fn post_message(
         }
     }
 
-    let new_id = db::chat::insert_message(&state.chat, room_id, &user.id, body).await?;
+    // Validate the quoted message (if any) before the insert. The quoted row
+    // must exist, live in the same room as this send, not itself be a thread
+    // reply (we don't quote inside threads), and not be the message currently
+    // being inserted (impossible by ordering, but explicitly rejected for
+    // future-proofing against any retry/idempotency-key flow).
+    if let Some(qid) = form.quote_id {
+        let quoted = db::chat::get_message(&state.chat, qid)
+            .await?
+            .ok_or(AppError::BadRequest("unknown quote_id".into()))?;
+        if quoted.room_id != room_id {
+            return Err(AppError::BadRequest(
+                "quoted message is in a different room".into(),
+            ));
+        }
+        if quoted.parent_id.is_some() {
+            return Err(AppError::BadRequest(
+                "cannot quote a thread reply; quote the thread root instead".into(),
+            ));
+        }
+    }
+
+    let new_id =
+        db::chat::insert_message_quoted(&state.chat, room_id, &user.id, body, form.quote_id)
+            .await?;
     if let Some(file_id) = form.file_id {
         db::uploads::link_upload_to_message(&state.chat, file_id, new_id).await?;
     }
@@ -313,6 +350,7 @@ pub async fn post_message(
         created_at: raw.created_at,
         edited_at: raw.edited_at,
         parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
     };
 
     let event = ChatEvent::NewMessage {
@@ -737,6 +775,10 @@ pub async fn patch_message(
         .await?
         .remove(&m.id)
         .unwrap_or_default();
+    let quote_preview = match m.quote_id {
+        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
+        None => None,
+    };
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -763,6 +805,7 @@ pub async fn patch_message(
         is_pinned: false,
         is_bookmarked: db::bookmarks::is_bookmarked(&state.chat, &user.id, m.id).await?,
         custom_emojis,
+        quote_preview,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -822,6 +865,10 @@ pub async fn get_thread_panel(
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
 
+    let parent_quote_preview = match parent.quote_id {
+        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
+        None => None,
+    };
     let parent_view = MessageView {
         id: parent.id,
         room_id: parent.room_id,
@@ -850,6 +897,7 @@ pub async fn get_thread_panel(
         is_pinned: false,
         is_bookmarked: bookmarked_ids.contains(&parent.id),
         custom_emojis: custom_emojis.clone(),
+        quote_preview: parent_quote_preview,
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -890,6 +938,7 @@ pub async fn get_thread_panel(
             is_pinned: false,
             is_bookmarked: bookmarked_ids.contains(&r_id),
             custom_emojis: custom_emojis.clone(),
+            quote_preview: None,
         });
     }
 
@@ -966,6 +1015,7 @@ pub async fn post_thread_reply(
         created_at: raw.created_at,
         edited_at: raw.edited_at,
         parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);
@@ -979,6 +1029,37 @@ pub async fn post_thread_reply(
 /// hidden aside.
 pub async fn close_thread_panel() -> Result<Html, AppError> {
     html(&ThreadPanelClosedFragment)
+}
+
+/// GET /room/:room_id/composer-quote/:message_id - returns the inline
+/// "Replying to ..." chip that fills `#composer-quote-bar` inside the
+/// composer. The chip carries a hidden `quote_id` input so the next submit
+/// picks it up along with the body. Refuses when the target message is in
+/// a different room, soft-deleted, or itself a thread reply (quote-replies
+/// only apply to top-level messages).
+pub async fn get_composer_quote(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, message_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if m.room_id != room_id || m.parent_id.is_some() {
+        return Err(AppError::NotFound);
+    }
+    let preview = crate::views::room::build_quote_preview(&state.chat, &state.auth, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    html(&ComposerQuoteChip {
+        quote_id: preview.id,
+        author_label: preview.author_label,
+        body_excerpt: preview.body_excerpt,
+    })
 }
 
 /// DELETE /messages/:id - soft-delete a message.

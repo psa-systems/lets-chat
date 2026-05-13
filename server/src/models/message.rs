@@ -11,4 +11,10 @@ pub struct Message {
     pub edited_at: Option<String>,
     /// `Some(N)` when this message is a reply in the thread rooted at `N`.
     pub parent_id: Option<i64>,
+    /// `Some(N)` when this message visually quotes the message with id `N`
+    /// inline above its body. Distinct from `parent_id`: quoted messages
+    /// still appear in the main timeline rather than being collapsed into
+    /// a thread side panel. Always `None` for thread replies (the quote-
+    /// reply affordance is suppressed inside the thread panel).
+    pub quote_id: Option<i64>,
 }

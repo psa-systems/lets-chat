@@ -43,6 +43,10 @@ pub struct RawMessage {
     /// `Some(N)` when this message is a thread reply rooted at message `N`.
     /// `None` for top-level messages that appear in the main room timeline.
     pub parent_id: Option<i64>,
+    /// `Some(N)` when this message is a quote-reply that visually quotes the
+    /// message with id `N` inline above its body. Distinct from `parent_id`:
+    /// quote-replies live in the main timeline rather than a side thread.
+    pub quote_id: Option<i64>,
 }
 
 fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
@@ -103,7 +107,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -112,18 +116,20 @@ pub async fn list_messages(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| RawMessage {
-            id: row.get("id"),
-            room_id: row.get("room_id"),
-            user_id: row.get("user_id"),
-            body: row.get("body"),
-            created_at: row.get("created_at"),
-            edited_at: row.get("edited_at"),
-            parent_id: row.get("parent_id"),
-        })
-        .collect())
+    Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
+fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
+    RawMessage {
+        id: row.get("id"),
+        room_id: row.get("room_id"),
+        user_id: row.get("user_id"),
+        body: row.get("body"),
+        created_at: row.get("created_at"),
+        edited_at: row.get("edited_at"),
+        parent_id: row.get("parent_id"),
+        quote_id: row.get("quote_id"),
+    }
 }
 
 /// Replies in a thread, ordered chronologically. Excludes soft-deleted rows.
@@ -133,7 +139,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL \
          ORDER BY id ASC",
@@ -142,18 +148,7 @@ pub async fn list_thread_replies(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| RawMessage {
-            id: row.get("id"),
-            room_id: row.get("room_id"),
-            user_id: row.get("user_id"),
-            body: row.get("body"),
-            created_at: row.get("created_at"),
-            edited_at: row.get("edited_at"),
-            parent_id: row.get("parent_id"),
-        })
-        .collect())
+    Ok(rows.into_iter().map(row_to_raw).collect())
 }
 
 /// Reply count per top-level message in a room, returned as `(parent_id,
@@ -216,7 +211,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -226,15 +221,7 @@ pub async fn prior_message_in_room(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| RawMessage {
-        id: row.get("id"),
-        room_id: row.get("room_id"),
-        user_id: row.get("user_id"),
-        body: row.get("body"),
-        created_at: row.get("created_at"),
-        edited_at: row.get("edited_at"),
-        parent_id: row.get("parent_id"),
-    }))
+    Ok(row.map(row_to_raw))
 }
 
 /// Fetch the next non-deleted message in `room_id` strictly after `after_id`
@@ -246,7 +233,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -256,15 +243,7 @@ pub async fn next_message_in_room(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| RawMessage {
-        id: row.get("id"),
-        room_id: row.get("room_id"),
-        user_id: row.get("user_id"),
-        body: row.get("body"),
-        created_at: row.get("created_at"),
-        edited_at: row.get("edited_at"),
-        parent_id: row.get("parent_id"),
-    }))
+    Ok(row.map(row_to_raw))
 }
 
 /// Fetch a single message by ID. Returns None if soft-deleted.
@@ -273,22 +252,14 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
          FROM messages WHERE id = ? AND deleted_at IS NULL",
     )
     .bind(message_id)
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| RawMessage {
-        id: row.get("id"),
-        room_id: row.get("room_id"),
-        user_id: row.get("user_id"),
-        body: row.get("body"),
-        created_at: row.get("created_at"),
-        edited_at: row.get("edited_at"),
-        parent_id: row.get("parent_id"),
-    }))
+    Ok(row.map(row_to_raw))
 }
 
 /// Update a message's body and set edited_at to now. Returns the edited_at timestamp.
@@ -313,12 +284,26 @@ pub async fn insert_message(
     user_id: &str,
     body: &str,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query("INSERT INTO messages (room_id, user_id, body) VALUES (?, ?, ?)")
-        .bind(room_id)
-        .bind(user_id)
-        .bind(body)
-        .execute(pool)
-        .await?;
+    insert_message_quoted(pool, room_id, user_id, body, None).await
+}
+
+/// Like [`insert_message`] but additionally records a `quote_id` reference
+/// to the message being quoted. Pass `None` for a plain top-level message.
+pub async fn insert_message_quoted(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    body: &str,
+    quote_id: Option<i64>,
+) -> Result<i64, sqlx::Error> {
+    let result =
+        sqlx::query("INSERT INTO messages (room_id, user_id, body, quote_id) VALUES (?, ?, ?, ?)")
+            .bind(room_id)
+            .bind(user_id)
+            .bind(body)
+            .bind(quote_id)
+            .execute(pool)
+            .await?;
     Ok(result.last_insert_rowid())
 }
 

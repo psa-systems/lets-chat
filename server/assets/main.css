@@ -99,3 +99,86 @@ html, body {
     background-color: #f8fafc !important;
 }
 .lc-md pre code { background: transparent; padding: 0; }
+
+/* Quote-reply UI.
+ *
+ * The chip is rendered inline above a message body to show the message it
+ * is responding to. A separate "reply bar" variant lives inside the
+ * composer; both share the same color palette but the in-message chip is
+ * compact and clickable while the composer bar adds an "x" to cancel.
+ */
+.lc-quote-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-left: 3px solid #cbd5e1;
+    background: #f8fafc;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+    color: #475569;
+    text-decoration: none;
+    max-width: 100%;
+}
+.lc-quote-chip:hover {
+    background: #f1f5f9;
+}
+.lc-quote-author {
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+}
+.lc-quote-excerpt {
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.lc-quote-deleted {
+    font-style: italic;
+    color: #94a3b8;
+}
+
+.lc-quote-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-left: 3px solid #2563eb;
+    background: #eff6ff;
+    border-radius: 0.25rem;
+    font-size: 0.8em;
+    color: #1e293b;
+}
+.lc-quote-bar-inner {
+    display: flex;
+    gap: 0.4rem;
+    overflow: hidden;
+    align-items: baseline;
+    min-width: 0;
+    flex: 1;
+}
+.lc-quote-bar-label {
+    color: #64748b;
+}
+.lc-quote-bar-author {
+    font-weight: 600;
+    white-space: nowrap;
+}
+.lc-quote-bar-excerpt {
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lc-quote-bar-clear {
+    color: #64748b;
+    padding: 0 0.25rem;
+    line-height: 1;
+}
+.lc-quote-bar-clear:hover {
+    color: #1e293b;
+}
