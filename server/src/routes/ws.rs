@@ -13,6 +13,7 @@ use crate::auth::OptionalUser;
 use crate::db;
 use crate::models::{self, User};
 use crate::state::AppState;
+use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
@@ -605,7 +606,7 @@ async fn render_new_message(
         is_bookmarked: false,
         custom_emojis,
     };
-    NewMessageFragment { message: &view }.render().ok()
+    render_template(&NewMessageFragment { message: &view }).ok()
 }
 
 /// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
@@ -692,7 +693,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         is_bookmarked,
         custom_emojis,
     };
-    EditedMessageFragment { message: &view }.render().ok()
+    render_template(&EditedMessageFragment { message: &view }).ok()
 }
 
 /// Render a thread reply for `viewer` along with an OOB update of the

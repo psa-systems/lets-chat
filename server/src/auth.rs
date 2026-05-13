@@ -85,11 +85,7 @@ pub async fn inject_user(
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
         if should_touch_last_seen(&state.last_seen_ledger, &t) {
-            let pool = state.auth.clone();
-            let id = t.clone();
-            tokio::spawn(async move {
-                let _ = db::auth::touch_session_last_seen(&pool, &id).await;
-            });
+            state.bg.touch_session(&t);
         }
         req.extensions_mut().insert(CurrentSessionId(t));
     }
@@ -98,13 +94,21 @@ pub async fn inject_user(
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
     let now = Instant::now();
-    match ledger.get(session_id) {
-        Some(prev) if now.duration_since(*prev) < LAST_SEEN_DEBOUNCE => false,
-        _ => {
-            ledger.insert(session_id.to_string(), now);
-            true
-        }
+    // CRITICAL: drop the Ref from `get` BEFORE calling `insert`. DashMap's
+    // shard locks are reentrant only within the same scope; holding a
+    // read Ref while requesting a write lock on the same shard
+    // deadlocks. The previous match-arm version kept the Some-arm Ref
+    // alive through the `_` arm, which is exactly that pattern and
+    // caused every authed request to hang forever in inject_user.
+    let recent = ledger
+        .get(session_id)
+        .map(|prev| now.duration_since(*prev) < LAST_SEEN_DEBOUNCE)
+        .unwrap_or(false);
+    if recent {
+        return false;
     }
+    ledger.insert(session_id.to_string(), now);
+    true
 }
 
 /// Extractor: pulls the authenticated `User` from extensions, or 303s to /login.
