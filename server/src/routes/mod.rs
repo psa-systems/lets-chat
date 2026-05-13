@@ -33,6 +33,7 @@ mod dm_mute;
 #[cfg(feature = "standalone")]
 pub(crate) mod email_verification;
 mod enclave;
+mod export;
 mod home;
 mod mentions;
 mod notify_prefs;
@@ -546,6 +547,7 @@ pub fn build_router(state: AppState) -> Router {
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
+        .route("/settings/export-data", get(export::get_export))
         .route(
             "/settings/2fa/setup",
             get(two_factor::get_setup).post(two_factor::post_setup),
