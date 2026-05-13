@@ -22,6 +22,7 @@ use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
+mod account;
 #[cfg(feature = "standalone")]
 mod admin;
 mod auth;
@@ -548,6 +549,10 @@ pub fn build_router(state: AppState) -> Router {
             get(settings::get_settings).post(settings::post_settings),
         )
         .route("/settings/export-data", get(export::get_export))
+        .route(
+            "/settings/delete-account",
+            post(account::post_delete_account),
+        )
         .route(
             "/settings/2fa/setup",
             get(two_factor::get_setup).post(two_factor::post_setup),
