@@ -207,6 +207,26 @@
     </p>
   </div>
 
+  <div class="rounded border border-red-300 bg-red-50 p-4 space-y-3">
+    <h2 class="font-medium text-red-800">Delete account</h2>
+    <p class="text-sm text-red-800">
+      Permanently remove your account, profile, messages, reactions, bookmarks, mentions, file uploads, blocks, sessions and push subscriptions. This cannot be undone. If you own an enclave with other members, transfer ownership or delete the enclave first.
+    </p>
+    <form method="post" action="/settings/delete-account" class="space-y-3">
+      {% if password_change_available %}
+      <label class="block text-sm">
+        <span class="text-red-800">Current password</span>
+        <input type="password" name="password" required class="mt-1 block w-full border border-red-300 rounded px-2 py-1" autocomplete="current-password">
+      </label>
+      {% endif %}
+      <label class="block text-sm">
+        <span class="text-red-800">Type <code class="font-mono">delete my account</code> to confirm</span>
+        <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-red-300 rounded px-2 py-1">
+      </label>
+      <button type="submit" class="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700" onclick="return confirm('Delete your account? This cannot be undone.');">Delete my account</button>
+    </form>
+  </div>
+
   <div>
     <h2 class="font-medium mb-2">About</h2>
     <dl class="text-sm text-slate-700 space-y-1">
