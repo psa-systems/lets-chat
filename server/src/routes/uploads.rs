@@ -10,6 +10,8 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
+use crate::uploads::pipeline::{self, PipelineError, ProcessedImage};
+
 use crate::auth::{AuthUser, OptionalUser};
 use crate::db;
 use crate::error::AppError;
@@ -142,29 +144,109 @@ pub async fn post_upload(
                 .into_response());
         };
 
-        // sha256 the temp file, rename to content-addressed path.
-        let hex = sha256_file(&tmp_path)
+        let (storage_name, stored_size, stored_mime) = if mime_type.starts_with("image/") {
+            // Acquire a permit. Decode + re-encode is memory-hungry; THUMBNAIL_CONCURRENCY
+            // caps how many run at once. The permit drops at the end of this branch,
+            // before the (much cheaper) DB insert.
+            let _permit = crate::uploads::thumbnail_semaphore()
+                .acquire()
+                .await
+                .expect("thumbnail semaphore never closed");
+
+            // Pipeline is CPU- and sync-IO-bound; run on the blocking pool so the
+            // async runtime threads stay free for other requests.
+            let tmp_for_blocking = tmp_path.clone();
+            let mime_for_blocking = mime_type.clone();
+            let processed_result = tokio::task::spawn_blocking(move || {
+                pipeline::process_image(&tmp_for_blocking, &mime_for_blocking)
+            })
             .await
-            .map_err(|e| AppError::Internal(format!("hash tmp file: {e}")))?;
-        let storage_name = format!("{hex}.{ext}");
-        let final_path = uploads_root.join(&storage_name);
-        match tokio::fs::metadata(&final_path).await {
-            Ok(_) => {
-                let _ = tokio::fs::remove_file(&tmp_path).await;
-            }
-            Err(_) => {
-                tokio::fs::rename(&tmp_path, &final_path)
+            .map_err(|e| AppError::Internal(format!("image pipeline join: {e}")))?;
+
+            let processed = match processed_result {
+                Ok(p) => p,
+                Err(PipelineError::Decode(e)) => {
+                    tracing::warn!(error = %e, "image decode failed");
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Ok((StatusCode::BAD_REQUEST, "image could not be decoded")
+                        .into_response());
+                }
+                Err(e) => {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Err(AppError::Internal(format!("image pipeline: {e}")));
+                }
+            };
+
+            let ProcessedImage {
+                original_bytes,
+                preview_bytes,
+                mime: stripped_mime,
+            } = processed;
+
+            // sha256 of the STRIPPED bytes (not the temp file). Dedup key reflects the
+            // cleaned form so two users uploading the same photo with different EXIF
+            // metadata dedup correctly.
+            let hex = sha256_bytes(&original_bytes);
+            let storage_name = format!("{hex}.{ext}");
+            let final_path = uploads_root.join(&storage_name);
+            let preview_name = preview_storage_name(&storage_name);
+            let preview_path = uploads_root.join(&preview_name);
+
+            if tokio::fs::metadata(&final_path).await.is_ok() {
+                // Dedup hit. Heal a missing preview if a prior upload's preview write
+                // failed (disk full at the time, etc.). Do NOT rewrite the original.
+                if tokio::fs::metadata(&preview_path).await.is_err() {
+                    if let Err(e) = write_atomic(&preview_path, &preview_bytes).await {
+                        tracing::warn!(
+                            error = %e,
+                            path = %preview_path.display(),
+                            "preview heal failed",
+                        );
+                    }
+                }
+            } else {
+                write_atomic(&final_path, &original_bytes)
                     .await
-                    .map_err(|e| AppError::Internal(format!("rename tmp file: {e}")))?;
+                    .map_err(|e| AppError::Internal(format!("write original: {e}")))?;
+                // Preview is best-effort: the original is committed and the serve route
+                // falls back to it if the preview is missing.
+                if let Err(e) = write_atomic(&preview_path, &preview_bytes).await {
+                    tracing::warn!(
+                        error = %e,
+                        path = %preview_path.display(),
+                        "preview write failed (original committed)",
+                    );
+                }
             }
-        }
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+
+            (storage_name, original_bytes.len() as i64, stripped_mime)
+        } else {
+            // Non-image branch (PDF). Existing flow: hash the temp file and rename.
+            let hex = sha256_file(&tmp_path)
+                .await
+                .map_err(|e| AppError::Internal(format!("hash tmp file: {e}")))?;
+            let storage_name = format!("{hex}.{ext}");
+            let final_path = uploads_root.join(&storage_name);
+            match tokio::fs::metadata(&final_path).await {
+                Ok(_) => {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                }
+                Err(_) => {
+                    tokio::fs::rename(&tmp_path, &final_path)
+                        .await
+                        .map_err(|e| AppError::Internal(format!("rename tmp file: {e}")))?;
+                }
+            }
+            (storage_name, total, mime_type.clone())
+        };
 
         let id = db::uploads::insert_upload(
             &state.chat,
             &user.id,
             &original_filename,
-            &mime_type,
-            total,
+            &stored_mime,
+            stored_size,
             &storage_name,
         )
         .await?;
@@ -231,6 +313,42 @@ pub async fn get_file(
         body,
     )
         .into_response())
+}
+
+/// Sha256 an in-memory byte slice. Used for image uploads where the canonical
+/// filename derives from the STRIPPED re-encoded bytes, not the temp file.
+fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Insert a `_preview` suffix before the extension of a content-addressed
+/// storage name. `"abc.jpg"` becomes `"abc_preview.jpg"`. Used for both the
+/// write side (here) and the dedup-hit heal check.
+fn preview_storage_name(storage_name: &str) -> String {
+    match storage_name.rsplit_once('.') {
+        Some((stem, ext)) => format!("{stem}_preview.{ext}"),
+        None => format!("{storage_name}_preview"),
+    }
+}
+
+/// Write `bytes` to `final_path` via a `.partial` sibling + rename, so a crash
+/// mid-write never leaves a half-written content-addressed file in place. On
+/// any error, the partial file is cleaned up best-effort.
+async fn write_atomic(final_path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut partial_os = final_path.as_os_str().to_owned();
+    partial_os.push(".partial");
+    let partial: PathBuf = partial_os.into();
+    if let Err(e) = tokio::fs::write(&partial, bytes).await {
+        let _ = tokio::fs::remove_file(&partial).await;
+        return Err(e);
+    }
+    if let Err(e) = tokio::fs::rename(&partial, final_path).await {
+        let _ = tokio::fs::remove_file(&partial).await;
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Sha256 a file by streaming through it 64 KiB at a time. Returns the hex
