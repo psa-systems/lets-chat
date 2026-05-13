@@ -220,7 +220,7 @@ fn spawn_orphan_sweeper(state: AppState) {
         tick.tick().await;
         loop {
             tick.tick().await;
-            match lets_chat::uploads::sweep::run_orphan_sweep(&state, THRESHOLD_HOURS).await {
+            match lets_chat::uploads::sweep::run_orphan_sweep(&state.chat, THRESHOLD_HOURS).await {
                 Ok(stats) if stats.rows_deleted > 0 || stats.errors > 0 => {
                     tracing::info!(
                         rows = stats.rows_deleted,

@@ -224,7 +224,7 @@ pub async fn post_purge_orphans(
     State(state): State<AppState>,
     AdminUser(_): AdminUser,
 ) -> Result<Redirect, AppError> {
-    let stats = crate::uploads::sweep::run_orphan_sweep(&state, 0)
+    let stats = crate::uploads::sweep::run_orphan_sweep(&state.chat, 0)
         .await
         .map_err(|e| AppError::Internal(format!("purge orphans: {e}")))?;
     tracing::info!(

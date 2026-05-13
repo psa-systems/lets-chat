@@ -17,8 +17,6 @@ use std::path::Path;
 
 use sqlx::SqlitePool;
 
-use crate::state::AppState;
-
 #[derive(Debug, Default)]
 pub struct SweepStats {
     pub rows_deleted: u64,
@@ -27,14 +25,14 @@ pub struct SweepStats {
 }
 
 pub async fn run_orphan_sweep(
-    state: &AppState,
+    pool: &SqlitePool,
     threshold_hours: i64,
 ) -> Result<SweepStats, sqlx::Error> {
     let candidates =
-        crate::db::uploads::select_orphans_older_than(&state.chat, threshold_hours).await?;
+        crate::db::uploads::select_orphans_older_than(pool, threshold_hours).await?;
     let mut stats = SweepStats::default();
     for (id, storage_path) in candidates {
-        match sweep_one(&state.chat, id, &storage_path).await {
+        match sweep_one(pool, id, &storage_path).await {
             Ok(file_removed) => {
                 stats.rows_deleted += 1;
                 if file_removed {
