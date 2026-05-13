@@ -579,6 +579,13 @@ async fn render_new_message(
         .await
         .ok()
         .unwrap_or_default();
+    let quote_preview = match message.quote_id {
+        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid)
+            .await
+            .ok()
+            .flatten(),
+        None => None,
+    };
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -605,6 +612,7 @@ async fn render_new_message(
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis,
+        quote_preview,
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -666,6 +674,13 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, m.id)
         .await
         .unwrap_or(false);
+    let quote_preview = match m.quote_id {
+        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid)
+            .await
+            .ok()
+            .flatten(),
+        None => None,
+    };
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -692,6 +707,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         is_pinned: pinned_ids.contains(&m.id),
         is_bookmarked,
         custom_emojis,
+        quote_preview,
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -756,6 +772,7 @@ async fn render_thread_reply(
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis,
+        quote_preview: None,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
