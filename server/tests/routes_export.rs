@@ -125,7 +125,12 @@ async fn app_with_two_users() -> TestApp {
     }
 }
 
-async fn send(app: &Router, sess: &str, method: Method, uri: &str) -> (StatusCode, Vec<u8>, http::HeaderMap) {
+async fn send(
+    app: &Router,
+    sess: &str,
+    method: Method,
+    uri: &str,
+) -> (StatusCode, Vec<u8>, http::HeaderMap) {
     let req = Request::builder()
         .method(method)
         .uri(uri)
@@ -167,9 +172,16 @@ async fn export_returns_json_attachment_with_user_data() {
         .fetch_one(&t.chat)
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&t.chat, "export-room", None, "public", None, Some(general_id))
-        .await
-        .unwrap();
+    let room_id = db::chat::create_room(
+        &t.chat,
+        "export-room",
+        None,
+        "public",
+        None,
+        Some(general_id),
+    )
+    .await
+    .unwrap();
     let msg_a = db::chat::insert_message(&t.chat, room_id, &t.viewer_id, "hello world")
         .await
         .unwrap();
@@ -225,7 +237,9 @@ async fn export_returns_json_attachment_with_user_data() {
     assert_eq!(messages.len(), 1, "only viewer's own message exported");
     assert_eq!(messages[0]["body"], "hello world");
 
-    let reactions = parsed["reactions_given"].as_array().expect("reactions array");
+    let reactions = parsed["reactions_given"]
+        .as_array()
+        .expect("reactions array");
     assert_eq!(reactions.len(), 1);
     assert_eq!(reactions[0]["emoji"], "👍");
 
@@ -241,14 +255,23 @@ async fn export_returns_json_attachment_with_user_data() {
         .as_array()
         .expect("enclave_memberships array");
     assert!(
-        memberships
-            .iter()
-            .any(|m| m["enclave_name"] == "General"),
+        memberships.iter().any(|m| m["enclave_name"] == "General"),
         "General membership missing: {memberships:?}"
     );
 
     let sessions = parsed["sessions"].as_array().expect("sessions array");
     assert!(!sessions.is_empty(), "session list empty");
+    // The raw session id is the cookie bearer token; the export must
+    // expose only its SHA-256, never the raw value.
+    let raw_token = t.viewer_session.as_bytes();
+    let s = &sessions[0];
+    assert!(s.get("id").is_none(), "raw session id leaked: {s}");
+    let hash = s["id_sha256"].as_str().expect("id_sha256 string");
+    assert_eq!(hash.len(), 64, "id_sha256 should be 64 hex chars: {hash}");
+    assert!(
+        !body.windows(raw_token.len()).any(|w| w == raw_token),
+        "raw session token appears in export body"
+    );
 }
 
 #[tokio::test]
@@ -259,9 +282,16 @@ async fn export_scopes_data_to_the_caller() {
         .fetch_one(&t.chat)
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&t.chat, "scope-room", None, "public", None, Some(general_id))
-        .await
-        .unwrap();
+    let room_id = db::chat::create_room(
+        &t.chat,
+        "scope-room",
+        None,
+        "public",
+        None,
+        Some(general_id),
+    )
+    .await
+    .unwrap();
     db::chat::insert_message(&t.chat, room_id, &t.other_id, "stranger says hi")
         .await
         .unwrap();

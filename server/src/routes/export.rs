@@ -2,6 +2,7 @@ use axum::extract::State;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
 
 use crate::auth::AuthUser;
@@ -72,7 +73,13 @@ struct NotificationPrefs {
 
 #[derive(Serialize)]
 struct SessionExport {
-    id: String,
+    /// SHA-256 of the raw session token. The raw token is the bearer
+    /// credential for the cookie; including it in a portable JSON dump
+    /// would turn a leaked export into account takeover until the row
+    /// expires. The hash keeps each session row uniquely identifiable
+    /// (so the user can correlate rows or spot duplicates) without
+    /// exposing anything reusable as a credential.
+    id_sha256: String,
     created_at: String,
     expires_at: String,
     last_seen_at: Option<String>,
@@ -379,15 +386,25 @@ async fn load_sessions(pool: &SqlitePool, user_id: &str) -> Result<Vec<SessionEx
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| SessionExport {
-            id: r.get("id"),
-            created_at: r.get("created_at"),
-            expires_at: r.get("expires_at"),
-            last_seen_at: r.get("last_seen_at"),
-            user_agent: r.get("user_agent"),
-            ip: r.get("ip"),
+        .map(|r| {
+            let raw_id: String = r.get("id");
+            SessionExport {
+                id_sha256: sha256_hex(&raw_id),
+                created_at: r.get("created_at"),
+                expires_at: r.get("expires_at"),
+                last_seen_at: r.get("last_seen_at"),
+                user_agent: r.get("user_agent"),
+                ip: r.get("ip"),
+            }
         })
         .collect())
+}
+
+fn sha256_hex(s: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(s.as_bytes());
+    let digest = hasher.finalize();
+    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 async fn load_push_subs(pool: &SqlitePool, user_id: &str) -> Result<Vec<PushSubExport>, AppError> {
