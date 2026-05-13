@@ -20,12 +20,14 @@
       </div>
     </div>
     {% if r.is_invitable() %}
-    <button type="button"
-            hx-post="/enclave/{{ enclave_id }}/invite"
-            hx-vals='{"user_id": "{{ r.id }}"}'
-            hx-target="closest [data-invite-row]"
-            hx-swap="outerHTML"
-            class="text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">Invite</button>
+    <form hx-post="/enclave/{{ enclave_id }}/invite"
+          hx-target="closest [data-invite-row]"
+          hx-swap="outerHTML"
+          class="inline">
+      <input type="hidden" name="user_id" value="{{ r.id }}">
+      <button type="submit"
+              class="text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">Invite</button>
+    </form>
     {% else if r.is_member() %}
     <span class="text-xs text-slate-400">Member</span>
     {% else if r.is_invited() %}
