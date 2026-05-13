@@ -33,26 +33,30 @@ impl IntoResponse for Html {
     }
 }
 
-/// Render an Askama template into an `Html` response wrapper.
+/// Render an Askama template to a `String`, deferring to
+/// `tokio::task::block_in_place` on a multi-thread runtime so the
+/// synchronous render (which includes syntect-based code-block
+/// highlighting via `body_html()`) does not pin a worker thread for
+/// seconds at a time and starve every other task on it.
 ///
-/// On the multi-thread tokio runtime we hand the synchronous render off
-/// via `block_in_place`, so the syntect-heavy `body_html()` calls inside
-/// the template do not pin a worker thread for seconds at a time and
-/// starve every other task scheduled on it. Under chat load several
-/// concurrent room renders could otherwise pin all worker threads
-/// simultaneously, leaving no thread free to poll incoming requests and
-/// producing the multi-minute "page is loading" stalls.
+/// Concurrent room and WS-fragment renders would otherwise pin all
+/// worker threads at once, leaving no thread free to poll incoming
+/// requests; that was the source of the multi-minute "page is loading"
+/// stalls.
 ///
-/// On the current-thread runtime (used by `#[tokio::test]`) we render
-/// inline: `block_in_place` panics there, and the test workload is
-/// single-shot anyway.
-pub fn html<T: Template>(template: &T) -> Result<Html, AppError> {
+/// Falls back to inline render on the current-thread runtime used by
+/// `#[tokio::test]`, where `block_in_place` would panic.
+pub fn render_template<T: Template>(template: &T) -> Result<String, askama::Error> {
     use tokio::runtime::{Handle, RuntimeFlavor};
-    let rendered = match Handle::try_current() {
+    match Handle::try_current() {
         Ok(h) if matches!(h.runtime_flavor(), RuntimeFlavor::MultiThread) => {
             tokio::task::block_in_place(|| template.render())
         }
         _ => template.render(),
-    }?;
-    Ok(Html(rendered))
+    }
+}
+
+/// Render an Askama template into an `Html` response wrapper.
+pub fn html<T: Template>(template: &T) -> Result<Html, AppError> {
+    Ok(Html(render_template(template)?))
 }
