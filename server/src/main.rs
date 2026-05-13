@@ -7,7 +7,15 @@ const APP_NAME: &str = "lets-chat-saas";
 #[cfg(not(feature = "saas"))]
 const APP_NAME: &str = "lets-chat";
 
-#[tokio::main]
+// Use a generous worker pool: the chat template render path is fully
+// synchronous CPU work (pulldown_cmark + syntect), and even with the
+// markdown cache and `block_in_place` wrap, a burst of cache-miss
+// renders across concurrent broadcasts can pin every worker. Default
+// `worker_threads = num_cpus` (often 4 in a container) leaves no spare
+// thread to poll fresh /ws or HTTP upgrades, which manifested as
+// multi-minute "page is loading" stalls. 32 is well above the steady-
+// state need and costs only a handful of stack pages.
+#[tokio::main(flavor = "multi_thread", worker_threads = 32)]
 async fn main() {
     if wants_version_flag() {
         println!("{}", version::banner(APP_NAME));
