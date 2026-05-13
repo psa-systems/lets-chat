@@ -31,7 +31,7 @@ async fn dispatch_login_alert(
     // exact reason. The dispatch is fire-and-forget, so this is the
     // only signal an operator gets.
     if !state.mail_available() {
-        tracing::info!(
+        tracing::debug!(
             user_id,
             "login alert suppressed: SMTP not configured (mail_available=false)"
         );
@@ -49,7 +49,7 @@ async fn dispatch_login_alert(
         Err(e) => return Err(format!("find_user_by_id: {e}")),
     };
     if !record.notify_login_alerts_enabled {
-        tracing::info!(
+        tracing::debug!(
             user_id,
             username = %record.username,
             "login alert suppressed: user has notify_login_alerts_enabled = 0"
@@ -57,7 +57,7 @@ async fn dispatch_login_alert(
         return Ok(());
     }
     let Some(email) = record.email.as_deref().filter(|e| !e.is_empty()) else {
-        tracing::info!(
+        tracing::debug!(
             user_id,
             username = %record.username,
             "login alert suppressed: no email address on account"
@@ -100,7 +100,7 @@ async fn dispatch_login_alert(
         .send_multipart(email, "New sign-in to your lets-chat account", &text, &html)
         .await
         .map_err(|e| format!("send: {e}"))?;
-    tracing::info!(
+    tracing::debug!(
         user_id,
         username = %record.username,
         device = %device_label,
