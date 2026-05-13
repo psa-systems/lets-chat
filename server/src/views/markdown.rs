@@ -9,7 +9,10 @@
 //! `views::room::render_body`: `@username` chips, custom emoji shortcodes,
 //! and bare-URL linkification. Raw HTML in user input is dropped so messages
 //! can't smuggle markup.
-use std::sync::OnceLock;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use syntect::highlighting::ThemeSet;
@@ -19,12 +22,56 @@ use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
 use crate::views::room::{emojify_and_escape, html_escape, render_body};
 
+/// Cache of (body, mentions, emojis) -> rendered HTML. Markdown rendering
+/// is fully deterministic in its inputs, and the same message body gets
+/// rendered once per viewer when an event is broadcast over the hub;
+/// caching collapses that into a single render plus N cheap HashMap
+/// lookups. Cache is bounded; on overflow we clear the whole map rather
+/// than evict entries individually, which avoids a per-call eviction
+/// strategy at the cost of a periodic cold cache.
+const MARKDOWN_CACHE_MAX_ENTRIES: usize = 4096;
+static MARKDOWN_CACHE: OnceLock<Mutex<HashMap<u64, String>>> = OnceLock::new();
+
+fn markdown_cache_key(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    body.hash(&mut hasher);
+    for m in mentions {
+        m.user_id.hash(&mut hasher);
+        m.username.hash(&mut hasher);
+    }
+    for e in emojis {
+        e.shortcode.hash(&mut hasher);
+        e.id.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// Render a message body to HTML.
 ///
 /// Mentions and custom emojis are processed only on inline text segments -
 /// they are not interpreted inside fenced code blocks or inline `code`
 /// spans, where the literal text is preserved.
 pub fn render(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+    let key = markdown_cache_key(body, mentions, emojis);
+    let cache = MARKDOWN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.get(&key) {
+            return cached.clone();
+        }
+    }
+
+    let rendered = render_inner(body, mentions, emojis);
+
+    if let Ok(mut guard) = cache.lock() {
+        if guard.len() >= MARKDOWN_CACHE_MAX_ENTRIES {
+            guard.clear();
+        }
+        guard.insert(key, rendered.clone());
+    }
+    rendered
+}
+
+fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
