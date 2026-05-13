@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -41,6 +41,11 @@ pub fn router() -> Router<AppState> {
         .route("/admin/rooms/{id}/regenerate", post(post_regenerate_invite))
         .route("/admin/enclaves", get(get_enclaves))
         .route("/admin/modlog", get(get_modlog))
+        .route(
+            "/admin/uploads/regenerate-thumbnails",
+            post(post_regenerate_thumbnails),
+        )
+        .route("/admin/uploads/purge-orphans", post(post_purge_orphans))
 }
 
 pub async fn get_enclaves(
@@ -89,9 +94,16 @@ pub struct SettingsForm {
     pub smtp_pass: String,
 }
 
+#[derive(Deserialize, Default)]
+pub struct SettingsQuery {
+    pub regenerated: Option<i64>,
+    pub purged: Option<i64>,
+}
+
 pub async fn get_settings(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
+    Query(q): Query<SettingsQuery>,
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
@@ -111,6 +123,12 @@ pub async fn get_settings(
             .await?
             .as_deref()
             == Some("1");
+    let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
+    let uploads_total_display = format!(
+        "{:.2} MiB",
+        uploads_total_bytes as f64 / (1024.0 * 1024.0)
+    );
+    let uploads_orphan_count = db::uploads::count_orphans(&state.chat).await?;
     let page = SettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -128,8 +146,97 @@ pub async fn get_settings(
         smtp_from,
         default_notify_email_digest,
         saved: false,
+        uploads_total_display,
+        uploads_orphan_count,
+        regenerated: q.regenerated,
+        purged: q.purged,
     };
     html(&page)
+}
+
+/// Walk every image upload and write a preview for any row that lacks one on
+/// disk. Useful when upgrading from a pre-Phase-23 deployment, or to recover
+/// from a batch of failed preview writes (disk-full transients, etc.).
+/// Originals are not touched: pre-Phase-23 originals were not stripped at
+/// upload time and would lose their content-addressed identity if we
+/// re-encoded them now, so this action is preview-only.
+pub async fn post_regenerate_thumbnails(
+    State(state): State<AppState>,
+    AdminUser(_): AdminUser,
+) -> Result<Redirect, AppError> {
+    let rows = db::uploads::list_image_uploads(&state.chat).await?;
+    let uploads_dir = db::uploads_dir();
+    let mut regenerated: i64 = 0;
+    for row in rows {
+        let preview_name = crate::uploads::preview_storage_name(&row.storage_path);
+        let preview_path = uploads_dir.join(&preview_name);
+        if tokio::fs::metadata(&preview_path).await.is_ok() {
+            continue;
+        }
+        let original_path = uploads_dir.join(&row.storage_path);
+
+        let permit = crate::uploads::thumbnail_semaphore()
+            .acquire()
+            .await
+            .expect("thumbnail semaphore never closed");
+        let path_for_blocking = original_path.clone();
+        let mime_for_blocking = row.mime_type.clone();
+        let preview_result = tokio::task::spawn_blocking(move || {
+            crate::uploads::pipeline::preview_from_path(&path_for_blocking, &mime_for_blocking)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("regen join: {e}")))?;
+        drop(permit);
+
+        match preview_result {
+            Ok(bytes) => {
+                if let Err(e) = crate::uploads::write_atomic(&preview_path, &bytes).await {
+                    tracing::warn!(
+                        error = %e,
+                        row_id = row.id,
+                        "regenerate: preview write failed",
+                    );
+                } else {
+                    regenerated += 1;
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    row_id = row.id,
+                    "regenerate: pipeline failed",
+                );
+            }
+        }
+    }
+    tracing::info!(regenerated, "admin regenerate-thumbnails complete");
+    Ok(Redirect::to(&format!(
+        "/admin/settings?regenerated={regenerated}"
+    )))
+}
+
+/// Run the orphan sweeper with threshold = 0, i.e. consider every
+/// `message_id IS NULL` row a candidate regardless of age. Reuses
+/// `run_orphan_sweep` so the same dedup-aware transaction and the same
+/// missing-file-is-success semantics apply; the only difference vs the
+/// hourly tick is the threshold.
+pub async fn post_purge_orphans(
+    State(state): State<AppState>,
+    AdminUser(_): AdminUser,
+) -> Result<Redirect, AppError> {
+    let stats = crate::uploads::sweep::run_orphan_sweep(&state, 0)
+        .await
+        .map_err(|e| AppError::Internal(format!("purge orphans: {e}")))?;
+    tracing::info!(
+        rows = stats.rows_deleted,
+        files = stats.files_deleted,
+        errors = stats.errors,
+        "admin purge-orphans complete",
+    );
+    Ok(Redirect::to(&format!(
+        "/admin/settings?purged={}",
+        stats.rows_deleted
+    )))
 }
 
 pub async fn post_settings(

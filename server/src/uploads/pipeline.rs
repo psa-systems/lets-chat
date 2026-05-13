@@ -138,6 +138,25 @@ fn process_gif(tmp_path: &Path) -> Result<ProcessedImage, PipelineError> {
     })
 }
 
+/// Read an image from disk and produce just the 360px preview bytes. Used by
+/// the admin "regenerate thumbnails" action to backfill missing `_preview`
+/// files without re-encoding the (already-stripped) original. For animated
+/// GIFs this returns a single-frame static preview, matching the upload-time
+/// behaviour for new uploads.
+pub fn preview_from_path(
+    path: &std::path::Path,
+    mime: &str,
+) -> Result<Vec<u8>, PipelineError> {
+    let format = Format::from_mime(mime)
+        .ok_or_else(|| PipelineError::UnsupportedMime(mime.to_string()))?;
+    let decoded = ImageReader::open(path)?
+        .with_guessed_format()?
+        .decode()
+        .map_err(PipelineError::Decode)?;
+    let preview = thumbnail(&decoded);
+    encode(&preview, format)
+}
+
 fn thumbnail(img: &DynamicImage) -> DynamicImage {
     if img.width().max(img.height()) <= PREVIEW_MAX_DIM {
         img.clone()

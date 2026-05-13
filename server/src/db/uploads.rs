@@ -198,6 +198,37 @@ pub async fn delete_upload_row(
     Ok(())
 }
 
+/// Sum of `size_bytes` across all upload rows. Drives the admin "Uploads"
+/// panel total.
+pub async fn sum_size_bytes(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT COALESCE(SUM(size_bytes), 0) FROM file_uploads")
+        .fetch_one(pool)
+        .await
+}
+
+/// Count of orphan rows (`message_id IS NULL`). Same predicate as the sweep,
+/// but cheap enough to compute on every admin-settings render.
+pub async fn count_orphans(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM file_uploads WHERE message_id IS NULL")
+        .fetch_one(pool)
+        .await
+}
+
+/// List every image upload row. Used by the admin regenerate-thumbnails
+/// action to walk all images and backfill missing previews.
+pub async fn list_image_uploads(pool: &SqlitePool) -> Result<Vec<UploadRow>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, uploader_id, message_id, filename, mime_type, size_bytes, \
+                storage_path, created_at \
+         FROM file_uploads \
+         WHERE mime_type LIKE 'image/%' \
+         ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_upload).collect())
+}
+
 // ── Link preview cache ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
