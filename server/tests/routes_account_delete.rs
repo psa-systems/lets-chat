@@ -382,6 +382,71 @@ async fn delete_refuses_when_sole_owner_with_other_members() {
 }
 
 #[tokio::test]
+async fn delete_refuses_when_caller_is_sole_admin_with_other_users() {
+    let t = app_with_user().await;
+    sqlx::query("UPDATE users SET role='admin' WHERE id = ?")
+        .bind(&t.user_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+
+    let (status, body, _) =
+        post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let text = String::from_utf8_lossy(&body);
+    assert!(text.to_lowercase().contains("only admin"), "body: {text}");
+
+    let still: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE id = ?")
+        .bind(&t.user_id)
+        .fetch_optional(&t.auth)
+        .await
+        .unwrap();
+    assert!(still.is_some());
+}
+
+#[tokio::test]
+async fn delete_allowed_when_another_admin_exists() {
+    let t = app_with_user().await;
+    sqlx::query("UPDATE users SET role='admin' WHERE id IN (?, ?)")
+        .bind(&t.user_id)
+        .bind(&t.peer_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+
+    let (status, body, _) =
+        post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
+    assert!(
+        status.is_redirection(),
+        "expected redirect, got {status}: {}",
+        String::from_utf8_lossy(&body)
+    );
+}
+
+#[tokio::test]
+async fn delete_allowed_when_caller_is_sole_user() {
+    let t = app_with_user().await;
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(&t.peer_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id = ?")
+        .bind(&t.user_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+
+    let (status, body, _) =
+        post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
+    assert!(
+        status.is_redirection(),
+        "expected redirect, got {status}: {}",
+        String::from_utf8_lossy(&body)
+    );
+}
+
+#[tokio::test]
 async fn delete_drops_solo_owned_enclave() {
     let t = app_with_user().await;
     let enclave_id = db::enclave::create_enclave(&t.chat, "solo-club", None, &t.user_id)
