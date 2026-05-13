@@ -95,6 +95,7 @@ pub async fn post_login(
     let token =
         db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
             .await?;
+    crate::routes::login_alerts::spawn_dispatch(&state, record.id.clone(), ua, ip);
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 
@@ -248,6 +249,16 @@ pub async fn post_register(
     let token =
         db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
             .await?;
+    // Pre-seed the device fingerprint so the first login from the same
+    // browser does not fire a "new device" alert. The user just created
+    // the account from this device - alerting them about it is noise.
+    let _ = db::login_alerts::check_and_record_device(
+        &state.auth,
+        &user_id,
+        ua.as_deref(),
+        ip.as_deref(),
+    )
+    .await;
     let cookie = build_session_cookie(token);
     let jar = jar.add(cookie);
 

@@ -36,6 +36,7 @@ pub(crate) mod email_verification;
 mod enclave;
 mod export;
 mod home;
+pub(crate) mod login_alerts;
 mod mentions;
 mod notify_prefs;
 #[cfg(feature = "standalone")]

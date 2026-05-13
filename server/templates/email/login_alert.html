@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+<p>Hi {{ username }},</p>
+
+<p>A new sign-in to your lets-chat account was just recorded:</p>
+
+<table style="border-collapse: collapse; margin-left: 16px;">
+  <tr><td style="color: #666; padding: 2px 12px 2px 0;">Device</td><td>{{ device_label }}</td></tr>
+{% if !ip.is_empty() %}
+  <tr><td style="color: #666; padding: 2px 12px 2px 0;">IP</td><td>{{ ip }}</td></tr>
+{% endif %}
+  <tr><td style="color: #666; padding: 2px 12px 2px 0;">Time</td><td>{{ when }} UTC</td></tr>
+</table>
+
+<p>If this was you, no action is needed. The device is now remembered and future sign-ins from it will not trigger another alert.</p>
+
+<p>If this was <strong>not</strong> you, <a href="{{ sessions_url }}">sign in and revoke the unfamiliar session</a>.</p>
+
+<hr style="margin-top: 24px; border: none; border-top: 1px solid #eee;">
+<p style="font-size: 12px; color: #666;">You are receiving this because login alerts are enabled for your account. <a href="{{ settings_url }}">Change your notification preferences</a>.</p>
+</body>
+</html>
