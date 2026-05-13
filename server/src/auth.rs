@@ -184,10 +184,13 @@ pub async fn enforce_2fa_enrollment(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    let path = req.uri().path().to_string();
+    tracing::debug!(%path, "enforce_2fa enter");
     if !state.two_factor_available() {
-        return next.run(req).await;
+        let r = next.run(req).await;
+        tracing::debug!(%path, "enforce_2fa: next.run done (no 2fa)");
+        return r;
     }
-    let path = req.uri().path();
     let exempt = path == "/logout"
         || path == "/login"
         || path.starts_with("/login/")
@@ -201,11 +204,15 @@ pub async fn enforce_2fa_enrollment(
     if !exempt {
         if let Some(u) = req.extensions().get::<User>() {
             if !u.totp_enabled {
+                tracing::debug!(%path, "enforce_2fa: redirecting to 2fa setup");
                 return Redirect::to("/settings/2fa/setup").into_response();
             }
         }
     }
-    next.run(req).await
+    tracing::debug!(%path, "enforce_2fa: passing through to next.run");
+    let r = next.run(req).await;
+    tracing::debug!(%path, "enforce_2fa: next.run done");
+    r
 }
 
 /// Extractor for routes that may render either a public or authed page.
