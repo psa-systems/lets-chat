@@ -44,6 +44,8 @@ pub struct SettingsForm {
     pub notify_push_enabled: Option<String>,
     #[serde(default)]
     pub notify_email_digest_enabled: Option<String>,
+    #[serde(default)]
+    pub notify_login_alerts_enabled: Option<String>,
 }
 
 pub async fn get_settings(
@@ -116,7 +118,7 @@ async fn build_session_views(
 /// identifiable. We deliberately do not parse with a heavyweight UA
 /// database: the rough family is enough to let the user spot a session
 /// they did not create.
-fn summarize_user_agent(ua: Option<&str>) -> String {
+pub(crate) fn summarize_user_agent(ua: Option<&str>) -> String {
     let Some(ua) = ua else {
         return "Unknown device".to_string();
     };
@@ -295,6 +297,12 @@ pub async fn post_settings(
     let email_digest = form.notify_email_digest_enabled.is_some() && state.mail_available();
     db::auth::set_notification_prefs(&state.auth, &user.id, browser, sound, push, email_digest)
         .await?;
+    // Same operator-gate as the digest: persist the user's chosen value
+    // regardless of SMTP availability so flipping the toggle survives a
+    // future SMTP enablement, but the dispatch path is already a no-op
+    // when mail is unavailable.
+    let login_alerts = form.notify_login_alerts_enabled.is_some();
+    db::auth::set_notify_login_alerts_enabled(&state.auth, &user.id, login_alerts).await?;
 
     Ok(Redirect::to("/settings").into_response())
 }
