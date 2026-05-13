@@ -34,7 +34,8 @@ pub async fn find_user_by_username(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -56,7 +57,8 @@ pub async fn find_user_by_id(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users WHERE id = ?",
     )
@@ -93,6 +95,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         notify_sound_enabled: r.get::<i64, _>("notify_sound_enabled") != 0,
         notify_push_enabled: r.get::<i64, _>("notify_push_enabled") != 0,
         notify_email_digest_enabled: r.get::<i64, _>("notify_email_digest_enabled") != 0,
+        notify_login_alerts_enabled: r.get::<i64, _>("notify_login_alerts_enabled") != 0,
         last_ws_seen_at: r.get("last_ws_seen_at"),
         last_digest_sent_at: r.get("last_digest_sent_at"),
         email: r.get("email"),
@@ -452,7 +455,8 @@ pub async fn get_user_by_session(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
-         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
+         u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
+         u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -489,7 +493,8 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users ORDER BY created_at ASC",
     )
@@ -735,6 +740,21 @@ pub async fn set_notification_prefs(
     Ok(())
 }
 
+pub async fn set_notify_login_alerts_enabled(
+    pool: &SqlitePool,
+    user_id: &str,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET notify_login_alerts_enabled = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(enabled as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Toggle the digest-opt-in flag for `user_id`. Used by the register
 /// flow when the operator has flipped `default_notify_email_digest` to
 /// `1`: new users start opted in, but the column default in the schema
@@ -853,7 +873,8 @@ pub async fn search_users(
          created_at, updated_at, read_receipts_enabled, \
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
-         notify_email_digest_enabled, last_ws_seen_at, last_digest_sent_at, email, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         last_ws_seen_at, last_digest_sent_at, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
          FROM users \
          WHERE is_banned = 0 \
@@ -1104,7 +1125,8 @@ pub async fn list_blocked_users(
          u.created_at, u.updated_at, u.read_receipts_enabled, \
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
-         u.notify_email_digest_enabled, u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
+         u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
+         u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
