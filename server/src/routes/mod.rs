@@ -621,65 +621,85 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// Middleware: instrument every request with two signals.
+/// Middleware: time every request, log slow ones, and detect cancellation.
 ///
-/// 1. A watchdog task. If the handler has not produced a response after
-///    `WATCHDOG_THRESHOLD`, emit a warn log right then so operators can
-///    see *which* endpoint is currently stuck. Without this, a handler
-///    that hangs forever produces zero log output (the after-the-fact
-///    "slow request" log only fires once the handler returns).
-/// 2. An after-the-fact slow-request log with the final duration and
-///    status code, suppressed when the watchdog already fired so we do
-///    not double-log every long request.
+/// The watchdog task fires a warn log after `WATCHDOG_THRESHOLD` if the
+/// request has neither completed nor been cancelled. A drop guard tracks
+/// whether the future was cancelled (e.g. client disconnect, hyper
+/// abort) so we can distinguish "handler is still running" from "client
+/// gave up and the request was abandoned mid-flight".
 async fn log_slow_requests(req: axum::extract::Request, next: middleware::Next) -> Response {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     const WATCHDOG_THRESHOLD: Duration = Duration::from_secs(5);
 
+    struct DropGuard {
+        completed: Arc<AtomicBool>,
+        method: http::Method,
+        path: String,
+        started: Instant,
+    }
+    impl Drop for DropGuard {
+        fn drop(&mut self) {
+            if !self.completed.load(Ordering::SeqCst) {
+                tracing::warn!(
+                    method = %self.method,
+                    path = %self.path,
+                    elapsed_ms = self.started.elapsed().as_millis() as u64,
+                    "request future dropped before completion (client cancelled or hyper aborted)"
+                );
+            }
+        }
+    }
+
     let method = req.method().clone();
     let uri = req.uri().clone();
+    let path_str = uri.path().to_string();
     let started = Instant::now();
 
-    let watchdog_fired = Arc::new(AtomicBool::new(false));
-    let done = Arc::new(AtomicBool::new(false));
+    let completed = Arc::new(AtomicBool::new(false));
+    let _guard = DropGuard {
+        completed: completed.clone(),
+        method: method.clone(),
+        path: path_str.clone(),
+        started,
+    };
+
     {
-        let watchdog_fired = watchdog_fired.clone();
-        let done = done.clone();
+        let completed = completed.clone();
         let method = method.clone();
-        let path = uri.path().to_string();
+        let path = path_str.clone();
         tokio::spawn(async move {
             tokio::time::sleep(WATCHDOG_THRESHOLD).await;
-            if !done.load(Ordering::SeqCst) {
-                watchdog_fired.store(true, Ordering::SeqCst);
+            if !completed.load(Ordering::SeqCst) {
                 tracing::warn!(
                     method = %method,
                     path = %path,
                     waited_ms = WATCHDOG_THRESHOLD.as_millis() as u64,
-                    "request still in-flight after watchdog threshold; handler is stuck"
+                    "request still in-flight after watchdog threshold"
                 );
             }
         });
     }
 
-    tracing::debug!(%method, path = %uri.path(), "log_slow_requests: entering next.run");
+    tracing::debug!(%method, path = %path_str, "log_slow_requests: entering next.run");
     let resp = next.run(req).await;
-    done.store(true, Ordering::SeqCst);
+    completed.store(true, Ordering::SeqCst);
 
     let elapsed = started.elapsed();
     if elapsed >= WATCHDOG_THRESHOLD {
         tracing::warn!(
             method = %method,
-            path = %uri.path(),
+            path = %path_str,
             status = resp.status().as_u16(),
             duration_ms = elapsed.as_millis() as u64,
-            watchdog_fired = watchdog_fired.load(Ordering::SeqCst),
             "slow request completed"
         );
     } else if elapsed >= Duration::from_millis(1000) {
         tracing::info!(
             method = %method,
-            path = %uri.path(),
+            path = %path_str,
             status = resp.status().as_u16(),
             duration_ms = elapsed.as_millis() as u64,
             "request >1s"
