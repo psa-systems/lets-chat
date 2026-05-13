@@ -1,0 +1,41 @@
+{% if results.is_empty() %}
+<div class="bg-white border border-slate-300 rounded shadow-lg p-3">
+  <p class="text-sm text-slate-500">No matching people.</p>
+</div>
+{% else %}
+<div class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">
+  {% for r in results %}
+  <div data-invite-row class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0">
+    {% let avatar_user_id = r.id.clone() %}
+    {% let avatar_username = r.username.clone() %}
+    {% let avatar_ext = r.avatar_ext.clone() %}
+    {% let avatar_status = r.status.clone() %}
+    {% let avatar_custom_status = r.custom_status.clone() %}
+    {% let avatar_size = "h-6 w-6 text-xs" %}
+    {% include "partials/avatar.html" %}
+    <div class="min-w-0 flex-1">
+      <div class="flex items-baseline gap-2">
+        <span class="font-medium truncate text-sm">{{ r.label() }}</span>
+        <span class="text-xs text-slate-500 truncate">@{{ r.username }}</span>
+      </div>
+    </div>
+    {% if r.is_invitable() %}
+    <form hx-post="/enclave/{{ enclave_id }}/invite"
+          hx-target="closest [data-invite-row]"
+          hx-swap="outerHTML"
+          class="inline">
+      <input type="hidden" name="user_id" value="{{ r.id }}">
+      <button type="submit"
+              class="text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">Invite</button>
+    </form>
+    {% else if r.is_member() %}
+    <span class="text-xs text-slate-400">Member</span>
+    {% else if r.is_invited() %}
+    <span class="text-xs text-slate-400">Invited</span>
+    {% else if r.is_self() %}
+    <span class="text-xs text-slate-400">(you)</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
