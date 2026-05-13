@@ -22,20 +22,46 @@ async fn dispatch_login_alert(
         .await
         .map_err(|e| format!("check_and_record_device: {e}"))?;
     if !is_new {
+        tracing::debug!(user_id, "login alert: known device, no email");
         return Ok(());
     }
+    // From here on the device IS new. Every early-return path is a
+    // suppression an operator might want to diagnose ("why didn't my
+    // user get an email?"), so each one emits a log line that names the
+    // exact reason. The dispatch is fire-and-forget, so this is the
+    // only signal an operator gets.
     if !state.mail_available() {
+        tracing::info!(
+            user_id,
+            "login alert suppressed: SMTP not configured (mail_available=false)"
+        );
         return Ok(());
     }
     let record = match db::auth::find_user_by_id(&state.auth, user_id).await {
         Ok(Some(r)) => r,
-        Ok(None) => return Ok(()),
+        Ok(None) => {
+            tracing::warn!(
+                user_id,
+                "login alert: user row vanished between session create and dispatch"
+            );
+            return Ok(());
+        }
         Err(e) => return Err(format!("find_user_by_id: {e}")),
     };
     if !record.notify_login_alerts_enabled {
+        tracing::info!(
+            user_id,
+            username = %record.username,
+            "login alert suppressed: user has notify_login_alerts_enabled = 0"
+        );
         return Ok(());
     }
     let Some(email) = record.email.as_deref().filter(|e| !e.is_empty()) else {
+        tracing::info!(
+            user_id,
+            username = %record.username,
+            "login alert suppressed: no email address on account"
+        );
         return Ok(());
     };
 
@@ -74,6 +100,12 @@ async fn dispatch_login_alert(
         .send_multipart(email, "New sign-in to your lets-chat account", &text, &html)
         .await
         .map_err(|e| format!("send: {e}"))?;
+    tracing::info!(
+        user_id,
+        username = %record.username,
+        device = %device_label,
+        "login alert sent"
+    );
     Ok(())
 }
 
