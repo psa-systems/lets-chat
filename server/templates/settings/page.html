@@ -129,6 +129,19 @@
         {% endif %}
       </span>
     </label>
+    <label class="flex items-start gap-2 cursor-pointer">
+      <input type="checkbox" name="notify_login_alerts_enabled" value="1" class="mt-0.5"
+        {% if user.notify_login_alerts_enabled %}checked{% endif %}
+        {% if !email_available %}disabled{% endif %}>
+      <span>
+        Email me when a new device signs in to my account
+        {% if !email_available %}
+        <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+        {% else %}
+        <span class="block text-xs text-slate-500">Sent the first time a browser or IP signs in. No alert is sent for devices already on file.</span>
+        {% endif %}
+      </span>
+    </label>
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 

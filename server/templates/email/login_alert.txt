@@ -1,0 +1,20 @@
+Hi {{ username }},
+
+A new sign-in to your lets-chat account was just recorded:
+
+  Device: {{ device_label }}
+{% if !ip.is_empty() -%}
+  IP:     {{ ip }}
+{% endif -%}
+  Time:   {{ when }} UTC
+
+If this was you, no action is needed. The device is now remembered and
+future sign-ins from it will not trigger another alert.
+
+If this was NOT you, sign in and revoke the unfamiliar session here:
+
+  {{ sessions_url }}
+
+You can also turn these alerts off (or back on) on the settings page:
+
+  {{ settings_url }}

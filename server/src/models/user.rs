@@ -27,6 +27,7 @@ pub struct UserRecord {
     pub notify_sound_enabled: bool,
     pub notify_push_enabled: bool,
     pub notify_email_digest_enabled: bool,
+    pub notify_login_alerts_enabled: bool,
     pub last_ws_seen_at: Option<String>,
     pub last_digest_sent_at: Option<String>,
     /// Optional notification address. Used by the email digest tick and
@@ -64,6 +65,7 @@ pub struct User {
     pub notify_sound_enabled: bool,
     pub notify_push_enabled: bool,
     pub notify_email_digest_enabled: bool,
+    pub notify_login_alerts_enabled: bool,
     pub totp_enabled: bool,
 }
 
@@ -101,6 +103,7 @@ impl From<UserRecord> for User {
             notify_sound_enabled: r.notify_sound_enabled,
             notify_push_enabled: r.notify_push_enabled,
             notify_email_digest_enabled: r.notify_email_digest_enabled,
+            notify_login_alerts_enabled: r.notify_login_alerts_enabled,
             totp_enabled: r.totp_enabled,
         }
     }

@@ -260,6 +260,7 @@ async fn finalize_2fa_login(
     let session =
         db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())
             .await?;
+    crate::routes::login_alerts::spawn_dispatch(state, user_id.to_string(), ua, ip);
     let _ = db::two_factor::delete_pending_2fa(&state.auth, pending_token).await;
 
     let session_cookie = build_session_cookie(session);
