@@ -28,9 +28,9 @@
   {% endif %}
   <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
     {% if message.parent_id.is_none() %}
-    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-slate-600 hover:underline">Quote</button>
+    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-slate-600 hover:underline">Reply</button>
     {% endif %}
-    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Reply</button>
+    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Thread</button>
     {% if message.is_pinned %}
     <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-amber-700 hover:underline">Unpin</button>
     {% else %}
