@@ -80,40 +80,38 @@ pub async fn inject_user(
     mut req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
     const PHASE_WATCHDOG: Duration = Duration::from_secs(3);
-
-    fn spawn_phase_watchdog(phase: &'static str, path: String) -> Arc<AtomicBool> {
-        let done = Arc::new(AtomicBool::new(false));
-        let done_for_task = done.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(PHASE_WATCHDOG).await;
-            if !done_for_task.load(Ordering::SeqCst) {
-                tracing::warn!(
-                    phase,
-                    %path,
-                    waited_ms = PHASE_WATCHDOG.as_millis() as u64,
-                    "inject_user phase still running"
-                );
-            }
-        });
-        done
-    }
 
     let path = req.uri().path().to_string();
     tracing::debug!(%path, "inject_user enter");
     let token = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
 
-    let lookup_done = spawn_phase_watchdog("session_lookup", path.clone());
-    let user = match token.as_deref() {
-        Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
-            Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
-            _ => None,
-        },
-        None => None,
+    let user = {
+        let path = path.clone();
+        let fut = async {
+            match token.as_deref() {
+                Some(t) => match db::auth::get_user_by_session(&state.auth, t).await {
+                    Ok(Some(record)) if !record.is_banned => Some(User::from(record)),
+                    _ => None,
+                },
+                None => None,
+            }
+        };
+        tokio::pin!(fut);
+        let start = Instant::now();
+        loop {
+            tokio::select! {
+                result = &mut fut => break result,
+                _ = tokio::time::sleep(PHASE_WATCHDOG) => {
+                    tracing::warn!(
+                        %path,
+                        elapsed_ms = start.elapsed().as_millis() as u64,
+                        "inject_user phase still running: session_lookup",
+                    );
+                }
+            }
+        }
     };
-    lookup_done.store(true, Ordering::SeqCst);
 
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
@@ -123,10 +121,21 @@ pub async fn inject_user(
         req.extensions_mut().insert(CurrentSessionId(t));
     }
 
-    let downstream_done = spawn_phase_watchdog("downstream_handler", path);
-    let resp = next.run(req).await;
-    downstream_done.store(true, Ordering::SeqCst);
-    resp
+    let fut = next.run(req);
+    tokio::pin!(fut);
+    let start = Instant::now();
+    loop {
+        tokio::select! {
+            result = &mut fut => break result,
+            _ = tokio::time::sleep(PHASE_WATCHDOG) => {
+                tracing::warn!(
+                    %path,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    "inject_user phase still running: downstream_handler",
+                );
+            }
+        }
+    }
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
