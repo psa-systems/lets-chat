@@ -1,7 +1,7 @@
 {% if a.is_image() %}
 <div class="mt-1">
   <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">
-    <img src="{{ a.url }}" alt="{{ a.filename }}"
+    <img src="{{ a.url }}?size=preview" alt="{{ a.filename }}"
          class="max-w-sm max-h-96 rounded border border-slate-200">
   </a>
 </div>

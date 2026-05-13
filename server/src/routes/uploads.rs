@@ -1,9 +1,10 @@
 use axum::body::Body;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -189,7 +190,7 @@ pub async fn post_upload(
             let hex = sha256_bytes(&original_bytes);
             let storage_name = format!("{hex}.{ext}");
             let final_path = uploads_root.join(&storage_name);
-            let preview_name = preview_storage_name(&storage_name);
+            let preview_name = crate::uploads::preview_storage_name(&storage_name);
             let preview_path = uploads_root.join(&preview_name);
 
             if tokio::fs::metadata(&final_path).await.is_ok() {
@@ -269,6 +270,7 @@ pub async fn get_file(
     State(state): State<AppState>,
     OptionalUser(maybe_user): OptionalUser,
     Path(file_id): Path<i64>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let Some(user) = maybe_user else {
         return Ok((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
@@ -290,7 +292,45 @@ pub async fn get_file(
         return Err(AppError::Forbidden);
     }
 
-    let path: PathBuf = db::uploads_dir().join(&row.storage_path);
+    let want_preview = params.get("size").map(|s| s == "preview").unwrap_or(false);
+
+    // Resolve which file to serve. The preview branch derives its MIME from
+    // the preview path via `mime_for_storage_path`, NOT from `row.mime_type`,
+    // so a future format where preview-mime ≠ original-mime cannot accidentally
+    // serve the wrong Content-Type. If the preview is missing on disk (write
+    // failed earlier, or the row predates Phase 23), fall through to the
+    // original.
+    let (path, content_type, content_length) =
+        if want_preview && row.mime_type.starts_with("image/") {
+            let preview_name = crate::uploads::preview_storage_name(&row.storage_path);
+            let preview_path = db::uploads_dir().join(&preview_name);
+            match tokio::fs::metadata(&preview_path).await {
+                Ok(meta) => {
+                    let mime = crate::uploads::mime_for_storage_path(&preview_name)
+                        .map(String::from)
+                        .unwrap_or_else(|| {
+                            tracing::warn!(
+                                path = %preview_path.display(),
+                                "preview mime not in mapping; falling back to row mime",
+                            );
+                            row.mime_type.clone()
+                        });
+                    (preview_path, mime, meta.len())
+                }
+                Err(_) => (
+                    db::uploads_dir().join(&row.storage_path),
+                    row.mime_type.clone(),
+                    row.size_bytes as u64,
+                ),
+            }
+        } else {
+            (
+                db::uploads_dir().join(&row.storage_path),
+                row.mime_type.clone(),
+                row.size_bytes as u64,
+            )
+        };
+
     let file = File::open(&path)
         .await
         .map_err(|_| AppError::Internal("upload file missing on disk".into()))?;
@@ -305,9 +345,9 @@ pub async fn get_file(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, row.mime_type.clone()),
+            (header::CONTENT_TYPE, content_type),
             (header::CONTENT_DISPOSITION, disposition),
-            (header::CONTENT_LENGTH, row.size_bytes.to_string()),
+            (header::CONTENT_LENGTH, content_length.to_string()),
             (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
         ],
         body,
@@ -321,16 +361,6 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Insert a `_preview` suffix before the extension of a content-addressed
-/// storage name. `"abc.jpg"` becomes `"abc_preview.jpg"`. Used for both the
-/// write side (here) and the dedup-hit heal check.
-fn preview_storage_name(storage_name: &str) -> String {
-    match storage_name.rsplit_once('.') {
-        Some((stem, ext)) => format!("{stem}_preview.{ext}"),
-        None => format!("{storage_name}_preview"),
-    }
 }
 
 /// Write `bytes` to `final_path` via a `.partial` sibling + rename, so a crash
