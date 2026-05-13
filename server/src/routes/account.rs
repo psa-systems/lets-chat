@@ -7,6 +7,7 @@ use sqlx::{Row, SqlitePool};
 use crate::auth::{AuthUser, SESSION_COOKIE};
 use crate::db;
 use crate::error::AppError;
+use crate::models::User;
 use crate::state::AppState;
 use crate::ws::events::ChatEvent;
 
@@ -73,6 +74,13 @@ pub async fn post_delete_account(
         let _ = form.password;
     }
 
+    if would_orphan_admin_role(&state.auth, &user).await? {
+        return Err(AppError::BadRequest(
+            "You are the only admin. Promote another user to admin before deleting your account."
+                .to_string(),
+        ));
+    }
+
     let blockers = sole_owner_enclaves(&state.chat, &user.id).await?;
     if !blockers.is_empty() {
         let names = blockers
@@ -96,6 +104,31 @@ pub async fn post_delete_account(
     clear.make_removal();
     let jar = jar.remove(clear);
     Ok((jar, Redirect::to("/login")).into_response())
+}
+
+/// True when the caller is the only remaining `admin` and another user
+/// exists. The first-user auto-promote only fires when the users table
+/// drops to a single row, so deleting the sole admin while non-admin
+/// accounts still exist would lock the instance out of admin recovery
+/// short of a manual SQL fix. Refuse the delete and tell the caller to
+/// promote someone else first.
+async fn would_orphan_admin_role(auth: &SqlitePool, user: &User) -> Result<bool, AppError> {
+    if user.role != "admin" {
+        return Ok(false);
+    }
+    let other_admins: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE role = 'admin' AND id <> ?")
+            .bind(&user.id)
+            .fetch_one(auth)
+            .await?;
+    if other_admins > 0 {
+        return Ok(false);
+    }
+    let other_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE id <> ?")
+        .bind(&user.id)
+        .fetch_one(auth)
+        .await?;
+    Ok(other_users > 0)
 }
 
 /// Return the names of enclaves where the user is the sole `owner` AND at
