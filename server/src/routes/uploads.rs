@@ -197,7 +197,7 @@ pub async fn post_upload(
                 // Dedup hit. Heal a missing preview if a prior upload's preview write
                 // failed (disk full at the time, etc.). Do NOT rewrite the original.
                 if tokio::fs::metadata(&preview_path).await.is_err() {
-                    if let Err(e) = write_atomic(&preview_path, &preview_bytes).await {
+                    if let Err(e) = crate::uploads::write_atomic(&preview_path, &preview_bytes).await {
                         tracing::warn!(
                             error = %e,
                             path = %preview_path.display(),
@@ -206,12 +206,12 @@ pub async fn post_upload(
                     }
                 }
             } else {
-                write_atomic(&final_path, &original_bytes)
+                crate::uploads::write_atomic(&final_path, &original_bytes)
                     .await
                     .map_err(|e| AppError::Internal(format!("write original: {e}")))?;
                 // Preview is best-effort: the original is committed and the serve route
                 // falls back to it if the preview is missing.
-                if let Err(e) = write_atomic(&preview_path, &preview_bytes).await {
+                if let Err(e) = crate::uploads::write_atomic(&preview_path, &preview_bytes).await {
                     tracing::warn!(
                         error = %e,
                         path = %preview_path.display(),
@@ -361,24 +361,6 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Write `bytes` to `final_path` via a `.partial` sibling + rename, so a crash
-/// mid-write never leaves a half-written content-addressed file in place. On
-/// any error, the partial file is cleaned up best-effort.
-async fn write_atomic(final_path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut partial_os = final_path.as_os_str().to_owned();
-    partial_os.push(".partial");
-    let partial: PathBuf = partial_os.into();
-    if let Err(e) = tokio::fs::write(&partial, bytes).await {
-        let _ = tokio::fs::remove_file(&partial).await;
-        return Err(e);
-    }
-    if let Err(e) = tokio::fs::rename(&partial, final_path).await {
-        let _ = tokio::fs::remove_file(&partial).await;
-        return Err(e);
-    }
-    Ok(())
 }
 
 /// Sha256 a file by streaming through it 64 KiB at a time. Returns the hex

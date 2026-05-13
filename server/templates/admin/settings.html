@@ -36,6 +36,32 @@
   <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
 </form>
 
+<h2 class="text-base font-semibold mt-8 mb-3">Uploads</h2>
+{% if let Some(n) = regenerated %}
+<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">Generated {{ n }} preview(s).</div>
+{% endif %}
+{% if let Some(n) = purged %}
+<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">Purged {{ n }} orphan upload(s).</div>
+{% endif %}
+<div class="max-w-lg space-y-2 text-sm">
+  <div class="flex justify-between">
+    <span>On-disk size</span>
+    <span class="font-mono">{{ uploads_total_display }}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>Orphan rows (uploads not attached to a message)</span>
+    <span class="font-mono">{{ uploads_orphan_count }}</span>
+  </div>
+  <div class="flex gap-2 pt-2">
+    <form method="post" action="/admin/uploads/regenerate-thumbnails">
+      <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Regenerate thumbnails</button>
+    </form>
+    <form method="post" action="/admin/uploads/purge-orphans">
+      <button type="submit" class="px-3 py-1 bg-slate-600 text-white rounded hover:bg-slate-700 text-sm">Purge orphans now</button>
+    </form>
+  </div>
+</div>
+
 <h2 class="text-base font-semibold mt-8 mb-3">Defaults for new users</h2>
 <form method="post" action="/admin/settings/email-digest-default" class="max-w-lg space-y-2">
   <label class="flex items-start gap-2 cursor-pointer">
