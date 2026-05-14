@@ -2,6 +2,10 @@
 
 A self-hosted fullstack chat application built in Rust. Server-rendered HTML via Askama + HTMX over an Axum backend, compiled to a single binary serving HTTP, WebSocket, and static assets.
 
+![Let's Chat][1]
+
+[1]: lets-chat.png
+
 ## Features
 
 - Public chat rooms with real-time messaging
