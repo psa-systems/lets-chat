@@ -36,6 +36,7 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0019_bookmarks.sql"),
         include_str!("../migrations/chat/0020_quote_reply.sql"),
         include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
+        include_str!("../migrations/chat/0022_voice_messages.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
@@ -44,9 +45,10 @@ async fn open_chat_pool() -> SqlitePool {
 }
 
 async fn insert_orphan(pool: &SqlitePool, storage_path: &str, age_hours: i64) -> i64 {
-    let id = db::uploads::insert_upload(pool, "user-x", "f.png", "image/png", 10, storage_path)
-        .await
-        .unwrap();
+    let id =
+        db::uploads::insert_upload(pool, "user-x", "f.png", "image/png", 10, storage_path, None)
+            .await
+            .unwrap();
     if age_hours > 0 {
         sqlx::query("UPDATE file_uploads SET created_at = datetime('now', ?) WHERE id = ?")
             .bind(format!("-{age_hours} hours"))
@@ -68,7 +70,7 @@ async fn insert_linked(pool: &SqlitePool, storage_path: &str, age_hours: i64) ->
         .await
         .unwrap();
     let upload_id =
-        db::uploads::insert_upload(pool, "user-x", "f.png", "image/png", 10, storage_path)
+        db::uploads::insert_upload(pool, "user-x", "f.png", "image/png", 10, storage_path, None)
             .await
             .unwrap();
     db::uploads::link_upload_to_message(pool, upload_id, mid)
