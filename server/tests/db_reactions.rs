@@ -1,39 +1,9 @@
 use sqlx::SqlitePool;
 
+mod common;
+
 async fn setup_pool() -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:")
-        .await
-        .expect("Failed to create in-memory pool");
-
-    for (i, sql) in [
-        include_str!("../migrations/chat/0001_create_tables.sql"),
-        include_str!("../migrations/chat/0002_moderation.sql"),
-        include_str!("../migrations/chat/0003_dms.sql"),
-        include_str!("../migrations/chat/0004_message_editing.sql"),
-        include_str!("../migrations/chat/0005_private_rooms.sql"),
-        include_str!("../migrations/chat/0006_read_receipts.sql"),
-        include_str!("../migrations/chat/0007_reactions.sql"),
-        include_str!("../migrations/chat/0008_search.sql"),
-        include_str!("../migrations/chat/0009_enclaves.sql"),
-        include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
-        include_str!("../migrations/chat/0011_threads.sql"),
-        include_str!("../migrations/chat/0014_mentions.sql"),
-        include_str!("../migrations/chat/0015_room_notification_settings.sql"),
-        include_str!("../migrations/chat/0016_pinned_messages.sql"),
-        include_str!("../migrations/chat/0017_custom_emojis.sql"),
-        include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
-        include_str!("../migrations/chat/0019_bookmarks.sql"),
-    ]
-    .iter()
-    .enumerate()
-    {
-        sqlx::raw_sql(sql)
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|e| panic!("migration {} failed: {e}", i + 1));
-    }
-
-    pool
+    common::chat_pool().await
 }
 
 #[tokio::test]

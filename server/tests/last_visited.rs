@@ -6,53 +6,10 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
+mod common;
+
 async fn open_pool(name: &str) -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-    let migrations: Vec<&str> = match name {
-        "auth" => vec![
-            include_str!("../migrations/auth/0001_create_tables.sql"),
-            include_str!("../migrations/auth/0002_read_receipts.sql"),
-            include_str!("../migrations/auth/0003_profile_fields.sql"),
-            include_str!("../migrations/auth/0004_user_status.sql"),
-            include_str!("../migrations/auth/0005_profile_visibility.sql"),
-            include_str!("../migrations/auth/0006_user_blocks.sql"),
-            include_str!("../migrations/auth/0007_notification_settings.sql"),
-            include_str!("../migrations/auth/0008_two_factor.sql"),
-            include_str!("../migrations/auth/0009_push_subscriptions.sql"),
-            include_str!("../migrations/auth/0010_password_reset.sql"),
-            include_str!("../migrations/auth/0011_email_verification.sql"),
-            include_str!("../migrations/auth/0012_session_metadata.sql"),
-            include_str!("../migrations/auth/0013_digest_columns.sql"),
-            include_str!("../migrations/auth/0014_login_alerts.sql"),
-        ],
-        "chat" => vec![
-            include_str!("../migrations/chat/0001_create_tables.sql"),
-            include_str!("../migrations/chat/0002_moderation.sql"),
-            include_str!("../migrations/chat/0003_dms.sql"),
-            include_str!("../migrations/chat/0004_message_editing.sql"),
-            include_str!("../migrations/chat/0005_private_rooms.sql"),
-            include_str!("../migrations/chat/0006_read_receipts.sql"),
-            include_str!("../migrations/chat/0007_reactions.sql"),
-            include_str!("../migrations/chat/0008_search.sql"),
-            include_str!("../migrations/chat/0009_enclaves.sql"),
-            include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
-            include_str!("../migrations/chat/0011_threads.sql"),
-            include_str!("../migrations/chat/0014_mentions.sql"),
-            include_str!("../migrations/chat/0015_room_notification_settings.sql"),
-            include_str!("../migrations/chat/0016_pinned_messages.sql"),
-            include_str!("../migrations/chat/0017_custom_emojis.sql"),
-            include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
-            include_str!("../migrations/chat/0019_bookmarks.sql"),
-        ],
-        "settings" => vec![include_str!(
-            "../migrations/settings/0001_create_tables.sql"
-        )],
-        _ => unreachable!(),
-    };
-    for sql in migrations {
-        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
-    }
-    pool
+    common::pool(name).await
 }
 
 async fn app_with_user_in_general() -> (Router, String, String) {

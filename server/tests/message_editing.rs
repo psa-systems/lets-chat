@@ -1,62 +1,9 @@
 use sqlx::SqlitePool;
 
+mod common;
+
 async fn setup_pool() -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:")
-        .await
-        .expect("Failed to create in-memory pool");
-
-    let m1 = include_str!("../migrations/chat/0001_create_tables.sql");
-    sqlx::raw_sql(m1).execute(&pool).await.expect("migration 1");
-
-    let m2 = include_str!("../migrations/chat/0002_moderation.sql");
-    sqlx::raw_sql(m2).execute(&pool).await.expect("migration 2");
-
-    let m3 = include_str!("../migrations/chat/0003_dms.sql");
-    sqlx::raw_sql(m3).execute(&pool).await.expect("migration 3");
-
-    let m4 = include_str!("../migrations/chat/0004_message_editing.sql");
-    sqlx::raw_sql(m4).execute(&pool).await.expect("migration 4");
-
-    let m5 = include_str!("../migrations/chat/0005_private_rooms.sql");
-    sqlx::raw_sql(m5).execute(&pool).await.expect("migration 5");
-
-    let m6 = include_str!("../migrations/chat/0006_read_receipts.sql");
-    sqlx::raw_sql(m6).execute(&pool).await.expect("migration 6");
-
-    let m7 = include_str!("../migrations/chat/0007_reactions.sql");
-    sqlx::raw_sql(m7).execute(&pool).await.expect("migration 7");
-
-    let m8 = include_str!("../migrations/chat/0008_search.sql");
-    sqlx::raw_sql(m8).execute(&pool).await.expect("migration 8");
-
-    let m9 = include_str!("../migrations/chat/0009_enclaves.sql");
-    sqlx::raw_sql(m9).execute(&pool).await.expect("migration 9");
-
-    let m10 = include_str!("../migrations/chat/0010_room_name_per_enclave.sql");
-    sqlx::raw_sql(m10)
-        .execute(&pool)
-        .await
-        .expect("migration 10");
-
-    let m11 = include_str!("../migrations/chat/0011_threads.sql");
-    sqlx::raw_sql(m11)
-        .execute(&pool)
-        .await
-        .expect("migration 11");
-
-    let m14 = include_str!("../migrations/chat/0014_mentions.sql");
-    sqlx::raw_sql(m14)
-        .execute(&pool)
-        .await
-        .expect("migration 14");
-
-    let m15 = include_str!("../migrations/chat/0015_room_notification_settings.sql");
-    sqlx::raw_sql(m15)
-        .execute(&pool)
-        .await
-        .expect("migration 15");
-
-    pool
+    common::chat_pool().await
 }
 
 #[tokio::test]
