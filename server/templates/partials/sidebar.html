@@ -50,6 +50,9 @@
         {% for room in sidebar_rooms %}
         <li>
           <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-slate-400{% endif %}">
+            {% if room.is_voice %}
+            <span>&#128266; {{ room.name }}</span>
+            {% else %}
             <span># {{ room.name }}</span>
             {% let kind = "room" %}
             {% let id = room.id.to_string() %}
@@ -58,6 +61,7 @@
             {% include "partials/unread_badge.html" %}
             {% let mentions = room.mentions %}
             {% include "partials/mention_badge.html" %}
+            {% endif %}
           </a>
         </li>
         {% endfor %}

@@ -14,6 +14,9 @@ pub struct SidebarRoom {
     /// "none" | "except_mentions" | "all". Carried as a string (not a Rust
     /// enum) because Askama templates compare against literals.
     pub mute_mode: String,
+    /// True for voice channels. Lets the sidebar pick the channel icon and
+    /// skip the unread/mention badges (voice channels have no messages).
+    pub is_voice: bool,
     pub active: bool,
 }
 

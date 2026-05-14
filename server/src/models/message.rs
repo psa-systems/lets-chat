@@ -17,4 +17,7 @@ pub struct Message {
     /// a thread side panel. Always `None` for thread replies (the quote-
     /// reply affordance is suppressed inside the thread panel).
     pub quote_id: Option<i64>,
+    /// True for server-authored system notices (e.g. "started a call"),
+    /// which render as a centered, non-interactive line.
+    pub is_system: bool,
 }

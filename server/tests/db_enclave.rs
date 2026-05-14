@@ -59,6 +59,7 @@ async fn chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0017_custom_emojis.sql"),
         include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
         include_str!("../migrations/chat/0019_bookmarks.sql"),
+        include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

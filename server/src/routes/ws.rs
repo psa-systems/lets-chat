@@ -17,11 +17,12 @@ use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
-    render_event, EditedMessageFragment, MentionClearedFragment, MentionedFragment,
-    NewMessageFragment, ReactionUpdateFragment, SeenIndicatorFragment, SidebarUpdateFragment,
-    ThreadReplyOobFragment, UnreadBadgeFragment,
+    render_event, CallSignalFragment, EditedMessageFragment, MentionClearedFragment,
+    MentionedFragment, NewMessageFragment, ReactionUpdateFragment, SeenIndicatorFragment,
+    SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
+use crate::ws::hub::ConnId;
 
 #[derive(Deserialize)]
 #[serde(tag = "type")]
@@ -32,7 +33,48 @@ enum ClientFrame {
     Typing { room_id: i64 },
     #[serde(rename = "thread_typing")]
     ThreadTyping { room_id: i64, parent_id: i64 },
+    /// WebRTC 1:1 call signaling. Relayed verbatim to the other member of
+    /// the DM room; the server validates membership and never inspects
+    /// `payload`. See [`ChatEvent::CallSignal`].
+    #[serde(rename = "call_signal")]
+    CallSignal {
+        room_id: i64,
+        kind: String,
+        #[serde(default)]
+        payload: Option<String>,
+    },
+    /// Join an enclave voice channel (`room_type = 'voice'`).
+    #[serde(rename = "voice_join")]
+    VoiceJoin { room_id: i64 },
+    /// Leave the voice channel this connection is in.
+    #[serde(rename = "voice_leave")]
+    VoiceLeave { room_id: i64 },
+    /// Mesh signaling to a specific peer in a voice channel. See
+    /// [`ChatEvent::VoiceSignal`].
+    #[serde(rename = "voice_signal")]
+    VoiceSignal {
+        room_id: i64,
+        target_user_id: String,
+        kind: String,
+        #[serde(default)]
+        payload: Option<String>,
+    },
 }
+
+/// Recognized `kind` discriminators for a call signal. Anything else is
+/// dropped before relay so a malformed client cannot inject arbitrary
+/// values into a peer's call state machine.
+const CALL_SIGNAL_KINDS: &[&str] = &[
+    "invite", "offer", "answer", "ice", "accept", "reject", "cancel", "hangup",
+];
+
+/// Recognized `kind` discriminators for a voice-channel mesh signal.
+const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
+
+/// Upper bound on a relayed signaling payload. An SDP blob is a few KiB;
+/// 64 KiB leaves generous headroom while bounding what one peer can push
+/// through the relay in a single frame.
+const MAX_CALL_PAYLOAD: usize = 64 * 1024;
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -228,6 +270,20 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     false,
                                 )
                                 .await,
+                                ChatEvent::CallSignal { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_call_signal(&e)
+                                }
+                                ChatEvent::VoiceJoined { .. } | ChatEvent::VoiceLeft { .. } => {
+                                    render_voice_event(&e)
+                                }
+                                ChatEvent::VoiceRoster { to_user_id, .. }
+                                | ChatEvent::VoiceSignal { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_voice_event(&e)
+                                }
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -285,6 +341,38 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 super::touch_user_and_maybe_broadcast(&state, &user.id).await;
                             }
                         }
+                        ClientFrame::CallSignal {
+                            room_id,
+                            kind,
+                            payload,
+                        } => {
+                            relay_call_signal(&state, &user, &username, room_id, &kind, payload)
+                                .await;
+                        }
+                        ClientFrame::VoiceJoin { room_id } => {
+                            handle_voice_join(&state, &user, &username, conn_id, room_id).await;
+                        }
+                        ClientFrame::VoiceLeave { room_id } => {
+                            let _ = room_id;
+                            handle_voice_leave(&state, conn_id);
+                        }
+                        ClientFrame::VoiceSignal {
+                            room_id,
+                            target_user_id,
+                            kind,
+                            payload,
+                        } => {
+                            relay_voice_signal(
+                                &state,
+                                &user,
+                                &username,
+                                conn_id,
+                                room_id,
+                                &target_user_id,
+                                &kind,
+                                payload,
+                            );
+                        }
                     }
                 }
             }
@@ -293,6 +381,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         }
     }
 
+    handle_voice_leave(&state, conn_id);
     if let Some(uid) = state.hub.disconnect(conn_id) {
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
@@ -613,6 +702,7 @@ async fn render_new_message(
         is_bookmarked: false,
         custom_emojis,
         quote_preview,
+        is_system: message.is_system,
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -708,6 +798,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         is_bookmarked,
         custom_emojis,
         quote_preview,
+        is_system: m.is_system,
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -773,6 +864,7 @@ async fn render_thread_reply(
         is_bookmarked: false,
         custom_emojis,
         quote_preview: None,
+        is_system: message.is_system,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
@@ -840,6 +932,304 @@ fn render_mention_cleared(event: &ChatEvent) -> Option<String> {
     }
     .render()
     .ok()
+}
+
+/// Render an inbound `CallSignal` into the `#lc-call-bus` OOB fragment the
+/// browser's call state machine consumes.
+fn render_call_signal(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::CallSignal {
+        room_id,
+        from_user_id,
+        from_name,
+        kind,
+        payload,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    CallSignalFragment {
+        room_id: *room_id,
+        from_user_id,
+        from_name,
+        kind,
+        payload: payload.as_deref(),
+    }
+    .render()
+    .ok()
+}
+
+/// Validate and relay one WebRTC call signal to the other member of a DM
+/// room. The server is a dumb relay: it confirms the sender belongs to a
+/// `dm` room, that the two parties have not blocked each other, and that
+/// the `kind`/`payload` are within bounds, then forwards the opaque blob.
+///
+/// Media kinds (`invite`/`offer`/`answer`/`ice`) go only to the peer.
+/// Control kinds (`accept`/`reject`/`cancel`/`hangup`) are additionally
+/// echoed to the sender's other tabs so a call answered or ended on one
+/// device tears down the ringing UI on the rest.
+async fn relay_call_signal(
+    state: &AppState,
+    user: &User,
+    from_name: &str,
+    room_id: i64,
+    kind: &str,
+    payload: Option<String>,
+) {
+    if !CALL_SIGNAL_KINDS.contains(&kind) {
+        return;
+    }
+    if payload.as_ref().is_some_and(|p| p.len() > MAX_CALL_PAYLOAD) {
+        return;
+    }
+    let room = match db::chat::get_room(&state.chat, room_id).await {
+        Ok(Some(r)) if r.room_type == "dm" => r,
+        _ => return,
+    };
+    let members = match db::chat::list_room_member_ids(&state.chat, room_id).await {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    if !members.iter().any(|id| id == &user.id) {
+        return;
+    }
+    let Some(peer_id) = members.into_iter().find(|id| id != &user.id) else {
+        return;
+    };
+    // A blocked relationship in either direction kills signaling outright.
+    // `unwrap_or(true)` fails closed: a lookup error drops the signal.
+    if db::auth::is_blocked_either_way(&state.auth, &user.id, &peer_id)
+        .await
+        .unwrap_or(true)
+    {
+        return;
+    }
+    let mut recipients: Vec<String> = vec![peer_id];
+    if matches!(kind, "accept" | "reject" | "cancel" | "hangup") {
+        recipients.push(user.id.clone());
+    }
+    for to in recipients {
+        let event = ChatEvent::CallSignal {
+            room_id,
+            to_user_id: to.clone(),
+            from_user_id: user.id.clone(),
+            from_name: from_name.to_string(),
+            kind: kind.to_string(),
+            payload: payload.clone(),
+        };
+        state.hub.broadcast_to_user(&to, &event);
+    }
+
+    // A fresh `invite` is the start of a call; drop a message into the DM so
+    // both members have a record of it in the conversation history.
+    if kind == "invite" {
+        post_call_started_message(state, user, &room).await;
+    }
+}
+
+/// Insert a "started a call" message into the DM `room` authored by `user`,
+/// then broadcast it like any normal message so it lands in both members'
+/// open conversation and bumps the sidebar for anyone not viewing the room.
+async fn post_call_started_message(state: &AppState, user: &User, room: &models::Room) {
+    let new_id =
+        match db::chat::insert_system_message(&state.chat, room.id, &user.id, "started a call.")
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to insert call-started message");
+                return;
+            }
+        };
+    let raw = match db::chat::get_message(&state.chat, new_id).await {
+        Ok(Some(r)) => r,
+        _ => return,
+    };
+    let message = models::Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: raw.user_id,
+        author_name: user.username.clone(),
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
+        is_system: raw.is_system,
+    };
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: true,
+    };
+    if let Err(e) = super::broadcast_room_message(state, room, &event).await {
+        tracing::warn!(error = %e, "failed to broadcast call-started message");
+    }
+}
+
+/// Render a voice-channel event into the `#lc-voice-bus` OOB fragment the
+/// browser's voice mesh consumes.
+fn render_voice_event(event: &ChatEvent) -> Option<String> {
+    match event {
+        ChatEvent::VoiceJoined {
+            room_id,
+            user_id,
+            username,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "joined",
+            user_id,
+            username,
+            peers_json: "",
+            payload: None,
+        }
+        .render()
+        .ok(),
+        ChatEvent::VoiceLeft { room_id, user_id } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "left",
+            user_id,
+            username: "",
+            peers_json: "",
+            payload: None,
+        }
+        .render()
+        .ok(),
+        ChatEvent::VoiceRoster {
+            room_id, peers, ..
+        } => {
+            let json = serde_json::to_string(peers).ok()?;
+            VoiceEventFragment {
+                room_id: *room_id,
+                kind: "roster",
+                user_id: "",
+                username: "",
+                peers_json: &json,
+                payload: None,
+            }
+            .render()
+            .ok()
+        }
+        ChatEvent::VoiceSignal {
+            room_id,
+            from_user_id,
+            from_name,
+            kind,
+            payload,
+            ..
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind,
+            user_id: from_user_id,
+            username: from_name,
+            peers_json: "",
+            payload: payload.as_deref(),
+        }
+        .render()
+        .ok(),
+        _ => None,
+    }
+}
+
+/// Handle a `voice_join` frame: validate the room is an accessible voice
+/// channel, register the connection in the hub, hand the joiner the current
+/// roster, and announce the joiner to everyone already in the channel.
+async fn handle_voice_join(
+    state: &AppState,
+    user: &User,
+    username: &str,
+    conn_id: ConnId,
+    room_id: i64,
+) {
+    match db::chat::get_room(&state.chat, room_id).await {
+        Ok(Some(r)) if r.is_voice => {}
+        _ => return,
+    }
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin)
+        .await
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let peers = state.hub.voice_join(conn_id, room_id);
+    // The joiner gets the roster so it can open a peer connection to each.
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::VoiceRoster {
+            room_id,
+            to_user_id: user.id.clone(),
+            peers,
+        },
+    );
+    // Everyone already in the channel learns about the joiner and waits for
+    // its offer (the newest joiner is always the mesh offerer).
+    let joined = ChatEvent::VoiceJoined {
+        room_id,
+        user_id: user.id.clone(),
+        username: username.to_string(),
+    };
+    for uid in state.hub.voice_room_users(room_id) {
+        if uid != user.id {
+            state.hub.broadcast_to_user(&uid, &joined);
+        }
+    }
+}
+
+/// Remove `conn_id` from its voice channel (if any) and tell the remaining
+/// participants. Idempotent - safe to call on both explicit leave and
+/// disconnect.
+fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
+    let Some((room_id, user_id, _)) = state.hub.voice_leave(conn_id) else {
+        return;
+    };
+    let left = ChatEvent::VoiceLeft { room_id, user_id };
+    for uid in state.hub.voice_room_users(room_id) {
+        state.hub.broadcast_to_user(&uid, &left);
+    }
+}
+
+/// Relay one mesh signal (offer/answer/ice) to a specific peer in the same
+/// voice channel. The server validates channel co-membership and bounds the
+/// payload; it never interprets the SDP/ICE blob.
+#[allow(clippy::too_many_arguments)]
+fn relay_voice_signal(
+    state: &AppState,
+    user: &User,
+    from_name: &str,
+    conn_id: ConnId,
+    room_id: i64,
+    target_user_id: &str,
+    kind: &str,
+    payload: Option<String>,
+) {
+    if !VOICE_SIGNAL_KINDS.contains(&kind) {
+        return;
+    }
+    if payload.as_ref().is_some_and(|p| p.len() > MAX_CALL_PAYLOAD) {
+        return;
+    }
+    if !state.hub.is_in_voice_room(conn_id, room_id) {
+        return;
+    }
+    if !state
+        .hub
+        .voice_room_users(room_id)
+        .iter()
+        .any(|u| u == target_user_id)
+    {
+        return;
+    }
+    state.hub.broadcast_to_user(
+        target_user_id,
+        &ChatEvent::VoiceSignal {
+            room_id,
+            to_user_id: target_user_id.to_string(),
+            from_user_id: user.id.clone(),
+            from_name: from_name.to_string(),
+            kind: kind.to_string(),
+            payload,
+        },
+    );
 }
 
 /// Render a full sidebar OOB replacement for `viewer` reflecting current

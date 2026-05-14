@@ -212,6 +212,7 @@ pub async fn get_dm(
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
+            is_system: m.is_system,
         });
     }
 
@@ -275,6 +276,7 @@ pub async fn get_dm(
         asset_version: &state.asset_version,
         mute_mode,
         pinned_strip_html,
+        ice_servers: &state.ice_servers,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

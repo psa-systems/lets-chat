@@ -131,6 +131,7 @@ async fn setup_app_with_users_and_client(
         push_client: push_client.clone(),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     let app = routes::build_router(state);
     TestApp {
@@ -517,6 +518,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         push_client: counting.clone() as Arc<dyn PushClient>,
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     let app = routes::build_router(state);
 
