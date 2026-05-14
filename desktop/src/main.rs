@@ -1,3 +1,5 @@
+mod update;
+
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoop};
 use tao::window::WindowBuilder;
@@ -9,16 +11,25 @@ const GIT_VERSION: &str = env!("GIT_VERSION");
 const BUILD_DATE: &str = env!("BUILD_DATE");
 
 fn main() -> wry::Result<()> {
-    if std::env::args()
-        .skip(1)
-        .any(|a| a == "--version" || a == "-V")
-    {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.iter().any(|a| a == "--version" || a == "-V") {
         println!(
             "lets-chat-desktop {VERSION} ({GIT_VERSION}, commit {GIT_HASH}, built {BUILD_DATE})"
         );
         return Ok(());
     }
+
+    if args.iter().any(|a| a == "--check-update") {
+        std::process::exit(run_check_update());
+    }
+
+    if args.iter().any(|a| a == "--update") {
+        std::process::exit(run_update());
+    }
+
     eprintln!("lets-chat-desktop {VERSION} ({GIT_VERSION}, commit {GIT_HASH}, built {BUILD_DATE})");
+    update::spawn_startup_check();
     set_linux_gtk_env();
     let url = std::env::var("LETS_CHAT_SERVER_URL")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
@@ -60,3 +71,37 @@ fn set_linux_gtk_env() {
 
 #[cfg(not(target_os = "linux"))]
 fn set_linux_gtk_env() {}
+
+fn run_check_update() -> i32 {
+    match update::check() {
+        Ok(Some(v)) => {
+            println!("update available: {v} (current: {VERSION})");
+            0
+        }
+        Ok(None) => {
+            println!("already at latest version: {VERSION}");
+            0
+        }
+        Err(e) => {
+            eprintln!("check-update failed: {e}");
+            1
+        }
+    }
+}
+
+fn run_update() -> i32 {
+    match update::apply() {
+        Ok(update::ApplyOutcome::Updated(v)) => {
+            println!("updated to {v}; restart lets-chat-desktop to use the new binary");
+            0
+        }
+        Ok(update::ApplyOutcome::AlreadyLatest) => {
+            println!("already at latest version: {VERSION}");
+            0
+        }
+        Err(e) => {
+            eprintln!("update failed: {e}");
+            1
+        }
+    }
+}

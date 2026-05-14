@@ -104,6 +104,7 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting SMTP password in settings |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens |
 | `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for 1:1 WebRTC calls. Add a TURN entry for reliable NAT traversal. |
+| `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. The updater fetches `${URL}/latest/latest.json` for the manifest and downloads platform binaries from `${URL}/${version}/lets-chat-desktop-{linux,windows}-x86_64[.exe]`. Override to test against a fork or a local fixture (eg. `http://127.0.0.1:18180`). |
 
 ## Workspace Layout
 
