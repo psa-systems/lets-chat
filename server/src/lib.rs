@@ -11,6 +11,7 @@ pub mod perms;
 pub mod push;
 pub mod routes;
 pub mod state;
+pub mod uploads;
 pub mod version;
 pub mod views;
 pub mod ws;

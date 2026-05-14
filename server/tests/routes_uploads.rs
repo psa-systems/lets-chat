@@ -6,19 +6,73 @@ use sqlx::SqlitePool;
 use std::sync::{Arc, OnceLock};
 use tower::ServiceExt;
 
-/// PNG fixture bytes: 1x1 transparent PNG. The magic-byte sniffer (`infer`)
-/// recognizes the PNG signature regardless of payload size.
-const TINY_PNG: &[u8] = &[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-    0x42, 0x60, 0x82,
-];
+/// 1x1 transparent PNG, generated once via the `image` crate so the bytes are
+/// guaranteed to round-trip through the Phase-23 pipeline (decode → re-encode
+/// → strip). The pre-Phase-23 hand-typed PNG fixture is rejected by
+/// `image::ImageReader::decode`; using a freshly encoded one keeps the
+/// existing tests covering happy paths instead of the decode-rejection branch.
+fn tiny_png() -> &'static [u8] {
+    static BYTES: OnceLock<Vec<u8>> = OnceLock::new();
+    BYTES
+        .get_or_init(|| {
+            use image::ImageEncoder;
+            let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 0]));
+            let mut buf = Vec::new();
+            image::codecs::png::PngEncoder::new(&mut buf)
+                .write_image(&img, 1, 1, image::ExtendedColorType::Rgba8)
+                .unwrap();
+            buf
+        })
+        .as_slice()
+}
 
 /// ZIP fixture bytes: empty ZIP archive (PK\x03\x04 header). Used to assert
 /// that renaming a non-image to .png does not bypass magic-byte sniffing.
 const TINY_ZIP: &[u8] = b"PK\x03\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+
+/// A 500x500 PNG, big enough that the 360px preview is meaningfully smaller
+/// than the stored original. The exact colours do not matter; the pipeline
+/// just needs something it can decode and re-encode.
+fn medium_png() -> Vec<u8> {
+    use image::ImageEncoder;
+    let img = image::RgbaImage::from_pixel(500, 500, image::Rgba([100, 200, 50, 255]));
+    let mut buf = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut buf)
+        .write_image(&img, 500, 500, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    buf
+}
+
+/// Reproduce the upload handler's content-addressed name derivation in the
+/// test so we can locate `{sha}.{ext}` and `{sha}_preview.{ext}` on disk
+/// without poking at internals. Mirrors `routes::uploads::post_upload`: sha256
+/// of the STRIPPED original bytes.
+fn expected_preview_path(input: &[u8], mime: &str) -> std::path::PathBuf {
+    use sha2::{Digest, Sha256};
+    let stem = std::env::temp_dir().join(format!(
+        "lets-chat-derive-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    ));
+    std::fs::write(&stem, input).unwrap();
+    let processed = lets_chat::uploads::pipeline::process_image(&stem, mime).unwrap();
+    let _ = std::fs::remove_file(&stem);
+    let mut h = Sha256::new();
+    h.update(&processed.original_bytes);
+    let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    let ext = match mime {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => unreachable!(),
+    };
+    let preview_name = lets_chat::uploads::preview_storage_name(&format!("{hex}.{ext}"));
+    db::uploads_dir().join(preview_name)
+}
 
 fn ensure_tempdir() -> &'static str {
     static TEMPDIR: OnceLock<String> = OnceLock::new();
@@ -71,6 +125,8 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0017_custom_emojis.sql"),
             include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
             include_str!("../migrations/chat/0019_bookmarks.sql"),
+            include_str!("../migrations/chat/0020_quote_reply.sql"),
+            include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -161,7 +217,7 @@ async fn post_upload(
 #[tokio::test]
 async fn upload_happy_path_returns_file_id_and_url() {
     let (app, sess, _uid) = app_with_user("alice").await;
-    let (status, body) = post_upload(app, &sess, "tiny.png", TINY_PNG).await;
+    let (status, body) = post_upload(app, &sess, "tiny.png", tiny_png()).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     let v: serde_json::Value = serde_json::from_str(&body).expect("json");
     assert!(v["file_id"].is_i64());
@@ -212,7 +268,7 @@ async fn upload_anonymous_redirects_to_login() {
     };
     let app = routes::build_router(state);
 
-    let (ctype, body) = multipart_body("file", "tiny.png", TINY_PNG);
+    let (ctype, body) = multipart_body("file", "tiny.png", tiny_png());
     let req = Request::builder()
         .method(Method::POST)
         .uri("/api/upload")
@@ -227,7 +283,7 @@ async fn upload_anonymous_redirects_to_login() {
 #[tokio::test]
 async fn file_serve_round_trips_uploaded_bytes() {
     let (app, sess, _uid) = app_with_user("dave").await;
-    let (status, body) = post_upload(app.clone(), &sess, "tiny.png", TINY_PNG).await;
+    let (status, body) = post_upload(app.clone(), &sess, "tiny.png", tiny_png()).await;
     assert_eq!(status, StatusCode::OK);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     let id = v["file_id"].as_i64().unwrap();
@@ -249,7 +305,12 @@ async fn file_serve_round_trips_uploaded_bytes() {
         .to_string();
     assert_eq!(ctype, "image/png");
     let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap().to_vec();
-    assert_eq!(bytes, TINY_PNG);
+    // Phase 23 re-encodes on upload (the strip), so the served bytes are not
+    // byte-identical to the upload. Assert semantic round-trip: the response
+    // is a valid PNG of the original dimensions.
+    let decoded = image::load_from_memory(&bytes).expect("served bytes decode as image");
+    assert_eq!(decoded.width(), 1);
+    assert_eq!(decoded.height(), 1);
 }
 
 async fn app_with_two_users() -> (Router, String, String, String, String) {
@@ -309,7 +370,7 @@ async fn other_user_cannot_fetch_orphan_upload() {
     let (app, sess_a, _id_a, sess_b, _id_b) = app_with_two_users().await;
 
     // Alice uploads. Orphan: message_id IS NULL.
-    let (status, body) = post_upload(app.clone(), &sess_a, "secret.png", TINY_PNG).await;
+    let (status, body) = post_upload(app.clone(), &sess_a, "secret.png", tiny_png()).await;
     assert_eq!(status, StatusCode::OK);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     let id = v["file_id"].as_i64().unwrap();
@@ -336,10 +397,84 @@ async fn other_user_cannot_fetch_orphan_upload() {
 }
 
 #[tokio::test]
+async fn preview_query_returns_smaller_bytes_than_original() {
+    let (app, sess, _uid) = app_with_user("eve").await;
+    let png = medium_png();
+    let (status, body) = post_upload(app.clone(), &sess, "mid.png", &png).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let id = v["file_id"].as_i64().unwrap();
+
+    async fn fetch(app: Router, sess: &str, url: String) -> (String, Vec<u8>) {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(url)
+            .header(header::COOKIE, format!("session={sess}"))
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ctype = resp
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let bytes = to_bytes(resp.into_body(), 1 << 22).await.unwrap().to_vec();
+        (ctype, bytes)
+    }
+    let (orig_mime, orig_bytes) = fetch(app.clone(), &sess, format!("/api/files/{id}")).await;
+    let (prev_mime, prev_bytes) = fetch(app, &sess, format!("/api/files/{id}?size=preview")).await;
+    assert_eq!(orig_mime, "image/png");
+    assert_eq!(prev_mime, "image/png");
+    assert!(
+        prev_bytes.len() < orig_bytes.len(),
+        "preview ({} B) should be smaller than original ({} B)",
+        prev_bytes.len(),
+        orig_bytes.len(),
+    );
+
+    let preview = image::load_from_memory(&prev_bytes).expect("decode preview");
+    assert_eq!(preview.width().max(preview.height()), 360);
+}
+
+#[tokio::test]
+async fn dedup_upload_heals_missing_preview_on_disk() {
+    let (app, sess_a, _id_a, sess_b, _id_b) = app_with_two_users().await;
+    let png = medium_png();
+
+    // First upload: writes original + preview. Verify preview is on disk.
+    let (status, _body) = post_upload(app.clone(), &sess_a, "pic.png", &png).await;
+    assert_eq!(status, StatusCode::OK);
+    let preview_path = expected_preview_path(&png, "image/png");
+    assert!(
+        preview_path.exists(),
+        "first upload should have produced preview at {}",
+        preview_path.display(),
+    );
+
+    // Simulate the Task 3 disk-full-mid-write recovery scenario: original
+    // committed, preview missing.
+    std::fs::remove_file(&preview_path).unwrap();
+    assert!(!preview_path.exists());
+
+    // Second upload of identical bytes by a different user: dedup hit. The
+    // handler must heal the missing preview rather than silently leaving the
+    // dedup'd row without one.
+    let (status, _body) = post_upload(app, &sess_b, "pic.png", &png).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        preview_path.exists(),
+        "dedup-hit upload should have healed the missing preview",
+    );
+}
+
+#[tokio::test]
 async fn send_message_with_attachment_renders_inline_image() {
     let (app, sess_a, _id_a, _sess_b, _id_b) = app_with_two_users().await;
 
-    let (status, body) = post_upload(app.clone(), &sess_a, "pic.png", TINY_PNG).await;
+    let (status, body) = post_upload(app.clone(), &sess_a, "pic.png", tiny_png()).await;
     assert_eq!(status, StatusCode::OK);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     let file_id = v["file_id"].as_i64().unwrap();
