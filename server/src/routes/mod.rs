@@ -190,6 +190,7 @@ pub(crate) async fn load_message_view_for_viewer(
         is_bookmarked,
         custom_emojis,
         quote_preview,
+        is_system: m.is_system,
     })
 }
 
@@ -282,6 +283,7 @@ pub(crate) async fn load_sidebar(
                     .to_string(),
                 id: r.id,
                 name: r.name,
+                is_voice: r.is_voice,
                 active: false,
             })
             .collect();

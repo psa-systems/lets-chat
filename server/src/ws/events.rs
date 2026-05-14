@@ -186,6 +186,59 @@ pub enum ChatEvent {
         room_id: i64,
         message_id: i64,
     },
+    /// WebRTC 1:1 call signaling relayed verbatim between the two members of
+    /// a DM room. The server never interprets `payload`; it is an opaque
+    /// blob (an SDP offer/answer or an ICE candidate, JSON-encoded by the
+    /// browser) produced and consumed by the peers' `RTCPeerConnection`.
+    /// `kind` is one of: `invite`, `offer`, `answer`, `ice`, `accept`,
+    /// `reject`, `cancel`, `hangup`. Routed via
+    /// `Hub::broadcast_to_user(to_user_id, ...)`.
+    CallSignal {
+        room_id: i64,
+        /// The intended recipient. The WS send task renders the frame only
+        /// for the connection whose user matches this id (belt-and-braces
+        /// on top of `broadcast_to_user`'s own targeting).
+        to_user_id: String,
+        from_user_id: String,
+        /// Display name of the signal's sender, shown in the callee's
+        /// incoming-call UI without an extra DB lookup.
+        from_name: String,
+        kind: String,
+        payload: Option<String>,
+    },
+    /// A user joined an enclave voice channel. Broadcast to everyone already
+    /// in that channel so they render the new participant and await the
+    /// joiner's offer (the newest joiner is always the mesh offerer).
+    VoiceJoined {
+        room_id: i64,
+        user_id: String,
+        username: String,
+    },
+    /// A user left a voice channel (explicit leave or disconnect). Broadcast
+    /// to the remaining participants so they tear down that peer connection.
+    VoiceLeft {
+        room_id: i64,
+        user_id: String,
+    },
+    /// Sent only to a freshly-joined participant: the users already in the
+    /// channel. The joiner opens a peer connection to each and sends the
+    /// offer. `peers` is a list of `(user_id, username)` pairs.
+    VoiceRoster {
+        room_id: i64,
+        /// Restricts rendering to the joiner; mirrors `CallSignal::to_user_id`.
+        to_user_id: String,
+        peers: Vec<(String, String)>,
+    },
+    /// Mesh signaling (offer/answer/ice) relayed verbatim between two members
+    /// of the same voice channel. `payload` is opaque (SDP or ICE JSON).
+    VoiceSignal {
+        room_id: i64,
+        to_user_id: String,
+        from_user_id: String,
+        from_name: String,
+        kind: String,
+        payload: Option<String>,
+    },
 }
 
 /// Control frames sent from client to server.

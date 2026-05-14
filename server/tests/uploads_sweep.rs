@@ -37,6 +37,8 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0020_quote_reply.sql"),
         include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
         include_str!("../migrations/chat/0022_voice_messages.sql"),
+            include_str!("../migrations/chat/0023_system_messages.sql"),
+            include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();

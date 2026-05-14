@@ -37,6 +37,12 @@ pub struct Hub {
     /// Kept separate from `typing` so room-composer typing and thread-composer
     /// typing don't bleed into each other's UI surfaces.
     thread_typing: DashMap<(i64, i64, String), std::time::Instant>,
+    /// room_id -> conn_ids currently joined to that enclave voice channel.
+    /// Ephemeral presence, like `typing` - never persisted to the DB.
+    voice_rooms: DashMap<i64, HashSet<ConnId>>,
+    /// conn_id -> the voice channel it joined, for O(1) cleanup on leave or
+    /// disconnect. A connection is in at most one voice channel.
+    voice_conn: DashMap<ConnId, i64>,
 }
 
 impl Hub {
@@ -47,7 +53,73 @@ impl Hub {
             user_conns: DashMap::new(),
             typing: DashMap::new(),
             thread_typing: DashMap::new(),
+            voice_rooms: DashMap::new(),
+            voice_conn: DashMap::new(),
         }
+    }
+
+    /// Join `conn_id` to voice channel `room_id`. Returns the
+    /// `(user_id, username)` of every connection already in the channel so
+    /// the joiner can open a peer connection to each. A connection may be in
+    /// at most one voice channel; any prior membership is dropped silently.
+    pub fn voice_join(&self, conn_id: ConnId, room_id: i64) -> Vec<(String, String)> {
+        if let Some((_, old)) = self.voice_conn.remove(&conn_id) {
+            if let Some(mut set) = self.voice_rooms.get_mut(&old) {
+                set.remove(&conn_id);
+            }
+        }
+        let existing: Vec<(String, String)> = self
+            .voice_rooms
+            .get(&room_id)
+            .map(|set| {
+                set.iter()
+                    .filter_map(|c| {
+                        self.connections
+                            .get(c)
+                            .map(|conn| (conn.user_id.clone(), conn.username.clone()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.voice_rooms.entry(room_id).or_default().insert(conn_id);
+        self.voice_conn.insert(conn_id, room_id);
+        existing
+    }
+
+    /// Remove `conn_id` from whatever voice channel it was in. Returns
+    /// `(room_id, user_id, username)` when it was in one so the caller can
+    /// broadcast a `VoiceLeft`. Must be called while the connection still
+    /// exists in `connections` - i.e. before `disconnect`.
+    pub fn voice_leave(&self, conn_id: ConnId) -> Option<(i64, String, String)> {
+        let (_, room_id) = self.voice_conn.remove(&conn_id)?;
+        if let Some(mut set) = self.voice_rooms.get_mut(&room_id) {
+            set.remove(&conn_id);
+        }
+        self.voice_rooms.retain(|_, set| !set.is_empty());
+        let conn = self.connections.get(&conn_id)?;
+        Some((room_id, conn.user_id.clone(), conn.username.clone()))
+    }
+
+    /// The deduped user_ids currently in voice channel `room_id`.
+    pub fn voice_room_users(&self, room_id: i64) -> Vec<String> {
+        let mut seen = HashSet::new();
+        self.voice_rooms
+            .get(&room_id)
+            .map(|set| {
+                set.iter()
+                    .filter_map(|c| self.connections.get(c).map(|conn| conn.user_id.clone()))
+                    .filter(|uid| seen.insert(uid.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// True when `conn_id` is currently joined to voice channel `room_id`.
+    pub fn is_in_voice_room(&self, conn_id: ConnId, room_id: i64) -> bool {
+        self.voice_conn
+            .get(&conn_id)
+            .map(|r| *r == room_id)
+            .unwrap_or(false)
     }
 
     /// Register a new connection. Returns (conn_id, broadcast::Receiver,

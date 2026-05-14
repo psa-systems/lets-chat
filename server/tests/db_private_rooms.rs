@@ -51,6 +51,12 @@ async fn setup_pool() -> SqlitePool {
     .execute(&pool)
     .await
     .expect("migration 15");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0024_voice_channel_flag.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 24");
 
     pool
 }

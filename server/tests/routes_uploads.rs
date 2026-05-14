@@ -128,6 +128,8 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0020_quote_reply.sql"),
             include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
             include_str!("../migrations/chat/0022_voice_messages.sql"),
+            include_str!("../migrations/chat/0023_system_messages.sql"),
+            include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -174,6 +176,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -266,6 +269,7 @@ async fn upload_anonymous_redirects_to_login() {
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     let app = routes::build_router(state);
 
@@ -361,6 +365,7 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     let app = routes::build_router(state);
     (app, sess_a, id_a, sess_b, id_b)

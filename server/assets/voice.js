@@ -1,0 +1,457 @@
+// Enclave voice channels: multi-party WebRTC over a full mesh.
+//
+// Persistent-shell script: loaded once per page load from base.html. On a
+// voice channel page ([data-lc-voice-root]) it lets the user join a channel
+// and opens one RTCPeerConnection to every other participant.
+//
+// Signaling rides the chat WebSocket; the server is a dumb per-peer relay.
+// Negotiation has no glare at setup: the newest joiner is the sole offerer
+// to everyone already there (it receives a "roster"); existing members get
+// a "joined" event and build their connection lazily from the joiner's
+// offer. The "perfect negotiation" pattern still governs mid-call
+// renegotiation (camera toggles) per peer.
+//
+// Mesh practically caps a channel at ~4-6 participants since there's no
+// media server. A joined call is bound to the voice page; navigating away
+// (or the reconnect soft-refresh) leaves the channel.
+(function () {
+  'use strict';
+
+  var root = null;        // current [data-lc-voice-root] element, or null
+  var cfg = null;         // { roomId, selfId, selfName, iceServers }
+  var joined = false;
+  var localStream = null;
+  var peers = {};         // user_id -> { pc, polite, makingOffer, name, pending: [] }
+
+  // Keep a handle on the chat socket wrapper regardless of page type.
+  document.body.addEventListener('htmx:wsOpen', function (e) {
+    if (e.detail && e.detail.socketWrapper) window.__lcWS = e.detail.socketWrapper;
+  });
+
+  function wsSend(obj) {
+    var ws = window.__lcWS;
+    if (!ws) return;
+    try { ws.send(JSON.stringify(obj)); } catch (e) { /* socket reconnecting */ }
+  }
+  function voiceSend(kind, targetUserId, payload) {
+    if (!cfg) return;
+    wsSend({
+      type: 'voice_signal',
+      room_id: cfg.roomId,
+      target_user_id: targetUserId,
+      kind: kind,
+      payload: payload || null,
+    });
+  }
+
+  // ---- dom -----------------------------------------------------------
+  function q(sel) { return root ? root.querySelector(sel) : null; }
+  function grid() { return q('[data-lc-voice-grid]'); }
+
+  function createTile(userId, label, isSelf) {
+    var g = grid();
+    if (!g) return;
+    if (g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]')) return;
+    var tile = document.createElement('div');
+    tile.setAttribute('data-lc-voice-tile', userId);
+    tile.className = 'relative overflow-hidden rounded-lg bg-slate-800';
+    // Inline aspect-ratio rather than the `aspect-video` utility: every child
+    // is absolutely positioned, so the tile has no in-flow content to give
+    // it height - without an explicit ratio it collapses to a sliver.
+    tile.style.aspectRatio = '16 / 9';
+    tile.style.minHeight = '140px';
+    var video = document.createElement('video');
+    video.setAttribute('data-lc-voice-video', '');
+    video.autoplay = true;
+    video.playsInline = true;
+    if (isSelf) video.muted = true;
+    video.className = 'absolute inset-0 h-full w-full object-cover';
+    video.style.display = 'none';
+    // Shown whenever this participant has no live camera track - including
+    // for users on the default avatar, since /avatars/{id} always resolves.
+    var avatar = document.createElement('img');
+    avatar.setAttribute('data-lc-voice-avatar', '');
+    avatar.src = '/avatars/' + encodeURIComponent(userId);
+    avatar.alt = label;
+    avatar.className = 'absolute inset-0 m-auto h-20 w-20 rounded-full object-cover';
+    var name = document.createElement('span');
+    name.className = 'absolute bottom-1 left-1 z-10 rounded bg-black/60 px-2 py-0.5 text-sm text-white';
+    name.textContent = label;
+    tile.appendChild(video);
+    tile.appendChild(avatar);
+    tile.appendChild(name);
+    g.appendChild(tile);
+  }
+
+  // Show the camera feed when this participant has a live video track,
+  // otherwise fall back to their avatar.
+  function updateTileMedia(userId) {
+    var g = grid();
+    var t = g && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (!t) return;
+    var video = t.querySelector('[data-lc-voice-video]');
+    var avatar = t.querySelector('[data-lc-voice-avatar]');
+    if (!video || !avatar) return;
+    var hasVideo;
+    if (cfg && userId === cfg.selfId) {
+      // Our own track: presence is authoritative (we fully remove it on
+      // camera-off). Skip the `muted` check - it is briefly true on a
+      // freshly-acquired local track, which would wrongly hide our video.
+      hasVideo = !!(localStream && localStream.getVideoTracks().some(function (tr) {
+        return tr.readyState === 'live';
+      }));
+    } else {
+      var stream = video.srcObject;
+      hasVideo = !!(stream && stream.getVideoTracks().some(function (tr) {
+        return tr.readyState === 'live' && !tr.muted;
+      }));
+    }
+    video.style.display = hasVideo ? '' : 'none';
+    avatar.style.display = hasVideo ? 'none' : '';
+  }
+  function tileVideo(userId) {
+    var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    return t ? t.querySelector('[data-lc-voice-video]') : null;
+  }
+  function removeTile(userId) {
+    var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (t) t.remove();
+  }
+  function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+  function showJoinedUi(on) {
+    var preview = q('[data-lc-voice-preview]');
+    var g = grid();
+    if (preview) preview.style.display = on ? 'none' : '';
+    if (g) g.style.display = on ? 'grid' : 'none';
+    toggle(q('[data-lc-voice-join]'), !on);
+    toggle(q('[data-lc-voice-mute]'), on);
+    toggle(q('[data-lc-voice-camera]'), on);
+    toggle(q('[data-lc-voice-leave]'), on);
+  }
+  function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
+
+  // ---- media ---------------------------------------------------------
+  function getMedia(withVideo) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.reject(new Error('getUserMedia unavailable'));
+    }
+    return navigator.mediaDevices.getUserMedia(
+      withVideo ? { audio: true, video: true } : { audio: true }
+    );
+  }
+  function hasLocalVideo() {
+    return !!(localStream && localStream.getVideoTracks().length > 0);
+  }
+
+  // ---- per-peer connection ------------------------------------------
+  function iceConfig() {
+    try { return { iceServers: JSON.parse(cfg.iceServers) }; }
+    catch (e) { return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; }
+  }
+
+  function makePc(userId) {
+    var p = peers[userId];
+    var pc = new RTCPeerConnection(iceConfig());
+    p.pc = pc;
+    pc.onicecandidate = function (ev) {
+      if (ev.candidate) voiceSend('ice', userId, JSON.stringify(ev.candidate));
+    };
+    pc.ontrack = function (ev) {
+      var v = tileVideo(userId);
+      if (v && ev.streams && ev.streams[0]) {
+        v.srcObject = ev.streams[0];
+        ev.streams[0].onaddtrack = function () { updateTileMedia(userId); };
+        ev.streams[0].onremovetrack = function () { updateTileMedia(userId); };
+      }
+      if (ev.track) {
+        ev.track.onmute = function () { updateTileMedia(userId); };
+        ev.track.onunmute = function () { updateTileMedia(userId); };
+        ev.track.onended = function () { updateTileMedia(userId); };
+      }
+      updateTileMedia(userId);
+    };
+    pc.onnegotiationneeded = function () {
+      p.makingOffer = true;
+      pc.setLocalDescription()
+        .then(function () { voiceSend('offer', userId, JSON.stringify(pc.localDescription)); })
+        .catch(function (e) { console.warn('voice: negotiation failed', e); })
+        .finally(function () { p.makingOffer = false; });
+    };
+    pc.onconnectionstatechange = function () {
+      // Do NOT remove the peer here. In a mesh, one participant leaving
+      // closes their connections, which transiently flaps *other* peers'
+      // connections through "failed" - auto-removing on that state would
+      // cascade and drop everyone. Peers are removed only by the explicit
+      // VoiceLeft event, which the server sends reliably on both a clean
+      // leave and a disconnect. (The 1:1 DM call in call.js does tear down
+      // on connection failure - that is correct there, but not for a mesh.)
+      if (p.pc === pc && pc.connectionState === 'failed') {
+        console.warn('voice: connection to', userId, 'failed; awaiting VoiceLeft');
+      }
+    };
+    return pc;
+  }
+
+  function addLocalTracks(pc) {
+    if (!pc || !localStream) return;
+    localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
+  }
+
+  function flushCandidates(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc) return;
+    var list = p.pending;
+    p.pending = [];
+    list.forEach(function (c) {
+      p.pc.addIceCandidate(c).catch(function (e) {
+        console.warn('voice: addIceCandidate failed', e);
+      });
+    });
+  }
+
+  // Register a peer. `iAmOfferer` => this side initiates (newest joiner
+  // offering to an existing member); otherwise the pc is built lazily from
+  // the peer's offer.
+  function addPeer(userId, name, iAmOfferer) {
+    if (peers[userId]) return;
+    peers[userId] = { pc: null, polite: !iAmOfferer, makingOffer: false, name: name, pending: [] };
+    createTile(userId, name, false);
+    if (iAmOfferer) {
+      makePc(userId);
+      addLocalTracks(peers[userId].pc); // -> negotiationneeded -> offer
+    }
+  }
+
+  function removePeer(userId) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.pc) {
+      p.pc.onicecandidate = p.pc.ontrack = p.pc.onnegotiationneeded = p.pc.onconnectionstatechange = null;
+      try { p.pc.close(); } catch (e) {}
+    }
+    delete peers[userId];
+    removeTile(userId);
+  }
+
+  function onOffer(userId, name, sdp) {
+    var p = peers[userId];
+    if (!p) { addPeer(userId, name, false); p = peers[userId]; }
+    var desc;
+    try { desc = JSON.parse(sdp); } catch (e) { return; }
+    var firstOffer = !p.pc;
+    if (firstOffer) makePc(userId);
+    var pc = p.pc;
+    var collision = p.makingOffer || pc.signalingState !== 'stable';
+    p.ignoreOffer = !p.polite && collision;
+    if (p.ignoreOffer) return;
+    pc.setRemoteDescription(desc)
+      .then(function () {
+        if (firstOffer) addLocalTracks(pc);
+        flushCandidates(userId);
+        return pc.setLocalDescription();
+      })
+      .then(function () { voiceSend('answer', userId, JSON.stringify(pc.localDescription)); })
+      .catch(function (e) { console.warn('voice: onOffer failed', e); });
+  }
+
+  function onAnswer(userId, sdp) {
+    var p = peers[userId];
+    if (!p || !p.pc) return;
+    var desc;
+    try { desc = JSON.parse(sdp); } catch (e) { return; }
+    p.pc.setRemoteDescription(desc)
+      .then(function () { flushCandidates(userId); })
+      .catch(function (e) { console.warn('voice: onAnswer failed', e); });
+  }
+
+  function onIce(userId, payload) {
+    var p = peers[userId];
+    if (!p || !payload) return;
+    var cand;
+    try { cand = JSON.parse(payload); } catch (e) { return; }
+    if (!p.pc || !p.pc.remoteDescription) { p.pending.push(cand); return; }
+    p.pc.addIceCandidate(cand).catch(function (e) {
+      if (!p.ignoreOffer) console.warn('voice: addIceCandidate failed', e);
+    });
+  }
+
+  // ---- join / leave --------------------------------------------------
+  function join() {
+    if (joined || !cfg) return;
+    getMedia(false).then(function (stream) {
+      localStream = stream;
+      joined = true;
+      showJoinedUi(true);
+      createTile(cfg.selfId, cfg.selfName + ' (you)', true);
+      var sv = tileVideo(cfg.selfId);
+      // Re-assign (null first) so the <video> re-renders with the changed
+      // track set - assigning the same stream object can be a no-op.
+      if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      setCameraBtn();
+      wsSend({ type: 'voice_join', room_id: cfg.roomId });
+    }).catch(function () {
+      alert('Could not access your microphone.');
+    });
+  }
+
+  function leave() {
+    if (!joined) return;
+    wsSend({ type: 'voice_leave', room_id: cfg.roomId });
+    Object.keys(peers).forEach(removePeer);
+    if (localStream) {
+      localStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+      localStream = null;
+    }
+    removeTile(cfg.selfId);
+    var g = grid();
+    if (g) g.replaceChildren();
+    joined = false;
+    showJoinedUi(false);
+  }
+
+  function toggleMute() {
+    if (!localStream) return;
+    var on = true;
+    localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
+    var btn = q('[data-lc-voice-mute]');
+    if (btn) btn.textContent = on ? 'Mute' : 'Unmute';
+  }
+
+  function setCameraBtn() {
+    var btn = q('[data-lc-voice-camera]');
+    if (btn) btn.textContent = hasLocalVideo() ? 'Stop video' : 'Start video';
+  }
+
+  // Camera on/off mid-call: acquire or release the video track and add it to
+  // (or remove it from) every peer connection, which renegotiates each.
+  function toggleCamera() {
+    if (!joined || !localStream) return;
+    var existing = localStream.getVideoTracks()[0];
+    if (existing) {
+      Object.keys(peers).forEach(function (uid) {
+        var pc = peers[uid].pc;
+        if (!pc) return;
+        var sender = pc.getSenders().find(function (s) { return s.track === existing; });
+        if (sender) pc.removeTrack(sender);
+      });
+      existing.stop();
+      localStream.removeTrack(existing);
+      var sv = tileVideo(cfg.selfId);
+      // Re-assign (null first) so the <video> re-renders with the changed
+      // track set - assigning the same stream object can be a no-op.
+      if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      setCameraBtn();
+    } else {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+        var vtrack = vstream.getVideoTracks()[0];
+        if (!vtrack) return;
+        if (!joined || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
+        localStream.addTrack(vtrack);
+        Object.keys(peers).forEach(function (uid) {
+          if (peers[uid].pc) peers[uid].pc.addTrack(vtrack, localStream);
+        });
+        var sv = tileVideo(cfg.selfId);
+        if (sv) sv.srcObject = localStream;
+        setCameraBtn();
+      }).catch(function () { alert('Could not access your camera.'); });
+    }
+  }
+
+  // ---- inbound dispatch ---------------------------------------------
+  function handleEvent(node) {
+    if (!cfg) return;
+    var roomId = node.getAttribute('data-room-id');
+    if (String(cfg.roomId) !== String(roomId)) return; // not this channel
+    var kind = node.getAttribute('data-kind');
+    var userId = node.getAttribute('data-user-id');
+    var username = node.getAttribute('data-username') || 'Someone';
+    var payload = node.getAttribute('data-payload');
+
+    if (kind === 'roster') {
+      if (!joined) return;
+      var list;
+      try { list = JSON.parse(node.getAttribute('data-peers') || '[]'); } catch (e) { list = []; }
+      // We are the newest joiner: offer to everyone already here.
+      list.forEach(function (pair) { addPeer(pair[0], pair[1], true); });
+      return;
+    }
+    if (kind === 'joined') {
+      // Someone joined after us; they will offer, we answer.
+      if (joined && userId !== cfg.selfId) addPeer(userId, username, false);
+      return;
+    }
+    if (kind === 'left') {
+      removePeer(userId);
+      return;
+    }
+    if (!joined) return;
+    if (kind === 'offer') onOffer(userId, username, payload);
+    else if (kind === 'answer') onAnswer(userId, payload);
+    else if (kind === 'ice') onIce(userId, payload);
+  }
+
+  function watchBus() {
+    var bus = document.getElementById('lc-voice-bus');
+    if (!bus) return;
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        Array.prototype.forEach.call(m.addedNodes, function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.hasAttribute('data-lc-voice-event')) handleEvent(n);
+          else if (n.querySelector) {
+            var c = n.querySelector('[data-lc-voice-event]');
+            if (c) handleEvent(c);
+          }
+        });
+      });
+      bus.replaceChildren();
+    }).observe(bus, { childList: true });
+  }
+
+  // ---- wiring --------------------------------------------------------
+  function bindRoot(el) {
+    if (el === root) return;
+    if (joined) leave(); // navigated to a different voice page
+    root = el;
+    cfg = {
+      roomId: parseInt(el.getAttribute('data-room-id'), 10),
+      selfId: el.getAttribute('data-self-id'),
+      selfName: el.getAttribute('data-self-name') || 'You',
+      iceServers: el.getAttribute('data-ice-servers') || '[]',
+    };
+    joined = false;
+  }
+
+  function scan() {
+    var el = document.querySelector('[data-lc-voice-root]');
+    if (el) {
+      bindRoot(el);
+    } else if (root) {
+      if (joined) leave();
+      root = null;
+      cfg = null;
+    }
+  }
+
+  document.body.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('[data-lc-voice-join]')) { join(); return; }
+    if (t.closest('[data-lc-voice-leave]')) { leave(); return; }
+    if (t.closest('[data-lc-voice-mute]')) { toggleMute(); return; }
+    if (t.closest('[data-lc-voice-camera]')) { toggleCamera(); return; }
+  });
+
+  function onReady(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  onReady(function () {
+    watchBus();
+    scan();
+    document.body.addEventListener('htmx:afterSettle', scan);
+  });
+})();

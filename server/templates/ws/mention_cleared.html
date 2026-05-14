@@ -1,4 +1,5 @@
-<div hx-swap-oob="beforeend:#lc-notify-bus"
-     data-event="mention_cleared"
-     data-room-id="{{ room_id }}"
-     data-message-id="{{ message_id }}"></div>
+<div id="lc-notify-bus" hx-swap-oob="beforeend">
+  <div data-event="mention_cleared"
+       data-room-id="{{ room_id }}"
+       data-message-id="{{ message_id }}"></div>
+</div>
