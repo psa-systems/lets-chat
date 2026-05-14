@@ -1,0 +1,95 @@
+---
+
+# Cross-build Windows desktop application and upload as artifact.
+name: Build desktop (Windows)
+
+on:
+  push:
+    branches:
+      - "main"
+    tags:
+      - "v*"
+    paths:
+      - "desktop/src/**"
+      - "desktop/Cargo.toml"
+      - "server/src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ci-build/Dockerfile.desktop-windows"
+      - "ci-build/get-tags.nu"
+      - ".forgejo/workflows/build-desktop-windows.yml"
+
+jobs:
+  build-desktop:
+    name: Build desktop (Windows x86_64)
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify Docker availability
+        run: |
+          docker version
+          docker buildx version
+
+      - name: Get version tag
+        id: get-version
+        shell: nu {0}
+        run: |
+          let describe = (^git describe --tags --always | str trim)
+          let parts = ($describe | parse --regex '^(?<tag>.+)-\d+-g[0-9a-f]+$')
+          let version = if ($parts | is-not-empty) {
+              $parts.tag.0
+          } else if ($describe | str starts-with "v") {
+              $describe
+          } else {
+              "latest"
+          }
+          print $"Version: ($version)"
+          $"version=($version)\n" | save --append $env.GITHUB_OUTPUT
+
+      - name: Build desktop application
+        shell: nu {0}
+        run: |
+          # CARGO_BUILD_JOBS caps cargo's parallel rustc + build-script
+          # workers. The desktop and OCI builds share a runner, so each
+          # takes nproc/2 to leave the host fully used without
+          # oversubscription.
+          let jobs = ((sys cpu | length) / 2 | into int)
+          print $"CARGO_BUILD_JOBS=($jobs)"
+          (
+            ^docker buildx build
+              --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              --tag lets-chat-desktop-windows:build
+              --load
+              -f ci-build/Dockerfile.desktop-windows
+              .
+          )
+
+      - name: Extract build artifact
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.get-version.outputs.version }}"
+          let container = (^docker create lets-chat-desktop-windows:build)
+          mkdir artifacts
+          (
+            ^docker cp
+              $"($container):/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe"
+              "artifacts/"
+          )
+          ^docker rm $container
+          let dest = $"artifacts/lets-chat-desktop-($version)-windows-x86_64.exe"
+          mv artifacts/lets-chat-desktop.exe $dest
+          print $"Artifact: ($dest)"
+
+      - name: Upload artifact
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: lets-chat-desktop-windows-x86_64
+          path: artifacts/lets-chat-desktop-*.exe
+          retention-days: 90
