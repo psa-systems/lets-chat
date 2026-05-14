@@ -210,6 +210,32 @@
 })();
 </script>
 <script>
+// Press Enter anywhere on the page to send the pending message. The textarea
+// has its own onkeydown for the focused case (and mention-popover handling);
+// this covers Enter while focus is elsewhere - message list, body, etc. We
+// skip interactive elements so Enter keeps its native meaning there (buttons,
+// links, other inputs). Cleanup-root is #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  if (!form || !ta) return;
+  var SKIP = { INPUT: 1, TEXTAREA: 1, SELECT: 1, BUTTON: 1, A: 1, OPTION: 1 };
+  function onDocKeydown(e){
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+    var t = e.target;
+    if (t && (SKIP[t.tagName] || t.isContentEditable)) return;
+    if (!ta.value.trim() && !form.file_id.value) return;
+    e.preventDefault();
+    form.requestSubmit();
+  }
+  document.addEventListener('keydown', onDocKeydown);
+  function teardown(){ document.removeEventListener('keydown', onDocKeydown); }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
 (function(){
   var input = document.getElementById('lc-file');
   var staged = document.getElementById('lc-staged');
