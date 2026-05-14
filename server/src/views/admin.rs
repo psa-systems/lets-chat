@@ -114,6 +114,14 @@ pub struct SettingsPage<'a> {
     /// `settings` table under `default_notify_email_digest`.
     pub default_notify_email_digest: bool,
     pub saved: bool,
+    /// Pre-formatted "N.NN MiB" string; Askama can't do the i64-to-f64
+    /// arithmetic inline, so the handler renders it.
+    pub uploads_total_display: String,
+    pub uploads_orphan_count: i64,
+    /// Flash counts populated from the post-redirect query string.
+    /// Some(N) renders a one-line success banner; None renders nothing.
+    pub regenerated: Option<i64>,
+    pub purged: Option<i64>,
 }
 
 pub struct AdminEnclaveView {
