@@ -269,6 +269,7 @@ async fn delete_wipes_user_and_chat_rows() {
     assert_eq!(n_enc, 0);
 }
 
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn delete_rejects_wrong_password() {
     let t = app_with_user().await;

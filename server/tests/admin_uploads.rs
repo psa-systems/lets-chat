@@ -1,3 +1,5 @@
+#![cfg(feature = "standalone")]
+
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
