@@ -76,7 +76,10 @@
       "Bash(gh auth *)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(./dev/cargo clean *)"
+      "Bash(./dev/cargo clean *)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://127.0.0.1:18080/login)"
     ]
   }
 }
