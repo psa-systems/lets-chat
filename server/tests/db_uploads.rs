@@ -22,6 +22,9 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0017_custom_emojis.sql"),
         include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
         include_str!("../migrations/chat/0019_bookmarks.sql"),
+        include_str!("../migrations/chat/0020_quote_reply.sql"),
+        include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
+        include_str!("../migrations/chat/0022_voice_messages.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
@@ -40,6 +43,7 @@ async fn insert_and_get_upload_round_trip() {
         "image/png",
         1234,
         "abc123.png",
+        None,
     )
     .await
     .unwrap();
@@ -69,10 +73,17 @@ async fn link_upload_to_message_promotes_orphan() {
         .await
         .unwrap();
 
-    let upload_id =
-        lets_chat::db::uploads::insert_upload(&pool, "user-a", "p.png", "image/png", 9, "abc.png")
-            .await
-            .unwrap();
+    let upload_id = lets_chat::db::uploads::insert_upload(
+        &pool,
+        "user-a",
+        "p.png",
+        "image/png",
+        9,
+        "abc.png",
+        None,
+    )
+    .await
+    .unwrap();
     lets_chat::db::uploads::link_upload_to_message(&pool, upload_id, mid)
         .await
         .unwrap();
@@ -109,6 +120,7 @@ async fn attachments_for_messages_groups_by_message_id() {
             "image/png",
             1,
             &format!("{name}-storage"),
+            None,
         )
         .await
         .unwrap();
@@ -130,6 +142,44 @@ async fn attachments_for_messages_groups_by_message_id() {
     assert_eq!(by_mid.len(), 1);
     assert_eq!(by_mid[0].filename, "c.pdf");
     assert_eq!(by_mid[0].url, format!("/api/files/{}", by_mid[0].id));
+}
+
+#[tokio::test]
+async fn waveform_round_trips_through_attachment_load() {
+    let pool = setup_chat_pool().await;
+    let room = lets_chat::db::chat::create_dm_room(&pool, "dm-a-b", "user-a", "user-b")
+        .await
+        .unwrap();
+    let mid = lets_chat::db::chat::insert_message(&pool, room.id, "user-a", "")
+        .await
+        .unwrap();
+
+    // A voice upload stores its waveform JSON; a plain upload stores NULL.
+    let voice_id = lets_chat::db::uploads::insert_upload(
+        &pool,
+        "user-a",
+        "voice-message.ogg",
+        "audio/ogg",
+        2048,
+        "deadbeef.ogg",
+        Some(r#"{"d":1.5,"p":[0.0,0.5,1.0]}"#),
+    )
+    .await
+    .unwrap();
+    lets_chat::db::uploads::link_upload_to_message(&pool, voice_id, mid)
+        .await
+        .unwrap();
+
+    let atts = lets_chat::db::uploads::attachments_for_message(&pool, mid)
+        .await
+        .unwrap();
+    assert_eq!(atts.len(), 1);
+    let a = &atts[0];
+    assert!(a.is_audio());
+    assert_eq!(a.waveform.as_deref(), Some(&[0.0, 0.5, 1.0][..]));
+    assert_eq!(a.waveform_csv(), "0.000,0.500,1.000");
+    assert_eq!(a.voice_duration, Some(1.5));
+    assert_eq!(a.duration_attr(), "1.500");
 }
 
 #[tokio::test]

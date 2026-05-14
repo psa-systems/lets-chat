@@ -44,6 +44,14 @@
     <button type="button" title="Attach file"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
+    <button type="button" id="lc-record" title="Record voice message"
+      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      aria-label="Record voice message">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path d="M10 2a3 3 0 00-3 3v5a3 3 0 006 0V5a3 3 0 00-3-3z"/>
+        <path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 005.25 5.954V17.5H7.75a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H10.75v-2.046A6 6 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-9 0z"/>
+      </svg>
+    </button>
     <textarea
       name="body"
       rows="1"
@@ -54,7 +62,7 @@
       oninput="
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 160) + 'px';
-        document.getElementById('composer-send').disabled = !this.value.trim();
+        document.getElementById('composer-send').disabled = !this.value.trim() && !this.form.file_id.value;
         var ws = window.__lcWS;
         if (!ws) return;
         var now = Date.now();
@@ -65,7 +73,7 @@
       onkeydown="
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
           event.preventDefault();
-          if (this.value.trim()) this.form.requestSubmit();
+          if (this.value.trim() || this.form.file_id.value) this.form.requestSubmit();
         }
       "
     ></textarea>
@@ -323,5 +331,231 @@
       if (f) uploadStaged(f);
     });
   }
+})();
+</script>
+<script>
+// Voice-message recorder. Records mic audio with MediaRecorder, decodes the
+// blob client-side to compute a waveform, then uploads it through the same
+// /api/upload endpoint the file picker uses (with kind=voice + waveform).
+// The returned file_id is stashed in the hidden #composer input[name=file_id]
+// so the normal form submit carries it - identical to the file-attach flow.
+(function(){
+  var MAX_SECONDS = 300;     // 5-minute hard cap (matches the feature spec)
+  var WAVEFORM_BUCKETS = 60; // peaks stored per recording
+
+  var recordBtn = document.getElementById('lc-record');
+  var staged = document.getElementById('lc-staged');
+  var errSlot = document.getElementById('lc-upload-error');
+  var hidden = document.querySelector('#composer input[name=file_id]');
+  var sendBtn = document.getElementById('composer-send');
+  if (!recordBtn || !staged || !errSlot || !hidden) return;
+
+  var mediaRecorder = null;
+  var mediaStream = null;
+  var chunks = [];
+  var startedAt = 0;
+  var tickTimer = null;
+  var capTimer = null;
+  var recording = false;
+
+  function fmtTime(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function pickMimeType(){
+    var prefs = ['audio/webm', 'audio/ogg', 'audio/mp4'];
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+      for (var i = 0; i < prefs.length; i++) {
+        if (MediaRecorder.isTypeSupported(prefs[i])) return prefs[i];
+      }
+    }
+    return '';
+  }
+
+  function releaseStream(){
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(function(t){ t.stop(); });
+      mediaStream = null;
+    }
+  }
+
+  function resetUi(){
+    recording = false;
+    recordBtn.classList.remove('text-red-600');
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (capTimer) { clearTimeout(capTimer); capTimer = null; }
+  }
+
+  // Decode the recorded blob to WAVEFORM_BUCKETS peak values (0..1) plus the
+  // exact duration in seconds. Capturing the duration here is what lets the
+  // player draw a progress bar: MediaRecorder webm/ogg blobs carry no duration
+  // in the container header, so the player cannot derive it from the <audio>
+  // element. Best-effort: a decode failure yields empty peaks + 0 duration and
+  // the message renders without a waveform.
+  async function computeWaveform(blob){
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return { peaks: [], duration: 0 };
+      var buf = await blob.arrayBuffer();
+      var ctx = new AC();
+      var audioBuf = await ctx.decodeAudioData(buf);
+      var data = audioBuf.getChannelData(0);
+      var bucketSize = Math.floor(data.length / WAVEFORM_BUCKETS) || 1;
+      var peaks = [];
+      var max = 0.0001;
+      for (var b = 0; b < WAVEFORM_BUCKETS; b++) {
+        var start = b * bucketSize;
+        var peak = 0;
+        for (var i = 0; i < bucketSize && start + i < data.length; i++) {
+          var v = Math.abs(data[start + i]);
+          if (v > peak) peak = v;
+        }
+        peaks.push(peak);
+        if (peak > max) max = peak;
+      }
+      var duration = audioBuf.duration;
+      ctx.close();
+      return {
+        peaks: peaks.map(function(p){ return Math.round((p / max) * 1000) / 1000; }),
+        duration: isFinite(duration) ? duration : 0,
+      };
+    } catch (e) {
+      return { peaks: [], duration: 0 };
+    }
+  }
+
+  function showRecording(){
+    staged.innerHTML =
+      '<span class="inline-flex items-center gap-2">' +
+        '<span class="text-red-600">● Recording</span>' +
+        '<span id="lc-record-time">0:00</span>' +
+        '<button type="button" id="lc-record-stop" class="underline">Stop</button>' +
+        '<button type="button" id="lc-record-cancel" class="text-red-500">Cancel</button>' +
+      '</span>';
+    document.getElementById('lc-record-stop').addEventListener('click', function(){ stop(false); });
+    document.getElementById('lc-record-cancel').addEventListener('click', function(){ stop(true); });
+  }
+
+  function tick(){
+    var el = document.getElementById('lc-record-time');
+    if (el) el.textContent = fmtTime((Date.now() - startedAt) / 1000);
+  }
+
+  async function start(){
+    errSlot.textContent = '';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      errSlot.textContent = 'Voice recording is not supported in this browser';
+      return;
+    }
+    try {
+      // Use the browser's default audio processing (noise suppression, auto
+      // gain control, echo cancellation all on). Noise suppression in
+      // particular removes periodic electrical spikes some mics inject into
+      // the raw capture; disabling it lets that noise straight into the file.
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      errSlot.textContent = 'Microphone access denied';
+      return;
+    }
+    var mimeType = pickMimeType();
+    try {
+      mediaRecorder = mimeType
+        ? new MediaRecorder(mediaStream, { mimeType: mimeType })
+        : new MediaRecorder(mediaStream);
+    } catch (e) {
+      releaseStream();
+      errSlot.textContent = 'Could not start recording';
+      return;
+    }
+    chunks = [];
+    mediaRecorder.addEventListener('dataavailable', function(e){
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    });
+    mediaRecorder.addEventListener('stop', onStop);
+    mediaRecorder.start();
+    recording = true;
+    startedAt = Date.now();
+    recordBtn.classList.add('text-red-600');
+    showRecording();
+    tickTimer = setInterval(tick, 250);
+    capTimer = setTimeout(function(){ stop(false); }, MAX_SECONDS * 1000);
+  }
+
+  // `cancelled` distinguishes the Cancel button (discard) from Stop (upload).
+  var cancelled = false;
+  function stop(isCancel){
+    if (!recording || !mediaRecorder) return;
+    cancelled = isCancel;
+    resetUi();
+    try { mediaRecorder.stop(); } catch (e) {}
+  }
+
+  async function onStop(){
+    releaseStream();
+    var type = (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm';
+    var blob = new Blob(chunks, { type: type });
+    chunks = [];
+    if (cancelled) {
+      staged.textContent = '';
+      return;
+    }
+    if (blob.size === 0) {
+      errSlot.textContent = 'Recording was empty';
+      staged.textContent = '';
+      return;
+    }
+    staged.innerHTML = 'Uploading voice message...';
+    var wf = await computeWaveform(blob);
+    var fd = new FormData();
+    // Order matters: the server reads kind + waveform before the file field.
+    // The waveform field is a JSON object: { d: duration_seconds, p: [peaks] }.
+    fd.append('kind', 'voice');
+    fd.append('waveform', JSON.stringify({ d: wf.duration, p: wf.peaks }));
+    var ext = type.indexOf('ogg') !== -1 ? 'ogg' : (type.indexOf('mp4') !== -1 ? 'm4a' : 'webm');
+    fd.append('file', blob, 'voice-message.' + ext);
+    try {
+      var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      if (!res.ok) {
+        errSlot.textContent = (await res.text()) || ('upload failed: ' + res.status);
+        staged.textContent = '';
+        return;
+      }
+      var data = await res.json();
+      hidden.value = data.file_id;
+      staged.innerHTML =
+        '<span class="inline-flex items-center gap-2">' +
+          '<span>Voice message attached</span>' +
+          '<button type="button" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+        '</span>';
+      if (sendBtn) sendBtn.disabled = false;
+    } catch (e) {
+      errSlot.textContent = 'upload failed';
+      staged.textContent = '';
+    }
+  }
+
+  recordBtn.addEventListener('click', function(){
+    if (recording) stop(false);
+    else start();
+  });
+
+  // Teardown: if #composer is swapped out mid-recording, stop the recorder
+  // and release the mic so the tab's recording indicator clears. Setting
+  // `cancelled` makes the async `onStop` bail instead of uploading into the
+  // now-detached DOM. Cleanup-root is #composer (form).
+  function teardown(){
+    cancelled = true;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop(); } catch (e) {}
+    }
+    resetUi();
+    releaseStream();
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>

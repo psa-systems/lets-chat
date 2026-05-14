@@ -15,6 +15,7 @@ use crate::uploads::pipeline::{self, PipelineError, ProcessedImage};
 
 use crate::auth::{AuthUser, OptionalUser};
 use crate::db;
+use crate::db::uploads::WaveformBlob;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -46,6 +47,57 @@ fn allowed_ext_for_mime(mime: &str) -> Option<&'static str> {
     }
 }
 
+/// When the client flags an upload as a voice recording (`kind=voice`), the
+/// sniffed type is the *container* the browser's `MediaRecorder` produced -
+/// which `infer` reports as a `video/*` or generic-ogg type even for
+/// audio-only data (Chrome -> webm, Firefox -> ogg, Safari -> mp4). Map the
+/// recognised audio containers to a canonical `audio/*` MIME + storage
+/// extension. Anything else returns `None` and the caller rejects with 415.
+/// Magic-byte sniffing still ran first, so this only ever sees real media
+/// containers - never an arbitrary uploaded blob.
+fn allowed_voice_mime(sniffed: &str) -> Option<(&'static str, &'static str)> {
+    match sniffed {
+        "video/webm" | "audio/webm" => Some(("audio/webm", "webm")),
+        "application/ogg" | "audio/ogg" | "video/ogg" => Some(("audio/ogg", "ogg")),
+        "video/mp4" | "audio/mp4" | "audio/m4a" => Some(("audio/mp4", "m4a")),
+        "audio/mpeg" => Some(("audio/mpeg", "mp3")),
+        _ => None,
+    }
+}
+
+/// Validate and normalize a client-supplied waveform blob. The wire format is
+/// a JSON object `{ "d": duration_seconds, "p": [peaks] }`. Caps the peak
+/// count, clamps every peak into 0..1, and drops a non-positive or non-finite
+/// duration - so a hostile or buggy client cannot store an oversized or
+/// out-of-range blob. Returns the re-serialized canonical JSON, or `None` if
+/// the input is unusable, in which case the voice message simply renders
+/// without a waveform.
+fn sanitize_waveform(raw: &str) -> Option<String> {
+    const MAX_PEAKS: usize = 256;
+    let blob: WaveformBlob = serde_json::from_str(raw).ok()?;
+    if blob.p.is_empty() {
+        return None;
+    }
+    let peaks: Vec<f32> = blob
+        .p
+        .into_iter()
+        .take(MAX_PEAKS)
+        .map(|p| {
+            if p.is_finite() {
+                p.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let duration = blob.d.filter(|d| d.is_finite() && *d > 0.0);
+    serde_json::to_string(&WaveformBlob {
+        d: duration,
+        p: peaks,
+    })
+    .ok()
+}
+
 /// `POST /api/upload` - multipart upload endpoint. Streams the first `file`
 /// field into a temp file under `${LETS_CHAT_DATA_DIR}/uploads/.tmp/{uuid}`,
 /// counting bytes against `max_upload_bytes`. After streaming, sniffs magic
@@ -66,14 +118,30 @@ pub async fn post_upload(
         .await
         .map_err(|e| AppError::Internal(format!("create tmp dir: {e}")))?;
 
+    // Voice recordings reuse this endpoint: the client sends `kind=voice` and
+    // a `waveform` JSON array as text fields *before* the `file` field, so
+    // both are populated by the time the file field is streamed below.
+    let mut upload_kind: Option<String> = None;
+    let mut waveform_json: Option<String> = None;
+
     while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|e| AppError::BadRequest(format!("multipart: {e}")))?
     {
-        if field.name() != Some("file") {
-            continue;
+        match field.name() {
+            Some("kind") => {
+                upload_kind = field.text().await.ok();
+                continue;
+            }
+            Some("waveform") => {
+                waveform_json = field.text().await.ok().filter(|s| !s.is_empty());
+                continue;
+            }
+            Some("file") => {}
+            _ => continue,
         }
+        let is_voice = upload_kind.as_deref() == Some("voice");
         let original_filename = field
             .file_name()
             .map(sanitize_filename)
@@ -136,13 +204,32 @@ pub async fn post_upload(
             }
         };
         let mime_type = kind.mime_type().to_string();
-        let Some(ext) = allowed_ext_for_mime(&mime_type) else {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Ok((
-                StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                format!("unsupported file type: {mime_type}"),
-            )
-                .into_response());
+        // For voice uploads the stored MIME is canonicalized from the sniffed
+        // container; for everything else it stays exactly as sniffed.
+        let (ext, canonical_mime): (&'static str, String) = if is_voice {
+            match allowed_voice_mime(&mime_type) {
+                Some((m, e)) => (e, m.to_string()),
+                None => {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Ok((
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        format!("unsupported voice format: {mime_type}"),
+                    )
+                        .into_response());
+                }
+            }
+        } else {
+            match allowed_ext_for_mime(&mime_type) {
+                Some(e) => (e, mime_type.clone()),
+                None => {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Ok((
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        format!("unsupported file type: {mime_type}"),
+                    )
+                        .into_response());
+                }
+            }
         };
 
         let (storage_name, stored_size, stored_mime) = if mime_type.starts_with("image/") {
@@ -226,7 +313,8 @@ pub async fn post_upload(
 
             (storage_name, original_bytes.len() as i64, stripped_mime)
         } else {
-            // Non-image branch (PDF). Existing flow: hash the temp file and rename.
+            // Non-image branch (PDF + voice recordings). Hash the temp file
+            // and rename into content-addressed storage; no re-encoding.
             let hex = sha256_file(&tmp_path)
                 .await
                 .map_err(|e| AppError::Internal(format!("hash tmp file: {e}")))?;
@@ -242,7 +330,15 @@ pub async fn post_upload(
                         .map_err(|e| AppError::Internal(format!("rename tmp file: {e}")))?;
                 }
             }
-            (storage_name, total, mime_type.clone())
+            (storage_name, total, canonical_mime.clone())
+        };
+
+        // Waveform is only meaningful for voice uploads; ignore the field on
+        // any other upload even if a client sends it.
+        let waveform = if is_voice {
+            waveform_json.as_deref().and_then(sanitize_waveform)
+        } else {
+            None
         };
 
         let id = db::uploads::insert_upload(
@@ -252,6 +348,7 @@ pub async fn post_upload(
             &stored_mime,
             stored_size,
             &storage_name,
+            waveform.as_deref(),
         )
         .await?;
 
