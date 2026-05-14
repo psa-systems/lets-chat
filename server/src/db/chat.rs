@@ -302,14 +302,13 @@ pub async fn insert_system_message(
     user_id: &str,
     body: &str,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query(
-        "INSERT INTO messages (room_id, user_id, body, is_system) VALUES (?, ?, ?, 1)",
-    )
-    .bind(room_id)
-    .bind(user_id)
-    .bind(body)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("INSERT INTO messages (room_id, user_id, body, is_system) VALUES (?, ?, ?, 1)")
+            .bind(room_id)
+            .bind(user_id)
+            .bind(body)
+            .execute(pool)
+            .await?;
     Ok(result.last_insert_rowid())
 }
 
