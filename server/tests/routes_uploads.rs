@@ -425,8 +425,7 @@ async fn preview_query_returns_smaller_bytes_than_original() {
         (ctype, bytes)
     }
     let (orig_mime, orig_bytes) = fetch(app.clone(), &sess, format!("/api/files/{id}")).await;
-    let (prev_mime, prev_bytes) =
-        fetch(app, &sess, format!("/api/files/{id}?size=preview")).await;
+    let (prev_mime, prev_bytes) = fetch(app, &sess, format!("/api/files/{id}?size=preview")).await;
     assert_eq!(orig_mime, "image/png");
     assert_eq!(prev_mime, "image/png");
     assert!(

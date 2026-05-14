@@ -148,7 +148,11 @@ async fn purge_orphans_removes_stale_row() {
         .unwrap();
 
     let status = post_status(app, Some(&sess), "/admin/uploads/purge-orphans").await;
-    assert_eq!(status, StatusCode::SEE_OTHER, "expected redirect on success");
+    assert_eq!(
+        status,
+        StatusCode::SEE_OTHER,
+        "expected redirect on success"
+    );
     assert!(
         db::uploads::get_upload(&chat, id).await.unwrap().is_none(),
         "stale orphan should be gone after purge",
@@ -164,14 +168,21 @@ async fn regenerate_thumbnails_creates_missing_preview() {
     let preview_name = lets_chat::uploads::preview_storage_name(storage);
     let preview_path = db::uploads_dir().join(&preview_name);
     let _ = std::fs::remove_file(&preview_path);
-    assert!(!preview_path.exists(), "preconditions: preview must be absent");
+    assert!(
+        !preview_path.exists(),
+        "preconditions: preview must be absent"
+    );
 
     db::uploads::insert_upload(&chat, "user-x", "f.png", "image/png", 1234, storage)
         .await
         .unwrap();
 
     let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(status, StatusCode::SEE_OTHER, "expected redirect on success");
+    assert_eq!(
+        status,
+        StatusCode::SEE_OTHER,
+        "expected redirect on success"
+    );
     assert!(
         preview_path.exists(),
         "preview should have been generated at {}",
@@ -195,11 +206,6 @@ async fn admin_uploads_non_admin_rejected_with_403() {
     let (app, sess, _chat) = make_app("regular-user", "user").await;
     let status = post_status(app.clone(), Some(&sess), "/admin/uploads/purge-orphans").await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let status = post_status(
-        app,
-        Some(&sess),
-        "/admin/uploads/regenerate-thumbnails",
-    )
-    .await;
+    let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }

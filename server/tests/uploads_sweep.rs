@@ -112,12 +112,21 @@ async fn centerpiece_dedup_orphan_sweeps_row_but_keeps_file_for_linked_sibling()
 
     let stats = uploads::sweep::run_orphan_sweep(&pool, 24).await.unwrap();
     assert_eq!(stats.rows_deleted, 1);
-    assert_eq!(stats.files_deleted, 0, "file is still referenced by A; must not be deleted");
+    assert_eq!(
+        stats.files_deleted, 0,
+        "file is still referenced by A; must not be deleted"
+    );
     assert_eq!(stats.errors, 0);
 
     assert!(row_exists(&pool, id_a).await, "A's linked row must survive");
-    assert!(!row_exists(&pool, id_b).await, "B's orphan row must be gone");
-    assert!(file_exists(storage), "shared file must survive while A points at it");
+    assert!(
+        !row_exists(&pool, id_b).await,
+        "B's orphan row must be gone"
+    );
+    assert!(
+        file_exists(storage),
+        "shared file must survive while A points at it"
+    );
 }
 
 #[tokio::test]
@@ -134,14 +143,23 @@ async fn original_present_preview_absent_sweeps_cleanly() {
 
     let id = insert_orphan(&pool, storage, 25).await;
     let preview_name = uploads::preview_storage_name(storage);
-    assert!(!file_exists(&preview_name), "preconditions: preview must be absent");
+    assert!(
+        !file_exists(&preview_name),
+        "preconditions: preview must be absent"
+    );
 
     let stats = uploads::sweep::run_orphan_sweep(&pool, 24).await.unwrap();
     assert_eq!(stats.rows_deleted, 1);
-    assert_eq!(stats.errors, 0, "missing preview must not surface as an error");
+    assert_eq!(
+        stats.errors, 0,
+        "missing preview must not surface as an error"
+    );
 
     assert!(!row_exists(&pool, id).await);
-    assert!(!file_exists(storage), "original was deleted alongside the row");
+    assert!(
+        !file_exists(storage),
+        "original was deleted alongside the row"
+    );
 }
 
 #[tokio::test]
@@ -201,5 +219,8 @@ async fn preview_file_removed_alongside_original() {
     assert_eq!(stats.rows_deleted, 1);
     assert!(!row_exists(&pool, id).await);
     assert!(!file_exists(storage), "original must be removed");
-    assert!(!file_exists(&preview), "preview must be removed alongside original");
+    assert!(
+        !file_exists(&preview),
+        "preview must be removed alongside original"
+    );
 }

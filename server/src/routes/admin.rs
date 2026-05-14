@@ -124,10 +124,8 @@ pub async fn get_settings(
             .as_deref()
             == Some("1");
     let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
-    let uploads_total_display = format!(
-        "{:.2} MiB",
-        uploads_total_bytes as f64 / (1024.0 * 1024.0)
-    );
+    let uploads_total_display =
+        format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
     let uploads_orphan_count = db::uploads::count_orphans(&state.chat).await?;
     let page = SettingsPage {
         user: &user,

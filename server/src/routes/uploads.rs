@@ -169,8 +169,9 @@ pub async fn post_upload(
                 Err(PipelineError::Decode(e)) => {
                     tracing::warn!(error = %e, "image decode failed");
                     let _ = tokio::fs::remove_file(&tmp_path).await;
-                    return Ok((StatusCode::BAD_REQUEST, "image could not be decoded")
-                        .into_response());
+                    return Ok(
+                        (StatusCode::BAD_REQUEST, "image could not be decoded").into_response()
+                    );
                 }
                 Err(e) => {
                     let _ = tokio::fs::remove_file(&tmp_path).await;
@@ -197,7 +198,9 @@ pub async fn post_upload(
                 // Dedup hit. Heal a missing preview if a prior upload's preview write
                 // failed (disk full at the time, etc.). Do NOT rewrite the original.
                 if tokio::fs::metadata(&preview_path).await.is_err() {
-                    if let Err(e) = crate::uploads::write_atomic(&preview_path, &preview_bytes).await {
+                    if let Err(e) =
+                        crate::uploads::write_atomic(&preview_path, &preview_bytes).await
+                    {
                         tracing::warn!(
                             error = %e,
                             path = %preview_path.display(),
@@ -360,7 +363,11 @@ pub async fn get_file(
 fn sha256_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// Sha256 a file by streaming through it 64 KiB at a time. Returns the hex
