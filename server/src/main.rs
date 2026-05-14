@@ -85,6 +85,12 @@ async fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://localhost:8080".to_string());
 
+    let ice_servers = std::env::var("LETS_CHAT_ICE_SERVERS")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| r#"[{"urls":"stun:stun.l.google.com:19302"}]"#.to_string());
+
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
@@ -100,6 +106,7 @@ async fn main() {
         push_client,
         mailer,
         base_url,
+        ice_servers,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

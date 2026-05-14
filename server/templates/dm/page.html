@@ -14,6 +14,45 @@
   </div>
   <aside id="thread-panel" class="hidden"></aside>
 </div>
+
+<div id="lc-call-root"
+     data-lc-call-root
+     data-room-id="{{ room.id }}"
+     data-self-id="{{ user.id }}"
+     data-self-name="{{ user.display_label() }}"
+     data-peer-id="{{ peer.id }}"
+     data-peer-name="{{ peer.display_label() }}"
+     data-ice-servers="{{ ice_servers }}">
+  <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="w-80 rounded-lg bg-white p-6 text-center shadow-xl">
+      <div class="text-sm text-slate-500">Incoming call</div>
+      <div data-lc-call-incoming-name class="mt-1 text-lg font-semibold">{{ peer.display_label() }}</div>
+      <div class="mt-5 flex justify-center gap-3">
+        <button type="button" data-lc-call-accept class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">Accept</button>
+        <button type="button" data-lc-call-decline class="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Decline</button>
+      </div>
+    </div>
+  </div>
+  <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-slate-900">
+    <div class="relative flex-1 overflow-hidden">
+      <video data-lc-remote-video autoplay playsinline class="absolute inset-0 h-full w-full bg-black object-contain"></video>
+      <img data-lc-remote-avatar src="/avatars/{{ peer.id }}" alt="{{ peer.display_label() }}"
+           class="absolute inset-0 m-auto h-32 w-32 rounded-full object-cover">
+      <div class="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-lg border border-slate-700 bg-black shadow-lg">
+        <video data-lc-local-video autoplay playsinline muted class="h-full w-full object-cover"></video>
+        <img data-lc-local-avatar src="/avatars/{{ user.id }}" alt="{{ user.display_label() }}"
+             class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
+      </div>
+      <div data-lc-call-status class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
+    </div>
+    <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
+      <button type="button" data-lc-call-mute class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
+      <button type="button" data-lc-call-camera class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Start video</button>
+      <button type="button" data-lc-call-hangup class="rounded-full bg-red-600 px-6 py-2 text-sm font-medium text-white hover:bg-red-700">Hang up</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   function onWsOpen(evt) {

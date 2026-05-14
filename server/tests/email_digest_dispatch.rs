@@ -119,6 +119,7 @@ async fn build_harness() -> Harness {
         // DB after a tick instead.
         mailer: None,
         base_url: "https://chat.example.com".into(),
+        ice_servers: "[]".to_string(),
     };
     Harness {
         state,

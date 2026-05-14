@@ -144,6 +144,37 @@ pub struct UserStatusUpdateFragment {
     pub custom_status_json: String,
 }
 
+/// OOB-appended WebRTC call signal. The client's `#lc-call-bus`
+/// MutationObserver consumes this element and feeds the `kind` + `payload`
+/// into the per-DM `RTCPeerConnection` state machine. `payload` carries an
+/// opaque SDP/ICE blob for media kinds and is absent for the pure-control
+/// kinds (invite/accept/reject/cancel/hangup).
+#[derive(Template)]
+#[template(path = "ws/call_signal.html")]
+pub struct CallSignalFragment<'a> {
+    pub room_id: i64,
+    pub from_user_id: &'a str,
+    pub from_name: &'a str,
+    pub kind: &'a str,
+    pub payload: Option<&'a str>,
+}
+
+/// OOB-appended voice-channel event. The client's `#lc-voice-bus`
+/// MutationObserver consumes this and feeds it into the per-channel mesh
+/// of `RTCPeerConnection`s. `kind` is `joined` / `left` / `roster` /
+/// `offer` / `answer` / `ice`; the other fields carry whichever payload
+/// that kind needs (empty string when not applicable).
+#[derive(Template)]
+#[template(path = "ws/voice_event.html")]
+pub struct VoiceEventFragment<'a> {
+    pub room_id: i64,
+    pub kind: &'a str,
+    pub user_id: &'a str,
+    pub username: &'a str,
+    pub peers_json: &'a str,
+    pub payload: Option<&'a str>,
+}
+
 /// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes for
 /// events that do not depend on the recipient. Per-recipient events
 /// (NewMessage, MessageEdited, ReactionAdded/Removed, DmRead,
@@ -196,7 +227,12 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::RoomNotifyPrefsChanged { .. }
         | ChatEvent::DmMuteChanged { .. }
         | ChatEvent::MessagePinned { .. }
-        | ChatEvent::MessageUnpinned { .. } => None,
+        | ChatEvent::MessageUnpinned { .. }
+        | ChatEvent::CallSignal { .. }
+        | ChatEvent::VoiceJoined { .. }
+        | ChatEvent::VoiceLeft { .. }
+        | ChatEvent::VoiceRoster { .. }
+        | ChatEvent::VoiceSignal { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

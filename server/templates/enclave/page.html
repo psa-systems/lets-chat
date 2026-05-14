@@ -25,7 +25,7 @@
         {% for r in rooms %}
         <li class="flex items-center justify-between">
           <a href="/room/{{ r.id }}" class="text-blue-600 hover:underline">
-            {% if r.room_type == "private" %}🔒 {% else %}# {% endif %}{{ r.name }}
+            {% if r.is_voice %}&#128266; {% else if r.room_type == "private" %}&#128274; {% else %}# {% endif %}{{ r.name }}{% if r.is_voice && r.room_type == "private" %} <span class="text-xs text-slate-400">(private)</span>{% endif %}
           </a>
           {% if can_manage %}
           <form method="post" action="/enclave/{{ enclave.id }}/rooms/{{ r.id }}/delete" class="inline">
@@ -38,6 +38,10 @@
       {% if can_manage %}
       <form method="post" action="/enclave/{{ enclave.id }}/rooms" class="mt-3 flex flex-wrap gap-2 items-center">
         <input name="name" placeholder="new-room" class="border rounded px-2 py-1 text-sm" required>
+        <select name="kind" class="border rounded px-2 py-1 text-sm">
+          <option value="text">text</option>
+          <option value="voice">voice</option>
+        </select>
         <select name="room_type" class="border rounded px-2 py-1 text-sm">
           <option value="public">public</option>
           <option value="private">private</option>

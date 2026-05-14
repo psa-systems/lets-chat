@@ -47,6 +47,10 @@ pub struct RawMessage {
     /// message with id `N` inline above its body. Distinct from `parent_id`:
     /// quote-replies live in the main timeline rather than a side thread.
     pub quote_id: Option<i64>,
+    /// True for server-authored system notices (e.g. "started a call").
+    /// `user_id` still records who triggered the event; this only changes
+    /// how the message renders.
+    pub is_system: bool,
 }
 
 fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
@@ -57,6 +61,7 @@ fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
         room_type: row.get("room_type"),
         invite_code: row.get("invite_code"),
         created_at: row.get("created_at"),
+        is_voice: row.get("is_voice"),
     }
 }
 
@@ -69,7 +74,7 @@ pub async fn list_rooms(
 ) -> Result<Vec<Room>, sqlx::Error> {
     if is_admin {
         let rows = sqlx::query(
-            "SELECT id, name, topic, room_type, invite_code, created_at \
+            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice \
              FROM rooms WHERE room_type != 'dm' ORDER BY name",
         )
         .fetch_all(pool)
@@ -78,7 +83,7 @@ pub async fn list_rooms(
     }
 
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice \
          FROM rooms r \
          LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
          WHERE r.room_type != 'dm' AND (r.room_type = 'public' OR m.user_id IS NOT NULL) \
@@ -93,7 +98,7 @@ pub async fn list_rooms(
 
 pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, topic, room_type, invite_code, created_at FROM rooms WHERE id = ?",
+        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice FROM rooms WHERE id = ?",
     )
     .bind(room_id)
     .fetch_optional(pool)
@@ -107,7 +112,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -129,6 +134,7 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         edited_at: row.get("edited_at"),
         parent_id: row.get("parent_id"),
         quote_id: row.get("quote_id"),
+        is_system: row.get("is_system"),
     }
 }
 
@@ -139,7 +145,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL \
          ORDER BY id ASC",
@@ -211,7 +217,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -233,7 +239,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -252,7 +258,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages WHERE id = ? AND deleted_at IS NULL",
     )
     .bind(message_id)
@@ -285,6 +291,26 @@ pub async fn insert_message(
     body: &str,
 ) -> Result<i64, sqlx::Error> {
     insert_message_quoted(pool, room_id, user_id, body, None).await
+}
+
+/// Insert a server-authored system message (e.g. "started a call"). The
+/// `user_id` still records who triggered the event; `is_system = 1` switches
+/// the rendering to a centered, non-interactive notice.
+pub async fn insert_system_message(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    body: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, body, is_system) VALUES (?, ?, ?, 1)",
+    )
+    .bind(room_id)
+    .bind(user_id)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
 }
 
 /// Like [`insert_message`] but additionally records a `quote_id` reference
@@ -328,6 +354,31 @@ pub async fn create_room(
     Ok(result.last_insert_rowid())
 }
 
+/// Like [`create_room`] but flags the room as a voice channel. Visibility
+/// (`room_type` = "public" | "private") still applies and is orthogonal to
+/// the voice flag.
+pub async fn create_voice_room(
+    pool: &sqlx::SqlitePool,
+    name: &str,
+    topic: Option<&str>,
+    room_type: &str,
+    invite_code: Option<&str>,
+    enclave_id: Option<i64>,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO rooms (name, topic, room_type, invite_code, enclave_id, is_voice) \
+         VALUES (?, ?, ?, ?, ?, 1)",
+    )
+    .bind(name)
+    .bind(topic)
+    .bind(room_type)
+    .bind(invite_code)
+    .bind(enclave_id)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
 pub async fn delete_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM rooms WHERE id = ?")
         .bind(room_id)
@@ -359,7 +410,7 @@ pub async fn list_rooms_in_enclave(
 ) -> Result<Vec<Room>, sqlx::Error> {
     if can_see_all_private {
         let rows = sqlx::query(
-            "SELECT id, name, topic, room_type, invite_code, created_at \
+            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice \
              FROM rooms WHERE enclave_id=? AND room_type != 'dm' ORDER BY name",
         )
         .bind(enclave_id)
@@ -368,7 +419,7 @@ pub async fn list_rooms_in_enclave(
         return Ok(rows.iter().map(map_room).collect());
     }
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice \
          FROM rooms r \
          LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
          WHERE r.enclave_id=? AND r.room_type != 'dm' \
@@ -425,6 +476,9 @@ pub async fn is_room_accessible(
         return Ok(false);
     }
 
+    // Public channels (text or voice) are open to every enclave member;
+    // private channels still require explicit membership. The voice flag is
+    // orthogonal and does not affect access.
     if room_type == "public" {
         return Ok(true);
     }
@@ -500,7 +554,7 @@ pub async fn get_room_by_invite(
     invite_code: &str,
 ) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, topic, room_type, invite_code, created_at \
+        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice \
          FROM rooms WHERE invite_code = ?",
     )
     .bind(invite_code)
@@ -530,7 +584,7 @@ pub async fn find_dm_room(
     user_b: &str,
 ) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ? \
@@ -580,7 +634,7 @@ pub async fn list_user_dm_rooms(
     user_id: &str,
 ) -> Result<Vec<(Room, String)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, m2.user_id as other_user \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, m2.user_id as other_user \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id != ? \

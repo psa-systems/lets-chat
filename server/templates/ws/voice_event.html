@@ -1,0 +1,9 @@
+<div id="lc-voice-bus" hx-swap-oob="beforeend">
+  <div data-lc-voice-event
+       data-room-id="{{ room_id }}"
+       data-kind="{{ kind }}"
+       data-user-id="{{ user_id }}"
+       data-username="{{ username }}"
+       data-peers="{{ peers_json }}"{% if let Some(p) = payload %}
+       data-payload="{{ p }}"{% endif %}></div>
+</div>
