@@ -113,8 +113,11 @@ dev-desktop:
     LETS_CHAT_SERVER_URL=http://localhost:18080 ./dev/cargo-desktop run -p lets-chat-desktop
 
 # Run tests (server, standalone)
+# --jobs 2 caps parallel linking: each of the ~50 test binaries statically
+# links the full dep graph, and 8-way parallel `ld` exhausts memory on a
+# swapless host, getting the linker OOM-killed (SIGTERM).
 test:
-    ./dev/cargo test -p lets-chat-server
+    ./dev/cargo test -p lets-chat-server --jobs 2
 
 # Run tests (server, saas)
 test-saas:

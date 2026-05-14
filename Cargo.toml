@@ -6,6 +6,12 @@ resolver = "2"
 edition = "2021"
 version = "0.1.0"
 
+# Linking many large test binaries in parallel can exhaust memory on hosts
+# without swap. Trimming debug info to line tables keeps the linker footprint
+# small enough to avoid the OOM killer terminating `ld`.
+[profile.dev]
+debug = "line-tables-only"
+
 [workspace.dependencies]
 dioxus = { version = "0.7.7", features = ["fullstack", "router"] }
 serde = { version = "1", features = ["derive"] }
