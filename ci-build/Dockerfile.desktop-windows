@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.6
+
+# Cross-compile the lets-chat-desktop binary to Windows x86_64.
+#
+# Uses the rust-builder-glibc-windows base image, which already provides the
+# mingw-w64 toolchain (gcc-mingw-w64-x86-64) and the x86_64-pc-windows-gnu
+# Rust target. Wry's Windows backend talks to WebView2 via Windows-RT
+# bindings (the webview2-com crate), so no extra build-time libraries are
+# required here. The runtime artifact is the single binary at
+# /build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe, which
+# the CI workflow extracts via `docker create` + `docker cp`.
+
+FROM ghcr.io/niceguyit/rust-builder-glibc-windows:v1.0.0-rust1.94-trixie AS builder
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
+
+# Cap concurrent rustc / build-script processes. The desktop-linux,
+# desktop-windows, and OCI builds run in parallel on the same CI runner;
+# without a cap each container reads the host's nproc and queues that many
+# cargo workers, oversubscribing the runner. nproc/2 (or less) lets the
+# parallel builds share the host without stepping on each other.
+# Overridable via `--build-arg CARGO_BUILD_JOBS=N` for ad-hoc local builds.
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
+
+# Point the gnu target at the mingw linker so rustc invokes the correct
+# cross-linker without per-developer `~/.cargo/config.toml` plumbing.
+ENV CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc
+
+WORKDIR /build
+COPY . .
+
+RUN cargo build --release -p lets-chat-desktop --target x86_64-pc-windows-gnu
