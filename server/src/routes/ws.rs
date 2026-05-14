@@ -1094,9 +1094,7 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
         }
         .render()
         .ok(),
-        ChatEvent::VoiceRoster {
-            room_id, peers, ..
-        } => {
+        ChatEvent::VoiceRoster { room_id, peers, .. } => {
             let json = serde_json::to_string(peers).ok()?;
             VoiceEventFragment {
                 room_id: *room_id,
