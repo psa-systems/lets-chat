@@ -58,6 +58,8 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0020_quote_reply.sql"),
             include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
             include_str!("../migrations/chat/0022_voice_messages.sql"),
+            include_str!("../migrations/chat/0023_system_messages.sql"),
+            include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -106,6 +108,7 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     (routes::build_router(state), session, chat)
 }

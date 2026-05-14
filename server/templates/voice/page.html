@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ room.name }} (voice) - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden"
+     id="lc-voice-root"
+     data-lc-voice-root
+     data-room-id="{{ room.id }}"
+     data-enclave-id="{{ enclave_id }}"
+     data-self-id="{{ user.id }}"
+     data-self-name="{{ user.display_label() }}"
+     data-ice-servers="{{ ice_servers }}">
+  <header class="flex items-center gap-3 border-b border-slate-200 px-4 py-2">
+    <h1 class="truncate font-semibold">{{ room.name }}</h1>
+    <span class="rounded bg-slate-200 px-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">voice</span>
+    <div class="flex-1"></div>
+    <button type="button" data-lc-voice-join
+            class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">Join voice</button>
+    <button type="button" data-lc-voice-mute
+            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">Mute</button>
+    <button type="button" data-lc-voice-camera
+            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">Start video</button>
+    <button type="button" data-lc-voice-leave
+            class="hidden rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">Leave</button>
+  </header>
+
+  <div data-lc-voice-preview class="px-4 py-4 text-sm text-slate-500">
+    {% if participants.is_empty() %}
+    No one is in this voice channel yet. Click <span class="font-medium text-slate-700">Join voice</span> to start.
+    {% else %}
+    Currently here: {% for p in participants %}<span class="font-medium text-slate-700">{{ p.label }}</span>{% if !loop.last %}, {% endif %}{% endfor %}
+    {% endif %}
+  </div>
+
+  <div data-lc-voice-grid
+       class="flex-1 content-start gap-4 overflow-y-auto p-4"
+       style="display:none; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));"></div>
+</div>
+{% endblock %}

@@ -19,6 +19,7 @@ pub mod search;
 pub mod settings;
 pub mod two_factor;
 pub mod users;
+pub mod voice;
 pub mod ws_fragments;
 
 use askama::Template;

@@ -67,6 +67,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0017_custom_emojis.sql"),
             include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
             include_str!("../migrations/chat/0019_bookmarks.sql"),
+            include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -111,6 +112,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
     };
     (routes::build_router(state), session)
 }

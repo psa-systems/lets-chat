@@ -44,6 +44,11 @@ pub struct AppState {
     /// (password reset, email verification, and digest deep links).
     /// Defaults to `http://localhost:8080`.
     pub base_url: String,
+    /// JSON array of `RTCIceServer` objects passed verbatim to the browser
+    /// `RTCPeerConnection` for 1:1 WebRTC calls. Defaults to a public STUN
+    /// server; override with `LETS_CHAT_ICE_SERVERS` to add a TURN server
+    /// for NAT traversal when peers cannot connect directly.
+    pub ice_servers: String,
 }
 
 impl AppState {

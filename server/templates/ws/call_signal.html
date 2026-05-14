@@ -1,0 +1,8 @@
+<div id="lc-call-bus" hx-swap-oob="beforeend">
+  <div data-lc-call-event
+       data-room-id="{{ room_id }}"
+       data-from-id="{{ from_user_id }}"
+       data-from-name="{{ from_name }}"
+       data-kind="{{ kind }}"{% if let Some(p) = payload %}
+       data-payload="{{ p }}"{% endif %}></div>
+</div>

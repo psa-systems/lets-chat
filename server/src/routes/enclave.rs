@@ -762,7 +762,12 @@ pub async fn post_kick(
 pub struct RoomForm {
     pub name: String,
     pub topic: Option<String>,
+    /// Visibility: "public" | "private".
     pub room_type: String,
+    /// Channel kind: "text" | "voice". Defaults to text for older form
+    /// posts that predate the voice/text split.
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 pub async fn post_create_room(
@@ -772,9 +777,16 @@ pub async fn post_create_room(
     axum::Form(form): axum::Form<RoomForm>,
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
+    // Visibility and channel kind are independent axes: a channel is public
+    // or private (`room_type`), and separately text or voice (`kind`).
     if !matches!(form.room_type.as_str(), "public" | "private") {
         return Err(AppError::BadRequest("invalid room_type".into()));
     }
+    let is_voice = match form.kind.as_deref() {
+        None | Some("text") => false,
+        Some("voice") => true,
+        Some(_) => return Err(AppError::BadRequest("invalid kind".into())),
+    };
     let name = form.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("name required".into()));
@@ -789,16 +801,29 @@ pub async fn post_create_room(
     } else {
         None
     };
-    let room_id = match db::chat::create_room(
-        &state.chat,
-        name,
-        form.topic.as_deref().filter(|s| !s.is_empty()),
-        &form.room_type,
-        invite_code.as_deref(),
-        Some(id),
-    )
-    .await
-    {
+    let topic = form.topic.as_deref().filter(|s| !s.is_empty());
+    let created = if is_voice {
+        db::chat::create_voice_room(
+            &state.chat,
+            name,
+            topic,
+            &form.room_type,
+            invite_code.as_deref(),
+            Some(id),
+        )
+        .await
+    } else {
+        db::chat::create_room(
+            &state.chat,
+            name,
+            topic,
+            &form.room_type,
+            invite_code.as_deref(),
+            Some(id),
+        )
+        .await
+    };
+    let room_id = match created {
         Ok(rid) => rid,
         Err(e) if is_unique_violation(&e) => {
             return Ok(Redirect::to(&format!(

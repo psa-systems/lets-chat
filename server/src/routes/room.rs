@@ -48,6 +48,48 @@ pub struct EditMessageForm {
     pub body: String,
 }
 
+/// Render the WebRTC voice-channel page for an enclave `voice` room. The
+/// initial participant list comes from the hub's live presence map; the
+/// browser mesh keeps it in sync from there.
+async fn get_voice_room(
+    state: &AppState,
+    user: &User,
+    room: &crate::models::Room,
+) -> Result<Response, AppError> {
+    let enclave_id = super::enclave_for_room(state, room.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let (sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(state, user, Some(enclave_id)).await?;
+    let mut participants = Vec::new();
+    for uid in state.hub.voice_room_users(room.id) {
+        let label = db::auth::find_user_by_id(&state.auth, &uid)
+            .await?
+            .map(|r| {
+                r.display_name
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or(r.username)
+            })
+            .unwrap_or_else(|| "(unknown)".to_string());
+        participants.push(crate::views::voice::VoiceParticipant {
+            user_id: uid,
+            label,
+        });
+    }
+    let page = crate::views::voice::VoicePage {
+        user,
+        room,
+        enclave_id,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        ice_servers: &state.ice_servers,
+        participants: &participants,
+    };
+    Ok(html(&page)?.into_response())
+}
+
 pub async fn get_room(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -60,6 +102,11 @@ pub async fn get_room(
     let is_admin = user.role == "admin";
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
+    }
+
+    // Voice channels render a WebRTC mesh page instead of a message list.
+    if room.is_voice {
+        return get_voice_room(&state, &user, &room).await;
     }
 
     // Capture the viewer's watermark BEFORE marking-as-read at the end of
@@ -185,6 +232,7 @@ pub async fn get_room(
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
+            is_system: m.is_system,
         });
     }
 
@@ -351,6 +399,7 @@ pub async fn post_message(
         edited_at: raw.edited_at,
         parent_id: raw.parent_id,
         quote_id: raw.quote_id,
+        is_system: raw.is_system,
     };
 
     let event = ChatEvent::NewMessage {
@@ -806,6 +855,7 @@ pub async fn patch_message(
         is_bookmarked: db::bookmarks::is_bookmarked(&state.chat, &user.id, m.id).await?,
         custom_emojis,
         quote_preview,
+        is_system: m.is_system,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -898,6 +948,7 @@ pub async fn get_thread_panel(
         is_bookmarked: bookmarked_ids.contains(&parent.id),
         custom_emojis: custom_emojis.clone(),
         quote_preview: parent_quote_preview,
+        is_system: parent.is_system,
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -939,6 +990,7 @@ pub async fn get_thread_panel(
             is_bookmarked: bookmarked_ids.contains(&r_id),
             custom_emojis: custom_emojis.clone(),
             quote_preview: None,
+            is_system: r.is_system,
         });
     }
 
@@ -1016,6 +1068,7 @@ pub async fn post_thread_reply(
         edited_at: raw.edited_at,
         parent_id: raw.parent_id,
         quote_id: raw.quote_id,
+        is_system: raw.is_system,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);

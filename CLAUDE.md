@@ -103,6 +103,7 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
 | `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for encrypting SMTP password in settings |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens |
+| `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for 1:1 WebRTC calls. Add a TURN entry for reliable NAT traversal. |
 
 ## Workspace Layout
 
