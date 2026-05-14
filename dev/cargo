@@ -13,8 +13,18 @@ GIT_HASH=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 GIT_VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "$GIT_HASH")
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+
+# The container starts as root so it can chown the named volumes to the host
+# user on first use. Docker initialises new named volumes with the image-path
+# ownership (root:root in rust:slim), which then blocks cargo from writing the
+# registry/target/rustup paths once we drop privileges. The chown loop is
+# idempotent: subsequent runs see the volumes already owned by the host user
+# and skip the recursive walk. After ownership is sorted we use setpriv to
+# exec cargo as the host user so Cargo.lock and any other files written into
+# the /work bind mount land with the right ownership on the host.
 docker run --rm --init \
-    --user "$(id -u):$(id -g)" \
     -v "$PWD:/work" \
     -w /work \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
@@ -24,8 +34,25 @@ docker run --rm --init \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     -e RUSTUP_HOME=/usr/local/rustup \
+    -e "HOST_UID=$HOST_UID" \
+    -e "HOST_GID=$HOST_GID" \
     -e "GIT_HASH=$GIT_HASH" \
     -e "GIT_VERSION=$GIT_VERSION" \
     -e "BUILD_DATE=$BUILD_DATE" \
     rust:1.88-slim-bookworm \
-    bash -c 'cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null; exec cargo "$@"' -- "$@"
+    bash -c '
+        set -euo pipefail
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target /usr/local/rustup; do
+            if [ "$(stat -c %u "$d")" != "$HOST_UID" ]; then
+                chown -R "$HOST_UID:$HOST_GID" "$d"
+            fi
+        done
+        # HOME defaults to /root (mode 700) when setpriv drops to a uid with no
+        # passwd entry. Point it at /tmp so libgit2 (invoked by cargo) does not
+        # hit permission-denied reading /root/.gitconfig when scanning the repo.
+        export HOME=/tmp
+        drop="setpriv --reuid=$HOST_UID --regid=$HOST_GID --clear-groups"
+        $drop env HOME=/tmp cargo fmt --version >/dev/null 2>&1 \
+            || $drop env HOME=/tmp rustup component add rustfmt clippy >/dev/null
+        exec $drop env HOME=/tmp cargo "$@"
+    ' -- "$@"
