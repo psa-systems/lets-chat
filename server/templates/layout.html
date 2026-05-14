@@ -327,4 +327,247 @@ document.body.addEventListener('click', function(e){
   });
 })();
 </script>
+<script>
+// Persistent-shell script: voice-message players. Each [data-lc-voice] node
+// rendered by partials/attachment.html is wired here - on initial page load
+// and again after every htmx swap (new messages arrive as WS OOB swaps, so
+// the node is not present when this script first runs). Idempotent: a wired
+// node is marked [data-lc-voice-ready] and skipped on re-scan.
+(function(){
+  var WAVE_BG = '#cbd5e1';     // slate-300, unplayed bars
+  var WAVE_FG = '#2563eb';     // blue-600, played bars
+  var current = null;          // the voice player currently playing, or null
+
+  // One shared AudioContext for every player on the page. Browsers cap the
+  // number of live AudioContexts (~6 in Chrome), so a per-player context
+  // would break once a few clips have been opened.
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var sharedCtx = null;
+  function audioContext(){
+    if (!sharedCtx && AC) sharedCtx = new AC();
+    return sharedCtx;
+  }
+
+  function fmtTime(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function parsePeaks(raw){
+    if (!raw) return [];
+    var out = [];
+    raw.split(',').forEach(function(t){
+      var v = parseFloat(t);
+      if (isFinite(v)) out.push(Math.max(0, Math.min(1, v)));
+    });
+    return out;
+  }
+
+  function initVoice(el){
+    if (el.hasAttribute('data-lc-voice-ready')) return;
+    el.setAttribute('data-lc-voice-ready', '');
+
+    var src = el.getAttribute('data-src');
+    var canvas = el.querySelector('.lc-voice-wave');
+    var playBtn = el.querySelector('.lc-voice-play');
+    var timeEl = el.querySelector('.lc-voice-time');
+    if (!src || !canvas || !playBtn || !timeEl) return;
+
+    // No client-supplied waveform (degraded row): draw a flat low bar set so
+    // the control still reads as an audio player.
+    var peaks = parsePeaks(el.getAttribute('data-waveform'));
+    if (peaks.length === 0) { for (var i = 0; i < 40; i++) peaks.push(0.15); }
+
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    var n = peaks.length;
+    var slot = W / n;
+    var barW = Math.max(1, slot * 0.6);
+
+    function draw(progress){
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < n; i++) {
+        var h = Math.max(2, peaks[i] * H);
+        var x = i * slot + (slot - barW) / 2;
+        var y = (H - h) / 2;
+        ctx.fillStyle = (i / n) < progress ? WAVE_FG : WAVE_BG;
+        ctx.fillRect(x, y, barW, h);
+      }
+    }
+    draw(0);
+
+    // Recording duration captured client-side at record time. Drives the idle
+    // time display before the clip has been decoded; once decoded, the exact
+    // buffer.duration takes over.
+    var storedDuration = parseFloat(el.getAttribute('data-duration'));
+    if (!isFinite(storedDuration) || storedDuration <= 0) storedDuration = 0;
+    if (storedDuration > 0) timeEl.textContent = fmtTime(storedDuration);
+
+    // Playback uses the Web Audio API rather than an <audio> element: the
+    // element's streaming decoder emits an audible click at the head of a
+    // MediaRecorder WebM/Opus clip. decodeAudioData decodes the whole buffer
+    // up front (the same clean decode ffmpeg performs) and an
+    // AudioBufferSourceNode plays the resulting PCM with no start glitch.
+    // Voice clips are small, so the one-shot full fetch + decode is cheap.
+    var buffer = null;       // decoded AudioBuffer, once loaded
+    var loadPromise = null;  // de-dupes concurrent loads
+    var node = null;         // live AudioBufferSourceNode while playing
+    var offset = 0;          // paused playback position, seconds
+    var startCtxTime = 0;    // audioContext().currentTime when `node` started
+    var playing = false;
+    var raf = 0;
+
+    function duration(){
+      return buffer ? buffer.duration : storedDuration;
+    }
+    function currentPos(){
+      var actx = audioContext();
+      var pos = (playing && actx) ? offset + (actx.currentTime - startCtxTime) : offset;
+      var d = duration();
+      return d > 0 ? Math.min(pos, d) : Math.max(0, pos);
+    }
+    function paint(){
+      var d = duration();
+      var pos = currentPos();
+      draw(d > 0 ? pos / d : 0);
+      timeEl.textContent = fmtTime(pos);
+    }
+    function frameLoop(){
+      paint();
+      if (playing) raf = requestAnimationFrame(frameLoop);
+    }
+    function clearNode(){
+      if (node) {
+        node.onended = null;  // so a manual stop does not run the end handler
+        try { node.stop(); } catch (e) {}
+        node = null;
+      }
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    }
+
+    function ensureBuffer(){
+      if (buffer) return Promise.resolve(buffer);
+      if (loadPromise) return loadPromise;
+      var ctx = audioContext();
+      if (!ctx) return Promise.reject(new Error('Web Audio unavailable'));
+      el.setAttribute('data-loading', '');
+      loadPromise = fetch(src, { credentials: 'same-origin' })
+        .then(function(r){ return r.arrayBuffer(); })
+        .then(function(ab){ return ctx.decodeAudioData(ab); })
+        .then(function(buf){
+          buffer = buf;
+          el.removeAttribute('data-loading');
+          return buf;
+        })
+        .catch(function(e){
+          el.removeAttribute('data-loading');
+          loadPromise = null;  // allow a retry on the next click
+          throw e;
+        });
+      return loadPromise;
+    }
+
+    // Exposed to the shared `current` slot so a newly started clip can pause
+    // whichever one was already playing.
+    var api = {
+      el: el,
+      pause: function(){
+        if (!playing) return;
+        offset = currentPos();
+        playing = false;
+        clearNode();
+        el.removeAttribute('data-playing');
+        paint();
+      },
+    };
+
+    // Synchronously (re)start playback from `pos` seconds. The buffer must
+    // already be decoded. Both play() and seek route through this so there is
+    // no async gap between updating the position and the node restarting - a
+    // gap let a stale animation frame repaint the old playhead.
+    function startFrom(pos){
+      var actx = audioContext();
+      if (!actx || !buffer) return;
+      if (current && current !== api) current.pause();
+      current = api;
+      if (actx.state === 'suspended') actx.resume();
+      clearNode();
+      // Clamp just inside the end so a click at the far edge of the waveform
+      // does not land exactly on buffer.duration (which would play nothing
+      // and immediately fire `ended`, snapping back to 0).
+      offset = Math.max(0, Math.min(pos, buffer.duration - 0.05));
+      node = actx.createBufferSource();
+      node.buffer = buffer;
+      node.connect(actx.destination);
+      node.onended = function(){
+        // Natural end only; manual stops null this handler in clearNode().
+        clearNode();
+        playing = false;
+        offset = 0;
+        el.removeAttribute('data-playing');
+        draw(0);
+        timeEl.textContent = '0:00';
+        if (current === api) current = null;
+      };
+      startCtxTime = actx.currentTime;
+      node.start(0, offset);
+      playing = true;
+      el.setAttribute('data-playing', '');
+      frameLoop();
+    }
+
+    function play(){
+      if (buffer) {
+        startFrom(offset);
+        return;
+      }
+      ensureBuffer()
+        .then(function(){ startFrom(offset); })
+        .catch(function(){ el.removeAttribute('data-loading'); });
+    }
+
+    playBtn.addEventListener('click', function(){
+      if (playing) api.pause();
+      else play();
+    });
+
+    // Click the waveform to seek.
+    canvas.addEventListener('click', function(e){
+      var rect = canvas.getBoundingClientRect();
+      var frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      function applySeek(){
+        var d = duration();
+        if (d <= 0) return;
+        var pos = frac * d;
+        if (playing) {
+          startFrom(pos);  // synchronous restart from the new position
+        } else {
+          offset = pos;
+          paint();
+        }
+      }
+      if (buffer) applySeek();
+      else ensureBuffer().then(applySeek).catch(function(){});
+    });
+  }
+
+  function scan(root){
+    var nodes = (root || document).querySelectorAll('[data-lc-voice]');
+    Array.prototype.forEach.call(nodes, initVoice);
+  }
+
+  function onReady(fn){
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  onReady(function(){ scan(document); });
+
+  // New messages and edits land via htmx swaps (HTTP and WS OOB both fire
+  // these on document.body). Re-scan the swapped subtree.
+  document.body.addEventListener('htmx:afterSettle', function(e){ scan(e.target); });
+  document.body.addEventListener('htmx:oobAfterSwap', function(e){ scan(e.target); });
+})();
+</script>
 {% endblock %}

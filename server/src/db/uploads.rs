@@ -1,7 +1,19 @@
+use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 
 use crate::models::Attachment;
+
+/// Wire + storage shape of a voice message's waveform: the recording duration
+/// in seconds (`d`) plus the normalized peak amplitudes (`p`). The upload
+/// route sanitizes a client-supplied blob into this shape; the read path
+/// parses it back out. `d` is `None` when the client could not determine the
+/// duration (the player then falls back to its own metadata probe).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaveformBlob {
+    pub d: Option<f32>,
+    pub p: Vec<f32>,
+}
 
 /// Raw row from `file_uploads`. The route layer maps this into `Attachment`
 /// (which is template-safe) and resolves access by joining to messages.
@@ -15,6 +27,10 @@ pub struct UploadRow {
     pub size_bytes: i64,
     pub storage_path: String,
     pub created_at: String,
+    /// Raw waveform JSON (a [`WaveformBlob`]) for voice messages, `None`
+    /// otherwise. Parsed into `Attachment::waveform` / `voice_duration` by
+    /// `parse_waveform`.
+    pub waveform: Option<String>,
 }
 
 fn map_upload(row: &sqlx::sqlite::SqliteRow) -> UploadRow {
@@ -27,6 +43,18 @@ fn map_upload(row: &sqlx::sqlite::SqliteRow) -> UploadRow {
         size_bytes: row.get("size_bytes"),
         storage_path: row.get("storage_path"),
         created_at: row.get("created_at"),
+        waveform: row.get("waveform"),
+    }
+}
+
+/// Parse the stored waveform JSON into `(peaks, duration_seconds)`. A
+/// malformed or absent value yields `(None, None)` so a bad row degrades to
+/// "audio attachment without a waveform" rather than failing the whole
+/// message render.
+fn parse_waveform(raw: Option<String>) -> (Option<Vec<f32>>, Option<f32>) {
+    match raw.and_then(|r| serde_json::from_str::<WaveformBlob>(&r).ok()) {
+        Some(blob) => (Some(blob.p), blob.d),
+        None => (None, None),
     }
 }
 
@@ -37,16 +65,19 @@ pub async fn insert_upload(
     mime_type: &str,
     size_bytes: i64,
     storage_path: &str,
+    waveform: Option<&str>,
 ) -> Result<i64, sqlx::Error> {
     let result = sqlx::query(
-        "INSERT INTO file_uploads (uploader_id, filename, mime_type, size_bytes, storage_path) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO file_uploads \
+         (uploader_id, filename, mime_type, size_bytes, storage_path, waveform) \
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(uploader_id)
     .bind(filename)
     .bind(mime_type)
     .bind(size_bytes)
     .bind(storage_path)
+    .bind(waveform)
     .execute(pool)
     .await?;
     Ok(result.last_insert_rowid())
@@ -81,7 +112,8 @@ pub async fn get_upload(
 ) -> Result<Option<(UploadRow, Option<i64>)>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
-                u.size_bytes, u.storage_path, u.created_at, m.room_id AS room_id \
+                u.size_bytes, u.storage_path, u.created_at, u.waveform, \
+                m.room_id AS room_id \
          FROM file_uploads u \
          LEFT JOIN messages m ON m.id = u.message_id \
          WHERE u.id = ?",
@@ -109,7 +141,7 @@ pub async fn attachments_for_messages(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT id, message_id, filename, mime_type, size_bytes \
+        "SELECT id, message_id, filename, mime_type, size_bytes, waveform \
          FROM file_uploads \
          WHERE message_id IN ({placeholders}) \
          ORDER BY id"
@@ -124,12 +156,15 @@ pub async fn attachments_for_messages(
         let id: i64 = r.get("id");
         let message_id: Option<i64> = r.get("message_id");
         let Some(mid) = message_id else { continue };
+        let (waveform, voice_duration) = parse_waveform(r.get("waveform"));
         let att = Attachment {
             id,
             filename: r.get("filename"),
             mime_type: r.get("mime_type"),
             size_bytes: r.get("size_bytes"),
             url: format!("/api/files/{id}"),
+            waveform,
+            voice_duration,
         };
         out.entry(mid).or_default().push(att);
     }
@@ -219,7 +254,7 @@ pub async fn count_orphans(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
 pub async fn list_image_uploads(pool: &SqlitePool) -> Result<Vec<UploadRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, uploader_id, message_id, filename, mime_type, size_bytes, \
-                storage_path, created_at \
+                storage_path, created_at, waveform \
          FROM file_uploads \
          WHERE mime_type LIKE 'image/%' \
          ORDER BY id",
