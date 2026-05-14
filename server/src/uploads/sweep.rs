@@ -28,8 +28,7 @@ pub async fn run_orphan_sweep(
     pool: &SqlitePool,
     threshold_hours: i64,
 ) -> Result<SweepStats, sqlx::Error> {
-    let candidates =
-        crate::db::uploads::select_orphans_older_than(pool, threshold_hours).await?;
+    let candidates = crate::db::uploads::select_orphans_older_than(pool, threshold_hours).await?;
     let mut stats = SweepStats::default();
     for (id, storage_path) in candidates {
         match sweep_one(pool, id, &storage_path).await {
@@ -53,11 +52,7 @@ pub async fn run_orphan_sweep(
     Ok(stats)
 }
 
-async fn sweep_one(
-    pool: &SqlitePool,
-    id: i64,
-    storage_path: &str,
-) -> Result<bool, sqlx::Error> {
+async fn sweep_one(pool: &SqlitePool, id: i64, storage_path: &str) -> Result<bool, sqlx::Error> {
     let uploads_dir = crate::db::uploads_dir();
     let original = uploads_dir.join(storage_path);
     let preview_name = crate::uploads::preview_storage_name(storage_path);
@@ -70,7 +65,7 @@ async fn sweep_one(
 
     let result: Result<bool, sqlx::Error> = async {
         let siblings =
-            crate::db::uploads::count_uploads_sharing_path(&mut *conn, storage_path, id).await?;
+            crate::db::uploads::count_uploads_sharing_path(&mut conn, storage_path, id).await?;
         let mut file_removed = false;
         if siblings == 0 {
             // File delete is inside the transaction, before the row delete,
@@ -82,7 +77,7 @@ async fn sweep_one(
             remove_if_exists(&preview).await?;
             file_removed = true;
         }
-        crate::db::uploads::delete_upload_row(&mut *conn, id).await?;
+        crate::db::uploads::delete_upload_row(&mut conn, id).await?;
         Ok(file_removed)
     }
     .await;

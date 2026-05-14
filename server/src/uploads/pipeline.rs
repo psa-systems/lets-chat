@@ -12,8 +12,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
 use image::{
-    AnimationDecoder, DynamicImage, ExtendedColorType, Frame, ImageEncoder, ImageError,
-    ImageReader,
+    AnimationDecoder, DynamicImage, ExtendedColorType, Frame, ImageEncoder, ImageError, ImageReader,
 };
 
 const PREVIEW_MAX_DIM: u32 = 360;
@@ -143,12 +142,9 @@ fn process_gif(tmp_path: &Path) -> Result<ProcessedImage, PipelineError> {
 /// files without re-encoding the (already-stripped) original. For animated
 /// GIFs this returns a single-frame static preview, matching the upload-time
 /// behaviour for new uploads.
-pub fn preview_from_path(
-    path: &std::path::Path,
-    mime: &str,
-) -> Result<Vec<u8>, PipelineError> {
-    let format = Format::from_mime(mime)
-        .ok_or_else(|| PipelineError::UnsupportedMime(mime.to_string()))?;
+pub fn preview_from_path(path: &std::path::Path, mime: &str) -> Result<Vec<u8>, PipelineError> {
+    let format =
+        Format::from_mime(mime).ok_or_else(|| PipelineError::UnsupportedMime(mime.to_string()))?;
     let decoded = ImageReader::open(path)?
         .with_guessed_format()?
         .decode()
