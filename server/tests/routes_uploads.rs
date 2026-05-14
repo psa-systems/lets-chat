@@ -127,6 +127,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0019_bookmarks.sql"),
             include_str!("../migrations/chat/0020_quote_reply.sql"),
             include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
+            include_str!("../migrations/chat/0022_voice_messages.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -514,4 +515,102 @@ async fn send_message_with_attachment_renders_inline_image() {
         text.contains("<img src="),
         "rendered HTML should include an <img> tag for the image"
     );
+}
+
+// ── Voice messages ───────────────────────────────────────────────────────────
+
+/// Minimal Ogg container: `infer` recognises a file as `audio/ogg` from the
+/// 4-byte "OggS" magic alone, so this is enough to exercise the voice-upload
+/// path without embedding a real Opus stream.
+const TINY_OGG: &[u8] = b"OggS\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+
+/// Build a multipart body carrying `kind=voice`, a `waveform` JSON field, and
+/// the `file` field - in the order the upload handler expects.
+fn multipart_voice_body(waveform: &str, filename: &str, bytes: &[u8]) -> (String, Vec<u8>) {
+    let boundary = "----lc-test-boundary";
+    let mut body: Vec<u8> = Vec::new();
+    for (name, value) in [("kind", "voice"), ("waveform", waveform)] {
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes(),
+        );
+        body.extend_from_slice(value.as_bytes());
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    body.extend_from_slice(
+        format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+            .as_bytes(),
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+async fn post_voice(
+    app: Router,
+    session: &str,
+    waveform: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> (StatusCode, String) {
+    let (ctype, body) = multipart_voice_body(waveform, filename, bytes);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/upload")
+        .header(header::CONTENT_TYPE, ctype)
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from(body))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[tokio::test]
+async fn voice_upload_accepts_audio_and_serves_canonical_mime() {
+    let (app, sess, _uid) = app_with_user("voice-alice").await;
+    let (status, body) = post_voice(
+        app.clone(),
+        &sess,
+        r#"{"d":2.0,"p":[0.1,0.9,0.5]}"#,
+        "clip.ogg",
+        TINY_OGG,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let id = v["file_id"].as_i64().unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/files/{id}"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    // The sniffed container is canonicalized to an audio/* MIME on store.
+    assert_eq!(
+        resp.headers().get(header::CONTENT_TYPE).unwrap(),
+        "audio/ogg"
+    );
+}
+
+#[tokio::test]
+async fn voice_upload_rejects_non_media_file() {
+    let (app, sess, _uid) = app_with_user("voice-bob").await;
+    // A ZIP flagged as kind=voice is not a recognised audio container.
+    let (status, _body) = post_voice(app, &sess, "[0.5]", "decoy.ogg", TINY_ZIP).await;
+    assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+}
+
+#[tokio::test]
+async fn voice_upload_tolerates_missing_waveform() {
+    let (app, sess, _uid) = app_with_user("voice-carol").await;
+    // An empty/garbage waveform must not fail the upload - it just stores NULL.
+    let (status, body) = post_voice(app, &sess, "", "clip.ogg", TINY_OGG).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
 }

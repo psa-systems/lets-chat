@@ -57,6 +57,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0019_bookmarks.sql"),
             include_str!("../migrations/chat/0020_quote_reply.sql"),
             include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
+            include_str!("../migrations/chat/0022_voice_messages.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
@@ -138,6 +139,7 @@ async fn purge_orphans_removes_stale_row() {
         "image/png",
         10,
         "admin-purge-test.png",
+        None,
     )
     .await
     .unwrap();
@@ -173,7 +175,7 @@ async fn regenerate_thumbnails_creates_missing_preview() {
         "preconditions: preview must be absent"
     );
 
-    db::uploads::insert_upload(&chat, "user-x", "f.png", "image/png", 1234, storage)
+    db::uploads::insert_upload(&chat, "user-x", "f.png", "image/png", 1234, storage, None)
         .await
         .unwrap();
 

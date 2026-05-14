@@ -182,3 +182,61 @@ html, body {
 .lc-quote-bar-clear:hover {
     color: #1e293b;
 }
+
+/* Voice-message player (partials/attachment.html). Wired by the voice IIFE
+   in layout.html. */
+.lc-voice {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+}
+.lc-voice-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    background: #2563eb;
+    color: #fff;
+    flex: none;
+}
+.lc-voice-play:hover {
+    background: #1d4ed8;
+}
+/* Brief buffering state between the play click and canplaythrough. */
+.lc-voice[data-loading] .lc-voice-play {
+    opacity: 0.5;
+    cursor: progress;
+}
+.lc-voice-play svg {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+/* Play / pause icon swap is driven by the [data-playing] attribute the IIFE
+   toggles on the container. */
+.lc-voice-icon-pause {
+    display: none;
+}
+.lc-voice[data-playing] .lc-voice-icon-play {
+    display: none;
+}
+.lc-voice[data-playing] .lc-voice-icon-pause {
+    display: inline;
+}
+.lc-voice-wave {
+    width: 320px;
+    max-width: 50vw;
+    height: 40px;
+    cursor: pointer;
+}
+.lc-voice-time {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+    flex: none;
+}
