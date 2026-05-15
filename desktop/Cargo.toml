@@ -7,9 +7,21 @@ edition.workspace = true
 name = "lets-chat-desktop"
 path = "src/main.rs"
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
-tao = "0.30"
-wry = "0.46"
+# Tauri 2 replaced the previous Tao+Wry pair. Same system webview (WebKit2GTK
+# / WebView2 / WKWebView) under the hood, but with an IPC bridge, a
+# permission/capability allow-list, native plugins, and a bundler producing
+# .dmg / .msi / .AppImage / .deb plus Android (.apk/.aab) and iOS (.ipa).
+# The migration is scoped to the framework swap; mobile targets, plugins,
+# system tray, and OS-native notifications land in follow-ups.
+tauri = { version = "2", features = [] }
+# Bring focus back to the existing window if the binary is launched while
+# already running. Cheap to wire up now; saves a "second window appeared"
+# bug report later.
+tauri-plugin-single-instance = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Default features ("tls") give us rustls + webpki-roots so HTTPS works on

@@ -198,6 +198,16 @@ Cargo.lock
 
 # End of https://www.toptal.com/developers/gitignore/api/rust
 
+################################################################################
+# Tauri (desktop crate)
+################################################################################
+
+# tauri-build emits ACL/capability schemas under <crate>/gen/ at compile
+# time. The contents are derived from tauri.conf.json + capabilities/*.json
+# and the installed plugin versions, so they regenerate on every build and
+# should not be checked in.
+desktop/gen/
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/vim
 # Edit at https://www.toptal.com/developers/gitignore?templates=vim

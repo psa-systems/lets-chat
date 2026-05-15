@@ -28,6 +28,11 @@ fn main() {
     println!("cargo:rerun-if-changed=../.git/HEAD");
     println!("cargo:rerun-if-changed=../.git/refs");
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Tauri 2 build step: generates the embedded ACL/capability bundle that
+    // `tauri::generate_context!()` consumes at compile time. Must run after
+    // our env-var injection so cargo sees a single build script success.
+    tauri_build::build();
 }
 
 fn resolve(env_key: &str, git_args: &[&str]) -> String {
