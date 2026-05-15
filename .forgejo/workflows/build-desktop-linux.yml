@@ -28,13 +28,12 @@ jobs:
       packages: write
     env:
       # Publish to the shared a8n-tools private org Generic Packages
-      # registry, matching every other repo in ~/projects/a8n-run/
-      # (see eg. da-os/.forgejo/workflows/build-linux.yml). Previously
-      # this workflow only uploaded the binary as a workflow-run
-      # artifact, which is invisible to anything outside the runs UI -
-      # in particular to the desktop self-updater, which reads from
-      # /api/packages/{owner}/generic/lets-chat/{version}/{filename}.
-      FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+      # registry, matching every other repo in ~/projects/a8n-run/.
+      # FORGEJO_TOKEN lives at step-env (not job-env) below to match the
+      # yotun pattern - declaring it here returned an empty value inside
+      # the nu step, which produced a malformed `Authorization: token `
+      # header and a 401 from the Packages endpoint. PACKAGE_OWNER and
+      # PACKAGE_NAME survive at job-env fine.
       PACKAGE_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
       PACKAGE_NAME: lets-chat
 
@@ -97,6 +96,8 @@ jobs:
 
       - name: Upload binary to Generic Packages
         shell: nu {0}
+        env:
+          FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
         run: |
           let version = "${{ steps.get-version.outputs.version }}"
           # Stable filename so the desktop self-updater's manifest can hard-code
