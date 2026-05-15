@@ -19,7 +19,7 @@ pub async fn get_avatar(
         // grid and DM call overlay, which can't branch on avatar presence).
         return Ok(default_avatar(&user.username));
     };
-    let path = db::avatars_dir().join(format!("{}.{}", user_id, ext));
+    let path = db::avatars_dir().join(format!("{user_id}.{ext}"));
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;

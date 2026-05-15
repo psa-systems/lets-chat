@@ -64,9 +64,9 @@ async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool 
     // of immediately returning SQLITE_BUSY. Without these the auth pool
     // hits "database is locked" any time activity-touch, session
     // last-seen, and a normal write collide in the same instant.
-    let url = format!("sqlite:{}/{}.db", dir, name);
+    let url = format!("sqlite:{dir}/{name}.db");
     let opts = SqliteConnectOptions::from_str(&url)
-        .unwrap_or_else(|e| panic!("invalid {} db url: {}", name, e))
+        .unwrap_or_else(|e| panic!("invalid {name} db url: {e}"))
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
@@ -82,11 +82,11 @@ async fn init_pool(name: &str, migrator: sqlx::migrate::Migrator) -> SqlitePool 
         .test_before_acquire(false)
         .connect_with(opts)
         .await
-        .unwrap_or_else(|e| panic!("Failed to connect to {} DB: {}", name, e));
+        .unwrap_or_else(|e| panic!("Failed to connect to {name} DB: {e}"));
     migrator
         .run(&pool)
         .await
-        .unwrap_or_else(|e| panic!("Failed to run {} migrations: {}", name, e));
+        .unwrap_or_else(|e| panic!("Failed to run {name} migrations: {e}"));
     pool
 }
 
