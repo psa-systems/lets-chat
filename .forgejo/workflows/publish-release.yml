@@ -126,31 +126,44 @@ jobs:
         shell: nu {0}
         run: |
           let version = "${{ steps.version.outputs.version }}"
-          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          # HTTP Basic auth with the package owner as the username is the
-          # form Forgejo's Generic Packages API on dev.a8n.run actually
-          # accepts (matches the `docker login --username $OWNER ...`
-          # in build-oci-image.yml and the curl form used by
-          # eform/.forgejo/workflows/build-oci-image.yml). The
-          # `Authorization: token ...` bearer header that da-os uses
-          # returns 401 against this Forgejo instance's Packages
-          # endpoint.
-          let userpass = $"($env.PACKAGE_OWNER):($env.FORGEJO_TOKEN)"
+          let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
+          let server = ($env.GITHUB_SERVER_URL | url parse)
           let uploads = [
-              { src: "artifacts/lets-chat-desktop-linux-x86_64",       dest: $"($version)/lets-chat-desktop-linux-x86_64" },
-              { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: $"($version)/lets-chat-desktop-windows-x86_64.exe" },
-              { src: "artifacts/latest.json",                          dest: "latest/latest.json" },
+              { src: "artifacts/lets-chat-desktop-linux-x86_64",       dest: [$version, "lets-chat-desktop-linux-x86_64"] }
+              { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: [$version, "lets-chat-desktop-windows-x86_64.exe"] }
+              { src: "artifacts/latest.json",                          dest: ["latest", "latest.json"] }
           ]
           for entry in $uploads {
-              let url = $"($base)/($entry.dest)"
-              # Best-effort DELETE so re-runs overwrite (Generic Packages
-              # rejects duplicate paths on PUT). A 404 is fine.
-              # --fail-with-body on the PUT surfaces the response body if
-              # Forgejo rejects the upload.
-              print $"DELETE ($url)"
-              ^curl --silent --show-error --user $userpass --request DELETE $url
-              print $"PUT ($url)"
-              ^curl --silent --show-error --fail-with-body --user $userpass --upload-file $entry.src $url
+              let url = (
+                  $server
+                  | update path ([
+                      "api" "packages" $env.PACKAGE_OWNER
+                      "generic" $env.PACKAGE_NAME
+                  ] | append $entry.dest | str join "/")
+                  | url join
+              )
+              # Generic Packages files are immutable, so PUTting the same
+              # path twice returns 409. Delete any existing copy first:
+              # 204 means it was removed, 404 means nothing was there.
+              # Any other status fails the step.
+              print $"Deleting existing ($url) if present"
+              let delete_status = (
+                  http delete --full --allow-errors --headers $auth $url | get status
+              )
+              if $delete_status not-in [204 404] {
+                  print --stderr $"Unexpected DELETE status: ($delete_status)"
+                  exit 1
+              }
+              print $"DELETE returned ($delete_status)"
+
+              print $"Uploading ($entry.src) to ($url)"
+              (
+                  http put
+                      --content-type application/octet-stream
+                      --headers $auth
+                      $url
+                      (open --raw $entry.src)
+              )
           }
 
       - name: Print release summary
