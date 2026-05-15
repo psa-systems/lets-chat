@@ -487,34 +487,65 @@
       alert('Screen sharing is not supported by your browser.');
       return;
     }
+    if (!pc) return;
     navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
       var dtrack = dstream.getVideoTracks()[0];
       if (!dtrack) return;
-      if (phase === 'idle' || !localStream) { try { dtrack.stop(); } catch (e) {} return; }
-      // Remember whether the camera was on so endScreenShare can restore it.
+      if (phase === 'idle' || !localStream || !pc) {
+        try { dtrack.stop(); } catch (e) {}
+        return;
+      }
+      // Hint the encoder that this is mostly static content with sharp edges.
+      // Browsers that honor this bias toward higher resolution / lower frame
+      // rate, which is what screen content actually wants.
+      try { dtrack.contentHint = 'detail'; } catch (e) {}
       var camera = localStream.getVideoTracks()[0];
       restoreCameraAfterShare = !!camera;
-      // Swap the outgoing video slot to the screen track. replaceTrack avoids
-      // a renegotiation when a video sender already exists; addTrack triggers
-      // onnegotiationneeded for the audio-only case.
-      var sender = findVideoSender();
-      if (sender) {
-        sender.replaceTrack(dtrack).catch(function (e) { console.warn('call: replaceTrack failed', e); });
+      // Finish the swap once the outgoing track is in place on the peer
+      // connection. Defers stop()ing the camera until then so the sender does
+      // not race with a half-completed replaceTrack.
+      function finalize() {
         if (camera) {
-          camera.stop();
-          localStream.removeTrack(camera);
+          try { camera.stop(); } catch (e) {}
+          try { localStream.removeTrack(camera); } catch (e) {}
         }
-      } else {
-        if (pc) pc.addTrack(dtrack, localStream);
+        localStream.addTrack(dtrack);
+        screenTrack = dtrack;
+        // User clicks "Stop sharing" in the browser chrome -> end the share.
+        dtrack.onended = function () { endScreenShare(); };
+        refreshLocalVideo();
+        setCameraBtn();
+        setScreenBtn();
       }
-      // Local preview shows the share so the user sees what the peer sees.
-      localStream.addTrack(dtrack);
-      screenTrack = dtrack;
-      // User clicks "Stop sharing" in the browser chrome -> end the share.
-      dtrack.onended = function () { endScreenShare(); };
-      refreshLocalVideo();
-      setCameraBtn();
-      setScreenBtn();
+      // Fallback path: drop the camera sender entirely and addTrack the screen
+      // track, which forces onnegotiationneeded -> new SDP -> peer receives
+      // the new track. Used both when there is no existing video sender and
+      // when replaceTrack rejected (codec/parameter mismatch).
+      function addTrackAndFinalize(existingSender) {
+        if (existingSender) {
+          try { pc.removeTrack(existingSender); } catch (e) {}
+        }
+        try { pc.addTrack(dtrack, localStream); }
+        catch (e) {
+          console.warn('call: addTrack(screen) failed', e);
+          try { dtrack.stop(); } catch (ee) {}
+          return;
+        }
+        finalize();
+      }
+      var sender = findVideoSender();
+      if (sender && sender.track) {
+        // Fast path: keep the same transceiver, no renegotiation. If the
+        // browser rejects the swap (rare, but reported for getDisplayMedia
+        // tracks whose codec/parameters do not match the camera's), fall
+        // back to a fresh addTrack so the peer actually receives the share.
+        sender.replaceTrack(dtrack).then(finalize).catch(function (e) {
+          console.warn('call: replaceTrack failed, falling back to addTrack', e);
+          addTrackAndFinalize(sender);
+        });
+      } else {
+        addTrackAndFinalize(sender);
+      }
     }).catch(function (e) {
       // User-cancel from the picker lands here too; nothing to undo.
       if (e && e.name !== 'NotAllowedError') console.warn('call: getDisplayMedia failed', e);
