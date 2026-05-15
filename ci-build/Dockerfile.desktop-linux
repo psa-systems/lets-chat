@@ -2,11 +2,11 @@
 
 # Build the lets-chat-desktop binary for Linux x86_64.
 #
-# The desktop crate is a Tao + Wry webview wrapper that links against system
-# GTK / WebKit2GTK / Soup libraries, so the build image installs those plus
-# the usual native build deps. The runtime artifact is the single binary at
-# /build/target/release/lets-chat-desktop, which the CI workflow extracts
-# via `docker create` + `docker cp`.
+# The desktop crate is a Tauri 2 webview wrapper (Wry under the hood) that
+# links against system GTK 3 / WebKit2GTK 4.1 / libsoup 3 libraries, so the
+# build image installs those plus the usual native build deps. The runtime
+# artifact is the single binary at /build/target/release/lets-chat-desktop,
+# which the CI workflow extracts via `docker create` + `docker cp`.
 
 FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS builder
 ARG GIT_HASH=unknown
