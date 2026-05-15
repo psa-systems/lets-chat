@@ -105,29 +105,21 @@ jobs:
           let src = $"artifacts/lets-chat-desktop-($version)-linux-x86_64"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           let url = $"($base)/($version)/($file)"
-          let auth = $"Authorization: token ($env.FORGEJO_TOKEN)"
-          # Best-effort DELETE so re-runs of the same version overwrite cleanly
-          # (Forgejo Generic Packages rejects duplicate paths on PUT). A 404
-          # is fine; anything else still lets the PUT below decide.
+          # HTTP Basic auth with the package owner as the username is the
+          # form Forgejo's Generic Packages API on dev.a8n.run actually
+          # accepts (matches the `docker login --username $OWNER ...`
+          # call in build-oci-image.yml and the curl form used by
+          # eform/.forgejo/workflows/build-oci-image.yml). The
+          # `Authorization: token ...` bearer header that da-os uses
+          # returns 401 against this Forgejo instance's Packages
+          # endpoint.
+          let userpass = $"($env.PACKAGE_OWNER):($env.FORGEJO_TOKEN)"
+          # Best-effort DELETE so re-runs of the same version overwrite
+          # cleanly (Generic Packages rejects duplicate paths on PUT);
+          # a 404 is fine. --fail-with-body on the PUT surfaces the
+          # response body if Forgejo rejects the upload.
           print $"DELETE ($url)"
-          (
-              ^curl
-                  --silent
-                  --show-error
-                  --output /dev/null
-                  --write-out "%{http_code}\n"
-                  --header $auth
-                  --request DELETE
-                  $url
-          )
+          ^curl --silent --show-error --user $userpass --request DELETE $url
           print $"PUT ($url)"
-          (
-              ^curl
-                  --silent
-                  --show-error
-                  --fail
-                  --header $auth
-                  --upload-file $src
-                  $url
-          )
+          ^curl --silent --show-error --fail-with-body --user $userpass --upload-file $src $url
           print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
