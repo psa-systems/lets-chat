@@ -10,3 +10,13 @@ path = "src/main.rs"
 [dependencies]
 tao = "0.30"
 wry = "0.46"
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Default features ("tls") give us rustls + webpki-roots so HTTPS works on
+# both Linux and the windows-gnu cross-compile without dragging in system
+# OpenSSL / Schannel build dependencies.
+ureq = { version = "2", features = ["json"] }
+# Atomic in-place replace of the currently running executable. Handles the
+# Windows-cant-delete-running-exe restriction by renaming the live binary
+# aside before writing the new one.
+self-replace = "1"
