@@ -133,6 +133,7 @@ async fn setup_app_with_users_and_client(
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
     TestApp {
@@ -520,6 +521,8 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
 

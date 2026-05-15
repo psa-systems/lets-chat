@@ -178,6 +178,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -271,6 +272,8 @@ async fn upload_anonymous_redirects_to_login() {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
 
@@ -367,6 +370,8 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
     (app, sess_a, id_a, sess_b, id_b)

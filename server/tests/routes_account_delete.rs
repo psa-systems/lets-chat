@@ -90,6 +90,7 @@ async fn app_with_user() -> TestApp {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     let app = routes::build_router(state);
     TestApp {

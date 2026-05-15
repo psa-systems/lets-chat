@@ -92,6 +92,29 @@ async fn main() {
         .unwrap_or_else(|| r#"[{"urls":"stun:stun.l.google.com:19302"}]"#.to_string());
 
     let bg = lets_chat::bg::spawn(auth_pool.clone());
+
+    // SSO providers. Empty container when LETS_CHAT_SSO_ISSUER is
+    // unset; otherwise one provider under the "default" slug. The
+    // loader returns Result so a half-set env (issuer present, secret
+    // missing) aborts startup rather than silently disabling SSO.
+    let sso = match lets_chat::sso::SsoConfig::from_env() {
+        Ok(Some(cfg)) => {
+            tracing::info!(
+                issuer = %cfg.issuer,
+                autoprovision = cfg.autoprovision,
+                "SSO configured"
+            );
+            let mut p = lets_chat::sso::SsoProviders::default();
+            p.register(lets_chat::sso::DEFAULT_PROVIDER_ID, cfg);
+            p
+        }
+        Ok(None) => {
+            tracing::info!("SSO not configured; password-only auth");
+            lets_chat::sso::SsoProviders::default()
+        }
+        Err(e) => panic!("SSO config error: {e}"),
+    };
+
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -107,6 +130,7 @@ async fn main() {
         mailer,
         base_url,
         ice_servers,
+        sso,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

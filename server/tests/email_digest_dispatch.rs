@@ -120,6 +120,7 @@ async fn build_harness() -> Harness {
         mailer: None,
         base_url: "https://chat.example.com".into(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     Harness {
         state,

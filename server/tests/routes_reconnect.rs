@@ -114,6 +114,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     (routes::build_router(state), session)
 }

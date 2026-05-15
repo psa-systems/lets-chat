@@ -7,6 +7,7 @@ use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
 use crate::push::PushClient;
+use crate::sso::SsoProviders;
 use crate::ws::hub::Hub;
 
 #[derive(Clone)]
@@ -49,6 +50,12 @@ pub struct AppState {
     /// server; override with `LETS_CHAT_ICE_SERVERS` to add a TURN server
     /// for NAT traversal when peers cannot connect directly.
     pub ice_servers: String,
+    /// Configured SSO providers. Empty when SSO is not configured for
+    /// this deployment (the existing username/password flow is the
+    /// only auth path). v1 holds at most one entry under the "default"
+    /// provider id; multi-IdP (BYO-SSO) extends this without a
+    /// schema/state change. See `crate::sso`.
+    pub sso: SsoProviders,
 }
 
 impl AppState {
@@ -66,5 +73,10 @@ impl AppState {
     /// email verification, and email digest are off-limits without one.
     pub fn mail_available(&self) -> bool {
         self.mailer.is_some()
+    }
+    /// True when at least one SSO provider is configured. Login page
+    /// renders the "Sign in with SSO" button conditionally on this.
+    pub fn sso_available(&self) -> bool {
+        !self.sso.is_empty()
     }
 }
