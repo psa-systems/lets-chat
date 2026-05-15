@@ -5,11 +5,11 @@
       var status = {{ status_json|safe }};
       var custom = {{ custom_status_json|safe }};
       var colorClass = status === 'dnd' ? 'bg-red-500'
-        : status === 'idle' ? 'bg-yellow-400'
+        : (status === 'idle' || status === 'away') ? 'bg-yellow-400'
         : status === 'offline' ? 'bg-slate-400'
         : 'bg-green-500';
       var label = status === 'dnd' ? 'Do not disturb'
-        : status === 'idle' ? 'Away'
+        : (status === 'idle' || status === 'away') ? 'Away'
         : status === 'offline' ? 'Offline'
         : 'Online';
       var safeUid = uid.replace(/"/g, '\\"');
