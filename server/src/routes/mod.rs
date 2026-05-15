@@ -611,6 +611,10 @@ pub fn build_router(state: AppState) -> Router {
             get(auth::get_register).post(auth::post_register),
         )
         .route(
+            "/register/2fa",
+            get(two_factor::get_register_2fa).post(two_factor::post_register_2fa),
+        )
+        .route(
             "/forgot",
             get(password_reset::get_forgot).post(password_reset::post_forgot),
         )
