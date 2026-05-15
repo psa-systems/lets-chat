@@ -76,7 +76,7 @@ async fn reconcile_inserts_added_and_removes_dropped() {
         msg_id,
         room_id,
         "author",
-        &[alice.clone()],
+        std::slice::from_ref(&alice),
     )
     .await
     .unwrap();
@@ -89,7 +89,7 @@ async fn reconcile_inserts_added_and_removes_dropped() {
         msg_id,
         room_id,
         "author",
-        &[bob.clone()],
+        std::slice::from_ref(&bob),
     )
     .await
     .unwrap();
@@ -123,9 +123,15 @@ async fn watermark_advances_read_state() {
         user_id: "alice-id".into(),
         username: "alice".into(),
     };
-    lets_chat::db::mentions::reconcile_mentions(&pool, m1, room_id, "author", &[alice.clone()])
-        .await
-        .unwrap();
+    lets_chat::db::mentions::reconcile_mentions(
+        &pool,
+        m1,
+        room_id,
+        "author",
+        std::slice::from_ref(&alice),
+    )
+    .await
+    .unwrap();
     lets_chat::db::mentions::reconcile_mentions(&pool, m2, room_id, "author", &[alice])
         .await
         .unwrap();
