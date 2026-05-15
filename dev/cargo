@@ -39,7 +39,7 @@ docker run --rm --init \
     -e "GIT_HASH=$GIT_HASH" \
     -e "GIT_VERSION=$GIT_VERSION" \
     -e "BUILD_DATE=$BUILD_DATE" \
-    rust:1.88-slim-bookworm \
+    rust:1.94-slim-bookworm \
     bash -c '
         set -euo pipefail
         for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target /usr/local/rustup; do
