@@ -1,0 +1,70 @@
+---
+# `just dev-desktop` - run lets-chat-desktop from source via `cargo run`
+# inside the shared org builder image, with X11/Wayland forwarding so the
+# Tao+Wry window renders on the developer's desktop. Talks to the local
+# server at http://localhost:18080 (assumes `just dev-web-local` is up in
+# another terminal).
+#
+# network_mode: host so the Wry webview can reach localhost:18080 without
+# any port-publish gymnastics, and so X11 over TCP just works.
+# ipc: host gives the webview access to the host's shared-memory segments
+# (XSHM); without it WebKit logs noise and falls back to slower paths.
+#
+# X11/Wayland forwarding via env vars + bind-mounted sockets. The default
+# expansions assume a typical Linux desktop (uid 1000, DISPLAY=:0,
+# /run/user/1000 for Wayland); users on non-standard setups can override
+# any of these via their shell environment before `just dev-desktop`.
+#
+# Source is bind-mounted at /work; the same cargo registry / git / target
+# volumes used by compose.dev-web-local.yml are shared here so a build
+# triggered by either compose file picks up the other's compiled deps.
+name: dev-desktop-${USER}
+
+services:
+
+  desktop:
+    image: ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie
+    container_name: dev-lets-chat-desktop-${USER}
+    init: true
+    restart: "no"
+    network_mode: host
+    ipc: host
+    environment:
+      CARGO_HOME: /usr/local/cargo
+      CARGO_TARGET_DIR: /cargo-target
+      LETS_CHAT_SERVER_URL: http://localhost:18080
+      DISPLAY: ${DISPLAY:-:0}
+      WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-}
+      XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR:-/run/user/1000}
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+      GIT_HASH: ${GIT_HASH:-unknown}
+      GIT_VERSION: ${GIT_VERSION:-unknown}
+      BUILD_DATE: ${BUILD_DATE:-unknown}
+    volumes:
+      - .:/work
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target:/cargo-target
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}:${XDG_RUNTIME_DIR:-/run/user/1000}:rw
+    working_dir: /work
+    # $$ escapes compose's interpolation pass; see compose.dev-web-local.yml.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do
+          if [ "$$(stat -c %u "$$d")" != "$$HOST_UID" ]; then
+            chown -R "$$HOST_UID:$$HOST_GID" "$$d"
+          fi
+        done
+        export HOME=/tmp
+        exec setpriv --reuid=$$HOST_UID --regid=$$HOST_GID --clear-groups \
+          cargo run -p lets-chat-desktop
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target:

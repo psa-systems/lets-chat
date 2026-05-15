@@ -1,0 +1,55 @@
+---
+# `just dev-web-local-saas` - same as compose.dev-web-local.yml but builds
+# with `--no-default-features --features saas`. Kept as a separate file so
+# the just recipe name maps 1:1 to the compose file name and the running
+# project stays distinct from the standalone variant. See
+# compose.dev-web-local.yml for the entrypoint and volume rationale.
+name: dev-web-local-saas-${USER}
+
+services:
+
+  app:
+    image: ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie
+    container_name: dev-lets-chat-web-local-saas-${USER}
+    init: true
+    restart: "no"
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      CARGO_HOME: /usr/local/cargo
+      CARGO_TARGET_DIR: /cargo-target
+      LETS_CHAT_DATA_DIR: /data
+      BIND_ADDR: 0.0.0.0:8080
+      RUST_LOG: lets_chat=debug
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+      GIT_HASH: ${GIT_HASH:-unknown}
+      GIT_VERSION: ${GIT_VERSION:-unknown}
+      BUILD_DATE: ${BUILD_DATE:-unknown}
+    volumes:
+      - .:/work
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target:/cargo-target
+      - data:/data
+    working_dir: /work
+    # $$ escapes compose's interpolation pass; see compose.dev-web-local.yml.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target /data; do
+          if [ "$$(stat -c %u "$$d")" != "$$HOST_UID" ]; then
+            chown -R "$$HOST_UID:$$HOST_GID" "$$d"
+          fi
+        done
+        export HOME=/tmp
+        exec setpriv --reuid=$$HOST_UID --regid=$$HOST_GID --clear-groups \
+          cargo run -p lets-chat-server --no-default-features --features saas
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target:
+  data:
