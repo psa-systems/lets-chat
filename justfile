@@ -97,47 +97,89 @@ build-docker: build-css
 build-docker-saas: build-css
     docker buildx build --tag lets-chat-saas:local --build-arg BUILD_MODE=saas {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
-# Start development server (web, standalone) via Docker with Traefik
+# Build args common to every compose recipe so the server logs the right
+# git metadata in its banner. Computed on the host because the builder
+# image has no git history of its repo to introspect.
+compose_env := 'GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
+
+# HOST_UID / HOST_GID for compose recipes that run `cargo run` from source
+# (dev-web-local{,-saas}, dev-desktop). The container starts as root long
+# enough to chown the named volumes, then drops to the host user via
+# setpriv so files written into the /work bind mount land owned by the
+# developer on the host.
+compose_uid := 'HOST_UID="$(id -u)" HOST_GID="$(id -g)"'
+
+# Start development server (web, standalone) via Docker Compose with Traefik
 [group('dev')]
 dev-web:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=standalone GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
+    {{ compose_env }} docker compose --file compose.dev-web.yml up --build
 
-# Start development server (web, saas) via Docker with Traefik
+# Stop dev-web container
+[group('dev')]
+dev-web-down:
+    docker compose --file compose.dev-web.yml down
+
+# Stop dev-web container and remove the data volume
+[group('dev')]
+dev-web-clean:
+    docker compose --file compose.dev-web.yml down --volumes
+
+# Start development server (web, saas) via Docker Compose with Traefik
 [group('dev')]
 dev-web-saas:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=saas GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
+    {{ compose_env }} docker compose --file compose.dev-web-saas.yml up --build
 
-# Stop dev-web containers
+# Stop dev-web-saas container
 [group('dev')]
-dev-web-down:
-    docker compose -f compose.dev.yml down
+dev-web-saas-down:
+    docker compose --file compose.dev-web-saas.yml down
 
-# Stop dev-web containers and remove volumes
+# Stop dev-web-saas container and remove the data volume
 [group('dev')]
-dev-web-clean:
-    docker compose -f compose.dev.yml down -v
+dev-web-saas-clean:
+    docker compose --file compose.dev-web-saas.yml down --volumes
 
 # Start development server (web, standalone) locally on http://localhost:18080
 [group('dev')]
 dev-web-local: build-css
-    HOST_PORT=18080 ./dev/server-up -p lets-chat-server
-
-# Start development server (web, saas) locally on http://localhost:18080
-[group('dev')]
-dev-web-local-saas: build-css
-    HOST_PORT=18080 ./dev/server-up -p lets-chat-server --no-default-features --features saas
+    {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml up
 
 # Stop the local dev server container
 [group('dev')]
 dev-web-local-down:
-    ./dev/server-down
+    docker compose --file compose.dev-web-local.yml down
+
+# Stop the local dev server container and remove cargo + data volumes
+[group('dev')]
+dev-web-local-clean:
+    docker compose --file compose.dev-web-local.yml down --volumes
+
+# Start development server (web, saas) locally on http://localhost:18080
+[group('dev')]
+dev-web-local-saas: build-css
+    {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local-saas.yml up
+
+# Stop the local saas dev server container
+[group('dev')]
+dev-web-local-saas-down:
+    docker compose --file compose.dev-web-local-saas.yml down
+
+# Stop the local saas dev server container and remove cargo + data volumes
+[group('dev')]
+dev-web-local-saas-clean:
+    docker compose --file compose.dev-web-local-saas.yml down --volumes
 
 # Start development server (desktop)
 [group('dev')]
 dev-desktop:
-    LETS_CHAT_SERVER_URL=http://localhost:18080 ./dev/cargo-desktop run -p lets-chat-desktop
+    {{ compose_uid }} docker compose --file compose.dev-desktop.yml up
+
+# Stop the desktop dev container
+[group('dev')]
+dev-desktop-down:
+    docker compose --file compose.dev-desktop.yml down
 
 # Run tests (server, standalone)
 [group('test')]

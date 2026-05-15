@@ -1,0 +1,72 @@
+---
+# `just dev-web-local` - run lets-chat-server from source via `cargo run`
+# inside the shared org builder image. Source is bind-mounted from /work,
+# cargo registry / git / target / data live in named volumes so rebuilds
+# are incremental and the SQLite databases survive across restarts.
+#
+# Replaces dev/server-up + dev/server-down. The old wrapper used
+# `docker run --rm --detach`, which swept the container off the moment
+# the server panicked at startup and left the operator with no logs.
+# Compose's default behaviour (no `--rm` on the service container) keeps
+# the container around after exit so `docker compose logs app` always has
+# the real error, and `docker compose down` is the explicit teardown.
+#
+# HOST_UID / HOST_GID come from the just recipe so the entrypoint can
+# chown the named volumes to the developer's host user before dropping
+# privileges via setpriv. The Docker default-init mounts named volumes
+# with the image-path ownership (root:root in the builder image), which
+# without this chown blocks cargo from writing the registry / target /
+# data paths once we drop to the host uid. The chown loop is idempotent:
+# subsequent `compose up` runs see the volumes already owned by the host
+# user and skip the recursive walk.
+name: dev-web-local-${USER}
+
+services:
+
+  app:
+    image: ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie
+    container_name: dev-lets-chat-web-local-${USER}
+    init: true
+    restart: "no"
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      CARGO_HOME: /usr/local/cargo
+      CARGO_TARGET_DIR: /cargo-target
+      LETS_CHAT_DATA_DIR: /data
+      BIND_ADDR: 0.0.0.0:8080
+      RUST_LOG: lets_chat=debug
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+      GIT_HASH: ${GIT_HASH:-unknown}
+      GIT_VERSION: ${GIT_VERSION:-unknown}
+      BUILD_DATE: ${BUILD_DATE:-unknown}
+    volumes:
+      - .:/work
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target:/cargo-target
+      - data:/data
+    working_dir: /work
+    # $$ escapes compose's own variable interpolation pass so bash sees a
+    # single `$` and substitutes the loop variable / HOST_UID / HOST_GID
+    # at container runtime, not at `compose up` parse time.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target /data; do
+          if [ "$$(stat -c %u "$$d")" != "$$HOST_UID" ]; then
+            chown -R "$$HOST_UID:$$HOST_GID" "$$d"
+          fi
+        done
+        export HOME=/tmp
+        exec setpriv --reuid=$$HOST_UID --regid=$$HOST_GID --clear-groups \
+          cargo run -p lets-chat-server
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target:
+  data:
