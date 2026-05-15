@@ -155,3 +155,49 @@ async fn is_user_dnd_reads_current_status() {
         .unwrap();
     assert!(auth_db::is_user_dnd(&pool, &id).await.unwrap());
 }
+
+#[tokio::test]
+async fn set_user_status_accepts_away() {
+    let pool = setup_pool().await;
+    let id = auth_db::create_user(&pool, "grace", "hash").await.unwrap();
+    auth_db::set_user_status(&pool, &id, "away", Some("lunch"))
+        .await
+        .unwrap();
+    let u = auth_db::find_user_by_id(&pool, &id).await.unwrap().unwrap();
+    assert_eq!(u.status, "away");
+    assert_eq!(u.custom_status.as_deref(), Some("lunch"));
+}
+
+#[tokio::test]
+async fn touch_user_activity_leaves_away_alone() {
+    let pool = setup_pool().await;
+    let id = auth_db::create_user(&pool, "heidi", "hash").await.unwrap();
+    auth_db::set_user_status(&pool, &id, "away", None)
+        .await
+        .unwrap();
+    let flipped = auth_db::touch_user_activity(&pool, &id).await.unwrap();
+    assert!(!flipped, "manual away must not flip back to active");
+    let u = auth_db::find_user_by_id(&pool, &id).await.unwrap().unwrap();
+    assert_eq!(u.status, "away");
+}
+
+#[tokio::test]
+async fn mark_idle_users_leaves_away_alone() {
+    let pool = setup_pool().await;
+    let away = auth_db::create_user(&pool, "ivan", "hash").await.unwrap();
+    auth_db::set_user_status(&pool, &away, "away", None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET last_active_at = datetime('now', '-1 hour') WHERE id = ?")
+        .bind(&away)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let flipped = auth_db::mark_idle_users(&pool, 30 * 60).await.unwrap();
+    assert!(flipped.is_empty(), "away rows must not be auto-idled");
+    let u = auth_db::find_user_by_id(&pool, &away)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(u.status, "away");
+}
