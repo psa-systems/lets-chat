@@ -18,9 +18,9 @@ fn main() {
             run(&["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"]).unwrap_or_else(|| "unknown".to_string())
         });
 
-    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
-    println!("cargo:rustc-env=GIT_VERSION={}", git_version);
-    println!("cargo:rustc-env=BUILD_DATE={}", build_date);
+    println!("cargo:rustc-env=GIT_HASH={git_hash}");
+    println!("cargo:rustc-env=GIT_VERSION={git_version}");
+    println!("cargo:rustc-env=BUILD_DATE={build_date}");
 
     println!("cargo:rerun-if-env-changed=GIT_HASH");
     println!("cargo:rerun-if-env-changed=GIT_VERSION");

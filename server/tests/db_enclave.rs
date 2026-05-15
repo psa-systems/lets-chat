@@ -1,5 +1,6 @@
 use lets_chat::models::enclave::EnclaveRole;
 use sqlx::{Row, SqlitePool};
+use std::str::FromStr;
 
 #[test]
 fn role_round_trips_via_str() {
