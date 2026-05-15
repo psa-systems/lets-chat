@@ -71,5 +71,5 @@ docker run --rm --init \
     -e CARGO_TARGET_DIR=/cargo-target \
     -e RUSTUP_HOME=/usr/local/rustup \
     "${EXTRA_ARGS[@]}" \
-    rust:1.88-slim-bookworm \
+    rust:1.94-slim-bookworm \
     bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libssl-dev > /dev/null && (cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null) && cargo "$@"' -- "$@"
