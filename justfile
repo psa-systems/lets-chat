@@ -42,16 +42,19 @@ check-server-saas:
 check-desktop:
     ./dev/cargo-desktop check -p lets-chat-desktop
 
-# Run clippy lints (standalone server + desktop)
+# Run clippy lints (standalone server + desktop).
+# `-D warnings` matches the CI runner so any new lint that the Rust 1.94
+# clippy promotes to a warning fails the local check too, instead of slipping
+# past `just check` and only blowing up after a push.
 [group('check')]
 check-clippy:
-    ./dev/cargo clippy -p lets-chat-server
-    ./dev/cargo-desktop clippy -p lets-chat-desktop
+    ./dev/cargo clippy -p lets-chat-server --all-targets -- -D warnings
+    ./dev/cargo-desktop clippy -p lets-chat-desktop -- -D warnings
 
 # Run clippy lints (saas server)
 [group('check')]
 check-clippy-saas:
-    ./dev/cargo clippy -p lets-chat-server --no-default-features --features saas
+    ./dev/cargo clippy -p lets-chat-server --no-default-features --features saas --all-targets -- -D warnings
 
 # Check formatting
 [group('check')]
