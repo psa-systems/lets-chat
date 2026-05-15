@@ -306,6 +306,11 @@
 
   function acceptCall() {
     if (phase !== 'incoming' || !incoming) return;
+    // Drop any active enclave voice channel first - the OS only has one
+    // mic/camera and the user can't be in two calls at once.
+    if (window.LetsChatVoice && window.LetsChatVoice.isJoined()) {
+      window.LetsChatVoice.leave();
+    }
     var withVideo = incoming.withVideo;
     Promise.all([ensureIce(), getMedia(withVideo)])
       .then(function (results) {
