@@ -12,6 +12,10 @@ on:
     paths:
       - "desktop/src/**"
       - "desktop/Cargo.toml"
+      - "desktop/build.rs"
+      - "desktop/tauri.conf.json"
+      - "desktop/capabilities/**"
+      - "desktop/icons/**"
       - "server/src/**"
       - "Cargo.toml"
       - "Cargo.lock"
