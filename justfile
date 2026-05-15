@@ -174,6 +174,22 @@ dev-web-local-saas-clean:
 # Start development server (desktop)
 [group('dev')]
 dev-desktop:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Default XAUTHORITY to the canonical location so compose has a real
+    # host path to bind-mount the X11 cookie file from. Touching is a no-op
+    # when the file exists; on a fresh login the file is created empty so
+    # the mount works, with xhost (below) covering the auth side instead.
+    : "${XAUTHORITY:=$HOME/.Xauthority}"
+    export XAUTHORITY
+    touch "$XAUTHORITY"
+    # Grant the local user access to the running X server (when there is
+    # one) so the container's GTK can connect without needing to read the
+    # cookie file. Silently no-op on Wayland-only sessions or hosts without
+    # the xhost utility.
+    if [ -n "${DISPLAY:-}" ] && command -v xhost >/dev/null 2>&1; then
+        xhost +SI:localuser:"$(id -un)" >/dev/null 2>&1 || true
+    fi
     {{ compose_uid }} docker compose --file compose.dev-desktop.yml up
 
 # Stop the desktop dev container
