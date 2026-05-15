@@ -1,4 +1,5 @@
 mod update;
+mod welcome;
 
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoop};
@@ -42,7 +43,18 @@ fn main() -> wry::Result<()> {
         .build(&event_loop)
         .expect("window");
 
-    let _webview = WebViewBuilder::new().with_url(&url).build(&window)?;
+    // Probe the configured server before pointing the webview at it.
+    // Without this, a misconfigured or down server gives the user a blank
+    // window with no hint at what went wrong; the welcome page tells them
+    // which URL failed and how to recover.
+    let builder = match welcome::server_reachable(&url) {
+        Ok(()) => WebViewBuilder::new().with_url(&url),
+        Err(reason) => {
+            eprintln!("lets-chat-desktop: server probe failed for {url}: {reason}");
+            WebViewBuilder::new().with_html(welcome::render(&url, &reason, VERSION, GIT_HASH))
+        }
+    };
+    let _webview = builder.build(&window)?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

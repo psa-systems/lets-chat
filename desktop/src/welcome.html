@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>lets-chat desktop</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .card {
+    max-width: 640px;
+    width: 100%;
+    padding: 3rem 3.5rem;
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+  }
+  h1 {
+    margin: 0 0 0.25rem;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    color: #64748b;
+    margin: 0 0 2rem;
+    font-size: 0.95rem;
+  }
+  .alert {
+    margin: 0 0 2rem;
+    padding: 1rem 1.25rem;
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    border-radius: 0.375rem;
+    font-size: 0.92rem;
+  }
+  .alert strong { color: #991b1b; }
+  .url {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(15, 23, 42, 0.06);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+  .reason {
+    color: #475569;
+    margin-top: 0.5rem;
+    display: block;
+    font-size: 0.85em;
+  }
+  h2 {
+    font-size: 1rem;
+    margin: 1.5rem 0 0.5rem;
+    color: #334155;
+  }
+  ol {
+    margin: 0;
+    padding-left: 1.5rem;
+    color: #334155;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  ol code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(15, 23, 42, 0.06);
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+  }
+  .actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 0.75rem;
+  }
+  button {
+    background: #0f172a;
+    color: white;
+    border: none;
+    padding: 0.7rem 1.4rem;
+    border-radius: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  button:hover { background: #1e293b; }
+  button.secondary {
+    background: transparent;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+  button.secondary:hover { background: #f1f5f9; color: #0f172a; }
+  footer {
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #e2e8f0;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    text-align: center;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>lets-chat</h1>
+    <p class="subtitle">Desktop client</p>
+
+    <div class="alert">
+      <strong>Couldn't reach</strong> <span class="url">{{URL}}</span>
+      <span class="reason">{{REASON}}</span>
+    </div>
+
+    <h2>To connect</h2>
+    <ol>
+      <li>Make sure the lets-chat server is running and reachable from this machine.</li>
+      <li>Set <code>LETS_CHAT_SERVER_URL</code> to your server URL (for example, <code>https://chat.example.com</code>).</li>
+      <li>Restart this app so the new URL takes effect.</li>
+    </ol>
+
+    <div class="actions">
+      <button onclick="location.href='{{URL}}'">Try again</button>
+    </div>
+
+    <footer>lets-chat-desktop {{VERSION}} &middot; {{GIT_HASH}}</footer>
+  </div>
+</body>
+</html>
