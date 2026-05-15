@@ -3,12 +3,12 @@
     <fieldset class="flex flex-col gap-1">
       <legend class="sr-only">Presence</legend>
       <label class="flex items-center gap-2 cursor-pointer">
-        <input type="radio" name="status" value="active"{% if current_status == "active" %} checked{% endif %}>
+        <input type="radio" name="status" value="active"{% if current_status == "active" || current_status == "idle" %} checked{% endif %}>
         <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
         <span>Online</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
-        <input type="radio" name="status" value="idle"{% if current_status == "idle" %} checked{% endif %}>
+        <input type="radio" name="status" value="away"{% if current_status == "away" %} checked{% endif %}>
         <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-yellow-400"></span>
         <span>Away</span>
       </label>
