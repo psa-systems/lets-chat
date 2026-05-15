@@ -25,6 +25,18 @@ jobs:
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read
+      packages: write
+    env:
+      # Publish to the shared a8n-tools private org Generic Packages
+      # registry, matching every other repo in ~/projects/a8n-run/
+      # (see eg. da-os/.forgejo/workflows/build-linux.yml). Previously
+      # this workflow only uploaded the binary as a workflow-run
+      # artifact, which is invisible to anything outside the runs UI -
+      # in particular to the desktop self-updater, which reads from
+      # /api/packages/{owner}/generic/lets-chat/{version}/{filename}.
+      FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+      PACKAGE_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
+      PACKAGE_NAME: lets-chat
 
     steps:
       - name: Clone the repository
@@ -83,9 +95,39 @@ jobs:
           mv artifacts/lets-chat-desktop $dest
           print $"Artifact: ($dest)"
 
-      - name: Upload artifact
-        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
-        with:
-          name: lets-chat-desktop-linux-x86_64
-          path: artifacts/lets-chat-desktop-*
-          retention-days: 90
+      - name: Upload binary to Generic Packages
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.get-version.outputs.version }}"
+          # Stable filename so the desktop self-updater's manifest can hard-code
+          # `${base}/${version}/lets-chat-desktop-linux-x86_64`.
+          let file = "lets-chat-desktop-linux-x86_64"
+          let src = $"artifacts/lets-chat-desktop-($version)-linux-x86_64"
+          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          let url = $"($base)/($version)/($file)"
+          let auth = $"Authorization: token ($env.FORGEJO_TOKEN)"
+          # Best-effort DELETE so re-runs of the same version overwrite cleanly
+          # (Forgejo Generic Packages rejects duplicate paths on PUT). A 404
+          # is fine; anything else still lets the PUT below decide.
+          print $"DELETE ($url)"
+          (
+              ^curl
+                  --silent
+                  --show-error
+                  --output /dev/null
+                  --write-out "%{http_code}\n"
+                  --header $auth
+                  --request DELETE
+                  $url
+          )
+          print $"PUT ($url)"
+          (
+              ^curl
+                  --silent
+                  --show-error
+                  --fail
+                  --header $auth
+                  --upload-file $src
+                  $url
+          )
+          print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
