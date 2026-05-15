@@ -27,9 +27,11 @@
 
   <div data-lc-voice-preview class="px-4 py-4 text-sm text-slate-500">
     {% if participants.is_empty() %}
-    No one is in this voice channel yet. Click <span class="font-medium text-slate-700">Join voice</span> to start.
+    <span data-lc-voice-preview-empty>No one is in this voice channel yet. Click <span class="font-medium text-slate-700">Join voice</span> to start.</span>
+    <span data-lc-voice-preview-list class="hidden">Currently here: <span data-lc-voice-preview-names></span></span>
     {% else %}
-    Currently here: {% for p in participants %}<span class="font-medium text-slate-700">{{ p.label }}</span>{% if !loop.last %}, {% endif %}{% endfor %}
+    <span data-lc-voice-preview-empty class="hidden">No one is in this voice channel yet. Click <span class="font-medium text-slate-700">Join voice</span> to start.</span>
+    <span data-lc-voice-preview-list>Currently here: <span data-lc-voice-preview-names>{% for p in participants %}<span class="font-medium text-slate-700" data-lc-voice-preview-name="{{ p.user_id }}">{{ p.label }}</span>{% if !loop.last %}, {% endif %}{% endfor %}</span></span>
     {% endif %}
   </div>
 
@@ -37,4 +39,31 @@
        class="flex-1 content-start gap-4 overflow-y-auto p-4"
        style="display:none; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));"></div>
 </div>
+<script>
+(function () {
+  // Subscribe the WS to this room so voice-join/leave events broadcast to
+  // room subscribers reach this tab even when the viewer has not yet
+  // clicked Join. Without this, the participants preview stays frozen at
+  // its page-load snapshot.
+  function onWsOpen(evt) {
+    window.__lcWS = evt.detail.socketWrapper;
+    evt.detail.socketWrapper.send(JSON.stringify({
+      type: 'subscribe',
+      room_id: {{ room.id }}
+    }));
+  }
+  document.body.addEventListener('htmx:wsOpen', onWsOpen);
+  function teardown() {
+    document.body.removeEventListener('htmx:wsOpen', onWsOpen);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+  // If the socket is already open (navigating between rooms without a fresh
+  // WS handshake), subscribe right now too.
+  if (window.__lcWS) {
+    try { window.__lcWS.send(JSON.stringify({ type: 'subscribe', room_id: {{ room.id }} })); } catch (e) {}
+  }
+})();
+</script>
 {% endblock %}

@@ -1202,18 +1202,16 @@ async fn handle_voice_join(
             peers,
         },
     );
-    // Everyone already in the channel learns about the joiner and waits for
-    // its offer (the newest joiner is always the mesh offerer).
+    // Existing voice members learn about the joiner and await its offer (the
+    // newest joiner is always the mesh offerer). The event also fans out to
+    // anyone just *viewing* the voice page so their participants preview
+    // stays in sync without waiting for a page reload.
     let joined = ChatEvent::VoiceJoined {
         room_id,
         user_id: user.id.clone(),
         username: username.to_string(),
     };
-    for uid in state.hub.voice_room_users(room_id) {
-        if uid != user.id {
-            state.hub.broadcast_to_user(&uid, &joined);
-        }
-    }
+    state.hub.broadcast_to_room(room_id, &joined);
 }
 
 /// Remove `conn_id` from its voice channel (if any) and tell the remaining
@@ -1223,10 +1221,11 @@ fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     let Some((room_id, user_id, _)) = state.hub.voice_leave(conn_id) else {
         return;
     };
+    // Tell every subscriber of the room, not just remaining voice members: a
+    // viewer who is *not* in the call still needs the update so their
+    // participants preview stays accurate.
     let left = ChatEvent::VoiceLeft { room_id, user_id };
-    for uid in state.hub.voice_room_users(room_id) {
-        state.hub.broadcast_to_user(&uid, &left);
-    }
+    state.hub.broadcast_to_room(room_id, &left);
 }
 
 /// Relay one mesh signal (offer/answer/ice) to a specific peer in the same
