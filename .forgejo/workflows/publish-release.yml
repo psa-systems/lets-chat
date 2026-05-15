@@ -32,8 +32,15 @@ jobs:
       contents: read
       packages: write
     env:
-      FORGEJO_PAT: ${{ secrets.FORGEJO_PAT }}
-      PACKAGE_OWNER: a8n-tools
+      # Publish to the private a8n-tools org via the shared org variables /
+      # secret used by every other repo in the parent directory (see eg.
+      # da-os/.forgejo/workflows/build-{linux,windows}.yml). Using the same
+      # PAT puts the binaries under the same /api/packages/{org}/generic/...
+      # path that consumers already trust, instead of the per-repo
+      # `GITHUB_REPOSITORY_OWNER` namespace which is not where any other
+      # tool looks for releases.
+      FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+      PACKAGE_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
       PACKAGE_NAME: lets-chat
 
     steps:
@@ -120,8 +127,7 @@ jobs:
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          let user = ($env.GITHUB_REPOSITORY_OWNER | str downcase)
-          let token = $env.FORGEJO_PAT
+          let auth = $"Authorization: token ($env.FORGEJO_TOKEN)"
           let uploads = [
               { src: "artifacts/lets-chat-desktop-linux-x86_64",       dest: $"($version)/lets-chat-desktop-linux-x86_64" },
               { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: $"($version)/lets-chat-desktop-windows-x86_64.exe" },
@@ -141,7 +147,7 @@ jobs:
                       --show-error
                       --output /dev/null
                       --write-out "%{http_code}\n"
-                      --user $"($user):($token)"
+                      --header $auth
                       --request DELETE
                       $url
               )
@@ -151,7 +157,7 @@ jobs:
                       --silent
                       --show-error
                       --fail
-                      --user $"($user):($token)"
+                      --header $auth
                       --upload-file $entry.src
                       $url
               )
