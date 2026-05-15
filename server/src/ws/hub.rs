@@ -1,11 +1,49 @@
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use dashmap::DashMap;
 use tokio::sync::broadcast;
 
 use crate::ws::events::ChatEvent;
+
+/// One pending DM call. Held in `Hub::ringing` keyed by DM `room_id` so a
+/// glare-resolution decision is identical for every connection of both peers,
+/// regardless of which page each one is on. Cleared on accept/reject/cancel/
+/// hangup or by the 60s timeout task spawned alongside the slot.
+#[derive(Debug, Clone)]
+pub struct RingingSlot {
+    pub caller_id: String,
+    pub from_name: String,
+    /// The invite payload (`"audio"` or `"video"`) - replayed verbatim if a
+    /// glare loser has to be re-delivered the winner's invite.
+    pub payload: Option<String>,
+    pub started: Instant,
+}
+
+/// Outcome of `Hub::try_start_ringing`. Lets the caller decide whether to
+/// relay the new invite, drop it, or replay the existing winner's invite
+/// back to the second caller (the glare loser).
+pub enum RingingResult {
+    /// Slot was vacant and we now own it.
+    Started,
+    /// Same caller already has the slot - drop the duplicate.
+    DuplicateSelf,
+    /// The peer is already calling us. The new invite must NOT be relayed;
+    /// the existing winner's invite should be replayed to the second caller
+    /// so their UI flips from outgoing to incoming.
+    Glare {
+        winner_id: String,
+        from_name: String,
+        payload: Option<String>,
+    },
+}
+
+/// How long a ringing slot is allowed to live before the server gives up and
+/// clears it. Caps damage when a client dies mid-call without sending the
+/// terminating signal that would normally release the slot.
+const RINGING_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Unique identifier for a WebSocket connection.
 pub type ConnId = u64;
@@ -43,6 +81,11 @@ pub struct Hub {
     /// conn_id -> the voice channel it joined, for O(1) cleanup on leave or
     /// disconnect. A connection is in at most one voice channel.
     voice_conn: DashMap<ConnId, i64>,
+    /// DM `room_id` -> the single pending 1:1 call. Holds the caller's id so
+    /// a second simultaneous invite for the same DM (the classic SIP "glare"
+    /// race) is resolved server-side: the first invite wins, the second is
+    /// converted into an incoming UI for its sender by replaying the winner.
+    ringing: DashMap<i64, RingingSlot>,
 }
 
 impl Default for Hub {
@@ -61,7 +104,95 @@ impl Hub {
             thread_typing: DashMap::new(),
             voice_rooms: DashMap::new(),
             voice_conn: DashMap::new(),
+            ringing: DashMap::new(),
         }
+    }
+
+    /// Try to claim the per-DM ringing slot for `room_id` on behalf of
+    /// `caller_id`. Returns one of:
+    ///
+    /// - `Started`: slot was vacant; the caller now owns it. The caller
+    ///   should relay the invite to the peer.
+    /// - `DuplicateSelf`: the same user already holds the slot (a retry, or
+    ///   a second tab inviting at the same time). Drop the new invite.
+    /// - `Glare { winner_id, .. }`: the peer is already ringing us; the new
+    ///   invite must not be relayed. Replay the stored invite (the fields
+    ///   returned here) back to the new caller so its UI flips to incoming.
+    pub fn try_start_ringing(
+        self: &Arc<Self>,
+        room_id: i64,
+        caller_id: &str,
+        from_name: &str,
+        payload: Option<String>,
+    ) -> RingingResult {
+        use dashmap::mapref::entry::Entry;
+        match self.ringing.entry(room_id) {
+            Entry::Occupied(slot) => {
+                let existing = slot.get();
+                // A stale slot whose lifetime has passed gets evicted in place
+                // so a fresh invite from either party can claim it. Mirrors
+                // what the spawned timeout task would have done shortly.
+                if existing.started.elapsed() >= RINGING_TTL {
+                    slot.remove();
+                    let new_slot = RingingSlot {
+                        caller_id: caller_id.to_string(),
+                        from_name: from_name.to_string(),
+                        payload,
+                        started: Instant::now(),
+                    };
+                    self.ringing.insert(room_id, new_slot);
+                    self.spawn_ringing_ttl(room_id);
+                    return RingingResult::Started;
+                }
+                if existing.caller_id == caller_id {
+                    return RingingResult::DuplicateSelf;
+                }
+                RingingResult::Glare {
+                    winner_id: existing.caller_id.clone(),
+                    from_name: existing.from_name.clone(),
+                    payload: existing.payload.clone(),
+                }
+            }
+            Entry::Vacant(slot) => {
+                slot.insert(RingingSlot {
+                    caller_id: caller_id.to_string(),
+                    from_name: from_name.to_string(),
+                    payload,
+                    started: Instant::now(),
+                });
+                self.spawn_ringing_ttl(room_id);
+                RingingResult::Started
+            }
+        }
+    }
+
+    /// Release the ringing slot for `room_id`. Called when either party
+    /// emits a terminating signal (`accept`/`reject`/`cancel`/`hangup`) so
+    /// the next invite for that DM can claim a fresh slot immediately.
+    pub fn clear_ringing(&self, room_id: i64) {
+        self.ringing.remove(&room_id);
+    }
+
+    /// Spawn a one-shot task that evicts the ringing slot for `room_id`
+    /// after `RINGING_TTL`, but only if the slot still matches the moment
+    /// this task was spawned (so a quick clear+reclaim does not orphan a
+    /// kill-switch from an earlier call).
+    fn spawn_ringing_ttl(self: &Arc<Self>, room_id: i64) {
+        let hub = self.clone();
+        let started_at = self
+            .ringing
+            .get(&room_id)
+            .map(|s| s.started)
+            .unwrap_or_else(Instant::now);
+        tokio::spawn(async move {
+            tokio::time::sleep(RINGING_TTL).await;
+            if let Some(slot) = hub.ringing.get(&room_id) {
+                if slot.started == started_at {
+                    drop(slot);
+                    hub.ringing.remove(&room_id);
+                }
+            }
+        });
     }
 
     /// Join `conn_id` to voice channel `room_id`. Returns the
