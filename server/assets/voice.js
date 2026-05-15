@@ -22,6 +22,11 @@
   var joined = false;
   var localStream = null;
   var peers = {};         // user_id -> { pc, polite, makingOffer, name, pending: [] }
+  // Live snapshot of who is in the voice channel right now, keyed by user_id.
+  // Kept in sync from the initial server-rendered preview plus VoiceJoined /
+  // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
+  // this map so it never lies about who is on the line.
+  var participants = {};  // user_id -> label
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -130,6 +135,48 @@
     toggle(q('[data-lc-voice-leave]'), on);
   }
   function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
+
+  // Seed `participants` from the server-rendered preview so we know who is
+  // already in the channel even before any WS event arrives.
+  function seedParticipantsFromDom() {
+    participants = {};
+    if (!root) return;
+    var names = root.querySelectorAll('[data-lc-voice-preview-name]');
+    Array.prototype.forEach.call(names, function (el) {
+      var uid = el.getAttribute('data-lc-voice-preview-name');
+      if (uid) participants[uid] = el.textContent || uid;
+    });
+  }
+
+  // Re-render the participants preview from the `participants` map. Called
+  // on every join/leave event and just before showing the preview after the
+  // local user leaves, so the line never shows stale data.
+  function renderPreview() {
+    var preview = q('[data-lc-voice-preview]');
+    if (!preview) return;
+    var empty = preview.querySelector('[data-lc-voice-preview-empty]');
+    var list = preview.querySelector('[data-lc-voice-preview-list]');
+    var names = preview.querySelector('[data-lc-voice-preview-names]');
+    if (!empty || !list || !names) return;
+    var ids = Object.keys(participants);
+    if (ids.length === 0) {
+      empty.classList.remove('hidden');
+      list.classList.add('hidden');
+      names.replaceChildren();
+      return;
+    }
+    empty.classList.add('hidden');
+    list.classList.remove('hidden');
+    names.replaceChildren();
+    ids.forEach(function (uid, idx) {
+      var span = document.createElement('span');
+      span.className = 'font-medium text-slate-700';
+      span.setAttribute('data-lc-voice-preview-name', uid);
+      span.textContent = participants[uid] || uid;
+      names.appendChild(span);
+      if (idx < ids.length - 1) names.appendChild(document.createTextNode(', '));
+    });
+  }
 
   // ---- media ---------------------------------------------------------
   function getMedia(withVideo) {
@@ -282,6 +329,9 @@
     getMedia(false).then(function (stream) {
       localStream = stream;
       joined = true;
+      // Record ourselves so the preview is correct if we leave before any
+      // VoiceJoined echoes back; the roster event will overwrite this.
+      participants[cfg.selfId] = cfg.selfName;
       showJoinedUi(true);
       createTile(cfg.selfId, cfg.selfName + ' (you)', true);
       var sv = tileVideo(cfg.selfId);
@@ -308,6 +358,12 @@
     var g = grid();
     if (g) g.replaceChildren();
     joined = false;
+    // Drop ourselves from the participants map and re-render the preview
+    // before un-hiding it. Otherwise the leaver would see whatever was
+    // server-rendered at page load, which is often "no one is here yet" even
+    // when the call is still busy.
+    if (cfg) delete participants[cfg.selfId];
+    renderPreview();
     showJoinedUi(false);
   }
 
@@ -354,7 +410,10 @@
           if (peers[uid].pc) peers[uid].pc.addTrack(vtrack, localStream);
         });
         var sv = tileVideo(cfg.selfId);
-        if (sv) sv.srcObject = localStream;
+        // Re-assign (null first) so the <video> re-renders with the changed
+        // track set - assigning the same stream object can be a no-op.
+        if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+        updateTileMedia(cfg.selfId);
         setCameraBtn();
       }).catch(function () { alert('Could not access your camera.'); });
     }
@@ -374,16 +433,31 @@
       if (!joined) return;
       var list;
       try { list = JSON.parse(node.getAttribute('data-peers') || '[]'); } catch (e) { list = []; }
-      // We are the newest joiner: offer to everyone already here.
-      list.forEach(function (pair) { addPeer(pair[0], pair[1], true); });
+      // Rebuild the participants map from the authoritative server roster
+      // plus ourselves; the preview will reflect this once we leave.
+      participants = {};
+      participants[cfg.selfId] = cfg.selfName;
+      list.forEach(function (pair) {
+        participants[pair[0]] = pair[1];
+        // We are the newest joiner: offer to everyone already here.
+        addPeer(pair[0], pair[1], true);
+      });
+      renderPreview();
       return;
     }
     if (kind === 'joined') {
-      // Someone joined after us; they will offer, we answer.
+      // Track the new participant for the preview regardless of whether we
+      // are joined to the call ourselves.
+      if (userId) participants[userId] = username;
+      renderPreview();
+      // Someone joined after us; they will offer, we answer. Skip when the
+      // event is about us (we already created our own tile in join()).
       if (joined && userId !== cfg.selfId) addPeer(userId, username, false);
       return;
     }
     if (kind === 'left') {
+      if (userId) delete participants[userId];
+      renderPreview();
       removePeer(userId);
       return;
     }
@@ -423,6 +497,7 @@
       iceServers: el.getAttribute('data-ice-servers') || '[]',
     };
     joined = false;
+    seedParticipantsFromDom();
   }
 
   function scan() {
@@ -454,4 +529,12 @@
     scan();
     document.body.addEventListener('htmx:afterSettle', scan);
   });
+
+  // Exposed so the 1:1 DM call (call.js) can drop us out of an enclave
+  // voice channel when accepting an incoming DM call - otherwise the
+  // browser would hold two simultaneous mics/cameras open.
+  window.LetsChatVoice = {
+    leave: function () { if (joined) leave(); },
+    isJoined: function () { return joined; },
+  };
 })();
