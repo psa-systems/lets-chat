@@ -10,6 +10,7 @@ pub mod models;
 pub mod perms;
 pub mod push;
 pub mod routes;
+pub mod sso;
 pub mod state;
 pub mod uploads;
 pub mod version;

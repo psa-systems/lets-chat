@@ -120,6 +120,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        sso: lets_chat::sso::SsoProviders::default(),
     };
     Fixture {
         state,
