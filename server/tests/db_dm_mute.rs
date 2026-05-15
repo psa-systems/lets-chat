@@ -90,7 +90,7 @@ async fn set_dm_mute_rejects_non_dm_room() {
     let pool = setup_chat_pool().await;
     let public = seed_room(&pool, "general", "public").await;
     let res = set_dm_mute(&pool, "user-1", public, true).await;
-    assert!(res.is_err(), "expected error, got {:?}", res);
+    assert!(res.is_err(), "expected error, got {res:?}");
 }
 
 #[tokio::test]
@@ -105,7 +105,7 @@ async fn set_room_mute_mode_rejects_dm_room() {
     let pool = setup_chat_pool().await;
     let dm = seed_room(&pool, "@bob", "dm").await;
     let res = set_room_mute_mode(&pool, "user-1", dm, MuteMode::All).await;
-    assert!(res.is_err(), "expected DM rejection, got {:?}", res);
+    assert!(res.is_err(), "expected DM rejection, got {res:?}");
     let res = set_room_mute_mode(&pool, "user-1", dm, MuteMode::ExceptMentions).await;
     assert!(res.is_err());
 }

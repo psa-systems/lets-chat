@@ -160,7 +160,7 @@ async fn watermark_advances_read_state() {
     let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id")
         .await
         .unwrap();
-    assert!(counts.iter().find(|(r, _)| *r == room_id).is_none());
+    assert!(!counts.iter().any(|(r, _)| *r == room_id));
 }
 
 #[tokio::test]

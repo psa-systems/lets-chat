@@ -45,6 +45,12 @@ pub struct Hub {
     voice_conn: DashMap<ConnId, i64>,
 }
 
+impl Default for Hub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Hub {
     pub fn new() -> Self {
         Self {
