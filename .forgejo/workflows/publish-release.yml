@@ -1,0 +1,167 @@
+---
+
+# Publish lets-chat-desktop release artifacts to Forgejo Generic Packages.
+#
+# Fires on `v*` tag pushes. For each release this workflow:
+#   1. Cross-builds the Linux x86_64 and Windows x86_64 desktop binaries
+#      from the existing ci-build/Dockerfile.desktop-{linux,windows} images.
+#   2. Generates `latest.json`, a small manifest that the desktop self-updater
+#      reads to discover the newest version and per-platform download URLs.
+#   3. Uploads everything to the Forgejo Generic Packages API at
+#      /api/packages/{owner}/generic/{package}/{version}/{filename}. Binaries
+#      land under the tag version (eg. /v0.2.0/lets-chat-desktop-linux-x86_64);
+#      the manifest lands under the fixed pseudo-version `latest`
+#      (/latest/latest.json), which the updater fetches on `--check-update`
+#      and during the GUI startup background check.
+#
+# The manifest pseudo-version is overwritten every release; Generic Packages
+# rejects duplicate files, so each upload is preceded by a best-effort DELETE
+# that swallows the 404 a first-time release produces.
+name: Publish release artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: Build + publish lets-chat-desktop binaries
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      FORGEJO_PAT: ${{ secrets.FORGEJO_PAT }}
+      PACKAGE_OWNER: a8n-tools
+      PACKAGE_NAME: lets-chat
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify Docker availability
+        run: |
+          docker version
+          docker buildx version
+
+      - name: Resolve release version
+        id: version
+        shell: nu {0}
+        run: |
+          # On a `v*` tag push, GITHUB_REF_NAME is exactly the tag name (eg.
+          # "v0.2.0"). Use it verbatim so the package version, the manifest's
+          # "version" field, and the download URLs all line up.
+          let tag = $env.GITHUB_REF_NAME
+          print $"Publishing version ($tag)"
+          $"version=($tag)\n" | save --append $env.GITHUB_OUTPUT
+
+      - name: Build Linux x86_64 binary
+        shell: nu {0}
+        run: |
+          let jobs = ((sys cpu | length) / 2 | into int)
+          print $"CARGO_BUILD_JOBS=($jobs)"
+          (
+            ^docker buildx build
+              --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              --tag lets-chat-desktop-linux:publish
+              --load
+              -f ci-build/Dockerfile.desktop-linux
+              .
+          )
+          mkdir artifacts
+          let container = (^docker create lets-chat-desktop-linux:publish)
+          (
+            ^docker cp
+              $"($container):/build/target/release/lets-chat-desktop"
+              "artifacts/lets-chat-desktop-linux-x86_64"
+          )
+          ^docker rm $container
+
+      - name: Build Windows x86_64 binary
+        shell: nu {0}
+        run: |
+          let jobs = ((sys cpu | length) / 2 | into int)
+          print $"CARGO_BUILD_JOBS=($jobs)"
+          (
+            ^docker buildx build
+              --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              --tag lets-chat-desktop-windows:publish
+              --load
+              -f ci-build/Dockerfile.desktop-windows
+              .
+          )
+          let container = (^docker create lets-chat-desktop-windows:publish)
+          (
+            ^docker cp
+              $"($container):/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe"
+              "artifacts/lets-chat-desktop-windows-x86_64.exe"
+          )
+          ^docker rm $container
+
+      - name: Generate update manifest
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.version.outputs.version }}"
+          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          let manifest = {
+              version: $version,
+              linux_x86_64:   { url: $"($base)/($version)/lets-chat-desktop-linux-x86_64" },
+              windows_x86_64: { url: $"($base)/($version)/lets-chat-desktop-windows-x86_64.exe" },
+          }
+          $manifest | to json --indent 2 | save --force artifacts/latest.json
+          print "Generated artifacts/latest.json:"
+          open --raw artifacts/latest.json | print
+
+      - name: Upload binaries and manifest to Generic Packages
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.version.outputs.version }}"
+          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          let user = ($env.GITHUB_REPOSITORY_OWNER | str downcase)
+          let token = $env.FORGEJO_PAT
+          let uploads = [
+              { src: "artifacts/lets-chat-desktop-linux-x86_64",       dest: $"($version)/lets-chat-desktop-linux-x86_64" },
+              { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: $"($version)/lets-chat-desktop-windows-x86_64.exe" },
+              { src: "artifacts/latest.json",                          dest: "latest/latest.json" },
+          ]
+          for entry in $uploads {
+              let url = $"($base)/($entry.dest)"
+              # Best-effort delete in case the file already exists at this
+              # path (the manifest at latest/latest.json is overwritten every
+              # release; version-specific binaries only collide on a re-run
+              # of the same tag). A 404 is fine; anything else still lets the
+              # PUT below decide whether the path is usable.
+              print $"DELETE ($url)"
+              (
+                  ^curl
+                      --silent
+                      --show-error
+                      --output /dev/null
+                      --write-out "%{http_code}\n"
+                      --user $"($user):($token)"
+                      --request DELETE
+                      $url
+              )
+              print $"PUT ($url)"
+              (
+                  ^curl
+                      --silent
+                      --show-error
+                      --fail
+                      --user $"($user):($token)"
+                      --upload-file $entry.src
+                      $url
+              )
+          }
+
+      - name: Print release summary
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.version.outputs.version }}"
+          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          print $"Manifest:        ($base)/latest/latest.json"
+          print $"Linux binary:    ($base)/($version)/lets-chat-desktop-linux-x86_64"
+          print $"Windows binary:  ($base)/($version)/lets-chat-desktop-windows-x86_64.exe"
