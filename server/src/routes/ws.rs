@@ -22,7 +22,7 @@ use crate::views::ws_fragments::{
     SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
-use crate::ws::hub::ConnId;
+use crate::ws::hub::{ConnId, RingingResult};
 
 #[derive(Deserialize)]
 #[serde(tag = "type")]
@@ -1004,6 +1004,55 @@ async fn relay_call_signal(
     {
         return;
     }
+    // An `invite` claims the per-DM ringing slot. On glare (the peer is
+    // already ringing us) we replay the winner's invite back to the second
+    // caller so their UI flips from outgoing to incoming, and never deliver
+    // the second invite to the peer. Terminating signals release the slot.
+    if kind == "invite" {
+        match state
+            .hub
+            .try_start_ringing(room_id, &user.id, from_name, payload.clone())
+        {
+            RingingResult::Started => {
+                let event = ChatEvent::CallSignal {
+                    room_id,
+                    to_user_id: peer_id.clone(),
+                    from_user_id: user.id.clone(),
+                    from_name: from_name.to_string(),
+                    kind: kind.to_string(),
+                    payload: payload.clone(),
+                };
+                state.hub.broadcast_to_user(&peer_id, &event);
+                post_call_started_message(state, user, &room).await;
+            }
+            RingingResult::DuplicateSelf => {
+                // Same caller already holds the slot. Drop silently so the
+                // peer is not invited a second time and a duplicate "started
+                // a call" system message is not posted.
+            }
+            RingingResult::Glare {
+                winner_id,
+                from_name: winner_name,
+                payload: winner_payload,
+            } => {
+                let event = ChatEvent::CallSignal {
+                    room_id,
+                    to_user_id: user.id.clone(),
+                    from_user_id: winner_id,
+                    from_name: winner_name,
+                    kind: "invite".to_string(),
+                    payload: winner_payload,
+                };
+                state.hub.broadcast_to_user(&user.id, &event);
+            }
+        }
+        return;
+    }
+
+    if matches!(kind, "accept" | "reject" | "cancel" | "hangup") {
+        state.hub.clear_ringing(room_id);
+    }
+
     let mut recipients: Vec<String> = vec![peer_id];
     if matches!(kind, "accept" | "reject" | "cancel" | "hangup") {
         recipients.push(user.id.clone());
@@ -1018,12 +1067,6 @@ async fn relay_call_signal(
             payload: payload.clone(),
         };
         state.hub.broadcast_to_user(&to, &event);
-    }
-
-    // A fresh `invite` is the start of a call; drop a message into the DM so
-    // both members have a record of it in the conversation history.
-    if kind == "invite" {
-        post_call_started_message(state, user, &room).await;
     }
 }
 
