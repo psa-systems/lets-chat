@@ -10,14 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 All common tasks are defined in `justfile`. Run `just --list` to see all recipes.
 
-The host has no Rust or Bun installed. The recipes invoke the `./dev/cargo`, `./dev/cargo-desktop`, `./dev/bun`, and `./dev/server-up` wrappers, which run their tools inside Docker containers with persistent named volumes for the cargo registry and target directory.
+The host has no Rust or Bun installed. One-shot commands (`cargo`, `cargo` for the desktop crate, `bun`) run through the `./dev/cargo`, `./dev/cargo-desktop`, and `./dev/bun` wrapper scripts; long-running dev services (`dev-web*`, `dev-desktop`) run through Docker Compose files named `compose.dev-<recipe>.yml` (so `just dev-web-local` reads `compose.dev-web-local.yml`, and so on). Both paths use persistent named volumes for the cargo registry, git checkout cache, build target dir, and `/data` so rebuilds stay incremental and SQLite state survives across restarts.
 
 ```nu
-# Development
-just dev-web-local          # Local dev server in a container at http://localhost:18080
-just dev-web                # Docker dev with Traefik at https://{USER}-chat.a8n.run
-just dev-web-down           # Stop Docker dev environment
-just dev-desktop            # Desktop wrapper (Tao+Wry) pointed at the local server
+# Development (each starts a `docker compose --file compose.dev-<recipe>.yml` stack)
+just dev-web-local          # Local dev server at http://localhost:18080 (cargo run from source)
+just dev-web                # Production-shape build behind Traefik at https://{USER}-chat.a8n.run
+just dev-web-local-down     # Stop the local stack
+just dev-web-down           # Stop the Traefik-fronted stack
+just dev-desktop            # Desktop wrapper (Tao+Wry) pointed at http://localhost:18080
 
 # Checks & Formatting
 just check                  # Run all checks: server, desktop, clippy, fmt
