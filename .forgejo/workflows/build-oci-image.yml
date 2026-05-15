@@ -34,8 +34,15 @@ jobs:
     env:
       IMAGE_REGISTRY: ""
       REGISTRY_PROVIDER: dev.a8n.run
+      # Push to the shared a8n-tools private org registry via the same org
+      # variables every other repo under ~/projects/a8n-run/ uses (see eg.
+      # backup, eform, saas, storefront). Previously this workflow used
+      # `GITHUB_REPOSITORY_OWNER` + `secrets.FORGEJO_PAT`, which pinned the
+      # image to whichever owner happened to host the repo and depended on a
+      # PAT name not standard across the org.
+      REGISTRY_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
       REGISTRY_USER: ""
-      REGISTRY_PASSWORD: ${{ secrets.FORGEJO_PAT }}
+      REGISTRY_PASSWORD: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
 
     steps:
       - name: Clone the repository
@@ -55,7 +62,7 @@ jobs:
       - name: Set environment variables
         shell: nu {0}
         run: |
-          let owner = ($env.GITHUB_REPOSITORY_OWNER | str downcase)
+          let owner = $env.REGISTRY_OWNER
           $"REGISTRY_USER=($owner)\n" | save --append $env.GITHUB_ENV
           $"IMAGE_REGISTRY=($env.REGISTRY_PROVIDER)/($owner)\n" | save --append $env.GITHUB_ENV
 
