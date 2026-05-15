@@ -107,23 +107,45 @@ jobs:
           # `${base}/${version}/lets-chat-desktop-windows-x86_64.exe`.
           let file = "lets-chat-desktop-windows-x86_64.exe"
           let src = $"artifacts/lets-chat-desktop-($version)-windows-x86_64.exe"
-          let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          let url = $"($base)/($version)/($file)"
-          # HTTP Basic auth with the package owner as the username is the
-          # form Forgejo's Generic Packages API on dev.a8n.run actually
-          # accepts (matches the `docker login --username $OWNER ...`
-          # call in build-oci-image.yml and the curl form used by
-          # eform/.forgejo/workflows/build-oci-image.yml). The
-          # `Authorization: token ...` bearer header that da-os uses
-          # returns 401 against this Forgejo instance's Packages
-          # endpoint.
-          let userpass = $"($env.PACKAGE_OWNER):($env.FORGEJO_TOKEN)"
-          # Best-effort DELETE so re-runs of the same version overwrite
-          # cleanly (Generic Packages rejects duplicate paths on PUT);
-          # a 404 is fine. --fail-with-body on the PUT surfaces the
-          # response body if Forgejo rejects the upload.
-          print $"DELETE ($url)"
-          ^curl --silent --show-error --user $userpass --request DELETE $url
-          print $"PUT ($url)"
-          ^curl --silent --show-error --fail-with-body --user $userpass --upload-file $src $url
+          # Build the URL by parsing GITHUB_SERVER_URL into a record,
+          # rewriting the path, and joining it back. Cleaner than dense
+          # string interpolation and lets `url join` handle encoding.
+          let url = (
+            $env.GITHUB_SERVER_URL
+            | url parse
+            | update path ([
+                "api"
+                "packages"
+                $env.PACKAGE_OWNER
+                "generic"
+                $env.PACKAGE_NAME
+                $version
+                $file
+              ] | str join "/")
+            | url join
+          )
+          let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
+
+          # Generic Packages files are immutable, so PUTting the same path
+          # twice returns 409. Delete any existing copy first: 204 means
+          # it was removed, 404 means nothing was there to remove. Any
+          # other status fails the step (yotun pattern).
+          print $"Deleting existing ($url) if present"
+          let delete_status = (
+            http delete --full --allow-errors --headers $auth $url | get status
+          )
+          if $delete_status not-in [204 404] {
+            print --stderr $"Unexpected DELETE status: ($delete_status)"
+            exit 1
+          }
+          print $"DELETE returned ($delete_status)"
+
+          print $"Uploading ($src) to ($url)"
+          (
+            http put
+              --content-type application/octet-stream
+              --headers $auth
+              $url
+              (open --raw $src)
+          )
           print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
