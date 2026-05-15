@@ -380,8 +380,7 @@ pub async fn build_quote_previews_bulk(
         return Ok(HashMap::new());
     }
 
-    let placeholders = std::iter::repeat("?")
-        .take(deduped.len())
+    let placeholders = std::iter::repeat_n("?", deduped.len())
         .collect::<Vec<_>>()
         .join(",");
     let sql =
@@ -439,17 +438,15 @@ pub async fn build_quote_previews_bulk(
 /// in the template via Askama's default auto-escape, so this function does
 /// not pre-escape (which would double-encode).
 fn excerpt_for_quote(body: &str) -> String {
-    let flat = body.replace('\r', " ").replace('\n', " ");
+    let flat = body.replace(['\r', '\n'], " ");
     let trimmed = flat.trim();
     let mut out = String::new();
-    let mut count = 0usize;
-    for c in trimmed.chars() {
+    for (count, c) in trimmed.chars().enumerate() {
         if count >= QUOTE_EXCERPT_MAX_CHARS {
             out.push('\u{2026}');
             break;
         }
         out.push(c);
-        count += 1;
     }
     out
 }

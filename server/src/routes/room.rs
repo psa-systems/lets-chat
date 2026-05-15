@@ -1172,8 +1172,7 @@ pub async fn delete_message(
     state.hub.broadcast_to_room(m.room_id, &event);
     // Return the deleted-fragment HTML directly so the requesting tab also updates.
     let body = format!(
-        "<div id=\"msg-{}\" class=\"px-4 py-2 italic text-slate-400\">[deleted]</div>",
-        message_id
+        "<div id=\"msg-{message_id}\" class=\"px-4 py-2 italic text-slate-400\">[deleted]</div>"
     );
     Ok(axum::response::Html(body).into_response())
 }

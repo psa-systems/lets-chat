@@ -136,7 +136,7 @@ async fn attachments_for_messages_groups_by_message_id() {
         .unwrap();
     assert_eq!(map.get(&m1).map(|v| v.len()), Some(2));
     assert_eq!(map.get(&m2).map(|v| v.len()), Some(1));
-    assert!(map.get(&m3).is_none());
+    assert!(!map.contains_key(&m3));
 
     let by_mid = lets_chat::db::uploads::attachments_for_message(&pool, m2)
         .await

@@ -105,8 +105,7 @@ async fn flush_user_activity(pool: &SqlitePool, ids: &[String]) -> Result<(), sq
     if ids.is_empty() {
         return Ok(());
     }
-    let placeholders = std::iter::repeat("?")
-        .take(ids.len())
+    let placeholders = std::iter::repeat_n("?", ids.len())
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
@@ -126,8 +125,7 @@ async fn flush_session_last_seen(pool: &SqlitePool, ids: &[String]) -> Result<()
     if ids.is_empty() {
         return Ok(());
     }
-    let placeholders = std::iter::repeat("?")
-        .take(ids.len())
+    let placeholders = std::iter::repeat_n("?", ids.len())
         .collect::<Vec<_>>()
         .join(",");
     let sql =

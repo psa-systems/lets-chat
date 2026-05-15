@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnclaveRole {
@@ -15,7 +16,12 @@ impl EnclaveRole {
             EnclaveRole::Member => "member",
         }
     }
-    pub fn from_str(s: &str) -> Result<Self, String> {
+}
+
+impl FromStr for EnclaveRole {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "owner" => Ok(EnclaveRole::Owner),
             "admin" => Ok(EnclaveRole::Admin),

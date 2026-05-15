@@ -69,10 +69,7 @@ pub async fn get_picker(
     for e in &unicode_defaults {
         let encoded = percent_encoding::utf8_percent_encode(e, percent_encoding::NON_ALPHANUMERIC);
         buttons.push_str(&format!(
-            r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
-            id = message_id,
-            enc = encoded,
-            e = e,
+            r##"<button hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
         ));
     }
 
@@ -95,9 +92,7 @@ pub async fn get_picker(
     }
 
     let body = format!(
-        r##"<div id="picker-{id}" class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{id}/reactions/cancel" hx-target="#picker-{id}" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
-        id = message_id,
-        buttons = buttons,
+        r##"<div id="picker-{message_id}" class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{message_id}/reactions/cancel" hx-target="#picker-{message_id}" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
     );
     Ok(axum::response::Html(body).into_response())
 }
@@ -106,8 +101,7 @@ pub async fn get_picker(
 /// Replace the picker with the `+` button again.
 pub async fn cancel_picker(Path(message_id): Path<i64>) -> Response {
     let body = format!(
-        r##"<button hx-get="/messages/{id}/reactions/picker" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500 hover:text-slate-700">+</button>"##,
-        id = message_id,
+        r##"<button hx-get="/messages/{message_id}/reactions/picker" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500 hover:text-slate-700">+</button>"##,
     );
     axum::response::Html(body).into_response()
 }

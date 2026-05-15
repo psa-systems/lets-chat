@@ -201,7 +201,7 @@ async fn discover_lists_only_public_enclaves() {
 
     let vis = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/visibility"))
+        .uri(format!("/enclave/{id}/visibility"))
         .header("cookie", cookie(&sess))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("is_public=1"))
@@ -246,7 +246,7 @@ async fn join_by_invite_code_adds_member() {
 
     let gen_code = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/invite-code"))
+        .uri(format!("/enclave/{id}/invite-code"))
         .header("cookie", cookie(&sess))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::empty())
@@ -293,7 +293,7 @@ async fn discover_join_rejects_private() {
 
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclaves/discover/{id}/join"))
+        .uri(format!("/enclaves/discover/{id}/join"))
         .header("cookie", cookie(&sess))
         .body(Body::empty())
         .unwrap();
@@ -327,7 +327,7 @@ async fn invite_then_accept_creates_membership() {
     // (HTTP 200), not a redirect.
     let invite = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{enclave_id}/invite"))
+        .uri(format!("/enclave/{enclave_id}/invite"))
         .header("cookie", cookie(&s1))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from(format!("user_id={id2}")))
@@ -363,7 +363,7 @@ async fn invite_then_accept_creates_membership() {
     };
     let accept = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/invitations/{inv_id}/accept"))
+        .uri(format!("/invitations/{inv_id}/accept"))
         .header("cookie", cookie(&s2))
         .body(Body::empty())
         .unwrap();
@@ -373,7 +373,7 @@ async fn invite_then_accept_creates_membership() {
     // Bob can now reach the enclave landing.
     let landing = Request::builder()
         .method(Method::GET)
-        .uri(&format!("/enclave/{enclave_id}"))
+        .uri(format!("/enclave/{enclave_id}"))
         .header("cookie", cookie(&s2))
         .body(Body::empty())
         .unwrap();
@@ -418,7 +418,7 @@ async fn owner_cannot_self_leave() {
         .unwrap();
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/leave"))
+        .uri(format!("/enclave/{id}/leave"))
         .header("cookie", cookie(&sess))
         .body(Body::empty())
         .unwrap();
@@ -450,7 +450,7 @@ async fn non_owner_cannot_delete_enclave() {
     // Direct DB poke is fine here because we're testing the route guard, not invite flow.
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/invite"))
+        .uri(format!("/enclave/{id}/invite"))
         .header("cookie", cookie(&s1))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("username=bob"))
@@ -461,7 +461,7 @@ async fn non_owner_cannot_delete_enclave() {
     let _ = id2;
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/delete"))
+        .uri(format!("/enclave/{id}/delete"))
         .header("cookie", cookie(&s2))
         .body(Body::empty())
         .unwrap();
@@ -492,7 +492,7 @@ async fn create_room_in_enclave_attaches_to_enclave() {
 
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/rooms"))
+        .uri(format!("/enclave/{id}/rooms"))
         .header("cookie", cookie(&sess))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("name=experiments&room_type=public"))
@@ -502,7 +502,7 @@ async fn create_room_in_enclave_attaches_to_enclave() {
 
     let landing = Request::builder()
         .method(Method::GET)
-        .uri(&format!("/enclave/{id}"))
+        .uri(format!("/enclave/{id}"))
         .header("cookie", cookie(&sess))
         .body(Body::empty())
         .unwrap();
@@ -536,7 +536,7 @@ async fn create_room_rejects_unknown_type() {
         .unwrap();
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{id}/rooms"))
+        .uri(format!("/enclave/{id}/rooms"))
         .header("cookie", cookie(&sess))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("name=x&room_type=garbage"))
@@ -580,7 +580,7 @@ async fn delete_room_404_for_wrong_enclave() {
         .unwrap();
     let mkroom = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{a}/rooms"))
+        .uri(format!("/enclave/{a}/rooms"))
         .header("cookie", cookie(&sess))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("name=r1&room_type=public"))
@@ -589,7 +589,7 @@ async fn delete_room_404_for_wrong_enclave() {
     // Find r1's id via direct DB call would need pool; instead try a wrong id.
     let req = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{b}/rooms/9999/delete"))
+        .uri(format!("/enclave/{b}/rooms/9999/delete"))
         .header("cookie", cookie(&sess))
         .body(Body::empty())
         .unwrap();
@@ -620,7 +620,7 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
         .unwrap();
     let mkroom = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/enclave/{enclave_id}/rooms"))
+        .uri(format!("/enclave/{enclave_id}/rooms"))
         .header("cookie", cookie(&s1))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("name=lobby&room_type=public"))
@@ -631,7 +631,7 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
     // Find the room id by listing the landing and grepping.
     let list = Request::builder()
         .method(Method::GET)
-        .uri(&format!("/enclave/{enclave_id}"))
+        .uri(format!("/enclave/{enclave_id}"))
         .header("cookie", cookie(&s1))
         .body(Body::empty())
         .unwrap();
@@ -655,7 +655,7 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
     // Bob (not a member of the enclave) tries to POST a message; must be 403.
     let post = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/room/{room_id}/messages"))
+        .uri(format!("/room/{room_id}/messages"))
         .header("cookie", cookie(&s2))
         .header("content-type", "application/x-www-form-urlencoded")
         .body(Body::from("body=intrusion"))
