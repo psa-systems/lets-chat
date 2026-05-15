@@ -14,7 +14,7 @@ fn fingerprint(user_agent: Option<&str>, ip: Option<&str>) -> String {
     let digest = hasher.finalize();
     let mut out = String::with_capacity(digest.len() * 2);
     for b in digest {
-        out.push_str(&format!("{:02x}", b));
+        out.push_str(&format!("{b:02x}"));
     }
     out
 }

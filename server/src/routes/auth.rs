@@ -177,7 +177,7 @@ pub async fn post_register(
 
     let password_hash = match hash_password(password) {
         Ok(h) => h,
-        Err(e) => return Err(AppError::Internal(format!("hash: {}", e))),
+        Err(e) => return Err(AppError::Internal(format!("hash: {e}"))),
     };
 
     let user_id = match db::auth::create_user(&state.auth, username, &password_hash).await {
@@ -191,7 +191,7 @@ pub async fn post_register(
                     "Username taken",
                 ));
             }
-            return Err(AppError::Internal(format!("register: {}", e)));
+            return Err(AppError::Internal(format!("register: {e}")));
         }
     };
 
@@ -209,7 +209,7 @@ pub async fn post_register(
                     "That email address is already in use",
                 ));
             }
-            return Err(AppError::Internal(format!("set_user_email: {}", err)));
+            return Err(AppError::Internal(format!("set_user_email: {err}")));
         }
 
         // Kick off a verification email when SMTP is configured. The send
@@ -337,7 +337,7 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
         Ok(b) => b,
         Err(e) => {
             tracing::error!(error = %e, "failed to render form_error template");
-            return AppError::Internal(format!("askama: {}", e)).into_response();
+            return AppError::Internal(format!("askama: {e}")).into_response();
         }
     };
     (

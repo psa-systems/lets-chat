@@ -39,12 +39,12 @@ impl IntoResponse for AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
-        AppError::Internal(format!("sqlx: {}", e))
+        AppError::Internal(format!("sqlx: {e}"))
     }
 }
 
 impl From<askama::Error> for AppError {
     fn from(e: askama::Error) -> Self {
-        AppError::Internal(format!("askama: {}", e))
+        AppError::Internal(format!("askama: {e}"))
     }
 }

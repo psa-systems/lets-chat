@@ -51,6 +51,10 @@ struct TestApp {
     auth: SqlitePool,
     chat: SqlitePool,
     hub: Arc<Hub>,
+    // Kept on TestApp so callers can swap in a counting mock and observe
+    // dispatch counts; not all test cases inspect it, so suppress the
+    // dead-code lint at the field level rather than per-test.
+    #[allow(dead_code)]
     push_client: Arc<dyn PushClient>,
 }
 
@@ -95,10 +99,7 @@ async fn setup_app_with_users_and_client(
         other_users.insert((*uname).to_string(), id);
     }
     // Swap key/value so callers do `other_users[name] -> user_id`.
-    let other_users: HashMap<String, String> = other_users
-        .into_iter()
-        .map(|(name, id)| (name, id))
-        .collect();
+    let other_users: HashMap<String, String> = other_users.into_iter().collect();
 
     // Seed General enclave membership + room_members for everyone.
     db::enclave::backfill_general_membership(&auth, &chat)
