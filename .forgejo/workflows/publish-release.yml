@@ -111,7 +111,7 @@ jobs:
               linux_x86_64:   { url: $"($base)/($version)/lets-chat-desktop-linux-x86_64" },
               windows_x86_64: { url: $"($base)/($version)/lets-chat-desktop-windows-x86_64.exe" },
           }
-          $manifest | to json --indent 2 | save --force artifacts/latest.json
+          $manifest | to json --indent 2 | save artifacts/latest.json
           print "Generated artifacts/latest.json:"
           open --raw artifacts/latest.json | print
 
