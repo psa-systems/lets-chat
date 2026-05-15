@@ -127,7 +127,15 @@ jobs:
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          let auth = $"Authorization: token ($env.FORGEJO_TOKEN)"
+          # HTTP Basic auth with the package owner as the username is the
+          # form Forgejo's Generic Packages API on dev.a8n.run actually
+          # accepts (matches the `docker login --username $OWNER ...`
+          # in build-oci-image.yml and the curl form used by
+          # eform/.forgejo/workflows/build-oci-image.yml). The
+          # `Authorization: token ...` bearer header that da-os uses
+          # returns 401 against this Forgejo instance's Packages
+          # endpoint.
+          let userpass = $"($env.PACKAGE_OWNER):($env.FORGEJO_TOKEN)"
           let uploads = [
               { src: "artifacts/lets-chat-desktop-linux-x86_64",       dest: $"($version)/lets-chat-desktop-linux-x86_64" },
               { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: $"($version)/lets-chat-desktop-windows-x86_64.exe" },
@@ -135,32 +143,14 @@ jobs:
           ]
           for entry in $uploads {
               let url = $"($base)/($entry.dest)"
-              # Best-effort delete in case the file already exists at this
-              # path (the manifest at latest/latest.json is overwritten every
-              # release; version-specific binaries only collide on a re-run
-              # of the same tag). A 404 is fine; anything else still lets the
-              # PUT below decide whether the path is usable.
+              # Best-effort DELETE so re-runs overwrite (Generic Packages
+              # rejects duplicate paths on PUT). A 404 is fine.
+              # --fail-with-body on the PUT surfaces the response body if
+              # Forgejo rejects the upload.
               print $"DELETE ($url)"
-              (
-                  ^curl
-                      --silent
-                      --show-error
-                      --output /dev/null
-                      --write-out "%{http_code}\n"
-                      --header $auth
-                      --request DELETE
-                      $url
-              )
+              ^curl --silent --show-error --user $userpass --request DELETE $url
               print $"PUT ($url)"
-              (
-                  ^curl
-                      --silent
-                      --show-error
-                      --fail
-                      --header $auth
-                      --upload-file $entry.src
-                      $url
-              )
+              ^curl --silent --show-error --fail-with-body --user $userpass --upload-file $entry.src $url
           }
 
       - name: Print release summary
