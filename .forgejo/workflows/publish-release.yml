@@ -32,14 +32,12 @@ jobs:
       contents: read
       packages: write
     env:
-      # Publish to the private a8n-tools org via the shared org variables /
-      # secret used by every other repo in the parent directory (see eg.
-      # da-os/.forgejo/workflows/build-{linux,windows}.yml). Using the same
-      # PAT puts the binaries under the same /api/packages/{org}/generic/...
-      # path that consumers already trust, instead of the per-repo
-      # `GITHUB_REPOSITORY_OWNER` namespace which is not where any other
-      # tool looks for releases.
-      FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+      # Publish to the private a8n-tools org via the shared org variables.
+      # FORGEJO_TOKEN lives at step-env on the upload step (not job-env)
+      # to match the yotun pattern - declaring it here returned an empty
+      # value inside the nu step, which produced a malformed
+      # `Authorization: token ` header and a 401 from the Packages
+      # endpoint. PACKAGE_OWNER and PACKAGE_NAME survive at job-env fine.
       PACKAGE_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
       PACKAGE_NAME: lets-chat
 
@@ -124,6 +122,8 @@ jobs:
 
       - name: Upload binaries and manifest to Generic Packages
         shell: nu {0}
+        env:
+          FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
