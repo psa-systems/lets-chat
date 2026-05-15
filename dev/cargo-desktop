@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
-# Wrapper: runs cargo for the desktop crate inside a Docker container.
-# The desktop crate links against system GTK/WebKit2GTK/Soup libraries that the
-# base rust:1.88-slim-bookworm image does not ship with, so this wrapper installs
-# the required apt packages on each invocation. The apt cache is persisted in a
-# named volume so subsequent runs are fast.
+# Wrapper: runs cargo for the desktop crate inside the shared org
+# rust-builder image. The image (`ghcr.io/niceguyit/rust-builder-glibc`)
+# bakes in Rust 1.94 + rustfmt + clippy and every GTK/WebKit/Soup/SSL system
+# library the Tao+Wry desktop crate needs, so no apt step is required at run
+# time and the local check matches the CI build environment one-for-one.
+# Image tag must stay aligned with `ci-build/Dockerfile.desktop-linux`.
 #
-# Shares the rustup volume with dev/cargo so rustfmt and clippy components are
-# available without re-downloading.
+# Cargo registry and target volumes are shared with dev/cargo so a build
+# triggered by either wrapper picks up the other's compiled deps. As in
+# dev/cargo, the container starts as root just long enough to chown the
+# named volumes to the host user, then drops to the host uid/gid via
+# setpriv before invoking cargo, so files cargo writes into the /work bind
+# mount (eg. Cargo.lock) land with the right ownership on the host.
 #
 # When invoked with `cargo run` from a graphical session the wrapper also
-# forwards the X11 / Wayland display, the LETS_CHAT_SERVER_URL env, and switches
-# to host networking so the GUI window renders and so localhost dev servers are
-# reachable from inside the container.
-#
-# Note: runs as root because apt-get requires it. Build artifacts live in the
-# named volume mounted at /cargo-target, so host filesystem ownership is
-# unaffected; alternating with dev/cargo (which runs as host user) is fine.
+# forwards the X11 / Wayland display, the LETS_CHAT_SERVER_URL env, and
+# switches to host networking so the GUI window renders and so localhost
+# dev servers are reachable from inside the container.
 set -euo pipefail
 
 EXTRA_ARGS=()
@@ -59,17 +60,31 @@ if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
     fi
 fi
 
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+EXTRA_ARGS+=(
+    -e "HOST_UID=$HOST_UID"
+    -e "HOST_GID=$HOST_GID"
+)
+
 docker run --rm --init \
     -v "$PWD:/work" \
     -w /work \
     -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
     -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
     -v lets-chat-rewrite-target:/cargo-target \
-    -v lets-chat-rewrite-rustup:/usr/local/rustup \
-    -v lets-chat-rewrite-desktop-apt:/var/cache/apt \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
-    -e RUSTUP_HOME=/usr/local/rustup \
     "${EXTRA_ARGS[@]}" \
-    rust:1.94-slim-bookworm \
-    bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libssl-dev > /dev/null && (cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt clippy >/dev/null) && cargo "$@"' -- "$@"
+    ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie \
+    bash -c '
+        set -euo pipefail
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do
+            if [ "$(stat -c %u "$d")" != "$HOST_UID" ]; then
+                chown -R "$HOST_UID:$HOST_GID" "$d"
+            fi
+        done
+        export HOME=/tmp
+        drop="setpriv --reuid=$HOST_UID --regid=$HOST_GID --clear-groups"
+        exec $drop env HOME=/tmp cargo "$@"
+    ' -- "$@"
