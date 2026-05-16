@@ -298,7 +298,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' + preview +
           '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
-          '<button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
         '</span>';
       document.getElementById('composer-send').disabled = false;
     } catch (e) {
@@ -554,7 +554,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' +
           '<span>Voice message attached</span>' +
-          '<button type="button" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
         '</span>';
       if (sendBtn) sendBtn.disabled = false;
     } catch (e) {
