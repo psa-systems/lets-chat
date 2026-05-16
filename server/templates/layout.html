@@ -21,7 +21,7 @@
     {% block main %}{% endblock %}
   </main>
   <div id="status-events-slot" class="hidden"></div>
-  <div id="lc-notify-bus" class="hidden"></div>
+  <div id="lc-notify-bus" class="sr-only" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
   <div id="lc-call-bus" class="hidden"></div>
   <div id="lc-voice-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
@@ -45,7 +45,7 @@
           <img data-lc-local-avatar src="/avatars/{{ user.id }}" alt="{{ user.display_label() }}"
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
-        <div data-lc-call-status class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
+        <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
       </div>
       <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
         <button type="button" data-lc-call-mute class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
@@ -179,9 +179,45 @@
     }
     refresh();
   }
+  // Drain debouncer. The bus is now an aria-live region (sr-only in the
+  // accessibility tree, visually hidden) so newly-added children get read
+  // by the SR. We must NOT immediately replaceChildren() the way the old
+  // code did - that removes the node before the SR reads its text. The
+  // refactor:
+  //   1. Visual + audio + push side effects still fire synchronously in
+  //      process(node), unchanged. Those are independent of the SR drain.
+  //   2. For `mentioned` events only, write a SR-readable summary into the
+  //      same node's textContent so the live-region announcement carries
+  //      text. mention_cleared has no announcement; it stays empty.
+  //   3. Drain children 2000ms after the LAST mutation. Burst of mentions
+  //      cleared in one shot; SR has already announced each one because
+  //      aria-live + aria-relevant="additions" fires per child added.
+  // 2000ms is conservative against the typical 100-300ms SR pickup window;
+  // tune down only after confirming announcements still land on the SR
+  // you test against.
+  function announceForScreenReader(node){
+    if (node.getAttribute('data-event') !== 'mentioned') return;
+    var kind = node.getAttribute('data-kind');
+    var author = node.getAttribute('data-author') || 'Someone';
+    var roomLabel = node.getAttribute('data-room-label') || '';
+    node.textContent = kind === 'dm'
+      ? 'Direct message from ' + author
+      : 'Mention from ' + author + (roomLabel ? ' in ' + roomLabel : '');
+  }
+  var drainTimer = null;
   new MutationObserver(function(muts){
-    muts.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 1) process(n); }); });
-    bus.replaceChildren();
+    muts.forEach(function(m){
+      Array.prototype.forEach.call(m.addedNodes, function(n){
+        if (n.nodeType !== 1) return;
+        process(n);                  // visual / audio / push - immediate, unchanged
+        announceForScreenReader(n);  // sr-only summary into node.textContent
+      });
+    });
+    if (drainTimer) clearTimeout(drainTimer);
+    drainTimer = setTimeout(function(){
+      drainTimer = null;
+      bus.replaceChildren();
+    }, 2000);
   }).observe(bus, { childList: true });
 })();
 </script>
@@ -265,6 +301,13 @@ document.body.addEventListener('click', function(e){
   function setBanner(next, msg) {
     bannerEl.setAttribute('data-state', next);
     textEl.textContent = msg || '';
+    // Escalate to role=alert when the failure has been ongoing long
+    // enough to merit interruption (matches the visual escalation to
+    // red). Brief reconnects and the green "connected" flash stay
+    // polite (role=status) so they do not step on whatever the user
+    // is reading. aria-live="polite" is set in the template; role
+    // swap is what changes the assertive vs. polite behavior.
+    textEl.setAttribute('role', next === 'failed-long' ? 'alert' : 'status');
   }
 
   function startWatchdog() {
