@@ -745,6 +745,14 @@ document.body.addEventListener('click', function(e){
 //      right behavior for OOB-only swaps and for swaps that replaced their
 //      own trigger.
 //
+// Cooperation contract: this listener is non-blocking. It does NOT call
+// stopPropagation / stopImmediatePropagation, so other htmx:afterSwap
+// listeners (e.g. composer.html's mention-popover handler, the
+// voice-player rescan in this file) also run. Order is determined by
+// registration sequence on document.body. If anyone ever adds a handler
+// that calls stopImmediatePropagation, registration order silently
+// becomes load-bearing - audit all afterSwap listeners before doing so.
+//
 // Opt-out: add `data-lc-skip-focus` to a swap target (or any ancestor) to
 // bypass this handler entirely. Used by the mention-popover slot in
 // composer.html so the textarea retains focus while the popover refreshes.
