@@ -10,7 +10,8 @@
   </div>
   <div id="lc-nav-backdrop" class="hidden fixed inset-0 z-20 bg-black/40 md:hidden" onclick="lcCloseNav()"></div>
   <main id="main" class="flex-1 flex flex-col overflow-hidden min-h-0">
-    <button type="button" aria-label="Open navigation"
+    <button type="button" id="lc-nav-toggle" aria-label="Toggle navigation"
+      aria-expanded="false" aria-controls="lc-nav-panel"
       class="md:hidden inline-flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-slate-600 hover:text-slate-900"
       onclick="lcOpenNav()">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -247,13 +248,20 @@ function lcOpenNav(){
   p.classList.remove('hidden');
   p.classList.add('flex');
   document.getElementById('lc-nav-backdrop').classList.remove('hidden');
+  var t = document.getElementById('lc-nav-toggle');
+  if (t) t.setAttribute('aria-expanded', 'true');
 }
 function lcCloseNav(){
+  // Desktop keeps the panel always-visible via md:flex; bail before mutating
+  // anything (including aria-expanded - the toggle button itself is md:hidden
+  // on desktop, so its state is moot).
   if (window.matchMedia('(min-width: 768px)').matches) return;
   var p = document.getElementById('lc-nav-panel');
   p.classList.add('hidden');
   p.classList.remove('flex');
   document.getElementById('lc-nav-backdrop').classList.add('hidden');
+  var t = document.getElementById('lc-nav-toggle');
+  if (t) t.setAttribute('aria-expanded', 'false');
 }
 document.body.addEventListener('click', function(e){
   if (window.matchMedia('(min-width: 768px)').matches) return;
