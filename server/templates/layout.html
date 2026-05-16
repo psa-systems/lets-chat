@@ -675,4 +675,45 @@ document.body.addEventListener('click', function(e){
   document.body.addEventListener('htmx:oobAfterSwap', function(e){ scan(e.target); });
 })();
 </script>
+<script>
+// Persistent-shell script: HTMX afterSwap focus restoration. Cascade:
+//   1. If the swap target (or any descendant) is [autofocus], focus it.
+//   2. Else if the triggering element is still in the document AND focusable,
+//      focus it.
+//   3. Else do nothing - browser default (focus stays where it was) is the
+//      right behavior for OOB-only swaps and for swaps that replaced their
+//      own trigger.
+//
+// Opt-out: add `data-lc-skip-focus` to a swap target (or any ancestor) to
+// bypass this handler entirely. Used by the mention-popover slot in
+// composer.html so the textarea retains focus while the popover refreshes.
+//
+// Carve-outs by design (no opt-out needed):
+//   - Composer message-send uses `hx-swap="none"` so afterSwap does not fire
+//     for that POST. The composer's own `hx-on::after-request` calls
+//     `ta.focus()` - no race with this handler.
+//   - WebSocket-driven OOB swaps (sidebar badges, new message rows, typing
+//     indicators) do not carry a meaningful `requestConfig.elt`, so step 2
+//     naturally fails the focusable check and step 3 (do nothing) wins.
+//     Focus stays in the composer / wherever the user had it.
+(function(){
+  var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function isLiveFocusable(el){
+    if (!el || el.nodeType !== 1 || !document.contains(el)) return false;
+    return typeof el.matches === 'function' && el.matches(FOCUSABLE);
+  }
+  document.body.addEventListener('htmx:afterSwap', function(evt){
+    var target = evt && evt.target;
+    if (!target || target.nodeType !== 1) return;
+    // Opt-out: walk up from the target so a marker on the slot OR any
+    // ancestor of it (e.g. a wrapper) suppresses the cascade.
+    if (typeof target.closest === 'function' && target.closest('[data-lc-skip-focus]')) return;
+    var auto = typeof target.querySelector === 'function' ? target.querySelector('[autofocus]') : null;
+    if (isLiveFocusable(auto)) { auto.focus(); return; }
+    var elt = evt.detail && evt.detail.requestConfig && evt.detail.requestConfig.elt;
+    if (isLiveFocusable(elt)) { elt.focus(); return; }
+    // step 3: do nothing
+  });
+})();
+</script>
 {% endblock %}
