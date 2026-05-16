@@ -198,11 +198,29 @@
   function announceForScreenReader(node){
     if (node.getAttribute('data-event') !== 'mentioned') return;
     var kind = node.getAttribute('data-kind');
-    var author = node.getAttribute('data-author') || 'Someone';
+    var author = node.getAttribute('data-author') || '';
     var roomLabel = node.getAttribute('data-room-label') || '';
-    node.textContent = kind === 'dm'
-      ? 'Direct message from ' + author
-      : 'Mention from ' + author + (roomLabel ? ' in ' + roomLabel : '');
+    // Degrade gracefully when fields are missing rather than emit
+    // "Mention from undefined in #general". The four-way matrix:
+    //   dm  + author    -> "Direct message from <author>"
+    //   dm  - author    -> "New direct message"
+    //   not + both      -> "Mention from <author> in <room>"
+    //   not - author    -> "Mention in <room>" (room still present)
+    //   not - room      -> "Mention from <author>"
+    //   not - both      -> "New mention"
+    var msg;
+    if (kind === 'dm') {
+      msg = author ? ('Direct message from ' + author) : 'New direct message';
+    } else if (author && roomLabel) {
+      msg = 'Mention from ' + author + ' in ' + roomLabel;
+    } else if (author) {
+      msg = 'Mention from ' + author;
+    } else if (roomLabel) {
+      msg = 'Mention in ' + roomLabel;
+    } else {
+      msg = 'New mention';
+    }
+    node.textContent = msg;
   }
   var drainTimer = null;
   new MutationObserver(function(muts){
