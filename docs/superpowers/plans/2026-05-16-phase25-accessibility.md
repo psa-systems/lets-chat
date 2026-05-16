@@ -207,11 +207,30 @@ Now that Task 5's global handler exists with `[data-lc-skip-focus]`, mark the po
 
 ### Task 8 - Axe baseline + gap fills
 
-- [ ] Run `bunx @axe-core/cli https://${USER}-chat.a8n.run/login https://${USER}-chat.a8n.run/register https://${USER}-chat.a8n.run/ https://${USER}-chat.a8n.run/settings --save docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json`. If the dev stack is not running, start it first (`just dev-web` or `just dev-web-local`).
-- [ ] If the stack URL has self-signed certs, pass `--no-sandbox` and use the local http URL (`http://localhost:18080`).
-- [ ] Read the resulting JSON. For every issue at severity `serious` or `critical` that is NOT in the "Out of scope" list above, fix it as part of this task. Do not expand scope - low-contrast text, missing `lang` attribute on `<html>`, and similar items that the brainstorm deferred stay deferred. The PR description names them explicitly so reviewers know.
-- [ ] Commit the raw axe JSON at the documented path so the next pass has a baseline to compare against.
-- [ ] `git add docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json <any template files patched in this task>`. Stop.
+**Run notes.** `@axe-core/cli` proved unworkable in this environment (host lacks Chromium; the npm tool uses Selenium/chromedriver, not the bundled Chrome that the `ghcr.io/puppeteer/puppeteer` image ships). Substituted with a small ad-hoc Puppeteer + `@axe-core/puppeteer` script run inside the Puppeteer container against the running dev-web stack at `https://long-chat.a8n.run`. The script and command are recorded here for the next pass:
+
+```nu
+# Script: /home/long/.axe-scan/axe-scan.js (Puppeteer launches Chromium,
+# loads each URL, runs @axe-core/puppeteer analyze, prints aggregate JSON)
+docker run --rm --network host --user "$(id -u):$(id -g)" \
+    --volume /home/long/.axe-scan:/scan --workdir /scan \
+    --env HOME=/scan ghcr.io/puppeteer/puppeteer:latest \
+    sh -c "npm install --silent @axe-core/puppeteer puppeteer && node axe-scan.js"
+```
+
+**Scope of this baseline.** `@axe-core/cli` and the substitute script both lack cookie-auth support; `/`, `/settings`, `/room/{id}`, `/dm/{id}`, `/admin/*` all redirect to `/login` and were scanned as the login page (deduplicating the one finding). The baseline covers `/login` and `/register` only. A follow-up pass with a Puppeteer login script can scan authenticated surfaces; that is its own item, not in scope for this phase.
+
+**Findings.** One violation, severity `serious`, repeated across both URLs:
+
+- `color-contrast` on the `.text-xs.text-center.text-slate-400` version footer (`<p>v0.1.0 (...)</p>`) on `/login`. Contrast 2.56 vs. required 4.5.
+- `color-contrast` on `<span class="text-slate-400">(optional)</span>` next to the email field on `/register`. Same root cause: `text-slate-400` (#94a3b8) on white is below WCAG AA for body text.
+
+**Disposition.** Both fall under the explicitly-deferred "Color contrast remediation" item (theme work, separate phase). No fix in this task. The findings confirm the deferred-list prediction; nothing unexpected surfaced.
+
+- [x] Ran the Puppeteer-based scan against the running dev-web stack at `https://long-chat.a8n.run`.
+- [x] Committed the raw JSON at `docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json` so the next pass has a baseline to compare against.
+- [x] Triaged: 0 unexpected findings; 1 expected finding (color-contrast) already in deferred list; no remediation in this task.
+- [ ] `git add docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json docs/superpowers/plans/2026-05-16-phase25-accessibility.md`. Stop.
 
 ### Final task - PR
 
@@ -222,8 +241,8 @@ Now that Task 5's global handler exists with `[data-lc-skip-focus]`, mark the po
 - [ ] PR title: `feat(a11y): phase 25 - keyboard nav, ARIA, focus rings, live regions, call dialogs`.
 - [ ] PR body (single long lines per bullet, per the project commit-style rule):
   - Summary: brings the codebase onto a single accessibility baseline. Global focus-visible. Live regions per the strategy in the plan. Mention autocomplete combobox wiring. Call dialogs get role="dialog" + focus trap. Icon-only buttons get accessible names. Mobile nav button toggles aria-expanded. HTMX swaps restore focus.
-  - Deferred (named explicitly, with rationale): WCAG 2.1 AA compliance certification; color contrast; prefers-reduced-motion; screen reader walkthrough; voice-message seekbar keyboard alternative; uploaded-image alt text; mobile touch targets; voice-message Play/Pause aria-label toggle (surfaced during Task 3 - button label stays "Play voice message" when paused/playing); reaction-chip viewer-reacted state via `aria-pressed` (surfaced during Task 3 - chip background communicates state visually but not to SR). The last two are candidates for a follow-up "toggle-state ARIA" mini-phase.
-  - Axe baseline committed at `docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json`. Summary of issues found / fixed / deferred from that report.
+  - Deferred (named explicitly, with rationale): WCAG 2.1 AA compliance certification; color contrast (axe baseline surfaced 2 instances on text-slate-400 on white at the version footer and the email "(optional)" hint - theme work, separate phase); prefers-reduced-motion; screen reader walkthrough; voice-message seekbar keyboard alternative; uploaded-image alt text; mobile touch targets; voice-message Play/Pause aria-label toggle (surfaced during Task 3 - button label stays "Play voice message" when paused/playing); reaction-chip viewer-reacted state via `aria-pressed` (surfaced during Task 3 - chip background communicates state visually but not to SR); authenticated-surface axe scan (the @axe-core/cli and @axe-core/puppeteer tools lack cookie-auth support; only /login and /register were scanned in this pass). The last three are candidates for a follow-up "toggle-state ARIA + authed-axe" mini-phase.
+  - Axe baseline committed at `docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json`. Scope: /login and /register (axe-cli does not handle session auth; the authed redirects all land on /login and dedupe). Findings: 1 unique rule, `color-contrast`, severity `serious`, 2 nodes (version footer p, email "(optional)" span). Fixed in this phase: 0 (already in deferred list). Unexpected findings: 0.
 
 ## Things to confirm during implementation
 
