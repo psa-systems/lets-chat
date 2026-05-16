@@ -30,18 +30,22 @@
   "
   class="border-t border-slate-200 p-2"
 >
-  <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
+  <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-slate-500"></div>
   <div id="lc-broadcast-count" class="mb-1 text-xs text-slate-500 px-1 min-h-[1rem]"></div>
   <div id="composer-quote-bar"></div>
-  <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
-  <div id="lc-mention-popover" class="relative"></div>
-  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
+  <div id="lc-upload-error" role="alert" class="mb-1 text-xs text-red-600"></div>
+  <!-- data-lc-skip-focus opts this slot out of the global afterSwap focus
+       handler in layout.html. The combobox pattern keeps focus in the
+       textarea while the listbox refreshes; aria-activedescendant points
+       at the highlighted option. -->
+  <div id="lc-mention-popover" data-lc-skip-focus class="relative"></div>
+  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600" role="alert">
     <span>Could not send.</span>
     <button type="submit" class="underline hover:no-underline">Retry</button>
   </div>
   <input type="hidden" name="file_id">
   <div class="flex items-end gap-2">
-    <button type="button" title="Attach file"
+    <button type="button" title="Attach file" aria-label="Attach file"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
     <button type="button" id="lc-record" title="Record voice message"
@@ -58,6 +62,11 @@
       autocomplete="off"
       autofocus
       placeholder="Message #{{ room.name }}"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="lc-mention-list"
+      aria-haspopup="listbox"
       class="flex-1 resize-none overflow-y-auto rounded border px-3 py-2 max-h-40"
       oninput="
         this.style.height = 'auto';
@@ -143,7 +152,18 @@
     var start = pos - prefix.length - 1;
     return { start: start, end: pos, prefix: prefix };
   }
-  function close() { current = null; slot.replaceChildren(); }
+  // Combobox semantics: the textarea is role="combobox" + aria-controls
+  // pointing at the listbox. While the popover is open we set
+  // aria-expanded="true" and aria-activedescendant to the currently
+  // highlighted <li>'s id (each option has a stable id from the server
+  // template, `lc-mention-option-N`). On close we clear both so SR engines
+  // do not chase a stale descendant.
+  function close() {
+    current = null;
+    slot.replaceChildren();
+    ta.setAttribute('aria-expanded', 'false');
+    ta.removeAttribute('aria-activedescendant');
+  }
   function refresh() {
     current = activeToken();
     if (!current) return close();
@@ -152,14 +172,21 @@
       htmx.ajax('GET', url, { target: '#lc-mention-popover', swap: 'innerHTML' });
     }
   }
-  function items() { return slot.querySelectorAll('button[data-username]'); }
-  function selected() { return slot.querySelector('button[aria-selected="true"]'); }
-  function select(btn) {
-    items().forEach(function(b){ b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
-    if (btn && btn.scrollIntoView) btn.scrollIntoView({ block: 'nearest' });
+  // items() returns the role="option" <li>s; aria-selected lives on the LI
+  // per WAI-ARIA pattern. The inner <button data-username> remains as the
+  // click target (mouse and the keyboard Enter handler simulate via it).
+  function items() { return slot.querySelectorAll('li[role="option"]'); }
+  function selected() { return slot.querySelector('li[role="option"][aria-selected="true"]'); }
+  function select(li) {
+    items().forEach(function(l){ l.setAttribute('aria-selected', l === li ? 'true' : 'false'); });
+    if (!li) return;
+    if (li.id) ta.setAttribute('aria-activedescendant', li.id);
+    if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
   }
-  function insert(btn) {
-    if (!current || !btn) return close();
+  function insert(li) {
+    if (!current || !li) return close();
+    var btn = li.querySelector('button[data-username]');
+    if (!btn) return close();
     var u = btn.getAttribute('data-username');
     var v = ta.value;
     ta.value = v.slice(0, current.start) + '@' + u + ' ' + v.slice(current.end);
@@ -187,11 +214,21 @@
   }, true);
   function onAfterSwap(e){
     if (e.target && e.target.id === 'lc-mention-popover') {
-      var first = slot.querySelector('button[data-username]');
-      if (first) first.setAttribute('aria-selected', 'true');
+      var firstLi = slot.querySelector('li[role="option"]');
+      if (firstLi) {
+        firstLi.setAttribute('aria-selected', 'true');
+        ta.setAttribute('aria-expanded', 'true');
+        if (firstLi.id) ta.setAttribute('aria-activedescendant', firstLi.id);
+      } else {
+        // Swap rendered the empty `<ul class="hidden">` (no results). Treat
+        // as closed for combobox state so SR does not announce an expanded
+        // listbox with nothing in it.
+        ta.setAttribute('aria-expanded', 'false');
+        ta.removeAttribute('aria-activedescendant');
+      }
       slot.addEventListener('mousedown', function(ev){
-        var b = ev.target.closest('button[data-username]');
-        if (b) { ev.preventDefault(); insert(b); }
+        var li = ev.target.closest('li[role="option"]');
+        if (li) { ev.preventDefault(); insert(li); }
       }, { once: true });
     }
   }
@@ -298,7 +335,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' + preview +
           '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
-          '<button type="button" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
         '</span>';
       document.getElementById('composer-send').disabled = false;
     } catch (e) {
@@ -554,7 +591,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' +
           '<span>Voice message attached</span>' +
-          '<button type="button" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
         '</span>';
       if (sendBtn) sendBtn.disabled = false;
     } catch (e) {
