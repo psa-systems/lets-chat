@@ -3,7 +3,7 @@
 {% else %}
 <ul id="lc-mention-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg" role="listbox">
   {% for s in results %}
-  <li role="option">
+  <li role="option" id="lc-mention-option-{{ loop.index0 }}" aria-selected="false">
     <button type="button"
       class="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
       data-username="{{ s.username }}">
