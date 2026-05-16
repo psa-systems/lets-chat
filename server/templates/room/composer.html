@@ -30,18 +30,18 @@
   "
   class="border-t border-slate-200 p-2"
 >
-  <div id="lc-staged" class="mb-1 text-xs text-slate-500"></div>
+  <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-slate-500"></div>
   <div id="lc-broadcast-count" class="mb-1 text-xs text-slate-500 px-1 min-h-[1rem]"></div>
   <div id="composer-quote-bar"></div>
-  <div id="lc-upload-error" class="mb-1 text-xs text-red-600"></div>
+  <div id="lc-upload-error" role="alert" class="mb-1 text-xs text-red-600"></div>
   <div id="lc-mention-popover" class="relative"></div>
-  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
+  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600" role="alert">
     <span>Could not send.</span>
     <button type="submit" class="underline hover:no-underline">Retry</button>
   </div>
   <input type="hidden" name="file_id">
   <div class="flex items-end gap-2">
-    <button type="button" title="Attach file"
+    <button type="button" title="Attach file" aria-label="Attach file"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
     <button type="button" id="lc-record" title="Record voice message"
