@@ -26,9 +26,10 @@
   <div id="lc-call-bus" class="hidden"></div>
   <div id="lc-voice-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
-    <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
       <div class="w-80 rounded-lg bg-white p-6 text-center shadow-xl">
-        <div class="text-sm text-slate-500">Incoming call</div>
+        <div id="lc-call-incoming-title" class="text-sm text-slate-500">Incoming call</div>
         <div data-lc-call-incoming-name class="mt-1 text-lg font-semibold"></div>
         <div class="mt-5 flex justify-center gap-3">
           <button type="button" data-lc-call-accept class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">Accept</button>
@@ -36,7 +37,9 @@
         </div>
       </div>
     </div>
-    <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-slate-900">
+    <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-slate-900"
+         role="dialog" aria-modal="true" aria-labelledby="lc-call-active-title" aria-hidden="true">
+      <h2 id="lc-call-active-title" class="sr-only">Active call</h2>
       <div class="relative flex-1 overflow-hidden">
         <video data-lc-remote-video autoplay playsinline class="absolute inset-0 h-full w-full bg-black object-contain"></video>
         <img data-lc-remote-avatar alt="" src=""
@@ -49,8 +52,8 @@
         <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
       </div>
       <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
-        <button type="button" data-lc-call-mute class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
-        <button type="button" data-lc-call-camera class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Start video</button>
+        <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
+        <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Start video</button>
         <button type="button" data-lc-call-hangup class="rounded-full bg-red-600 px-6 py-2 text-sm font-medium text-white hover:bg-red-700">Hang up</button>
       </div>
     </div>
@@ -673,6 +676,64 @@ document.body.addEventListener('click', function(e){
   // these on document.body). Re-scan the swapped subtree.
   document.body.addEventListener('htmx:afterSettle', function(e){ scan(e.target); });
   document.body.addEventListener('htmx:oobAfterSwap', function(e){ scan(e.target); });
+})();
+</script>
+<script>
+// Persistent-shell script: focus trap helper for modal dialogs. Exposes
+// `window.__lcDialogTrap(rootElement)` which installs a `keydown` listener
+// on the root, wrapping Tab and Shift+Tab against the first/last focusable
+// descendant. Returns `{ dispose }` so the caller can detach the listener
+// when the dialog closes.
+//
+// Used by call.js for the incoming-call and active-call dialogs. The
+// listener-cleanup discipline applies here even though the lifecycle is
+// open/close instead of htmx:beforeCleanupElement - every addEventListener
+// MUST be paired with removeEventListener on EVERY lifetime-end path.
+// call.js funnels every dialog-close through teardown(), which disposes
+// exactly once.
+(function(){
+  var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  window.__lcDialogTrap = function(root){
+    if (!root) return { dispose: function(){} };
+    function focusable(){
+      // Re-query on every Tab so dialogs whose contents change mid-call
+      // (Mute toggling text, Camera toggling text, status pill mutating)
+      // still wrap to whatever is currently focusable.
+      var nodes = root.querySelectorAll(FOCUSABLE);
+      return Array.prototype.filter.call(nodes, function(el){
+        // Skip elements that are inside a hidden subtree (CSS `display:none`
+        // bubbles through `offsetParent === null` for non-fixed elements;
+        // dialogs themselves are position:fixed so this check is for their
+        // descendants).
+        return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+      });
+    }
+    function onKey(e){
+      if (e.key !== 'Tab') return;
+      var items = focusable();
+      if (items.length === 0) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last || !root.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    root.addEventListener('keydown', onKey);
+    return {
+      dispose: function(){
+        root.removeEventListener('keydown', onKey);
+      }
+    };
+  };
 })();
 </script>
 <script>
