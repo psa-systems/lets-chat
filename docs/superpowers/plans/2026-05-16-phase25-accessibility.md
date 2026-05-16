@@ -222,7 +222,7 @@ Now that Task 5's global handler exists with `[data-lc-skip-focus]`, mark the po
 - [ ] PR title: `feat(a11y): phase 25 - keyboard nav, ARIA, focus rings, live regions, call dialogs`.
 - [ ] PR body (single long lines per bullet, per the project commit-style rule):
   - Summary: brings the codebase onto a single accessibility baseline. Global focus-visible. Live regions per the strategy in the plan. Mention autocomplete combobox wiring. Call dialogs get role="dialog" + focus trap. Icon-only buttons get accessible names. Mobile nav button toggles aria-expanded. HTMX swaps restore focus.
-  - Deferred (named explicitly, with rationale): WCAG 2.1 AA compliance certification; color contrast; prefers-reduced-motion; screen reader walkthrough; voice-message seekbar keyboard alternative; uploaded-image alt text; mobile touch targets.
+  - Deferred (named explicitly, with rationale): WCAG 2.1 AA compliance certification; color contrast; prefers-reduced-motion; screen reader walkthrough; voice-message seekbar keyboard alternative; uploaded-image alt text; mobile touch targets; voice-message Play/Pause aria-label toggle (surfaced during Task 3 - button label stays "Play voice message" when paused/playing); reaction-chip viewer-reacted state via `aria-pressed` (surfaced during Task 3 - chip background communicates state visually but not to SR). The last two are candidates for a follow-up "toggle-state ARIA" mini-phase.
   - Axe baseline committed at `docs/superpowers/plans/2026-05-16-phase25-accessibility-axe-baseline.json`. Summary of issues found / fixed / deferred from that report.
 
 ## Things to confirm during implementation
