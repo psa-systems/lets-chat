@@ -26,6 +26,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/auth/0015_pending_registrations.sql"),
         include_str!("../migrations/auth/0016_sso_identities.sql"),
         include_str!("../migrations/auth/0017_sso_providers.sql"),
+        include_str!("../migrations/auth/0018_sso_flows_provider.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
@@ -320,6 +321,7 @@ async fn insert_then_consume_flow_returns_row_then_none() {
         "/rooms/general",
         "sign_in",
         None,
+        "default",
         600,
     )
     .await
@@ -332,6 +334,7 @@ async fn insert_then_consume_flow_returns_row_then_none() {
     assert_eq!(row.pkce_verifier, "verifier-z");
     assert_eq!(row.return_to, "/rooms/general");
     assert_eq!(row.kind, "sign_in");
+    assert_eq!(row.provider_id, "default");
     assert!(row.user_id.is_none());
 
     // Second consume returns None - one-shot semantics.
@@ -361,6 +364,7 @@ async fn link_flow_carries_user_id() {
         "/settings/profile",
         "link",
         Some(&alice),
+        "default",
         600,
     )
     .await
@@ -386,6 +390,7 @@ async fn expired_flow_is_not_consumable() {
         "/",
         "sign_in",
         None,
+        "default",
         -10,
     )
     .await
@@ -408,13 +413,25 @@ async fn prune_drops_only_expired_rows() {
         "/",
         "sign_in",
         None,
+        "default",
         600,
     )
     .await
     .unwrap();
-    db::sso::insert_sso_flow(&pool, "stale-flow", "c", "n", "v", "/", "sign_in", None, -1)
-        .await
-        .unwrap();
+    db::sso::insert_sso_flow(
+        &pool,
+        "stale-flow",
+        "c",
+        "n",
+        "v",
+        "/",
+        "sign_in",
+        None,
+        "default",
+        -1,
+    )
+    .await
+    .unwrap();
 
     let pruned = db::sso::prune_expired_sso_flows(&pool).await.unwrap();
     assert_eq!(pruned, 1, "exactly one stale row removed");

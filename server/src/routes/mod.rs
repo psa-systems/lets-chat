@@ -52,6 +52,7 @@ mod room;
 mod saas_auth;
 mod search;
 mod settings;
+mod sso;
 mod status;
 pub(crate) mod two_factor;
 mod unfurl;
@@ -604,7 +605,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/call/config", get(call::get_config))
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
-        .merge(enclave::router());
+        .merge(enclave::router())
+        .merge(sso::router());
 
     #[cfg(feature = "standalone")]
     let router = router
