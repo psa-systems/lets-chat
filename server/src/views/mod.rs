@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod admin_sso;
 pub mod auth;
 pub mod bookmarks;
 pub mod dm;

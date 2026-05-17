@@ -245,6 +245,20 @@ pub async fn set_provider_enabled(
     Ok(res.rows_affected())
 }
 
+/// Count `sso_identities` rows still keyed to the given issuer URL.
+/// Used by the admin delete route to refuse a delete that would
+/// orphan linked users. Returns 0 when no rows reference the issuer.
+pub async fn count_identities_for_issuer(
+    pool: &SqlitePool,
+    issuer_url: &str,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM sso_identities WHERE issuer = ?")
+        .bind(issuer_url)
+        .fetch_one(pool)
+        .await?;
+    Ok(row.get::<i64, _>("c"))
+}
+
 /// Delete a provider row. Callers should refuse the delete at the
 /// route layer when `sso_identities` still references its issuer.
 /// This helper is unconditional - no FK enforcement on the SQL side

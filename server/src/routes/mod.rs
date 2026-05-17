@@ -25,6 +25,8 @@ use crate::ws::events::ChatEvent;
 mod account;
 #[cfg(feature = "standalone")]
 mod admin;
+#[cfg(feature = "standalone")]
+mod admin_sso;
 mod auth;
 mod avatar;
 mod bookmarks;
@@ -628,7 +630,8 @@ pub fn build_router(state: AppState) -> Router {
             post(email_verification::post_resend),
         )
         .route("/settings/password", post(settings::post_password))
-        .merge(admin::router());
+        .merge(admin::router())
+        .merge(admin_sso::router());
 
     #[cfg(feature = "saas")]
     let router = router.merge(saas_auth::router());
