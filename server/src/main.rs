@@ -93,26 +93,32 @@ async fn main() {
 
     let bg = lets_chat::bg::spawn(auth_pool.clone());
 
-    // SSO providers. Empty container when LETS_CHAT_SSO_ISSUER is
-    // unset; otherwise one provider under the "default" slug. The
-    // loader returns Result so a half-set env (issuer present, secret
-    // missing) aborts startup rather than silently disabling SSO.
-    let sso = match lets_chat::sso::SsoConfig::from_env() {
+    // SSO providers. Live state is the `sso_providers` table; the
+    // legacy LETS_CHAT_SSO_* env vars seed one default row on first
+    // boot for the upgrade path from L2's env-var single-provider
+    // config. Subsequent edits go through /admin/sso and the env vars
+    // are silently honoured by the DB row (DB wins).
+    match lets_chat::sso::SsoConfig::from_env() {
         Ok(Some(cfg)) => {
-            tracing::info!(
-                issuer = %cfg.issuer,
-                autoprovision = cfg.autoprovision,
-                "SSO configured"
-            );
-            let mut p = lets_chat::sso::SsoProviders::default();
-            p.register(lets_chat::sso::DEFAULT_PROVIDER_ID, cfg);
-            p
+            let key = secret_key.as_ref().map(|k| k.as_ref());
+            match lets_chat::sso::seed::seed_default_from_env(&auth_pool, key, &cfg).await {
+                Ok(true) => tracing::info!(
+                    issuer = %cfg.issuer,
+                    autoprovision = cfg.autoprovision,
+                    "seeded sso_providers row from env vars"
+                ),
+                Ok(false) => {}
+                Err(e) => panic!("SSO seed failed: {e}"),
+            }
         }
         Ok(None) => {
-            tracing::info!("SSO not configured; password-only auth");
-            lets_chat::sso::SsoProviders::default()
+            tracing::info!("LETS_CHAT_SSO_ISSUER not set; relying on /admin/sso for providers")
         }
         Err(e) => panic!("SSO config error: {e}"),
+    }
+    let sso = match lets_chat::sso::SsoProviders::load_enabled(&auth_pool).await {
+        Ok(p) => p,
+        Err(e) => panic!("failed to load sso_providers: {e}"),
     };
 
     let state = AppState {
