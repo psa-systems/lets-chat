@@ -183,6 +183,15 @@ For each match, eyeball the surrounding code to determine the pattern, then add 
 
 **Detection.** Only by running the affected tests. Add the test update to the same commit as the handler change; don't defer.
 
+### 5. Test-harness setup gotchas
+
+Test binaries that exercise authed endpoints need two setup patterns or they fail in non-obvious ways:
+
+1. **`enforce_2fa_enrollment` middleware activates when `AppState.secret_key.is_some()`.** Users with `totp_enabled = 0` get 303'd to `/settings/2fa/setup` on every authed request. Test harness workaround: `UPDATE users SET totp_enabled = 1` on every created user after registration.
+2. **`db::enclave::backfill_general_membership` early-returns when no admin exists.** Tests that downgrade users to `'user'` role leave them out of the General enclave; all room access then 403s. Test harness must promote at least one user to `'admin'` before backfill runs.
+
+Both surfaces are invisible until they fail. Reference: `routes_mentions.rs` (admin promotion pattern), `routes_message_edit_history.rs` (totp_enabled pattern). The symptoms - 303 to `/settings/2fa/setup` and 403 on `POST /room/1/messages` respectively - are both the kind of error that looks like a routing or auth bug but is actually a setup omission.
+
 ### Other notes
 
 - The `server/tests/` directory contains 50 integration binaries. A flake in one (current: `routes_uploads`'s upload-pipeline tests under concurrent-binary load) is not a drift category and is not in scope for "make tests pass."
