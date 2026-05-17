@@ -139,6 +139,47 @@ pub async fn mentions_for_messages(
     Ok(by_message)
 }
 
+/// Resolve `@username` tokens in `body` against `auth.users.username` and
+/// return one MentionRef per match. Used by the edit-history endpoint to
+/// render prior bodies: the live-path helper `mentions_for_messages` reads
+/// the denormalized `mentions` table, which is reconciled-to-current-body,
+/// so a token in a prior body that the live body no longer mentions has no
+/// row there to look up. This helper bypasses that table and resolves
+/// tokens against `auth.users` directly, so a chip for `@carol` in a prior
+/// version still renders even if a later edit removed her from the live
+/// body.
+///
+/// Unresolved tokens (typos, deleted users, `@here` / `@channel` broadcast
+/// tokens, users renamed since the edit) are silently dropped; the renderer
+/// falls back to literal text for any `@token` not in the returned slice,
+/// matching the live-path behavior on the same miss.
+pub async fn mentions_for_body(
+    auth_pool: &SqlitePool,
+    body: &str,
+) -> Result<Vec<MentionRef>, sqlx::Error> {
+    let tokens = parse_mention_tokens(body);
+    if tokens.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = std::iter::repeat_n("?", tokens.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql =
+        format!("SELECT id, username FROM users WHERE username IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for t in &tokens {
+        q = q.bind(t);
+    }
+    let rows = q.fetch_all(auth_pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| MentionRef {
+            user_id: r.get::<String, _>("id"),
+            username: r.get::<String, _>("username"),
+        })
+        .collect())
+}
+
 /// Mark every mention of `user_id` in `room_id` with `message_id <= watermark`
 /// as read. Called from the same path as `set_last_read`. Returns the number
 /// of rows that flipped from unread to read so the caller can decide whether

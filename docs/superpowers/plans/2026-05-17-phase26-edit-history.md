@@ -12,7 +12,8 @@ The full shape is mechanical from reading the codebase: one new table, one new i
 
 - No new dependencies. Stays on Askama + HTMX + inline IIFEs. The drawer mirrors `server/templates/room/thread_panel.html` (right-side `<aside>`, close-button shape, slot replacement via `hx-swap="outerHTML"`).
 - Markdown renderer unchanged. Prior bodies render via the existing `views::markdown::render(body, mentions, emojis)` entry point at `server/src/views/markdown.rs:54`.
-- Mention resolution against current usernames, not a snapshot at edit time. Same behavior as live message rendering. If "bob" became "robert" between the edit and the history view, the prior body shows "robert". Documented decision; matches Slack.
+- Mention resolution against current usernames at render time. Same behavior as live message rendering. If a mentioned user has been renamed between the edit and the history view, the prior body shows the `@`-token as literal text (matches live-message behavior - a system-wide limitation, not a history-specific gap; see §Mention resolution below for the mechanism).
+- Prior bodies resolve `@username` tokens via a dedicated helper `db::mentions::mentions_for_body(auth_pool, body)` that queries `auth.users` directly. The live-path helper `mentions_for_messages` reads the denormalized `mentions` table which is reconciled-to-current-body, so a token in a prior body that the live body no longer mentions has no row there to look up. The new helper bypasses that table and resolves tokens against current `users.username`; unresolved tokens (typos, deleted users, `@here` / `@channel`, renamed users) fall through to literal text via the existing renderer behavior.
 - WS broadcast surface unchanged. The existing `MessageEdited` event continues to push new body + edited_at. The history drawer is an explicit HTTP fetch on click; nothing pushes into the drawer.
 - Soft-deleted message hides history. Reuse `db::chat::get_message` (which already filters `deleted_at IS NULL`) as the gate. No widening for v1.
 - Author-only editing today means `editor_user_id` is not stored. Forward-compat migration documented in §Schema below.
@@ -119,6 +120,7 @@ The INSERT captures `previous_body = messages.body` (the body the user is about 
 | Add | `docs/superpowers/plans/2026-05-17-phase26-edit-history.md` | This plan. |
 | Add | `server/migrations/chat/0025_message_edits.sql` | Schema for prior-version storage. |
 | Edit | `server/src/db/chat.rs` | `update_message_body` opens a transaction, captures prior body, inserts a `message_edits` row, runs the existing UPDATE, commits. New `list_message_edits` reader for the history endpoint. New `MessageEdit` row struct. |
+| Edit | `server/src/db/mentions.rs` | New `mentions_for_body(auth_pool, body) -> Vec<MentionRef>` helper. Resolves `@username` tokens against `auth.users.username` via one batch query. Reuses `parse_mention_tokens` so the regex and email-disambiguation behavior stay consistent with the live path. |
 | Edit | `server/src/routes/room.rs` | New `get_history_panel` handler and `close_history_panel` handler. |
 | Edit | `server/src/routes/mod.rs` | Register `GET /messages/{message_id}/history` and `DELETE /history-panel`. |
 | Edit | `server/src/views/room.rs` | `HistoryPanelFragment` template struct + `HistoryEntryView { body_html, edited_at, label_kind }`. Place near `EditFormFragment` for locality. |
@@ -195,12 +197,15 @@ The INSERT captures `previous_body = messages.body` (the body the user is about 
 - [ ] In `server/src/views/room.rs`, add the template structs near `EditFormFragment`:
 
     ```rust
-    pub enum HistoryEntryKind { Prior, Current }
-
+    /// One entry in the edit-history drawer. `body_html` is pre-rendered by
+    /// the markdown pipeline so the template emits it with `|safe`. `label`
+    /// is pre-computed in the handler ("Edited <ts>" for prior, "Current"
+    /// or "Current - last edited <ts>" for the current body) so the
+    /// template stays branch-free and consistent with the codebase's
+    /// `{% if %}`-only convention (no `{% match %}` usage today).
     pub struct HistoryEntryView {
         pub body_html: String,
-        pub edited_at: String,
-        pub kind: HistoryEntryKind,
+        pub label: String,
     }
 
     #[derive(Template)]
@@ -227,26 +232,41 @@ The INSERT captures `previous_body = messages.body` (the body the user is about 
             return Err(AppError::Forbidden);
         }
         let edits = db::chat::list_message_edits(&state.chat, message_id).await?;
-        let mentions = /* mention refs for this single message, same call as load_message_view_for_viewer */;
         let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
-        let mut entries: Vec<HistoryEntryView> = edits
-            .into_iter()
-            .map(|e| HistoryEntryView {
-                body_html: crate::views::markdown::render(&e.previous_body, &mentions, &emojis),
-                edited_at: e.edited_at,
-                kind: HistoryEntryKind::Prior,
-            })
-            .collect();
+        // Current body uses the live-path mentions helper (denormalized table,
+        // reconciled-to-current-body).
+        let current_mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+            .await?
+            .remove(&m.id)
+            .unwrap_or_default();
+        let mut entries: Vec<HistoryEntryView> = Vec::with_capacity(edits.len() + 1);
+        for e in edits {
+            // Prior bodies resolve tokens via the auth-pool-direct helper so
+            // mentions removed by a later edit still render their chips.
+            let prior_mentions =
+                db::mentions::mentions_for_body(&state.auth, &e.previous_body).await?;
+            entries.push(HistoryEntryView {
+                body_html: crate::views::markdown::render(
+                    &e.previous_body,
+                    &prior_mentions,
+                    &emojis,
+                ),
+                label: format!("Edited {}", e.edited_at),
+            });
+        }
+        let current_label = match m.edited_at.as_deref() {
+            Some(ts) => format!("Current - last edited {}", ts),
+            None => "Current".to_string(),
+        };
         entries.push(HistoryEntryView {
-            body_html: crate::views::markdown::render(&m.body, &mentions, &emojis),
-            edited_at: m.edited_at.clone().unwrap_or_default(),
-            kind: HistoryEntryKind::Current,
+            body_html: crate::views::markdown::render(&m.body, &current_mentions, &emojis),
+            label: current_label,
         });
         html(&HistoryPanelFragment { message_id, entries: &entries })
     }
     ```
 
-  The mention refs are loaded once for the message and reused across all entries. Since usernames are resolved at render time (not snapshotted at edit time), a single set of refs is the correct input for every prior body. Markdown cache means repeated identical bodies do not re-render.
+  The mention helpers differ deliberately between prior and current bodies. Current body uses `mentions_for_messages` (the live-path call) because that path is already proven against the existing message rendering pipeline and stays consistent with how the same body renders in the room timeline. Prior bodies use `mentions_for_body` because the `mentions` table is reconciled-to-current-body and does not retain rows for users a later edit unmentioned. Markdown cache means repeated identical bodies do not re-render across entries.
 
 - [ ] Add `close_history_panel` mirroring `close_thread_panel` (`server/src/routes/room.rs:1084`):
 
@@ -289,10 +309,7 @@ The INSERT captures `previous_body = messages.body` (the body the user is about 
         {% for entry in entries %}
         <div class="rounded border border-slate-200 p-2">
           <div class="text-xs text-slate-500 mb-1">
-            {% match entry.kind %}
-              {% when HistoryEntryKind::Current %}Current - last edited {{ entry.edited_at }}
-              {% when HistoryEntryKind::Prior %}Edited {{ entry.edited_at }}
-            {% endmatch %}
+            {{ entry.label }}
           </div>
           <div class="markdown-body">{{ entry.body_html|safe }}</div>
         </div>
@@ -333,12 +350,15 @@ The INSERT captures `previous_body = messages.body` (the body the user is about 
 
 - [ ] New `server/tests/routes_message_edit_history.rs`:
     - Unedited message: `GET /messages/:id/history` returns a fragment containing exactly one entry, the "Current" version with the message's body.
+    - Unedited-message label regression guard: hit `/messages/:id/history` for a message with `edited_at = NULL` directly (the `(edited)` button never appears in the UI for such a message, but the endpoint is reachable). Assert the rendered fragment contains the label `Current` exactly and does NOT contain `Current - last edited` or any empty-timestamp artifact. Without this, a future refactor that resurrects `unwrap_or_default()` on `m.edited_at` would silently re-introduce a misleading `Current - last edited ` (trailing space) label.
     - After two edits: fragment contains three entries in order (prior, prior, current). Assert on the rendered HTML containing the right bodies in the right slots.
     - Unauthenticated request: same redirect/401 shape as `get_single_message` for unauthenticated callers. Assert against the actual existing behavior (do not assume; mirror the assertion shape used in `routes_messages.rs` or whichever existing file tests similar gates).
     - Non-room-member: receives the same status as `get_single_message` for the same caller/message - whichever of `Forbidden` (403) or `NotFound` (404) the combined `get_message` + `is_room_accessible` produces.
     - Soft-deleted message: returns 404. `get_message` filters `deleted_at IS NULL` so this falls out for free.
     - Markdown rendering of a prior body: insert a row with `**bold**` as `previous_body`, hit the endpoint, assert response contains `<strong>bold</strong>`.
-    - Mention chip in a prior body: insert a row with `@<username>` referencing an existing user, hit the endpoint, assert the chip HTML for that user is present. This exercises the resolve-against-current-usernames behavior.
+    - Mention chips, current-and-prior overlap: prior body `hey @bob`, current body `hey @bob` (same mention persisted across the edit). Both entries render the chip for u_bob.
+    - Mention chips, removed-mention case (the load-bearing test for why `mentions_for_body` exists at all): prior body `hey @bob @carol`, current body `hey @bob` (carol unmentioned by the edit). The prior entry renders chips for both u_bob and u_carol; the current entry renders the chip for u_bob only, with `@carol` absent from the live body.
+    - Mention chips, unresolved token: prior body `hey @nosuchuser`, no user with that username exists. Renders as literal `@nosuchuser` text, no chip, no error. Same fall-through path as a typo in a live message.
     - Drift-trap line: include `include_str!("../migrations/chat/0025_message_edits.sql")` in the hand-rolled pool setup if the file does not use `common::chat_pool()`. (Test-binary author decides; prefer `common::chat_pool()` for new files since phase 24's helper picks up migrations automatically.)
 
 - [ ] `just test` clean.
