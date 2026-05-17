@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm to link - lets-chat{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center p-6">
+  <form method="post" action="/auth/sso/finish-link" class="w-full max-w-md space-y-4 bg-white p-6 rounded shadow">
+    <h1 class="text-xl font-semibold">Confirm to link your account</h1>
+    <p class="text-sm text-slate-600">
+      We found a Let's Chat account for
+      <span class="font-medium">{{ email }}</span>.
+      To confirm it's yours and link it to your <span class="font-medium">{{ provider_display_name }}</span> identity,
+      sign in with your existing password.
+    </p>
+    {% if let Some(err) = error %}
+    <p class="text-red-600 text-sm">{{ err }}</p>
+    {% endif %}
+    <input type="hidden" name="envelope" value="{{ envelope }}">
+    <label class="block">
+      <span class="text-sm">Username</span>
+      <input name="username" required class="mt-1 block w-full border rounded px-2 py-1">
+    </label>
+    <label class="block">
+      <span class="text-sm">Password</span>
+      <input type="password" name="password" required class="mt-1 block w-full border rounded px-2 py-1">
+    </label>
+    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Sign in &amp; link</button>
+    <p class="text-xs text-slate-500">If this isn't your account, close this tab and contact your admin.</p>
+  </form>
+</main>
+{% endblock %}

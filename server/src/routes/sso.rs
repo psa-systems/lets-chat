@@ -39,6 +39,18 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/sso/{provider}/start", get(get_start))
         .route("/auth/sso/{provider}/callback", get(get_callback))
+        .route(
+            "/auth/sso/finish-link",
+            axum::routing::post(post_finish_link),
+        )
+}
+
+fn now_unix() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 #[derive(Deserialize)]
@@ -277,25 +289,45 @@ pub async fn get_callback(
     }
 
     // Email collision but auto-link is off OR email_verified is false:
-    // fall through to the link-required interstitial. That page lives
-    // in L13; for now, return a placeholder explanation.
+    // render the link-required interstitial. The HMAC-stamped envelope
+    // carries the verified claims forward; the POST handler
+    // (`post_finish_link`) verifies the user's password before writing
+    // the link row.
     if let Some(email) = claims.email.as_deref() {
         if db::auth::find_user_id_by_email(&state.auth, email)
             .await?
             .is_some()
         {
+            let key = state
+                .secret_key
+                .as_ref()
+                .ok_or_else(|| AppError::Internal("LETS_CHAT_SECRET_KEY not set".into()))?;
+            let payload = crate::sso::link_envelope::LinkPayload {
+                provider_id: provider_id.clone(),
+                issuer: metadata.issuer.clone(),
+                subject: claims.sub.clone(),
+                email: email.to_string(),
+                return_to: flow.return_to.clone(),
+                not_after: now_unix() + crate::sso::link_envelope::ENVELOPE_TTL_SECONDS,
+            };
+            let envelope = crate::sso::link_envelope::mint(key.as_ref(), &payload);
             tracing::info!(
                 target: "lets_chat.auth.sso",
                 provider = %provider_id,
                 email = %email,
-                "sso callback: existing account by email; link-required interstitial (L13) not yet implemented"
+                "sso callback: rendering link-required interstitial"
             );
-            return Err(AppError::BadRequest(
-                "An account already exists for this email. \
-                 Sign in with your password first to link it. \
-                 (link-required interstitial lands in L13.)"
-                    .into(),
-            ));
+            let page = crate::views::auth::SsoLinkRequiredPage {
+                provider_display_name: &entry.row.display_name,
+                email,
+                envelope: &envelope,
+                error: None,
+                asset_version: &state.asset_version,
+                app_version: crate::version::VERSION,
+                git_hash: crate::version::GIT_HASH,
+                build_date: crate::version::BUILD_DATE,
+            };
+            return Ok(crate::views::html(&page)?.into_response());
         }
     }
 
@@ -313,6 +345,84 @@ pub async fn get_callback(
          (auto-provisioning lands in L14.)"
             .into(),
     ))
+}
+
+#[derive(Deserialize)]
+pub struct FinishLinkForm {
+    pub envelope: String,
+    pub username: String,
+    pub password: String,
+}
+
+/// Handle the form POST from the link-required interstitial. Verify
+/// the HMAC envelope, verify the user's existing password, write the
+/// `sso_identities` row (with `auto_linked = false` since this was an
+/// explicit user action), then mint a session and 302 to the
+/// `return_to` carried in the envelope.
+pub async fn post_finish_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    jar: CookieJar,
+    axum::Form(form): axum::Form<FinishLinkForm>,
+) -> Result<Response, AppError> {
+    let key = state
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("LETS_CHAT_SECRET_KEY not set".into()))?;
+    let payload = crate::sso::link_envelope::verify(key.as_ref(), &form.envelope, now_unix())
+        .map_err(|e| {
+            tracing::warn!(error = %e, "sso link envelope verify failed");
+            AppError::BadRequest("link confirmation expired or invalid; please start over".into())
+        })?;
+
+    let record = db::auth::find_user_by_username(&state.auth, &form.username)
+        .await?
+        .ok_or_else(|| AppError::BadRequest("invalid username or password".into()))?;
+    if record.is_banned {
+        return Err(AppError::Forbidden);
+    }
+    if !crate::routes::auth::verify_password(&record.password_hash, &form.password) {
+        return Err(AppError::BadRequest("invalid username or password".into()));
+    }
+    // Defense in depth: the envelope was minted because the email
+    // matched some local user; we now require the username the human
+    // typed to resolve to that SAME user. Otherwise an attacker who
+    // got hold of an envelope plus ANY local credential could splice
+    // them into a link on a stranger's account.
+    let by_email = db::auth::find_user_id_by_email(&state.auth, &payload.email).await?;
+    if by_email.as_deref() != Some(record.id.as_str()) {
+        return Err(AppError::BadRequest(
+            "this confirmation page was issued for a different account".into(),
+        ));
+    }
+
+    db::sso::link_sso_identity(
+        &state.auth,
+        &record.id,
+        &payload.issuer,
+        &payload.subject,
+        Some(&payload.email),
+        false,
+    )
+    .await?;
+    tracing::info!(
+        target: "lets_chat.auth.sso",
+        event = "sso_account_linked",
+        user_id = %record.id,
+        provider = %payload.provider_id,
+        issuer = %payload.issuer,
+        subject = %payload.subject,
+        "password-confirmed link from interstitial"
+    );
+    finalize_sign_in(
+        &state,
+        &record.id,
+        &payload.provider_id,
+        &payload.return_to,
+        &headers,
+        jar,
+    )
+    .await
 }
 
 /// Mint the session cookie + emit the `sso_sign_in` tracing event +

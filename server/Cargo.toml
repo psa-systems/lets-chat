@@ -21,7 +21,7 @@ path = "src/lib.rs"
 [features]
 default = ["standalone"]
 standalone = []
-saas = ["dep:hmac", "dep:hex"]
+saas = ["dep:hex"]
 
 [dependencies]
 serde = { workspace = true }
@@ -70,7 +70,7 @@ base64 = "0.22"
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy", "html"] }
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "rustls-tls", "hostname"] }
-hmac = { version = "0.12", optional = true }
+hmac = "0.12"
 hex = { version = "0.4", optional = true }
 jsonwebtoken = "9"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
