@@ -248,13 +248,15 @@ async fn create_user_from_sso_inserts_both_rows() {
         .unwrap();
     assert_eq!(user.username, "fresh");
     assert_eq!(user.display_name.as_deref(), Some("Fresh User"));
-    // sso_identities row landed and auto_linked is set.
+    // sso_identities row landed. auto_linked stays false: the
+    // autoprovision path is "no existing user matched, create one",
+    // not "auto-linked on email collision" (doc 02 section 2).
     let rows = db::sso::list_sso_identities_for_user(&pool, &uid)
         .await
         .unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].subject, "fresh-sub");
-    assert!(rows[0].auto_linked);
+    assert!(!rows[0].auto_linked);
 }
 
 #[tokio::test]

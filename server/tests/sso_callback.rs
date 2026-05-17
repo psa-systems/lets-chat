@@ -215,12 +215,20 @@ async fn spawn_stub() -> Arc<StubState> {
 }
 
 async fn make_app(stub: &StubState) -> (Router, SqlitePool) {
-    make_app_with_provider_flags(stub, true).await
+    make_app_with_flags(stub, true, false).await
 }
 
 async fn make_app_with_provider_flags(
     stub: &StubState,
     auto_link_verified_email: bool,
+) -> (Router, SqlitePool) {
+    make_app_with_flags(stub, auto_link_verified_email, false).await
+}
+
+async fn make_app_with_flags(
+    stub: &StubState,
+    auto_link_verified_email: bool,
+    allow_signup: bool,
 ) -> (Router, SqlitePool) {
     ensure_tempdir();
     let auth = open_pool("auth").await;
@@ -242,7 +250,7 @@ async fn make_app_with_provider_flags(
             client_secret_encrypted: &enc,
             scopes: "openid email",
             attribute_map_json: "{}",
-            allow_signup: false,
+            allow_signup,
             auto_link_verified_email,
         },
     )
@@ -497,8 +505,10 @@ async fn callback_does_not_auto_link_when_provider_flag_off() {
 }
 
 #[tokio::test]
-async fn callback_unknown_email_falls_through_to_autoprovision_placeholder() {
+async fn callback_unknown_email_with_signup_off_renders_unauthorized_page() {
     let stub = spawn_stub().await;
+    // allow_signup=false (the default in make_app) -> render the
+    // "ask your admin" page, do NOT create a user.
     let (app, auth) = make_app(&stub).await;
 
     let (state_token, nonce) = start_flow(&app, &auth).await;
@@ -507,12 +517,86 @@ async fn callback_unknown_email_falls_through_to_autoprovision_placeholder() {
     *stub.email.lock().unwrap() = "nobody@example.com".into();
 
     let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(res.status(), StatusCode::OK);
     let body = axum::body::to_bytes(res.into_body(), 1 << 20)
         .await
         .unwrap();
     let body = std::str::from_utf8(&body).unwrap();
     assert!(body.contains("isn't authorized"));
+    // No user created.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&auth)
+        .await
+        .unwrap();
+    assert_eq!(count.0, 0);
+}
+
+#[tokio::test]
+async fn callback_autoprovisions_when_allow_signup_and_email_verified() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app_with_flags(&stub, true, true).await;
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+    *stub.email.lock().unwrap() = "newbie@example.com".into();
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        res.headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "/rooms/general"
+    );
+    // Fresh user row + sso_identities row land in the same transaction
+    // via create_user_from_sso. password_hash is NULL.
+    let row: (String, Option<String>) =
+        sqlx::query_as("SELECT id, password_hash FROM users WHERE email = ?")
+            .bind("newbie@example.com")
+            .fetch_one(&auth)
+            .await
+            .unwrap();
+    assert!(
+        row.1.is_none(),
+        "autoprovisioned users have NULL password_hash"
+    );
+    let link: (String, i64) =
+        sqlx::query_as("SELECT subject, auto_linked FROM sso_identities WHERE user_id = ?")
+            .bind(&row.0)
+            .fetch_one(&auth)
+            .await
+            .unwrap();
+    assert_eq!(link.0, "fresh-sub");
+    assert_eq!(link.1, 0, "auto_linked is for email-match path only");
+}
+
+#[tokio::test]
+async fn callback_autoprovision_blocked_by_email_unverified() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app_with_flags(&stub, true, true).await;
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+    *stub.email.lock().unwrap() = "newbie@example.com".into();
+    *stub.email_verified.lock().unwrap() = false;
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+    assert!(body.contains("Verify your email first"));
+    // No user created.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&auth)
+        .await
+        .unwrap();
+    assert_eq!(count.0, 0);
 }
 
 #[tokio::test]

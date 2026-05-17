@@ -331,20 +331,73 @@ pub async fn get_callback(
         }
     }
 
-    // No link, no email match. Auto-provision (L14) branches off here.
+    // No link, no email match. Auto-provision branch (doc 02 section 3 +
+    // doc 10 section 1).
+    if entry.row.allow_signup {
+        if claims.email_verified == Some(true) {
+            let user_id = db::sso::create_user_from_sso(
+                &state.auth,
+                db::sso::CreateUserFromSso {
+                    issuer: &metadata.issuer,
+                    subject: &claims.sub,
+                    email: claims.email.as_deref(),
+                    preferred_username: claims.preferred_username.as_deref(),
+                    display_name: claims.name.as_deref(),
+                },
+            )
+            .await?;
+            tracing::info!(
+                target: "lets_chat.auth.sso",
+                event = "sso_autoprovisioned",
+                user_id = %user_id,
+                provider = %provider_id,
+                issuer = %metadata.issuer,
+                subject = %claims.sub,
+                email = ?claims.email,
+                "auto-provisioned new user from SSO claims"
+            );
+            return finalize_sign_in(
+                &state,
+                &user_id,
+                &provider_id,
+                &flow.return_to,
+                &headers,
+                jar,
+            )
+            .await;
+        }
+        tracing::info!(
+            target: "lets_chat.auth.sso",
+            provider = %provider_id,
+            email = ?claims.email,
+            "sso callback: auto-provision blocked by email_verified=false"
+        );
+        let page = crate::views::auth::SsoEmailUnverifiedPage {
+            provider_display_name: &entry.row.display_name,
+            email: claims.email.as_deref(),
+            asset_version: &state.asset_version,
+            app_version: crate::version::VERSION,
+            git_hash: crate::version::GIT_HASH,
+            build_date: crate::version::BUILD_DATE,
+        };
+        return Ok(crate::views::html(&page)?.into_response());
+    }
+
     tracing::info!(
         target: "lets_chat.auth.sso",
         provider = %provider_id,
-        subject = %claims.sub,
         email = ?claims.email,
-        "sso callback: unknown identity (L14 auto-provision not yet implemented)"
+        "sso callback: unauthorized identity (provider has allow_signup=0)"
     );
-    Err(AppError::BadRequest(
-        "Your account isn't authorized for this deployment. \
-         Ask an admin to invite you. \
-         (auto-provisioning lands in L14.)"
-            .into(),
-    ))
+    let page = crate::views::auth::SsoUnauthorizedPage {
+        provider_display_name: &entry.row.display_name,
+        email: claims.email.as_deref(),
+        asset_version: &state.asset_version,
+        app_version: crate::version::VERSION,
+        git_hash: crate::version::GIT_HASH,
+        build_date: crate::version::BUILD_DATE,
+    };
+    Ok(crate::views::html(&page)?.into_response())
 }
 
 #[derive(Deserialize)]
