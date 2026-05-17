@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 use crate::db::sso_providers;
 
 pub mod cache;
+pub mod claims;
 mod config;
 pub mod discovery;
 pub mod link_envelope;
