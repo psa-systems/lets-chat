@@ -40,6 +40,28 @@ pub struct SsoLinkRequiredPage<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "auth/sso_unauthorized.html")]
+pub struct SsoUnauthorizedPage<'a> {
+    pub provider_display_name: &'a str,
+    pub email: Option<&'a str>,
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub build_date: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "auth/sso_email_unverified.html")]
+pub struct SsoEmailUnverifiedPage<'a> {
+    pub provider_display_name: &'a str,
+    pub email: Option<&'a str>,
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub build_date: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "auth/forgot.html")]
 pub struct ForgotPage<'a> {
     pub error: Option<&'a str>,

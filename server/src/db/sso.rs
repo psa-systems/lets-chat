@@ -237,7 +237,7 @@ pub async fn create_user_from_sso(
 
     sqlx::query(
         "INSERT INTO sso_identities (user_id, issuer, subject, email, auto_linked, linked_at, last_seen_at) \
-         VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))",
+         VALUES (?, ?, ?, ?, 0, datetime('now'), datetime('now'))",
     )
     .bind(&user_id)
     .bind(args.issuer)
