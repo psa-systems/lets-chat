@@ -4,5 +4,5 @@
   {% else %}
   <div class="{{ avatar_size }} rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-semibold">{% if let Some(c) = avatar_username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
   {% endif %}
-  <span data-user-status="{{ avatar_user_id }}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white {% if avatar_status == "dnd" %}bg-red-500{% else if avatar_status == "idle" %}bg-yellow-400{% else if avatar_status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
+  <span data-user-status="{{ avatar_user_id }}" aria-label="{% if avatar_status == "dnd" %}Do not disturb{% else if avatar_status == "idle" || avatar_status == "away" %}Away{% else if avatar_status == "offline" %}Offline{% else %}Online{% endif %}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white {% if avatar_status == "dnd" %}bg-red-500{% else if avatar_status == "idle" || avatar_status == "away" %}bg-yellow-400{% else if avatar_status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
 </span>

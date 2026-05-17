@@ -1,4 +1,4 @@
-<button id="own-avatar-wrapper" hx-swap-oob="outerHTML" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" title="Set status">
+<button id="own-avatar-wrapper" hx-swap-oob="outerHTML" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" title="Set status" aria-label="Set status">
   {% let avatar_user_id = user_id.clone() %}
   {% let avatar_username = username.clone() %}
   {% let avatar_ext = avatar_ext.clone() %}

@@ -1,48 +1,45 @@
 // 1:1 WebRTC calls, Discord-style.
 //
-// Persistent-shell script: loaded once per full page load from base.html and
-// never re-run by in-place swaps. It watches the OOB "#lc-call-bus" for
-// inbound call signals (relayed by the server WS handler) and drives a single
-// RTCPeerConnection per open DM page.
+// Page-agnostic: the call UI lives in a single global #lc-call-root rendered
+// by layout.html, and this script handles invites from any page (so an
+// incoming call shows up whether or not the recipient is viewing the DM
+// with the caller). Outgoing calls are started from per-DM header buttons
+// that carry the room/peer context in data attributes.
 //
-// There is ONE call type. The voice and video buttons differ only in whether
-// the local camera starts enabled - either way the camera can be toggled on
-// or off at any point during the call. Signaling rides the existing chat
-// WebSocket; the server is a dumb relay forwarding opaque SDP/ICE blobs
-// between the two members of a DM room.
-//
-// Initial setup has no glare: the caller is the sole initiator (it offers,
-// the callee builds its RTCPeerConnection lazily from that offer and just
-// answers). Mid-call renegotiation - needed when enabling/disabling the
-// camera adds or removes a track - uses the "perfect negotiation" pattern so
-// either peer can renegotiate; the caller is the impolite peer and the
-// callee the polite one, which resolves any offer glare deterministically.
-//
-// Known v1 limitations: a call is bound to the DM page it started on.
-// Navigating away (or the reconnect soft-refresh replacing #main) tears it
-// down. Incoming calls only surface when that DM is the page on screen.
+// Signaling rides the existing chat WebSocket. The server resolves glare
+// (both peers inviting simultaneously) per DM room: the first invite wins
+// and the loser is delivered the winner's invite, so this script no longer
+// needs to compare user ids to pick a caller.
 (function () {
   'use strict';
 
-  var root = null;        // current [data-lc-call-root] element, or null
-  var cfg = null;         // { roomId, selfId, peerName, iceServers }
-  var pc = null;          // RTCPeerConnection while a call is live
+  var selfId = null;          // viewer's user id, set on init from layout
+  var iceServers = null;      // resolved RTCIceServer array, fetched lazily
+  var iceFetch = null;        // de-dupes concurrent /call/config fetches
+
+  // Per-active-call context. Set on outgoing start or first incoming invite;
+  // cleared by teardown(). selfId/iceServers are session-wide and survive.
+  var roomId = null;
+  var peerId = null;
+  var peerName = null;
+
+  var pc = null;              // RTCPeerConnection while a call is live
   var localStream = null;
-  var phase = 'idle';     // idle | outgoing | incoming | connecting | in-call
-  var polite = false;     // perfect-negotiation role (caller=false, callee=true)
+  var phase = 'idle';         // idle | outgoing | incoming | connecting | in-call
+  var polite = false;         // perfect-negotiation role (caller=false, callee=true)
   var makingOffer = false;
   var ignoreOffer = false;
-  var incoming = null;    // { fromName } while an invite is ringing
+  var incoming = null;        // { fromId, fromName, withVideo } while invite is ringing
   var pendingCandidates = [];
 
   // ---- websocket signaling -----------------------------------------
   function signal(kind, payload) {
     var ws = window.__lcWS;
-    if (!ws || !cfg) return;
+    if (!ws || roomId == null) return;
     try {
       ws.send(JSON.stringify({
         type: 'call_signal',
-        room_id: cfg.roomId,
+        room_id: roomId,
         kind: kind,
         payload: payload || null,
       }));
@@ -50,10 +47,58 @@
   }
 
   // ---- dom helpers --------------------------------------------------
-  function q(sel) { return root ? root.querySelector(sel) : null; }
-  function show(el) { if (el) el.classList.remove('hidden'); }
-  function hide(el) { if (el) el.classList.add('hidden'); }
+  function root() { return document.getElementById('lc-call-root'); }
+  function q(sel) { var r = root(); return r ? r.querySelector(sel) : null; }
+  // show/hide mirror the visual hidden-class onto aria-hidden so the
+  // accessibility tree matches. `display:none` already removes the element
+  // from the a11y tree, but keeping the attribute in sync is belt-and-
+  // suspenders against any future style change. Only call-dialog elements
+  // pass through these helpers; safe to apply globally.
+  function show(el) { if (el) { el.classList.remove('hidden'); el.setAttribute('aria-hidden', 'false'); } }
+  function hide(el) { if (el) { el.classList.add('hidden'); el.setAttribute('aria-hidden', 'true'); } }
   function setStatus(text) { var s = q('[data-lc-call-status]'); if (s) s.textContent = text; }
+
+  // ---- focus trap (modal dialog discipline) -------------------------
+  // Exactly one trap is active at a time. installDialogTrap migrates from
+  // an existing trap (incoming -> active on Accept) without restoring focus
+  // to the pre-dialog source; disposeDialogTrap (called only from teardown,
+  // the close funnel) restores focus to whatever element opened the dialog.
+  //
+  // Listener-cleanup discipline: every call path that closes a dialog ends
+  // at teardown(); teardown calls disposeDialogTrap exactly once; dispose
+  // calls removeEventListener exactly once. Migrations dispose the previous
+  // trap inline so we never hold two listeners simultaneously.
+  var currentTrap = null;
+  var trapPrevious = null;
+  var TRAP_FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function installDialogTrap(dialogEl) {
+    if (!dialogEl) return;
+    if (currentTrap) {
+      currentTrap.dispose();
+      currentTrap = null;
+    } else {
+      trapPrevious = document.activeElement;
+    }
+    var trap = window.__lcDialogTrap;
+    currentTrap = trap ? trap(dialogEl) : { dispose: function () {} };
+    var first = dialogEl.querySelector(TRAP_FOCUSABLE);
+    if (first) { try { first.focus(); } catch (e) {} }
+  }
+  function disposeDialogTrap() {
+    if (currentTrap) { currentTrap.dispose(); currentTrap = null; }
+    if (trapPrevious && document.contains(trapPrevious) && typeof trapPrevious.focus === 'function') {
+      try { trapPrevious.focus(); } catch (e) {}
+    }
+    trapPrevious = null;
+  }
+
+  function setRemoteAvatar() {
+    var av = q('[data-lc-remote-avatar]');
+    if (av && peerId != null) {
+      av.setAttribute('src', '/avatars/' + peerId);
+      av.setAttribute('alt', peerName || '');
+    }
+  }
 
   function hasLocalVideo() {
     return !!(localStream && localStream.getVideoTracks().length > 0);
@@ -69,8 +114,7 @@
     if (av) av.style.display = on ? 'none' : '';
   }
   // Show the peer's camera when their stream carries a live video track;
-  // otherwise fall back to their avatar (/avatars/{id} always resolves,
-  // default avatar included).
+  // otherwise fall back to their avatar.
   function refreshRemoteVideo() {
     var rv = q('[data-lc-remote-video]');
     var av = q('[data-lc-remote-avatar]');
@@ -83,7 +127,10 @@
   }
   function setCameraBtn() {
     var btn = q('[data-lc-call-camera]');
-    if (btn) btn.textContent = hasLocalVideo() ? 'Stop video' : 'Start video';
+    if (!btn) return;
+    var on = hasLocalVideo();
+    btn.textContent = on ? 'Stop video' : 'Start video';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
   // ---- teardown -----------------------------------------------------
@@ -109,11 +156,40 @@
     polite = false;
     makingOffer = false;
     ignoreOffer = false;
+    roomId = null;
+    peerId = null;
+    peerName = null;
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
     var lv = q('[data-lc-local-video]'); if (lv) lv.srcObject = null;
-    var mute = q('[data-lc-call-mute]'); if (mute) mute.textContent = 'Mute';
+    var mute = q('[data-lc-call-mute]');
+    if (mute) { mute.textContent = 'Mute'; mute.setAttribute('aria-pressed', 'false'); }
+    var cam = q('[data-lc-call-camera]');
+    if (cam) { cam.textContent = 'Start video'; cam.setAttribute('aria-pressed', 'false'); }
+    disposeDialogTrap();
+  }
+
+  // ---- ice config ---------------------------------------------------
+  // The ICE-server list is per-deployment (env var) and is fetched once over
+  // a small JSON endpoint instead of being threaded into every page struct
+  // that extends the layout template.
+  function ensureIce() {
+    if (iceServers) return Promise.resolve(iceServers);
+    if (iceFetch) return iceFetch;
+    iceFetch = fetch('/call/config', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (j) {
+        iceServers = Array.isArray(j.iceServers) ? j.iceServers
+          : [{ urls: 'stun:stun.l.google.com:19302' }];
+        return iceServers;
+      })
+      .catch(function () {
+        iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        iceFetch = null;
+        return iceServers;
+      });
+    return iceFetch;
   }
 
   // ---- media + peer connection -------------------------------------
@@ -127,10 +203,7 @@
   }
 
   function createPc() {
-    var iceServers;
-    try { iceServers = JSON.parse(cfg.iceServers); }
-    catch (e) { iceServers = [{ urls: 'stun:stun.l.google.com:19302' }]; }
-    pc = new RTCPeerConnection({ iceServers: iceServers });
+    pc = new RTCPeerConnection({ iceServers: iceServers || [] });
 
     pc.onicecandidate = function (ev) {
       if (ev.candidate) signal('ice', JSON.stringify(ev.candidate));
@@ -162,7 +235,7 @@
       if (!pc) return;
       if (pc.connectionState === 'connected') {
         phase = 'in-call';
-        setStatus(cfg.peerName);
+        setStatus(peerName || '');
       } else if (pc.connectionState === 'failed') {
         setStatus('Connection failed');
         endCall();
@@ -172,10 +245,6 @@
     };
   }
 
-  // Attach the current local tracks to the peer connection. Called at the
-  // point in each role's flow that keeps the caller the sole initiator of
-  // the initial negotiation - the caller right after createPc(), the callee
-  // only after it has applied the caller's offer.
   function addLocalTracks() {
     if (!pc || !localStream) return;
     localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
@@ -194,8 +263,6 @@
   function onOffer(sdp) {
     var desc;
     try { desc = JSON.parse(sdp); } catch (e) { return; }
-    // The callee builds its peer connection lazily from the caller's first
-    // offer, so the caller alone initiates the setup negotiation (no glare).
     var firstOffer = !pc;
     if (firstOffer) {
       if (phase === 'idle') return;
@@ -204,12 +271,8 @@
     var collision = makingOffer || pc.signalingState !== 'stable';
     ignoreOffer = !polite && collision;
     if (ignoreOffer) return;
-    // setRemoteDescription performs an implicit rollback when the polite
-    // peer is mid-offer, so no explicit rollback call is needed.
     pc.setRemoteDescription(desc)
       .then(function () {
-        // Attach the callee's local tracks to the just-offered transceivers
-        // before answering, so the answer advertises them.
         if (firstOffer) addLocalTracks();
         flushCandidates();
         return pc.setLocalDescription();
@@ -231,8 +294,6 @@
     if (!payload) return;
     var cand;
     try { cand = JSON.parse(payload); } catch (e) { return; }
-    // Buffer until the connection exists and has a remote description; the
-    // callee may receive ICE before it has built its pc from the offer.
     if (!pc || !pc.remoteDescription) { pendingCandidates.push(cand); return; }
     pc.addIceCandidate(cand).catch(function (e) {
       if (!ignoreOffer) console.warn('call: addIceCandidate failed', e);
@@ -242,73 +303,81 @@
   // ---- call lifecycle ----------------------------------------------
   function becomeCaller() {
     phase = 'outgoing';
-    polite = false; // caller is the impolite peer
+    polite = false;
     hide(q('[data-lc-call-incoming]'));
-    setStatus('Calling ' + cfg.peerName + '...');
+    setStatus('Calling ' + (peerName || '') + '...');
     signal('invite', hasLocalVideo() ? 'video' : 'audio');
   }
 
-  // Flip from "calling" to "answering" when glare resolves against us: we
-  // already hold local media with the overlay up, so just switch roles and
-  // accept the peer's in-flight invite.
   function becomeCallee() {
     phase = 'connecting';
-    polite = true; // callee is the polite peer
+    polite = true;
     hide(q('[data-lc-call-incoming]'));
     setStatus('Connecting...');
     signal('accept');
   }
 
-  function startCall(withVideo) {
-    if (phase !== 'idle' || !cfg) return;
-    getMedia(withVideo).then(function (stream) {
-      localStream = stream;
-      refreshLocalVideo();
-      refreshRemoteVideo();
-      setCameraBtn();
-      show(q('[data-lc-call-active]'));
-      // An invite from the same peer can land while getUserMedia resolves
-      // (both sides calling at once). Resolve deterministically by user id
-      // so exactly one side ends up the caller.
-      if (phase === 'incoming' && incoming) {
-        if (cfg.selfId < incoming.fromId) becomeCaller();
-        else becomeCallee();
-        incoming = null;
-        return;
-      }
-      if (phase !== 'idle') { teardown(); return; }
-      becomeCaller();
-    }).catch(function () {
-      alert('Could not access your microphone or camera.');
-      teardown();
-    });
+  function startCall(withVideo, ctx) {
+    if (phase !== 'idle' && phase !== 'incoming') return;
+    // Outgoing context comes from the clicked button; if a call is already
+    // bound (we are mid-incoming for the same peer) keep the existing one.
+    if (phase === 'idle') {
+      roomId = ctx.roomId;
+      peerId = ctx.peerId;
+      peerName = ctx.peerName;
+      setRemoteAvatar();
+    }
+    Promise.all([ensureIce(), getMedia(withVideo)])
+      .then(function (results) {
+        localStream = results[1];
+        refreshLocalVideo();
+        refreshRemoteVideo();
+        setCameraBtn();
+        show(q('[data-lc-call-active]'));
+        installDialogTrap(q('[data-lc-call-active]'));
+        // The server resolves glare; if an invite arrived while we were
+        // acquiring media the phase has already flipped to 'incoming'.
+        // Honor that: we are now the callee.
+        if (phase === 'incoming' && incoming) {
+          becomeCallee();
+          incoming = null;
+          return;
+        }
+        if (phase !== 'idle') { teardown(); return; }
+        becomeCaller();
+      }).catch(function () {
+        alert('Could not access your microphone or camera.');
+        teardown();
+      });
   }
 
   function acceptCall() {
-    if (phase !== 'incoming') return;
-    // The callee inherits the call's default: a video call starts both peers
-    // with the camera on, a voice call with it off. Either peer can flip
-    // their own camera at any time with the in-call control.
-    var withVideo = incoming ? incoming.withVideo : false;
-    getMedia(withVideo).then(function (stream) {
-      localStream = stream;
-      phase = 'connecting';
-      polite = true; // callee is the polite peer
-      hide(q('[data-lc-call-incoming]'));
-      refreshLocalVideo();
-      refreshRemoteVideo();
-      setCameraBtn();
-      show(q('[data-lc-call-active]'));
-      setStatus('Connecting...');
-      // The peer connection is built lazily when the caller's offer arrives
-      // (see onOffer), keeping the caller the sole initiator at setup.
-      signal('accept');
-      incoming = null;
-    }).catch(function () {
-      alert('Could not access your microphone or camera.');
-      signal('reject');
-      teardown();
-    });
+    if (phase !== 'incoming' || !incoming) return;
+    // Drop any active enclave voice channel first - the OS only has one
+    // mic/camera and the user can't be in two calls at once.
+    if (window.LetsChatVoice && window.LetsChatVoice.isJoined()) {
+      window.LetsChatVoice.leave();
+    }
+    var withVideo = incoming.withVideo;
+    Promise.all([ensureIce(), getMedia(withVideo)])
+      .then(function (results) {
+        localStream = results[1];
+        phase = 'connecting';
+        polite = true;
+        hide(q('[data-lc-call-incoming]'));
+        refreshLocalVideo();
+        refreshRemoteVideo();
+        setCameraBtn();
+        show(q('[data-lc-call-active]'));
+        installDialogTrap(q('[data-lc-call-active]'));
+        setStatus('Connecting...');
+        signal('accept');
+        incoming = null;
+      }).catch(function () {
+        alert('Could not access your microphone or camera.');
+        signal('reject');
+        teardown();
+      });
   }
 
   function declineCall() {
@@ -328,7 +397,7 @@
     phase = 'connecting';
     setStatus('Connecting...');
     createPc();
-    addLocalTracks(); // -> negotiationneeded -> caller sends the initial offer
+    addLocalTracks();
   }
 
   function toggleMute() {
@@ -336,13 +405,14 @@
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-call-mute]');
-    if (btn) btn.textContent = on ? 'Mute' : 'Unmute';
+    if (btn) {
+      btn.textContent = on ? 'Mute' : 'Unmute';
+      // aria-pressed="true" means "currently muted" (the toggle is on).
+      // Mirrors the visual: button reads "Unmute" exactly when muted.
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    }
   }
 
-  // Discord-style camera control: available throughout the call regardless of
-  // whether it began as a voice or video call. Turning the camera on acquires
-  // it and adds a track; turning it off stops and removes the track. Either
-  // direction triggers renegotiation via onnegotiationneeded.
   function toggleCamera() {
     if (phase === 'idle' || !localStream) return;
     var existing = localStream.getVideoTracks()[0];
@@ -359,7 +429,6 @@
       navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
         var vtrack = vstream.getVideoTracks()[0];
         if (!vtrack) return;
-        // The call may have ended while the permission prompt was open.
         if (phase === 'idle' || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
         localStream.addTrack(vtrack);
         if (pc) pc.addTrack(vtrack, localStream);
@@ -371,17 +440,15 @@
 
   // ---- inbound signal dispatch -------------------------------------
   function handleSignal(node) {
-    var roomId = node.getAttribute('data-room-id');
+    var msgRoomId = parseInt(node.getAttribute('data-room-id'), 10);
     var fromId = node.getAttribute('data-from-id');
     var fromName = node.getAttribute('data-from-name') || 'Someone';
     var kind = node.getAttribute('data-kind');
     var payload = node.getAttribute('data-payload');
 
-    if (!cfg) return;
-
     // Self-echo: a control signal the server mirrored to our other tabs.
     // Used only to dismiss a ringing prompt that another device answered.
-    if (fromId === cfg.selfId) {
+    if (fromId === selfId) {
       if (phase === 'incoming' &&
           (kind === 'accept' || kind === 'reject' || kind === 'cancel' || kind === 'hangup')) {
         teardown();
@@ -389,26 +456,41 @@
       return;
     }
 
-    // Only the DM currently on screen can host a call in v1.
-    if (String(cfg.roomId) !== String(roomId)) return;
+    // Once a call is active for a specific DM, ignore any signals tagged for
+    // a different DM (a stray invite from a third party while we're busy).
+    if (roomId != null && msgRoomId !== roomId && kind !== 'invite') return;
 
     switch (kind) {
       case 'invite':
         if (phase === 'idle') {
-          incoming = { fromName: fromName, fromId: fromId, withVideo: payload === 'video' };
+          roomId = msgRoomId;
+          peerId = fromId;
+          peerName = fromName;
+          setRemoteAvatar();
+          incoming = { fromId: fromId, fromName: fromName, withVideo: payload === 'video' };
           var nm = q('[data-lc-call-incoming-name]'); if (nm) nm.textContent = fromName;
           phase = 'incoming';
           show(q('[data-lc-call-incoming]'));
+          installDialogTrap(q('[data-lc-call-incoming]'));
           return;
         }
-        if (phase === 'outgoing') {
-          // Glare: we are calling them and they are calling us. The lower
-          // user id stays the caller; the other side becomes the callee.
-          if (cfg.selfId < fromId) return; // we win - keep our outgoing call
-          becomeCallee();                  // we lose - accept their call
+        if (phase === 'outgoing' && msgRoomId === roomId && fromId === peerId) {
+          // Server-resolved glare loss: the peer was already ringing us
+          // (or won the race) and the server replayed their invite back
+          // to us. Drop our outgoing UI and accept their call.
+          incoming = { fromId: fromId, fromName: fromName, withVideo: payload === 'video' };
+          becomeCallee();
+          incoming = null;
           return;
         }
-        signal('reject'); // genuinely busy in another call
+        // Already busy with another peer: politely reject so the new
+        // caller's UI tears down rather than ringing indefinitely.
+        try {
+          var ws = window.__lcWS;
+          if (ws) ws.send(JSON.stringify({
+            type: 'call_signal', room_id: msgRoomId, kind: 'reject', payload: null,
+          }));
+        } catch (e) {}
         return;
       case 'accept':
         onAccept();
@@ -435,33 +517,6 @@
   }
 
   // ---- wiring -------------------------------------------------------
-  // Bind to the DM page currently in the DOM. Each navigation swaps in a
-  // fresh root node, so a non-identical element means the page changed:
-  // end any live call (notifying the peer) before switching context.
-  function bindRoot(el) {
-    if (el === root) return;
-    if (phase !== 'idle') endCall();
-    root = el;
-    cfg = {
-      roomId: parseInt(el.getAttribute('data-room-id'), 10),
-      selfId: el.getAttribute('data-self-id'),
-      peerName: el.getAttribute('data-peer-name') || 'your contact',
-      iceServers: el.getAttribute('data-ice-servers') || '[]',
-    };
-  }
-
-  function scan() {
-    var el = document.querySelector('[data-lc-call-root]');
-    if (el) {
-      bindRoot(el);
-    } else if (root) {
-      if (phase !== 'idle') endCall();
-      teardown();
-      root = null;
-      cfg = null;
-    }
-  }
-
   function watchBus() {
     var bus = document.getElementById('lc-call-bus');
     if (!bus) return;
@@ -481,14 +536,29 @@
     }).observe(bus, { childList: true });
   }
 
-  // Delegated click handling: the call buttons (header start buttons and the
-  // overlay controls) are re-rendered by htmx swaps, so a single permanent
-  // listener is simpler and swap-proof.
+  function readSelfId() {
+    var el = document.getElementById('lc-call-root');
+    if (el) selfId = el.getAttribute('data-self-id');
+  }
+
+  // Delegated click handling: the call buttons (DM-header start buttons and
+  // the overlay controls) may be re-rendered by htmx swaps, so a single
+  // permanent listener is simpler and swap-proof.
   document.body.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
-    var b = t.closest('[data-lc-call-start]');
-    if (b) { e.preventDefault(); startCall(b.getAttribute('data-lc-call-start') === 'video'); return; }
+    var startBtn = t.closest('[data-lc-call-start]');
+    if (startBtn) {
+      e.preventDefault();
+      var ctx = {
+        roomId: parseInt(startBtn.getAttribute('data-room-id'), 10),
+        peerId: startBtn.getAttribute('data-peer-id'),
+        peerName: startBtn.getAttribute('data-peer-name') || 'your contact',
+      };
+      if (!isFinite(ctx.roomId)) return;
+      startCall(startBtn.getAttribute('data-lc-call-start') === 'video', ctx);
+      return;
+    }
     if (t.closest('[data-lc-call-accept]')) { acceptCall(); return; }
     if (t.closest('[data-lc-call-decline]')) { declineCall(); return; }
     if (t.closest('[data-lc-call-hangup]')) { endCall(); return; }
@@ -501,8 +571,7 @@
     else document.addEventListener('DOMContentLoaded', fn);
   }
   onReady(function () {
+    readSelfId();
     watchBus();
-    scan();
-    document.body.addEventListener('htmx:afterSettle', scan);
   });
 })();

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "lets-chat",
+  "version": "0.1.0",
+  "identifier": "run.a8n.lets-chat-desktop",
+  "build": {},
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "category": "SocialNetworking",
+    "shortDescription": "Self-hosted chat desktop client",
+    "longDescription": "lets-chat desktop wraps the lets-chat server's web UI in a native Tauri 2 webview window, with system-tray integration and OS-native notifications.",
+    "publisher": "a8n.run",
+    "copyright": "Copyright (c) 2026 a8n.run",
+    "homepage": "https://a8n.run",
+    "icon": [
+      "icons/icon-square-32.png",
+      "icons/icon-square-64.png",
+      "icons/icon-square-128.png",
+      "icons/icon-square-256.png",
+      "icons/icon.ico"
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
+      }
+    }
+  }
+}

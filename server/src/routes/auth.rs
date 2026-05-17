@@ -77,7 +77,8 @@ pub async fn post_login(
 
     if record.totp_enabled && state.two_factor_available() {
         let pending = db::two_factor::create_pending_2fa(&state.auth, &record.id).await?;
-        let cookie = crate::routes::two_factor::build_pending_cookie(pending);
+        let cookie =
+            crate::routes::two_factor::build_pending_cookie(state.cookies_secure(), pending);
         let jar = jar.add(cookie);
         if is_htmx(&headers) {
             let mut resp = Response::builder()
@@ -96,7 +97,7 @@ pub async fn post_login(
         db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
             .await?;
     crate::routes::login_alerts::spawn_dispatch(&state, record.id.clone(), ua, ip);
-    let cookie = build_session_cookie(token);
+    let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
 
     if is_htmx(&headers) {
@@ -180,6 +181,23 @@ pub async fn post_register(
         Err(e) => return Err(AppError::Internal(format!("hash: {e}"))),
     };
 
+    // When 2FA enforcement is on for this deployment, defer the actual user
+    // creation until after the TOTP code is verified. Otherwise an abandoned
+    // setup leaves a fully-registered account behind that squats the
+    // username and (if SMTP is wired) has already fired a verification
+    // email - both surprising for the operator and the prospective user.
+    if state.two_factor_available() {
+        return crate::routes::two_factor::stash_pending_registration(
+            &state,
+            &headers,
+            jar,
+            username,
+            email.as_deref(),
+            &password_hash,
+        )
+        .await;
+    }
+
     let user_id = match db::auth::create_user(&state.auth, username, &password_hash).await {
         Ok(id) => id,
         Err(e) => {
@@ -259,7 +277,7 @@ pub async fn post_register(
         ip.as_deref(),
     )
     .await;
-    let cookie = build_session_cookie(token);
+    let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
 
     if is_htmx(&headers) {
@@ -289,17 +307,17 @@ pub async fn get_logout(
     Ok((jar, Redirect::to("/login")).into_response())
 }
 
-fn build_session_cookie(token: String) -> Cookie<'static> {
+pub(super) fn build_session_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(SESSION_COOKIE, token);
     c.set_http_only(true);
-    c.set_secure(true);
+    c.set_secure(secure);
     c.set_same_site(SameSite::Strict);
     c.set_path("/");
     c.set_max_age(Duration::days(30));
     c
 }
 
-fn is_htmx(headers: &HeaderMap) -> bool {
+pub(super) fn is_htmx(headers: &HeaderMap) -> bool {
     headers.get("HX-Request").is_some()
 }
 
@@ -392,7 +410,7 @@ fn verify_password(hash: &str, password: &str) -> bool {
 }
 
 #[cfg(feature = "standalone")]
-fn is_unique_violation(err: &sqlx::Error) -> bool {
+pub(super) fn is_unique_violation(err: &sqlx::Error) -> bool {
     matches!(err, sqlx::Error::Database(db_err) if db_err.is_unique_violation())
 }
 

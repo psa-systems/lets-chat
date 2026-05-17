@@ -3,10 +3,13 @@
 # Cross-compile the lets-chat-desktop binary to Windows x86_64.
 #
 # Uses the rust-builder-glibc-windows base image, which already provides the
-# mingw-w64 toolchain (gcc-mingw-w64-x86-64) and the x86_64-pc-windows-gnu
-# Rust target. Wry's Windows backend talks to WebView2 via Windows-RT
-# bindings (the webview2-com crate), so no extra build-time libraries are
-# required here. The runtime artifact is the single binary at
+# mingw-w64 toolchain (gcc-mingw-w64-x86-64, windres) and the
+# x86_64-pc-windows-gnu Rust target. Tauri 2's Windows backend (Wry under
+# the hood) talks to WebView2 via Windows-RT bindings (the webview2-com
+# crate); tauri-build also embeds a Windows resource through `embed-resource`,
+# which shells out to `x86_64-w64-mingw32-windres`. No extra build-time
+# libraries beyond those provided by the base image are required. The
+# runtime artifact is the single binary at
 # /build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe, which
 # the CI workflow extracts via `docker create` + `docker cp`.
 

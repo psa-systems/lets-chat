@@ -276,7 +276,6 @@ pub async fn get_dm(
         asset_version: &state.asset_version,
         mute_mode,
         pinned_strip_html,
-        ice_servers: &state.ice_servers,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

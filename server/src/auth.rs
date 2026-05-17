@@ -143,6 +143,7 @@ pub async fn enforce_2fa_enrollment(
         || path == "/login"
         || path.starts_with("/login/")
         || path == "/register"
+        || path == "/register/2fa"
         || path == "/forgot"
         || path.starts_with("/reset/")
         || path == "/settings/2fa/setup"
