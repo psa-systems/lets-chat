@@ -36,6 +36,10 @@ pub struct SsoFlow {
     /// Non-null iff `kind = "link"`. The user who started the link
     /// flow from their already-signed-in session.
     pub user_id: Option<String>,
+    /// Slug of the `sso_providers` row that started the flow. Added
+    /// in migration 0018 so the callback handler knows which provider
+    /// to exchange the code against.
+    pub provider_id: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -273,12 +277,13 @@ pub async fn insert_sso_flow(
     return_to: &str,
     kind: &str,
     user_id: Option<&str>,
+    provider_id: &str,
     ttl_seconds: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO sso_flows \
-            (flow_id, csrf_state, nonce, pkce_verifier, return_to, kind, user_id, expires_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', ? || ' seconds'))",
+            (flow_id, csrf_state, nonce, pkce_verifier, return_to, kind, user_id, provider_id, expires_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ? || ' seconds'))",
     )
     .bind(flow_id)
     .bind(csrf_state)
@@ -287,6 +292,7 @@ pub async fn insert_sso_flow(
     .bind(return_to)
     .bind(kind)
     .bind(user_id)
+    .bind(provider_id)
     .bind(ttl_seconds.to_string())
     .execute(pool)
     .await?;
@@ -302,7 +308,7 @@ pub async fn consume_sso_flow(
 ) -> Result<Option<SsoFlow>, sqlx::Error> {
     let row = sqlx::query(
         "DELETE FROM sso_flows WHERE flow_id = ? AND expires_at > datetime('now') \
-         RETURNING csrf_state, nonce, pkce_verifier, return_to, kind, user_id",
+         RETURNING csrf_state, nonce, pkce_verifier, return_to, kind, user_id, provider_id",
     )
     .bind(flow_id)
     .fetch_optional(pool)
@@ -313,6 +319,7 @@ pub async fn consume_sso_flow(
         pkce_verifier: r.get("pkce_verifier"),
         return_to: r.get("return_to"),
         kind: r.get("kind"),
+        provider_id: r.get("provider_id"),
         user_id: r.get("user_id"),
     }))
 }
