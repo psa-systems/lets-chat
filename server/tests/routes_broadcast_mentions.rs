@@ -134,6 +134,8 @@ async fn setup_app_with_users_and_client(
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         sso: lets_chat::sso::SsoProviders::default(),
+
+        local_login_disabled: false,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -523,6 +525,8 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         ice_servers: "[]".to_string(),
 
         sso: lets_chat::sso::SsoProviders::default(),
+
+        local_login_disabled: false,
     };
     let app = routes::build_router(state);
 

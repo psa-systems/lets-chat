@@ -572,6 +572,9 @@ pub async fn post_password(
     AuthUser(user): AuthUser,
     axum::Form(form): axum::Form<PasswordForm>,
 ) -> Result<Response, AppError> {
+    if state.local_login_disabled {
+        return Err(AppError::NotFound);
+    }
     let record = db::auth::find_user_by_id(&state.auth, &user.id)
         .await?
         .ok_or(AppError::Unauthorized)?;

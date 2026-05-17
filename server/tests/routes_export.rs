@@ -69,6 +69,8 @@ async fn app_with_two_users() -> TestApp {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         sso: lets_chat::sso::SsoProviders::default(),
+
+        local_login_disabled: false,
     };
     let app = routes::build_router(state);
     TestApp {

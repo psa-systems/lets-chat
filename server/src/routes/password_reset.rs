@@ -36,7 +36,7 @@ pub struct ResetForm {
 /// Render the "enter your email" form. Returns 404 when SMTP is not
 /// configured so admins running without a mailer don't expose a broken flow.
 pub async fn get_forgot(State(state): State<AppState>) -> Result<Response, AppError> {
-    if !state.mail_available() {
+    if state.local_login_disabled || !state.mail_available() {
         return Err(AppError::NotFound);
     }
     let page = ForgotPage {
@@ -59,7 +59,7 @@ pub async fn post_forgot(
     headers: HeaderMap,
     Form(form): Form<ForgotForm>,
 ) -> Result<Response, AppError> {
-    if !state.mail_available() {
+    if state.local_login_disabled || !state.mail_available() {
         return Err(AppError::NotFound);
     }
     let email = form.email.trim().to_string();
@@ -121,7 +121,7 @@ pub async fn get_reset(
     State(state): State<AppState>,
     Path(token): Path<String>,
 ) -> Result<Response, AppError> {
-    if !state.mail_available() {
+    if state.local_login_disabled || !state.mail_available() {
         return Err(AppError::NotFound);
     }
     let active = db::password_reset::find_active_user_id(&state.auth, &token).await?;
@@ -146,7 +146,7 @@ pub async fn post_reset(
     headers: HeaderMap,
     Form(form): Form<ResetForm>,
 ) -> Result<Response, AppError> {
-    if !state.mail_available() {
+    if state.local_login_disabled || !state.mail_available() {
         return Err(AppError::NotFound);
     }
     if form.password.len() < 8 {

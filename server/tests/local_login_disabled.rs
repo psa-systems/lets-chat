@@ -1,4 +1,8 @@
 #![cfg(feature = "standalone")]
+//! Integration tests for the LETS_CHAT_LOCAL_LOGIN_DISABLED kill
+//! switch. With the flag on, every password-related route returns
+//! 404 regardless of credentials; with the flag off, the same routes
+//! behave normally (sanity check / regression guard).
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
@@ -11,9 +15,8 @@ use tower::ServiceExt;
 fn ensure_tempdir() {
     static INIT: OnceLock<()> = OnceLock::new();
     INIT.get_or_init(|| {
-        let p = std::env::temp_dir().join(format!("lets-chat-admin-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("lets-chat-killsw-{}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
-        std::fs::create_dir_all(p.join("uploads")).unwrap();
         db::set_data_dir(p.to_string_lossy().to_string());
     });
 }
@@ -81,146 +84,147 @@ async fn open_pool(name: &str) -> SqlitePool {
     pool
 }
 
-async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
+async fn make_app(local_login_disabled: bool) -> (Router, SqlitePool) {
     ensure_tempdir();
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
-
-    let user_id = db::auth::create_user(&auth, username, "hash")
-        .await
-        .unwrap();
-    db::auth::set_user_role(&auth, &user_id, role)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
-        .bind(&user_id)
-        .execute(&auth)
-        .await
-        .unwrap();
-    let session = db::auth::create_session(&auth, &user_id).await.unwrap();
-
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
-        auth,
-        chat: chat.clone(),
+        auth: auth.clone(),
+        chat,
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         bg,
-        secret_key: Some(Arc::new([0u8; 32])),
+        secret_key: Some(Arc::new([1u8; 32])),
         vapid: None,
         push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         sso: lets_chat::sso::SsoProviders::default(),
-
-        local_login_disabled: false,
+        local_login_disabled,
     };
-    (routes::build_router(state), session, chat)
+    (routes::build_router(state), auth)
 }
 
-async fn post_status(app: Router, sess: Option<&str>, uri: &str) -> StatusCode {
-    let mut builder = Request::builder().method(Method::POST).uri(uri);
-    if let Some(s) = sess {
-        builder = builder.header(header::COOKIE, format!("session={s}"));
+fn post(uri: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+fn get(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn post_login_404s_when_disabled() {
+    let (app, auth) = make_app(true).await;
+    db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(post("/login", "username=alice&password=anything"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn get_register_404s_when_disabled() {
+    let (app, _) = make_app(true).await;
+    let res = app.clone().oneshot(get("/register")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn post_register_404s_when_disabled() {
+    let (app, _) = make_app(true).await;
+    let res = app
+        .clone()
+        .oneshot(post(
+            "/register",
+            "username=newuser&password=hunter22&password_confirm=hunter22",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn forgot_and_reset_routes_404_when_disabled() {
+    let (app, _) = make_app(true).await;
+    for uri in ["/forgot"] {
+        let res = app.clone().oneshot(get(uri)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND, "{uri}");
     }
-    let req = builder.body(Body::empty()).unwrap();
-    app.oneshot(req).await.unwrap().status()
-}
-
-fn write_png(path: &std::path::Path, size: u32) {
-    use image::ImageEncoder;
-    let img = image::RgbaImage::from_pixel(size, size, image::Rgba([10, 200, 30, 255]));
-    let mut buf = Vec::new();
-    image::codecs::png::PngEncoder::new(&mut buf)
-        .write_image(&img, size, size, image::ExtendedColorType::Rgba8)
-        .unwrap();
-    std::fs::write(path, &buf).unwrap();
+    let res = app.clone().oneshot(get("/reset/some-token")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn purge_orphans_removes_stale_row() {
-    let (app, sess, chat) = make_app("admin-purge", "admin").await;
-    let id = db::uploads::insert_upload(
-        &chat,
-        "user-x",
-        "f.png",
-        "image/png",
-        10,
-        "admin-purge-test.png",
-        None,
-    )
-    .await
-    .unwrap();
-    sqlx::query("UPDATE file_uploads SET created_at = datetime('now', '-25 hours') WHERE id = ?")
-        .bind(id)
-        .execute(&chat)
+async fn settings_password_404s_when_disabled() {
+    let (app, auth) = make_app(true).await;
+    let uid = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    // Force totp_enabled so the auth middleware doesn't redirect to
+    // 2FA setup before the kill-switch gate runs.
+    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
+        .bind(&uid)
+        .execute(&auth)
         .await
         .unwrap();
-
-    let status = post_status(app, Some(&sess), "/admin/uploads/purge-orphans").await;
-    assert_eq!(
-        status,
-        StatusCode::SEE_OTHER,
-        "expected redirect on success"
-    );
-    assert!(
-        db::uploads::get_upload(&chat, id).await.unwrap().is_none(),
-        "stale orphan should be gone after purge",
-    );
-}
-
-#[tokio::test]
-async fn regenerate_thumbnails_creates_missing_preview() {
-    let (app, sess, chat) = make_app("admin-regen", "admin").await;
-    let storage = "admin-regen-test.png";
-    let original_path = db::uploads_dir().join(storage);
-    write_png(&original_path, 200);
-    let preview_name = lets_chat::uploads::preview_storage_name(storage);
-    let preview_path = db::uploads_dir().join(&preview_name);
-    let _ = std::fs::remove_file(&preview_path);
-    assert!(
-        !preview_path.exists(),
-        "preconditions: preview must be absent"
-    );
-
-    db::uploads::insert_upload(&chat, "user-x", "f.png", "image/png", 1234, storage, None)
+    let sess = db::auth::create_session(&auth, &uid).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/settings/password")
+                .header(header::COOKIE, format!("session={sess}"))
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(
+                    "current_password=hash&new_password=newpassword12345&new_password_confirm=newpassword12345",
+                ))
+                .unwrap(),
+        )
         .await
         .unwrap();
-
-    let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(
-        status,
-        StatusCode::SEE_OTHER,
-        "expected redirect on success"
-    );
-    assert!(
-        preview_path.exists(),
-        "preview should have been generated at {}",
-        preview_path.display(),
-    );
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn admin_uploads_anonymous_redirects_to_login() {
-    let (app, _sess, _chat) = make_app("admin-anon", "admin").await;
-    // Drop the session: hit the endpoint without a cookie. AdminUser
-    // returns a 303 to /login when there is no User in extensions.
-    let status = post_status(app.clone(), None, "/admin/uploads/purge-orphans").await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
-    let status = post_status(app, None, "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
+async fn get_login_still_renders_with_flag_on() {
+    // The /login page stays mounted; L21 will hide the password form
+    // conditionally. The kill switch only 404s the POST and the
+    // password-recovery routes.
+    let (app, _) = make_app(true).await;
+    let res = app.clone().oneshot(get("/login")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 }
 
 #[tokio::test]
-async fn admin_uploads_non_admin_rejected_with_403() {
-    let (app, sess, _chat) = make_app("regular-user", "user").await;
-    let status = post_status(app.clone(), Some(&sess), "/admin/uploads/purge-orphans").await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+async fn post_login_works_with_flag_off() {
+    // Regression guard: flag-off must not change the existing behaviour.
+    let (app, auth) = make_app(false).await;
+    db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(post("/login", "username=alice&password=wrong"))
+        .await
+        .unwrap();
+    // The wrong-password path renders the login form again with an
+    // inline error (422 unprocessable entity per the existing handler);
+    // the assertion here is just "not a 404," i.e. the kill switch is
+    // off and the route is reachable.
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }

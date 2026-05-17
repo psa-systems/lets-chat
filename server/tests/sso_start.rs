@@ -168,6 +168,7 @@ async fn make_app_with_provider(
         base_url: "http://chat.example".to_string(),
         ice_servers: "[]".to_string(),
         sso: sso.clone(),
+        local_login_disabled: false,
     };
     (routes::build_router(state), auth, sso)
 }

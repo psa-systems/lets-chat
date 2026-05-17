@@ -45,6 +45,8 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         sso: lets_chat::sso::SsoProviders::default(),
+
+        local_login_disabled: false,
     };
     (routes::build_router(state), session, user_id)
 }

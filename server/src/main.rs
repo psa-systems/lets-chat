@@ -121,6 +121,13 @@ async fn main() {
         Err(e) => panic!("failed to load sso_providers: {e}"),
     };
 
+    let local_login_disabled = parse_bool_env("LETS_CHAT_LOCAL_LOGIN_DISABLED", false);
+    if local_login_disabled {
+        tracing::info!(
+            "LETS_CHAT_LOCAL_LOGIN_DISABLED=true; password sign-in, register, password reset, and /settings/password will 404"
+        );
+    }
+
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -137,6 +144,7 @@ async fn main() {
         base_url,
         ice_servers,
         sso,
+        local_login_disabled,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
@@ -278,6 +286,16 @@ fn parse_data_dir() -> Option<String> {
     args.windows(2)
         .find(|pair| pair[0] == "--data-dir")
         .map(|pair| pair[1].clone())
+}
+
+fn parse_bool_env(name: &str, default: bool) -> bool {
+    match std::env::var(name) {
+        Ok(s) => matches!(
+            s.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => default,
+    }
 }
 
 fn wants_version_flag() -> bool {
