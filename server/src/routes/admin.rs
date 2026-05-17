@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{id}/unmute", post(post_unmute))
         .route("/admin/users/{id}/role", post(post_role))
         .route("/admin/users/{id}/delete", post(post_delete_user))
+        .route("/admin/users/{id}/sso/unlink", post(post_unlink_sso))
         .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
         .route("/admin/rooms", get(get_rooms))
@@ -290,16 +291,27 @@ pub async fn get_users(
 ) -> Result<Html, AppError> {
     let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
     let records = db::auth::list_users(&state.auth).await?;
-    let users: Vec<AdminUserView> = records
-        .into_iter()
-        .map(|r| AdminUserView {
+    let mut users: Vec<AdminUserView> = Vec::with_capacity(records.len());
+    for r in records {
+        let sso_identities = db::sso::list_sso_identities_for_user(&state.auth, &r.id)
+            .await?
+            .into_iter()
+            .map(|s| crate::views::admin::AdminUserSsoIdentity {
+                issuer: s.issuer,
+                email: s.email,
+            })
+            .collect();
+        let has_password = !r.password_hash.is_empty();
+        users.push(AdminUserView {
             id: r.id,
             username: r.username,
             role: r.role,
             is_banned: r.is_banned,
             is_muted: r.is_muted,
-        })
-        .collect();
+            has_password,
+            sso_identities,
+        });
+    }
     let page = UsersPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -421,14 +433,42 @@ async fn render_user_row(state: &AppState, user_id: &str) -> Result<Html, AppErr
     let record = db::auth::find_user_by_id(&state.auth, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    let sso_identities = db::sso::list_sso_identities_for_user(&state.auth, &record.id)
+        .await?
+        .into_iter()
+        .map(|s| crate::views::admin::AdminUserSsoIdentity {
+            issuer: s.issuer,
+            email: s.email,
+        })
+        .collect();
+    let has_password = !record.password_hash.is_empty();
     let view = AdminUserView {
         id: record.id,
         username: record.username,
         role: record.role,
         is_banned: record.is_banned,
         is_muted: record.is_muted,
+        has_password,
+        sso_identities,
     };
     html(&UserRowFragment { u: &view })
+}
+
+pub async fn post_unlink_sso(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(user_id): Path<String>,
+) -> Result<Html, AppError> {
+    let removed = db::sso::unlink_sso_identity(&state.auth, &user_id).await?;
+    tracing::info!(
+        target: "lets_chat.auth.sso",
+        event = "sso_admin_unlinked",
+        actor = %actor.id,
+        user_id = %user_id,
+        removed_rows = removed,
+        "admin removed SSO link"
+    );
+    render_user_row(&state, &user_id).await
 }
 
 // Invites -------------------------------------------------------------------
