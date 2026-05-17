@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.6
+
+# Build the lets-chat-desktop binary for Linux x86_64 AND the
+# accompanying .deb / .AppImage bundles via the Tauri 2 CLI bundler.
+#
+# Separate from Dockerfile.desktop-linux (which compiles only the raw
+# binary in ~2.5 min) because the Tauri CLI install + bundler steps add
+# a noticeable layer of overhead. The fast Dockerfile stays the path for
+# iterating on the binary; this one is used by CI publish and by
+# `just build-desktop-linux-bundles` for producing distributables.
+#
+# Artifacts after a successful build:
+#   /build/target/release/lets-chat-desktop                    (binary)
+#   /build/target/release/bundle/deb/lets-chat_<ver>_amd64.deb
+#   /build/target/release/bundle/appimage/lets-chat_<ver>_amd64.AppImage
+# The just recipe + CI workflow extract these via `docker create`+`docker cp`.
+
+FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS builder
+ARG GIT_HASH=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+ENV GIT_HASH=${GIT_HASH} \
+    GIT_VERSION=${GIT_VERSION} \
+    BUILD_DATE=${BUILD_DATE}
+
+# Cap concurrent rustc / build-script processes; see Dockerfile.desktop-linux
+# for the same trick. Overridable via `--build-arg CARGO_BUILD_JOBS=N`.
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+
+# Tauri 2 CLI: produces the .deb + .AppImage bundles around the cargo
+# build output. Pinned to 2.x. Installed in its own layer so the binary
+# build below stays fast on rebuilds when only source changes.
+RUN cargo install --locked tauri-cli --version "^2.0"
+
+WORKDIR /build
+COPY . .
+
+# `--bundles deb,appimage` matches tauri.conf.json's bundle.targets and
+# avoids attempting macOS / Windows bundle types that have no toolchain
+# in this image. The Tauri bundler downloads `linuxdeploy` on demand for
+# the AppImage step (cached into the target dir on rebuilds).
+RUN cargo tauri build --bundles deb,appimage

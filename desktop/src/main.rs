@@ -1,7 +1,13 @@
+mod config;
 mod update;
 mod welcome;
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    image::Image,
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager, WebviewUrl, WebviewWindowBuilder,
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GIT_HASH: &str = env!("GIT_HASH");
@@ -15,6 +21,40 @@ const BUILD_DATE: &str = env!("BUILD_DATE");
 // request under welcome://localhost/.
 const WELCOME_SCHEME: &str = "welcome";
 const WELCOME_URL: &str = "welcome://localhost/";
+
+// JSON payload returned by the set_server_url IPC command. The webview JS
+// uses `reachable` to decide whether to navigate to the new URL or to keep
+// showing the welcome page with the new failure reason.
+#[derive(serde::Serialize)]
+struct ProbeResult {
+    url: String,
+    reachable: bool,
+    reason: Option<String>,
+}
+
+#[tauri::command]
+fn set_server_url(url: String) -> Result<ProbeResult, String> {
+    let trimmed = url.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("URL cannot be empty".into());
+    }
+    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+        return Err("URL must start with http:// or https://".into());
+    }
+    config::save(&trimmed).map_err(|e| format!("config save failed: {e}"))?;
+    Ok(match welcome::server_reachable(&trimmed) {
+        Ok(()) => ProbeResult {
+            url: trimmed,
+            reachable: true,
+            reason: None,
+        },
+        Err(reason) => ProbeResult {
+            url: trimmed,
+            reachable: false,
+            reason: Some(reason),
+        },
+    })
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -38,14 +78,14 @@ fn main() {
     update::spawn_startup_check();
     set_linux_gtk_env();
 
-    let url = std::env::var("LETS_CHAT_SERVER_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let url = config::initial_server_url();
     let title = format!("lets-chat v{VERSION} ({GIT_HASH})");
 
     // Probe the configured server before pointing the webview at it.
     // Without this, a misconfigured or down server gives the user a blank
     // window with no hint at what went wrong; the welcome page tells them
-    // which URL failed and how to recover.
+    // which URL failed and how to recover (including an inline URL editor
+    // backed by the set_server_url command below).
     let probe = welcome::server_reachable(&url);
     let welcome_html = match &probe {
         Ok(()) => String::new(),
@@ -65,9 +105,12 @@ fn main() {
             // a second one. Silent if the window is already gone (eg. user
             // is mid-shutdown).
             if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![set_server_url])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
             tauri::http::Response::builder()
@@ -85,10 +128,57 @@ fn main() {
                 .title(&title_for_window)
                 .inner_size(1100.0, 750.0)
                 .build()?;
+            build_tray_icon(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");
+}
+
+// Build a system-tray icon with Show / Quit menu items. Left-click focuses
+// the main window; right-click opens the menu. The window is `hide()`d
+// rather than destroyed when the user closes it (handled via the tray's
+// Show entry), so the app keeps running in the background.
+fn build_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let icon = Image::from_bytes(include_bytes!("../icons/icon-square-128.png"))?;
+    let show_item = MenuItem::with_id(app, "show", "Show window", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit lets-chat", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .tooltip("lets-chat")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => focus_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            // Left-click anywhere on the tray icon focuses the main
+            // window, matching how Slack / Discord / Element behave on
+            // Linux. The default would be "do nothing" - which is
+            // confusing when the menu is right-click-only.
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                focus_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
 }
 
 #[cfg(target_os = "linux")]
