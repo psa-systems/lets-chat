@@ -97,47 +97,168 @@ build-docker: build-css
 build-docker-saas: build-css
     docker buildx build --tag lets-chat-saas:local --build-arg BUILD_MODE=saas {{ docker_version_args }} -f ci-build/Dockerfile.web .
 
-# Start development server (web, standalone) via Docker with Traefik
+# Build desktop binaries (Linux x86_64 + Windows x86_64). Outputs land in artifacts/.
+[group('build')]
+build-desktop: build-desktop-linux build-desktop-windows
+
+# Mirrors the .forgejo/workflows/build-desktop-linux.yml pipeline so a local
+# `just build-desktop-linux` produces the same artifact CI publishes. Builds
+# via ci-build/Dockerfile.desktop-linux and copies the binary out of the build
+# image to artifacts/lets-chat-desktop-linux-x86_64. Bash shebang is required
+# so the $(...) substitutions inside docker_version_args expand on the host
+# (nu would forward them as literal strings, ending up in the binary).
+# Build the Linux x86_64 desktop binary into artifacts/.
+[group('build')]
+build-desktop-linux:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker buildx build --tag lets-chat-desktop:local --load {{ docker_version_args }} -f ci-build/Dockerfile.desktop-linux .
+    mkdir -p artifacts
+    container=$(docker create lets-chat-desktop:local)
+    trap 'docker rm "$container" >/dev/null 2>&1 || true' EXIT
+    docker cp "$container:/build/target/release/lets-chat-desktop" artifacts/lets-chat-desktop-linux-x86_64
+    echo "Artifact: artifacts/lets-chat-desktop-linux-x86_64"
+
+# Slower than build-desktop-linux (installs tauri-cli first); keep this for
+# producing distributables and use build-desktop-linux for fast iteration on
+# the binary alone. Copies the binary AND both bundles into artifacts/.
+# Build the Linux .deb + .AppImage bundles via the Tauri 2 CLI bundler.
+[group('build')]
+build-desktop-linux-bundles:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker buildx build --tag lets-chat-desktop:bundles --load {{ docker_version_args }} -f ci-build/Dockerfile.desktop-linux-bundles .
+    mkdir -p artifacts
+    container=$(docker create lets-chat-desktop:bundles)
+    trap 'docker rm "$container" >/dev/null 2>&1 || true' EXIT
+    docker cp "$container:/build/target/release/lets-chat-desktop" artifacts/lets-chat-desktop-linux-x86_64
+    # Bundles land under /build/target/release/bundle/{deb,appimage}/ with
+    # version-stamped filenames; copy each whole directory and let the user
+    # inspect what's there rather than guessing exact filenames.
+    rm -rf artifacts/bundle-linux
+    mkdir -p artifacts/bundle-linux
+    docker cp "$container:/build/target/release/bundle/deb/." artifacts/bundle-linux/
+    docker cp "$container:/build/target/release/bundle/appimage/." artifacts/bundle-linux/
+    echo "Artifact: artifacts/lets-chat-desktop-linux-x86_64"
+    echo "Bundles in artifacts/bundle-linux/ :"
+    ls -1 artifacts/bundle-linux/
+
+# Mirrors .forgejo/workflows/build-desktop-windows.yml. Cross-builds via
+# ci-build/Dockerfile.desktop-windows (mingw-w64 toolchain inside the
+# rust-builder-glibc-windows image) and copies the binary out to
+# artifacts/lets-chat-desktop-windows-x86_64.exe. Bash shebang for the same
+# reason as build-desktop-linux.
+# Cross-build the Windows x86_64 desktop binary into artifacts/.
+[group('build')]
+build-desktop-windows:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker buildx build --tag lets-chat-desktop-windows:local --load {{ docker_version_args }} -f ci-build/Dockerfile.desktop-windows .
+    mkdir -p artifacts
+    container=$(docker create lets-chat-desktop-windows:local)
+    trap 'docker rm "$container" >/dev/null 2>&1 || true' EXIT
+    docker cp "$container:/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe" artifacts/lets-chat-desktop-windows-x86_64.exe
+    echo "Artifact: artifacts/lets-chat-desktop-windows-x86_64.exe"
+
+# Build args common to every compose recipe so the server logs the right
+# git metadata in its banner. Computed on the host because the builder
+# image has no git history of its repo to introspect.
+compose_env := 'GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
+
+# HOST_UID / HOST_GID for compose recipes that run `cargo run` from source
+# (dev-web-local{,-saas}, dev-desktop). The container starts as root long
+# enough to chown the named volumes, then drops to the host user via
+# setpriv so files written into the /work bind mount land owned by the
+# developer on the host.
+compose_uid := 'HOST_UID="$(id -u)" HOST_GID="$(id -g)"'
+
+# Start development server (web, standalone) via Docker Compose with Traefik
 [group('dev')]
 dev-web:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=standalone GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
+    {{ compose_env }} docker compose --file compose.dev-web.yml up --build
 
-# Start development server (web, saas) via Docker with Traefik
+# Stop dev-web container
+[group('dev')]
+dev-web-down:
+    docker compose --file compose.dev-web.yml down
+
+# Stop dev-web container and remove the data volume
+[group('dev')]
+dev-web-clean:
+    docker compose --file compose.dev-web.yml down --volumes
+
+# Start development server (web, saas) via Docker Compose with Traefik
 [group('dev')]
 dev-web-saas:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    BUILD_MODE=saas GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" docker compose -f compose.dev.yml up --build
+    {{ compose_env }} docker compose --file compose.dev-web-saas.yml up --build
 
-# Stop dev-web containers
+# Stop dev-web-saas container
 [group('dev')]
-dev-web-down:
-    docker compose -f compose.dev.yml down
+dev-web-saas-down:
+    docker compose --file compose.dev-web-saas.yml down
 
-# Stop dev-web containers and remove volumes
+# Stop dev-web-saas container and remove the data volume
 [group('dev')]
-dev-web-clean:
-    docker compose -f compose.dev.yml down -v
+dev-web-saas-clean:
+    docker compose --file compose.dev-web-saas.yml down --volumes
 
 # Start development server (web, standalone) locally on http://localhost:18080
 [group('dev')]
 dev-web-local: build-css
-    HOST_PORT=18080 ./dev/server-up -p lets-chat-server
-
-# Start development server (web, saas) locally on http://localhost:18080
-[group('dev')]
-dev-web-local-saas: build-css
-    HOST_PORT=18080 ./dev/server-up -p lets-chat-server --no-default-features --features saas
+    {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml up
 
 # Stop the local dev server container
 [group('dev')]
 dev-web-local-down:
-    ./dev/server-down
+    docker compose --file compose.dev-web-local.yml down
+
+# Stop the local dev server container and remove cargo + data volumes
+[group('dev')]
+dev-web-local-clean:
+    docker compose --file compose.dev-web-local.yml down --volumes
+
+# Start development server (web, saas) locally on http://localhost:18080
+[group('dev')]
+dev-web-local-saas: build-css
+    {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local-saas.yml up
+
+# Stop the local saas dev server container
+[group('dev')]
+dev-web-local-saas-down:
+    docker compose --file compose.dev-web-local-saas.yml down
+
+# Stop the local saas dev server container and remove cargo + data volumes
+[group('dev')]
+dev-web-local-saas-clean:
+    docker compose --file compose.dev-web-local-saas.yml down --volumes
 
 # Start development server (desktop)
 [group('dev')]
 dev-desktop:
-    LETS_CHAT_SERVER_URL=http://localhost:18080 ./dev/cargo-desktop run -p lets-chat-desktop
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Default XAUTHORITY to the canonical location so compose has a real
+    # host path to bind-mount the X11 cookie file from. Touching is a no-op
+    # when the file exists; on a fresh login the file is created empty so
+    # the mount works, with xhost (below) covering the auth side instead.
+    : "${XAUTHORITY:=$HOME/.Xauthority}"
+    export XAUTHORITY
+    touch "$XAUTHORITY"
+    # Grant the local user access to the running X server (when there is
+    # one) so the container's GTK can connect without needing to read the
+    # cookie file. Silently no-op on Wayland-only sessions or hosts without
+    # the xhost utility.
+    if [ -n "${DISPLAY:-}" ] && command -v xhost >/dev/null 2>&1; then
+        xhost +SI:localuser:"$(id -un)" >/dev/null 2>&1 || true
+    fi
+    {{ compose_uid }} docker compose --file compose.dev-desktop.yml up
+
+# Stop the desktop dev container
+[group('dev')]
+dev-desktop-down:
+    docker compose --file compose.dev-desktop.yml down
 
 # Run tests (server, standalone)
 [group('test')]

@@ -29,7 +29,8 @@ async fn setup_auth_pool() -> SqlitePool {
         include_str!("../migrations/auth/0012_session_metadata.sql"),
         include_str!("../migrations/auth/0013_digest_columns.sql"),
         include_str!("../migrations/auth/0014_login_alerts.sql"),
-        include_str!("../migrations/auth/0015_sso_identities.sql"),
+        include_str!("../migrations/auth/0015_pending_registrations.sql"),
+        include_str!("../migrations/auth/0016_sso_identities.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

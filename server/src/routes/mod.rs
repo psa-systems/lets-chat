@@ -28,6 +28,7 @@ mod admin;
 mod auth;
 mod avatar;
 mod bookmarks;
+mod call;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
@@ -598,6 +599,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
+        .route("/call/config", get(call::get_config))
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
         .merge(enclave::router());
@@ -607,6 +609,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/register",
             get(auth::get_register).post(auth::post_register),
+        )
+        .route(
+            "/register/2fa",
+            get(two_factor::get_register_2fa).post(two_factor::post_register_2fa),
         )
         .route(
             "/forgot",

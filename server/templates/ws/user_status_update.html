@@ -5,13 +5,18 @@
       var status = {{ status_json|safe }};
       var custom = {{ custom_status_json|safe }};
       var colorClass = status === 'dnd' ? 'bg-red-500'
-        : status === 'idle' ? 'bg-yellow-400'
+        : (status === 'idle' || status === 'away') ? 'bg-yellow-400'
         : status === 'offline' ? 'bg-slate-400'
         : 'bg-green-500';
+      var label = status === 'dnd' ? 'Do not disturb'
+        : (status === 'idle' || status === 'away') ? 'Away'
+        : status === 'offline' ? 'Offline'
+        : 'Online';
       var safeUid = uid.replace(/"/g, '\\"');
       document.querySelectorAll('[data-user-status="' + safeUid + '"]').forEach(function(dot){
         dot.classList.remove('bg-red-500','bg-yellow-400','bg-slate-400','bg-green-500');
         dot.classList.add(colorClass);
+        dot.setAttribute('aria-label', label);
         var wrapper = dot.parentElement;
         if (wrapper) {
           if (custom) { wrapper.setAttribute('title', custom); }

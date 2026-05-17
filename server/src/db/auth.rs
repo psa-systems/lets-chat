@@ -107,13 +107,21 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
 }
 
 /// Allowed values for the `users.status` column.
+///
+/// `idle` and `away` both render as "Away" in the UI but differ in semantics:
+/// - `idle` is auto-applied by the background tick when `last_active_at`
+///   crosses the threshold, and is cleared automatically by the next HTTP
+///   request (see `touch_user_activity`).
+/// - `away` is manually selected from the status picker and is sticky: HTTP
+///   activity does not clear it. The user must change it back themselves.
 pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_IDLE: &str = "idle";
+pub const STATUS_AWAY: &str = "away";
 pub const STATUS_DND: &str = "dnd";
 pub const MAX_CUSTOM_STATUS_CHARS: usize = 50;
 
 pub fn is_valid_status(s: &str) -> bool {
-    matches!(s, STATUS_ACTIVE | STATUS_IDLE | STATUS_DND)
+    matches!(s, STATUS_ACTIVE | STATUS_IDLE | STATUS_AWAY | STATUS_DND)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -158,16 +166,17 @@ pub async fn set_user_status(
 }
 
 /// Refresh `last_active_at`. If the user was `'idle'`, promote them back to
-/// `'active'`. DND is sticky: bumps the timestamp so the idle clock restarts
-/// once they leave DND, but never overwrites the status. Returns `true` only
-/// when the call actually flipped idle->active so the caller can broadcast.
+/// `'active'`. DND and manual `'away'` are sticky: bumps the timestamp so the
+/// idle clock restarts once they leave that state, but never overwrites the
+/// status. Returns `true` only when the call actually flipped idle->active so
+/// the caller can broadcast.
 ///
 /// Implemented as two single-statement updates rather than a SELECT-then-
 /// UPDATE transaction: under chat load this runs on every WebSocket message
 /// and every room visit, so holding a write lock for the duration of a
 /// round-trip multiplies contention and produces `SQLITE_BUSY` even with
-/// WAL + busy_timeout enabled. The first statement only matches idle rows
-/// and never the DND row, so the DND-sticky guarantee is preserved.
+/// WAL + busy_timeout enabled. The first statement only matches idle rows,
+/// never DND or away, so the sticky-state guarantees are preserved.
 pub async fn touch_user_activity(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
     let flipped = sqlx::query(
         "UPDATE users \

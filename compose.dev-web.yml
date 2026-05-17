@@ -1,8 +1,13 @@
 ---
-# Developer Docker Compose: builds via the same multi-stage Dockerfile as
-# production, then attaches the running container to the shared Traefik
-# network so it is reachable at https://${USER}-chat.a8n.run.
-name: chat-${USER}
+# `just dev-web` - build the production multi-stage image and attach it to
+# the shared Traefik network so it serves at https://${USER}-chat.a8n.run.
+#
+# `restart: unless-stopped` keeps the container alive across panics so
+# `docker compose logs app` always has output; the prior `dev/server-up`
+# pattern of `docker run --rm --detach` swept the container away on
+# startup failure and left "container started" printed to the terminal
+# with no way to see the real error.
+name: dev-web-${USER}
 
 services:
 
@@ -11,11 +16,11 @@ services:
       context: .
       dockerfile: ci-build/Dockerfile.web
       args:
-        BUILD_MODE: ${BUILD_MODE:-standalone}
+        BUILD_MODE: standalone
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_VERSION: ${GIT_VERSION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
-    container_name: dev-lets-chat-app-${USER}
+    container_name: dev-lets-chat-web-${USER}
     restart: unless-stopped
     environment:
       RUST_LOG: lets_chat=debug

@@ -609,9 +609,10 @@ async fn resolve_tokens_for_room(
 }
 
 /// Resolve `@here` against `room`: every candidate member who has at least
-/// one live WebSocket connection AND whose persisted status is not DND.
-/// Excludes the author. Idle is intentionally included - idle is "stepped
-/// away briefly," not "do not interrupt."
+/// one live WebSocket connection AND whose persisted status is neither DND
+/// nor manual `away`. Excludes the author. Auto-`idle` is intentionally
+/// included: idle is "stepped away briefly," whereas manual `away` is the
+/// user explicitly saying "I'm not around right now."
 pub(crate) async fn resolve_here_targets(
     state: &AppState,
     room: &crate::models::Room,
@@ -626,14 +627,14 @@ pub(crate) async fn resolve_here_targets(
     if connected.is_empty() {
         return Ok(Vec::new());
     }
-    // Second filter: bulk auth lookup to drop DND users and resolve usernames.
+    // Second filter: bulk auth lookup to drop DND/away users and resolve usernames.
     let id_refs: Vec<&str> = connected.iter().map(String::as_str).collect();
     let rows = db::auth::usernames_and_status_for_ids(&state.auth, &id_refs).await?;
     Ok(connected
         .into_iter()
         .filter_map(|id| {
             rows.get(&id).and_then(|(uname, status)| {
-                if status == db::auth::STATUS_DND {
+                if status == db::auth::STATUS_DND || status == db::auth::STATUS_AWAY {
                     None
                 } else {
                     Some(db::mentions::MentionRef {

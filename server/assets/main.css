@@ -4,6 +4,18 @@ html, body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
+   focus but NOT on plain mouse clicks (`:focus-visible` heuristic). Pinned
+   to blue-600 so it matches the per-component `focus:ring-blue-500` already
+   used in `notify_dropdown.html`, `sidebar.html`, and `own_avatar_oob.html`.
+   Those three elements keep their custom ring: their `focus:outline-none`
+   utility has higher specificity than this selector and wins. */
+:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
 #main {
     height: 100vh;
 }

@@ -12,19 +12,18 @@ const TEMPLATE: &str = include_str!("welcome.html");
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 // Quick HEAD-equivalent probe: GETs the configured URL with a tight timeout.
-// Any 2xx/3xx response (including the login redirect a fresh lets-chat
-// returns on `/`) counts as reachable. ureq treats 4xx/5xx as errors via
-// its `Error::Status` variant, which we map back to "reachable" too - the
-// server is up and the desktop client will get the same response the
-// webview will. Only network-layer failures (DNS, connect, TLS, timeout)
+// Only a 2xx/3xx response on `/` (the lets-chat root redirects to /login)
+// counts as reachable. ureq treats 4xx/5xx as errors via its
+// `Error::Status` variant; we treat those as unreachable too, because the
+// root of a real lets-chat server never 404s. The common case caught here
+// is `LETS_CHAT_SERVER_URL` pointing at a port serving a different app
+// (whose Problem+JSON 404 would otherwise render as raw JSON in the
+// webview). Network-layer failures (DNS, connect, TLS, timeout) also
 // short-circuit to the welcome page.
 pub fn server_reachable(url: &str) -> Result<(), String> {
     match ureq::get(url).timeout(PROBE_TIMEOUT).call() {
         Ok(_) => Ok(()),
-        // ureq returns Status for HTTP-level errors; the server answered,
-        // so the webview will see the same response. Not our problem to
-        // intercept.
-        Err(ureq::Error::Status(_, _)) => Ok(()),
+        Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code} from {url}")),
         Err(ureq::Error::Transport(t)) => Err(format!("{t}")),
     }
 }

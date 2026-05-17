@@ -11,13 +11,19 @@
     <div class="text-xs text-slate-500 truncate">@{{ peer.username }}</div>
     <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
   </div>
-  <button type="button" data-lc-call-start="audio" title="Voice call"
+  <button type="button" data-lc-call-start="audio" title="Voice call" aria-label="Start voice call"
+          data-room-id="{{ room.id }}"
+          data-peer-id="{{ peer.id }}"
+          data-peer-name="{{ peer.display_label() }}"
           class="text-slate-500 hover:text-blue-600">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
       <path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c-.41.117-.643.555-.48.95a11.542 11.542 0 006.254 6.254c.395.163.833-.07.95-.48l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/>
     </svg>
   </button>
-  <button type="button" data-lc-call-start="video" title="Video call"
+  <button type="button" data-lc-call-start="video" title="Video call" aria-label="Start video call"
+          data-room-id="{{ room.id }}"
+          data-peer-id="{{ peer.id }}"
+          data-peer-name="{{ peer.display_label() }}"
           class="text-slate-500 hover:text-blue-600">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
       <path d="M3.25 4A2.25 2.25 0 001 6.25v7.5A2.25 2.25 0 003.25 16h7.5A2.25 2.25 0 0013 13.75v-7.5A2.25 2.25 0 0010.75 4h-7.5zM19 4.5a.75.75 0 00-1.28-.53l-3 3a.75.75 0 00-.22.53v5a.75.75 0 00.22.53l3 3a.75.75 0 001.28-.53v-11z"/>
