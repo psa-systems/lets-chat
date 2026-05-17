@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 mod config;
+pub mod secret;
 
 pub use config::{SsoConfig, DEFAULT_PROVIDER_ID};
 
