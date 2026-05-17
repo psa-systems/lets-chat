@@ -101,4 +101,25 @@ pub struct SsoEditPage<'a> {
     pub error: Option<String>,
     /// Set when the form just saved successfully.
     pub flash: Option<String>,
+    /// Current group-mapping rows for this provider. Empty on create.
+    pub mappings: Vec<GroupMappingView>,
+    /// All enclaves on the chat side, for the "Add mapping" dropdown.
+    pub enclaves: Vec<EnclaveOption>,
+}
+
+/// Per-row projection of a `sso_group_mappings` entry for the admin
+/// edit page. Carries the enclave display name (looked up server-side)
+/// so the template doesn't have to resolve it from the dropdown list.
+pub struct GroupMappingView {
+    pub id: i64,
+    pub group_value: String,
+    pub enclave_id: i64,
+    pub enclave_name: String,
+    pub role: String,
+}
+
+/// One option for the enclave dropdown.
+pub struct EnclaveOption {
+    pub id: i64,
+    pub name: String,
 }

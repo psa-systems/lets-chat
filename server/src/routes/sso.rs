@@ -247,6 +247,7 @@ pub async fn get_callback(
             &flow.return_to,
             &headers,
             jar,
+            claims.groups.as_deref(),
         )
         .await;
     }
@@ -285,6 +286,7 @@ pub async fn get_callback(
                 &flow.return_to,
                 &headers,
                 jar,
+                claims.groups.as_deref(),
             )
             .await;
         }
@@ -365,6 +367,7 @@ pub async fn get_callback(
                 &flow.return_to,
                 &headers,
                 jar,
+                claims.groups.as_deref(),
             )
             .await;
         }
@@ -476,13 +479,19 @@ pub async fn post_finish_link(
         &payload.return_to,
         &headers,
         jar,
+        None,
     )
     .await
 }
 
 /// Mint the session cookie + emit the `sso_sign_in` tracing event +
 /// 302 to `return_to`. Shared between the already-linked and
-/// auto-linked branches above.
+/// auto-linked branches above. `groups` is `Some` on the three OIDC
+/// callback paths (the id_token claims carry it through) and `None`
+/// on the password-confirmed finish-link path which doesn't have
+/// fresh claims to project; the membership table is left untouched
+/// in that case (operators expect the user's next OIDC sign-in to
+/// re-reconcile).
 async fn finalize_sign_in(
     state: &AppState,
     user_id: &str,
@@ -490,7 +499,24 @@ async fn finalize_sign_in(
     return_to: &str,
     headers: &HeaderMap,
     jar: CookieJar,
+    groups: Option<&[String]>,
 ) -> Result<Response, AppError> {
+    if let Some(g) = groups {
+        if let Err(e) =
+            crate::sso::group_sync::apply(&state.auth, &state.chat, user_id, provider_id, g).await
+        {
+            // Group sync failure shouldn't block sign-in; the user's
+            // SSO identity is otherwise verified. Surface as a warn so
+            // operators see the drift and can investigate manually.
+            tracing::warn!(
+                target: "lets_chat.auth.sso",
+                user_id = %user_id,
+                provider = %provider_id,
+                error = %e,
+                "group sync failed; sign-in continuing"
+            );
+        }
+    }
     let (ua, ip) = crate::auth::extract_session_origin(headers);
     let session_token =
         db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())

@@ -94,7 +94,7 @@
                class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
       </div>
       <div class="col-span-2">
-        <label class="block text-xs mb-1" for="groups_claim">groups_claim (default: groups; group-to-enclave mapping is L17)</label>
+        <label class="block text-xs mb-1" for="groups_claim">groups_claim (default: groups)</label>
         <input id="groups_claim" name="groups_claim" type="text" value="{{ attribute_map.groups_claim }}"
                class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
       </div>
@@ -122,6 +122,74 @@
 
 {% if editing %}
 <div class="mt-8 border-t border-slate-200 pt-4 max-w-2xl space-y-3">
+  <h2 class="text-base font-semibold">Group -&gt; enclave mappings</h2>
+  <p class="text-xs text-slate-500">
+    For every group the IdP lists for a user at sign-in time, lets-chat looks here and
+    grants membership in the configured enclaves at the configured roles. Memberships in
+    enclaves not listed below are untouched (admins can still grant access manually).
+  </p>
+  {% if mappings.is_empty() %}
+  <p class="text-xs text-slate-500">No mappings configured.</p>
+  {% else %}
+  <table class="w-full text-sm">
+    <thead class="text-left text-xs uppercase text-slate-500">
+      <tr><th class="py-1 pr-3">Group value</th><th class="py-1 pr-3">Enclave</th><th class="py-1 pr-3">Role</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for m in mappings %}
+      <tr class="border-t border-slate-200">
+        <td class="py-1 pr-3 font-mono text-xs">{{ m.group_value }}</td>
+        <td class="py-1 pr-3">{{ m.enclave_name }}</td>
+        <td class="py-1 pr-3">
+          <form method="post" action="/admin/sso/{{ id }}/mappings/{{ m.id }}/role" class="flex items-center gap-1">
+            <select name="role" class="border border-slate-300 rounded px-1 py-0.5 text-xs">
+              <option value="User"{% if m.role == "User" %} selected{% endif %}>User</option>
+              <option value="Moderator"{% if m.role == "Moderator" %} selected{% endif %}>Moderator</option>
+              <option value="Admin"{% if m.role == "Admin" %} selected{% endif %}>Admin</option>
+            </select>
+            <button type="submit" class="px-2 py-0.5 bg-slate-200 rounded hover:bg-slate-300 text-xs">Save</button>
+          </form>
+        </td>
+        <td class="py-1 text-right">
+          <form method="post" action="/admin/sso/{{ id }}/mappings/{{ m.id }}/delete" onsubmit="return confirm('Remove this mapping?');">
+            <button type="submit" class="text-red-600 hover:underline text-xs">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if enclaves.is_empty() %}
+  <p class="text-xs text-slate-500">No enclaves exist yet; create one first to map groups onto it.</p>
+  {% else %}
+  <form method="post" action="/admin/sso/{{ id }}/mappings" class="flex flex-wrap items-end gap-2 text-sm">
+    <label class="flex flex-col text-xs">
+      Group value
+      <input name="group_value" required class="border border-slate-300 rounded px-2 py-1 text-sm">
+    </label>
+    <label class="flex flex-col text-xs">
+      Enclave
+      <select name="enclave_id" required class="border border-slate-300 rounded px-2 py-1 text-sm">
+        {% for e in enclaves %}
+        <option value="{{ e.id }}">{{ e.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="flex flex-col text-xs">
+      Role
+      <select name="role" class="border border-slate-300 rounded px-2 py-1 text-sm">
+        <option value="User" selected>User</option>
+        <option value="Moderator">Moderator</option>
+        <option value="Admin">Admin</option>
+      </select>
+    </label>
+    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Add mapping</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="mt-6 border-t border-slate-200 pt-4 max-w-2xl space-y-3">
   <h2 class="text-base font-semibold">Manage</h2>
   <div class="flex items-center gap-3 text-sm">
     {% if enabled %}
