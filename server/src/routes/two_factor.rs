@@ -267,7 +267,7 @@ async fn finalize_2fa_login(
     crate::routes::login_alerts::spawn_dispatch(state, user_id.to_string(), ua, ip);
     let _ = db::two_factor::delete_pending_2fa(&state.auth, pending_token).await;
 
-    let session_cookie = build_session_cookie(session);
+    let session_cookie = build_session_cookie(state.cookies_secure(), session);
     let jar = jar
         .add(session_cookie)
         .remove(removal_cookie(PENDING_COOKIE));
@@ -285,20 +285,20 @@ async fn finalize_2fa_login(
     }
 }
 
-pub fn build_pending_cookie(token: String) -> Cookie<'static> {
+pub fn build_pending_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(PENDING_COOKIE, token);
     c.set_http_only(true);
-    c.set_secure(true);
+    c.set_secure(secure);
     c.set_same_site(SameSite::Strict);
     c.set_path("/");
     c.set_max_age(Duration::minutes(5));
     c
 }
 
-fn build_session_cookie(token: String) -> Cookie<'static> {
+fn build_session_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(SESSION_COOKIE, token);
     c.set_http_only(true);
-    c.set_secure(true);
+    c.set_secure(secure);
     c.set_same_site(SameSite::Strict);
     c.set_path("/");
     c.set_max_age(Duration::days(30));
@@ -396,7 +396,7 @@ pub async fn stash_pending_registration(
     )
     .await?;
 
-    let cookie = build_pending_registration_cookie(token);
+    let cookie = build_pending_registration_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
 
     if is_htmx(headers) {
@@ -553,7 +553,7 @@ pub async fn post_register_2fa(
     .await;
     let _ = db::two_factor::delete_pending_registration(&state.auth, &token).await;
 
-    let session_cookie = build_session_cookie(session);
+    let session_cookie = build_session_cookie(state.cookies_secure(), session);
     let jar = jar
         .add(session_cookie)
         .remove(removal_cookie(PENDING_REGISTRATION_COOKIE));
@@ -608,10 +608,10 @@ async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<
 }
 
 #[cfg(feature = "standalone")]
-pub fn build_pending_registration_cookie(token: String) -> Cookie<'static> {
+pub fn build_pending_registration_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(PENDING_REGISTRATION_COOKIE, token);
     c.set_http_only(true);
-    c.set_secure(true);
+    c.set_secure(secure);
     c.set_same_site(SameSite::Strict);
     c.set_path("/");
     c.set_max_age(Duration::minutes(30));

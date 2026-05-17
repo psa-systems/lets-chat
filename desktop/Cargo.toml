@@ -17,11 +17,16 @@ tauri-build = { version = "2", features = [] }
 # .dmg / .msi / .AppImage / .deb plus Android (.apk/.aab) and iOS (.ipa).
 # The migration is scoped to the framework swap; mobile targets, plugins,
 # system tray, and OS-native notifications land in follow-ups.
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 # Bring focus back to the existing window if the binary is launched while
 # already running. Cheap to wire up now; saves a "second window appeared"
 # bug report later.
 tauri-plugin-single-instance = "2"
+# OS-native notifications. The server pages call
+# invoke('plugin:notification|notify', { title, body }) once the
+# server-side integration lands; the plugin and capability are wired
+# here so the desktop binary is ready ahead of that work.
+tauri-plugin-notification = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Default features ("tls") give us rustls + webpki-roots so HTTPS works on
@@ -32,3 +37,8 @@ ureq = { version = "2", features = ["json"] }
 # Windows-cant-delete-running-exe restriction by renaming the live binary
 # aside before writing the new one.
 self-replace = "1"
+# Cross-platform user config / data dir resolution. Used by config.rs to
+# pick the right path for the persisted LETS_CHAT_SERVER_URL choice:
+# $XDG_CONFIG_HOME on Linux, ~/Library/Application Support on macOS,
+# %APPDATA% on Windows.
+dirs = "5"
