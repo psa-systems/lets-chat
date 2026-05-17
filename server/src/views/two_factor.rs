@@ -10,6 +10,15 @@ pub struct TwoFactorSetupPage<'a> {
     pub asset_version: &'a str,
 }
 
+/// Rendered when a user without a local password reaches
+/// `/settings/2fa/setup`. SSO-only users don't enroll a local TOTP -
+/// the IdP is their authenticator. Per doc 10 section 7.
+#[derive(Template)]
+#[template(path = "two_factor/sso_only_notice.html")]
+pub struct TwoFactorSsoOnlyPage<'a> {
+    pub asset_version: &'a str,
+}
+
 /// Same QR + code form as [`TwoFactorSetupPage`], but rendered during the
 /// pre-account registration flow. The action posts to `/register/2fa`
 /// (which materializes the user on success) and the bail-out link returns

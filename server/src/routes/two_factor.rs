@@ -50,6 +50,15 @@ pub async fn get_setup(
     if user.totp_enabled {
         return Err(AppError::Redirect(Redirect::to("/settings")));
     }
+    // SSO-only users (no local password) can't enroll local TOTP -
+    // the IdP is their authenticator. Render the explanation page
+    // instead of the QR enrollment form. See doc 10 section 7.
+    if !db::sso::user_has_password(&state.auth, &user.id).await? {
+        let page = crate::views::two_factor::TwoFactorSsoOnlyPage {
+            asset_version: &state.asset_version,
+        };
+        return html(&page);
+    }
 
     let secret_bytes = generate_secret_bytes();
     let (encrypted, nonce) = crypto::seal(&key, &secret_bytes)
@@ -80,6 +89,11 @@ pub async fn post_setup(
     let Some(key) = state.secret_key.as_ref().map(|k| **k) else {
         return Err(AppError::NotFound);
     };
+    if !db::sso::user_has_password(&state.auth, &user.id).await? {
+        // Mirrors the GET guard so a stale form submission from an
+        // earlier state can't reach the enrollment path.
+        return Err(AppError::Forbidden);
+    }
     let record = db::auth::find_user_by_id(&state.auth, &user.id)
         .await?
         .ok_or(AppError::Unauthorized)?;
