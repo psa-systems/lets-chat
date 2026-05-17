@@ -24,6 +24,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/auth/0016_sso_identities.sql"),
         include_str!("../migrations/auth/0017_sso_providers.sql"),
         include_str!("../migrations/auth/0018_sso_flows_provider.sql"),
+        include_str!("../migrations/auth/0019_sso_group_mappings.sql"),
     ] {
         sqlx::raw_sql(migration)
             .execute(&pool)
