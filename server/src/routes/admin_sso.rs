@@ -38,6 +38,15 @@ pub fn router() -> Router<AppState> {
         .route("/admin/sso/{id}/enable", post(post_enable))
         .route("/admin/sso/{id}/disable", post(post_disable))
         .route("/admin/sso/{id}/delete", post(post_delete))
+        .route("/admin/sso/{id}/mappings", post(post_mapping_create))
+        .route(
+            "/admin/sso/{id}/mappings/{mapping_id}/delete",
+            post(post_mapping_delete),
+        )
+        .route(
+            "/admin/sso/{id}/mappings/{mapping_id}/role",
+            post(post_mapping_role),
+        )
 }
 
 #[derive(Deserialize)]
@@ -115,6 +124,8 @@ pub async fn get_new(
         test_result: None,
         error: None,
         flash: None,
+        mappings: Vec::new(),
+        enclaves: Vec::new(),
     };
     Ok(html(&page)?.into_response())
 }
@@ -288,6 +299,33 @@ pub async fn get_edit(
             jwks_uri: None,
         },
     });
+    let mapping_rows =
+        crate::db::sso_group_mappings::list_for_provider(&state.auth, &row.id).await?;
+    let all_enclaves = crate::db::enclave::list_all_enclaves_with_counts(&state.chat).await?;
+    let enclave_lookup: std::collections::HashMap<i64, String> = all_enclaves
+        .iter()
+        .map(|(e, _, _)| (e.id, e.name.clone()))
+        .collect();
+    let mappings = mapping_rows
+        .into_iter()
+        .map(|m| crate::views::admin_sso::GroupMappingView {
+            id: m.id,
+            group_value: m.group_value,
+            enclave_name: enclave_lookup
+                .get(&m.enclave_id)
+                .cloned()
+                .unwrap_or_else(|| format!("(deleted enclave #{})", m.enclave_id)),
+            enclave_id: m.enclave_id,
+            role: m.role,
+        })
+        .collect();
+    let enclaves = all_enclaves
+        .into_iter()
+        .map(|(e, _, _)| crate::views::admin_sso::EnclaveOption {
+            id: e.id,
+            name: e.name,
+        })
+        .collect();
     let page = SsoEditPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -312,6 +350,8 @@ pub async fn get_edit(
         test_result,
         error: None,
         flash: q.flash.clone(),
+        mappings,
+        enclaves,
     };
     Ok(html(&page)?.into_response())
 }
@@ -459,6 +499,83 @@ pub async fn post_delete(
     sso_providers::delete_provider(&state.auth, &id).await?;
     state.sso.reload(&state.auth).await?;
     Ok(Redirect::to("/admin/sso?flash=deleted").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct MappingCreateForm {
+    pub group_value: String,
+    pub enclave_id: i64,
+    pub role: String,
+}
+
+pub async fn post_mapping_create(
+    State(state): State<AppState>,
+    AdminUser(_): AdminUser,
+    Path(id): Path<String>,
+    Form(f): Form<MappingCreateForm>,
+) -> Result<Response, AppError> {
+    if sso_providers::get_provider_by_id(&state.auth, &id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    let trimmed = f.group_value.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest("group value is required".into()));
+    }
+    if !matches!(f.role.as_str(), "User" | "Moderator" | "Admin") {
+        return Err(AppError::BadRequest(
+            "role must be User, Moderator, or Admin".into(),
+        ));
+    }
+    if let Err(e) =
+        crate::db::sso_group_mappings::insert(&state.auth, &id, trimmed, f.enclave_id, &f.role)
+            .await
+    {
+        if e.to_string().to_lowercase().contains("unique") {
+            return Err(AppError::Conflict(
+                "a mapping for that group + enclave already exists".into(),
+            ));
+        }
+        return Err(e.into());
+    }
+    Ok(Redirect::to(&format!("/admin/sso/{id}?flash=mapping+added")).into_response())
+}
+
+pub async fn post_mapping_delete(
+    State(state): State<AppState>,
+    AdminUser(_): AdminUser,
+    Path((id, mapping_id)): Path<(String, i64)>,
+) -> Result<Response, AppError> {
+    let n = crate::db::sso_group_mappings::delete(&state.auth, mapping_id).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Redirect::to(&format!("/admin/sso/{id}?flash=mapping+removed")).into_response())
+}
+
+#[derive(Deserialize)]
+pub struct MappingRoleForm {
+    pub role: String,
+}
+
+pub async fn post_mapping_role(
+    State(state): State<AppState>,
+    AdminUser(_): AdminUser,
+    Path((id, mapping_id)): Path<(String, i64)>,
+    Form(f): Form<MappingRoleForm>,
+) -> Result<Response, AppError> {
+    if !matches!(f.role.as_str(), "User" | "Moderator" | "Admin") {
+        return Err(AppError::BadRequest(
+            "role must be User, Moderator, or Admin".into(),
+        ));
+    }
+    let n = crate::db::sso_group_mappings::update_role(&state.auth, mapping_id, &f.role).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Redirect::to(&format!("/admin/sso/{id}?flash=role+updated")).into_response())
 }
 
 fn urlencode(s: &str) -> String {

@@ -22,6 +22,7 @@ pub mod cache;
 pub mod claims;
 mod config;
 pub mod discovery;
+pub mod group_sync;
 pub mod link_envelope;
 pub mod oidc;
 pub mod secret;
