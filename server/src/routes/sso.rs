@@ -14,9 +14,11 @@
 use std::sync::OnceLock;
 
 use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
+use axum_extra::extract::CookieJar;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::RngCore;
 use serde::Deserialize;
@@ -24,6 +26,7 @@ use sha2::{Digest, Sha256};
 
 use crate::db;
 use crate::error::AppError;
+use crate::sso::{oidc, secret};
 use crate::state::AppState;
 
 /// 10-minute window between `/auth/sso/:provider/start` and the
@@ -33,7 +36,9 @@ use crate::state::AppState;
 const FLOW_TTL_SECONDS: i64 = 600;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/auth/sso/{provider}/start", get(get_start))
+    Router::new()
+        .route("/auth/sso/{provider}/start", get(get_start))
+        .route("/auth/sso/{provider}/callback", get(get_callback))
 }
 
 #[derive(Deserialize)]
@@ -97,6 +102,166 @@ pub async fn get_start(
         .append_pair("code_challenge_method", "S256");
 
     Ok(Redirect::to(auth_url.as_str()).into_response())
+}
+
+#[derive(Deserialize)]
+pub struct CallbackQuery {
+    /// Authorization code returned by the IdP. Empty when the user
+    /// declined / errored out.
+    pub code: Option<String>,
+    /// CSRF state token; must match the `flow_id` we wrote in `start`.
+    pub state: Option<String>,
+    /// OIDC error code (e.g. `access_denied`). When present, the
+    /// callback short-circuits without attempting token exchange.
+    pub error: Option<String>,
+    pub error_description: Option<String>,
+}
+
+pub async fn get_callback(
+    State(state): State<AppState>,
+    Path(provider_id): Path<String>,
+    Query(q): Query<CallbackQuery>,
+    headers: HeaderMap,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
+    if let Some(err) = q.error.as_deref() {
+        let desc = q.error_description.as_deref().unwrap_or("");
+        tracing::warn!(provider = %provider_id, error = %err, description = %desc, "SSO callback returned error");
+        return Err(AppError::BadRequest(format!(
+            "sign-in failed at identity provider: {err}"
+        )));
+    }
+    let state_token = q
+        .state
+        .ok_or_else(|| AppError::BadRequest("missing `state` parameter".into()))?;
+    let code = q
+        .code
+        .ok_or_else(|| AppError::BadRequest("missing `code` parameter".into()))?;
+
+    let flow = db::sso::consume_sso_flow(&state.auth, &state_token)
+        .await?
+        .ok_or_else(|| {
+            AppError::BadRequest(
+                "this sign-in link has expired or was already used; please start over".into(),
+            )
+        })?;
+    if flow.provider_id != provider_id {
+        // The state was minted for a different provider. Refuse rather
+        // than silently honouring it - a path/state mismatch is either
+        // a copy-paste bug or an attempt to splice flows.
+        return Err(AppError::BadRequest("provider mismatch on callback".into()));
+    }
+    if flow.kind != "sign_in" {
+        return Err(AppError::BadRequest(format!(
+            "unexpected flow kind `{}` on /callback",
+            flow.kind
+        )));
+    }
+
+    let entry = state
+        .sso
+        .lookup(&provider_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    let metadata = entry
+        .discovery(http_client())
+        .await
+        .map_err(|e| AppError::Internal(format!("discovery: {e}")))?;
+    let key = state
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("LETS_CHAT_SECRET_KEY not set".into()))?;
+    let client_secret =
+        secret::decrypt_client_secret(key.as_ref(), &entry.row.client_secret_encrypted)
+            .map_err(|e| AppError::Internal(format!("decrypt client_secret: {e}")))?;
+
+    let redirect_uri = format!(
+        "{}/auth/sso/{}/callback",
+        state.base_url.trim_end_matches('/'),
+        provider_id
+    );
+    let token = oidc::exchange_code(
+        http_client(),
+        &metadata.token_endpoint,
+        &code,
+        &flow.pkce_verifier,
+        &entry.row.client_id,
+        &client_secret,
+        &redirect_uri,
+    )
+    .await
+    .map_err(|e| {
+        tracing::warn!(provider = %provider_id, error = %e, "token exchange failed");
+        AppError::BadRequest("sign-in failed; check with your admin.".into())
+    })?;
+    let id_token = token.id_token.ok_or_else(|| {
+        AppError::BadRequest("identity provider did not return an id_token".into())
+    })?;
+
+    let claims = oidc::verify_id_token(
+        &id_token,
+        &metadata.jwks_json,
+        &metadata.issuer,
+        &entry.row.client_id,
+        &flow.nonce,
+    )
+    .map_err(|e| {
+        tracing::warn!(provider = %provider_id, error = %e, "id_token verification failed");
+        AppError::BadRequest("sign-in failed; identity could not be verified.".into())
+    })?;
+
+    if let Some(user_id) =
+        db::sso::find_user_by_sso(&state.auth, &metadata.issuer, &claims.sub).await?
+    {
+        // Touch the link's `last_seen_at` + refresh the stored email
+        // metadata if it changed. The `auto_linked` flag stays as-is
+        // (sticky via the UPSERT).
+        db::sso::link_sso_identity(
+            &state.auth,
+            &user_id,
+            &metadata.issuer,
+            &claims.sub,
+            claims.email.as_deref(),
+            false,
+        )
+        .await?;
+        let (ua, ip) = crate::auth::extract_session_origin(&headers);
+        let session_token = db::auth::create_session_with_origin(
+            &state.auth,
+            &user_id,
+            ua.as_deref(),
+            ip.as_deref(),
+        )
+        .await?;
+        let cookie =
+            crate::routes::auth::build_session_cookie(state.cookies_secure(), session_token);
+        let jar = jar.add(cookie);
+        tracing::info!(
+            target: "lets_chat.auth.sso",
+            user_id = %user_id,
+            provider = %provider_id,
+            "sso_sign_in"
+        );
+        return Ok((jar, Redirect::to(&flow.return_to)).into_response());
+    }
+
+    // No existing sso_identities row for (issuer, sub). The
+    // email-match auto-link path (L12), the link-required interstitial
+    // (L13), and the auto-provisioning path (L14) all branch out from
+    // here. Until those phases land, return an explanatory error so
+    // the user sees something concrete rather than a 500.
+    tracing::info!(
+        target: "lets_chat.auth.sso",
+        provider = %provider_id,
+        subject = %claims.sub,
+        email = ?claims.email,
+        "sso callback: unlinked identity (L12+ not yet implemented)"
+    );
+    Err(AppError::BadRequest(
+        "This identity isn't linked to a local account yet. \
+         Account-linking and auto-provisioning land in later phases."
+            .into(),
+    ))
 }
 
 /// Validate the `return_to` query parameter as a safe internal path.

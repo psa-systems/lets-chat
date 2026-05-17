@@ -217,10 +217,10 @@ async fn start_redirects_to_authorize_with_expected_params() {
         pairs.get("code_challenge_method").map(|s| s.as_str()),
         Some("S256")
     );
-    assert!(pairs.get("state").is_some(), "state present");
-    assert!(pairs.get("nonce").is_some(), "nonce present");
+    assert!(pairs.contains_key("state"), "state present");
+    assert!(pairs.contains_key("nonce"), "nonce present");
     assert!(
-        pairs.get("code_challenge").is_some(),
+        pairs.contains_key("code_challenge"),
         "PKCE challenge present"
     );
 
