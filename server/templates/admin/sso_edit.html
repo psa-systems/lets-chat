@@ -1,0 +1,143 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{% if editing %}Edit{% else %}New{% endif %} SSO provider - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-lg font-semibold">
+    {% if editing %}Edit SSO provider{% else %}New SSO provider{% endif %}
+  </h1>
+  <a href="/admin/sso" class="text-sm text-blue-600 hover:underline">&larr; Back</a>
+</div>
+
+{% if let Some(msg) = flash %}
+<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ msg }}</div>
+{% endif %}
+
+{% if let Some(t) = test_result %}
+<div class="mb-4 p-3 rounded {% if t.ok %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">
+  <div class="font-semibold mb-1">{{ t.message }}</div>
+  {% if t.ok %}
+  <ul class="font-mono text-xs space-y-0.5">
+    {% if let Some(v) = t.authorization_endpoint %}<li>auth: {{ v }}</li>{% endif %}
+    {% if let Some(v) = t.token_endpoint %}<li>token: {{ v }}</li>{% endif %}
+    {% if let Some(v) = t.userinfo_endpoint %}<li>userinfo: {{ v }}</li>{% endif %}
+    {% if let Some(v) = t.jwks_uri %}<li>jwks: {{ v }}</li>{% endif %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+
+<form method="post" action="{% if editing %}/admin/sso/{{ id }}{% else %}/admin/sso{% endif %}" class="max-w-2xl space-y-4">
+  <div>
+    <label class="block text-sm font-medium mb-1" for="id">Slug</label>
+    <input id="id" name="id" type="text" value="{{ id }}" required pattern="[a-z0-9][a-z0-9_-]*"
+           {% if editing %}readonly{% endif %}
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm {% if editing %}bg-slate-100 text-slate-500{% endif %}">
+    <p class="text-xs text-slate-500 mt-1">URL-safe id. Used in /auth/sso/{slug}/start. Cannot change after creation.</p>
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="display_name">Display name</label>
+    <input id="display_name" name="display_name" type="text" value="{{ display_name }}" required
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="issuer_url">Issuer URL</label>
+    <input id="issuer_url" name="issuer_url" type="url" value="{{ issuer_url }}" required
+           placeholder="https://idp.example.com"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">Discovery happens at {issuer}/.well-known/openid-configuration.</p>
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="client_id">Client ID</label>
+    <input id="client_id" name="client_id" type="text" value="{{ client_id }}" required
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="client_secret">Client secret (write-only)</label>
+    <input id="client_secret" name="client_secret" type="password" value=""
+           placeholder="{% if editing %}leave blank to keep existing{% else %}required{% endif %}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="scopes">Scopes</label>
+    <input id="scopes" name="scopes" type="text" value="{{ scopes }}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">Space-separated. Default: openid email profile.</p>
+  </div>
+
+  <fieldset class="border border-slate-200 rounded p-3">
+    <legend class="text-sm font-medium px-2">Attribute mapping</legend>
+    <p class="text-xs text-slate-500 mb-2">Override claim names when the IdP doesn't use the OIDC defaults. Leave blank to use the default for each row.</p>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs mb-1" for="email_claim">email_claim (default: email)</label>
+        <input id="email_claim" name="email_claim" type="text" value="{{ attribute_map.email_claim }}"
+               class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs mb-1" for="email_verified_claim">email_verified_claim (default: email_verified)</label>
+        <input id="email_verified_claim" name="email_verified_claim" type="text" value="{{ attribute_map.email_verified_claim }}"
+               class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs mb-1" for="name_claim">name_claim (default: name)</label>
+        <input id="name_claim" name="name_claim" type="text" value="{{ attribute_map.name_claim }}"
+               class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs mb-1" for="username_claim">username_claim (default: preferred_username)</label>
+        <input id="username_claim" name="username_claim" type="text" value="{{ attribute_map.username_claim }}"
+               class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs mb-1" for="groups_claim">groups_claim (default: groups; group-to-enclave mapping is L17)</label>
+        <input id="groups_claim" name="groups_claim" type="text" value="{{ attribute_map.groups_claim }}"
+               class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="space-y-2">
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="allow_signup" value="1" {% if allow_signup %}checked{% endif %}>
+      Allow first-time SSO sign-ins to auto-provision a new local user
+    </label>
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="auto_link_verified_email" value="1" {% if auto_link_verified_email %}checked{% endif %}>
+      Auto-link an existing password user when email_verified is true
+    </label>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <button type="submit" name="action" value="save" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
+    {% if editing %}
+    <button type="submit" name="action" value="test" class="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300 text-sm">Test discovery</button>
+    {% endif %}
+  </div>
+</form>
+
+{% if editing %}
+<div class="mt-8 border-t border-slate-200 pt-4 max-w-2xl space-y-3">
+  <h2 class="text-base font-semibold">Manage</h2>
+  <div class="flex items-center gap-3 text-sm">
+    {% if enabled %}
+      <form method="post" action="/admin/sso/{{ id }}/disable">
+        <button type="submit" class="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm">Disable</button>
+      </form>
+      <span class="text-slate-500 text-xs">Disabling stops new sign-ins; existing sessions keep working.</span>
+    {% else %}
+      <form method="post" action="/admin/sso/{{ id }}/enable">
+        <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Enable</button>
+      </form>
+    {% endif %}
+  </div>
+  <form method="post" action="/admin/sso/{{ id }}/delete" onsubmit="return confirm('Permanently delete this provider? This refuses if any users are still linked.');">
+    <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Delete provider</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
