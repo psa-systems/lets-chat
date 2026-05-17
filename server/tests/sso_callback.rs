@@ -109,6 +109,10 @@ struct StubState {
     /// client_id; can be set to a wrong value to exercise verify
     /// failure paths.
     audience: Mutex<String>,
+    /// Email claim. Default points at alice; auto-link tests flip this.
+    email: Mutex<String>,
+    /// email_verified claim.
+    email_verified: Mutex<bool>,
 }
 
 async fn spawn_stub() -> Arc<StubState> {
@@ -120,6 +124,8 @@ async fn spawn_stub() -> Arc<StubState> {
         nonce: Mutex::new(String::new()),
         sub: Mutex::new("sub-default".into()),
         audience: Mutex::new("the-client-id".into()),
+        email: Mutex::new("alice@example.com".into()),
+        email_verified: Mutex::new(true),
     });
 
     let discovery_body = format!(
@@ -175,8 +181,8 @@ async fn spawn_stub() -> Arc<StubState> {
                         "exp": now + 600,
                         "iat": now,
                         "sub": *stub.sub.lock().unwrap(),
-                        "email": "alice@example.com",
-                        "email_verified": true,
+                        "email": *stub.email.lock().unwrap(),
+                        "email_verified": *stub.email_verified.lock().unwrap(),
                         "name": "Alice",
                         "preferred_username": "alice",
                         "nonce": *stub.nonce.lock().unwrap(),
@@ -209,6 +215,13 @@ async fn spawn_stub() -> Arc<StubState> {
 }
 
 async fn make_app(stub: &StubState) -> (Router, SqlitePool) {
+    make_app_with_provider_flags(stub, true).await
+}
+
+async fn make_app_with_provider_flags(
+    stub: &StubState,
+    auto_link_verified_email: bool,
+) -> (Router, SqlitePool) {
     ensure_tempdir();
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
@@ -230,7 +243,7 @@ async fn make_app(stub: &StubState) -> (Router, SqlitePool) {
             scopes: "openid email",
             attribute_map_json: "{}",
             allow_signup: false,
-            auto_link_verified_email: true,
+            auto_link_verified_email,
         },
     )
     .await
@@ -336,25 +349,6 @@ async fn callback_signs_linked_user_in_and_redirects() {
 }
 
 #[tokio::test]
-async fn callback_unlinked_identity_falls_through_to_placeholder() {
-    let stub = spawn_stub().await;
-    let (app, auth) = make_app(&stub).await;
-
-    // No sso_identities row.
-    let (state_token, nonce) = start_flow(&app, &auth).await;
-    *stub.nonce.lock().unwrap() = nonce;
-    *stub.sub.lock().unwrap() = "brand-new-sub".into();
-
-    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    let body = std::str::from_utf8(&body).unwrap();
-    assert!(body.contains("isn't linked"));
-}
-
-#[tokio::test]
 async fn callback_rejects_state_for_wrong_provider() {
     let stub = spawn_stub().await;
     let (app, auth) = make_app(&stub).await;
@@ -410,6 +404,114 @@ async fn callback_rejects_idp_error_redirect() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn callback_auto_links_existing_user_on_verified_email() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app(&stub).await;
+
+    // Pre-seed an existing password user with the email the IdP will assert.
+    let alice = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    db::auth::set_user_email(&auth, &alice, Some("alice@example.com"))
+        .await
+        .unwrap();
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    // brand-new sub: not yet in sso_identities. email_verified stays true.
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        res.headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "/rooms/general"
+    );
+    // Link row written with auto_linked = 1.
+    let row: (i64,) = sqlx::query_as("SELECT auto_linked FROM sso_identities WHERE user_id = ?")
+        .bind(&alice)
+        .fetch_one(&auth)
+        .await
+        .unwrap();
+    assert_eq!(row.0, 1, "auto_linked flag set for the auto-link path");
+}
+
+#[tokio::test]
+async fn callback_does_not_auto_link_when_email_unverified() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app(&stub).await;
+    let alice = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    db::auth::set_user_email(&auth, &alice, Some("alice@example.com"))
+        .await
+        .unwrap();
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+    *stub.email_verified.lock().unwrap() = false;
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    // Falls through to the link-required interstitial placeholder.
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+    assert!(body.contains("Sign in with your password first"));
+    // No sso_identities row written.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sso_identities")
+        .fetch_one(&auth)
+        .await
+        .unwrap();
+    assert_eq!(count.0, 0);
+}
+
+#[tokio::test]
+async fn callback_does_not_auto_link_when_provider_flag_off() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app_with_provider_flags(&stub, false).await;
+    let alice = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    db::auth::set_user_email(&auth, &alice, Some("alice@example.com"))
+        .await
+        .unwrap();
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+    // email_verified=true but provider's flag is off -> still goes
+    // through the link-required interstitial.
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+    assert!(body.contains("Sign in with your password first"));
+}
+
+#[tokio::test]
+async fn callback_unknown_email_falls_through_to_autoprovision_placeholder() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app(&stub).await;
+
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.sub.lock().unwrap() = "fresh-sub".into();
+    *stub.email.lock().unwrap() = "nobody@example.com".into();
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+    assert!(body.contains("isn't authorized"));
 }
 
 #[tokio::test]
