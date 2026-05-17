@@ -11,7 +11,13 @@
     <span class="font-medium text-sm">{{ message.label() }}</span>
     <span class="text-xs text-slate-500">{{ message.created_at }}</span>
     {% if message.edited_at.is_some() %}
-    <span class="text-xs text-slate-400">(edited)</span>
+    <button
+      hx-get="/messages/{{ message.id }}/history"
+      hx-target="#history-panel"
+      hx-swap="outerHTML"
+      class="text-xs text-slate-400 hover:text-slate-600 hover:underline"
+      aria-label="View edit history"
+    >(edited)</button>
     {% endif %}
   </div>
   <div class="lc-md leading-snug text-sm pl-7">{{ message.body_html()|safe }}</div>
