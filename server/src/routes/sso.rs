@@ -210,6 +210,7 @@ pub async fn get_callback(
         AppError::BadRequest("sign-in failed; identity could not be verified.".into())
     })?;
 
+    // Already-linked happy path.
     if let Some(user_id) =
         db::sso::find_user_by_sso(&state.auth, &metadata.issuer, &claims.sub).await?
     {
@@ -225,43 +226,119 @@ pub async fn get_callback(
             false,
         )
         .await?;
-        let (ua, ip) = crate::auth::extract_session_origin(&headers);
-        let session_token = db::auth::create_session_with_origin(
-            &state.auth,
+        return finalize_sign_in(
+            &state,
             &user_id,
-            ua.as_deref(),
-            ip.as_deref(),
+            &provider_id,
+            &flow.return_to,
+            &headers,
+            jar,
         )
-        .await?;
-        let cookie =
-            crate::routes::auth::build_session_cookie(state.cookies_secure(), session_token);
-        let jar = jar.add(cookie);
-        tracing::info!(
-            target: "lets_chat.auth.sso",
-            user_id = %user_id,
-            provider = %provider_id,
-            "sso_sign_in"
-        );
-        return Ok((jar, Redirect::to(&flow.return_to)).into_response());
+        .await;
     }
 
-    // No existing sso_identities row for (issuer, sub). The
-    // email-match auto-link path (L12), the link-required interstitial
-    // (L13), and the auto-provisioning path (L14) all branch out from
-    // here. Until those phases land, return an explanatory error so
-    // the user sees something concrete rather than a 500.
+    // Auto-link on email match. Gated on the per-provider flag AND
+    // the IdP's `email_verified=true` claim. Per doc 02 section 2 / 10 section 1.
+    if entry.row.auto_link_verified_email
+        && claims.email_verified == Some(true)
+        && claims.email.is_some()
+    {
+        let email = claims.email.as_deref().unwrap();
+        if let Some(user_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
+            db::sso::link_sso_identity(
+                &state.auth,
+                &user_id,
+                &metadata.issuer,
+                &claims.sub,
+                Some(email),
+                true,
+            )
+            .await?;
+            tracing::warn!(
+                target: "lets_chat.auth.sso",
+                event = "sso_account_auto_linked",
+                user_id = %user_id,
+                provider = %provider_id,
+                issuer = %metadata.issuer,
+                subject = %claims.sub,
+                email = %email,
+                "auto-linked existing account on verified email match"
+            );
+            return finalize_sign_in(
+                &state,
+                &user_id,
+                &provider_id,
+                &flow.return_to,
+                &headers,
+                jar,
+            )
+            .await;
+        }
+    }
+
+    // Email collision but auto-link is off OR email_verified is false:
+    // fall through to the link-required interstitial. That page lives
+    // in L13; for now, return a placeholder explanation.
+    if let Some(email) = claims.email.as_deref() {
+        if db::auth::find_user_id_by_email(&state.auth, email)
+            .await?
+            .is_some()
+        {
+            tracing::info!(
+                target: "lets_chat.auth.sso",
+                provider = %provider_id,
+                email = %email,
+                "sso callback: existing account by email; link-required interstitial (L13) not yet implemented"
+            );
+            return Err(AppError::BadRequest(
+                "An account already exists for this email. \
+                 Sign in with your password first to link it. \
+                 (link-required interstitial lands in L13.)"
+                    .into(),
+            ));
+        }
+    }
+
+    // No link, no email match. Auto-provision (L14) branches off here.
     tracing::info!(
         target: "lets_chat.auth.sso",
         provider = %provider_id,
         subject = %claims.sub,
         email = ?claims.email,
-        "sso callback: unlinked identity (L12+ not yet implemented)"
+        "sso callback: unknown identity (L14 auto-provision not yet implemented)"
     );
     Err(AppError::BadRequest(
-        "This identity isn't linked to a local account yet. \
-         Account-linking and auto-provisioning land in later phases."
+        "Your account isn't authorized for this deployment. \
+         Ask an admin to invite you. \
+         (auto-provisioning lands in L14.)"
             .into(),
     ))
+}
+
+/// Mint the session cookie + emit the `sso_sign_in` tracing event +
+/// 302 to `return_to`. Shared between the already-linked and
+/// auto-linked branches above.
+async fn finalize_sign_in(
+    state: &AppState,
+    user_id: &str,
+    provider_id: &str,
+    return_to: &str,
+    headers: &HeaderMap,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
+    let (ua, ip) = crate::auth::extract_session_origin(headers);
+    let session_token =
+        db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())
+            .await?;
+    let cookie = crate::routes::auth::build_session_cookie(state.cookies_secure(), session_token);
+    let jar = jar.add(cookie);
+    tracing::info!(
+        target: "lets_chat.auth.sso",
+        user_id = %user_id,
+        provider = %provider_id,
+        "sso_sign_in"
+    );
+    Ok((jar, Redirect::to(return_to)).into_response())
 }
 
 /// Validate the `return_to` query parameter as a safe internal path.
