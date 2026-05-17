@@ -67,4 +67,16 @@ impl AppState {
     pub fn mail_available(&self) -> bool {
         self.mailer.is_some()
     }
+    /// Whether session and pending-auth cookies should carry the `Secure`
+    /// attribute. WebKit2GTK (Tauri desktop on Linux) and Safari reject
+    /// `Secure` cookies on `http://` URLs, including `http://localhost`,
+    /// which silently breaks login on dev setups served over plain HTTP.
+    /// We tie the flag to `base_url`'s scheme: if the operator configured
+    /// an HTTPS base URL the client is reaching us over TLS (directly or
+    /// through a terminating proxy), so Secure is correct. For the default
+    /// `http://localhost:8080` dev base URL, Secure is dropped so cookies
+    /// stick.
+    pub fn cookies_secure(&self) -> bool {
+        self.base_url.starts_with("https://")
+    }
 }
