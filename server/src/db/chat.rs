@@ -53,6 +53,17 @@ pub struct RawMessage {
     pub is_system: bool,
 }
 
+/// One archived prior version of a message. Inserted by `update_message_body`
+/// before the live row is overwritten; surfaced to viewers by
+/// `list_message_edits` via the `/messages/:id/history` endpoint.
+#[derive(Debug, Clone)]
+pub struct MessageEdit {
+    pub id: i64,
+    pub message_id: i64,
+    pub previous_body: String,
+    pub edited_at: String,
+}
+
 fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
     Room {
         id: row.get("id"),
@@ -269,19 +280,66 @@ pub async fn get_message(
 }
 
 /// Update a message's body and set edited_at to now. Returns the edited_at timestamp.
+///
+/// Wraps the prior-body archive (INSERT into message_edits) and the live-row
+/// UPDATE in a single transaction so the history rows and messages.body never
+/// disagree about which version was displaced. The SELECT runs inside the tx
+/// rather than reusing a body the caller fetched earlier, so the archived
+/// previous_body matches what the UPDATE actually overwrites even if a
+/// concurrent edit commits in between.
 pub async fn update_message_body(
     pool: &sqlx::SqlitePool,
     message_id: i64,
     new_body: &str,
 ) -> Result<String, sqlx::Error> {
     let edited_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut tx = pool.begin().await?;
+    let prior_body: String = sqlx::query_scalar("SELECT body FROM messages WHERE id = ?")
+        .bind(message_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO message_edits (message_id, previous_body, edited_at) VALUES (?, ?, ?)",
+    )
+    .bind(message_id)
+    .bind(&prior_body)
+    .bind(&edited_at)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("UPDATE messages SET body = ?, edited_at = ? WHERE id = ?")
         .bind(new_body)
         .bind(&edited_at)
         .bind(message_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(edited_at)
+}
+
+/// List archived prior versions of a message, oldest-first. Empty for
+/// unedited messages. The live (current) body lives in `messages.body` and
+/// is appended by the handler after this read.
+pub async fn list_message_edits(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+) -> Result<Vec<MessageEdit>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, message_id, previous_body, edited_at \
+         FROM message_edits WHERE message_id = ? \
+         ORDER BY edited_at ASC, id ASC",
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| MessageEdit {
+            id: row.get("id"),
+            message_id: row.get("message_id"),
+            previous_body: row.get("previous_body"),
+            edited_at: row.get("edited_at"),
+        })
+        .collect())
 }
 
 pub async fn insert_message(
