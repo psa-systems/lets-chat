@@ -21,6 +21,7 @@ use crate::db::sso_providers;
 pub mod cache;
 mod config;
 pub mod discovery;
+pub mod oidc;
 pub mod secret;
 pub mod seed;
 
