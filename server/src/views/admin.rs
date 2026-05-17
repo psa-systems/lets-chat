@@ -10,6 +10,22 @@ pub struct AdminUserView {
     pub role: String,
     pub is_banned: bool,
     pub is_muted: bool,
+    /// Whether the user still has a non-null `password_hash`. When
+    /// false, unlinking the user's last SSO identity locks them out
+    /// until an admin sets a password or they re-link. The template
+    /// shows a "no password set" warning next to the Unlink button.
+    pub has_password: bool,
+    /// Linked SSO identities for the user. Typically zero or one
+    /// today; the schema supports N for forward compatibility.
+    pub sso_identities: Vec<AdminUserSsoIdentity>,
+}
+
+/// Per-row projection of one `sso_identities` row in the admin users
+/// table. The issuer + email are shown so the admin can tell which
+/// provider's link they're about to remove.
+pub struct AdminUserSsoIdentity {
+    pub issuer: String,
+    pub email: Option<String>,
 }
 
 /// Per-row projection for the invites admin table.
