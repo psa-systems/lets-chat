@@ -110,10 +110,9 @@ async fn test_first_edit_inserts_one_message_edits_row_with_prior_body() {
         lets_chat::db::chat::create_room(&pool, "test-history-1", None, "public", None, None)
             .await
             .unwrap();
-    let msg_id =
-        lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "version zero")
-            .await
-            .unwrap();
+    let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "user-1", "version zero")
+        .await
+        .unwrap();
 
     let edited_at = lets_chat::db::chat::update_message_body(&pool, msg_id, "version one")
         .await

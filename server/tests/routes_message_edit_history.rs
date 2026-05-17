@@ -10,8 +10,8 @@ fn ensure_tempdir() -> &'static str {
     static TEMPDIR: OnceLock<String> = OnceLock::new();
     TEMPDIR
         .get_or_init(|| {
-            let p = std::env::temp_dir()
-                .join(format!("lc-edit-history-tests-{}", std::process::id()));
+            let p =
+                std::env::temp_dir().join(format!("lc-edit-history-tests-{}", std::process::id()));
             std::fs::create_dir_all(&p).expect("create test data dir");
             db::set_data_dir(p.to_string_lossy().to_string());
             p.to_string_lossy().to_string()
