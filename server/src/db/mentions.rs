@@ -164,8 +164,7 @@ pub async fn mentions_for_body(
     let placeholders = std::iter::repeat_n("?", tokens.len())
         .collect::<Vec<_>>()
         .join(",");
-    let sql =
-        format!("SELECT id, username FROM users WHERE username IN ({placeholders})");
+    let sql = format!("SELECT id, username FROM users WHERE username IN ({placeholders})");
     let mut q = sqlx::query(&sql);
     for t in &tokens {
         q = q.bind(t);
