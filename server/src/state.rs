@@ -56,6 +56,14 @@ pub struct AppState {
     /// provider id; multi-IdP (BYO-SSO) extends this without a
     /// schema/state change. See `crate::sso`.
     pub sso: SsoProviders,
+    /// True when `LETS_CHAT_LOCAL_LOGIN_DISABLED` is set. Per doc 10
+    /// section 8 this is a hard kill switch for the password sign-in
+    /// path: POST /login, /register, /forgot, /reset/{token},
+    /// /settings/password, and /verify-email/resend all 404. Existing
+    /// users keep their `password_hash` rows; nothing is dropped from
+    /// the DB. The login page UI hides the password form (L21).
+    /// Per-user lockdown is a separate follow-up.
+    pub local_login_disabled: bool,
 }
 
 impl AppState {

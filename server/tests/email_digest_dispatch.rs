@@ -121,6 +121,8 @@ async fn build_harness() -> Harness {
         base_url: "https://chat.example.com".into(),
         ice_servers: "[]".to_string(),
         sso: lets_chat::sso::SsoProviders::default(),
+
+        local_login_disabled: false,
     };
     Harness {
         state,

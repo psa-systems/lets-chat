@@ -54,6 +54,9 @@ pub async fn post_login(
     jar: CookieJar,
     axum::Form(form): axum::Form<LoginForm>,
 ) -> Result<Response, AppError> {
+    if state.local_login_disabled {
+        return Err(AppError::NotFound);
+    }
     let record = match db::auth::find_user_by_username(&state.auth, &form.username).await? {
         Some(r) if !r.is_banned => r,
         _ => {
@@ -115,6 +118,9 @@ pub async fn post_login(
 
 #[cfg(feature = "standalone")]
 pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppError> {
+    if state.local_login_disabled {
+        return Err(AppError::NotFound);
+    }
     let page = RegisterPage {
         error: None,
         asset_version: &state.asset_version,
@@ -132,6 +138,9 @@ pub async fn post_register(
     jar: CookieJar,
     axum::Form(form): axum::Form<RegisterForm>,
 ) -> Result<Response, AppError> {
+    if state.local_login_disabled {
+        return Err(AppError::NotFound);
+    }
     let username = form.username.trim();
     let password = form.password.as_str();
     if username.len() < 3 || username.len() > 32 {
