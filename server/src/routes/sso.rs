@@ -210,12 +210,14 @@ pub async fn get_callback(
         AppError::BadRequest("identity provider did not return an id_token".into())
     })?;
 
+    let claim_map = crate::sso::claims::ClaimMap::from_json(&entry.row.attribute_map_json);
     let claims = oidc::verify_id_token(
         &id_token,
         &metadata.jwks_json,
         &metadata.issuer,
         &entry.row.client_id,
         &flow.nonce,
+        &claim_map,
     )
     .map_err(|e| {
         tracing::warn!(provider = %provider_id, error = %e, "id_token verification failed");
@@ -341,7 +343,7 @@ pub async fn get_callback(
                     issuer: &metadata.issuer,
                     subject: &claims.sub,
                     email: claims.email.as_deref(),
-                    preferred_username: claims.preferred_username.as_deref(),
+                    preferred_username: claims.username.as_deref(),
                     display_name: claims.name.as_deref(),
                 },
             )

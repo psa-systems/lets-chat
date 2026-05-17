@@ -19,6 +19,9 @@ use jsonwebtoken::jwk::{Jwk, JwkSet};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use reqwest::Client as HttpClient;
 use serde::Deserialize;
+use serde_json::{Map, Value};
+
+use crate::sso::claims::{self, ClaimMap, ExtractedClaims};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OidcError {
@@ -89,40 +92,32 @@ pub async fn exchange_code(
     Ok(serde_json::from_str(&body)?)
 }
 
-/// OIDC id_token claims relevant to the sign-in path.
-#[derive(Debug, Clone, Deserialize)]
+/// OIDC id_token claims relevant to the sign-in path, with the
+/// per-provider attribute map already applied.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdTokenClaims {
     /// OIDC subject. Stable id assigned by the IdP; the load-bearing
-    /// link key in `sso_identities`.
+    /// link key in `sso_identities`. NOT configurable via the
+    /// attribute map - `sub` is mandatory in OIDC core.
     pub sub: String,
-    /// OIDC email claim. Per-provider attribute_map can override which
-    /// claim name to read from; defaulting here is fine because the
-    /// caller projects the raw map onto the IdTokenClaims fields after
-    /// the parse via `apply_attribute_map` (L15) - for L11 we read the
-    /// default fields directly.
-    #[serde(default)]
     pub email: Option<String>,
-    #[serde(default)]
     pub email_verified: Option<bool>,
-    #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub preferred_username: Option<String>,
-    /// Groups claim, when the IdP emits one. Empty / absent in most
-    /// vanilla deployments. L17 consumes this for enclave sync.
-    #[serde(default)]
+    pub username: Option<String>,
     pub groups: Option<Vec<String>>,
 }
 
 /// Verify the id_token signature against the JWKS, run the OIDC claim
-/// checks (iss + aud + exp), and verify the nonce echo. Returns the
-/// parsed claims on success.
+/// checks (iss + aud + exp), verify the nonce echo, then project the
+/// raw payload through the provider's [`ClaimMap`] to surface the
+/// fields callers consume.
 pub fn verify_id_token(
     id_token: &str,
     jwks_json: &str,
     expected_issuer: &str,
     expected_audience: &str,
     expected_nonce: &str,
+    map: &ClaimMap,
 ) -> Result<IdTokenClaims, OidcError> {
     let jwks: JwkSet = serde_json::from_str(jwks_json).map_err(OidcError::BadJwks)?;
     let header = jsonwebtoken::decode_header(id_token).map_err(OidcError::BadHeader)?;
@@ -143,37 +138,42 @@ pub fn verify_id_token(
     // token. OIDC core leaves the leeway up to the RP.
     validation.leeway = 30;
 
-    #[derive(Debug, Deserialize)]
-    struct WireClaims {
-        sub: String,
-        #[serde(default)]
-        email: Option<String>,
-        #[serde(default)]
-        email_verified: Option<bool>,
-        #[serde(default)]
-        name: Option<String>,
-        #[serde(default)]
-        preferred_username: Option<String>,
-        #[serde(default)]
-        groups: Option<Vec<String>>,
-        nonce: Option<String>,
-    }
-
-    let token = jsonwebtoken::decode::<WireClaims>(id_token, &key, &validation)
+    // Decode into a JSON map so the attribute_map projection in
+    // [`crate::sso::claims::extract`] can pick fields by configured
+    // name. The `sub` + `nonce` fields are validated structurally up
+    // front because they're mandatory and not subject to remapping.
+    let token = jsonwebtoken::decode::<Map<String, Value>>(id_token, &key, &validation)
         .map_err(OidcError::Verify)?;
-    let claims = token.claims;
-    if claims.nonce.as_deref() != Some(expected_nonce) {
+    let raw = token.claims;
+    let sub = raw
+        .get("sub")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            OidcError::Verify(jsonwebtoken::errors::Error::from(
+                jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("sub".into()),
+            ))
+        })?
+        .to_string();
+    let nonce = raw.get("nonce").and_then(|v| v.as_str());
+    if nonce != Some(expected_nonce) {
         return Err(OidcError::Verify(jsonwebtoken::errors::Error::from(
             jsonwebtoken::errors::ErrorKind::InvalidToken,
         )));
     }
+    let ExtractedClaims {
+        email,
+        email_verified,
+        name,
+        username,
+        groups,
+    } = claims::extract(&raw, map);
     Ok(IdTokenClaims {
-        sub: claims.sub,
-        email: claims.email,
-        email_verified: claims.email_verified,
-        name: claims.name,
-        preferred_username: claims.preferred_username,
-        groups: claims.groups,
+        sub,
+        email,
+        email_verified,
+        name,
+        username,
+        groups,
     })
 }
 
@@ -264,13 +264,14 @@ mod tests {
             "https://idp/",
             "client-1",
             "the-nonce",
+            &ClaimMap::default(),
         )
         .unwrap();
         assert_eq!(claims.sub, "user-42");
         assert_eq!(claims.email.as_deref(), Some("alice@example.com"));
         assert_eq!(claims.email_verified, Some(true));
         assert_eq!(claims.name.as_deref(), Some("Alice"));
-        assert_eq!(claims.preferred_username.as_deref(), Some("alice"));
+        assert_eq!(claims.username.as_deref(), Some("alice"));
     }
 
     #[test]
@@ -293,6 +294,7 @@ mod tests {
             "https://idp/",
             "client-1",
             "n",
+            &ClaimMap::default(),
         )
         .unwrap_err();
         assert!(matches!(err, OidcError::Verify(_)));
@@ -318,6 +320,7 @@ mod tests {
             "https://idp/",
             "client-1",
             "expected",
+            &ClaimMap::default(),
         )
         .unwrap_err();
         assert!(matches!(err, OidcError::Verify(_)));
@@ -343,6 +346,7 @@ mod tests {
             "https://idp/",
             "client-1",
             "n",
+            &ClaimMap::default(),
         )
         .unwrap_err();
         assert!(matches!(err, OidcError::Verify(_)));
@@ -368,6 +372,7 @@ mod tests {
             "https://idp/",
             "client-1",
             "n",
+            &ClaimMap::default(),
         )
         .unwrap_err();
         assert!(matches!(err, OidcError::UnknownKid(_)));
