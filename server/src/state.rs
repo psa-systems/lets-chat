@@ -76,8 +76,8 @@ impl AppState {
     }
     /// True when at least one SSO provider is configured. Login page
     /// renders the "Sign in with SSO" button conditionally on this.
-    pub fn sso_available(&self) -> bool {
-        !self.sso.is_empty()
+    pub async fn sso_available(&self) -> bool {
+        !self.sso.is_empty().await
     }
     /// Whether session and pending-auth cookies should carry the `Secure`
     /// attribute. WebKit2GTK (Tauri desktop on Linux) and Safari reject
