@@ -399,7 +399,7 @@ fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error>
         .to_string())
 }
 
-fn verify_password(hash: &str, password: &str) -> bool {
+pub(super) fn verify_password(hash: &str, password: &str) -> bool {
     let parsed = match PasswordHash::new(hash) {
         Ok(p) => p,
         Err(_) => return false,

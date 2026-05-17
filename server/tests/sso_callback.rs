@@ -456,14 +456,15 @@ async fn callback_does_not_auto_link_when_email_unverified() {
     *stub.email_verified.lock().unwrap() = false;
 
     let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
-    // Falls through to the link-required interstitial placeholder.
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    // Renders the link-required interstitial (200 with the form).
+    assert_eq!(res.status(), StatusCode::OK);
     let body = axum::body::to_bytes(res.into_body(), 1 << 20)
         .await
         .unwrap();
     let body = std::str::from_utf8(&body).unwrap();
-    assert!(body.contains("Sign in with your password first"));
-    // No sso_identities row written.
+    assert!(body.contains("Confirm to link your account"));
+    assert!(body.contains("name=\"envelope\""));
+    // No sso_identities row written yet; the user has to POST the form.
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sso_identities")
         .fetch_one(&auth)
         .await
@@ -487,12 +488,12 @@ async fn callback_does_not_auto_link_when_provider_flag_off() {
     // through the link-required interstitial.
 
     let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(res.status(), StatusCode::OK);
     let body = axum::body::to_bytes(res.into_body(), 1 << 20)
         .await
         .unwrap();
     let body = std::str::from_utf8(&body).unwrap();
-    assert!(body.contains("Sign in with your password first"));
+    assert!(body.contains("Confirm to link your account"));
 }
 
 #[tokio::test]
