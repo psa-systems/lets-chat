@@ -13,6 +13,7 @@ pub mod pinned;
 pub mod push_subscriptions;
 pub mod settings;
 pub mod sso;
+pub mod sso_providers;
 pub mod two_factor;
 pub mod uploads;
 pub mod vapid;
