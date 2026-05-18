@@ -23,6 +23,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/auth/0017_sso_providers.sql"),
         include_str!("../migrations/auth/0018_sso_flows_provider.sql"),
         include_str!("../migrations/auth/0019_sso_group_mappings.sql"),
+        include_str!("../migrations/auth/0020_session_tenant.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

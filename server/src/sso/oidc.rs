@@ -105,6 +105,10 @@ pub struct IdTokenClaims {
     pub name: Option<String>,
     pub username: Option<String>,
     pub groups: Option<Vec<String>>,
+    /// Mokosh-specific `mokosh_active_tenant` claim; threaded onto
+    /// the session row by the SSO callback. None for IdPs that don't
+    /// emit it. Per doc 02 section 16.
+    pub mokosh_active_tenant: Option<String>,
 }
 
 /// Verify the id_token signature against the JWKS, run the OIDC claim
@@ -167,6 +171,10 @@ pub fn verify_id_token(
         username,
         groups,
     } = claims::extract(&raw, map);
+    let mokosh_active_tenant = raw
+        .get("mokosh_active_tenant")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     Ok(IdTokenClaims {
         sub,
         email,
@@ -174,6 +182,7 @@ pub fn verify_id_token(
         name,
         username,
         groups,
+        mokosh_active_tenant,
     })
 }
 

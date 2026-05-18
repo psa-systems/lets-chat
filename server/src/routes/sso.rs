@@ -248,6 +248,7 @@ pub async fn get_callback(
             &headers,
             jar,
             claims.groups.as_deref(),
+            claims.mokosh_active_tenant.as_deref(),
         )
         .await;
     }
@@ -287,6 +288,7 @@ pub async fn get_callback(
                 &headers,
                 jar,
                 claims.groups.as_deref(),
+                claims.mokosh_active_tenant.as_deref(),
             )
             .await;
         }
@@ -368,6 +370,7 @@ pub async fn get_callback(
                 &headers,
                 jar,
                 claims.groups.as_deref(),
+                claims.mokosh_active_tenant.as_deref(),
             )
             .await;
         }
@@ -480,6 +483,7 @@ pub async fn post_finish_link(
         &headers,
         jar,
         None,
+        None,
     )
     .await
 }
@@ -492,6 +496,7 @@ pub async fn post_finish_link(
 /// fresh claims to project; the membership table is left untouched
 /// in that case (operators expect the user's next OIDC sign-in to
 /// re-reconcile).
+#[allow(clippy::too_many_arguments)]
 async fn finalize_sign_in(
     state: &AppState,
     user_id: &str,
@@ -500,6 +505,7 @@ async fn finalize_sign_in(
     headers: &HeaderMap,
     jar: CookieJar,
     groups: Option<&[String]>,
+    tenant_id: Option<&str>,
 ) -> Result<Response, AppError> {
     if let Some(g) = groups {
         if let Err(e) =
@@ -518,9 +524,14 @@ async fn finalize_sign_in(
         }
     }
     let (ua, ip) = crate::auth::extract_session_origin(headers);
-    let session_token =
-        db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())
-            .await?;
+    let session_token = db::auth::create_session_full(
+        &state.auth,
+        user_id,
+        ua.as_deref(),
+        ip.as_deref(),
+        tenant_id,
+    )
+    .await?;
     let cookie = crate::routes::auth::build_session_cookie(state.cookies_secure(), session_token);
     let jar = jar.add(cookie);
     tracing::info!(
