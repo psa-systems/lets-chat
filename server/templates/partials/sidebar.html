@@ -43,6 +43,26 @@
     </form>
   </div>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">
+    {% if !sidebar_starred_rooms.is_empty() || !sidebar_starred_peers.is_empty() %}
+    <section>
+      <h2 class="text-xs uppercase text-slate-500 px-2">&#9733; Starred</h2>
+      <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
+        {% for room in sidebar_starred_rooms %}
+        <li data-room-id="{{ room.id }}" draggable="true">
+          {% let is_starred = true %}
+          {% let room_id_str = room.id.to_string() %}
+          {% include "partials/sidebar_room_row.html" %}
+        </li>
+        {% endfor %}
+        {% for peer in sidebar_starred_peers %}
+        <li data-room-id="{{ peer.dm_room_id }}" draggable="true">
+          {% let is_starred = true %}
+          {% include "partials/sidebar_peer_row.html" %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
     {% if let Some(_eid) = sidebar_current_enclave %}
     <div data-category-list{% if can_manage_sidebar_categories %} data-positions-url="/enclave/{{ _eid }}/sidebar/categories/positions"{% endif %} class="space-y-4">
     {% for category in sidebar_categories %}
@@ -85,6 +105,7 @@
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories %} data-room-list data-positions-url="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}/positions"{% endif %}>
         {% for room in category.rooms %}
         <li{% if can_manage_sidebar_categories %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
+          {% let is_starred = false %}
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
         </li>
@@ -101,6 +122,7 @@
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
         {% for room in sidebar_rooms %}
         <li{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
+          {% let is_starred = false %}
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
         </li>
@@ -114,24 +136,8 @@
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
         <li>
-          <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-slate-400{% endif %}">
-            {% let avatar_user_id = peer.id.clone() %}
-            {% let avatar_username = peer.username.clone() %}
-            {% let avatar_ext = peer.avatar_ext.clone() %}
-            {% let avatar_status = peer.status.clone() %}
-            {% let avatar_custom_status = peer.custom_status.clone() %}
-            {% let avatar_size = "h-6 w-6 text-xs" %}
-            {% include "partials/avatar.html" %}
-            <div class="min-w-0 flex-1">
-              <div class="truncate">{{ peer.label() }}</div>
-              <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
-            </div>
-            {% let kind = "dm" %}
-            {% let id = peer.id.clone() %}
-            {% let unread = peer.unread %}
-            {% let mute_mode = peer.mute_mode.as_str() %}
-            {% include "partials/unread_badge.html" %}
-          </a>
+          {% let is_starred = false %}
+          {% include "partials/sidebar_peer_row.html" %}
         </li>
         {% endfor %}
       </ul>

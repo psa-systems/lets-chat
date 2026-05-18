@@ -36,6 +36,8 @@ pub async fn get_home(
     }
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -45,6 +47,8 @@ pub async fn get_home(
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
