@@ -98,7 +98,7 @@
     {% if !sidebar_rooms.is_empty() %}
     <section>
       <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}All rooms{% else %}Rooms{% endif %}</h2>
-      <ul class="mt-1">
+      <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
         {% for room in sidebar_rooms %}
         <li{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
           {% let room_id_str = room.id.to_string() %}
