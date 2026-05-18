@@ -38,14 +38,34 @@ pub struct RegisterForm {
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
+    let sso_buttons = login_sso_buttons(&state).await;
     let page = LoginPage {
         error: None,
         asset_version: &state.asset_version,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         build_date: version::BUILD_DATE,
+        password_form_hidden: state.local_login_disabled,
+        sso_buttons,
     };
     html(&page)
+}
+
+/// Snapshot the cached enabled providers into the row of "Sign in
+/// with X" buttons the login template renders. Empty when no
+/// providers are configured (login page falls back to password-only
+/// look without the divider).
+pub(super) async fn login_sso_buttons(state: &AppState) -> Vec<crate::views::auth::LoginSsoButton> {
+    state
+        .sso
+        .snapshot()
+        .await
+        .into_iter()
+        .map(|(id, entry)| crate::views::auth::LoginSsoButton {
+            id,
+            display_name: entry.row.display_name.clone(),
+        })
+        .collect()
 }
 
 pub async fn post_login(
@@ -65,7 +85,8 @@ pub async fn post_login(
                 &headers,
                 FormPage::Login,
                 "Invalid username or password",
-            ));
+            )
+            .await);
         }
     };
 
@@ -75,7 +96,8 @@ pub async fn post_login(
             &headers,
             FormPage::Login,
             "Invalid username or password",
-        ));
+        )
+        .await);
     }
 
     if record.totp_enabled && state.two_factor_available() {
@@ -149,7 +171,8 @@ pub async fn post_register(
             &headers,
             FormPage::Register,
             "Username must be 3-32 characters",
-        ));
+        )
+        .await);
     }
     if password.len() < 8 {
         return Ok(form_error(
@@ -157,7 +180,8 @@ pub async fn post_register(
             &headers,
             FormPage::Register,
             "Password must be at least 8 characters",
-        ));
+        )
+        .await);
     }
     if password != form.password_confirm.as_str() {
         return Ok(form_error(
@@ -165,7 +189,8 @@ pub async fn post_register(
             &headers,
             FormPage::Register,
             "Passwords do not match",
-        ));
+        )
+        .await);
     }
 
     let email = form
@@ -181,7 +206,8 @@ pub async fn post_register(
                 &headers,
                 FormPage::Register,
                 "Email address is not valid",
-            ));
+            )
+            .await);
         }
     }
 
@@ -211,12 +237,9 @@ pub async fn post_register(
         Ok(id) => id,
         Err(e) => {
             if is_unique_violation(&e) {
-                return Ok(form_error(
-                    &state,
-                    &headers,
-                    FormPage::Register,
-                    "Username taken",
-                ));
+                return Ok(
+                    form_error(&state, &headers, FormPage::Register, "Username taken").await,
+                );
             }
             return Err(AppError::Internal(format!("register: {e}")));
         }
@@ -234,7 +257,8 @@ pub async fn post_register(
                     &headers,
                     FormPage::Register,
                     "That email address is already in use",
-                ));
+                )
+                .await);
             }
             return Err(AppError::Internal(format!("set_user_email: {err}")));
         }
@@ -336,7 +360,7 @@ enum FormPage {
     Register,
 }
 
-fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) -> Response {
+async fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) -> Response {
     let body = if is_htmx(headers) {
         FormErrors { error: Some(msg) }.render()
     } else {
@@ -347,6 +371,8 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
                 app_version: version::VERSION,
                 git_hash: version::GIT_HASH,
                 build_date: version::BUILD_DATE,
+                password_form_hidden: state.local_login_disabled,
+                sso_buttons: login_sso_buttons(state).await,
             }
             .render(),
             #[cfg(feature = "standalone")]
