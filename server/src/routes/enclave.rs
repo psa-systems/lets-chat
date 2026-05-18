@@ -612,6 +612,33 @@ pub async fn get_settings(
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
+
+    // LC-83: resolve groups for the enclave alongside their member
+    // labels so the settings page can render the CRUD UI without
+    // extra fetches per row.
+    let raw_groups = db::user_groups::list_for_enclave(&state.chat, id).await?;
+    let mut groups: Vec<crate::views::enclave::EnclaveGroupView> =
+        Vec::with_capacity(raw_groups.len());
+    for g in raw_groups {
+        let ids = db::user_groups::list_member_ids(&state.chat, g.id).await?;
+        let mut labels: Vec<String> = Vec::with_capacity(ids.len());
+        for uid in &ids {
+            let label = db::auth::find_user_by_id(&state.auth, uid)
+                .await?
+                .map(|r| match r.display_name.as_deref() {
+                    Some(n) if !n.trim().is_empty() => n.to_string(),
+                    _ => format!("@{}", r.username),
+                })
+                .unwrap_or_else(|| uid.clone());
+            labels.push(label);
+        }
+        groups.push(crate::views::enclave::EnclaveGroupView {
+            id: g.id,
+            name: g.name,
+            member_count: ids.len() as i64,
+            member_labels: labels,
+        });
+    }
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -626,6 +653,7 @@ pub async fn get_settings(
         user: &user,
         enclave: &enclave,
         members: &member_views,
+        groups: &groups,
         emojis: &emojis,
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
