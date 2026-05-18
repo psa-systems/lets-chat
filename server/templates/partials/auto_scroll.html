@@ -37,6 +37,21 @@
   document.body.addEventListener('htmx:oobBeforeSwap', onBeforeSwap);
   document.body.addEventListener('htmx:oobAfterSwap', onAfterSwap);
 
+  // Re-anchor on container resize. The composer textarea grows on input
+  // (multi-line messages, mention insert), which shrinks #messages from
+  // the bottom. scrollTop stays put, so the newest messages slide off-
+  // screen even though the user never scrolled. Without this, autoscroll
+  // appears to "stop working" after the first mention insert: subsequent
+  // beforeSwap snapshots see isAtBottom() = false (visible window moved
+  // up) and the afterSwap restore is a no-op.
+  var ro = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(function(){
+      if (wasAtBottom) scrollToBottom();
+    });
+    ro.observe(messages);
+  }
+
   // Teardown: when #main is replaced by the WS reconnect soft-refresh (the
   // only in-place re-render path that reaches scripts under #main today),
   // htmx fires htmx:beforeCleanupElement on every descendant. Drop the four
@@ -48,6 +63,7 @@
     document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
     document.body.removeEventListener('htmx:oobBeforeSwap', onBeforeSwap);
     document.body.removeEventListener('htmx:oobAfterSwap', onAfterSwap);
+    if (ro) ro.disconnect();
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
