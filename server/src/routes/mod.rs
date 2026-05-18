@@ -23,6 +23,7 @@ use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
 mod account;
+mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
 mod auth;
@@ -734,6 +735,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/saved", get(bookmarks::get_saved))
         .route("/inbox", get(inbox::get_inbox))
+        .route("/activity", get(activity::get_activity))
         .route(
             "/enclave/{enclave_id}/sidebar/categories",
             post(sidebar_categories::post_create),
