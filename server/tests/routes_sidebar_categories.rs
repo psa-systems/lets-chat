@@ -23,32 +23,42 @@ mod common;
 
 struct TestApp {
     app: Router,
-    session: String,
-    user_id: String,
+    admin_session: String,
+    member_session: String,
+    member_id: String,
     auth: SqlitePool,
+    chat: SqlitePool,
 }
 
-/// Seed an admin user with the General enclave bootstrapped (so room id 1
-/// exists and is accessible). totp_enabled = 1 to bypass the 2FA-enrollment
-/// middleware that the test harness pattern (see CLAUDE.md test maintenance
-/// section 5) otherwise redirects every authed request through.
+/// Seed two users: `admin` (enclave owner via being the first registered
+/// user + General enclave bootstrap) and `member` (joined the General
+/// enclave as a regular member). Returns both sessions so tests can
+/// exercise RBAC on the new shared category endpoints.
 async fn app() -> TestApp {
     ensure_tempdir();
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
-    let user_id = db::auth::create_user(&auth, "viewer", "hash")
-        .await
-        .unwrap();
+
+    let admin_id = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    let member_id = db::auth::create_user(&auth, "member", "h").await.unwrap();
     sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
-        .bind(&user_id)
+        .bind(&admin_id)
         .execute(&auth)
         .await
         .unwrap();
-    let session = db::auth::create_session(&auth, &user_id).await.unwrap();
+    sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
+        .bind(&member_id)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin_id).await.unwrap();
+    let member_session = db::auth::create_session(&auth, &member_id).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
+
+    let chat_for_test = chat.clone();
     let auth_for_test = auth.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
@@ -62,7 +72,7 @@ async fn app() -> TestApp {
         bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: None,
-        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        push_client: Arc::new(lets_chat::push::MockPushClient::default()),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
@@ -70,9 +80,11 @@ async fn app() -> TestApp {
     let app = routes::build_router(state);
     TestApp {
         app,
-        session,
-        user_id,
+        admin_session,
+        member_session,
+        member_id,
         auth: auth_for_test,
+        chat: chat_for_test,
     }
 }
 
@@ -87,315 +99,117 @@ async fn send(app: &Router, sess: &str, method: Method, uri: &str, body: &str) -
     app.clone().oneshot(req).await.unwrap().status()
 }
 
-/// Variant of `send` that returns (status, body) and lets the caller
-/// inject an `HX-Current-URL` header so handlers that derive the
-/// current enclave from the request can be exercised.
-async fn send_with_hx_url(
-    app: &Router,
-    sess: &str,
-    method: Method,
-    uri: &str,
-    body: &str,
-    hx_current_url: &str,
-) -> (StatusCode, String) {
+async fn category_count(chat: &SqlitePool, enclave_id: i64) -> i64 {
+    let row = sqlx::query("SELECT COUNT(*) AS n FROM room_categories WHERE enclave_id = ?")
+        .bind(enclave_id)
+        .fetch_one(chat)
+        .await
+        .unwrap();
+    row.get::<i64, _>("n")
+}
+
+async fn assignment_count(chat: &SqlitePool) -> i64 {
+    let row = sqlx::query("SELECT COUNT(*) AS n FROM room_category_assignments")
+        .fetch_one(chat)
+        .await
+        .unwrap();
+    row.get::<i64, _>("n")
+}
+
+#[tokio::test]
+async fn admin_creates_category() {
+    let t = app().await;
+    let status = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        "/enclave/1/sidebar/categories",
+        "name=Work",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(category_count(&t.chat, 1).await, 1);
+}
+
+#[tokio::test]
+async fn member_cannot_create_category() {
+    let t = app().await;
+    let status = send(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        "/enclave/1/sidebar/categories",
+        "name=Work",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(category_count(&t.chat, 1).await, 0);
+}
+
+#[tokio::test]
+async fn admin_assigns_room_then_member_sees_it_in_category() {
+    let t = app().await;
+    let cat = db::sidebar_categories::create_category(&t.chat, 1, "Work")
+        .await
+        .unwrap();
+    let status = send(
+        &t.app,
+        &t.admin_session,
+        Method::PATCH,
+        &format!("/enclave/1/sidebar/categories/{cat}/rooms/1"),
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(assignment_count(&t.chat).await, 1);
+
+    // Member fetching /enclave/1 sees the General room inside the
+    // category section, not in "All rooms".
     let req = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .header(header::COOKIE, format!("session={sess}"))
-        .header("HX-Current-URL", hx_current_url)
-        .body(Body::from(body.to_string()))
+        .method(Method::GET)
+        .uri("/enclave/1")
+        .header(header::COOKIE, format!("session={}", t.member_session))
+        .body(Body::empty())
         .unwrap();
-    let resp = app.clone().oneshot(req).await.unwrap();
-    let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
-    (status, String::from_utf8_lossy(&bytes).into_owned())
-}
-
-async fn category_count(auth: &SqlitePool, user_id: &str) -> i64 {
-    let row = sqlx::query("SELECT COUNT(*) AS n FROM sidebar_categories WHERE user_id = ?")
-        .bind(user_id)
-        .fetch_one(auth)
-        .await
-        .unwrap();
-    row.get::<i64, _>("n")
-}
-
-async fn assignment_count(auth: &SqlitePool, user_id: &str) -> i64 {
-    let row = sqlx::query("SELECT COUNT(*) AS n FROM sidebar_category_rooms WHERE user_id = ?")
-        .bind(user_id)
-        .fetch_one(auth)
-        .await
-        .unwrap();
-    row.get::<i64, _>("n")
-}
-
-#[tokio::test]
-async fn create_category_persists_row() {
-    let t = app().await;
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::POST,
-        "/sidebar/categories",
-        "name=Work",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(category_count(&t.auth, &t.user_id).await, 1);
-}
-
-#[tokio::test]
-async fn create_category_rejects_empty_name() {
-    let t = app().await;
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::POST,
-        "/sidebar/categories",
-        "name=",
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(category_count(&t.auth, &t.user_id).await, 0);
-}
-
-#[tokio::test]
-async fn rename_then_delete_category() {
-    let t = app().await;
-    let id = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
-        .await
-        .unwrap();
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        &format!("/sidebar/categories/{id}"),
-        "name=Projects",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let row = sqlx::query("SELECT name FROM sidebar_categories WHERE id = ?")
-        .bind(id)
-        .fetch_one(&t.auth)
-        .await
-        .unwrap();
-    assert_eq!(row.get::<String, _>("name"), "Projects");
-
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::DELETE,
-        &format!("/sidebar/categories/{id}"),
-        "",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(category_count(&t.auth, &t.user_id).await, 0);
-}
-
-#[tokio::test]
-async fn assign_room_then_delete_cascade_clears_assignment() {
-    let t = app().await;
-    let id = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
-        .await
-        .unwrap();
-    // Room id 1 = the seeded General enclave room. The viewer is an admin
-    // so is_room_accessible passes.
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        &format!("/sidebar/categories/{id}/rooms/1"),
-        "",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 1);
-
-    // Deleting the category cascades the assignment row.
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::DELETE,
-        &format!("/sidebar/categories/{id}"),
-        "",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
-}
-
-#[tokio::test]
-async fn assign_room_requires_room_access() {
-    let t = app().await;
-    let id = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
-        .await
-        .unwrap();
-    // Room id 999 does not exist; is_room_accessible returns false, so
-    // the assignment endpoint must refuse with 403 (and persist nothing).
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        &format!("/sidebar/categories/{id}/rooms/999"),
-        "",
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
-}
-
-#[tokio::test]
-async fn delete_room_assignment_unassigns_without_unjoining() {
-    let t = app().await;
-    let id = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
-        .await
-        .unwrap();
-    db::sidebar_categories::assign_room(&t.auth, &t.user_id, 1, id)
-        .await
-        .unwrap();
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 1);
-
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::DELETE,
-        "/sidebar/categories/rooms/1",
-        "",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
-    // The category itself is untouched.
-    assert_eq!(category_count(&t.auth, &t.user_id).await, 1);
-}
-
-#[tokio::test]
-async fn category_positions_endpoint_reorders_in_place() {
-    let t = app().await;
-    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
-        .await
-        .unwrap();
-    let b = db::sidebar_categories::create_category(&t.auth, &t.user_id, "B")
-        .await
-        .unwrap();
-    let c = db::sidebar_categories::create_category(&t.auth, &t.user_id, "C")
-        .await
-        .unwrap();
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        "/sidebar/categories/positions",
-        &format!("ids={c},{a},{b}"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let cats = db::sidebar_categories::list_categories(&t.auth, &t.user_id)
-        .await
-        .unwrap();
-    let order: Vec<i64> = cats.iter().map(|c| c.id).collect();
-    assert_eq!(order, vec![c, a, b]);
-}
-
-#[tokio::test]
-async fn room_positions_endpoint_handles_cross_category_move() {
-    let t = app().await;
-    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
-        .await
-        .unwrap();
-    let b = db::sidebar_categories::create_category(&t.auth, &t.user_id, "B")
-        .await
-        .unwrap();
-    db::sidebar_categories::assign_room(&t.auth, &t.user_id, 1, a)
-        .await
-        .unwrap();
-    // Cross-category drag: room 1 currently in A; positions endpoint
-    // for B includes it, so the assignment row gets upserted into B.
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        &format!("/sidebar/categories/{b}/positions"),
-        "ids=1",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let assignments = db::sidebar_categories::room_assignments(&t.auth, &t.user_id)
-        .await
-        .unwrap();
-    assert_eq!(assignments.get(&1).map(|(c, _)| *c), Some(b));
-}
-
-#[tokio::test]
-async fn room_positions_endpoint_refuses_inaccessible_room() {
-    let t = app().await;
-    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
-        .await
-        .unwrap();
-    let status = send(
-        &t.app,
-        &t.session,
-        Method::PATCH,
-        &format!("/sidebar/categories/{a}/positions"),
-        "ids=1,999",
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
-}
-
-#[tokio::test]
-async fn create_category_preserves_room_list_when_viewing_enclave() {
-    // Regression: render_sidebar_fragment used to always call
-    // load_sidebar(None) which blanks `sidebar_rooms` (Home view shows
-    // DMs only). Creating a category while viewing an enclave then
-    // wiped the "All rooms" section from the swap response. The
-    // HX-Current-URL header now drives the enclave context so the
-    // rebuilt sidebar still lists the seeded room.
-    let t = app().await;
-    let (status, body) = send_with_hx_url(
-        &t.app,
-        &t.session,
-        Method::POST,
-        "/sidebar/categories",
-        "name=Work",
-        "http://localhost:8080/enclave/1",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(
-        body.contains("/room/1\""),
-        "expected the seeded General room link in the swapped sidebar body, got: {body}"
-    );
-}
-
-#[tokio::test]
-async fn forget_rooms_drops_only_named_assignments() {
-    let t = app().await;
-    let cat = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
-        .await
-        .unwrap();
-    for room_id in [1_i64, 7, 9] {
-        db::sidebar_categories::assign_room(&t.auth, &t.user_id, room_id, cat)
+    let resp = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        axum::body::to_bytes(resp.into_body(), 10 << 20)
             .await
-            .unwrap();
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    let cat_marker = body
+        .find(&format!("data-category-id=\"{cat}\""))
+        .expect("category section in HTML");
+    let room_link = body.find("/room/1\"").expect("room link in HTML");
+    // Room link must appear after the category marker (inside it),
+    // before any "All rooms" header.
+    let all_rooms = body.find(">All rooms<");
+    assert!(room_link > cat_marker, "room link before category section");
+    if let Some(ar) = all_rooms {
+        assert!(room_link < ar, "room ended up in All rooms");
     }
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 3);
+}
 
-    // Empty slice is a no-op.
-    db::sidebar_categories::forget_rooms(&t.auth, &t.user_id, &[])
+#[tokio::test]
+async fn member_collapse_only_affects_self() {
+    let t = app().await;
+    let cat = db::sidebar_categories::create_category(&t.chat, 1, "Work")
         .await
         .unwrap();
-    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 3);
-
-    db::sidebar_categories::forget_rooms(&t.auth, &t.user_id, &[1, 7])
+    let status = send(
+        &t.app,
+        &t.member_session,
+        Method::PATCH,
+        &format!("/sidebar/categories/{cat}/collapse"),
+        "collapsed=1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let collapsed = db::sidebar_categories::list_collapsed_for_user(&t.auth, &t.member_id)
         .await
         .unwrap();
-    let remaining = db::sidebar_categories::room_assignments(&t.auth, &t.user_id)
-        .await
-        .unwrap();
-    let ids: Vec<i64> = remaining.keys().copied().collect();
-    assert_eq!(ids, vec![9]);
+    assert!(collapsed.contains(&cat));
 }

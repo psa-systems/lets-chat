@@ -260,6 +260,8 @@ pub(crate) async fn load_sidebar(
         Vec<SidebarCategoryGroup>,
         Vec<SidebarRoom>,
         Vec<SidebarPeer>,
+        bool,
+        Option<i64>,
     ),
     AppError,
 > {
@@ -337,53 +339,78 @@ pub(crate) async fn load_sidebar(
         (Vec::new(), sidebar_peers)
     };
 
-    // Bucket categorized rooms into per-user category groups. Categories
-    // and assignments both live in `auth.db`; this is a single small
-    // query per (category list, assignment map) so the cost stays
-    // negligible vs the existing chat.db sidebar work above.
-    let mut category_meta = db::sidebar_categories::list_categories(&state.auth, &user.id).await?;
-    let assignments = db::sidebar_categories::room_assignments(&state.auth, &user.id).await?;
+    // Categories are enclave-scoped (LC-79 redesign): only fetch +
+    // bucket when the user is viewing an enclave. Home / DM views have
+    // no notion of categories and render the existing flat rooms +
+    // peers shape.
+    let (sidebar_categories, uncategorized) = if let Some(eid) = current_enclave {
+        let mut category_meta =
+            db::sidebar_categories::list_categories_for_enclave(&state.chat, eid).await?;
+        let assignments =
+            db::sidebar_categories::room_assignments_for_enclave(&state.chat, eid).await?;
+        let collapsed =
+            db::sidebar_categories::list_collapsed_for_user(&state.auth, &user.id).await?;
 
-    let mut by_category: HashMap<i64, Vec<(i64, SidebarRoom)>> = HashMap::new();
-    let mut uncategorized: Vec<SidebarRoom> = Vec::with_capacity(sidebar_rooms.len());
-    for room in sidebar_rooms {
-        match assignments.get(&room.id) {
-            Some((cat_id, pos)) => {
-                by_category.entry(*cat_id).or_default().push((*pos, room));
+        let mut by_category: HashMap<i64, Vec<(i64, SidebarRoom)>> = HashMap::new();
+        let mut uncategorized: Vec<SidebarRoom> = Vec::with_capacity(sidebar_rooms.len());
+        for room in sidebar_rooms {
+            match assignments.get(&room.id) {
+                Some((cat_id, pos)) => {
+                    by_category.entry(*cat_id).or_default().push((*pos, room));
+                }
+                None => uncategorized.push(room),
             }
-            None => uncategorized.push(room),
         }
-    }
 
-    category_meta.sort_by(|a, b| a.position.cmp(&b.position).then(a.id.cmp(&b.id)));
-    let sidebar_categories: Vec<SidebarCategoryGroup> = category_meta
-        .into_iter()
-        .map(|cat| {
-            let mut rooms = by_category.remove(&cat.id).unwrap_or_default();
-            rooms.sort_by(|a, b| a.0.cmp(&b.0));
-            let rooms: Vec<SidebarRoom> = rooms.into_iter().map(|(_, r)| r).collect();
-            // Aggregates rendered as a single pill beside the
-            // collapsed-category header (phase 3); muted rooms suppress
-            // their unread contribution so the aggregate stays
-            // consistent with the per-room badge behaviour.
-            let unread_total: i64 = rooms
-                .iter()
-                .filter(|r| r.mute_mode == "none")
-                .map(|r| r.unread)
-                .sum();
-            let mention_total: i64 = rooms.iter().map(|r| r.mentions).sum();
-            SidebarCategoryGroup {
-                id: cat.id,
-                name: cat.name,
-                collapsed: cat.collapsed,
-                rooms,
-                unread_total,
-                mention_total,
-            }
-        })
-        .collect();
+        category_meta.sort_by(|a, b| a.position.cmp(&b.position).then(a.id.cmp(&b.id)));
+        let sidebar_categories: Vec<SidebarCategoryGroup> = category_meta
+            .into_iter()
+            .map(|cat| {
+                let mut rooms = by_category.remove(&cat.id).unwrap_or_default();
+                rooms.sort_by(|a, b| a.0.cmp(&b.0));
+                let rooms: Vec<SidebarRoom> = rooms.into_iter().map(|(_, r)| r).collect();
+                let unread_total: i64 = rooms
+                    .iter()
+                    .filter(|r| r.mute_mode == "none")
+                    .map(|r| r.unread)
+                    .sum();
+                let mention_total: i64 = rooms.iter().map(|r| r.mentions).sum();
+                SidebarCategoryGroup {
+                    id: cat.id,
+                    enclave_id: cat.enclave_id,
+                    name: cat.name,
+                    collapsed: collapsed.contains(&cat.id),
+                    rooms,
+                    unread_total,
+                    mention_total,
+                }
+            })
+            .collect();
+        (sidebar_categories, uncategorized)
+    } else {
+        (Vec::new(), sidebar_rooms)
+    };
 
-    Ok((sidebar_categories, uncategorized, sidebar_peers))
+    // Whether the calling user can edit shared category state in the
+    // currently-viewed enclave. Site admins always can; enclave admins
+    // and owners can. Read once here so every view that wants to gate
+    // an "Add category" / "Rename" / "Delete" affordance does not have
+    // to redo the query.
+    let can_manage_sidebar_categories = match current_enclave {
+        Some(eid) => {
+            let membership = db::enclave::get_membership(&state.chat, eid, &user.id).await?;
+            crate::perms::enclave_can_manage(membership.map(|m| m.role), &user.role)
+        }
+        None => false,
+    };
+
+    Ok((
+        sidebar_categories,
+        uncategorized,
+        sidebar_peers,
+        can_manage_sidebar_categories,
+        current_enclave,
+    ))
 }
 
 /// Convenience wrapper that returns sidebar lists plus the switcher entries
@@ -398,12 +425,22 @@ pub(crate) async fn load_chrome(
         Vec<SidebarRoom>,
         Vec<SidebarPeer>,
         Vec<SwitcherEntry>,
+        bool,
+        Option<i64>,
     ),
     AppError,
 > {
-    let (categories, rooms, peers) = load_sidebar(state, user, current_enclave).await?;
+    let (categories, rooms, peers, can_manage_sidebar_categories, sidebar_current_enclave) =
+        load_sidebar(state, user, current_enclave).await?;
     let switcher = load_switcher(state, user, current_enclave).await?;
-    Ok((categories, rooms, peers, switcher))
+    Ok((
+        categories,
+        rooms,
+        peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ))
 }
 
 /// Resolve a room's enclave so the sidebar/switcher can highlight the right
@@ -526,11 +563,20 @@ pub(crate) async fn handle_not_found(
         Ok(c) => c,
         Err(_) => return (StatusCode::NOT_FOUND, "Not Found").into_response(),
     };
-    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) = chrome;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = chrome;
     let page = NotFoundPage {
         user: &user,
         path: Some(uri.path().to_string()),
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -592,27 +638,34 @@ pub fn build_router(state: AppState) -> Router {
             post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
         )
         .route("/saved", get(bookmarks::get_saved))
-        .route("/sidebar/categories", post(sidebar_categories::post_create))
         .route(
-            "/sidebar/categories/positions",
+            "/enclave/{enclave_id}/sidebar/categories",
+            post(sidebar_categories::post_create),
+        )
+        .route(
+            "/enclave/{enclave_id}/sidebar/categories/positions",
             axum::routing::patch(sidebar_categories::patch_category_positions),
         )
         .route(
-            "/sidebar/categories/{category_id}",
+            "/enclave/{enclave_id}/sidebar/categories/{category_id}",
             axum::routing::patch(sidebar_categories::patch_category)
                 .delete(sidebar_categories::delete_category),
         )
         .route(
-            "/sidebar/categories/{category_id}/positions",
+            "/enclave/{enclave_id}/sidebar/categories/{category_id}/positions",
             axum::routing::patch(sidebar_categories::patch_room_positions),
         )
         .route(
-            "/sidebar/categories/{category_id}/rooms/{room_id}",
+            "/enclave/{enclave_id}/sidebar/categories/{category_id}/rooms/{room_id}",
             axum::routing::patch(sidebar_categories::patch_room_assignment),
         )
         .route(
-            "/sidebar/categories/rooms/{room_id}",
+            "/enclave/{enclave_id}/sidebar/categories/rooms/{room_id}",
             delete(sidebar_categories::delete_room_assignment),
+        )
+        .route(
+            "/sidebar/categories/{category_id}/collapse",
+            axum::routing::patch(sidebar_categories::patch_collapse),
         )
         .route(
             "/messages/{message_id}",
