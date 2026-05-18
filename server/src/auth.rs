@@ -151,9 +151,20 @@ pub async fn enforce_2fa_enrollment(
         || path.starts_with("/assets/")
         || path.starts_with("/avatars/");
     if !exempt {
-        if let Some(u) = req.extensions().get::<User>() {
+        if let Some(u) = req.extensions().get::<User>().cloned() {
             if !u.totp_enabled {
-                return Redirect::to("/settings/2fa/setup").into_response();
+                // SSO-only users (NULL password_hash) can't enroll a
+                // local TOTP - the IdP handles their second factor.
+                // Without this branch they'd ping-pong between every
+                // authed page and /settings/2fa/setup forever, since
+                // the L19 notice page makes enrollment a dead-end.
+                // Per doc 10 section 7.
+                let sso_only = !crate::db::sso::user_has_password(&state.auth, &u.id)
+                    .await
+                    .unwrap_or(true);
+                if !sso_only {
+                    return Redirect::to("/settings/2fa/setup").into_response();
+                }
             }
         }
     }
