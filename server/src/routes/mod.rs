@@ -37,6 +37,7 @@ pub(crate) mod email_verification;
 mod enclave;
 mod export;
 mod home;
+mod inbox;
 pub(crate) mod login_alerts;
 mod mentions;
 mod notify_prefs;
@@ -732,6 +733,7 @@ pub fn build_router(state: AppState) -> Router {
             post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
         )
         .route("/saved", get(bookmarks::get_saved))
+        .route("/inbox", get(inbox::get_inbox))
         .route(
             "/enclave/{enclave_id}/sidebar/categories",
             post(sidebar_categories::post_create),
