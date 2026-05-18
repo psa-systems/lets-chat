@@ -43,6 +43,11 @@ pub fn router() -> Router<AppState> {
             "/auth/sso/finish-link",
             axum::routing::post(post_finish_link),
         )
+        .route(
+            "/auth/sso/{provider}/link",
+            axum::routing::post(post_user_link_start),
+        )
+        .route("/auth/sso/unlink", axum::routing::post(post_user_unlink))
 }
 
 fn now_unix() -> i64 {
@@ -163,7 +168,7 @@ pub async fn get_callback(
         // a copy-paste bug or an attempt to splice flows.
         return Err(AppError::BadRequest("provider mismatch on callback".into()));
     }
-    if flow.kind != "sign_in" {
+    if !matches!(flow.kind.as_str(), "sign_in" | "link") {
         return Err(AppError::BadRequest(format!(
             "unexpected flow kind `{}` on /callback",
             flow.kind
@@ -223,6 +228,50 @@ pub async fn get_callback(
         tracing::warn!(provider = %provider_id, error = %e, "id_token verification failed");
         AppError::BadRequest("sign-in failed; identity could not be verified.".into())
     })?;
+
+    // Link flow: the user kicked this off from /settings/profile with
+    // their session already established. Attach the verified identity
+    // to the user_id captured in sso_flows; refuse if (issuer, subject)
+    // is already linked to a different user. Per doc 04 link branch.
+    if flow.kind == "link" {
+        let link_user = flow
+            .user_id
+            .as_deref()
+            .ok_or_else(|| AppError::Internal("link flow missing user_id".into()))?;
+        if let Some(other) =
+            db::sso::find_user_by_sso(&state.auth, &metadata.issuer, &claims.sub).await?
+        {
+            if other != link_user {
+                tracing::warn!(
+                    target: "lets_chat.auth.sso",
+                    provider = %provider_id,
+                    actor_user = %link_user,
+                    other_user = %other,
+                    "refusing to move an SSO identity already linked elsewhere"
+                );
+                return Ok(Redirect::to("/settings?sso_flash=already_linked").into_response());
+            }
+        }
+        db::sso::link_sso_identity(
+            &state.auth,
+            link_user,
+            &metadata.issuer,
+            &claims.sub,
+            claims.email.as_deref(),
+            false,
+        )
+        .await?;
+        tracing::info!(
+            target: "lets_chat.auth.sso",
+            event = "sso_account_linked",
+            user_id = %link_user,
+            provider = %provider_id,
+            issuer = %metadata.issuer,
+            subject = %claims.sub,
+            "user linked SSO from settings"
+        );
+        return Ok(Redirect::to("/settings?sso_flash=linked").into_response());
+    }
 
     // Already-linked happy path.
     if let Some(user_id) =
@@ -486,6 +535,88 @@ pub async fn post_finish_link(
         None,
     )
     .await
+}
+
+/// User-initiated link flow. The signed-in user clicks "Link SSO to
+/// my account" on `/settings/profile`; this hits POST
+/// `/auth/sso/:provider/link`. Stashes the current user_id in the
+/// `sso_flows` row under `kind = "link"` and kicks off the same OIDC
+/// dance the sign-in path uses. The callback's link branch picks up
+/// the user_id and attaches the verified identity to that user
+/// (rather than running the sign-in state machine). Per doc 04.
+pub async fn post_user_link_start(
+    State(state): State<AppState>,
+    crate::auth::AuthUser(user): crate::auth::AuthUser,
+    Path(provider_id): Path<String>,
+) -> Result<Response, AppError> {
+    let entry = state
+        .sso
+        .lookup(&provider_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    let metadata = entry.discovery(http_client()).await.map_err(|e| {
+        tracing::warn!(provider = %provider_id, error = %e, "OIDC discovery failed (link flow)");
+        AppError::Internal(format!("discovery: {e}"))
+    })?;
+
+    let state_token = random_b64url(32);
+    let nonce = random_b64url(32);
+    let pkce_verifier = random_b64url(48);
+    let pkce_challenge = s256_challenge(&pkce_verifier);
+
+    db::sso::insert_sso_flow(
+        &state.auth,
+        &state_token,
+        &state_token,
+        &nonce,
+        &pkce_verifier,
+        "/settings",
+        "link",
+        Some(&user.id),
+        &provider_id,
+        FLOW_TTL_SECONDS,
+    )
+    .await?;
+
+    let redirect_uri = format!(
+        "{}/auth/sso/{}/callback",
+        state.base_url.trim_end_matches('/'),
+        provider_id
+    );
+    let mut auth_url = metadata.authorization_endpoint.clone();
+    auth_url
+        .query_pairs_mut()
+        .append_pair("response_type", "code")
+        .append_pair("client_id", &entry.row.client_id)
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("scope", &entry.row.scopes)
+        .append_pair("state", &state_token)
+        .append_pair("nonce", &nonce)
+        .append_pair("code_challenge", &pkce_challenge)
+        .append_pair("code_challenge_method", "S256");
+    Ok(Redirect::to(auth_url.as_str()).into_response())
+}
+
+/// User-initiated unlink. Removes every `sso_identities` row for the
+/// caller. Refuses with `?sso_flash=no_password` when the user has no
+/// `password_hash` - the chat-side AuthUser middleware would lock them
+/// out on the next request. Per doc 04 / doc 06.
+pub async fn post_user_unlink(
+    State(state): State<AppState>,
+    crate::auth::AuthUser(user): crate::auth::AuthUser,
+) -> Result<Response, AppError> {
+    if !db::sso::user_has_password(&state.auth, &user.id).await? {
+        return Ok(Redirect::to("/settings?sso_flash=no_password").into_response());
+    }
+    let removed = db::sso::unlink_sso_identity(&state.auth, &user.id).await?;
+    tracing::info!(
+        target: "lets_chat.auth.sso",
+        event = "sso_account_unlinked",
+        user_id = %user.id,
+        removed_rows = removed,
+        "user removed their SSO link"
+    );
+    Ok(Redirect::to("/settings?sso_flash=unlinked").into_response())
 }
 
 /// Mint the session cookie + emit the `sso_sign_in` tracing event +

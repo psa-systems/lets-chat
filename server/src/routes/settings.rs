@@ -28,6 +28,10 @@ pub struct SettingsQuery {
     pub verify_sent: Option<String>,
     #[serde(default)]
     pub session_revoked: Option<String>,
+    /// Flash set by the SSO link/unlink redirects (sso_linked /
+    /// sso_unlinked / sso_already_linked / sso_no_password).
+    #[serde(default)]
+    pub sso_flash: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +67,56 @@ pub async fn get_settings(
     let password_error = q.password_error.as_deref().and_then(password_error_message);
     let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
     let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
+
+    // Linked Accounts card data: the user's current identities + the
+    // full list of enabled providers, each annotated with whether the
+    // user already has an identity for that issuer (so the Link button
+    // can hide for providers already-linked). Per doc 06.
+    let provider_snapshot = state.sso.snapshot().await;
+    let identity_rows = db::sso::list_sso_identities_for_user(&state.auth, &user.id).await?;
+    let linked_issuers: std::collections::HashSet<String> =
+        identity_rows.iter().map(|r| r.issuer.clone()).collect();
+    let sso_providers: Vec<crate::views::settings::SettingsSsoProviderOption> = provider_snapshot
+        .iter()
+        .map(
+            |(id, entry)| crate::views::settings::SettingsSsoProviderOption {
+                id: id.clone(),
+                display_name: entry.row.display_name.clone(),
+                issuer_url: entry.row.issuer_url.clone(),
+                already_linked: linked_issuers.contains(&entry.row.issuer_url),
+            },
+        )
+        .collect();
+    let issuer_to_display: std::collections::HashMap<String, String> = provider_snapshot
+        .iter()
+        .map(|(_, entry)| (entry.row.issuer_url.clone(), entry.row.display_name.clone()))
+        .collect();
+    let sso_identities: Vec<crate::views::settings::SettingsSsoIdentity> = identity_rows
+        .into_iter()
+        .map(|r| crate::views::settings::SettingsSsoIdentity {
+            provider_display_name: issuer_to_display
+                .get(&r.issuer)
+                .cloned()
+                .unwrap_or_else(|| r.issuer.clone()),
+            issuer: r.issuer,
+            email: r.email,
+            auto_linked: r.auto_linked,
+            linked_at: r.linked_at,
+        })
+        .collect();
+    let has_password = db::sso::user_has_password(&state.auth, &user.id).await?;
+    let sso_flash = match q.sso_flash.as_deref() {
+        Some("linked") => Some("SSO linked. You can now sign in with either method."),
+        Some("unlinked") => Some("SSO unlinked. You can re-link any time."),
+        Some("already_linked") => Some(
+            "That identity is already linked to a different Let's Chat account; refusing to move it.",
+        ),
+        Some("no_password") => {
+            Some("Set a password first; unlinking would leave the account inaccessible.")
+        }
+        _ => None,
+    };
+
     let page = UserSettingsPage {
         user: &user,
         sidebar_rooms: &sidebar_rooms,
@@ -85,6 +139,10 @@ pub async fn get_settings(
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
+        sso_providers,
+        sso_identities,
+        has_password,
+        sso_flash,
     };
     html(&page)
 }

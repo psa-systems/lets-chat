@@ -170,6 +170,47 @@
   </form>
   {% endif %}
 
+  {% if !sso_providers.is_empty() || !sso_identities.is_empty() %}
+  <div class="space-y-3">
+    <h2 class="font-medium">Linked accounts</h2>
+    <p class="text-sm text-slate-600">Sign in to Let's Chat with your organization identity. Existing username/password access keeps working.</p>
+    {% if let Some(msg) = sso_flash %}
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ msg }}</div>
+    {% endif %}
+
+    {% if !sso_identities.is_empty() %}
+    <ul class="divide-y border rounded">
+      {% for i in sso_identities %}
+      <li class="p-3 space-y-1">
+        <div class="text-sm">
+          <span class="font-medium">{{ i.provider_display_name }}</span>
+          {% if let Some(email) = i.email %}<span class="text-slate-600">- {{ email }}</span>{% endif %}
+          {% if i.auto_linked %}<span class="ml-1 text-xs text-amber-700">(auto-linked)</span>{% endif %}
+        </div>
+        <div class="text-xs text-slate-500 font-mono truncate" title="{{ i.issuer }}">{{ i.issuer }}</div>
+        <div class="text-xs text-slate-500">Linked {{ i.linked_at }}</div>
+        <form method="post" action="/auth/sso/unlink" class="pt-1">
+          {% if has_password %}
+          <button type="submit" class="text-sm text-red-600 hover:underline" onclick="return confirm('Unlink Let&apos;s Chat from SSO? You will need your username and password to sign in next time.');">Unlink</button>
+          {% else %}
+          <span class="text-sm text-slate-400" title="Set a password first; unlinking would leave the account inaccessible.">Unlink (set a password first)</span>
+          {% endif %}
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% for p in sso_providers %}
+    {% if !p.already_linked %}
+    <form method="post" action="/auth/sso/{{ p.id }}/link">
+      <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Link {{ p.display_name }} to my account</button>
+    </form>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="space-y-3">
     <h2 class="font-medium">Active sessions</h2>
     <p class="text-sm text-slate-600">Every device signed in to this account. Revoke any session you do not recognize. Logging out ends the current one.</p>
