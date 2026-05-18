@@ -287,7 +287,52 @@ async fn create_user_from_sso_resolves_username_collision() {
 }
 
 #[tokio::test]
-async fn create_user_from_sso_falls_back_when_username_unusable() {
+async fn create_user_from_sso_falls_back_to_email_local_part() {
+    // preferred_username missing -> use the email's local-part.
+    let pool = setup_pool().await;
+    let uid = db::sso::create_user_from_sso(
+        &pool,
+        CreateUserFromSso {
+            issuer: ISSUER,
+            subject: "abcd1234-rest",
+            email: Some("yousif@niceguyit.biz"),
+            preferred_username: None,
+            display_name: Some("Yousif Akbar"),
+        },
+    )
+    .await
+    .unwrap();
+    let user = db::auth::find_user_by_id(&pool, &uid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.username, "yousif");
+}
+
+#[tokio::test]
+async fn create_user_from_sso_falls_back_to_name_first_word_when_no_email() {
+    let pool = setup_pool().await;
+    let uid = db::sso::create_user_from_sso(
+        &pool,
+        CreateUserFromSso {
+            issuer: ISSUER,
+            subject: "abcd1234-rest",
+            email: None,
+            preferred_username: None,
+            display_name: Some("Yousif Akbar"),
+        },
+    )
+    .await
+    .unwrap();
+    let user = db::auth::find_user_by_id(&pool, &uid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.username, "Yousif");
+}
+
+#[tokio::test]
+async fn create_user_from_sso_falls_back_to_sso_hash_when_everything_unusable() {
     let pool = setup_pool().await;
     let uid = db::sso::create_user_from_sso(
         &pool,

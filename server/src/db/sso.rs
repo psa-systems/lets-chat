@@ -178,14 +178,29 @@ pub async fn create_user_from_sso(
 ) -> Result<String, sqlx::Error> {
     const MAX_COLLISION_ATTEMPTS: i32 = 50;
 
+    // Fallback chain for the local username when the IdP doesn't emit
+    // a clean `preferred_username` (mokosh in particular doesn't):
+    //   1. sanitized `preferred_username` claim
+    //   2. local-part of `email` (before the @) - stable, user-facing
+    //   3. first word of the `name` claim, sanitized
+    //   4. `sso-<8 alnum of subject>` last-resort (opaque but unique)
     let base_username = args
         .preferred_username
         .map(sanitize_username)
         .filter(|s| !s.is_empty())
+        .or_else(|| {
+            args.email
+                .and_then(|e| e.split('@').next())
+                .map(sanitize_username)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            args.display_name
+                .and_then(|n| n.split_whitespace().next())
+                .map(sanitize_username)
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or_else(|| {
-            // Fall back to the subject hashed-into-a-username when
-            // the IdP gave us nothing usable. This is rare; mokosh
-            // always emits preferred_username.
             let mut s = String::from("sso-");
             for c in args.subject.chars().take(8) {
                 if c.is_ascii_alphanumeric() {
