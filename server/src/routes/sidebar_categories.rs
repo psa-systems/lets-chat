@@ -264,6 +264,8 @@ async fn render_sidebar_fragment(
     let current_enclave = current_enclave_from_headers(state, headers).await;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         can_manage_sidebar_categories,
@@ -272,6 +274,8 @@ async fn render_sidebar_fragment(
     let fragment = SidebarUpdateFragment {
         user,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

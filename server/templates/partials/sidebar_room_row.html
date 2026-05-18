@@ -13,6 +13,9 @@
     {% include "partials/mention_badge.html" %}
     {% endif %}
   </a>
+  <form hx-post="/rooms/{{ room.id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
+    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-slate-300 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}Unstar{% else %}Star{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
+  </form>
   {% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}
   <details class="relative">
     <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100" title="Move to category">&#9776;</summary>

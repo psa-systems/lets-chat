@@ -1293,6 +1293,8 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     // they will pass current_enclave themselves.
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         can_manage_sidebar_categories,
@@ -1301,6 +1303,8 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     SidebarUpdateFragment {
         user: viewer,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

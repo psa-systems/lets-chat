@@ -166,6 +166,8 @@ pub async fn get_saved(
     // pages, which is the right framing for a personal-list page.
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -176,6 +178,8 @@ pub async fn get_saved(
     let page = SavedPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

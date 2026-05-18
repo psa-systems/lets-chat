@@ -25,6 +25,11 @@ pub struct SidebarRoom {
 /// peer.
 pub struct SidebarPeer {
     pub id: String,
+    /// LC-80: chat.db `rooms.id` of the DM. Stars key on room ids
+    /// (so both regular rooms and DMs share `starred_rooms`); the
+    /// sidebar loader buckets DMs into the Starred section and the
+    /// star-toggle form targets this id.
+    pub dm_room_id: i64,
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
