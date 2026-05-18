@@ -54,7 +54,8 @@ pub async fn get_settings(
     Query(q): Query<SettingsQuery>,
     jar: CookieJar,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
     let email_verified = db::auth::get_user_email_verified_at(&state.auth, &user.id)
         .await?
@@ -65,6 +66,7 @@ pub async fn get_settings(
     let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
     let page = UserSettingsPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -528,7 +530,8 @@ async fn render_blocked_list(
     error: Option<&str>,
     form_username: &str,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(state, user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(state, user, None).await?;
     let records = db::auth::list_blocked_users(&state.auth, &user.id).await?;
     let blocked: Vec<BlockedUserView> = records
         .into_iter()
@@ -541,6 +544,7 @@ async fn render_blocked_list(
         .collect();
     let page = BlockedListPage {
         user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

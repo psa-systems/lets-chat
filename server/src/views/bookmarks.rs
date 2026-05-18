@@ -20,6 +20,7 @@ pub struct SavedListRow {
 #[template(path = "saved/page.html")]
 pub struct SavedPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],

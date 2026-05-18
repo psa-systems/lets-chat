@@ -144,16 +144,15 @@ pub async fn delete_room_assignment(
 /// Re-render the sidebar partial. Uses `SidebarUpdateFragment` (the same
 /// shape used for WebSocket-driven sidebar updates) so HTMX swaps the
 /// `#sidebar` element via the `hx-swap-oob` attribute baked into
-/// `ws/sidebar_update.html`.
-///
-/// Phase 1a: returns the flat (ungrouped) sidebar. The category data
-/// persisted by these endpoints is ready in `auth.db` but the
-/// sidebar.html template + view-struct fan-out that surfaces categories
-/// visually lands in phase 1b (separate PR).
+/// `ws/sidebar_update.html`. Phase 1b: now includes the grouped
+/// `sidebar_categories` field so the rebuilt sidebar reflects the
+/// mutation immediately.
 async fn render_sidebar_fragment(state: &AppState, user: &User) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers) = super::load_sidebar(state, user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers) =
+        super::load_sidebar(state, user, None).await?;
     let fragment = SidebarUpdateFragment {
         user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
     };

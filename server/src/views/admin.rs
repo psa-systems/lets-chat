@@ -42,6 +42,7 @@ pub struct RoomRowFragment<'a> {
 #[template(path = "admin/users.html")]
 pub struct UsersPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -64,6 +65,7 @@ pub struct UserRowFragment<'a> {
 #[template(path = "admin/rooms.html")]
 pub struct RoomsPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -80,6 +82,7 @@ pub struct RoomsPage<'a> {
 #[template(path = "admin/modlog.html")]
 pub struct ModLogPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -96,6 +99,7 @@ pub struct ModLogPage<'a> {
 #[template(path = "admin/settings.html")]
 pub struct SettingsPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -139,6 +143,7 @@ pub struct AdminEnclaveView {
 #[template(path = "admin/enclaves.html")]
 pub struct EnclavesPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -155,6 +160,7 @@ pub struct EnclavesPage<'a> {
 #[template(path = "admin/invites.html")]
 pub struct InvitesPage<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
