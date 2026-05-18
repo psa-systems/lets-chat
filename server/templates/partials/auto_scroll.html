@@ -27,28 +27,29 @@
     wasAtBottom = true;
   }
 
-  // Capture stickiness BEFORE htmx mutates the DOM, then restore after.
-  // htmx:beforeSwap fires for all swaps (regular + OOB) on the body level.
-  function onBeforeSwap() { wasAtBottom = isAtBottom(); }
-  function onAfterSwap() { if (wasAtBottom) scrollToBottom(); }
-  document.body.addEventListener('htmx:beforeSwap', onBeforeSwap);
-  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  // Follow new content if the user has not scrolled away from the bottom.
+  // `wasAtBottom` is driven by real scroll events only. The previous
+  // implementation also overwrote it inside `htmx:beforeSwap`, but that
+  // mis-fires when the composer textarea has just grown: `#messages`
+  // clientHeight shrinks from the bottom, scrollTop stays put, and the
+  // post-resize `isAtBottom()` snapshot reads false even though the user
+  // never scrolled. That snapshot then suppresses the corresponding
+  // `htmx:afterSwap` re-anchor, leaving newly-arrived messages off-
+  // screen. Reading `wasAtBottom` directly (without re-snapshotting)
+  // preserves the user's actual intent: if they were following the
+  // bottom before the composer grew, they still are.
+  function followIfPinned() { if (wasAtBottom) scrollToBottom(); }
+  document.body.addEventListener('htmx:afterSwap', followIfPinned);
   // OOB swaps (new messages over WS) take a separate event path.
-  document.body.addEventListener('htmx:oobBeforeSwap', onBeforeSwap);
-  document.body.addEventListener('htmx:oobAfterSwap', onAfterSwap);
+  document.body.addEventListener('htmx:oobAfterSwap', followIfPinned);
 
-  // Re-anchor on container resize. The composer textarea grows on input
-  // (multi-line messages, mention insert), which shrinks #messages from
-  // the bottom. scrollTop stays put, so the newest messages slide off-
-  // screen even though the user never scrolled. Without this, autoscroll
-  // appears to "stop working" after the first mention insert: subsequent
-  // beforeSwap snapshots see isAtBottom() = false (visible window moved
-  // up) and the afterSwap restore is a no-op.
+  // Re-anchor on container resize. Composer growth (mention insert,
+  // multi-line typing) and typing-indicator updates both shrink
+  // `#messages` from the bottom without firing a scroll event, so the
+  // afterSwap hook alone is not enough.
   var ro = null;
   if (typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver(function(){
-      if (wasAtBottom) scrollToBottom();
-    });
+    ro = new ResizeObserver(followIfPinned);
     ro.observe(messages);
   }
 
@@ -59,10 +60,8 @@
   // The messages-scroll listener goes with the #messages element naturally.
   function teardown() {
     messages.removeEventListener('scroll', onScroll);
-    document.body.removeEventListener('htmx:beforeSwap', onBeforeSwap);
-    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
-    document.body.removeEventListener('htmx:oobBeforeSwap', onBeforeSwap);
-    document.body.removeEventListener('htmx:oobAfterSwap', onAfterSwap);
+    document.body.removeEventListener('htmx:afterSwap', followIfPinned);
+    document.body.removeEventListener('htmx:oobAfterSwap', followIfPinned);
     if (ro) ro.disconnect();
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
