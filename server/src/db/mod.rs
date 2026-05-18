@@ -18,6 +18,7 @@ pub mod sidebar_categories;
 pub mod starred_rooms;
 pub mod two_factor;
 pub mod uploads;
+pub mod user_groups;
 pub mod vapid;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
