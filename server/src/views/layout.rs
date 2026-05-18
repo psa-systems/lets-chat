@@ -58,6 +58,15 @@ pub struct SidebarCategoryGroup {
     pub name: String,
     pub collapsed: bool,
     pub rooms: Vec<SidebarRoom>,
+    /// Sum of `room.unread` across rooms whose `mute_mode == "none"`.
+    /// Mirrors the per-room unread badge's mute behaviour: muted rooms
+    /// suppress their own badge, so they should not bump the
+    /// collapsed-category aggregate either.
+    pub unread_total: i64,
+    /// Sum of `room.mentions` across all rooms in the category.
+    /// Mentions ignore the per-room mute mode (the per-room mention
+    /// badge does too) so the aggregate is the raw sum.
+    pub mention_total: i64,
 }
 
 /// One icon in the leftmost enclave-switcher column. `id = None` is the Home

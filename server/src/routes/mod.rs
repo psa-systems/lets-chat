@@ -361,11 +361,24 @@ pub(crate) async fn load_sidebar(
         .map(|cat| {
             let mut rooms = by_category.remove(&cat.id).unwrap_or_default();
             rooms.sort_by(|a, b| a.0.cmp(&b.0));
+            let rooms: Vec<SidebarRoom> = rooms.into_iter().map(|(_, r)| r).collect();
+            // Aggregates rendered as a single pill beside the
+            // collapsed-category header (phase 3); muted rooms suppress
+            // their unread contribution so the aggregate stays
+            // consistent with the per-room badge behaviour.
+            let unread_total: i64 = rooms
+                .iter()
+                .filter(|r| r.mute_mode == "none")
+                .map(|r| r.unread)
+                .sum();
+            let mention_total: i64 = rooms.iter().map(|r| r.mentions).sum();
             SidebarCategoryGroup {
                 id: cat.id,
                 name: cat.name,
                 collapsed: cat.collapsed,
-                rooms: rooms.into_iter().map(|(_, r)| r).collect(),
+                rooms,
+                unread_total,
+                mention_total,
             }
         })
         .collect();
