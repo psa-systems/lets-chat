@@ -117,7 +117,10 @@ async fn peer_mention_appears_in_activity() {
 
     let (status, body) = get(&t.app, &t.viewer_session, "/activity").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("Mention"), "expected Mention row, got: {body}");
+    assert!(
+        body.contains("Mention"),
+        "expected Mention row, got: {body}"
+    );
     assert!(
         body.contains("/room/1#msg-"),
         "expected deep link, got: {body}"

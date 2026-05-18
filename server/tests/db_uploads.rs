@@ -29,6 +29,7 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
         include_str!("../migrations/chat/0025_message_edits.sql"),
         include_str!("../migrations/chat/0026_room_categories.sql"),
+        include_str!("../migrations/chat/0027_user_groups.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
