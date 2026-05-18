@@ -117,7 +117,8 @@ async fn admin_creates_group_and_adds_member() {
         &body,
     )
     .await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
+    // Typeahead row swap: handler returns 200 + an HTML fragment, not a redirect.
+    assert_eq!(status, StatusCode::OK);
     let members = db::user_groups::list_member_ids(&t.chat, group_id)
         .await
         .unwrap();
