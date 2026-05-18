@@ -209,8 +209,14 @@ pub async fn get_landing(
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
-    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-        super::load_chrome(&state, &user, Some(id)).await?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclavePage {
         user: &user,
         enclave: &enclave,
@@ -219,6 +225,8 @@ pub async fn get_landing(
         can_manage,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -232,13 +240,21 @@ pub async fn get_discover(
     Query(flash): Query<FlashQuery>,
 ) -> Result<Html, AppError> {
     let enclaves = db::enclave::list_public_enclaves(&state.chat).await?;
-    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-        super::load_chrome(&state, &user, None).await?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -588,8 +604,14 @@ pub async fn get_settings(
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
-    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-        super::load_chrome(&state, &user, Some(id)).await?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
@@ -598,6 +620,8 @@ pub async fn get_settings(
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -702,15 +726,11 @@ pub async fn post_leave(
             "transfer ownership before leaving".into(),
         ));
     }
-    // Scrub sidebar categorization for any room the leaving user is
-    // about to lose access to (LC-79 AC #5). list_rooms_in_enclave with
-    // `can_see_all_private=false` returns only the rooms this user is
-    // a member of, so private-room categorizations they were never in
-    // are left untouched.
-    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, false).await?;
-    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
+    // LC-79 redesign: categorization is per-enclave / shared. Leaving
+    // an enclave doesn't dirty any user-specific assignment row (there
+    // aren't any). The assignment rows live with the enclave and stay
+    // valid for the remaining members.
     db::enclave::remove_member(&state.chat, id, &user.id).await?;
-    db::sidebar_categories::forget_rooms(&state.auth, &user.id, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &user.id,
         &ChatEvent::EnclaveMemberRemoved {
@@ -759,12 +779,9 @@ pub async fn post_kick(
             "cannot kick the owner; transfer ownership first".into(),
         ));
     }
-    // LC-79 AC #5: scrub categorization for any room the kicked user
-    // is about to lose access to.
-    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &target, false).await?;
-    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
+    // LC-79 redesign: per-enclave categorization is shared, not
+    // per-user. Kicking a user does not affect any assignment row.
     db::enclave::remove_member(&state.chat, id, &target).await?;
-    db::sidebar_categories::forget_rooms(&state.auth, &target, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &target,
         &ChatEvent::EnclaveMemberRemoved {
@@ -973,11 +990,6 @@ pub async fn post_remove_room_member(
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     db::chat::remove_room_member(&state.chat, room_id, &target).await?;
-    // LC-79 AC #5: the removed user should lose this room from their
-    // sidebar categories the next time they load the sidebar; scrub
-    // the assignment row here so a category they had this room in
-    // doesn't pop the room back if they're re-added later.
-    db::sidebar_categories::forget_room(&state.auth, &target, room_id).await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -986,12 +998,20 @@ pub async fn get_invitations(
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
     let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
-    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-        super::load_chrome(&state, &user, None).await?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
     html(&crate::views::enclave::InvitationsPage {
         user: &user,
         invitations: &invs,
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

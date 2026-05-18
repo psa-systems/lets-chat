@@ -52,12 +52,20 @@ pub async fn get_dm(
     // them specifically.
     let blocked = db::auth::is_blocked_either_way(&state.auth, &user.id, &peer.id).await?;
     if blocked {
-        let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-            super::load_chrome(&state, &user, None).await?;
+        let (
+            sidebar_categories,
+            sidebar_rooms,
+            sidebar_peers,
+            switcher,
+            can_manage_sidebar_categories,
+            sidebar_current_enclave,
+        ) = super::load_chrome(&state, &user, None).await?;
         let msg = format!("You can't message @{}.", peer.username);
         let page = WelcomePage {
             user: &user,
             sidebar_categories: &sidebar_categories,
+            can_manage_sidebar_categories,
+            sidebar_current_enclave,
             sidebar_rooms: &sidebar_rooms,
             sidebar_peers: &sidebar_peers,
             switcher: &switcher,
@@ -78,8 +86,14 @@ pub async fn get_dm(
             // so the user gets app chrome and a clear explanation rather than
             // a bare 404.
             if !peer.is_profile_public {
-                let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
-                    super::load_chrome(&state, &user, None).await?;
+                let (
+                    sidebar_categories,
+                    sidebar_rooms,
+                    sidebar_peers,
+                    switcher,
+                    can_manage_sidebar_categories,
+                    sidebar_current_enclave,
+                ) = super::load_chrome(&state, &user, None).await?;
                 let msg = format!(
                     "@{} has a private profile. You can't start a new DM with them.",
                     peer.username
@@ -87,6 +101,8 @@ pub async fn get_dm(
                 let page = WelcomePage {
                     user: &user,
                     sidebar_categories: &sidebar_categories,
+                    can_manage_sidebar_categories,
+                    sidebar_current_enclave,
                     sidebar_rooms: &sidebar_rooms,
                     sidebar_peers: &sidebar_peers,
                     switcher: &switcher,
@@ -248,8 +264,14 @@ pub async fn get_dm(
     }
 
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
-    let (sidebar_categories, sidebar_rooms, mut sidebar_peers, switcher) =
-        super::load_chrome(&state, &user, None).await?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        mut sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
     if let Some(p) = sidebar_peers.iter_mut().find(|p| p.id == peer.id) {
         p.active = true;
     }
@@ -272,6 +294,8 @@ pub async fn get_dm(
         peer: &peer,
         room: &room,
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

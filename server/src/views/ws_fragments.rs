@@ -77,6 +77,8 @@ pub struct SeenIndicatorFragment<'a> {
 pub struct SidebarUpdateFragment<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
 }
@@ -221,6 +223,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveMemberRemoved { .. }
         | ChatEvent::EnclaveRoomAdded { .. }
         | ChatEvent::EnclaveRoomRemoved { .. }
+        | ChatEvent::SidebarCategoriesChanged { .. }
         | ChatEvent::EnclaveInvitationCreated { .. }
         | ChatEvent::EnclaveInvitationResolved { .. }
         | ChatEvent::Mentioned { .. }

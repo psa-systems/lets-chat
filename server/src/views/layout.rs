@@ -55,6 +55,11 @@ impl SidebarPeer {
 /// hides the room list when true and shows the category header alone.
 pub struct SidebarCategoryGroup {
     pub id: i64,
+    /// The enclave this category lives in. Surfaced so the sidebar
+    /// template can build the enclave-scoped admin URLs
+    /// (`/enclave/{enclave_id}/sidebar/categories/...`) without
+    /// threading current_enclave through every include scope.
+    pub enclave_id: i64,
     pub name: String,
     pub collapsed: bool,
     pub rooms: Vec<SidebarRoom>,
