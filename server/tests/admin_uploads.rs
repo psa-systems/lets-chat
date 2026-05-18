@@ -38,6 +38,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0014_login_alerts.sql"),
             include_str!("../migrations/auth/0015_pending_registrations.sql"),
             include_str!("../migrations/auth/0016_sidebar_categories.sql"),
+            include_str!("../migrations/auth/0017_drop_sidebar_categories_add_collapsed.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -65,6 +66,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0023_system_messages.sql"),
             include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
             include_str!("../migrations/chat/0025_message_edits.sql"),
+            include_str!("../migrations/chat/0026_room_categories.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),

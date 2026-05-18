@@ -239,6 +239,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // visibility flip in this tab.
                                     render_sidebar(&send_state, &send_user).await
                                 }
+                                ChatEvent::SidebarCategoriesChanged { .. } => {
+                                    // Shared category state changed in an
+                                    // enclave this user is a member of.
+                                    // Re-render their sidebar so live tabs
+                                    // pick up the change without a manual
+                                    // refresh. The fragment uses None for
+                                    // current_enclave (DM-only shape); WS
+                                    // tabs on /enclave/N will see the room
+                                    // section render via the normal page
+                                    // navigation flow when the user moves.
+                                    render_sidebar(&send_state, &send_user).await
+                                }
                                 ChatEvent::MessagePinned {
                                     room_id,
                                     message_id,
@@ -1279,11 +1291,18 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     // Live OOB sidebar refreshes only fire from DM-creation today, so render
     // the Home (DM-only) variant. When per-enclave events ship OOB rendering,
     // they will pass current_enclave themselves.
-    let (sidebar_categories, sidebar_rooms, sidebar_peers) =
-        super::load_sidebar(state, viewer, None).await.ok()?;
+    let (
+        sidebar_categories,
+        sidebar_rooms,
+        sidebar_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_sidebar(state, viewer, None).await.ok()?;
     SidebarUpdateFragment {
         user: viewer,
         sidebar_categories: &sidebar_categories,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
     }
