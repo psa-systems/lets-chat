@@ -68,15 +68,23 @@ pub async fn exchange_code(
     client_secret: &str,
     redirect_uri: &str,
 ) -> Result<TokenResponse, OidcError> {
+    // OIDC core mandates `client_secret_basic` as the default token-
+    // endpoint auth method for confidential clients (RFC 6749 section
+    // 2.3.1). Mokosh + Keycloak + Authentik enforce whichever method
+    // was registered; sending Basic is the universally-accepted choice
+    // since the client_id + secret stay out of any access log that
+    // captures form bodies. The OIDC discovery doc's
+    // `token_endpoint_auth_methods_supported` would let us pick at
+    // runtime; we always send Basic in v1 and revisit if a provider
+    // ever rejects it.
     let res = http
         .post(token_endpoint.as_str())
         .timeout(Duration::from_secs(10))
+        .basic_auth(client_id, Some(client_secret))
         .form(&[
             ("grant_type", "authorization_code"),
             ("code", code),
             ("code_verifier", pkce_verifier),
-            ("client_id", client_id),
-            ("client_secret", client_secret),
             ("redirect_uri", redirect_uri),
         ])
         .send()

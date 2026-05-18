@@ -32,7 +32,7 @@ services:
       # to your relay. Leaving any of them blank disables outbound mail and
       # the /forgot + /reset routes return 404. See .env.standalone for
       # variable documentation.
-      # LETS_CHAT_BASE_URL: "https://${USER}-chat.a8n.run"
+      LETS_CHAT_BASE_URL: "https://${USER}-chat.a8n.run"
       # SMTP_HOST: ""
       # SMTP_PORT: ""
       # SMTP_TLS: ""
@@ -46,9 +46,9 @@ services:
       # admin UI edits survive restarts). Register the client on the
       # IdP side first (mokosh-server: `just register-lets-chat-client`).
       # See docs/lets-chat/sso/10-admin-managed-providers.md.
-      # LETS_CHAT_SSO_ISSUER: "https://${USER}-mokosh-api.a8n.run"
-      # LETS_CHAT_SSO_CLIENT_ID: ""
-      # LETS_CHAT_SSO_CLIENT_SECRET: ""
+      LETS_CHAT_SSO_ISSUER: "https://${USER}-mokosh-api.a8n.run"
+      LETS_CHAT_SSO_CLIENT_ID: "5a899a1e-09d4-4691-a591-467985d0ec2f"
+      LETS_CHAT_SSO_CLIENT_SECRET: "xU0PJBneKjeQQ4vEbPlG_kfHddBVpKpB0ubbhzSB0IQ"
       # Optional: hard-disable the password sign-in path entirely. POST
       # /login, /register, /forgot, /reset, /settings/password all 404.
       # Existing password rows stay; flip it off to resume the password
