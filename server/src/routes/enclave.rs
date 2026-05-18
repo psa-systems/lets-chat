@@ -702,7 +702,15 @@ pub async fn post_leave(
             "transfer ownership before leaving".into(),
         ));
     }
+    // Scrub sidebar categorization for any room the leaving user is
+    // about to lose access to (LC-79 AC #5). list_rooms_in_enclave with
+    // `can_see_all_private=false` returns only the rooms this user is
+    // a member of, so private-room categorizations they were never in
+    // are left untouched.
+    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, false).await?;
+    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &user.id).await?;
+    db::sidebar_categories::forget_rooms(&state.auth, &user.id, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &user.id,
         &ChatEvent::EnclaveMemberRemoved {
@@ -751,7 +759,12 @@ pub async fn post_kick(
             "cannot kick the owner; transfer ownership first".into(),
         ));
     }
+    // LC-79 AC #5: scrub categorization for any room the kicked user
+    // is about to lose access to.
+    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &target, false).await?;
+    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &target).await?;
+    db::sidebar_categories::forget_rooms(&state.auth, &target, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &target,
         &ChatEvent::EnclaveMemberRemoved {
@@ -960,6 +973,11 @@ pub async fn post_remove_room_member(
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     db::chat::remove_room_member(&state.chat, room_id, &target).await?;
+    // LC-79 AC #5: the removed user should lose this room from their
+    // sidebar categories the next time they load the sidebar; scrub
+    // the assignment row here so a category they had this room in
+    // doesn't pop the room back if they're re-added later.
+    db::sidebar_categories::forget_room(&state.auth, &target, room_id).await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
