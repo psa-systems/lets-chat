@@ -44,6 +44,7 @@ pub enum OidcError {
     #[error("id_token signature / claims verification failed: {0}")]
     Verify(jsonwebtoken::errors::Error),
     #[error("id_token alg `{0:?}` is not supported")]
+    #[allow(dead_code)] // kept for future per-method gating; no producers in v1
     UnsupportedAlg(Algorithm),
 }
 
@@ -203,6 +204,13 @@ fn decoding_key_for(jwk: &Jwk) -> Result<DecodingKey, OidcError> {
         AlgorithmParameters::EllipticCurve(ec) => {
             DecodingKey::from_ec_components(&ec.x, &ec.y).map_err(OidcError::Verify)
         }
+        // OKP keys cover Ed25519 / Ed448 (EdDSA signing) and X25519 /
+        // X448 (ECDH-ES key agreement). OIDC id_tokens only ever use
+        // the signing curves; mokosh signs with Ed25519. jsonwebtoken
+        // exposes from_ed_components for both Ed variants.
+        AlgorithmParameters::OctetKeyPair(okp) => {
+            DecodingKey::from_ed_components(&okp.x).map_err(OidcError::Verify)
+        }
         AlgorithmParameters::OctetKey(oct) => {
             use base64::engine::general_purpose::URL_SAFE_NO_PAD;
             use base64::Engine as _;
@@ -213,10 +221,6 @@ fn decoding_key_for(jwk: &Jwk) -> Result<DecodingKey, OidcError> {
             })?;
             Ok(DecodingKey::from_secret(&secret))
         }
-        other => Err(OidcError::UnsupportedAlg(match other {
-            AlgorithmParameters::OctetKeyPair(_) => Algorithm::EdDSA,
-            _ => Algorithm::HS256,
-        })),
     }
 }
 
