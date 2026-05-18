@@ -581,9 +581,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/saved", get(bookmarks::get_saved))
         .route("/sidebar/categories", post(sidebar_categories::post_create))
         .route(
+            "/sidebar/categories/positions",
+            axum::routing::patch(sidebar_categories::patch_category_positions),
+        )
+        .route(
             "/sidebar/categories/{category_id}",
             axum::routing::patch(sidebar_categories::patch_category)
                 .delete(sidebar_categories::delete_category),
+        )
+        .route(
+            "/sidebar/categories/{category_id}/positions",
+            axum::routing::patch(sidebar_categories::patch_room_positions),
         )
         .route(
             "/sidebar/categories/{category_id}/rooms/{room_id}",

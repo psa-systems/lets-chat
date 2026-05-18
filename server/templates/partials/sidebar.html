@@ -43,8 +43,9 @@
     </form>
   </div>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">
+    <div data-category-list data-positions-url="/sidebar/categories/positions" class="space-y-4">
     {% for category in sidebar_categories %}
-    <section data-category-id="{{ category.id }}">
+    <section data-category-id="{{ category.id }}" draggable="true">
       <div class="flex items-center justify-between px-2">
         <form hx-patch="/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex-1 min-w-0">
           {% if category.collapsed %}
@@ -70,9 +71,9 @@
         </details>
       </div>
       {% if !category.collapsed %}
-      <ul class="mt-1">
+      <ul class="mt-1 min-h-[8px]" data-room-list data-positions-url="/sidebar/categories/{{ category.id }}/positions">
         {% for room in category.rooms %}
-        <li>
+        <li data-room-id="{{ room.id }}" draggable="true">
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
         </li>
@@ -81,8 +82,9 @@
       {% endif %}
     </section>
     {% endfor %}
+    </div>
     {% if !sidebar_rooms.is_empty() %}
-    <section data-category-id="">
+    <section>
       <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}All rooms{% else %}Rooms{% endif %}</h2>
       <ul class="mt-1">
         {% for room in sidebar_rooms %}
