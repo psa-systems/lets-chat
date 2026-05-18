@@ -39,6 +39,21 @@ services:
       # SMTP_USERNAME: ""
       # SMTP_PASSWORD: ""
       # SMTP_FROM: ""
+      # Optional: seed an OIDC SSO provider on first boot. When all
+      # three are set, the L6 startup path inserts a row into
+      # sso_providers under the slug "default" and enables it; on
+      # subsequent boots the env values are ignored (the DB wins,
+      # admin UI edits survive restarts). Register the client on the
+      # IdP side first (mokosh-server: `just register-lets-chat-client`).
+      # See docs/lets-chat/sso/10-admin-managed-providers.md.
+      # LETS_CHAT_SSO_ISSUER: "https://${USER}-mokosh-api.a8n.run"
+      # LETS_CHAT_SSO_CLIENT_ID: ""
+      # LETS_CHAT_SSO_CLIENT_SECRET: ""
+      # Optional: hard-disable the password sign-in path entirely. POST
+      # /login, /register, /forgot, /reset, /settings/password all 404.
+      # Existing password rows stay; flip it off to resume the password
+      # flow. Independent of LETS_CHAT_SSO_ISSUER but typically paired.
+      # LETS_CHAT_LOCAL_LOGIN_DISABLED: "true"
     volumes:
       - lets-chat-data:/data
     networks:
