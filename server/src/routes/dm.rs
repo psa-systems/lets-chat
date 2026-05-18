@@ -54,6 +54,8 @@ pub async fn get_dm(
     if blocked {
         let (
             sidebar_categories,
+            sidebar_starred_rooms,
+            sidebar_starred_peers,
             sidebar_rooms,
             sidebar_peers,
             switcher,
@@ -64,6 +66,8 @@ pub async fn get_dm(
         let page = WelcomePage {
             user: &user,
             sidebar_categories: &sidebar_categories,
+            sidebar_starred_rooms: &sidebar_starred_rooms,
+            sidebar_starred_peers: &sidebar_starred_peers,
             can_manage_sidebar_categories,
             sidebar_current_enclave,
             sidebar_rooms: &sidebar_rooms,
@@ -88,6 +92,8 @@ pub async fn get_dm(
             if !peer.is_profile_public {
                 let (
                     sidebar_categories,
+                    sidebar_starred_rooms,
+                    sidebar_starred_peers,
                     sidebar_rooms,
                     sidebar_peers,
                     switcher,
@@ -101,6 +107,8 @@ pub async fn get_dm(
                 let page = WelcomePage {
                     user: &user,
                     sidebar_categories: &sidebar_categories,
+                    sidebar_starred_rooms: &sidebar_starred_rooms,
+                    sidebar_starred_peers: &sidebar_starred_peers,
                     can_manage_sidebar_categories,
                     sidebar_current_enclave,
                     sidebar_rooms: &sidebar_rooms,
@@ -266,6 +274,8 @@ pub async fn get_dm(
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         mut sidebar_peers,
         switcher,
@@ -294,6 +304,8 @@ pub async fn get_dm(
         peer: &peer,
         room: &room,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

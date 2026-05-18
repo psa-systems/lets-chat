@@ -211,6 +211,8 @@ pub async fn get_landing(
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -225,6 +227,8 @@ pub async fn get_landing(
         can_manage,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
@@ -242,6 +246,8 @@ pub async fn get_discover(
     let enclaves = db::enclave::list_public_enclaves(&state.chat).await?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -253,6 +259,8 @@ pub async fn get_discover(
         enclaves: &enclaves,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
@@ -606,6 +614,8 @@ pub async fn get_settings(
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -620,6 +630,8 @@ pub async fn get_settings(
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
@@ -727,10 +739,13 @@ pub async fn post_leave(
         ));
     }
     // LC-79 redesign: categorization is per-enclave / shared. Leaving
-    // an enclave doesn't dirty any user-specific assignment row (there
-    // aren't any). The assignment rows live with the enclave and stay
-    // valid for the remaining members.
+    // an enclave doesn't dirty any category row. LC-80: stars are
+    // per-user; scrub the leaving user's stars on rooms they're
+    // about to lose access to so a re-join starts fresh.
+    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, false).await?;
+    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &user.id).await?;
+    db::starred_rooms::forget_rooms(&state.auth, &user.id, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &user.id,
         &ChatEvent::EnclaveMemberRemoved {
@@ -780,8 +795,12 @@ pub async fn post_kick(
         ));
     }
     // LC-79 redesign: per-enclave categorization is shared, not
-    // per-user. Kicking a user does not affect any assignment row.
+    // per-user. LC-80: stars are per-user; scrub the kicked user's
+    // stars on rooms they're about to lose access to.
+    let lost_rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &target, false).await?;
+    let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &target).await?;
+    db::starred_rooms::forget_rooms(&state.auth, &target, &lost_ids).await?;
     state.hub.broadcast_to_user(
         &target,
         &ChatEvent::EnclaveMemberRemoved {
@@ -990,6 +1009,9 @@ pub async fn post_remove_room_member(
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     db::chat::remove_room_member(&state.chat, room_id, &target).await?;
+    // LC-80: drop the removed user's star on this room so re-adding
+    // them doesn't resurrect the old star.
+    db::starred_rooms::forget_room(&state.auth, &target, room_id).await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -1000,6 +1022,8 @@ pub async fn get_invitations(
     let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -1010,6 +1034,8 @@ pub async fn get_invitations(
         user: &user,
         invitations: &invs,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

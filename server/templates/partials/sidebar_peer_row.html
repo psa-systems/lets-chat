@@ -1,0 +1,23 @@
+<div class="flex items-center group">
+  <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex-1 flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-slate-400{% endif %}">
+    {% let avatar_user_id = peer.id.clone() %}
+    {% let avatar_username = peer.username.clone() %}
+    {% let avatar_ext = peer.avatar_ext.clone() %}
+    {% let avatar_status = peer.status.clone() %}
+    {% let avatar_custom_status = peer.custom_status.clone() %}
+    {% let avatar_size = "h-6 w-6 text-xs" %}
+    {% include "partials/avatar.html" %}
+    <div class="min-w-0 flex-1">
+      <div class="truncate">{{ peer.label() }}</div>
+      <div data-user-custom="{{ peer.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+    </div>
+    {% let kind = "dm" %}
+    {% let id = peer.id.clone() %}
+    {% let unread = peer.unread %}
+    {% let mute_mode = peer.mute_mode.as_str() %}
+    {% include "partials/unread_badge.html" %}
+  </a>
+  <form hx-post="/rooms/{{ peer.dm_room_id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
+    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-slate-300 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}Unstar{% else %}Star{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
+  </form>
+</div>

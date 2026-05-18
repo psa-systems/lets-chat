@@ -372,6 +372,8 @@ async fn render_pins_page(
         .collect();
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -382,6 +384,8 @@ async fn render_pins_page(
         user,
         asset_version: &state.asset_version,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,

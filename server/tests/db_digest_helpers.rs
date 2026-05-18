@@ -28,6 +28,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/auth/0015_pending_registrations.sql"),
         include_str!("../migrations/auth/0016_sidebar_categories.sql"),
         include_str!("../migrations/auth/0017_drop_sidebar_categories_add_collapsed.sql"),
+        include_str!("../migrations/auth/0018_starred_rooms.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

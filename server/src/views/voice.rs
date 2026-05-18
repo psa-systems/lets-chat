@@ -18,6 +18,8 @@ pub struct VoicePage<'a> {
     pub room: &'a Room,
     pub enclave_id: i64,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
     pub can_manage_sidebar_categories: bool,
     pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
