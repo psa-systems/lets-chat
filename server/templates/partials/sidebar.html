@@ -94,7 +94,7 @@
       <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}All rooms{% else %}Rooms{% endif %}</h2>
       <ul class="mt-1">
         {% for room in sidebar_rooms %}
-        <li>
+        <li{% if !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
         </li>
