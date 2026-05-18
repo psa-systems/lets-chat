@@ -85,6 +85,12 @@ pub enum ChatEvent {
         enclave_id: i64,
         room_id: i64,
     },
+    /// Shared room-category state changed (create / rename / delete /
+    /// assign / reorder). Every member of `enclave_id` re-renders their
+    /// sidebar so live tabs catch up.
+    SidebarCategoriesChanged {
+        enclave_id: i64,
+    },
     EnclaveRoomRemoved {
         enclave_id: i64,
         room_id: i64,

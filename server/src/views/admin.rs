@@ -43,6 +43,8 @@ pub struct RoomRowFragment<'a> {
 pub struct UsersPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -66,6 +68,8 @@ pub struct UserRowFragment<'a> {
 pub struct RoomsPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -83,6 +87,8 @@ pub struct RoomsPage<'a> {
 pub struct ModLogPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -100,6 +106,8 @@ pub struct ModLogPage<'a> {
 pub struct SettingsPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -144,6 +152,8 @@ pub struct AdminEnclaveView {
 pub struct EnclavesPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
@@ -161,6 +171,8 @@ pub struct EnclavesPage<'a> {
 pub struct InvitesPage<'a> {
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
