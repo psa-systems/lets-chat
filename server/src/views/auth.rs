@@ -1,5 +1,12 @@
 use askama::Template;
 
+/// One enabled SSO provider, projected for the login page's
+/// "Sign in with X" button row. Doc 10 section 6.
+pub struct LoginSsoButton {
+    pub id: String,
+    pub display_name: String,
+}
+
 #[derive(Template)]
 #[template(path = "auth/login.html")]
 pub struct LoginPage<'a> {
@@ -8,6 +15,13 @@ pub struct LoginPage<'a> {
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub build_date: &'a str,
+    /// When true (LETS_CHAT_LOCAL_LOGIN_DISABLED), the username +
+    /// password form is removed from the page entirely. Per doc 10
+    /// section 8 this is a hard switch, not a CSS hide.
+    pub password_form_hidden: bool,
+    /// Enabled SSO providers - one button rendered per entry. Empty
+    /// when no providers configured (no SSO buttons + no divider).
+    pub sso_buttons: Vec<LoginSsoButton>,
 }
 
 #[derive(Template)]
