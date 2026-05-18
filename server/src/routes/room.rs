@@ -622,6 +622,12 @@ async fn resolve_tokens_for_room(
         let candidates = candidate_ids_for_room(state, room).await?;
         let candidate_set: std::collections::HashSet<&str> =
             candidates.iter().map(String::as_str).collect();
+        // LC-83: a token can resolve to either a user or a per-enclave
+        // group. User takes precedence so a group named the same as a
+        // username doesn't shadow the user (deletable group; user is
+        // canonical). Group expansion drops into the same dedup that
+        // collapses @here / @channel / @username overlaps below.
+        let enclave_id = super::enclave_for_room(state, room.id).await?;
         for token in user_tokens {
             if let Some(rec) = db::auth::find_user_by_username(&state.auth, token).await? {
                 if rec.id == author_id {
@@ -634,6 +640,29 @@ async fn resolve_tokens_for_room(
                     user_id: rec.id,
                     username: rec.username,
                 });
+                continue;
+            }
+            if let Some(eid) = enclave_id {
+                if let Some(group_id) =
+                    db::user_groups::find_by_name(&state.chat, eid, token).await?
+                {
+                    let member_ids =
+                        db::user_groups::list_member_ids(&state.chat, group_id).await?;
+                    for uid in member_ids {
+                        if uid == author_id {
+                            continue;
+                        }
+                        if !candidate_set.contains(uid.as_str()) {
+                            continue;
+                        }
+                        if let Some(rec) = db::auth::find_user_by_id(&state.auth, &uid).await? {
+                            targets.push(db::mentions::MentionRef {
+                                user_id: rec.id,
+                                username: rec.username,
+                            });
+                        }
+                    }
+                }
             }
         }
     }
