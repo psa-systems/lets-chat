@@ -87,6 +87,31 @@ async fn send(app: &Router, sess: &str, method: Method, uri: &str, body: &str) -
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+/// Variant of `send` that returns (status, body) and lets the caller
+/// inject an `HX-Current-URL` header so handlers that derive the
+/// current enclave from the request can be exercised.
+async fn send_with_hx_url(
+    app: &Router,
+    sess: &str,
+    method: Method,
+    uri: &str,
+    body: &str,
+    hx_current_url: &str,
+) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={sess}"))
+        .header("HX-Current-URL", hx_current_url)
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn category_count(auth: &SqlitePool, user_id: &str) -> i64 {
     let row = sqlx::query("SELECT COUNT(*) AS n FROM sidebar_categories WHERE user_id = ?")
         .bind(user_id)
@@ -319,6 +344,31 @@ async fn room_positions_endpoint_refuses_inaccessible_room() {
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
+}
+
+#[tokio::test]
+async fn create_category_preserves_room_list_when_viewing_enclave() {
+    // Regression: render_sidebar_fragment used to always call
+    // load_sidebar(None) which blanks `sidebar_rooms` (Home view shows
+    // DMs only). Creating a category while viewing an enclave then
+    // wiped the "All rooms" section from the swap response. The
+    // HX-Current-URL header now drives the enclave context so the
+    // rebuilt sidebar still lists the seeded room.
+    let t = app().await;
+    let (status, body) = send_with_hx_url(
+        &t.app,
+        &t.session,
+        Method::POST,
+        "/sidebar/categories",
+        "name=Work",
+        "http://localhost:8080/enclave/1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("/room/1\""),
+        "expected the seeded General room link in the swapped sidebar body, got: {body}"
+    );
 }
 
 #[tokio::test]
