@@ -53,19 +53,26 @@
     ro.observe(messages);
   }
 
-  // Teardown: when #main is replaced by the WS reconnect soft-refresh (the
-  // only in-place re-render path that reaches scripts under #main today),
-  // htmx fires htmx:beforeCleanupElement on every descendant. Drop the four
-  // body listeners we attached so the next render's IIFE does not double-fire.
-  // The messages-scroll listener goes with the #messages element naturally.
-  function teardown() {
+  // Teardown when the #messages element itself is detached (page swap,
+  // navigation). `htmx:beforeCleanupElement` BUBBLES, so listening on any
+  // ancestor catches arbitrary descendant cleanups too: a mention popover
+  // refresh inside the composer cleans up the previous <ul>, that event
+  // bubbles up through the composer form and #main, and a `{ once: true }`
+  // teardown attached to #main would fire on the FIRST popover swap,
+  // permanently disabling autoscroll. Listen on #messages and filter on
+  // `evt.target === messages` so we only react when #messages itself is
+  // the element being cleaned up; descendants (message edits via OOB
+  // outerHTML, etc.) bubble through but do not trigger teardown.
+  var torndown = false;
+  function maybeTeardown(evt) {
+    if (torndown || (evt && evt.target !== messages)) return;
+    torndown = true;
     messages.removeEventListener('scroll', onScroll);
     document.body.removeEventListener('htmx:afterSwap', followIfPinned);
     document.body.removeEventListener('htmx:oobAfterSwap', followIfPinned);
     if (ro) ro.disconnect();
+    messages.removeEventListener('htmx:beforeCleanupElement', maybeTeardown);
   }
-  var root = document.currentScript.closest('[data-lc-cleanup-root]')
-          || document.currentScript.parentElement;
-  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+  messages.addEventListener('htmx:beforeCleanupElement', maybeTeardown);
 })();
 </script>
