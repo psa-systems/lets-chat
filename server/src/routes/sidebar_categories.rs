@@ -141,6 +141,78 @@ pub async fn delete_room_assignment(
     render_sidebar_fragment(&state, &user).await
 }
 
+/// Form shape for the two positions endpoints. The body is a single
+/// comma-separated `ids` field (eg. `ids=3,1,2`) so the standard
+/// `application/x-www-form-urlencoded` codec serde-urlencoded uses can
+/// decode it. The repeated-key shape (`ids[]=1&ids[]=2`) is not
+/// supported by axum's default Form extractor.
+#[derive(Deserialize)]
+pub struct PositionsForm {
+    #[serde(default)]
+    pub ids: String,
+}
+
+impl PositionsForm {
+    /// Parse the comma-separated id list into a `Vec<i64>`. Skips empty
+    /// entries so a leading / trailing / repeated comma in the request
+    /// body is tolerated; surfaces a 400 for any non-integer entry so
+    /// the client gets a clear error rather than a silent reorder skip.
+    fn parsed_ids(&self) -> Result<Vec<i64>, AppError> {
+        self.ids
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.parse::<i64>()
+                    .map_err(|_| AppError::BadRequest(format!("invalid id: {s}")))
+            })
+            .collect()
+    }
+}
+
+/// PATCH /sidebar/categories/positions - reorder all categories owned
+/// by the caller. Body carries the new ordering as
+/// `ids=<cat_id>,<cat_id>,...`.
+pub async fn patch_category_positions(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Form(form): Form<PositionsForm>,
+) -> Result<Html, AppError> {
+    let ids = form.parsed_ids()?;
+    db::sidebar_categories::set_category_positions(&state.auth, &user.id, &ids).await?;
+    render_sidebar_fragment(&state, &user).await
+}
+
+/// PATCH /sidebar/categories/{cat_id}/positions - reorder the rooms in
+/// one category. The body is the new ordering of room ids; rooms that
+/// were previously in a different category get reassigned to this one
+/// (the cross-category drag case). Each room id is membership-checked
+/// against `chat.db` first so the endpoint cannot disclose private-room
+/// existence.
+pub async fn patch_room_positions(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(category_id): Path<i64>,
+    Form(form): Form<PositionsForm>,
+) -> Result<Html, AppError> {
+    let ids = form.parsed_ids()?;
+    // Confirm the target category belongs to the user up-front so a
+    // spoofed id from the form does not write rows under someone else's
+    // category.
+    let categories = db::sidebar_categories::list_categories(&state.auth, &user.id).await?;
+    if !categories.iter().any(|c| c.id == category_id) {
+        return Err(AppError::NotFound);
+    }
+    let is_admin = user.role == "admin";
+    for room_id in &ids {
+        if !db::chat::is_room_accessible(&state.chat, *room_id, &user.id, is_admin).await? {
+            return Err(AppError::Forbidden);
+        }
+    }
+    db::sidebar_categories::set_room_positions(&state.auth, &user.id, category_id, &ids).await?;
+    render_sidebar_fragment(&state, &user).await
+}
+
 /// Re-render the sidebar partial. Uses `SidebarUpdateFragment` (the same
 /// shape used for WebSocket-driven sidebar updates) so HTMX swaps the
 /// `#sidebar` element via the `hx-swap-oob` attribute baked into
