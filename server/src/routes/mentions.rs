@@ -63,6 +63,25 @@ pub async fn get_autocomplete(
                 "Notify the entire room",
             ));
         }
+        // User groups live per-enclave. Rooms outside an enclave (DMs above,
+        // legacy enclave-less public rooms) cannot match a group, so the
+        // resolver in routes/room.rs treats them as plain text; skip the
+        // lookup here too.
+        if let Some(enclave_id) = super::enclave_for_room(&state, room_id).await? {
+            let groups = db::user_groups::list_for_enclave(&state.chat, enclave_id).await?;
+            for g in groups {
+                if results.len() >= MAX {
+                    break;
+                }
+                if !trimmed.is_empty() && !g.name.to_ascii_lowercase().contains(&q_lower) {
+                    continue;
+                }
+                let count = db::user_groups::list_member_ids(&state.chat, g.id)
+                    .await?
+                    .len() as i64;
+                results.push(MentionSuggestion::group(g.name, count));
+            }
+        }
     }
 
     // User suggestions fill the remainder.
