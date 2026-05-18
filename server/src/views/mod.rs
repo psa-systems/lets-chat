@@ -7,6 +7,7 @@ pub mod email_auth;
 pub mod email_digest;
 pub mod enclave;
 pub mod home;
+pub mod inbox;
 pub mod layout;
 pub mod login_alert;
 pub mod markdown;

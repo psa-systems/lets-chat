@@ -1,0 +1,22 @@
+{% for item in items %}
+<li class="px-4 py-3 hover:bg-slate-50">
+  <a href="{{ item.target_path }}" class="block">
+    <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+      <span class="font-semibold text-slate-700">{{ item.room_label }}</span>
+      <span>{{ item.created_at }}</span>
+    </div>
+    <div class="text-sm mt-1">
+      <span class="text-slate-700 font-medium">{{ item.author_label }}:</span>
+      <span class="text-slate-600">{{ item.snippet }}</span>
+    </div>
+  </a>
+</li>
+{% endfor %}
+{% if let Some(cursor) = next_cursor %}
+<li class="px-4 py-3 text-center text-xs text-slate-400"
+    hx-get="/inbox?before={{ cursor }}&fragment=1"
+    hx-trigger="revealed"
+    hx-swap="outerHTML">
+  Loading more&hellip;
+</li>
+{% endif %}
