@@ -124,10 +124,11 @@ fn main() {
             } else {
                 WebviewUrl::CustomProtocol(WELCOME_URL.parse()?)
             };
-            WebviewWindowBuilder::new(app, "main", webview_url)
+            let window = WebviewWindowBuilder::new(app, "main", webview_url)
                 .title(&title_for_window)
                 .inner_size(1100.0, 750.0)
                 .build()?;
+            install_media_permission_handler(&window)?;
             build_tray_icon(app.handle())?;
             Ok(())
         })
@@ -196,6 +197,80 @@ fn set_linux_gtk_env() {
 
 #[cfg(not(target_os = "linux"))]
 fn set_linux_gtk_env() {}
+
+// Wire a media-stream auto-grant handler into the underlying webview so
+// WebRTC camera / microphone (and screen-share on Windows) work without
+// silent denials. The webview never navigates off the configured server
+// URL (config.rs + set_server_url enforce this), and a compromised
+// server can already exfiltrate everything via the IPC bridge anyway,
+// so granting unconditionally inside this binary is no weaker than the
+// trust model around `LETS_CHAT_SERVER_URL` itself.
+//
+// macOS / iOS / Android variants live under LC-134 / LC-135 / LC-136
+// in the Apple+mobile tracker (LC-133); those targets need their
+// permission flows wired through Tauri's per-platform hooks once the
+// build paths for those targets land.
+#[cfg(target_os = "linux")]
+fn install_media_permission_handler(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webkit2gtk::glib::Cast;
+    use webkit2gtk::{PermissionRequestExt, UserMediaPermissionRequest, WebViewExt};
+    window.with_webview(|webview| {
+        let wv = webview.inner();
+        wv.connect_permission_request(|_view, request| {
+            if request
+                .downcast_ref::<UserMediaPermissionRequest>()
+                .is_some()
+            {
+                request.allow();
+                true
+            } else {
+                false
+            }
+        });
+    })?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_media_permission_handler(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2PermissionRequestedEventArgs, COREWEBVIEW2_PERMISSION_KIND,
+        COREWEBVIEW2_PERMISSION_KIND_CAMERA, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+        COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+    };
+    use webview2_com::PermissionRequestedEventHandler;
+    window.with_webview(|webview| {
+        let controller = webview.controller();
+        let core = unsafe { controller.CoreWebView2() }.expect("CoreWebView2 unavailable");
+        let handler = PermissionRequestedEventHandler::create(Box::new(
+            |_sender, args: Option<ICoreWebView2PermissionRequestedEventArgs>| {
+                if let Some(args) = args {
+                    unsafe {
+                        let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                        args.PermissionKind(&mut kind)?;
+                        if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                            || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+                        {
+                            args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+                        }
+                    }
+                }
+                Ok(())
+            },
+        ));
+        let mut token = Default::default();
+        unsafe {
+            core.add_PermissionRequested(&handler, &mut token)
+                .expect("add_PermissionRequested failed");
+        }
+    })?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+fn install_media_permission_handler(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    Ok(())
+}
 
 fn run_check_update() -> i32 {
     match update::check() {
