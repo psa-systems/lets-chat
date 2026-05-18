@@ -729,6 +729,32 @@ pub struct ThreadPanelFragment<'a> {
 #[template(path = "room/thread_panel_closed.html")]
 pub struct ThreadPanelClosedFragment;
 
+/// One entry in the edit-history drawer. `body_html` is pre-rendered by the
+/// markdown pipeline so the template emits it with `|safe`. `label` is
+/// pre-computed in the handler ("Edited <ts>" for prior bodies, "Current"
+/// or "Current - last edited <ts>" for the live body) so the template stays
+/// branch-free and consistent with the codebase's `{% if %}`-only
+/// convention (no `{% match %}` in any template today).
+pub struct HistoryEntryView {
+    pub body_html: String,
+    pub label: String,
+}
+
+/// Right-side edit-history drawer. Replaces `#history-panel` outerHTML when
+/// opened. Sibling slot to `#thread-panel`; the two drawers do not share
+/// state and can coexist.
+#[derive(Template)]
+#[template(path = "room/history_panel.html")]
+pub struct HistoryPanelFragment<'a> {
+    pub message_id: i64,
+    pub entries: &'a [HistoryEntryView],
+}
+
+/// Empty history panel container, used to close the drawer.
+#[derive(Template)]
+#[template(path = "room/history_panel_closed.html")]
+pub struct HistoryPanelClosedFragment;
+
 /// Single reply rendered inside the panel's reply list.
 #[derive(Template)]
 #[template(path = "room/thread_reply.html")]

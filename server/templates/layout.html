@@ -10,7 +10,8 @@
   </div>
   <div id="lc-nav-backdrop" class="hidden fixed inset-0 z-20 bg-black/40 md:hidden" onclick="lcCloseNav()"></div>
   <main id="main" class="flex-1 flex flex-col overflow-hidden min-h-0">
-    <button type="button" aria-label="Open navigation"
+    <button type="button" id="lc-nav-toggle" aria-label="Toggle navigation"
+      aria-expanded="false" aria-controls="lc-nav-panel"
       class="md:hidden inline-flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-slate-600 hover:text-slate-900"
       onclick="lcOpenNav()">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -21,13 +22,14 @@
     {% block main %}{% endblock %}
   </main>
   <div id="status-events-slot" class="hidden"></div>
-  <div id="lc-notify-bus" class="hidden"></div>
+  <div id="lc-notify-bus" class="sr-only" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
   <div id="lc-call-bus" class="hidden"></div>
   <div id="lc-voice-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
-    <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
       <div class="w-80 rounded-lg bg-white p-6 text-center shadow-xl">
-        <div class="text-sm text-slate-500">Incoming call</div>
+        <div id="lc-call-incoming-title" class="text-sm text-slate-500">Incoming call</div>
         <div data-lc-call-incoming-name class="mt-1 text-lg font-semibold"></div>
         <div class="mt-5 flex justify-center gap-3">
           <button type="button" data-lc-call-accept class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">Accept</button>
@@ -35,7 +37,9 @@
         </div>
       </div>
     </div>
-    <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-slate-900">
+    <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-slate-900"
+         role="dialog" aria-modal="true" aria-labelledby="lc-call-active-title" aria-hidden="true">
+      <h2 id="lc-call-active-title" class="sr-only">Active call</h2>
       <div class="relative flex-1 overflow-hidden">
         <video data-lc-remote-video autoplay playsinline class="absolute inset-0 h-full w-full bg-black object-contain"></video>
         <img data-lc-remote-avatar alt="" src=""
@@ -45,12 +49,12 @@
           <img data-lc-local-avatar src="/avatars/{{ user.id }}" alt="{{ user.display_label() }}"
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
-        <div data-lc-call-status class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
+        <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
       </div>
       <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
-        <button type="button" data-lc-call-mute class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
-        <button type="button" data-lc-call-camera class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">Start video</button>
-        <button type="button" data-lc-call-screen class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Share screen</button>
+        <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
+        <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">Start video</button>
+        <button type="button" data-lc-call-screen aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Share screen</button>
         <button type="button" data-lc-call-hangup class="rounded-full bg-red-600 px-6 py-2 text-sm font-medium text-white hover:bg-red-700">Hang up</button>
       </div>
     </div>
@@ -180,9 +184,63 @@
     }
     refresh();
   }
+  // Drain debouncer. The bus is now an aria-live region (sr-only in the
+  // accessibility tree, visually hidden) so newly-added children get read
+  // by the SR. We must NOT immediately replaceChildren() the way the old
+  // code did - that removes the node before the SR reads its text. The
+  // refactor:
+  //   1. Visual + audio + push side effects still fire synchronously in
+  //      process(node), unchanged. Those are independent of the SR drain.
+  //   2. For `mentioned` events only, write a SR-readable summary into the
+  //      same node's textContent so the live-region announcement carries
+  //      text. mention_cleared has no announcement; it stays empty.
+  //   3. Drain children 2000ms after the LAST mutation. Burst of mentions
+  //      cleared in one shot; SR has already announced each one because
+  //      aria-live + aria-relevant="additions" fires per child added.
+  // 2000ms is conservative against the typical 100-300ms SR pickup window;
+  // tune down only after confirming announcements still land on the SR
+  // you test against.
+  function announceForScreenReader(node){
+    if (node.getAttribute('data-event') !== 'mentioned') return;
+    var kind = node.getAttribute('data-kind');
+    var author = node.getAttribute('data-author') || '';
+    var roomLabel = node.getAttribute('data-room-label') || '';
+    // Degrade gracefully when fields are missing rather than emit
+    // "Mention from undefined in #general". The four-way matrix:
+    //   dm  + author    -> "Direct message from <author>"
+    //   dm  - author    -> "New direct message"
+    //   not + both      -> "Mention from <author> in <room>"
+    //   not - author    -> "Mention in <room>" (room still present)
+    //   not - room      -> "Mention from <author>"
+    //   not - both      -> "New mention"
+    var msg;
+    if (kind === 'dm') {
+      msg = author ? ('Direct message from ' + author) : 'New direct message';
+    } else if (author && roomLabel) {
+      msg = 'Mention from ' + author + ' in ' + roomLabel;
+    } else if (author) {
+      msg = 'Mention from ' + author;
+    } else if (roomLabel) {
+      msg = 'Mention in ' + roomLabel;
+    } else {
+      msg = 'New mention';
+    }
+    node.textContent = msg;
+  }
+  var drainTimer = null;
   new MutationObserver(function(muts){
-    muts.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 1) process(n); }); });
-    bus.replaceChildren();
+    muts.forEach(function(m){
+      Array.prototype.forEach.call(m.addedNodes, function(n){
+        if (n.nodeType !== 1) return;
+        process(n);                  // visual / audio / push - immediate, unchanged
+        announceForScreenReader(n);  // sr-only summary into node.textContent
+      });
+    });
+    if (drainTimer) clearTimeout(drainTimer);
+    drainTimer = setTimeout(function(){
+      drainTimer = null;
+      bus.replaceChildren();
+    }, 2000);
   }).observe(bus, { childList: true });
 })();
 </script>
@@ -194,13 +252,20 @@ function lcOpenNav(){
   p.classList.remove('hidden');
   p.classList.add('flex');
   document.getElementById('lc-nav-backdrop').classList.remove('hidden');
+  var t = document.getElementById('lc-nav-toggle');
+  if (t) t.setAttribute('aria-expanded', 'true');
 }
 function lcCloseNav(){
+  // Desktop keeps the panel always-visible via md:flex; bail before mutating
+  // anything (including aria-expanded - the toggle button itself is md:hidden
+  // on desktop, so its state is moot).
   if (window.matchMedia('(min-width: 768px)').matches) return;
   var p = document.getElementById('lc-nav-panel');
   p.classList.add('hidden');
   p.classList.remove('flex');
   document.getElementById('lc-nav-backdrop').classList.add('hidden');
+  var t = document.getElementById('lc-nav-toggle');
+  if (t) t.setAttribute('aria-expanded', 'false');
 }
 document.body.addEventListener('click', function(e){
   if (window.matchMedia('(min-width: 768px)').matches) return;
@@ -266,6 +331,13 @@ document.body.addEventListener('click', function(e){
   function setBanner(next, msg) {
     bannerEl.setAttribute('data-state', next);
     textEl.textContent = msg || '';
+    // Escalate to role=alert when the failure has been ongoing long
+    // enough to merit interruption (matches the visual escalation to
+    // red). Brief reconnects and the green "connected" flash stay
+    // polite (role=status) so they do not step on whatever the user
+    // is reading. aria-live="polite" is set in the template; role
+    // swap is what changes the assertive vs. polite behavior.
+    textEl.setAttribute('role', next === 'failed-long' ? 'alert' : 'status');
   }
 
   function startWatchdog() {
@@ -605,6 +677,113 @@ document.body.addEventListener('click', function(e){
   // these on document.body). Re-scan the swapped subtree.
   document.body.addEventListener('htmx:afterSettle', function(e){ scan(e.target); });
   document.body.addEventListener('htmx:oobAfterSwap', function(e){ scan(e.target); });
+})();
+</script>
+<script>
+// Persistent-shell script: focus trap helper for modal dialogs. Exposes
+// `window.__lcDialogTrap(rootElement)` which installs a `keydown` listener
+// on the root, wrapping Tab and Shift+Tab against the first/last focusable
+// descendant. Returns `{ dispose }` so the caller can detach the listener
+// when the dialog closes.
+//
+// Used by call.js for the incoming-call and active-call dialogs. The
+// listener-cleanup discipline applies here even though the lifecycle is
+// open/close instead of htmx:beforeCleanupElement - every addEventListener
+// MUST be paired with removeEventListener on EVERY lifetime-end path.
+// call.js funnels every dialog-close through teardown(), which disposes
+// exactly once.
+(function(){
+  var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  window.__lcDialogTrap = function(root){
+    if (!root) return { dispose: function(){} };
+    function focusable(){
+      // Re-query on every Tab so dialogs whose contents change mid-call
+      // (Mute toggling text, Camera toggling text, status pill mutating)
+      // still wrap to whatever is currently focusable.
+      var nodes = root.querySelectorAll(FOCUSABLE);
+      return Array.prototype.filter.call(nodes, function(el){
+        // Skip elements that are inside a hidden subtree (CSS `display:none`
+        // bubbles through `offsetParent === null` for non-fixed elements;
+        // dialogs themselves are position:fixed so this check is for their
+        // descendants).
+        return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+      });
+    }
+    function onKey(e){
+      if (e.key !== 'Tab') return;
+      var items = focusable();
+      if (items.length === 0) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last || !root.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    root.addEventListener('keydown', onKey);
+    return {
+      dispose: function(){
+        root.removeEventListener('keydown', onKey);
+      }
+    };
+  };
+})();
+</script>
+<script>
+// Persistent-shell script: HTMX afterSwap focus restoration. Cascade:
+//   1. If the swap target (or any descendant) is [autofocus], focus it.
+//   2. Else if the triggering element is still in the document AND focusable,
+//      focus it.
+//   3. Else do nothing - browser default (focus stays where it was) is the
+//      right behavior for OOB-only swaps and for swaps that replaced their
+//      own trigger.
+//
+// Cooperation contract: this listener is non-blocking. It does NOT call
+// stopPropagation / stopImmediatePropagation, so other htmx:afterSwap
+// listeners (e.g. composer.html's mention-popover handler, the
+// voice-player rescan in this file) also run. Order is determined by
+// registration sequence on document.body. If anyone ever adds a handler
+// that calls stopImmediatePropagation, registration order silently
+// becomes load-bearing - audit all afterSwap listeners before doing so.
+//
+// Opt-out: add `data-lc-skip-focus` to a swap target (or any ancestor) to
+// bypass this handler entirely. Used by the mention-popover slot in
+// composer.html so the textarea retains focus while the popover refreshes.
+//
+// Carve-outs by design (no opt-out needed):
+//   - Composer message-send uses `hx-swap="none"` so afterSwap does not fire
+//     for that POST. The composer's own `hx-on::after-request` calls
+//     `ta.focus()` - no race with this handler.
+//   - WebSocket-driven OOB swaps (sidebar badges, new message rows, typing
+//     indicators) do not carry a meaningful `requestConfig.elt`, so step 2
+//     naturally fails the focusable check and step 3 (do nothing) wins.
+//     Focus stays in the composer / wherever the user had it.
+(function(){
+  var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function isLiveFocusable(el){
+    if (!el || el.nodeType !== 1 || !document.contains(el)) return false;
+    return typeof el.matches === 'function' && el.matches(FOCUSABLE);
+  }
+  document.body.addEventListener('htmx:afterSwap', function(evt){
+    var target = evt && evt.target;
+    if (!target || target.nodeType !== 1) return;
+    // Opt-out: walk up from the target so a marker on the slot OR any
+    // ancestor of it (e.g. a wrapper) suppresses the cascade.
+    if (typeof target.closest === 'function' && target.closest('[data-lc-skip-focus]')) return;
+    var auto = typeof target.querySelector === 'function' ? target.querySelector('[autofocus]') : null;
+    if (isLiveFocusable(auto)) { auto.focus(); return; }
+    var elt = evt.detail && evt.detail.requestConfig && evt.detail.requestConfig.elt;
+    if (isLiveFocusable(elt)) { elt.focus(); return; }
+    // step 3: do nothing
+  });
 })();
 </script>
 {% endblock %}

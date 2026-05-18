@@ -77,7 +77,8 @@ pub async fn post_login(
 
     if record.totp_enabled && state.two_factor_available() {
         let pending = db::two_factor::create_pending_2fa(&state.auth, &record.id).await?;
-        let cookie = crate::routes::two_factor::build_pending_cookie(pending);
+        let cookie =
+            crate::routes::two_factor::build_pending_cookie(state.cookies_secure(), pending);
         let jar = jar.add(cookie);
         if is_htmx(&headers) {
             let mut resp = Response::builder()
@@ -96,7 +97,7 @@ pub async fn post_login(
         db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
             .await?;
     crate::routes::login_alerts::spawn_dispatch(&state, record.id.clone(), ua, ip);
-    let cookie = build_session_cookie(token);
+    let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
 
     if is_htmx(&headers) {
@@ -276,7 +277,7 @@ pub async fn post_register(
         ip.as_deref(),
     )
     .await;
-    let cookie = build_session_cookie(token);
+    let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
 
     if is_htmx(&headers) {
@@ -306,10 +307,10 @@ pub async fn get_logout(
     Ok((jar, Redirect::to("/login")).into_response())
 }
 
-pub(super) fn build_session_cookie(token: String) -> Cookie<'static> {
+pub(super) fn build_session_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(SESSION_COOKIE, token);
     c.set_http_only(true);
-    c.set_secure(true);
+    c.set_secure(secure);
     c.set_same_site(SameSite::Strict);
     c.set_path("/");
     c.set_max_age(Duration::days(30));
