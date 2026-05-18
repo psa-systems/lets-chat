@@ -66,9 +66,11 @@ pub async fn get_enclaves(
             created_at: e.created_at,
         })
         .collect();
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let page = EnclavesPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -105,7 +107,8 @@ pub async fn get_settings(
     AdminUser(user): AdminUser,
     Query(q): Query<SettingsQuery>,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
         .await?
         .unwrap_or_default();
@@ -129,6 +132,7 @@ pub async fn get_settings(
     let uploads_orphan_count = db::uploads::count_orphans(&state.chat).await?;
     let page = SettingsPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -288,7 +292,8 @@ pub async fn get_users(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let records = db::auth::list_users(&state.auth).await?;
     let users: Vec<AdminUserView> = records
         .into_iter()
@@ -302,6 +307,7 @@ pub async fn get_users(
         .collect();
     let page = UsersPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -437,10 +443,12 @@ pub async fn get_invites(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let invites = build_invite_views(&state).await?;
     let page = InvitesPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -516,7 +524,8 @@ pub async fn get_rooms(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let raw_rooms = db::chat::list_rooms(&state.chat, &user.id, true).await?;
     let mut rooms_admin = Vec::with_capacity(raw_rooms.len());
     for r in &raw_rooms {
@@ -533,6 +542,7 @@ pub async fn get_rooms(
     }
     let page = RoomsPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -649,10 +659,12 @@ pub async fn get_modlog(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let entries = db::moderation::list_mod_actions(&state.chat).await?;
     let page = ModLogPage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

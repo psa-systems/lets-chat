@@ -18,7 +18,7 @@ use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::version;
-use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
@@ -255,7 +255,14 @@ pub(crate) async fn load_sidebar(
     state: &AppState,
     user: &User,
     current_enclave: Option<i64>,
-) -> Result<(Vec<SidebarRoom>, Vec<SidebarPeer>), AppError> {
+) -> Result<
+    (
+        Vec<SidebarCategoryGroup>,
+        Vec<SidebarRoom>,
+        Vec<SidebarPeer>,
+    ),
+    AppError,
+> {
     let is_admin = user.role == "admin";
 
     let (sidebar_rooms, sidebar_peers) = if let Some(eid) = current_enclave {
@@ -330,7 +337,40 @@ pub(crate) async fn load_sidebar(
         (Vec::new(), sidebar_peers)
     };
 
-    Ok((sidebar_rooms, sidebar_peers))
+    // Bucket categorized rooms into per-user category groups. Categories
+    // and assignments both live in `auth.db`; this is a single small
+    // query per (category list, assignment map) so the cost stays
+    // negligible vs the existing chat.db sidebar work above.
+    let mut category_meta = db::sidebar_categories::list_categories(&state.auth, &user.id).await?;
+    let assignments = db::sidebar_categories::room_assignments(&state.auth, &user.id).await?;
+
+    let mut by_category: HashMap<i64, Vec<(i64, SidebarRoom)>> = HashMap::new();
+    let mut uncategorized: Vec<SidebarRoom> = Vec::with_capacity(sidebar_rooms.len());
+    for room in sidebar_rooms {
+        match assignments.get(&room.id) {
+            Some((cat_id, pos)) => {
+                by_category.entry(*cat_id).or_default().push((*pos, room));
+            }
+            None => uncategorized.push(room),
+        }
+    }
+
+    category_meta.sort_by(|a, b| a.position.cmp(&b.position).then(a.id.cmp(&b.id)));
+    let sidebar_categories: Vec<SidebarCategoryGroup> = category_meta
+        .into_iter()
+        .map(|cat| {
+            let mut rooms = by_category.remove(&cat.id).unwrap_or_default();
+            rooms.sort_by(|a, b| a.0.cmp(&b.0));
+            SidebarCategoryGroup {
+                id: cat.id,
+                name: cat.name,
+                collapsed: cat.collapsed,
+                rooms: rooms.into_iter().map(|(_, r)| r).collect(),
+            }
+        })
+        .collect();
+
+    Ok((sidebar_categories, uncategorized, sidebar_peers))
 }
 
 /// Convenience wrapper that returns sidebar lists plus the switcher entries
@@ -339,10 +379,18 @@ pub(crate) async fn load_chrome(
     state: &AppState,
     user: &User,
     current_enclave: Option<i64>,
-) -> Result<(Vec<SidebarRoom>, Vec<SidebarPeer>, Vec<SwitcherEntry>), AppError> {
-    let (rooms, peers) = load_sidebar(state, user, current_enclave).await?;
+) -> Result<
+    (
+        Vec<SidebarCategoryGroup>,
+        Vec<SidebarRoom>,
+        Vec<SidebarPeer>,
+        Vec<SwitcherEntry>,
+    ),
+    AppError,
+> {
+    let (categories, rooms, peers) = load_sidebar(state, user, current_enclave).await?;
     let switcher = load_switcher(state, user, current_enclave).await?;
-    Ok((rooms, peers, switcher))
+    Ok((categories, rooms, peers, switcher))
 }
 
 /// Resolve a room's enclave so the sidebar/switcher can highlight the right
@@ -465,10 +513,11 @@ pub(crate) async fn handle_not_found(
         Ok(c) => c,
         Err(_) => return (StatusCode::NOT_FOUND, "Not Found").into_response(),
     };
-    let (sidebar_rooms, sidebar_peers, switcher) = chrome;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) = chrome;
     let page = NotFoundPage {
         user: &user,
         path: Some(uri.path().to_string()),
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

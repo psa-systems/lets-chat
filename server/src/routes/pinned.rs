@@ -370,11 +370,12 @@ async fn render_pins_page(
             body: p.body.clone(),
         })
         .collect();
-    let (sidebar_rooms, sidebar_peers, switcher) =
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(state, user, current_enclave).await?;
     let page = PinnedListPage {
         user,
         asset_version: &state.asset_version,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

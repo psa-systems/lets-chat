@@ -47,6 +47,19 @@ impl SidebarPeer {
     }
 }
 
+/// A user-defined sidebar category plus the rooms the user has assigned
+/// to it. The sidebar partial iterates these groups first (in
+/// `position` order) before falling back to the flat `sidebar_rooms`
+/// list, which now holds only rooms the user has NOT categorized.
+/// `collapsed` is a per-user toggle persisted in `auth.db`; the template
+/// hides the room list when true and shows the category header alone.
+pub struct SidebarCategoryGroup {
+    pub id: i64,
+    pub name: String,
+    pub collapsed: bool,
+    pub rooms: Vec<SidebarRoom>,
+}
+
 /// One icon in the leftmost enclave-switcher column. `id = None` is the Home
 /// pseudo-enclave (DM hub). `unread` aggregates unread counts across all
 /// rooms (or DMs, for Home) the user can see in that scope. `pending_invites`
