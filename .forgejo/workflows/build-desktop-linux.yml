@@ -1,6 +1,7 @@
 ---
 
-# Build Linux desktop application and upload as artifact.
+# Build Linux desktop application AND bundles (.deb, .AppImage) and
+# upload all three to the Generic Packages registry.
 name: Build desktop (Linux)
 
 on:
@@ -19,7 +20,7 @@ on:
       - "server/src/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "ci-build/Dockerfile.desktop-linux"
+      - "ci-build/Dockerfile.desktop-linux-bundles"
       - "ci-build/get-tags.nu"
       - ".forgejo/workflows/build-desktop-linux.yml"
 
@@ -68,7 +69,7 @@ jobs:
           print $"Version: ($version)"
           $"version=($version)\n" | save --append $env.GITHUB_OUTPUT
 
-      - name: Build desktop application
+      - name: Build desktop application + bundles
         shell: nu {0}
         run: |
           # CARGO_BUILD_JOBS caps cargo's parallel rustc + build-script
@@ -82,71 +83,77 @@ jobs:
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
               --tag lets-chat-desktop:build
               --load
-              -f ci-build/Dockerfile.desktop-linux
+              -f ci-build/Dockerfile.desktop-linux-bundles
               .
           )
 
-      - name: Extract build artifact
+      - name: Extract build artifacts
         shell: nu {0}
         run: |
           let version = "${{ steps.get-version.outputs.version }}"
           let container = (^docker create lets-chat-desktop:build)
-          mkdir artifacts
-          ^docker cp $"($container):/build/target/release/lets-chat-desktop" "artifacts/"
+          mkdir artifacts artifacts/bundle-linux
+          ^docker cp $"($container):/build/target/release/lets-chat-desktop" "artifacts/lets-chat-desktop-linux-x86_64"
+          # Bundles land under bundle/{deb,appimage}/ with Tauri's
+          # version-stamped filenames (eg. lets-chat_0.1.0_amd64.deb).
+          # Copy whole dirs and resolve actual filenames in the upload
+          # step rather than guessing exact stems here.
+          ^docker cp $"($container):/build/target/release/bundle/deb/." "artifacts/bundle-linux/"
+          ^docker cp $"($container):/build/target/release/bundle/appimage/." "artifacts/bundle-linux/"
           ^docker rm $container
-          let dest = $"artifacts/lets-chat-desktop-($version)-linux-x86_64"
-          mv artifacts/lets-chat-desktop $dest
-          print $"Artifact: ($dest)"
+          print "Bundle contents:"
+          ls artifacts/bundle-linux/ | print
 
-      - name: Upload binary to Generic Packages
+      - name: Upload binary + bundles to Generic Packages
         shell: nu {0}
         env:
           FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
         run: |
           let version = "${{ steps.get-version.outputs.version }}"
-          # Stable filename so the desktop self-updater's manifest can hard-code
-          # `${base}/${version}/lets-chat-desktop-linux-x86_64`.
-          let file = "lets-chat-desktop-linux-x86_64"
-          let src = $"artifacts/lets-chat-desktop-($version)-linux-x86_64"
-          # Build the URL by parsing GITHUB_SERVER_URL into a record,
-          # rewriting the path, and joining it back. Cleaner than dense
-          # string interpolation and lets `url join` handle encoding.
-          let url = (
-            $env.GITHUB_SERVER_URL
-            | url parse
-            | update path ([
-                "api"
-                "packages"
-                $env.PACKAGE_OWNER
-                "generic"
-                $env.PACKAGE_NAME
-                $version
-                $file
-              ] | str join "/")
-            | url join
-          )
           let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
+          let server = ($env.GITHUB_SERVER_URL | url parse)
+          # Stable filenames so the desktop self-updater + release
+          # manifest can hard-code download paths.  Tauri stamps the
+          # bundles with the crate version (lets-chat_0.1.0_amd64.deb,
+          # etc.); resolve the first match for each pattern so the
+          # workflow stays insulated from version-string changes.
+          let deb_src = (ls artifacts/bundle-linux/*.deb | first | get name)
+          let appimage_src = (ls artifacts/bundle-linux/*.AppImage | first | get name)
+          let uploads = [
+              { src: "artifacts/lets-chat-desktop-linux-x86_64", dest: [$version, "lets-chat-desktop-linux-x86_64"] }
+              { src: $deb_src, dest: [$version, "lets-chat-desktop-linux-amd64.deb"] }
+              { src: $appimage_src, dest: [$version, "lets-chat-desktop-linux-amd64.AppImage"] }
+          ]
+          for entry in $uploads {
+              let url = (
+                  $server
+                  | update path ([
+                      "api" "packages" $env.PACKAGE_OWNER
+                      "generic" $env.PACKAGE_NAME
+                  ] | append $entry.dest | str join "/")
+                  | url join
+              )
+              # Generic Packages files are immutable, so PUTting the
+              # same path twice returns 409. Delete any existing copy
+              # first: 204 means it was removed, 404 means nothing was
+              # there to remove. Any other status fails the step.
+              print $"Deleting existing ($url) if present"
+              let delete_status = (
+                  http delete --full --allow-errors --headers $auth $url | get status
+              )
+              if $delete_status not-in [204 404] {
+                  print --stderr $"Unexpected DELETE status: ($delete_status)"
+                  exit 1
+              }
+              print $"DELETE returned ($delete_status)"
 
-          # Generic Packages files are immutable, so PUTting the same path
-          # twice returns 409. Delete any existing copy first: 204 means
-          # it was removed, 404 means nothing was there to remove. Any
-          # other status fails the step (yotun pattern).
-          print $"Deleting existing ($url) if present"
-          let delete_status = (
-            http delete --full --allow-errors --headers $auth $url | get status
-          )
-          if $delete_status not-in [204 404] {
-            print --stderr $"Unexpected DELETE status: ($delete_status)"
-            exit 1
+              print $"Uploading ($entry.src) to ($url)"
+              (
+                  http put
+                      --content-type application/octet-stream
+                      --headers $auth
+                      $url
+                      (open --raw $entry.src)
+              )
           }
-          print $"DELETE returned ($delete_status)"
-
-          print $"Uploading ($src) to ($url)"
-          (
-            http put
-              --content-type application/octet-stream
-              --headers $auth
-              $url
-              (open --raw $src)
-          )
-          print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
+          print $"Uploaded binary + .deb + .AppImage to ($env.PACKAGE_NAME)/($version)"
