@@ -273,8 +273,19 @@ pub async fn get_room(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, current_enclave).await?;
+    let mut sidebar_categories = sidebar_categories;
     if let Some(r) = sidebar_rooms.iter_mut().find(|r| r.id == room_id) {
         r.active = true;
+    } else {
+        // After the LC-79 redesign categorized rooms live inside
+        // `sidebar_categories[i].rooms`; scan those too so the active
+        // room's link still highlights when it sits in a category.
+        for cat in sidebar_categories.iter_mut() {
+            if let Some(r) = cat.rooms.iter_mut().find(|r| r.id == room_id) {
+                r.active = true;
+                break;
+            }
+        }
     }
 
     let mute_mode = db::notifications::room_mute_mode(&state.chat, &user.id, room_id)

@@ -69,8 +69,40 @@
     var list = matchingList(e.target);
     if (!list || !dragged) return;
     e.preventDefault();
-    submitOrder(list);
+    // Uncategorized "All rooms" list opts in to drop by exposing
+    // `data-uncategorize-url` instead of `data-positions-url`. A drop
+    // there means "remove this room's category assignment", so fire a
+    // DELETE per dropped room rather than the bulk positions PATCH.
+    if (list.dataset.uncategorizeUrl) {
+      unassign(list.dataset.uncategorizeUrl, dragged.dataset.roomId);
+    } else {
+      submitOrder(list);
+    }
   });
+
+  function unassign(baseUrl, roomId) {
+    if (!roomId) return;
+    fetch(baseUrl + '/' + encodeURIComponent(roomId), {
+      method: 'DELETE',
+      headers: { 'HX-Request': 'true' },
+      credentials: 'same-origin'
+    }).then(function (res) {
+      if (!res.ok) return;
+      return res.text();
+    }).then(swapSidebar);
+  }
+
+  function swapSidebar(html) {
+    if (!html) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    var fresh = tmp.firstElementChild;
+    if (fresh) {
+      var old = document.getElementById('sidebar');
+      if (old) old.replaceWith(fresh);
+      if (window.htmx && window.htmx.process) window.htmx.process(fresh);
+    }
+  }
 
   // Read the current DOM order from the list and POST it back. The
   // server returns the rebuilt sidebar fragment, which HTMX swaps over
@@ -93,19 +125,6 @@
     }).then(function (res) {
       if (!res.ok) return;
       return res.text();
-    }).then(function (html) {
-      if (!html || !window.htmx) return;
-      // The response body is the full <aside id="sidebar"> with
-      // hx-swap-oob="outerHTML"; let htmx process the swap so OOB
-      // handling matches the existing WS path.
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      var fresh = tmp.firstElementChild;
-      if (fresh) {
-        var old = document.getElementById('sidebar');
-        if (old) old.replaceWith(fresh);
-        if (window.htmx && window.htmx.process) window.htmx.process(fresh);
-      }
-    });
+    }).then(swapSidebar);
   }
 })();
