@@ -320,3 +320,32 @@ async fn room_positions_endpoint_refuses_inaccessible_room() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
 }
+
+#[tokio::test]
+async fn forget_rooms_drops_only_named_assignments() {
+    let t = app().await;
+    let cat = db::sidebar_categories::create_category(&t.auth, &t.user_id, "Work")
+        .await
+        .unwrap();
+    for room_id in [1_i64, 7, 9] {
+        db::sidebar_categories::assign_room(&t.auth, &t.user_id, room_id, cat)
+            .await
+            .unwrap();
+    }
+    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 3);
+
+    // Empty slice is a no-op.
+    db::sidebar_categories::forget_rooms(&t.auth, &t.user_id, &[])
+        .await
+        .unwrap();
+    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 3);
+
+    db::sidebar_categories::forget_rooms(&t.auth, &t.user_id, &[1, 7])
+        .await
+        .unwrap();
+    let remaining = db::sidebar_categories::room_assignments(&t.auth, &t.user_id)
+        .await
+        .unwrap();
+    let ids: Vec<i64> = remaining.keys().copied().collect();
+    assert_eq!(ids, vec![9]);
+}
