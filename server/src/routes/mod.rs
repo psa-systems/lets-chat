@@ -50,6 +50,7 @@ mod room;
 mod saas_auth;
 mod search;
 mod settings;
+mod sidebar_categories;
 mod status;
 pub(crate) mod two_factor;
 mod unfurl;
@@ -529,6 +530,20 @@ pub fn build_router(state: AppState) -> Router {
             post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
         )
         .route("/saved", get(bookmarks::get_saved))
+        .route("/sidebar/categories", post(sidebar_categories::post_create))
+        .route(
+            "/sidebar/categories/{category_id}",
+            axum::routing::patch(sidebar_categories::patch_category)
+                .delete(sidebar_categories::delete_category),
+        )
+        .route(
+            "/sidebar/categories/{category_id}/rooms/{room_id}",
+            axum::routing::patch(sidebar_categories::patch_room_assignment),
+        )
+        .route(
+            "/sidebar/categories/rooms/{room_id}",
+            delete(sidebar_categories::delete_room_assignment),
+        )
         .route(
             "/messages/{message_id}",
             get(room::get_single_message)
