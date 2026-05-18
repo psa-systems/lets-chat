@@ -59,6 +59,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0017_sso_providers.sql"),
             include_str!("../migrations/auth/0018_sso_flows_provider.sql"),
             include_str!("../migrations/auth/0019_sso_group_mappings.sql"),
+            include_str!("../migrations/auth/0020_session_tenant.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -115,6 +116,8 @@ struct StubState {
     email: Mutex<String>,
     /// email_verified claim.
     email_verified: Mutex<bool>,
+    /// `mokosh_active_tenant` claim. None omits the claim entirely.
+    mokosh_active_tenant: Mutex<Option<String>>,
 }
 
 async fn spawn_stub() -> Arc<StubState> {
@@ -128,6 +131,7 @@ async fn spawn_stub() -> Arc<StubState> {
         audience: Mutex::new("the-client-id".into()),
         email: Mutex::new("alice@example.com".into()),
         email_verified: Mutex::new(true),
+        mokosh_active_tenant: Mutex::new(None),
     });
 
     let discovery_body = format!(
@@ -177,18 +181,39 @@ async fn spawn_stub() -> Arc<StubState> {
                         .as_secs() as i64;
                     let mut header = Header::new(Algorithm::HS256);
                     header.kid = Some(KID.into());
-                    let claims = json!({
-                        "iss": issuer,
-                        "aud": *stub.audience.lock().unwrap(),
-                        "exp": now + 600,
-                        "iat": now,
-                        "sub": *stub.sub.lock().unwrap(),
-                        "email": *stub.email.lock().unwrap(),
-                        "email_verified": *stub.email_verified.lock().unwrap(),
-                        "name": "Alice",
-                        "preferred_username": "alice",
-                        "nonce": *stub.nonce.lock().unwrap(),
-                    });
+                    let mut claims = serde_json::Map::new();
+                    claims.insert("iss".into(), serde_json::Value::String(issuer.clone()));
+                    claims.insert(
+                        "aud".into(),
+                        serde_json::Value::String(stub.audience.lock().unwrap().clone()),
+                    );
+                    claims.insert("exp".into(), json!(now + 600));
+                    claims.insert("iat".into(), json!(now));
+                    claims.insert(
+                        "sub".into(),
+                        serde_json::Value::String(stub.sub.lock().unwrap().clone()),
+                    );
+                    claims.insert(
+                        "email".into(),
+                        serde_json::Value::String(stub.email.lock().unwrap().clone()),
+                    );
+                    claims.insert(
+                        "email_verified".into(),
+                        json!(*stub.email_verified.lock().unwrap()),
+                    );
+                    claims.insert("name".into(), serde_json::Value::String("Alice".into()));
+                    claims.insert(
+                        "preferred_username".into(),
+                        serde_json::Value::String("alice".into()),
+                    );
+                    claims.insert(
+                        "nonce".into(),
+                        serde_json::Value::String(stub.nonce.lock().unwrap().clone()),
+                    );
+                    if let Some(t) = stub.mokosh_active_tenant.lock().unwrap().clone() {
+                        claims.insert("mokosh_active_tenant".into(), serde_json::Value::String(t));
+                    }
+                    let claims = serde_json::Value::Object(claims);
                     let id_token = encode(
                         &header,
                         &claims,
@@ -616,4 +641,53 @@ async fn callback_rejects_wrong_audience() {
 
     let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn callback_threads_mokosh_active_tenant_onto_session() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app(&stub).await;
+    let alice = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    db::sso::link_sso_identity(&auth, &alice, &stub.issuer, "sub-default", None, false)
+        .await
+        .unwrap();
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    *stub.mokosh_active_tenant.lock().unwrap() = Some("tenant-acme".into());
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+
+    let row: (Option<String>,) = sqlx::query_as(
+        "SELECT tenant_id FROM sessions WHERE user_id = ? ORDER BY rowid DESC LIMIT 1",
+    )
+    .bind(&alice)
+    .fetch_one(&auth)
+    .await
+    .unwrap();
+    assert_eq!(row.0.as_deref(), Some("tenant-acme"));
+}
+
+#[tokio::test]
+async fn callback_leaves_session_tenant_null_when_claim_absent() {
+    let stub = spawn_stub().await;
+    let (app, auth) = make_app(&stub).await;
+    let alice = db::auth::create_user(&auth, "alice", "hash").await.unwrap();
+    db::sso::link_sso_identity(&auth, &alice, &stub.issuer, "sub-default", None, false)
+        .await
+        .unwrap();
+    let (state_token, nonce) = start_flow(&app, &auth).await;
+    *stub.nonce.lock().unwrap() = nonce;
+    // mokosh_active_tenant stays None - claim absent from JWT.
+
+    let res = app.clone().oneshot(cb_req(&state_token)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    let row: (Option<String>,) = sqlx::query_as(
+        "SELECT tenant_id FROM sessions WHERE user_id = ? ORDER BY rowid DESC LIMIT 1",
+    )
+    .bind(&alice)
+    .fetch_one(&auth)
+    .await
+    .unwrap();
+    assert!(row.0.is_none());
 }

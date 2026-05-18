@@ -118,6 +118,12 @@ async fn setup_pool() -> SqlitePool {
         .await
         .expect("auth migration 19");
 
+    let migration20 = include_str!("../migrations/auth/0020_session_tenant.sql");
+    sqlx::raw_sql(migration20)
+        .execute(&pool)
+        .await
+        .expect("auth migration 20");
+
     pool
 }
 

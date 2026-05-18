@@ -364,6 +364,22 @@ pub async fn create_session_with_origin(
     user_agent: Option<&str>,
     ip: Option<&str>,
 ) -> Result<String, sqlx::Error> {
+    create_session_full(pool, user_id, user_agent, ip, None).await
+}
+
+/// Full session-creation entry that also threads the per-session
+/// `tenant_id`. Passed Some(...) by the SSO callback when the IdP
+/// emitted a `mokosh_active_tenant` claim; password sign-ins (and
+/// other IdPs that don't emit the claim) pass None and the chat side
+/// treats the session as tenant-unscoped. Per doc 02 section 16.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_session_full(
+    pool: &SqlitePool,
+    user_id: &str,
+    user_agent: Option<&str>,
+    ip: Option<&str>,
+    tenant_id: Option<&str>,
+) -> Result<String, sqlx::Error> {
     use rand::Rng;
     let token: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
@@ -372,13 +388,14 @@ pub async fn create_session_with_origin(
         .collect();
 
     sqlx::query(
-        "INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, last_seen_at) \
-         VALUES (?, ?, datetime('now', '+30 days'), ?, ?, datetime('now'))",
+        "INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, last_seen_at, tenant_id) \
+         VALUES (?, ?, datetime('now', '+30 days'), ?, ?, datetime('now'), ?)",
     )
     .bind(&token)
     .bind(user_id)
     .bind(user_agent)
     .bind(ip)
+    .bind(tenant_id)
     .execute(pool)
     .await?;
 
