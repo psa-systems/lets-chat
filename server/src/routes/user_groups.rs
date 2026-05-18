@@ -6,8 +6,7 @@
 //! `@group-name` tokens; no UI is bundled here yet, manage via curl /
 //! direct API until a templates pass lands.
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Redirect};
 use axum::Form;
 use serde::Deserialize;
 
@@ -58,7 +57,7 @@ pub async fn post_create(
         &user.id,
     )
     .await?;
-    Ok(StatusCode::OK)
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
 }
 
 /// PATCH /enclave/{id}/groups/{group_id}
@@ -77,7 +76,7 @@ pub async fn patch_rename(
     if n == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(StatusCode::OK)
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
 }
 
 /// DELETE /enclave/{id}/groups/{group_id}
@@ -91,7 +90,7 @@ pub async fn delete_group(
     if n == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(StatusCode::OK)
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
 }
 
 /// POST /enclave/{id}/groups/{group_id}/members  body: user_id=...
@@ -112,7 +111,7 @@ pub async fn post_add_member(
         ));
     }
     db::user_groups::add_member(&state.chat, group_id, &form.user_id).await?;
-    Ok(StatusCode::OK)
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
 }
 
 /// DELETE /enclave/{id}/groups/{group_id}/members/{user_id}
@@ -124,7 +123,7 @@ pub async fn delete_member(
     require_manage(&state, &user, enclave_id).await?;
     assert_group_in_enclave(&state, enclave_id, group_id).await?;
     db::user_groups::remove_member(&state.chat, group_id, &target).await?;
-    Ok(StatusCode::OK)
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
 }
 
 async fn assert_group_in_enclave(

@@ -103,7 +103,7 @@ async fn admin_creates_group_and_adds_member() {
         "name=designers",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::SEE_OTHER);
     let group_id: i64 = sqlx::query_scalar("SELECT id FROM user_groups WHERE name='designers'")
         .fetch_one(&t.chat)
         .await
@@ -117,7 +117,7 @@ async fn admin_creates_group_and_adds_member() {
         &body,
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::SEE_OTHER);
     let members = db::user_groups::list_member_ids(&t.chat, group_id)
         .await
         .unwrap();
@@ -167,13 +167,11 @@ async fn group_mention_expands_to_member_mention_rows() {
     let resp = t.app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let row: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM mentions WHERE mentioned_user_id = ?",
-    )
-    .bind(&t.member_id)
-    .fetch_one(&t.chat)
-    .await
-    .unwrap();
+    let row: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mentions WHERE mentioned_user_id = ?")
+        .bind(&t.member_id)
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
     assert_eq!(row, 1);
     let _ = t.auth;
 }
