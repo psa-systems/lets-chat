@@ -159,6 +159,30 @@ async fn autocomplete_returns_room_members() {
 }
 
 #[tokio::test]
+async fn autocomplete_includes_enclave_user_groups() {
+    // Per-enclave user groups (LC-83) should show up in the mention popover
+    // alongside users so callers do not have to type the entire group name
+    // by hand. The group lives in enclave 1, so the General room (id=1)
+    // sees it; the row is identified by `data-username="mods"`.
+    let t = app_with_two_users("viewer", "alice").await;
+    db::user_groups::create(&t.chat, 1, "mods", None, &t.viewer_id)
+        .await
+        .unwrap();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/users/mentions?room_id=1&q=mo")
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("data-username=\"mods\""), "body: {body}");
+    let _ = t.peer_id;
+}
+
+#[tokio::test]
 async fn autocomplete_excludes_self() {
     let t = app_with_two_users("viewer", "alice").await;
     let req = Request::builder()
