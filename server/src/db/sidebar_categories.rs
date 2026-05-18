@@ -190,6 +190,34 @@ pub async fn forget_room(
     unassign_room(pool, user_id, room_id).await
 }
 
+/// Bulk variant for the enclave-leave / enclave-kick path. The handler
+/// resolves the list of room ids the user is losing access to (via the
+/// chat.db `list_rooms_in_enclave` query), then this function drops
+/// every matching assignment row for that user in one statement. Empty
+/// slice is a no-op (no SQL fired); supports up to ~999 ids per call
+/// (sqlite's variable limit), more than any realistic enclave.
+pub async fn forget_rooms(
+    pool: &SqlitePool,
+    user_id: &str,
+    room_ids: &[i64],
+) -> Result<(), sqlx::Error> {
+    if room_ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders = std::iter::repeat_n("?", room_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "DELETE FROM sidebar_category_rooms WHERE user_id = ? AND room_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql).bind(user_id);
+    for id in room_ids {
+        q = q.bind(id);
+    }
+    q.execute(pool).await?;
+    Ok(())
+}
+
 /// Apply a new ordering for the categories owned by `user_id`. The
 /// caller passes the full list of category ids in the desired order;
 /// this rewrites `position` for each as its index in the list, scoped
