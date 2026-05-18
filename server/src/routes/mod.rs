@@ -58,6 +58,7 @@ mod status;
 pub(crate) mod two_factor;
 mod unfurl;
 mod uploads;
+mod user_groups;
 mod users;
 mod ws;
 
@@ -736,6 +737,22 @@ pub fn build_router(state: AppState) -> Router {
         .route("/saved", get(bookmarks::get_saved))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
+        .route(
+            "/enclave/{enclave_id}/groups",
+            post(user_groups::post_create),
+        )
+        .route(
+            "/enclave/{enclave_id}/groups/{group_id}",
+            axum::routing::patch(user_groups::patch_rename).delete(user_groups::delete_group),
+        )
+        .route(
+            "/enclave/{enclave_id}/groups/{group_id}/members",
+            post(user_groups::post_add_member),
+        )
+        .route(
+            "/enclave/{enclave_id}/groups/{group_id}/members/{user_id}",
+            delete(user_groups::delete_member),
+        )
         .route(
             "/enclave/{enclave_id}/sidebar/categories",
             post(sidebar_categories::post_create),
