@@ -53,6 +53,40 @@ pub struct UserSettingsPage<'a> {
     pub git_hash: &'a str,
     pub git_version: &'a str,
     pub build_date: &'a str,
+    /// Enabled SSO providers the user could link to. Empty when no
+    /// providers configured: the Linked Accounts card hides entirely.
+    pub sso_providers: Vec<SettingsSsoProviderOption>,
+    /// The user's own current sso_identities rows. Typically zero or
+    /// one in v1; the schema is N-per-user ready.
+    pub sso_identities: Vec<SettingsSsoIdentity>,
+    /// True when the user has a non-NULL `password_hash`. Drives the
+    /// Unlink button's disabled state (refusing to remove a user's
+    /// only credential).
+    pub has_password: bool,
+    /// Flash set after a successful link / unlink action so the user
+    /// sees confirmation when bounced back.
+    pub sso_flash: Option<&'a str>,
+}
+
+pub struct SettingsSsoProviderOption {
+    pub id: String,
+    pub display_name: String,
+    pub issuer_url: String,
+    /// True when the user already has an identity row pointing at this
+    /// provider's issuer; the per-provider Link button is hidden in
+    /// that case (the Unlink button in the identities list handles it).
+    pub already_linked: bool,
+}
+
+pub struct SettingsSsoIdentity {
+    /// Display name of the provider the identity belongs to. Resolved
+    /// server-side from the cached SsoProviders so the template doesn't
+    /// have to thread the join.
+    pub provider_display_name: String,
+    pub issuer: String,
+    pub email: Option<String>,
+    pub auto_linked: bool,
+    pub linked_at: String,
 }
 
 pub struct BlockedUserView {
