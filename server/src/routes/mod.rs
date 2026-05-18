@@ -750,6 +750,10 @@ pub fn build_router(state: AppState) -> Router {
             post(user_groups::post_add_member),
         )
         .route(
+            "/enclave/{enclave_id}/groups/{group_id}/members/search",
+            get(user_groups::get_member_search),
+        )
+        .route(
             "/enclave/{enclave_id}/groups/{group_id}/members/{user_id}",
             delete(user_groups::delete_member),
         )

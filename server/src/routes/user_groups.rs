@@ -5,7 +5,7 @@
 //! (`resolve_tokens_for_room`) consumes these groups when expanding
 //! `@group-name` tokens; no UI is bundled here yet, manage via curl /
 //! direct API until a templates pass lands.
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect};
 use axum::Form;
 use serde::Deserialize;
@@ -16,6 +16,11 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::perms::enclave_can_manage;
 use crate::state::AppState;
+use crate::views::enclave::{
+    GroupMemberCandidate, GroupMemberCandidateState, GroupMemberRowResult,
+    GroupMemberSearchFragment,
+};
+use crate::views::{html, Html};
 
 #[derive(Deserialize)]
 pub struct GroupForm {
@@ -94,24 +99,97 @@ pub async fn delete_group(
 }
 
 /// POST /enclave/{id}/groups/{group_id}/members  body: user_id=...
+///
+/// Returns a row fragment (`GroupMemberRowResult`) the typeahead swaps
+/// in via `hx-swap="outerHTML"`. Not a redirect because the caller is
+/// the popover row, not a full-page form.
 pub async fn post_add_member(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, group_id)): Path<(i64, i64)>,
     Form(form): Form<MemberForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Html, AppError> {
     require_manage(&state, &user, enclave_id).await?;
     assert_group_in_enclave(&state, enclave_id, group_id).await?;
     // The target must be a member of the enclave (you can't add a
     // non-member to a group inside that enclave).
     let m = db::enclave::get_membership(&state.chat, enclave_id, &form.user_id).await?;
     if m.is_none() {
-        return Err(AppError::BadRequest(
-            "target user is not a member of this enclave".into(),
-        ));
+        return html(&GroupMemberRowResult {
+            ok: false,
+            message: "Not a member of this enclave.",
+        });
     }
     db::user_groups::add_member(&state.chat, group_id, &form.user_id).await?;
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
+    html(&GroupMemberRowResult {
+        ok: true,
+        message: "Added",
+    })
+}
+
+#[derive(Deserialize)]
+pub struct MemberSearchQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+}
+
+/// GET /enclave/{id}/groups/{group_id}/members/search?q=...
+///
+/// Typeahead candidates for adding a member to a group. Blank `q`
+/// returns an empty body so the popover collapses via `empty:hidden`,
+/// matching `/enclave/{id}/invite/search`.
+pub async fn get_member_search(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((enclave_id, group_id)): Path<(i64, i64)>,
+    Query(MemberSearchQuery { q }): Query<MemberSearchQuery>,
+) -> Result<Html, AppError> {
+    require_manage(&state, &user, enclave_id).await?;
+    assert_group_in_enclave(&state, enclave_id, group_id).await?;
+    let query = q.unwrap_or_default();
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(crate::views::Html(String::new()));
+    }
+
+    let records = db::auth::search_users(&state.auth, trimmed, &user.id, 50).await?;
+    let enclave_members = db::enclave::list_members(&state.chat, enclave_id).await?;
+    let enclave_ids: std::collections::HashSet<String> =
+        enclave_members.into_iter().map(|m| m.user_id).collect();
+    let group_ids: std::collections::HashSet<String> =
+        db::user_groups::list_member_ids(&state.chat, group_id)
+            .await?
+            .into_iter()
+            .collect();
+
+    let results: Vec<GroupMemberCandidate> = records
+        .into_iter()
+        .map(|r| {
+            let state_flag = if group_ids.contains(&r.id) {
+                GroupMemberCandidateState::AlreadyInGroup
+            } else if !enclave_ids.contains(&r.id) {
+                GroupMemberCandidateState::NotInEnclave
+            } else {
+                GroupMemberCandidateState::Addable
+            };
+            GroupMemberCandidate {
+                id: r.id,
+                username: r.username,
+                display_name: r.display_name,
+                avatar_ext: r.avatar_ext,
+                status: r.status,
+                custom_status: r.custom_status,
+                state: state_flag,
+            }
+        })
+        .collect();
+
+    html(&GroupMemberSearchFragment {
+        enclave_id,
+        group_id,
+        query: trimmed,
+        results: &results,
+    })
 }
 
 /// DELETE /enclave/{id}/groups/{group_id}/members/{user_id}

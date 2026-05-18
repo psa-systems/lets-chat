@@ -154,10 +154,18 @@
         {% endif %}
         <details class="text-xs">
           <summary class="cursor-pointer text-slate-500 hover:text-slate-700">Add member</summary>
-          <form method="post" action="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members" class="flex gap-1 mt-2">
-            <input type="text" name="user_id" placeholder="user id" required class="flex-1 border rounded px-2 py-1 text-xs font-mono">
-            <button type="submit" class="bg-slate-200 hover:bg-slate-300 rounded px-2 text-xs">Add</button>
-          </form>
+          <div class="relative mt-2" autocomplete="off">
+            <input
+              name="q"
+              placeholder="Search by username or display name..."
+              hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
+              hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+              hx-target="#group-{{ g.id }}-add-results"
+              hx-swap="innerHTML"
+              autocomplete="off"
+              class="w-full border rounded px-2 py-1 text-xs">
+            <div id="group-{{ g.id }}-add-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+          </div>
         </details>
       </li>
       {% endfor %}
