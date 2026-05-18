@@ -209,7 +209,7 @@ pub async fn get_landing(
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
-    let (sidebar_rooms, sidebar_peers, switcher) =
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclavePage {
         user: &user,
@@ -218,6 +218,7 @@ pub async fn get_landing(
         rooms: &rooms,
         can_manage,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -231,11 +232,13 @@ pub async fn get_discover(
     Query(flash): Query<FlashQuery>,
 ) -> Result<Html, AppError> {
     let enclaves = db::enclave::list_public_enclaves(&state.chat).await?;
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     html(&DiscoverPage {
         user: &user,
         enclaves: &enclaves,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -585,7 +588,7 @@ pub async fn get_settings(
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
-    let (sidebar_rooms, sidebar_peers, switcher) =
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, Some(id)).await?;
     html(&EnclaveSettingsPage {
         user: &user,
@@ -594,6 +597,7 @@ pub async fn get_settings(
         emojis: &emojis,
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -964,10 +968,12 @@ pub async fn get_invitations(
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
     let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     html(&crate::views::enclave::InvitationsPage {
         user: &user,
         invitations: &invs,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

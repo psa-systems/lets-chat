@@ -43,26 +43,52 @@
     </form>
   </div>
   <nav class="flex-1 overflow-y-auto p-2 space-y-4">
+    {% for category in sidebar_categories %}
+    <section data-category-id="{{ category.id }}">
+      <div class="flex items-center justify-between px-2">
+        <form hx-patch="/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex-1 min-w-0">
+          {% if category.collapsed %}
+          {# Submitting without the `collapsed` field uncollapses. #}
+          {% else %}
+          <input type="hidden" name="collapsed" value="1">
+          {% endif %}
+          <button type="submit" class="w-full text-left text-xs uppercase text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded" title="{% if category.collapsed %}Expand{% else %}Collapse{% endif %}">
+            {% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}
+          </button>
+        </form>
+        <details class="relative">
+          <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1" title="Category actions">&#8230;</summary>
+          <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-sm w-56 p-2 space-y-2">
+            <form hx-patch="/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1">
+              <input type="text" name="name" value="{{ category.name }}" maxlength="50" required class="flex-1 border rounded px-1 py-0.5 text-xs">
+              <button type="submit" class="px-2 text-xs bg-blue-600 text-white rounded">Rename</button>
+            </form>
+            <form hx-delete="/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="Delete category &quot;{{ category.name }}&quot;? Its rooms move back to All rooms." class="text-right">
+              <button type="submit" class="text-xs text-red-600 hover:underline">Delete category</button>
+            </form>
+          </div>
+        </details>
+      </div>
+      {% if !category.collapsed %}
+      <ul class="mt-1">
+        {% for room in category.rooms %}
+        <li>
+          {% let room_id_str = room.id.to_string() %}
+          {% include "partials/sidebar_room_row.html" %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endfor %}
     {% if !sidebar_rooms.is_empty() %}
-    <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">Rooms</h2>
+    <section data-category-id="">
+      <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}All rooms{% else %}Rooms{% endif %}</h2>
       <ul class="mt-1">
         {% for room in sidebar_rooms %}
         <li>
-          <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-slate-400{% endif %}">
-            {% if room.is_voice %}
-            <span>&#128266; {{ room.name }}</span>
-            {% else %}
-            <span># {{ room.name }}</span>
-            {% let kind = "room" %}
-            {% let id = room.id.to_string() %}
-            {% let unread = room.unread %}
-            {% let mute_mode = room.mute_mode.as_str() %}
-            {% include "partials/unread_badge.html" %}
-            {% let mentions = room.mentions %}
-            {% include "partials/mention_badge.html" %}
-            {% endif %}
-          </a>
+          {% let room_id_str = room.id.to_string() %}
+          {% include "partials/sidebar_room_row.html" %}
         </li>
         {% endfor %}
       </ul>
@@ -97,6 +123,10 @@
       </ul>
     </section>
     {% endif %}
+    <form hx-post="/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-slate-200">
+      <input type="text" name="name" placeholder="New category" maxlength="50" required class="flex-1 border rounded px-2 py-1 text-xs">
+      <button type="submit" class="px-2 text-xs bg-slate-200 hover:bg-slate-300 rounded">+ Add</button>
+    </form>
   </nav>
   <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
     {% if user.role == "admin" || user.role == "moderator" %}

@@ -34,9 +34,11 @@ pub async fn get_home(
             }
         }
     }
-    let (sidebar_rooms, sidebar_peers, switcher) = super::load_chrome(&state, &user, None).await?;
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
+        super::load_chrome(&state, &user, None).await?;
     let page = WelcomePage {
         user: &user,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,

@@ -76,6 +76,7 @@ pub struct SeenIndicatorFragment<'a> {
 #[template(path = "ws/sidebar_update.html")]
 pub struct SidebarUpdateFragment<'a> {
     pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
 }
