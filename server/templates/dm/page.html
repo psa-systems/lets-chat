@@ -23,13 +23,19 @@
   // assigned globally in layout.html; here we only need to issue the
   // subscribe frame. Tearing the listener down on #main swap keeps the
   // reconnect soft-refresh from stacking duplicate subscribes per reload.
+  var subscribeFrame = JSON.stringify({ type: 'subscribe', room_id: {{ room.id }} });
   function onWsOpen(evt) {
-    evt.detail.socketWrapper.send(JSON.stringify({
-      type: 'subscribe',
-      room_id: {{ room.id }}
-    }));
+    evt.detail.socketWrapper.send(subscribeFrame);
   }
   document.body.addEventListener('htmx:wsOpen', onWsOpen);
+  // If the WS handshake completed BEFORE this script attached (the
+  // reconnect soft-refresh swaps #main while leaving the socket open,
+  // so htmx:wsOpen has already fired for this connection), `__lcWS` is
+  // already populated. Send the subscribe directly so the sender's
+  // own newly-posted DM messages reach this tab and auto_scroll fires.
+  if (window.__lcWS) {
+    try { window.__lcWS.send(subscribeFrame); } catch (_) {}
+  }
   function teardown() {
     document.body.removeEventListener('htmx:wsOpen', onWsOpen);
   }
