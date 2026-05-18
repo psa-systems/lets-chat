@@ -41,6 +41,66 @@ pub struct EnclaveGroupView {
     pub member_labels: Vec<String>,
 }
 
+/// One row in the per-group member-add typeahead. Mirrors
+/// `EnclaveInviteCandidate` but with group-relevant state flags:
+/// already-in-group renders an "Added" pill, not-in-enclave renders a
+/// disabled "Not in enclave" pill, the caller can add themselves so
+/// there is no Self_ variant.
+pub struct GroupMemberCandidate {
+    pub id: String,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
+    pub state: GroupMemberCandidateState,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum GroupMemberCandidateState {
+    Addable,
+    AlreadyInGroup,
+    NotInEnclave,
+}
+
+impl GroupMemberCandidate {
+    pub fn label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
+    pub fn is_addable(&self) -> bool {
+        matches!(self.state, GroupMemberCandidateState::Addable)
+    }
+    pub fn is_in_group(&self) -> bool {
+        matches!(self.state, GroupMemberCandidateState::AlreadyInGroup)
+    }
+    pub fn is_outside_enclave(&self) -> bool {
+        matches!(self.state, GroupMemberCandidateState::NotInEnclave)
+    }
+}
+
+#[derive(Template)]
+#[template(path = "enclave/group_member_search.html")]
+pub struct GroupMemberSearchFragment<'a> {
+    pub enclave_id: i64,
+    pub group_id: i64,
+    pub query: &'a str,
+    pub results: &'a [GroupMemberCandidate],
+}
+
+/// Per-row response returned by `POST /enclave/{id}/groups/{gid}/members`
+/// when the request originates from the typeahead. The row swaps itself
+/// via `hx-swap="outerHTML"`. `ok` true on add (renders "Added"), false
+/// on validation error (renders inline red message).
+#[derive(Template)]
+#[template(path = "enclave/group_member_row_result.html")]
+pub struct GroupMemberRowResult<'a> {
+    pub ok: bool,
+    pub message: &'a str,
+}
+
 #[derive(Template)]
 #[template(path = "enclave/settings.html")]
 pub struct EnclaveSettingsPage<'a> {
