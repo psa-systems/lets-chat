@@ -32,6 +32,13 @@
   var incoming = null;        // { fromId, fromName, withVideo } while invite is ringing
   var pendingCandidates = [];
 
+  // Screen-share state. While sharing, screenTrack is the live display capture
+  // and replaces the camera in the peer connection's video sender. cameraTrack
+  // (if any) is stopped so the OS releases the webcam; restoreCameraAfterShare
+  // remembers that we should re-acquire it when sharing ends.
+  var screenTrack = null;
+  var restoreCameraAfterShare = false;
+
   // ---- websocket signaling -----------------------------------------
   function signal(kind, payload) {
     var ws = window.__lcWS;
@@ -103,6 +110,12 @@
   function hasLocalVideo() {
     return !!(localStream && localStream.getVideoTracks().length > 0);
   }
+  function isSharingScreen() {
+    return !!screenTrack;
+  }
+  function hasLocalCamera() {
+    return hasLocalVideo() && !isSharingScreen();
+  }
   function refreshLocalVideo() {
     var lv = q('[data-lc-local-video]');
     var av = q('[data-lc-local-avatar]');
@@ -128,8 +141,20 @@
   function setCameraBtn() {
     var btn = q('[data-lc-call-camera]');
     if (!btn) return;
-    var on = hasLocalVideo();
+    var on = hasLocalCamera();
     btn.textContent = on ? 'Stop video' : 'Start video';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    // While the screen-share track owns the video sender, toggling the camera
+    // would race for the same outgoing slot. The `disabled:*` classes on the
+    // button render the disabled affordance.
+    if (isSharingScreen()) btn.setAttribute('disabled', '');
+    else btn.removeAttribute('disabled');
+  }
+  function setScreenBtn() {
+    var btn = q('[data-lc-call-screen]');
+    if (!btn) return;
+    var on = isSharingScreen();
+    btn.textContent = on ? 'Stop sharing' : 'Share screen';
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
@@ -147,8 +172,17 @@
       pc = null;
     }
   }
+  function stopScreen() {
+    if (screenTrack) {
+      screenTrack.onended = null;
+      try { screenTrack.stop(); } catch (e) {}
+      screenTrack = null;
+    }
+    restoreCameraAfterShare = false;
+  }
   function teardown() {
     closePc();
+    stopScreen();
     stopLocal();
     pendingCandidates = [];
     incoming = null;
@@ -166,7 +200,13 @@
     var mute = q('[data-lc-call-mute]');
     if (mute) { mute.textContent = 'Mute'; mute.setAttribute('aria-pressed', 'false'); }
     var cam = q('[data-lc-call-camera]');
-    if (cam) { cam.textContent = 'Start video'; cam.setAttribute('aria-pressed', 'false'); }
+    if (cam) {
+      cam.textContent = 'Start video';
+      cam.setAttribute('aria-pressed', 'false');
+      cam.removeAttribute('disabled');
+    }
+    var ss = q('[data-lc-call-screen]');
+    if (ss) { ss.textContent = 'Share screen'; ss.setAttribute('aria-pressed', 'false'); }
     disposeDialogTrap();
   }
 
@@ -415,6 +455,7 @@
 
   function toggleCamera() {
     if (phase === 'idle' || !localStream) return;
+    if (isSharingScreen()) return;  // setCameraBtn disables the control; guard the dispatch path too.
     var existing = localStream.getVideoTracks()[0];
     if (existing) {
       if (pc) {
@@ -436,6 +477,139 @@
         setCameraBtn();
       }).catch(function () { alert('Could not access your camera.'); });
     }
+  }
+
+  // Find the PeerConnection sender that currently transports our outgoing
+  // video track (camera or screen). Returns null if no video has ever been
+  // negotiated. Walks transceivers because `removeTrack` leaves the sender
+  // in place with a null track, and we still want to reuse that slot.
+  function findVideoSender() {
+    if (!pc || !pc.getTransceivers) return null;
+    var ts = pc.getTransceivers();
+    for (var i = 0; i < ts.length; i++) {
+      var t = ts[i];
+      if (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') {
+        return t.sender;
+      }
+      if (t.sender && t.sender.track && t.sender.track.kind === 'video') {
+        return t.sender;
+      }
+    }
+    return null;
+  }
+
+  // Drop the screen-capture track, restore the camera if it was running when
+  // sharing started. Shared by the manual button, the browser-native "Stop
+  // sharing" widget (track.onended), and teardown indirectly via stopScreen.
+  function endScreenShare() {
+    if (!isSharingScreen()) return;
+    var sender = pc ? pc.getSenders().find(function (s) { return s.track === screenTrack; }) : null;
+    var wantCamera = restoreCameraAfterShare;
+    stopScreen();
+    // Swap the outgoing slot back to camera (if it was on) or null it out.
+    function applyCameraTrack(track) {
+      if (sender) {
+        sender.replaceTrack(track).catch(function (e) { console.warn('call: replaceTrack failed', e); });
+      } else if (track && pc && localStream) {
+        pc.addTrack(track, localStream);
+      }
+    }
+    if (wantCamera) {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+        var vtrack = vstream.getVideoTracks()[0];
+        if (!vtrack) return;
+        if (phase === 'idle' || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
+        localStream.addTrack(vtrack);
+        applyCameraTrack(vtrack);
+        refreshLocalVideo();
+        setCameraBtn();
+        setScreenBtn();
+      }).catch(function () {
+        // Camera unavailable on the way back. Clear the sender so the peer
+        // does not keep rendering the last frame of our screen share.
+        applyCameraTrack(null);
+        refreshLocalVideo();
+        setCameraBtn();
+        setScreenBtn();
+      });
+    } else {
+      applyCameraTrack(null);
+      refreshLocalVideo();
+      setCameraBtn();
+      setScreenBtn();
+    }
+  }
+
+  function toggleScreen() {
+    if (phase === 'idle' || !localStream) return;
+    if (isSharingScreen()) { endScreenShare(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert('Screen sharing is not supported by your browser.');
+      return;
+    }
+    if (!pc) return;
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
+      var dtrack = dstream.getVideoTracks()[0];
+      if (!dtrack) return;
+      if (phase === 'idle' || !localStream || !pc) {
+        try { dtrack.stop(); } catch (e) {}
+        return;
+      }
+      // Hint the encoder that this is mostly static content with sharp edges.
+      // Browsers that honor this bias toward higher resolution / lower frame
+      // rate, which is what screen content actually wants.
+      try { dtrack.contentHint = 'detail'; } catch (e) {}
+      var camera = localStream.getVideoTracks()[0];
+      restoreCameraAfterShare = !!camera;
+      // Finish the swap once the outgoing track is in place on the peer
+      // connection. Defers stop()ing the camera until then so the sender does
+      // not race with a half-completed replaceTrack.
+      function finalize() {
+        if (camera) {
+          try { camera.stop(); } catch (e) {}
+          try { localStream.removeTrack(camera); } catch (e) {}
+        }
+        localStream.addTrack(dtrack);
+        screenTrack = dtrack;
+        // User clicks "Stop sharing" in the browser chrome -> end the share.
+        dtrack.onended = function () { endScreenShare(); };
+        refreshLocalVideo();
+        setCameraBtn();
+        setScreenBtn();
+      }
+      // Fallback path: drop the camera sender entirely and addTrack the screen
+      // track, which forces onnegotiationneeded -> new SDP -> peer receives
+      // the new track. Used both when there is no existing video sender and
+      // when replaceTrack rejected (codec/parameter mismatch).
+      function addTrackAndFinalize(existingSender) {
+        if (existingSender) {
+          try { pc.removeTrack(existingSender); } catch (e) {}
+        }
+        try { pc.addTrack(dtrack, localStream); }
+        catch (e) {
+          console.warn('call: addTrack(screen) failed', e);
+          try { dtrack.stop(); } catch (ee) {}
+          return;
+        }
+        finalize();
+      }
+      var sender = findVideoSender();
+      if (sender && sender.track) {
+        // Fast path: keep the same transceiver, no renegotiation. If the
+        // browser rejects the swap (rare, but reported for getDisplayMedia
+        // tracks whose codec/parameters do not match the camera's), fall
+        // back to a fresh addTrack so the peer actually receives the share.
+        sender.replaceTrack(dtrack).then(finalize).catch(function (e) {
+          console.warn('call: replaceTrack failed, falling back to addTrack', e);
+          addTrackAndFinalize(sender);
+        });
+      } else {
+        addTrackAndFinalize(sender);
+      }
+    }).catch(function (e) {
+      // User-cancel from the picker lands here too; nothing to undo.
+      if (e && e.name !== 'NotAllowedError') console.warn('call: getDisplayMedia failed', e);
+    });
   }
 
   // ---- inbound signal dispatch -------------------------------------
@@ -564,6 +738,7 @@
     if (t.closest('[data-lc-call-hangup]')) { endCall(); return; }
     if (t.closest('[data-lc-call-mute]')) { toggleMute(); return; }
     if (t.closest('[data-lc-call-camera]')) { toggleCamera(); return; }
+    if (t.closest('[data-lc-call-screen]')) { toggleScreen(); return; }
   });
 
   function onReady(fn) {
