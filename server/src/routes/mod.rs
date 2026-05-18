@@ -48,6 +48,7 @@ mod pinned;
 mod push;
 mod reactions;
 mod room;
+mod room_rbac;
 #[cfg(feature = "saas")]
 mod saas_auth;
 mod search;
@@ -145,7 +146,9 @@ pub(crate) async fn load_message_view_for_viewer(
         .ok_or(AppError::NotFound)?;
     let meta = load_author_meta(state, &m.user_id, &viewer.id).await?;
     let can_edit = m.user_id == viewer.id;
-    let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let can_delete = m.user_id == viewer.id
+        || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
+            .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await?
@@ -737,6 +740,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/saved", get(bookmarks::get_saved))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
+        .route(
+            "/room/{room_id}/moderators",
+            get(room_rbac::get_page).post(room_rbac::post_grant),
+        )
+        .route(
+            "/room/{room_id}/moderators/{user_id}",
+            delete(room_rbac::delete_revoke),
+        )
         .route(
             "/enclave/{enclave_id}/groups",
             post(user_groups::post_create),

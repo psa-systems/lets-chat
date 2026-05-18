@@ -191,6 +191,12 @@ pub async fn get_room(
     let quote_preview_map =
         crate::views::room::build_quote_previews_bulk(&state.chat, &state.auth, &quote_ids).await?;
 
+    // Resolve the viewer's effective mod power for this room once, not
+    // per-message. The override lives in `room_role_overrides` and never
+    // changes mid-render.
+    let viewer_is_room_mod =
+        db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role).await?;
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     let mut unread_divider_placed = false;
@@ -203,7 +209,7 @@ pub async fn get_room(
             entry
         };
         let can_edit = m.user_id == user.id;
-        let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
+        let can_delete = m.user_id == user.id || viewer_is_room_mod;
         let reactions = reactions_by_message.remove(&m.id).unwrap_or_default();
         let attachments = attachments_by_message.remove(&m.id).unwrap_or_default();
         let mentions = mentions_by_message.remove(&m.id).unwrap_or_default();
@@ -1246,7 +1252,8 @@ pub async fn delete_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
+    let can_delete = m.user_id == user.id
+        || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &user.id, &user.role).await?;
     if !can_delete {
         return Err(AppError::Forbidden);
     }

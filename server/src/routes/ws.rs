@@ -648,8 +648,10 @@ async fn render_new_message(
     viewer: &User,
 ) -> Option<String> {
     let can_edit = message.user_id == viewer.id;
-    let can_delete =
-        message.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let can_delete = message.user_id == viewer.id
+        || db::room_rbac::is_room_moderator(&state.chat, message.room_id, &viewer.id, &viewer.role)
+            .await
+            .unwrap_or(false);
     let prior = db::chat::prior_message_in_room(&state.chat, message.room_id, message.id)
         .await
         .ok()
@@ -757,7 +759,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         (m.user_id.as_str(), m.created_at.as_str()),
     );
     let can_edit = m.user_id == viewer.id;
-    let can_delete = m.user_id == viewer.id || viewer.role == "admin" || viewer.role == "moderator";
+    let can_delete = m.user_id == viewer.id
+        || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
+            .await
+            .unwrap_or(false);
     let reply_count = db::chat::count_replies(&state.chat, m.id).await.ok()?;
     let parent_id = m.parent_id;
     let attachments = db::uploads::attachments_for_message(&state.chat, m.id)
