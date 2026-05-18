@@ -540,6 +540,11 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/messages/{message_id}/edit", get(room::get_edit_form))
         .route(
+            "/messages/{message_id}/history",
+            get(room::get_history_panel),
+        )
+        .route("/history-panel", delete(room::close_history_panel))
+        .route(
             "/messages/{message_id}/reactions/picker",
             get(reactions::get_picker),
         )
