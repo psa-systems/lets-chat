@@ -245,3 +245,78 @@ async fn delete_room_assignment_unassigns_without_unjoining() {
     // The category itself is untouched.
     assert_eq!(category_count(&t.auth, &t.user_id).await, 1);
 }
+
+#[tokio::test]
+async fn category_positions_endpoint_reorders_in_place() {
+    let t = app().await;
+    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
+        .await
+        .unwrap();
+    let b = db::sidebar_categories::create_category(&t.auth, &t.user_id, "B")
+        .await
+        .unwrap();
+    let c = db::sidebar_categories::create_category(&t.auth, &t.user_id, "C")
+        .await
+        .unwrap();
+    let status = send(
+        &t.app,
+        &t.session,
+        Method::PATCH,
+        "/sidebar/categories/positions",
+        &format!("ids={c},{a},{b}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let cats = db::sidebar_categories::list_categories(&t.auth, &t.user_id)
+        .await
+        .unwrap();
+    let order: Vec<i64> = cats.iter().map(|c| c.id).collect();
+    assert_eq!(order, vec![c, a, b]);
+}
+
+#[tokio::test]
+async fn room_positions_endpoint_handles_cross_category_move() {
+    let t = app().await;
+    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
+        .await
+        .unwrap();
+    let b = db::sidebar_categories::create_category(&t.auth, &t.user_id, "B")
+        .await
+        .unwrap();
+    db::sidebar_categories::assign_room(&t.auth, &t.user_id, 1, a)
+        .await
+        .unwrap();
+    // Cross-category drag: room 1 currently in A; positions endpoint
+    // for B includes it, so the assignment row gets upserted into B.
+    let status = send(
+        &t.app,
+        &t.session,
+        Method::PATCH,
+        &format!("/sidebar/categories/{b}/positions"),
+        "ids=1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let assignments = db::sidebar_categories::room_assignments(&t.auth, &t.user_id)
+        .await
+        .unwrap();
+    assert_eq!(assignments.get(&1).map(|(c, _)| *c), Some(b));
+}
+
+#[tokio::test]
+async fn room_positions_endpoint_refuses_inaccessible_room() {
+    let t = app().await;
+    let a = db::sidebar_categories::create_category(&t.auth, &t.user_id, "A")
+        .await
+        .unwrap();
+    let status = send(
+        &t.app,
+        &t.session,
+        Method::PATCH,
+        &format!("/sidebar/categories/{a}/positions"),
+        "ids=1,999",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(assignment_count(&t.auth, &t.user_id).await, 0);
+}

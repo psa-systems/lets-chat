@@ -190,6 +190,69 @@ pub async fn forget_room(
     unassign_room(pool, user_id, room_id).await
 }
 
+/// Apply a new ordering for the categories owned by `user_id`. The
+/// caller passes the full list of category ids in the desired order;
+/// this rewrites `position` for each as its index in the list, scoped
+/// to the user so a stale or spoofed id from a different user is a
+/// no-op rather than a privilege escalation. Categories not present in
+/// the list are left untouched.
+pub async fn set_category_positions(
+    pool: &SqlitePool,
+    user_id: &str,
+    category_ids: &[i64],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for (idx, cat_id) in category_ids.iter().enumerate() {
+        sqlx::query("UPDATE sidebar_categories SET position = ? WHERE user_id = ? AND id = ?")
+            .bind(idx as i64)
+            .bind(user_id)
+            .bind(cat_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Apply a new ordering for rooms inside one category. Handles three
+/// shapes in one call:
+///   - same-category reorder: room already assigned to this category
+///     gets a new position;
+///   - cross-category drag: room currently assigned to a DIFFERENT
+///     category is upserted into this one at the new position;
+///   - newly categorizing: room previously uncategorized lands in this
+///     category at the new position.
+///
+/// Wrapped in a transaction so a partial failure leaves the assignment
+/// table untouched. The caller is responsible for verifying that the
+/// user is actually a member of every room id passed in; this function
+/// trusts its inputs.
+pub async fn set_room_positions(
+    pool: &SqlitePool,
+    user_id: &str,
+    category_id: i64,
+    room_ids: &[i64],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for (idx, room_id) in room_ids.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO sidebar_category_rooms (user_id, room_id, category_id, position) \
+             VALUES (?, ?, ?, ?) \
+             ON CONFLICT (user_id, room_id) DO UPDATE SET \
+                category_id = excluded.category_id, \
+                position = excluded.position",
+        )
+        .bind(user_id)
+        .bind(room_id)
+        .bind(category_id)
+        .bind(idx as i64)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Per-user map of `room_id -> (category_id, position)` so the sidebar
 /// renderer can bucket each room into the right category in O(rooms)
 /// rather than running one query per room.
