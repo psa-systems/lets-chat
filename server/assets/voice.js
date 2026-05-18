@@ -22,6 +22,13 @@
   var joined = false;
   var localStream = null;
   var peers = {};         // user_id -> { pc, polite, makingOffer, name, pending: [] }
+
+  // Screen-share state. While sharing, screenTrack is the live display
+  // capture; it sits in localStream in place of the camera and feeds every
+  // peer's video sender. restoreCameraAfterShare remembers that the camera
+  // was on so the camera track is re-acquired when sharing ends.
+  var screenTrack = null;
+  var restoreCameraAfterShare = false;
   // Live snapshot of who is in the voice channel right now, keyed by user_id.
   // Kept in sync from the initial server-rendered preview plus VoiceJoined /
   // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
@@ -132,6 +139,7 @@
     toggle(q('[data-lc-voice-join]'), !on);
     toggle(q('[data-lc-voice-mute]'), on);
     toggle(q('[data-lc-voice-camera]'), on);
+    toggle(q('[data-lc-voice-screen]'), on);
     toggle(q('[data-lc-voice-leave]'), on);
   }
   function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
@@ -190,6 +198,12 @@
   function hasLocalVideo() {
     return !!(localStream && localStream.getVideoTracks().length > 0);
   }
+  function isSharingScreen() {
+    return !!screenTrack;
+  }
+  function hasLocalCamera() {
+    return hasLocalVideo() && !isSharingScreen();
+  }
 
   // ---- per-peer connection ------------------------------------------
   function iceConfig() {
@@ -242,7 +256,14 @@
 
   function addLocalTracks(pc) {
     if (!pc || !localStream) return;
-    localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
+    var sharing = isSharingScreen();
+    localStream.getTracks().forEach(function (t) {
+      // Only one outgoing video track per peer. While sharing, the screen
+      // track wins so a new joiner mid-share also receives the share rather
+      // than the (transiently still present) camera.
+      if (sharing && t.kind === 'video' && t !== screenTrack) return;
+      pc.addTrack(t, localStream);
+    });
   }
 
   function flushCandidates(userId) {
@@ -350,6 +371,7 @@
     if (!joined) return;
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
+    stopScreen();
     if (localStream) {
       localStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
       localStream = null;
@@ -358,6 +380,8 @@
     var g = grid();
     if (g) g.replaceChildren();
     joined = false;
+    var ss = q('[data-lc-voice-screen]');
+    if (ss) ss.textContent = 'Share screen';
     // Drop ourselves from the participants map and re-render the preview
     // before un-hiding it. Otherwise the leaver would see whatever was
     // server-rendered at page load, which is often "no one is here yet" even
@@ -377,13 +401,24 @@
 
   function setCameraBtn() {
     var btn = q('[data-lc-voice-camera]');
-    if (btn) btn.textContent = hasLocalVideo() ? 'Stop video' : 'Start video';
+    if (!btn) return;
+    btn.textContent = hasLocalCamera() ? 'Stop video' : 'Start video';
+    // While the screen-share track owns the video sender on every peer,
+    // toggling the camera would race for the same outgoing slot. The
+    // `disabled:*` classes on the button render the disabled affordance.
+    if (isSharingScreen()) btn.setAttribute('disabled', '');
+    else btn.removeAttribute('disabled');
+  }
+  function setScreenBtn() {
+    var btn = q('[data-lc-voice-screen]');
+    if (btn) btn.textContent = isSharingScreen() ? 'Stop sharing' : 'Share screen';
   }
 
   // Camera on/off mid-call: acquire or release the video track and add it to
   // (or remove it from) every peer connection, which renegotiates each.
   function toggleCamera() {
     if (!joined || !localStream) return;
+    if (isSharingScreen()) return;  // setCameraBtn disables the control; guard the dispatch path too.
     var existing = localStream.getVideoTracks()[0];
     if (existing) {
       Object.keys(peers).forEach(function (uid) {
@@ -416,6 +451,161 @@
         updateTileMedia(cfg.selfId);
         setCameraBtn();
       }).catch(function () { alert('Could not access your camera.'); });
+    }
+  }
+
+  // Find the sender on one peer connection that transports our outgoing
+  // video track (camera or screen). Walks transceivers because removeTrack
+  // leaves the sender in place with a null track, and we still want to
+  // reuse that slot.
+  function findVideoSenderOn(pc) {
+    if (!pc || !pc.getTransceivers) return null;
+    var ts = pc.getTransceivers();
+    for (var i = 0; i < ts.length; i++) {
+      var t = ts[i];
+      if (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') {
+        return t.sender;
+      }
+      if (t.sender && t.sender.track && t.sender.track.kind === 'video') {
+        return t.sender;
+      }
+    }
+    return null;
+  }
+
+  // Swap one peer's outgoing video track to `track`. Prefer replaceTrack to
+  // avoid renegotiation; fall back to removeTrack + addTrack so the peer
+  // actually receives the new track when the browser rejects the swap
+  // (codec/parameter mismatch is the common case for getDisplayMedia).
+  // When `track` is null and no sender exists yet, this is a no-op.
+  function swapPeerVideo(pc, track) {
+    if (!pc) return Promise.resolve();
+    var sender = findVideoSenderOn(pc);
+    if (sender && sender.track) {
+      return sender.replaceTrack(track).catch(function (e) {
+        console.warn('voice: replaceTrack failed, falling back to addTrack', e);
+        try { pc.removeTrack(sender); } catch (ee) {}
+        if (track) {
+          try { pc.addTrack(track, localStream); } catch (ee) {}
+        }
+      });
+    }
+    if (sender && !sender.track && track) {
+      return sender.replaceTrack(track).catch(function (e) {
+        console.warn('voice: replaceTrack on idle sender failed', e);
+        try { pc.addTrack(track, localStream); } catch (ee) {}
+      });
+    }
+    if (track) {
+      try { pc.addTrack(track, localStream); } catch (e) {
+        console.warn('voice: addTrack failed', e);
+      }
+    }
+    return Promise.resolve();
+  }
+
+  // Acquire screen capture and route it to every peer.
+  function toggleScreen() {
+    if (!joined || !localStream) return;
+    if (isSharingScreen()) { endScreenShare(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert('Screen sharing is not supported by your browser.');
+      return;
+    }
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
+      var dtrack = dstream.getVideoTracks()[0];
+      if (!dtrack) return;
+      if (!joined || !localStream) { try { dtrack.stop(); } catch (e) {} return; }
+      // Hint the encoder that this is mostly static content with sharp
+      // edges; browsers that honor this bias toward higher resolution /
+      // lower frame rate, which is what screen content actually wants.
+      try { dtrack.contentHint = 'detail'; } catch (e) {}
+      var camera = localStream.getVideoTracks()[0];
+      restoreCameraAfterShare = !!camera;
+      // Stamp the screen-share state before the async swaps so any peer
+      // added during the renegotiation window (addLocalTracks() observes
+      // screenTrack and localStream) also picks up the screen track.
+      localStream.addTrack(dtrack);
+      screenTrack = dtrack;
+      // User clicks "Stop sharing" in the browser chrome -> end the share.
+      dtrack.onended = function () { endScreenShare(); };
+      var sv = tileVideo(cfg.selfId);
+      if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      setCameraBtn();
+      setScreenBtn();
+      // Swap every existing peer's outgoing video slot to the screen track
+      // while the camera is still alive (replaceTrack must not race a stop).
+      // After all peers settle, drop the camera.
+      var swaps = Object.keys(peers).map(function (uid) {
+        return swapPeerVideo(peers[uid].pc, dtrack);
+      });
+      Promise.all(swaps).then(function () {
+        if (camera) {
+          try { camera.stop(); } catch (e) {}
+          try { localStream.removeTrack(camera); } catch (e) {}
+        }
+      });
+    }).catch(function (e) {
+      // User-cancel from the picker lands here too; nothing to undo.
+      if (e && e.name !== 'NotAllowedError') console.warn('voice: getDisplayMedia failed', e);
+    });
+  }
+
+  function stopScreen() {
+    if (screenTrack) {
+      screenTrack.onended = null;
+      try { screenTrack.stop(); } catch (e) {}
+      screenTrack = null;
+    }
+    restoreCameraAfterShare = false;
+  }
+
+  // Drop the screen track from every peer. If the camera was on when sharing
+  // started, re-acquire it and swap it back in; otherwise leave the senders
+  // with null tracks so each peer's tile drops back to the avatar.
+  function endScreenShare() {
+    if (!isSharingScreen()) return;
+    var oldScreen = screenTrack;
+    var wantCamera = restoreCameraAfterShare;
+    // Remove the screen track from localStream first so the self tile reflects
+    // reality immediately even if camera re-acquisition takes a moment.
+    try { localStream.removeTrack(oldScreen); } catch (e) {}
+    stopScreen();
+    var sv = tileVideo(cfg.selfId);
+    if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+    updateTileMedia(cfg.selfId);
+
+    function swapAllTo(track) {
+      var swaps = Object.keys(peers).map(function (uid) {
+        return swapPeerVideo(peers[uid].pc, track);
+      });
+      return Promise.all(swaps);
+    }
+
+    if (wantCamera) {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+        var vtrack = vstream.getVideoTracks()[0];
+        if (!vtrack) return swapAllTo(null);
+        if (!joined || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
+        localStream.addTrack(vtrack);
+        return swapAllTo(vtrack).then(function () {
+          var sv2 = tileVideo(cfg.selfId);
+          if (sv2) { sv2.srcObject = null; sv2.srcObject = localStream; }
+          updateTileMedia(cfg.selfId);
+        });
+      }).catch(function () {
+        // Camera unavailable on the way back: leave senders empty.
+        swapAllTo(null);
+      }).finally(function () {
+        setCameraBtn();
+        setScreenBtn();
+      });
+    } else {
+      swapAllTo(null).finally(function () {
+        setCameraBtn();
+        setScreenBtn();
+      });
     }
   }
 
@@ -518,6 +708,7 @@
     if (t.closest('[data-lc-voice-leave]')) { leave(); return; }
     if (t.closest('[data-lc-voice-mute]')) { toggleMute(); return; }
     if (t.closest('[data-lc-voice-camera]')) { toggleCamera(); return; }
+    if (t.closest('[data-lc-voice-screen]')) { toggleScreen(); return; }
   });
 
   function onReady(fn) {
