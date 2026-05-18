@@ -27,30 +27,52 @@
     wasAtBottom = true;
   }
 
-  // Capture stickiness BEFORE htmx mutates the DOM, then restore after.
-  // htmx:beforeSwap fires for all swaps (regular + OOB) on the body level.
-  function onBeforeSwap() { wasAtBottom = isAtBottom(); }
-  function onAfterSwap() { if (wasAtBottom) scrollToBottom(); }
-  document.body.addEventListener('htmx:beforeSwap', onBeforeSwap);
-  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  // Follow new content if the user has not scrolled away from the bottom.
+  // `wasAtBottom` is driven by real scroll events only. The previous
+  // implementation also overwrote it inside `htmx:beforeSwap`, but that
+  // mis-fires when the composer textarea has just grown: `#messages`
+  // clientHeight shrinks from the bottom, scrollTop stays put, and the
+  // post-resize `isAtBottom()` snapshot reads false even though the user
+  // never scrolled. That snapshot then suppresses the corresponding
+  // `htmx:afterSwap` re-anchor, leaving newly-arrived messages off-
+  // screen. Reading `wasAtBottom` directly (without re-snapshotting)
+  // preserves the user's actual intent: if they were following the
+  // bottom before the composer grew, they still are.
+  function followIfPinned() { if (wasAtBottom) scrollToBottom(); }
+  document.body.addEventListener('htmx:afterSwap', followIfPinned);
   // OOB swaps (new messages over WS) take a separate event path.
-  document.body.addEventListener('htmx:oobBeforeSwap', onBeforeSwap);
-  document.body.addEventListener('htmx:oobAfterSwap', onAfterSwap);
+  document.body.addEventListener('htmx:oobAfterSwap', followIfPinned);
 
-  // Teardown: when #main is replaced by the WS reconnect soft-refresh (the
-  // only in-place re-render path that reaches scripts under #main today),
-  // htmx fires htmx:beforeCleanupElement on every descendant. Drop the four
-  // body listeners we attached so the next render's IIFE does not double-fire.
-  // The messages-scroll listener goes with the #messages element naturally.
-  function teardown() {
-    messages.removeEventListener('scroll', onScroll);
-    document.body.removeEventListener('htmx:beforeSwap', onBeforeSwap);
-    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
-    document.body.removeEventListener('htmx:oobBeforeSwap', onBeforeSwap);
-    document.body.removeEventListener('htmx:oobAfterSwap', onAfterSwap);
+  // Re-anchor on container resize. Composer growth (mention insert,
+  // multi-line typing) and typing-indicator updates both shrink
+  // `#messages` from the bottom without firing a scroll event, so the
+  // afterSwap hook alone is not enough.
+  var ro = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(followIfPinned);
+    ro.observe(messages);
   }
-  var root = document.currentScript.closest('[data-lc-cleanup-root]')
-          || document.currentScript.parentElement;
-  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+
+  // Teardown when the #messages element itself is detached (page swap,
+  // navigation). `htmx:beforeCleanupElement` BUBBLES, so listening on any
+  // ancestor catches arbitrary descendant cleanups too: a mention popover
+  // refresh inside the composer cleans up the previous <ul>, that event
+  // bubbles up through the composer form and #main, and a `{ once: true }`
+  // teardown attached to #main would fire on the FIRST popover swap,
+  // permanently disabling autoscroll. Listen on #messages and filter on
+  // `evt.target === messages` so we only react when #messages itself is
+  // the element being cleaned up; descendants (message edits via OOB
+  // outerHTML, etc.) bubble through but do not trigger teardown.
+  var torndown = false;
+  function maybeTeardown(evt) {
+    if (torndown || (evt && evt.target !== messages)) return;
+    torndown = true;
+    messages.removeEventListener('scroll', onScroll);
+    document.body.removeEventListener('htmx:afterSwap', followIfPinned);
+    document.body.removeEventListener('htmx:oobAfterSwap', followIfPinned);
+    if (ro) ro.disconnect();
+    messages.removeEventListener('htmx:beforeCleanupElement', maybeTeardown);
+  }
+  messages.addEventListener('htmx:beforeCleanupElement', maybeTeardown);
 })();
 </script>
