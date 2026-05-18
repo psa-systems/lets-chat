@@ -162,6 +162,7 @@ async fn main() {
     spawn_idle_scanner(state.clone());
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
+    spawn_sso_flow_pruner(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -276,6 +277,28 @@ fn spawn_orphan_sweeper(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "orphan sweep failed"),
+            }
+        }
+    });
+}
+
+/// Drop expired `sso_flows` rows every 5 minutes. The callback path
+/// consumes each row on hit (DELETE ... RETURNING) so the only rows
+/// left around are flows that were never finished - the user closed
+/// the IdP tab, hit Cancel, or the network dropped. Without a pruner
+/// these accumulate forever. The TTL is 10 minutes per doc 02 section
+/// 12; a 5-minute tick keeps the table bounded.
+fn spawn_sso_flow_pruner(state: AppState) {
+    const TICK_SECS: u64 = 300;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match db::sso::prune_expired_sso_flows(&state.auth).await {
+                Ok(n) if n > 0 => tracing::info!(removed = n, "sso_flows prune"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "sso_flows prune failed"),
             }
         }
     });

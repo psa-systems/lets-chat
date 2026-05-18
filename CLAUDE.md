@@ -83,6 +83,7 @@ desktop/                   # Tao + Wry wrapper
 - The `AuthUser` and `AdminUser` Axum extractors in `server/src/auth.rs` read the cookie and resolve the `User` (or reject the request).
 - First registered user is auto-promoted to Admin.
 - Roles: Admin > Moderator > User. RBAC logic lives in `server/src/db/auth.rs`.
+- **OIDC SSO** (added 2026-05-17). Admin-managed providers in `auth.db.sso_providers`; admin UI at `/admin/sso`. Sign-in entry at `/auth/sso/:provider/start`, callback at `/auth/sso/:provider/callback`. Account-linking state machine: already-linked sign-in, auto-link on verified-email match, link-required interstitial (password confirm + HMAC envelope), auto-provisioning. Group-claim -> enclave membership sync at sign-in via `sso_group_mappings`. SSO sign-ins skip local 2FA (the IdP is the authenticator); `/settings/2fa/setup` shows an SSO-only notice for password-less users. `LETS_CHAT_LOCAL_LOGIN_DISABLED=true` hard-disables the password path (POST /login, /register, /forgot, /reset/:token, /settings/password all 404). Session row carries `tenant_id` from the IdP's `mokosh_active_tenant` claim. Provider config + linkage code lives in `server/src/sso/`; routes in `server/src/routes/sso.rs` + `routes/admin_sso.rs`. Full design + phasing in `docs/lets-chat/sso/`.
 
 ### WebSocket Flow
 
