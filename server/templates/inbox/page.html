@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block title %}Inbox - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+    <h1 class="font-semibold truncate">Unread inbox</h1>
+    <button type="button" data-lc-jump-unread class="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 border rounded">Jump to next unread (Alt+Shift+&darr;)</button>
+  </header>
+  <div class="flex-1 overflow-y-auto" id="lc-inbox-list">
+    {% if items.is_empty() %}
+    <p class="p-8 text-center text-sm text-slate-500">&#10003; All caught up - no unread messages.</p>
+    {% else %}
+    <ul class="divide-y divide-slate-200">
+      {% include "inbox/items.html" %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
