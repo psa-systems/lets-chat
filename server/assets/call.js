@@ -56,9 +56,48 @@
   // ---- dom helpers --------------------------------------------------
   function root() { return document.getElementById('lc-call-root'); }
   function q(sel) { var r = root(); return r ? r.querySelector(sel) : null; }
-  function show(el) { if (el) el.classList.remove('hidden'); }
-  function hide(el) { if (el) el.classList.add('hidden'); }
+  // show/hide mirror the visual hidden-class onto aria-hidden so the
+  // accessibility tree matches. `display:none` already removes the element
+  // from the a11y tree, but keeping the attribute in sync is belt-and-
+  // suspenders against any future style change. Only call-dialog elements
+  // pass through these helpers; safe to apply globally.
+  function show(el) { if (el) { el.classList.remove('hidden'); el.setAttribute('aria-hidden', 'false'); } }
+  function hide(el) { if (el) { el.classList.add('hidden'); el.setAttribute('aria-hidden', 'true'); } }
   function setStatus(text) { var s = q('[data-lc-call-status]'); if (s) s.textContent = text; }
+
+  // ---- focus trap (modal dialog discipline) -------------------------
+  // Exactly one trap is active at a time. installDialogTrap migrates from
+  // an existing trap (incoming -> active on Accept) without restoring focus
+  // to the pre-dialog source; disposeDialogTrap (called only from teardown,
+  // the close funnel) restores focus to whatever element opened the dialog.
+  //
+  // Listener-cleanup discipline: every call path that closes a dialog ends
+  // at teardown(); teardown calls disposeDialogTrap exactly once; dispose
+  // calls removeEventListener exactly once. Migrations dispose the previous
+  // trap inline so we never hold two listeners simultaneously.
+  var currentTrap = null;
+  var trapPrevious = null;
+  var TRAP_FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function installDialogTrap(dialogEl) {
+    if (!dialogEl) return;
+    if (currentTrap) {
+      currentTrap.dispose();
+      currentTrap = null;
+    } else {
+      trapPrevious = document.activeElement;
+    }
+    var trap = window.__lcDialogTrap;
+    currentTrap = trap ? trap(dialogEl) : { dispose: function () {} };
+    var first = dialogEl.querySelector(TRAP_FOCUSABLE);
+    if (first) { try { first.focus(); } catch (e) {} }
+  }
+  function disposeDialogTrap() {
+    if (currentTrap) { currentTrap.dispose(); currentTrap = null; }
+    if (trapPrevious && document.contains(trapPrevious) && typeof trapPrevious.focus === 'function') {
+      try { trapPrevious.focus(); } catch (e) {}
+    }
+    trapPrevious = null;
+  }
 
   function setRemoteAvatar() {
     var av = q('[data-lc-remote-avatar]');
@@ -102,7 +141,9 @@
   function setCameraBtn() {
     var btn = q('[data-lc-call-camera]');
     if (!btn) return;
-    btn.textContent = hasLocalCamera() ? 'Stop video' : 'Start video';
+    var on = hasLocalCamera();
+    btn.textContent = on ? 'Stop video' : 'Start video';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     // While the screen-share track owns the video sender, toggling the camera
     // would race for the same outgoing slot. The `disabled:*` classes on the
     // button render the disabled affordance.
@@ -111,7 +152,10 @@
   }
   function setScreenBtn() {
     var btn = q('[data-lc-call-screen]');
-    if (btn) btn.textContent = isSharingScreen() ? 'Stop sharing' : 'Share screen';
+    if (!btn) return;
+    var on = isSharingScreen();
+    btn.textContent = on ? 'Stop sharing' : 'Share screen';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
   // ---- teardown -----------------------------------------------------
@@ -153,8 +197,17 @@
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
     var lv = q('[data-lc-local-video]'); if (lv) lv.srcObject = null;
-    var mute = q('[data-lc-call-mute]'); if (mute) mute.textContent = 'Mute';
-    var ss = q('[data-lc-call-screen]'); if (ss) ss.textContent = 'Share screen';
+    var mute = q('[data-lc-call-mute]');
+    if (mute) { mute.textContent = 'Mute'; mute.setAttribute('aria-pressed', 'false'); }
+    var cam = q('[data-lc-call-camera]');
+    if (cam) {
+      cam.textContent = 'Start video';
+      cam.setAttribute('aria-pressed', 'false');
+      cam.removeAttribute('disabled');
+    }
+    var ss = q('[data-lc-call-screen]');
+    if (ss) { ss.textContent = 'Share screen'; ss.setAttribute('aria-pressed', 'false'); }
+    disposeDialogTrap();
   }
 
   // ---- ice config ---------------------------------------------------
@@ -321,6 +374,7 @@
         refreshRemoteVideo();
         setCameraBtn();
         show(q('[data-lc-call-active]'));
+        installDialogTrap(q('[data-lc-call-active]'));
         // The server resolves glare; if an invite arrived while we were
         // acquiring media the phase has already flipped to 'incoming'.
         // Honor that: we are now the callee.
@@ -355,6 +409,7 @@
         refreshRemoteVideo();
         setCameraBtn();
         show(q('[data-lc-call-active]'));
+        installDialogTrap(q('[data-lc-call-active]'));
         setStatus('Connecting...');
         signal('accept');
         incoming = null;
@@ -390,7 +445,12 @@
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-call-mute]');
-    if (btn) btn.textContent = on ? 'Mute' : 'Unmute';
+    if (btn) {
+      btn.textContent = on ? 'Mute' : 'Unmute';
+      // aria-pressed="true" means "currently muted" (the toggle is on).
+      // Mirrors the visual: button reads "Unmute" exactly when muted.
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    }
   }
 
   function toggleCamera() {
@@ -585,6 +645,7 @@
           var nm = q('[data-lc-call-incoming-name]'); if (nm) nm.textContent = fromName;
           phase = 'incoming';
           show(q('[data-lc-call-incoming]'));
+          installDialogTrap(q('[data-lc-call-incoming]'));
           return;
         }
         if (phase === 'outgoing' && msgRoomId === roomId && fromId === peerId) {

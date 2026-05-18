@@ -9,7 +9,8 @@ use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
 use crate::views::room::{
-    ComposerFragment, ComposerQuoteChip, EditFormFragment, MessageView, ReactionView, RoomPage,
+    ComposerFragment, ComposerQuoteChip, EditFormFragment, HistoryEntryView,
+    HistoryPanelClosedFragment, HistoryPanelFragment, MessageView, ReactionView, RoomPage,
     SingleMessageFragment, ThreadPanelClosedFragment, ThreadPanelFragment,
 };
 use crate::views::{html, Html};
@@ -1083,6 +1084,59 @@ pub async fn post_thread_reply(
 /// hidden aside.
 pub async fn close_thread_panel() -> Result<Html, AppError> {
     html(&ThreadPanelClosedFragment)
+}
+
+/// GET /messages/:id/history - render the edit-history drawer for a
+/// message. Permission gate combines `get_message` (rejects soft-deleted)
+/// and `is_room_accessible` (room membership), matching the access shape of
+/// `get_single_message` exactly. Prior bodies render with mention chips
+/// resolved through `db::mentions::mentions_for_body` so chips persist for
+/// users a later edit removed; the current body uses the live-path
+/// `mentions_for_messages` for consistency with the room timeline.
+pub async fn get_history_panel(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(message_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, m.room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let edits = db::chat::list_message_edits(&state.chat, message_id).await?;
+    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let current_mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
+        .await?
+        .remove(&m.id)
+        .unwrap_or_default();
+    let mut entries: Vec<HistoryEntryView> = Vec::with_capacity(edits.len() + 1);
+    for e in edits {
+        let prior_mentions = db::mentions::mentions_for_body(&state.auth, &e.previous_body).await?;
+        entries.push(HistoryEntryView {
+            body_html: crate::views::markdown::render(&e.previous_body, &prior_mentions, &emojis),
+            label: format!("Edited {}", e.edited_at),
+        });
+    }
+    let current_label = match m.edited_at.as_deref() {
+        Some(ts) => format!("Current - last edited {ts}"),
+        None => "Current".to_string(),
+    };
+    entries.push(HistoryEntryView {
+        body_html: crate::views::markdown::render(&m.body, &current_mentions, &emojis),
+        label: current_label,
+    });
+    html(&HistoryPanelFragment {
+        message_id,
+        entries: &entries,
+    })
+}
+
+/// DELETE /history-panel - close the drawer by replacing it with an empty
+/// hidden aside.
+pub async fn close_history_panel() -> Result<Html, AppError> {
+    html(&HistoryPanelClosedFragment)
 }
 
 /// GET /room/:room_id/composer-quote/:message_id - returns the inline

@@ -3,5 +3,8 @@
   "identifier": "default",
   "description": "Permissions for the main lets-chat webview window.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "notification:default"
+  ]
 }

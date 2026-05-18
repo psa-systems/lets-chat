@@ -43,10 +43,10 @@
     font-size: 0.92rem;
   }
   .alert strong { color: #991b1b; }
-  .url {
+  code, .url {
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     background: rgba(15, 23, 42, 0.06);
-    padding: 0.15rem 0.4rem;
+    padding: 0.1rem 0.35rem;
     border-radius: 0.25rem;
     font-size: 0.85em;
     word-break: break-all;
@@ -62,25 +62,55 @@
     margin: 1.5rem 0 0.5rem;
     color: #334155;
   }
-  ol {
-    margin: 0;
-    padding-left: 1.5rem;
-    color: #334155;
+  .hint {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    border-radius: 0.375rem;
+    padding: 0.85rem 1.1rem;
+    margin: 0 0 1.25rem;
+    font-size: 0.88rem;
+    color: #1e3a8a;
+  }
+  .hint code { background: rgba(30, 58, 138, 0.1); }
+  .hint a.fill {
+    display: inline-block;
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    color: #1d4ed8;
+    text-decoration: none;
+    cursor: pointer;
+    border-bottom: 1px dashed #93c5fd;
+  }
+  .hint a.fill:hover { color: #1e3a8a; border-bottom-color: #1e3a8a; }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 0.4rem;
+    font-weight: 500;
+  }
+  input[type="url"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.4rem;
     font-size: 0.95rem;
-    line-height: 1.65;
-  }
-  ol code {
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    background: rgba(15, 23, 42, 0.06);
-    padding: 0.1rem 0.35rem;
-    border-radius: 0.25rem;
-    font-size: 0.85em;
+    color: #0f172a;
+    background: white;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
   }
-  .actions {
-    margin-top: 2rem;
+  input[type="url"]:focus {
+    outline: none;
+    border-color: #0f172a;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
+  }
+  .form-row {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
   }
+  .form-row input { flex: 1; }
   button {
     background: #0f172a;
     color: white;
@@ -91,14 +121,27 @@
     font-weight: 500;
     cursor: pointer;
     transition: background 120ms ease;
+    white-space: nowrap;
   }
   button:hover { background: #1e293b; }
-  button.secondary {
-    background: transparent;
-    color: #475569;
-    border: 1px solid #cbd5e1;
+  button:disabled {
+    background: #94a3b8;
+    cursor: progress;
   }
-  button.secondary:hover { background: #f1f5f9; color: #0f172a; }
+  .status {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    min-height: 1.2em;
+  }
+  .status.info { color: #475569; }
+  .status.error { color: #991b1b; }
+  .status.ok { color: #166534; }
+  .env-note {
+    margin: 1.25rem 0 0;
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.55;
+  }
   footer {
     margin-top: 2.5rem;
     padding-top: 1.25rem;
@@ -116,22 +159,138 @@
     <p class="subtitle">Desktop client</p>
 
     <div class="alert">
-      <strong>Couldn't reach</strong> <span class="url">{{URL}}</span>
-      <span class="reason">{{REASON}}</span>
+      <strong>Couldn't reach</strong> <span class="url" id="failing-url">{{URL}}</span>
+      <span class="reason" id="failing-reason">{{REASON}}</span>
     </div>
 
-    <h2>To connect</h2>
-    <ol>
-      <li>Make sure the lets-chat server is running and reachable from this machine.</li>
-      <li>Set <code>LETS_CHAT_SERVER_URL</code> to your server URL (for example, <code>https://chat.example.com</code>).</li>
-      <li>Restart this app so the new URL takes effect.</li>
-    </ol>
+    <h2>Connect to a server</h2>
 
-    <div class="actions">
-      <button onclick="location.href='{{URL}}'">Try again</button>
+    <div class="hint">
+      Running <code>just dev-web-local</code>? The local dev server listens on
+      <code>http://localhost:18080</code>.
+      <a class="fill" id="fill-local">Use this URL</a>
     </div>
+
+    <label for="url-input">Server URL</label>
+    <div class="form-row">
+      <input type="url" id="url-input" placeholder="https://chat.example.com"
+             value="{{URL}}" spellcheck="false" autocapitalize="off"
+             autocomplete="off" autocorrect="off">
+      <button type="button" id="save-btn">Save &amp; connect</button>
+    </div>
+    <div class="status info" id="status"></div>
+
+    <p class="env-note">
+      <code>LETS_CHAT_SERVER_URL</code> environment variable still works as a
+      higher-priority override. The URL you save here is persisted to
+      <code>~/.config/lets-chat-desktop/config.json</code> and used on
+      restart.
+    </p>
 
     <footer>lets-chat-desktop {{VERSION}} &middot; {{GIT_HASH}}</footer>
   </div>
+
+<script>
+  // Tauri 2 injects window.__TAURI_INTERNALS__.invoke into every main-frame
+  // load it owns (including custom URI scheme protocols like welcome://).
+  // We never rely on the @tauri-apps/api JS package (window.__TAURI__.core),
+  // which would have to be bundled separately.
+  function hasTauriIPC() {
+    return !!(window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+  }
+  function tauriInvoke(cmd, args) {
+    if (!hasTauriIPC()) {
+      return Promise.reject(new Error("Tauri IPC bridge not available"));
+    }
+    return window.__TAURI_INTERNALS__.invoke(cmd, args);
+  }
+
+  const input = document.getElementById('url-input');
+  const saveBtn = document.getElementById('save-btn');
+  const fillLocal = document.getElementById('fill-local');
+  const statusEl = document.getElementById('status');
+  const failingUrl = document.getElementById('failing-url');
+  const failingReason = document.getElementById('failing-reason');
+
+  function setStatus(kind, msg) {
+    statusEl.className = 'status ' + kind;
+    statusEl.textContent = msg;
+  }
+
+  // Make sure the user immediately sees that JS is alive. If the user
+  // clicks Save and nothing happens (no status text appears), it means the
+  // script never reached this line - useful failure signal.
+  setStatus('info', hasTauriIPC()
+    ? 'Ready. Edit the URL above and press Save & connect.'
+    : 'Tauri IPC unavailable - Save will still connect to the URL, but the choice will not be persisted.');
+
+  fillLocal.addEventListener('click', (e) => {
+    e.preventDefault();
+    input.value = 'http://localhost:18080';
+    input.focus();
+  });
+
+  async function connect() {
+    const url = input.value.trim();
+    if (!url) {
+      setStatus('error', 'URL cannot be empty.');
+      input.focus();
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      setStatus('error', 'URL must start with http:// or https://');
+      input.focus();
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Probing...';
+    setStatus('info', 'Probing ' + url + ' ...');
+
+    let reachable = false;
+    let reason = null;
+    let persisted = false;
+
+    try {
+      const result = await tauriInvoke('set_server_url', { url });
+      reachable = !!result.reachable;
+      reason = result.reason || null;
+      persisted = true;
+    } catch (e) {
+      // IPC unavailable or the command rejected. Don't trap the user - fall
+      // through to a best-effort direct navigation so they can still
+      // connect. Persistence is the only thing lost; they'd just have to
+      // re-enter the URL next launch.
+      setStatus('error', 'Could not persist URL (' + String(e) + '). Connecting anyway...');
+      window.location.href = url;
+      return;
+    }
+
+    if (reachable) {
+      setStatus('ok', 'Connected. Loading...');
+      window.location.href = url;
+      return;
+    }
+
+    // Server responded but with a 4xx/5xx, or network failed. Update the
+    // alert with the new failure reason so the user can adjust.
+    failingUrl.textContent = url;
+    failingReason.textContent = reason || 'unknown error';
+    setStatus('error', 'Server unreachable: ' + (reason || 'unknown error'));
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save & connect';
+  }
+
+  saveBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    connect();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      connect();
+    }
+  });
+</script>
 </body>
 </html>
