@@ -54,6 +54,26 @@ impl MentionSuggestion {
             subtitle: Some(subtitle),
         }
     }
+
+    /// Convenience constructor for a user-group suggestion. The `username`
+    /// is the group name; the composer inserts `@{name}` into the
+    /// textarea exactly like a user mention. `display_name` carries a
+    /// rendered "N members" label for the secondary text in the row.
+    pub fn group(name: String, member_count: i64) -> Self {
+        let label = if member_count == 1 {
+            "1 member".to_string()
+        } else {
+            format!("{member_count} members")
+        };
+        Self {
+            kind: "group",
+            user_id: String::new(),
+            username: name,
+            display_name: Some(label),
+            avatar_ext: None,
+            subtitle: None,
+        }
+    }
 }
 
 #[derive(Template)]
