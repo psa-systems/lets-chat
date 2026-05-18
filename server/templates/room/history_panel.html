@@ -1,0 +1,20 @@
+<aside id="history-panel" class="w-96 border-l border-slate-200 flex flex-col bg-white">
+  <header class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+    <div class="font-semibold">Edit history</div>
+    <button
+      hx-delete="/history-panel"
+      hx-target="#history-panel"
+      hx-swap="outerHTML"
+      class="text-slate-400 hover:text-slate-700"
+      aria-label="Close history"
+    >&#10005;</button>
+  </header>
+  <div class="flex-1 overflow-y-auto px-3 py-2 space-y-3 text-sm" data-message-id="{{ message_id }}">
+    {% for entry in entries %}
+    <div class="rounded border border-slate-200 p-2">
+      <div class="text-xs text-slate-500 mb-1">{{ entry.label }}</div>
+      <div class="lc-md leading-snug">{{ entry.body_html|safe }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</aside>
