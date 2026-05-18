@@ -42,3 +42,22 @@ self-replace = "1"
 # $XDG_CONFIG_HOME on Linux, ~/Library/Application Support on macOS,
 # %APPDATA% on Windows.
 dirs = "5"
+
+# Linux-only: gives access to the WebKit2GTK `permission-request` signal
+# that wry exposes via PlatformWebview::inner(). Required because the
+# default WebKit2GTK behaviour silently denies `getUserMedia` /
+# `getDisplayMedia` unless the host application explicitly handles the
+# signal. Pinned to "2" (= libwebkit2gtk-4.1) to match the system .so
+# that wry links against.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2"
+
+# Windows-only: WebView2 surfaces media-stream consent through the
+# CoreWebView2 PermissionRequested COM event. webview2-com + the
+# `windows` crate cover the COM plumbing; the handler is wired
+# directly off the controller returned by wry's
+# PlatformWebview::controller(). Default WebView2 behaviour cancels
+# the event (= silent deny) unless the host sets state to Allow.
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com"] }
