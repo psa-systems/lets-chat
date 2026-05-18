@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block title %}Activity - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+    <h1 class="font-semibold truncate">Activity</h1>
+    <nav class="flex gap-1 text-xs">
+      <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">All</a>
+      <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Mentions</a>
+      <a href="/activity?tab=reply" class="px-2 py-1 rounded{% if active_tab == "reply" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Replies</a>
+      <a href="/activity?tab=reaction" class="px-2 py-1 rounded{% if active_tab == "reaction" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Reactions</a>
+    </nav>
+  </header>
+  <div class="flex-1 overflow-y-auto">
+    {% if items.is_empty() %}
+    <p class="p-8 text-center text-sm text-slate-500">Nothing to see here. New mentions, replies, and reactions will show up as they happen.</p>
+    {% else %}
+    <ul class="divide-y divide-slate-200">
+      {% for item in items %}
+      <li class="px-4 py-3 hover:bg-slate-50">
+        <a href="{{ item.target_path }}" class="block">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span class="font-semibold text-slate-700">{{ item.kind_label }} - {{ item.room_label }}</span>
+            <span>{{ item.created_at }}</span>
+          </div>
+          <div class="text-sm mt-1 text-slate-700">
+            {% if item.kind == "reaction" %}
+            <span class="font-medium">{{ item.actor_label }}</span> reacted {{ item.emoji }} to your message
+            {% else if item.kind == "reply" %}
+            <span class="font-medium">{{ item.actor_label }}</span> replied to your message
+            {% else %}
+            <span class="font-medium">{{ item.actor_label }}</span> mentioned you
+            {% endif %}
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
