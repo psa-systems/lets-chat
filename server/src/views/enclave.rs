@@ -34,12 +34,20 @@ pub struct EnclavePage<'a> {
     pub asset_version: &'a str,
 }
 
+pub struct EnclaveGroupView {
+    pub id: i64,
+    pub name: String,
+    pub member_count: i64,
+    pub member_labels: Vec<String>,
+}
+
 #[derive(Template)]
 #[template(path = "enclave/settings.html")]
 pub struct EnclaveSettingsPage<'a> {
     pub user: &'a User,
     pub enclave: &'a Enclave,
     pub members: &'a [EnclaveMemberView],
+    pub groups: &'a [EnclaveGroupView],
     pub emojis: &'a [CustomEmoji],
     pub can_delete: bool,
     pub flash_error: Option<&'a str>,
