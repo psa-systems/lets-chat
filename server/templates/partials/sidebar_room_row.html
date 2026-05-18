@@ -15,7 +15,7 @@
   </a>
   {% if !sidebar_categories.is_empty() %}
   <details class="relative">
-    <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1 opacity-0 group-hover:opacity-100 focus:opacity-100" title="Move to category">&#9776;</summary>
+    <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100" title="Move to category">&#9776;</summary>
     <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-xs w-48 py-1">
       {% for category in sidebar_categories %}
       <form hx-patch="/sidebar/categories/{{ category.id }}/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML">
