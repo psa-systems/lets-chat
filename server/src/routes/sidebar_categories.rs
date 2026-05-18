@@ -5,6 +5,7 @@
 //! `#sidebar` element. Keeps the response shape uniform and avoids
 //! per-endpoint OOB swap plumbing for what is a small navigation surface.
 use axum::extract::{Path, State};
+use axum::http::HeaderMap;
 use axum::Form;
 use serde::Deserialize;
 
@@ -49,11 +50,12 @@ fn validate_name(raw: &str) -> Result<String, AppError> {
 pub async fn post_create(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     Form(form): Form<CreateCategoryForm>,
 ) -> Result<Html, AppError> {
     let name = validate_name(&form.name)?;
     db::sidebar_categories::create_category(&state.auth, &user.id, &name).await?;
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// PATCH /sidebar/categories/{id} - rename or toggle collapsed. The
@@ -63,6 +65,7 @@ pub async fn patch_category(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(category_id): Path<i64>,
+    headers: HeaderMap,
     Form(form): Form<PatchCategoryForm>,
 ) -> Result<Html, AppError> {
     if let Some(name) = form.name.as_deref() {
@@ -88,7 +91,7 @@ pub async fn patch_category(
             return Err(AppError::NotFound);
         }
     }
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// DELETE /sidebar/categories/{id} - remove a category. Rooms previously
@@ -98,12 +101,13 @@ pub async fn delete_category(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(category_id): Path<i64>,
+    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     let n = db::sidebar_categories::delete_category(&state.auth, &user.id, category_id).await?;
     if n == 0 {
         return Err(AppError::NotFound);
     }
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// PATCH /sidebar/categories/{id}/rooms/{room_id} - assign a room to a
@@ -114,6 +118,7 @@ pub async fn patch_room_assignment(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((category_id, room_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     let is_admin = user.role == "admin";
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
@@ -127,7 +132,7 @@ pub async fn patch_room_assignment(
         return Err(AppError::NotFound);
     }
     db::sidebar_categories::assign_room(&state.auth, &user.id, room_id, category_id).await?;
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// DELETE /sidebar/categories/rooms/{room_id} - unassign a room (move it
@@ -136,9 +141,10 @@ pub async fn delete_room_assignment(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
+    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     db::sidebar_categories::unassign_room(&state.auth, &user.id, room_id).await?;
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// Form shape for the two positions endpoints. The body is a single
@@ -176,11 +182,12 @@ impl PositionsForm {
 pub async fn patch_category_positions(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     Form(form): Form<PositionsForm>,
 ) -> Result<Html, AppError> {
     let ids = form.parsed_ids()?;
     db::sidebar_categories::set_category_positions(&state.auth, &user.id, &ids).await?;
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
 /// PATCH /sidebar/categories/{cat_id}/positions - reorder the rooms in
@@ -193,6 +200,7 @@ pub async fn patch_room_positions(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(category_id): Path<i64>,
+    headers: HeaderMap,
     Form(form): Form<PositionsForm>,
 ) -> Result<Html, AppError> {
     let ids = form.parsed_ids()?;
@@ -210,18 +218,30 @@ pub async fn patch_room_positions(
         }
     }
     db::sidebar_categories::set_room_positions(&state.auth, &user.id, category_id, &ids).await?;
-    render_sidebar_fragment(&state, &user).await
+    render_sidebar_fragment(&state, &user, &headers).await
 }
 
-/// Re-render the sidebar partial. Uses `SidebarUpdateFragment` (the same
-/// shape used for WebSocket-driven sidebar updates) so HTMX swaps the
-/// `#sidebar` element via the `hx-swap-oob` attribute baked into
-/// `ws/sidebar_update.html`. Phase 1b: now includes the grouped
-/// `sidebar_categories` field so the rebuilt sidebar reflects the
-/// mutation immediately.
-async fn render_sidebar_fragment(state: &AppState, user: &User) -> Result<Html, AppError> {
+/// Re-render the sidebar partial. Uses `SidebarUpdateFragment` (the
+/// same shape used for WebSocket-driven sidebar updates) so HTMX swaps
+/// the `#sidebar` element via the `hx-swap-oob` attribute baked into
+/// `ws/sidebar_update.html`.
+///
+/// The current enclave is derived from HTMX's `HX-Current-URL` header
+/// so the re-rendered sidebar matches the page the user is actually on:
+/// `load_sidebar(None)` always returns an empty rooms list (the Home
+/// view shows only DMs), which would blank the "All rooms" section
+/// every time a category was created or toggled.  Falling back to
+/// `Referer` covers non-HTMX clients (cURL tests, browsers with
+/// scripting off, etc.); a missing / unrecognised URL drops to None
+/// without erroring.
+async fn render_sidebar_fragment(
+    state: &AppState,
+    user: &User,
+    headers: &HeaderMap,
+) -> Result<Html, AppError> {
+    let current_enclave = current_enclave_from_headers(state, headers).await;
     let (sidebar_categories, sidebar_rooms, sidebar_peers) =
-        super::load_sidebar(state, user, None).await?;
+        super::load_sidebar(state, user, current_enclave).await?;
     let fragment = SidebarUpdateFragment {
         user,
         sidebar_categories: &sidebar_categories,
@@ -229,4 +249,26 @@ async fn render_sidebar_fragment(state: &AppState, user: &User) -> Result<Html, 
         sidebar_peers: &sidebar_peers,
     };
     html(&fragment)
+}
+
+/// Parse `HX-Current-URL` (preferred) or `Referer` (fallback) into the
+/// enclave the user is currently viewing. Returns `None` on Home /
+/// settings / saved / any URL whose path does not map to an enclave so
+/// `load_sidebar` renders the Home (DM-only) shape.
+async fn current_enclave_from_headers(state: &AppState, headers: &HeaderMap) -> Option<i64> {
+    let raw = headers
+        .get("HX-Current-URL")
+        .or_else(|| headers.get(axum::http::header::REFERER))?
+        .to_str()
+        .ok()?;
+    let url = url::Url::parse(raw).ok()?;
+    let mut segs = url.path_segments()?;
+    match segs.next()? {
+        "enclave" => segs.next()?.parse::<i64>().ok(),
+        "room" => {
+            let room_id = segs.next()?.parse::<i64>().ok()?;
+            super::enclave_for_room(state, room_id).await.ok().flatten()
+        }
+        _ => None,
+    }
 }
