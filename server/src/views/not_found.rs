@@ -8,6 +8,7 @@ use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 pub struct NotFoundPage<'a> {
     pub user: &'a User,
     pub path: Option<String>,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],

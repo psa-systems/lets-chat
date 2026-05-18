@@ -1,0 +1,31 @@
+<div class="flex items-center group">
+  <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex-1 flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-slate-400{% endif %}">
+    {% if room.is_voice %}
+    <span>&#128266; {{ room.name }}</span>
+    {% else %}
+    <span># {{ room.name }}</span>
+    {% let kind = "room" %}
+    {% let id = room.id.to_string() %}
+    {% let unread = room.unread %}
+    {% let mute_mode = room.mute_mode.as_str() %}
+    {% include "partials/unread_badge.html" %}
+    {% let mentions = room.mentions %}
+    {% include "partials/mention_badge.html" %}
+    {% endif %}
+  </a>
+  {% if !sidebar_categories.is_empty() %}
+  <details class="relative">
+    <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1 opacity-0 group-hover:opacity-100 focus:opacity-100" title="Move to category">&#9776;</summary>
+    <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-xs w-48 py-1">
+      {% for category in sidebar_categories %}
+      <form hx-patch="/sidebar/categories/{{ category.id }}/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML">
+        <button type="submit" class="w-full text-left px-3 py-1 hover:bg-slate-100">{{ category.name }}</button>
+      </form>
+      {% endfor %}
+      <form hx-delete="/sidebar/categories/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="border-t border-slate-200 mt-1 pt-1">
+        <button type="submit" class="w-full text-left px-3 py-1 text-slate-500 hover:bg-slate-100">Remove from category</button>
+      </form>
+    </div>
+  </details>
+  {% endif %}
+</div>

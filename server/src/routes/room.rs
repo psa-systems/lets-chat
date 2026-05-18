@@ -60,7 +60,7 @@ async fn get_voice_room(
     let enclave_id = super::enclave_for_room(state, room.id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let (sidebar_rooms, sidebar_peers, switcher) =
+    let (sidebar_categories, sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(state, user, Some(enclave_id)).await?;
     let mut participants = Vec::new();
     for uid in state.hub.voice_room_users(room.id) {
@@ -81,6 +81,7 @@ async fn get_voice_room(
         user,
         room,
         enclave_id,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
@@ -256,7 +257,7 @@ pub async fn get_room(
     // Resolve the room's enclave so the switcher highlights the right icon
     // and the sidebar shows that enclave's rooms instead of DMs.
     let current_enclave = super::enclave_for_room(&state, room_id).await?;
-    let (mut sidebar_rooms, sidebar_peers, switcher) =
+    let (sidebar_categories, mut sidebar_rooms, sidebar_peers, switcher) =
         super::load_chrome(&state, &user, current_enclave).await?;
     if let Some(r) = sidebar_rooms.iter_mut().find(|r| r.id == room_id) {
         r.active = true;
@@ -278,6 +279,7 @@ pub async fn get_room(
     let page = RoomPage {
         user: &user,
         room: &room,
+        sidebar_categories: &sidebar_categories,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
