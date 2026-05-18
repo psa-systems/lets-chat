@@ -51,6 +51,7 @@ mod saas_auth;
 mod search;
 mod settings;
 mod sidebar_categories;
+mod starred_rooms;
 mod status;
 pub(crate) mod two_factor;
 mod unfurl;
@@ -260,6 +261,8 @@ pub(crate) async fn load_sidebar(
         Vec<SidebarCategoryGroup>,
         Vec<SidebarRoom>,
         Vec<SidebarPeer>,
+        Vec<SidebarRoom>,
+        Vec<SidebarPeer>,
         bool,
         Option<i64>,
     ),
@@ -320,6 +323,7 @@ pub(crate) async fn load_sidebar(
                 let effective = effective_status(state, &record.id, &record.status);
                 sidebar_peers.push(SidebarPeer {
                     id: record.id.clone(),
+                    dm_room_id: room.id,
                     username: record.username.clone(),
                     display_name: record.display_name.clone(),
                     avatar_ext: record.avatar_ext.clone(),
@@ -404,13 +408,88 @@ pub(crate) async fn load_sidebar(
         None => false,
     };
 
+    // LC-80: split starred rooms / DMs out into their own top-of-sidebar
+    // sections. Pull the per-user star set + positions once and bucket
+    // both the room and DM lists. A starred categorized room is shown
+    // ONLY in the Starred section (not duplicated in its category) so
+    // the user sees each row exactly once.
+    let starred_ids = db::starred_rooms::starred_room_ids(&state.auth, &user.id).await?;
+    let star_positions = db::starred_rooms::star_positions(&state.auth, &user.id).await?;
+    let (sidebar_starred_rooms, uncategorized) =
+        split_starred_rooms(uncategorized, &starred_ids, &star_positions);
+    let mut sidebar_categories = sidebar_categories;
+    let mut starred_from_categories: Vec<SidebarRoom> = Vec::new();
+    for cat in sidebar_categories.iter_mut() {
+        let mut kept = Vec::with_capacity(cat.rooms.len());
+        for room in cat.rooms.drain(..) {
+            if starred_ids.contains(&room.id) {
+                starred_from_categories.push(room);
+            } else {
+                kept.push(room);
+            }
+        }
+        cat.rooms = kept;
+        // Recompute aggregates after pulling out starred rooms so the
+        // collapsed-header counts match the rooms still in the category.
+        cat.unread_total = cat
+            .rooms
+            .iter()
+            .filter(|r| r.mute_mode == "none")
+            .map(|r| r.unread)
+            .sum();
+        cat.mention_total = cat.rooms.iter().map(|r| r.mentions).sum();
+    }
+    let mut sidebar_starred_rooms = sidebar_starred_rooms;
+    sidebar_starred_rooms.extend(starred_from_categories);
+    sidebar_starred_rooms.sort_by_key(|r| star_positions.get(&r.id).copied().unwrap_or(i64::MAX));
+
+    let (sidebar_starred_peers, sidebar_peers) =
+        split_starred_peers(sidebar_peers, &starred_ids, &star_positions);
+
     Ok((
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         uncategorized,
         sidebar_peers,
         can_manage_sidebar_categories,
         current_enclave,
     ))
+}
+
+/// Helper: split a SidebarRoom vec into (starred, rest) using the
+/// user's per-room star set + position map.
+fn split_starred_rooms(
+    rooms: Vec<SidebarRoom>,
+    starred_ids: &std::collections::HashSet<i64>,
+    star_positions: &HashMap<i64, i64>,
+) -> (Vec<SidebarRoom>, Vec<SidebarRoom>) {
+    let (mut starred, rest): (Vec<_>, Vec<_>) =
+        rooms.into_iter().partition(|r| starred_ids.contains(&r.id));
+    starred.sort_by_key(|r| star_positions.get(&r.id).copied().unwrap_or(i64::MAX));
+    (starred, rest)
+}
+
+/// Same split for DMs. DM rows are keyed on the DM peer's user_id in
+/// SidebarPeer, but `starred_rooms.room_id` keys on the chat.db DM
+/// room id. The DM SidebarPeer carries the peer id, not the room id;
+/// the route layer must star by room id, so we surface the DM's
+/// room id through SidebarPeer (added below) and filter on that.
+fn split_starred_peers(
+    peers: Vec<SidebarPeer>,
+    starred_ids: &std::collections::HashSet<i64>,
+    star_positions: &HashMap<i64, i64>,
+) -> (Vec<SidebarPeer>, Vec<SidebarPeer>) {
+    let (mut starred, rest): (Vec<_>, Vec<_>) = peers
+        .into_iter()
+        .partition(|p| starred_ids.contains(&p.dm_room_id));
+    starred.sort_by_key(|p| {
+        star_positions
+            .get(&p.dm_room_id)
+            .copied()
+            .unwrap_or(i64::MAX)
+    });
+    (starred, rest)
 }
 
 /// Convenience wrapper that returns sidebar lists plus the switcher entries
@@ -424,17 +503,28 @@ pub(crate) async fn load_chrome(
         Vec<SidebarCategoryGroup>,
         Vec<SidebarRoom>,
         Vec<SidebarPeer>,
+        Vec<SidebarRoom>,
+        Vec<SidebarPeer>,
         Vec<SwitcherEntry>,
         bool,
         Option<i64>,
     ),
     AppError,
 > {
-    let (categories, rooms, peers, can_manage_sidebar_categories, sidebar_current_enclave) =
-        load_sidebar(state, user, current_enclave).await?;
+    let (
+        categories,
+        starred_rooms,
+        starred_peers,
+        rooms,
+        peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = load_sidebar(state, user, current_enclave).await?;
     let switcher = load_switcher(state, user, current_enclave).await?;
     Ok((
         categories,
+        starred_rooms,
+        starred_peers,
         rooms,
         peers,
         switcher,
@@ -565,6 +655,8 @@ pub(crate) async fn handle_not_found(
     };
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -575,6 +667,8 @@ pub(crate) async fn handle_not_found(
         user: &user,
         path: Some(uri.path().to_string()),
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
@@ -666,6 +760,11 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/sidebar/categories/{category_id}/collapse",
             axum::routing::patch(sidebar_categories::patch_collapse),
+        )
+        .route("/rooms/{room_id}/star", post(starred_rooms::post_toggle))
+        .route(
+            "/sidebar/stars/positions",
+            axum::routing::patch(starred_rooms::patch_positions),
         )
         .route(
             "/messages/{message_id}",

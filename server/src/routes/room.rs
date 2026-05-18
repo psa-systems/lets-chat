@@ -62,6 +62,8 @@ async fn get_voice_room(
         .ok_or(AppError::NotFound)?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -88,6 +90,8 @@ async fn get_voice_room(
         room,
         enclave_id,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
@@ -267,6 +271,8 @@ pub async fn get_room(
     let current_enclave = super::enclave_for_room(&state, room_id).await?;
     let (
         sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
         mut sidebar_rooms,
         sidebar_peers,
         switcher,
@@ -305,6 +311,8 @@ pub async fn get_room(
         user: &user,
         room: &room,
         sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
