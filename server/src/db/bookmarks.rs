@@ -78,7 +78,7 @@ pub async fn bookmarked_message_ids_in_room(
     let rows = sqlx::query(
         "SELECT b.message_id FROM bookmarks b \
            INNER JOIN messages m ON m.id = b.message_id \
-          WHERE b.user_id = ? AND m.room_id = ? AND m.deleted_at IS NULL",
+          WHERE b.user_id = ? AND m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
     )
     .bind(user_id)
     .bind(room_id)
@@ -106,7 +106,7 @@ pub async fn bookmarks_for_user(
            FROM bookmarks b \
            INNER JOIN messages m ON m.id = b.message_id \
            INNER JOIN rooms r ON r.id = m.room_id \
-          WHERE b.user_id = ? AND m.deleted_at IS NULL \
+          WHERE b.user_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0 \
           ORDER BY b.created_at DESC, b.message_id DESC",
     )
     .bind(user_id)
@@ -135,10 +135,11 @@ pub async fn room_for_message(
     pool: &SqlitePool,
     message_id: i64,
 ) -> Result<Option<i64>, sqlx::Error> {
-    let row: Option<i64> =
-        sqlx::query_scalar("SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL")
-            .bind(message_id)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<i64> = sqlx::query_scalar(
+        "SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(row)
 }

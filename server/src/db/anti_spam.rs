@@ -64,8 +64,7 @@ pub async fn list_rules(pool: &SqlitePool) -> Result<Vec<LinkFilterRule>, sqlx::
         .map(|r| LinkFilterRule {
             id: r.get("id"),
             pattern: r.get("pattern"),
-            action: FilterAction::parse(r.get::<&str, _>("action"))
-                .unwrap_or(FilterAction::Warn),
+            action: FilterAction::parse(r.get::<&str, _>("action")).unwrap_or(FilterAction::Warn),
             created_by: r.get("created_by"),
             created_at: r.get("created_at"),
         })
@@ -96,6 +95,29 @@ pub async fn delete_rule(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> 
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// First rule that matches any host in `hosts`. Rules are scanned in
+/// pattern-alphabetical order (same as `list_rules`) so behavior is
+/// stable across runs; the first hit wins regardless of action
+/// severity. Returns the rule + the matched host so the caller can
+/// log which URL tripped which rule.
+pub async fn find_match(
+    pool: &SqlitePool,
+    hosts: &[String],
+) -> Result<Option<(LinkFilterRule, String)>, sqlx::Error> {
+    if hosts.is_empty() {
+        return Ok(None);
+    }
+    let rules = list_rules(pool).await?;
+    for host in hosts {
+        for rule in &rules {
+            if crate::links::pattern_matches(&rule.pattern, host) {
+                return Ok(Some((rule.clone(), host.clone())));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Insert the quarantine record for a freshly-inserted message. The
@@ -211,9 +233,7 @@ pub async fn reject_quarantine(
 
 /// Count of unreviewed entries, for the admin sidebar badge / nav.
 pub async fn count_pending_quarantine(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT COUNT(*) FROM link_filter_quarantine WHERE reviewed_at IS NULL",
-    )
-    .fetch_one(pool)
-    .await
+    sqlx::query_scalar("SELECT COUNT(*) FROM link_filter_quarantine WHERE reviewed_at IS NULL")
+        .fetch_one(pool)
+        .await
 }

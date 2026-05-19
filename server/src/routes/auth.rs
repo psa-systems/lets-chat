@@ -35,6 +35,14 @@ pub struct RegisterForm {
     pub password_confirm: String,
     #[serde(default)]
     pub email: Option<String>,
+    /// LC-94 honeypot. The register form renders a hidden input with
+    /// this name, off-screen and `autocomplete=off`; legit users
+    /// never see it and never fill it in. Bots that auto-fill every
+    /// input populate the field, and the handler rejects the
+    /// submission. Wrapped in `Option` so old clients without the
+    /// field still deserialize cleanly.
+    #[serde(default)]
+    pub website: Option<String>,
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
@@ -132,6 +140,48 @@ pub async fn post_register(
     jar: CookieJar,
     axum::Form(form): axum::Form<RegisterForm>,
 ) -> Result<Response, AppError> {
+    // LC-94: honeypot. If the hidden field is populated the request
+    // came from a bot. Return a generic-looking error so the bot
+    // cannot tell it was caught; do not surface a distinct message
+    // (which would let the spammer A/B around the field).
+    let honeypot_on = db::settings::get_setting(&state.settings, "honeypot_enabled")
+        .await?
+        .as_deref()
+        == Some("true");
+    if honeypot_on
+        && form
+            .website
+            .as_deref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+    {
+        return Ok(form_error(
+            &state,
+            &headers,
+            FormPage::Register,
+            "Could not create account; please try again",
+        ));
+    }
+
+    // LC-94: per-IP rate limit. Skipped when the cap is 0 (default),
+    // when the request has no extractable client IP (no reverse
+    // proxy upstream), or when the deployment-wide honeypot is the
+    // only defense the operator wants. Each rate-limited 429 still
+    // surfaces a clear error so legitimate retries know to wait.
+    let reg_cap =
+        crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_registrations").await;
+    if let Some(ip) = crate::auth::extract_session_origin(&headers).1 {
+        if let crate::rate_limit::Outcome::Deny { retry_after } =
+            state
+                .rate_limits
+                .check(crate::rate_limit::RateLimitKind::Register, &ip, reg_cap)
+        {
+            return Err(AppError::TooManyRequests(format!(
+                "too many registrations from this address; retry in {retry_after} seconds"
+            )));
+        }
+    }
+
     let username = form.username.trim();
     let password = form.password.as_str();
     if username.len() < 3 || username.len() > 32 {

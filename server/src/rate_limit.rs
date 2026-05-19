@@ -73,6 +73,20 @@ pub struct RateLimits {
     map: Arc<DashMap<String, WindowState>>,
 }
 
+/// Read a `settings.db` KV value as `u32`. Missing keys, blank
+/// values, and non-numeric values all collapse to `0`, which the
+/// `check` method treats as "rate limiting disabled" - the
+/// safe-by-default convention. Saturates rather than overflowing if
+/// an admin types a number larger than `u32::MAX`.
+pub async fn read_u32_setting(pool: &sqlx::SqlitePool, key: &str) -> u32 {
+    crate::db::settings::get_setting(pool, key)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0)
+}
+
 impl RateLimits {
     pub fn new() -> Self {
         Self::default()
@@ -98,10 +112,7 @@ impl RateLimits {
         }
         if entry.count >= limit_per_minute {
             let elapsed = now.duration_since(entry.start);
-            let retry_after = WINDOW
-                .saturating_sub(elapsed)
-                .as_secs()
-                .max(1);
+            let retry_after = WINDOW.saturating_sub(elapsed).as_secs().max(1);
             return Outcome::Deny { retry_after };
         }
         entry.count += 1;

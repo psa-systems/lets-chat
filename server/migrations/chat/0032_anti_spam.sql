@@ -1,5 +1,13 @@
 -- LC-94: anti-spam rate limits, link filter, quarantine.
 --
+-- Note on rate-limit defaults: the operator-facing settings live in
+-- settings.db and are seeded in `settings/0001` (rate_limit_messages
+-- = '30') and `settings/0004_anti_spam.sql` (the two new IP-keyed
+-- caps default to '0' = disabled). The rate-limit module treats
+-- limit = 0 as disabled, so the seed shape means existing deployments
+-- get rate limiting only for messages until the admin opts in to the
+-- IP-keyed ones from `/admin/anti-spam`.
+--
 -- The quarantined column lets the link filter hold a message after
 -- insert (so we can show it to the admin for review) without
 -- soft-deleting it. `list_messages` adds `AND quarantined = 0` so
