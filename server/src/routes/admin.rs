@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
             "/admin/settings/email-digest-default",
             post(post_email_digest_default),
         )
+        .route("/admin/maintenance", post(post_maintenance))
         .route("/admin/users", get(get_users))
         .route("/admin/users/{id}/ban", post(post_ban))
         .route("/admin/users/{id}/unban", post(post_unban))
@@ -146,6 +147,13 @@ pub async fn get_settings(
             .await?
             .as_deref()
             == Some("1");
+    let maintenance_enabled = db::settings::get_setting(&state.settings, "maintenance_mode")
+        .await?
+        .as_deref()
+        == Some("true");
+    let maintenance_message = db::settings::get_setting(&state.settings, "maintenance_message")
+        .await?
+        .unwrap_or_default();
     let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
     let uploads_total_display =
         format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
@@ -171,6 +179,8 @@ pub async fn get_settings(
         smtp_user,
         smtp_from,
         default_notify_email_digest,
+        maintenance_enabled,
+        maintenance_message,
         saved: false,
         uploads_total_display,
         uploads_orphan_count,
@@ -302,6 +312,42 @@ pub async fn post_email_digest_default(
         "0"
     };
     db::settings::set_setting(&state.settings, "default_notify_email_digest", value).await?;
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct MaintenanceForm {
+    /// Checkbox: present when on, omitted when off.
+    #[serde(default)]
+    pub enabled: Option<String>,
+    /// Free-text shown on the 503 page when maintenance is on. Empty
+    /// hides the message block; the page still renders the heading.
+    #[serde(default)]
+    pub message: String,
+}
+
+/// Flip the global maintenance-mode flag and persist the operator-facing
+/// message together. Audited via the moderation log so the modlog page
+/// surfaces who toggled it and when. The middleware reads the flag on
+/// the next request, so non-admin traffic sees the 503 within milliseconds
+/// of submitting this form.
+pub async fn post_maintenance(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<MaintenanceForm>,
+) -> Result<Response, AppError> {
+    let on = form.enabled.is_some();
+    let value = if on { "true" } else { "false" };
+    db::settings::set_setting(&state.settings, "maintenance_mode", value).await?;
+    db::settings::set_setting(&state.settings, "maintenance_message", form.message.trim()).await?;
+    let action = if on {
+        "maintenance_on"
+    } else {
+        "maintenance_off"
+    };
+    let metadata = (!form.message.trim().is_empty()).then(|| form.message.trim());
+    db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, metadata)
+        .await?;
     Ok(Redirect::to("/admin/settings").into_response())
 }
 

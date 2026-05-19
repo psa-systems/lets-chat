@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maintenance in progress - lets-chat</title>
+  <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex items-center justify-center p-6">
+  <section class="max-w-md w-full text-center">
+    <h1 class="text-2xl font-semibold mb-3">We will be right back</h1>
+    <p class="text-slate-600 mb-4">The site is undergoing maintenance.</p>
+    {% if !message.is_empty() %}
+    <div class="rounded border border-slate-200 bg-white p-4 text-left text-sm whitespace-pre-wrap">{{ message }}</div>
+    {% endif %}
+    <p class="mt-6 text-xs text-slate-400">Try refreshing in a few minutes.</p>
+  </section>
+</body>
+</html>

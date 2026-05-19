@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use askama::Template;
 use axum::extract::{FromRequestParts, State};
-use axum::http::request::Parts;
+use axum::http::{request::Parts, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
@@ -12,6 +13,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
+use crate::views::maintenance::MaintenancePage;
 
 /// Per-session debounce for `sessions.last_seen_at` writes. We bump the
 /// column on every authed request, but only flush to SQLite once per
@@ -158,6 +160,60 @@ pub async fn enforce_2fa_enrollment(
         }
     }
     next.run(req).await
+}
+
+/// Middleware: when the `maintenance_mode` setting is on, return a 503
+/// maintenance page for everyone except admins. Admins still need the
+/// admin area, the login surface, and static assets to recover, so each
+/// of those is exempt before the setting is even read. The setting read
+/// is one indexed KV lookup against `settings.db`; we skip it entirely
+/// for exempt paths so static asset requests do not pay the cost.
+pub async fn enforce_maintenance_mode(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path();
+    let exempt = path.starts_with("/assets/")
+        || path.starts_with("/avatars/")
+        || path == "/login"
+        || path.starts_with("/login/")
+        || path == "/logout"
+        || path == "/version";
+    if exempt {
+        return next.run(req).await;
+    }
+    if let Some(u) = req.extensions().get::<User>() {
+        if u.role == "admin" {
+            return next.run(req).await;
+        }
+    }
+    let enabled = db::settings::get_setting(&state.settings, "maintenance_mode")
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("true");
+    if !enabled {
+        return next.run(req).await;
+    }
+    let message = db::settings::get_setting(&state.settings, "maintenance_message")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let body = MaintenancePage {
+        message: &message,
+        asset_version: &state.asset_version,
+    }
+    .render()
+    .unwrap_or_else(|_| "Maintenance in progress.".to_string());
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
+        .into_response()
 }
 
 /// Extractor for routes that may render either a public or authed page.

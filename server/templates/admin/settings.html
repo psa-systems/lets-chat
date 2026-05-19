@@ -3,6 +3,33 @@
 {% block title %}Settings - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
+{% if maintenance_enabled %}
+<div class="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+  <strong>Maintenance mode is ON.</strong> Non-admin users see a 503 maintenance page. Toggle off below to restore access.
+</div>
+{% endif %}
+
+<h2 class="text-base font-semibold mb-3">Maintenance mode</h2>
+<form method="post" action="/admin/maintenance" class="max-w-lg space-y-3 mb-8">
+  <label class="flex items-start gap-2 cursor-pointer">
+    <input type="checkbox" name="enabled" value="1" class="mt-0.5"
+      {% if maintenance_enabled %}checked{% endif %}>
+    <span>
+      Enable maintenance mode
+      <span class="block text-xs text-slate-500 mt-1">
+        Non-admins see a 503 page; admins keep full access so you can flip this back off when done.
+      </span>
+    </span>
+  </label>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="maintenance_message">Message shown to users</label>
+    <textarea id="maintenance_message" name="message" rows="3"
+      class="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      placeholder="Back at 17:00 UTC; upgrading the database.">{{ maintenance_message }}</textarea>
+  </div>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save maintenance mode</button>
+</form>
+
 <h1 class="text-lg font-semibold mb-4">SMTP settings</h1>
 {% if saved %}
 <div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">Settings saved.</div>
