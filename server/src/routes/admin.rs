@@ -11,8 +11,9 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
-    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, EnclavesPage, InvitesPage,
-    ModLogPage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
+    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AntiSpamPage, EnclavesPage,
+    InvitesPage, LinkFilterPage, LinkFilterRuleView, ModLogPage, QuarantineEntryView,
+    QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -43,6 +44,24 @@ pub fn router() -> Router<AppState> {
         .route("/admin/rooms/{id}/regenerate", post(post_regenerate_invite))
         .route("/admin/enclaves", get(get_enclaves))
         .route("/admin/enclaves/{id}/quota", post(post_enclave_quota))
+        .route("/admin/anti-spam", get(get_anti_spam).post(post_anti_spam))
+        .route(
+            "/admin/link-filter",
+            get(get_link_filter).post(post_link_filter),
+        )
+        .route(
+            "/admin/link-filter/{id}/delete",
+            post(post_link_filter_delete),
+        )
+        .route("/admin/quarantine", get(get_quarantine))
+        .route(
+            "/admin/quarantine/{id}/approve",
+            post(post_quarantine_approve),
+        )
+        .route(
+            "/admin/quarantine/{id}/reject",
+            post(post_quarantine_reject),
+        )
         .route("/admin/modlog", get(get_modlog))
         .route(
             "/admin/uploads/regenerate-thumbnails",
@@ -933,4 +952,384 @@ pub async fn post_enclave_quota(
     )
     .await?;
     Ok(Redirect::to("/admin/enclaves"))
+}
+
+// Anti-spam (LC-94) ---------------------------------------------------------
+
+#[derive(Deserialize, Default)]
+pub struct AntiSpamQuery {
+    pub saved: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct AntiSpamForm {
+    #[serde(default)]
+    pub rate_limit_messages: Option<String>,
+    #[serde(default)]
+    pub rate_limit_registrations: Option<String>,
+    #[serde(default)]
+    pub rate_limit_password_resets: Option<String>,
+    /// Checkboxes: present when on, omitted when off.
+    #[serde(default)]
+    pub link_filter_enabled: Option<String>,
+    #[serde(default)]
+    pub honeypot_enabled: Option<String>,
+}
+
+pub async fn get_anti_spam(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Query(q): Query<AntiSpamQuery>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let page = AntiSpamPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "anti_spam",
+        rate_limit_messages: crate::rate_limit::read_u32_setting(
+            &state.settings,
+            "rate_limit_messages",
+        )
+        .await,
+        rate_limit_registrations: crate::rate_limit::read_u32_setting(
+            &state.settings,
+            "rate_limit_registrations",
+        )
+        .await,
+        rate_limit_password_resets: crate::rate_limit::read_u32_setting(
+            &state.settings,
+            "rate_limit_password_resets",
+        )
+        .await,
+        link_filter_enabled: db::settings::get_setting(&state.settings, "link_filter_enabled")
+            .await?
+            .as_deref()
+            == Some("true"),
+        honeypot_enabled: db::settings::get_setting(&state.settings, "honeypot_enabled")
+            .await?
+            .as_deref()
+            == Some("true"),
+        saved: q.saved.is_some(),
+    };
+    html(&page)
+}
+
+/// Persist the anti-spam toggles + caps in one shot. Non-numeric caps
+/// fall back to "0" (disabled) so a bad input cannot silently leave
+/// the previous value in place. Audit entry records which actor
+/// changed what; the metadata blob is a compact summary of the final
+/// state so the mod log is greppable.
+pub async fn post_anti_spam(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<AntiSpamForm>,
+) -> Result<Redirect, AppError> {
+    fn cap_or_zero(s: &Option<String>) -> String {
+        s.as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .and_then(|t| t.parse::<u32>().ok())
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "0".to_string())
+    }
+    let msg = cap_or_zero(&form.rate_limit_messages);
+    let reg = cap_or_zero(&form.rate_limit_registrations);
+    let pwr = cap_or_zero(&form.rate_limit_password_resets);
+    let link = if form.link_filter_enabled.is_some() {
+        "true"
+    } else {
+        "false"
+    };
+    let hp = if form.honeypot_enabled.is_some() {
+        "true"
+    } else {
+        "false"
+    };
+    db::settings::set_setting(&state.settings, "rate_limit_messages", &msg).await?;
+    db::settings::set_setting(&state.settings, "rate_limit_registrations", &reg).await?;
+    db::settings::set_setting(&state.settings, "rate_limit_password_resets", &pwr).await?;
+    db::settings::set_setting(&state.settings, "link_filter_enabled", link).await?;
+    db::settings::set_setting(&state.settings, "honeypot_enabled", hp).await?;
+    let summary = format!("msg={msg} reg={reg} pwr={pwr} link={link} hp={hp}");
+    db::moderation::log_mod_action(
+        &state.chat,
+        "anti_spam_settings",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&summary),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/anti-spam?saved=1"))
+}
+
+// Link-filter rules (LC-94) -------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct LinkFilterForm {
+    pub pattern: String,
+    pub action: String,
+}
+
+async fn render_link_filter_page(
+    state: &AppState,
+    user: &crate::models::User,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let raw = db::anti_spam::list_rules(&state.chat).await?;
+    let rules: Vec<LinkFilterRuleView> = raw
+        .into_iter()
+        .map(|r| LinkFilterRuleView {
+            id: r.id,
+            pattern: r.pattern,
+            action: r.action.as_str().to_string(),
+            created_by: r.created_by,
+            created_at: r.created_at,
+        })
+        .collect();
+    let page = LinkFilterPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "link_filter",
+        rules: &rules,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_link_filter(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_link_filter_page(&state, &user, None).await
+}
+
+pub async fn post_link_filter(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<LinkFilterForm>,
+) -> Result<Response, AppError> {
+    let pattern = form.pattern.trim().to_ascii_lowercase();
+    if pattern.is_empty() {
+        return Ok(
+            render_link_filter_page(&state, &actor, Some("Pattern is required".into()))
+                .await?
+                .into_response(),
+        );
+    }
+    let Some(action) = db::anti_spam::FilterAction::parse(form.action.as_str()) else {
+        return Ok(render_link_filter_page(
+            &state,
+            &actor,
+            Some("Action must be block, quarantine, or warn".into()),
+        )
+        .await?
+        .into_response());
+    };
+    match db::anti_spam::insert_rule(&state.chat, &pattern, action, &actor.id).await {
+        Ok(_) => {}
+        Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+            return Ok(render_link_filter_page(
+                &state,
+                &actor,
+                Some("That pattern is already in the list".into()),
+            )
+            .await?
+            .into_response());
+        }
+        Err(e) => return Err(AppError::from(e)),
+    }
+    db::moderation::log_mod_action(
+        &state.chat,
+        "link_filter_add",
+        "",
+        &actor.id,
+        Some(&pattern),
+        None,
+        Some(action.as_str()),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/link-filter").into_response())
+}
+
+pub async fn post_link_filter_delete(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(rule_id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    db::anti_spam::delete_rule(&state.chat, rule_id).await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "link_filter_remove",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&rule_id.to_string()),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/link-filter"))
+}
+
+// Quarantine review (LC-94) -------------------------------------------------
+
+pub async fn get_quarantine(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let raw = db::anti_spam::list_pending_quarantine(&state.chat).await?;
+    let entries: Vec<QuarantineEntryView> = raw
+        .into_iter()
+        .map(|q| QuarantineEntryView {
+            message_id: q.message_id,
+            room_id: q.room_id,
+            author_id: q.author_id,
+            body: q.body,
+            matched_pattern: q.matched_pattern,
+            matched_url: q.matched_url,
+            created_at: q.created_at,
+        })
+        .collect();
+    let page = QuarantinePage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "quarantine",
+        entries: &entries,
+    };
+    html(&page)
+}
+
+pub async fn post_quarantine_approve(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(message_id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    db::anti_spam::approve_quarantine(&state.chat, message_id, &actor.id).await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "quarantine_approve",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&message_id.to_string()),
+    )
+    .await?;
+    // LC-94 follow-up: broadcast the freshly-unhidden message so
+    // anyone currently in the room sees it appear live, not just on
+    // the next page load. Mirrors the WS fanout from
+    // `routes::room::post_message`. If the message or room has been
+    // hard-deleted between hold + approve we just skip the
+    // broadcast - the approve-decision is still logged.
+    if let Ok(Some(raw)) = db::chat::get_message(&state.chat, message_id).await {
+        if let Ok(Some(room)) = db::chat::get_room(&state.chat, raw.room_id).await {
+            let author_name = db::auth::find_user_by_id(&state.auth, &raw.user_id)
+                .await?
+                .map(|r| r.username)
+                .unwrap_or_else(|| "(unknown)".to_string());
+            let message = crate::models::Message {
+                id: raw.id,
+                room_id: raw.room_id,
+                user_id: raw.user_id,
+                author_name,
+                body: raw.body,
+                created_at: raw.created_at,
+                edited_at: raw.edited_at,
+                parent_id: raw.parent_id,
+                quote_id: raw.quote_id,
+                is_system: raw.is_system,
+            };
+            let event = ChatEvent::NewMessage {
+                message,
+                is_dm: room.room_type == "dm",
+            };
+            let _ = super::broadcast_room_message(&state, &room, &event).await;
+        }
+    }
+    Ok(Redirect::to("/admin/quarantine"))
+}
+
+pub async fn post_quarantine_reject(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(message_id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    db::anti_spam::reject_quarantine(&state.chat, message_id, &actor.id).await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "quarantine_reject",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&message_id.to_string()),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/quarantine"))
 }

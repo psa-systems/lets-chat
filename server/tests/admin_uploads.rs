@@ -73,11 +73,13 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0029_room_posting_policy.sql"),
             include_str!("../migrations/chat/0030_room_docs_wiki.sql"),
             include_str!("../migrations/chat/0031_storage_quotas.sql"),
+            include_str!("../migrations/chat/0032_anti_spam.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_anti_spam.sql"),
         ],
         _ => unreachable!(),
     };
@@ -122,6 +124,7 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     (routes::build_router(state), session, chat)
 }

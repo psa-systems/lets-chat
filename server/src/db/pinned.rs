@@ -86,7 +86,7 @@ pub async fn pins_for_room(
            FROM pinned_messages pm \
            INNER JOIN messages m ON m.id = pm.message_id \
           WHERE pm.room_id = ? \
-            AND m.deleted_at IS NULL \
+            AND m.deleted_at IS NULL AND m.quarantined = 0 \
           ORDER BY pm.pinned_at DESC \
           LIMIT ?",
     )
@@ -113,7 +113,7 @@ pub async fn count_for_room(pool: &SqlitePool, room_id: i64) -> Result<i64, sqlx
     let n: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pinned_messages pm \
            INNER JOIN messages m ON m.id = pm.message_id \
-          WHERE pm.room_id = ? AND m.deleted_at IS NULL",
+          WHERE pm.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
     )
     .bind(room_id)
     .fetch_one(pool)
@@ -131,7 +131,7 @@ pub async fn pinned_message_ids_for_room(
     let rows = sqlx::query(
         "SELECT pm.message_id FROM pinned_messages pm \
            INNER JOIN messages m ON m.id = pm.message_id \
-          WHERE pm.room_id = ? AND m.deleted_at IS NULL",
+          WHERE pm.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
     )
     .bind(room_id)
     .fetch_all(pool)
@@ -150,10 +150,11 @@ pub async fn room_for_message(
     pool: &SqlitePool,
     message_id: i64,
 ) -> Result<Option<i64>, sqlx::Error> {
-    let opt: Option<i64> =
-        sqlx::query_scalar("SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL")
-            .bind(message_id)
-            .fetch_optional(pool)
-            .await?;
+    let opt: Option<i64> = sqlx::query_scalar(
+        "SELECT room_id FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(opt)
 }

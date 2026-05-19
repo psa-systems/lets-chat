@@ -61,7 +61,7 @@ pub async fn feed_for_user(
                INNER JOIN messages m ON m.id = men.message_id \
                INNER JOIN rooms r ON r.id = m.room_id \
               WHERE men.mentioned_user_id = ? \
-                AND m.deleted_at IS NULL \
+                AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND m.user_id != ? \
                 AND ( \
                   r.room_type = 'public' \
@@ -97,7 +97,7 @@ pub async fn feed_for_user(
                INNER JOIN rooms r ON r.id = m.room_id \
               WHERE parent.user_id = ? \
                 AND m.user_id != ? \
-                AND m.deleted_at IS NULL \
+                AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND parent.deleted_at IS NULL \
                 AND ( \
                   r.room_type = 'public' \
@@ -134,7 +134,7 @@ pub async fn feed_for_user(
                INNER JOIN rooms r ON r.id = m.room_id \
               WHERE m.user_id = ? \
                 AND mr.user_id != ? \
-                AND m.deleted_at IS NULL \
+                AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND ( \
                   r.room_type = 'public' \
                   OR EXISTS (SELECT 1 FROM room_members rm \

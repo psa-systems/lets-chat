@@ -53,7 +53,7 @@ pub async fn list_unread(
            JOIN rooms r ON r.id = m.room_id \
            LEFT JOIN dm_read_state s ON s.room_id = m.room_id AND s.user_id = ? \
           WHERE m.user_id != ? \
-            AND m.deleted_at IS NULL \
+            AND m.deleted_at IS NULL AND m.quarantined = 0 \
             AND m.parent_id IS NULL \
             AND m.id > COALESCE(s.last_read_message_id, 0) \
             AND {access_clause} \

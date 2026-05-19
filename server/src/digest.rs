@@ -512,7 +512,7 @@ async fn load_missed_mentions(
                   ON rns.user_id = m.mentioned_user_id AND rns.room_id = m.room_id \
           WHERE m.mentioned_user_id = ? \
             AND m.read_at IS NULL \
-            AND msg.deleted_at IS NULL \
+            AND msg.deleted_at IS NULL AND msg.quarantined = 0 \
             AND msg.created_at > ? \
             AND msg.created_at > datetime('now', ?) \
             AND (rns.mute_mode IS NULL OR rns.mute_mode <> 'all') \
@@ -561,7 +561,7 @@ async fn load_missed_dms(
            LEFT JOIN room_notification_settings rns \
                   ON rns.user_id = ? AND rns.room_id = r.id \
           WHERE msg.user_id <> ? \
-            AND msg.deleted_at IS NULL \
+            AND msg.deleted_at IS NULL AND msg.quarantined = 0 \
             AND msg.id > COALESCE(s.last_read_message_id, 0) \
             AND msg.created_at > ? \
             AND msg.created_at > datetime('now', ?) \

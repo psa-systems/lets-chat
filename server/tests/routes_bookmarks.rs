@@ -70,6 +70,7 @@ async fn app_with_two_users() -> TestApp {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     let app = routes::build_router(state);
     TestApp {

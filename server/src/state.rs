@@ -7,6 +7,7 @@ use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
 use crate::push::PushClient;
+use crate::rate_limit::RateLimits;
 use crate::ws::hub::Hub;
 
 #[derive(Clone)]
@@ -49,6 +50,9 @@ pub struct AppState {
     /// server; override with `LETS_CHAT_ICE_SERVERS` to add a TURN server
     /// for NAT traversal when peers cannot connect directly.
     pub ice_servers: String,
+    /// LC-94: per-process rate-limit counters. Shared via `Clone` so all
+    /// handler tasks see the same DashMap.
+    pub rate_limits: RateLimits,
 }
 
 impl AppState {
