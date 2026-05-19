@@ -44,6 +44,7 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0027_user_groups.sql"),
         include_str!("../migrations/chat/0028_room_role_overrides.sql"),
         include_str!("../migrations/chat/0029_room_posting_policy.sql"),
+        include_str!("../migrations/chat/0030_room_docs_wiki.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();

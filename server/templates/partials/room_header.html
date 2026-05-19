@@ -1,11 +1,16 @@
 <header id="lc-room-header" class="border-b border-slate-200 px-4 py-2 flex items-start justify-between gap-2">
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">#{{ room.name }}</h1>
-    {% if let Some(topic) = room.topic.as_ref() %}
-    <p class="text-sm text-slate-500 truncate">{{ topic }}</p>
-    {% endif %}
+    <a href="/room/{{ room.id }}/info" class="block hover:underline" title="View room info, description, and wiki">
+      <h1 class="font-semibold truncate">#{{ room.name }}</h1>
+      {% if let Some(topic) = room.topic.as_ref() %}
+      <p class="text-sm text-slate-500 truncate">{{ topic }}</p>
+      {% endif %}
+    </a>
   </div>
   <div class="flex items-center gap-2 shrink-0">
+    <a href="/room/{{ room.id }}/info"
+       class="inline-flex items-center rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100"
+       title="Room info / docs / wiki">Info</a>
     {% if can_manage_overrides %}
     <a href="/room/{{ room.id }}/moderators"
        class="inline-flex items-center rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100"

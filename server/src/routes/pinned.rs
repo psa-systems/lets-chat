@@ -133,7 +133,7 @@ impl PinnedStripFragmentOwned {
 /// One bulk auth query for every distinct user id appearing as either
 /// an author or a pinner across `pins`. Returns a map keyed by user id
 /// with the display label (display_name or username).
-async fn resolve_author_labels(
+pub(crate) async fn resolve_author_labels(
     state: &AppState,
     pins: &[db::pinned::PinnedRow],
 ) -> Result<HashMap<String, String>, AppError> {

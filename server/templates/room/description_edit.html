@@ -1,0 +1,19 @@
+<form hx-patch="/room/{{ room_id }}/description"
+      hx-target="#description-content"
+      hx-swap="innerHTML"
+      class="space-y-2">
+  <label class="block">
+    <span class="text-sm">Description (Markdown)</span>
+    <textarea name="body" rows="6"
+              class="w-full border rounded px-2 py-1 text-sm font-mono"
+              autofocus>{{ body }}</textarea>
+  </label>
+  <div class="flex gap-2">
+    <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">Save</button>
+    <button type="button"
+            hx-get="/room/{{ room_id }}/description"
+            hx-target="#description-content"
+            hx-swap="innerHTML"
+            class="bg-slate-200 hover:bg-slate-300 rounded px-3 py-1 text-sm">Cancel</button>
+  </div>
+</form>

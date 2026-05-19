@@ -74,6 +74,10 @@ fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
         created_at: row.get("created_at"),
         is_voice: row.get("is_voice"),
         posting_allowed_for: row.get("posting_allowed_for"),
+        description: row.get("description"),
+        wiki_body: row.get("wiki_body"),
+        wiki_updated_at: row.get("wiki_updated_at"),
+        wiki_updated_by: row.get("wiki_updated_by"),
     }
 }
 
@@ -86,7 +90,7 @@ pub async fn list_rooms(
 ) -> Result<Vec<Room>, sqlx::Error> {
     if is_admin {
         let rows = sqlx::query(
-            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for \
+            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by \
              FROM rooms WHERE room_type != 'dm' ORDER BY name",
         )
         .fetch_all(pool)
@@ -95,7 +99,7 @@ pub async fn list_rooms(
     }
 
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, r.description, r.wiki_body, r.wiki_updated_at, r.wiki_updated_by \
          FROM rooms r \
          LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
          WHERE r.room_type != 'dm' AND (r.room_type = 'public' OR m.user_id IS NOT NULL) \
@@ -110,7 +114,7 @@ pub async fn list_rooms(
 
 pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for FROM rooms WHERE id = ?",
+        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by FROM rooms WHERE id = ?",
     )
     .bind(room_id)
     .fetch_optional(pool)
@@ -460,6 +464,52 @@ pub async fn update_room(
     Ok(())
 }
 
+/// LC-86: set the long-form description (markdown source). Pass
+/// `None` (or an empty string filtered out by the caller) to clear.
+pub async fn set_room_description(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    description: Option<&str>,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET description = ? WHERE id = ?")
+        .bind(description)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+/// LC-86: write the wiki body and stamp last-edit metadata. `None` body
+/// clears the wiki (sets wiki_body / wiki_updated_at / wiki_updated_by
+/// all NULL). Returns the number of rows updated.
+pub async fn set_room_wiki(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    wiki_body: Option<&str>,
+    actor_user_id: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = if wiki_body.is_some() {
+        sqlx::query(
+            "UPDATE rooms SET wiki_body = ?, wiki_updated_at = datetime('now'), \
+             wiki_updated_by = ? WHERE id = ?",
+        )
+        .bind(wiki_body)
+        .bind(actor_user_id)
+        .bind(room_id)
+        .execute(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "UPDATE rooms SET wiki_body = NULL, wiki_updated_at = NULL, \
+             wiki_updated_by = NULL WHERE id = ?",
+        )
+        .bind(room_id)
+        .execute(pool)
+        .await?
+    };
+    Ok(res.rows_affected())
+}
+
 /// LC-85: set the per-room "who can post" policy. Caller is expected to
 /// pre-validate the policy string against
 /// `("all", "moderators_only", "admins_only")`; the CHECK constraint
@@ -486,7 +536,7 @@ pub async fn list_rooms_in_enclave(
 ) -> Result<Vec<Room>, sqlx::Error> {
     if can_see_all_private {
         let rows = sqlx::query(
-            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for \
+            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by \
              FROM rooms WHERE enclave_id=? AND room_type != 'dm' ORDER BY name",
         )
         .bind(enclave_id)
@@ -495,7 +545,7 @@ pub async fn list_rooms_in_enclave(
         return Ok(rows.iter().map(map_room).collect());
     }
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, r.description, r.wiki_body, r.wiki_updated_at, r.wiki_updated_by \
          FROM rooms r \
          LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
          WHERE r.enclave_id=? AND r.room_type != 'dm' \
@@ -630,7 +680,7 @@ pub async fn get_room_by_invite(
     invite_code: &str,
 ) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for \
+        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by \
          FROM rooms WHERE invite_code = ?",
     )
     .bind(invite_code)
@@ -660,7 +710,7 @@ pub async fn find_dm_room(
     user_b: &str,
 ) -> Result<Option<Room>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, r.description, r.wiki_body, r.wiki_updated_at, r.wiki_updated_by \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ? \
@@ -710,7 +760,7 @@ pub async fn list_user_dm_rooms(
     user_id: &str,
 ) -> Result<Vec<(Room, String)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, m2.user_id as other_user \
+        "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, r.description, r.wiki_body, r.wiki_updated_at, r.wiki_updated_by, m2.user_id as other_user \
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id != ? \
