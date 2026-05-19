@@ -48,6 +48,7 @@ mod pinned;
 mod push;
 mod reactions;
 mod room;
+mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
 mod saas_auth;
@@ -740,6 +741,20 @@ pub fn build_router(state: AppState) -> Router {
         .route("/saved", get(bookmarks::get_saved))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
+        .route("/room/{room_id}/info", get(room_info::get_page))
+        .route("/room/{room_id}/wiki/edit", get(room_info::get_wiki_edit))
+        .route(
+            "/room/{room_id}/wiki",
+            get(room_info::get_wiki).patch(room_info::patch_wiki),
+        )
+        .route(
+            "/room/{room_id}/description/edit",
+            get(room_info::get_description_edit),
+        )
+        .route(
+            "/room/{room_id}/description",
+            get(room_info::get_description).patch(room_info::patch_description),
+        )
         .route(
             "/room/{room_id}/moderators",
             get(room_rbac::get_page).post(room_rbac::post_grant),
