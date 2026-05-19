@@ -42,7 +42,10 @@ pub fn set_data_dir(dir: String) {
     let _ = DATA_DIR.set(dir);
 }
 
-fn data_dir() -> &'static str {
+/// The currently active data directory. Exposed so the backup /
+/// restore admin routes can locate sibling staging paths and the
+/// marker file without re-implementing the env-var + default chain.
+pub fn data_dir() -> &'static str {
     DATA_DIR.get().map(|s| s.as_str()).unwrap_or("/data")
 }
 
