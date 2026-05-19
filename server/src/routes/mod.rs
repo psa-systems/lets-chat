@@ -749,6 +749,10 @@ pub fn build_router(state: AppState) -> Router {
             delete(room_rbac::delete_revoke),
         )
         .route(
+            "/room/{room_id}/posting-policy",
+            post(room_rbac::post_posting_policy),
+        )
+        .route(
             "/enclave/{enclave_id}/groups",
             post(user_groups::post_create),
         )

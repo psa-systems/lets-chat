@@ -9,7 +9,13 @@
     {{ pinned_strip_html|safe }}
     {% include "room/messages.html" %}
     <div id="typing" class="px-4 text-xs text-slate-500"></div>
+    {% if can_post %}
     {% include "room/composer.html" %}
+    {% else %}
+    <div class="border-t border-slate-200 px-4 py-3 text-center text-sm text-slate-500" role="status">
+      {{ posting_locked_reason }}
+    </div>
+    {% endif %}
   </div>
   <aside id="thread-panel" class="hidden"></aside>
   <aside id="history-panel" class="hidden"></aside>
