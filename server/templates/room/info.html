@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+
+{% block title %}#{{ room.name }} info - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex-1 overflow-y-auto">
+<section class="p-6 max-w-3xl space-y-5">
+  <div class="flex items-baseline justify-between gap-2">
+    <div>
+      <h1 class="text-2xl font-semibold">#{{ room.name }}</h1>
+      {% if let Some(topic) = room.topic.as_ref() %}
+      <p class="text-sm text-slate-600">{{ topic }}</p>
+      {% endif %}
+    </div>
+    <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline">Back to chat</a>
+  </div>
+
+  <nav class="border-b border-slate-200 flex gap-1" aria-label="Room info tabs">
+    <a href="/room/{{ room.id }}/info?tab=docs"
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "docs" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Docs</a>
+    <a href="/room/{{ room.id }}/info?tab=pinned"
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "pinned" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Pinned</a>
+  </nav>
+
+  {% if active_tab == "docs" %}
+
+  <section class="space-y-2">
+    <h2 class="font-semibold">Description</h2>
+    <div id="description-content" class="space-y-2">
+      {% if description_html.is_empty() %}
+      <p class="text-sm text-slate-500 italic">No description set.</p>
+      {% else %}
+      <div class="prose prose-slate max-w-none text-sm">{{ description_html|safe }}</div>
+      {% endif %}
+      {% if can_manage_overrides %}
+      <button type="button"
+              hx-get="/room/{{ room.id }}/description/edit"
+              hx-target="#description-content"
+              hx-swap="innerHTML"
+              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if description_html.is_empty() %}Set description{% else %}Edit description{% endif %}</button>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="space-y-2">
+    <h2 class="font-semibold">Wiki</h2>
+    <div id="wiki-content" class="space-y-2">
+      {% if wiki_html.is_empty() %}
+      <p class="text-sm text-slate-500 italic">No wiki page yet.</p>
+      {% else %}
+      <div class="prose prose-slate max-w-none text-sm">{{ wiki_html|safe }}</div>
+      <p class="text-xs text-slate-500">
+        Last edited
+        {% if let Some(at) = room.wiki_updated_at.as_ref() %}on {{ at }}{% endif %}
+        {% if let Some(by) = wiki_updated_by_label.as_ref() %}by {{ by }}{% endif %}.
+      </p>
+      {% endif %}
+      {% if can_edit_wiki %}
+      <button type="button"
+              hx-get="/room/{{ room.id }}/wiki/edit"
+              hx-target="#wiki-content"
+              hx-swap="innerHTML"
+              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if wiki_html.is_empty() %}Create wiki{% else %}Edit wiki{% endif %}</button>
+      {% endif %}
+    </div>
+  </section>
+
+  {% else %}
+
+  <section class="space-y-3">
+    <h2 class="font-semibold">Pinned messages</h2>
+    {% if pinned.is_empty() %}
+    <p class="text-sm text-slate-500 italic">No pinned messages yet.</p>
+    {% else %}
+    <ul class="divide-y border rounded">
+      {% for p in pinned %}
+      <li class="p-3 space-y-1">
+        <div class="text-xs text-slate-500">
+          <span class="font-medium text-slate-700">{{ p.author_label }}</span>
+          - pinned by {{ p.pinner_label }} on {{ p.pinned_at }}
+        </div>
+        <div class="text-sm whitespace-pre-wrap">{{ p.body }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {% endif %}
+</section>
+</div>
+{% endblock %}

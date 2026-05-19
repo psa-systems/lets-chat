@@ -18,4 +18,17 @@ pub struct Room {
     /// / edits-of-own-messages do not. New rooms default to `"all"` via
     /// the migration's column DEFAULT.
     pub posting_allowed_for: String,
+    /// LC-86: long-form description shown on the room info page below
+    /// the (short) topic. Optional; None for rooms that never set one.
+    pub description: Option<String>,
+    /// LC-86: single wiki / docs page body in Markdown source. Rendered
+    /// through `views::markdown` on the info page. None when no wiki has
+    /// been written.
+    pub wiki_body: Option<String>,
+    /// LC-86: timestamp of the last wiki edit (`datetime('now')`). None
+    /// when no wiki has ever been written.
+    pub wiki_updated_at: Option<String>,
+    /// LC-86: user_id of the last wiki editor. None when no wiki has
+    /// ever been written. The info page resolves this to a display label.
+    pub wiki_updated_by: Option<String>,
 }
