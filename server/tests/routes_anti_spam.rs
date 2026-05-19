@@ -238,35 +238,14 @@ async fn register_rate_limit_returns_429_after_cap() {
     assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
 }
 
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn forgot_rate_limit_returns_429_after_cap() {
-    // /forgot needs a mailer to return anything other than 404, so
-    // this test asserts the rate limit DOES NOT fire before the
-    // mailer-availability gate (which 404s) and then asserts the
-    // limit DOES fire when the cap is hit. The handler order is:
-    // mailer-check -> rate-limit -> email validation. So the 404 is
-    // the expected first response, but flipping the setting + hitting
-    // many times should NOT 404 forever - the rate limit only kicks
-    // in on the n+1th call within the window.
-    let t = app().await;
-    db::settings::set_setting(&t.settings, "rate_limit_password_resets", "1")
-        .await
-        .unwrap();
-    // Mailer is None in tests, so /forgot 404s before the rate
-    // limit; bumping a cap doesn't help. Verify that's still the
-    // case and the rate-limit code path is at least reached without
-    // panicking.
-    let status = send_with_ip(
-        &t.app,
-        "7.7.7.7",
-        Method::POST,
-        "/forgot",
-        "email=a@example.com",
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-}
+// LC-94 follow-up TODO: end-to-end /forgot rate-limit test needs a
+// stub `Mailer` in the test AppState. The current AppState literal
+// hard-codes `mailer: None`, which makes `state.mail_available()`
+// false and 404s before the rate-limit gate runs. Wiring a
+// MockMailer (mirror the MockPushClient pattern) would let an
+// assertion actually exercise the 429 path; until then the
+// `client_ip_for_rate_limit` + `rate_limits.check` plumbing is
+// covered by the unit tests in rate_limit.rs.
 
 // ── Link filter ───────────────────────────────────────────────────────────
 
