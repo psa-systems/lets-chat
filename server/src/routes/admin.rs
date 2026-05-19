@@ -1,4 +1,4 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -11,9 +11,10 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
-    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AntiSpamPage, EnclavesPage,
-    InvitesPage, LinkFilterPage, LinkFilterRuleView, ModLogPage, QuarantineEntryView,
-    QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment, UsersPage,
+    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AntiSpamPage,
+    BackupRestorePage, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, ModLogPage,
+    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment,
+    UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -52,6 +53,12 @@ pub fn router() -> Router<AppState> {
         .route(
             "/admin/link-filter/{id}/delete",
             post(post_link_filter_delete),
+        )
+        .route("/admin/backup-restore", get(get_backup_restore))
+        .route("/admin/backup", post(post_backup))
+        .route(
+            "/admin/restore",
+            post(post_restore).layer(DefaultBodyLimit::disable()),
         )
         .route("/admin/quarantine", get(get_quarantine))
         .route(
@@ -1332,4 +1339,201 @@ pub async fn post_quarantine_reject(
     )
     .await?;
     Ok(Redirect::to("/admin/quarantine"))
+}
+
+// Backup / restore (LC-95) ------------------------------------------------
+
+async fn render_backup_page(
+    state: &AppState,
+    user: &crate::models::User,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let data_dir = std::path::PathBuf::from(db::data_dir());
+    let restore_pending = crate::backup::marker_path_for(&data_dir).exists();
+    let page = BackupRestorePage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "backup",
+        restore_pending,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_backup_restore(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_backup_page(&state, &user, None).await
+}
+
+/// Build the archive to a tempfile, stream it back, and unlink the
+/// tempfile from disk while still holding the read handle. Linux
+/// keeps the bytes accessible until the last close, so the file is
+/// reclaimable the moment the response finishes (or aborts). The
+/// orphan-on-disk window between create and unlink is one syscall.
+pub async fn post_backup(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+) -> Result<Response, AppError> {
+    let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let download_name = format!("lets-chat-backup-{ts}.zip");
+    let tmp_path = std::env::temp_dir().join(format!("lc-backup-{}.zip", uuid::Uuid::new_v4()));
+    let data_dir = std::path::PathBuf::from(db::data_dir());
+    let manifest = crate::backup::build_archive(
+        &state.auth,
+        &state.chat,
+        &state.settings,
+        &data_dir,
+        &tmp_path,
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "backup_create",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&format!(
+            "{} files, archive {}",
+            manifest.files.len(),
+            tmp_path.display()
+        )),
+    )
+    .await?;
+
+    let file = tokio::fs::File::open(&tmp_path)
+        .await
+        .map_err(|e| AppError::Internal(format!("reopen archive: {e}")))?;
+    let size = file
+        .metadata()
+        .await
+        .map(|m| m.len())
+        .map_err(|e| AppError::Internal(format!("stat archive: {e}")))?;
+    // Unlink immediately: the open handle keeps the bytes available
+    // until the last close, so the file is released the moment the
+    // stream finishes or the client disconnects.
+    let _ = std::fs::remove_file(&tmp_path);
+    let stream = tokio_util::io::ReaderStream::new(file);
+    let body = axum::body::Body::from_stream(stream);
+    let disposition = format!("attachment; filename=\"{download_name}\"");
+    Ok((
+        axum::http::StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/zip".to_string(),
+            ),
+            (axum::http::header::CONTENT_DISPOSITION, disposition),
+            (axum::http::header::CONTENT_LENGTH, size.to_string()),
+        ],
+        body,
+    )
+        .into_response())
+}
+
+pub async fn post_restore(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    mut multipart: Multipart,
+) -> Result<Response, AppError> {
+    let tmp_path = std::env::temp_dir().join(format!("lc-restore-{}.zip", uuid::Uuid::new_v4()));
+    let mut wrote_any = false;
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("multipart: {e}")))?
+    {
+        if field.name() != Some("archive") {
+            continue;
+        }
+        let mut file = tokio::fs::File::create(&tmp_path)
+            .await
+            .map_err(|e| AppError::Internal(format!("create tmp: {e}")))?;
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+        while let Some(chunk) = field.next().await {
+            let chunk = chunk.map_err(|e| AppError::BadRequest(format!("multipart read: {e}")))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| AppError::Internal(format!("write tmp: {e}")))?;
+        }
+        file.flush()
+            .await
+            .map_err(|e| AppError::Internal(format!("flush tmp: {e}")))?;
+        wrote_any = true;
+        break;
+    }
+    if !wrote_any {
+        return Err(AppError::BadRequest("missing `archive` field".into()));
+    }
+
+    // Validate before staging so a tampered archive never lands on
+    // disk in a location the next startup would consume.
+    let manifest = match crate::backup::verify_archive(&tmp_path) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp_path);
+            let msg = match &e {
+                AppError::BadRequest(s) => s.clone(),
+                _ => "archive validation failed".to_string(),
+            };
+            return Ok(render_backup_page(&state, &actor, Some(msg))
+                .await?
+                .into_response());
+        }
+    };
+
+    let data_dir = std::path::PathBuf::from(db::data_dir());
+    let staged = crate::backup::staged_dir_for(&data_dir);
+    if let Err(e) = crate::backup::stage_extract(&tmp_path, &staged) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+    let _ = std::fs::remove_file(&tmp_path);
+
+    // Drop the marker last so the page-refresh-banner check is
+    // accurate from the next request onward.
+    let marker = crate::backup::marker_path_for(&data_dir);
+    std::fs::write(&marker, b"")
+        .map_err(|e| AppError::Internal(format!("write restore marker: {e}")))?;
+
+    db::moderation::log_mod_action(
+        &state.chat,
+        "restore_stage",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&format!(
+            "archive version {} files {}",
+            manifest.version,
+            manifest.files.len()
+        )),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/backup-restore").into_response())
 }

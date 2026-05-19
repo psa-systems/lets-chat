@@ -1,0 +1,55 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Backup / Restore - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">Backup / restore</h1>
+
+{% if restore_pending %}
+<div class="mb-6 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+  <strong>A restore is staged.</strong> Restart the server to apply it.
+  On startup the current data directory is renamed aside (suffix
+  <code>.replaced-{timestamp}</code>) and the staged copy takes its
+  place. If you change your mind, delete the
+  <code>.restore-pending</code> file and the
+  <code>.staged-restore</code> sibling directory inside the data
+  directory before restarting.
+</div>
+{% endif %}
+
+<section class="mb-8 max-w-2xl">
+  <h2 class="text-base font-semibold mb-2">Create backup</h2>
+  <p class="text-sm text-slate-600 mb-3">
+    Downloads a single <code>.zip</code> with consistent SQLite
+    snapshots (via <code>VACUUM INTO</code>) of all three databases
+    plus the <code>uploads/</code> and <code>avatars/</code> trees.
+    Each entry is sha256'd into a <code>manifest.json</code> so a
+    later restore can verify integrity. The server keeps serving while
+    the snapshot runs. Large deployments may take a minute or two; the
+    response begins streaming as soon as the archive finishes
+    building on disk.
+  </p>
+  <form method="post" action="/admin/backup">
+    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Download backup</button>
+  </form>
+</section>
+
+<section class="max-w-2xl">
+  <h2 class="text-base font-semibold mb-2">Restore from archive</h2>
+  <p class="text-sm text-slate-600 mb-3">
+    Upload a previously-downloaded backup. The server validates the
+    manifest + per-file sha256, refuses archives built on a different
+    lets-chat version, then stages the contents in a sibling
+    directory. A restart finalizes the swap.
+  </p>
+  {% if let Some(err) = error %}
+  <div class="mb-3 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  {% endif %}
+  <form method="post" action="/admin/restore" enctype="multipart/form-data" class="space-y-3">
+    <input type="file" name="archive" required accept=".zip,application/zip" class="block text-sm">
+    <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+      onclick="return confirm('Stage this archive for restore? On the next server restart the current data will be replaced.')">Stage restore</button>
+    <p class="text-xs text-slate-500">The restart step is the confirmation gate; staging alone does not touch the live data directory.</p>
+  </form>
+</section>
+{% endblock %}
