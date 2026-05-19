@@ -26,6 +26,9 @@ pub struct RoomModeratorsPage<'a> {
     pub room: &'a Room,
     pub overrides: &'a [RoomOverrideEntry],
     pub candidates: &'a [RoomModeratorRow],
+    /// LC-85: current `posting_allowed_for` for this room. Drives the
+    /// "Posting policy" dropdown's selected option.
+    pub posting_policy: &'a str,
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],

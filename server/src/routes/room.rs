@@ -320,6 +320,18 @@ pub async fn get_room(
         crate::perms::room_can_manage_overrides(enclave_role, &user.role)
     };
 
+    // LC-85: whether to render the composer vs a read-only notice.
+    let can_post = can_post_with_policy(&state, &user, room_id, &room.posting_allowed_for).await?;
+    let posting_locked_reason = if can_post {
+        ""
+    } else {
+        match room.posting_allowed_for.as_str() {
+            "moderators_only" => "Only moderators can post in this room.",
+            "admins_only" => "Only admins can post in this room.",
+            _ => "",
+        }
+    };
+
     // Pre-render the pinned strip so the page template can inline it
     // verbatim. Builder resolves author labels in a single bulk auth
     // lookup (see `routes::pinned::resolve_author_labels`).
@@ -344,6 +356,8 @@ pub async fn get_room(
         mute_mode,
         pinned_strip_html,
         can_manage_overrides,
+        can_post,
+        posting_locked_reason,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -382,6 +396,14 @@ pub async fn post_message(
     // read and write. Enclave membership is required for non-DM rooms.
     let is_admin = user.role == "admin";
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    // LC-85: read-only / moderators-only rooms gate sends on the
+    // caller's effective role (LC-84). The compose box client-side
+    // already disables for callers below the bar; this server check
+    // catches forged POSTs.
+    if !can_post_with_policy(&state, &user, room_id, &room.posting_allowed_for).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -1319,4 +1341,35 @@ pub async fn delete_message(
         "<div id=\"msg-{message_id}\" class=\"px-4 py-2 italic text-slate-400\">[deleted]</div>"
     );
     Ok(axum::response::Html(body).into_response())
+}
+
+/// LC-85: does the caller satisfy the room's posting policy? `"all"`
+/// is always true; `"moderators_only"` requires effective role
+/// moderator or admin; `"admins_only"` requires effective role admin.
+/// The effective-role check consumes `db::room_rbac` (LC-84) so a
+/// per-room moderator override unlocks `moderators_only` rooms even
+/// for an org-Member.
+pub(crate) async fn can_post_with_policy(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    policy: &str,
+) -> Result<bool, AppError> {
+    match policy {
+        "all" => Ok(true),
+        "moderators_only" => {
+            Ok(
+                db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role)
+                    .await?,
+            )
+        }
+        "admins_only" => {
+            let r =
+                db::room_rbac::effective_role(&state.chat, room_id, &user.id, &user.role).await?;
+            Ok(r == "admin")
+        }
+        // Unknown policy strings fall through closed. The CHECK constraint
+        // should make this unreachable; defending against schema drift.
+        _ => Ok(false),
+    }
 }
