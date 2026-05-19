@@ -69,6 +69,11 @@ hmac = { version = "0.12", optional = true }
 hex = { version = "0.4", optional = true }
 jsonwebtoken = { version = "9", optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+# Pinned to v2 deliberately. v3+ reshuffled the SimpleFileOptions /
+# ZipWriter API and our backup module is intentionally feature-light
+# (deflate only, no encryption). Revisit if/when LC-95 grows into
+# encrypted archives or schedule-with-rotation, neither of which is
+# in scope today.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
