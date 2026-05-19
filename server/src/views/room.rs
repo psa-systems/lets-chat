@@ -691,6 +691,9 @@ pub struct RoomPage<'a> {
     /// zero pins). Built by the route handler from `db::pinned` so the
     /// template just inlines the markup verbatim with `|safe`.
     pub pinned_strip_html: String,
+    /// LC-84: viewer is allowed to grant/revoke per-room role overrides.
+    /// Drives the "Moderators" link in the room header.
+    pub can_manage_overrides: bool,
 }
 
 #[derive(Template)]
