@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod anti_spam;
 pub mod auth;
 pub mod bookmarks;
 pub mod chat;
