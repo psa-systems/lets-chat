@@ -13,6 +13,7 @@ pub mod notifications;
 pub mod password_reset;
 pub mod pinned;
 pub mod push_subscriptions;
+pub mod quota;
 pub mod room_rbac;
 pub mod settings;
 pub mod sidebar_categories;
