@@ -742,6 +742,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
         .route("/room/{room_id}/info", get(room_info::get_page))
+        .route("/room/{room_id}/files", get(room_info::get_files))
         .route("/room/{room_id}/wiki/edit", get(room_info::get_wiki_edit))
         .route(
             "/room/{room_id}/wiki",

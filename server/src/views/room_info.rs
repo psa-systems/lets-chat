@@ -4,6 +4,36 @@ use crate::models::{Room, User};
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::pinned::PinnedListRow;
 
+/// LC-87: one row in the Files tab. Pre-resolved by the route so the
+/// template stays presentation-only. `is_image` drives the thumbnail-
+/// vs-icon branch. `kind_icon` is a one-letter glyph for non-image
+/// rows ("V" video, "A" audio, "P" pdf, "F" other) to keep the bundle
+/// small without shipping an icon set.
+pub struct RoomFileRow {
+    pub id: i64,
+    pub message_id: i64,
+    pub filename: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    pub created_at: String,
+    pub uploader_label: String,
+    pub is_image: bool,
+    pub kind_icon: &'static str,
+}
+
+/// LC-87: human-readable byte size for the Files tab. KiB / MiB
+/// thresholds line up with upload-size logging elsewhere in the
+/// codebase.
+pub fn format_size(bytes: i64) -> String {
+    if bytes < 1024 {
+        format!("{bytes}\u{00a0}B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1}\u{00a0}KiB", (bytes as f64) / 1024.0)
+    } else {
+        format!("{:.1}\u{00a0}MiB", (bytes as f64) / (1024.0 * 1024.0))
+    }
+}
+
 /// LC-86: room info page (`/room/{id}/info`). Renders the topic +
 /// description + wiki ("Docs" tab) or the pinned-message list ("Pinned"
 /// tab). The tab nav lives at the top; switching is a normal navigation
@@ -32,6 +62,16 @@ pub struct RoomInfoPage<'a> {
     pub can_manage_overrides: bool,
     /// Pinned messages for the "Pinned" tab. Empty for the docs tab.
     pub pinned: &'a [PinnedListRow],
+    /// LC-87: file rows for the "Files" tab. Empty for other tabs.
+    pub files: &'a [RoomFileRow],
+    /// LC-87: active file-kind filter (`"all"` / `"image"` / `"video"`
+    /// / `"audio"` / `"pdf"` / `"other"`). Drives the filter dropdown's
+    /// selected option.
+    pub files_kind: &'a str,
+    /// LC-87: cursor for the "Load more" button, or `None` when the
+    /// current page is the last one. Set by the route after a one-extra
+    /// peek into the next page.
+    pub files_next_cursor: Option<i64>,
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
@@ -82,4 +122,20 @@ pub struct WikiViewFragment<'a> {
     pub updated_at: Option<&'a str>,
     pub updated_by_label: Option<&'a str>,
     pub can_edit_wiki: bool,
+}
+
+/// LC-87: file-list fragment for HTMX pagination + filter swaps.
+/// Returned by `GET /room/{id}/files` so the client can swap into
+/// `#files-grid` without re-rendering the rest of the info page.
+/// `append` toggles between "replace the grid" (filter change) and
+/// "append rows" (load-more); the template branches on it to decide
+/// whether to render the wrapper element.
+#[derive(Template)]
+#[template(path = "room/files_fragment.html")]
+pub struct FileListFragment<'a> {
+    pub room_id: i64,
+    pub files: &'a [RoomFileRow],
+    pub kind: &'a str,
+    pub next_cursor: Option<i64>,
+    pub append: bool,
 }

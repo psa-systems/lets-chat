@@ -1,0 +1,48 @@
+{# LC-87: response to either a filter change or a load-more click.
+
+`append=false`: replaces `#files-grid` innerHTML. The fragment renders
+the `<div id="files-grid-rows">` wrapper + the load-more slot from
+scratch.
+
+`append=true`: replaces the `#files-load-more` element. The fragment
+emits the new cards as an OOB swap targeting `#files-grid-rows`
+beforeend (so they land in the grid container), then renders the new
+load-more button (or empty wrapper when there is no next page) which
+HTMX swaps via the originating `hx-target="#files-load-more"`.
+#}
+{% let card_room_id = room_id %}
+{% if !append %}
+  {% if files.is_empty() %}
+  <p class="text-sm text-slate-500 italic">No files match this filter.</p>
+  {% else %}
+  <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+    {% for f in files %}
+    {% include "room/file_card.html" %}
+    {% endfor %}
+  </div>
+  <div id="files-load-more" class="mt-3 text-center">
+    {% if let Some(cur) = next_cursor %}
+    <button type="button"
+            hx-get="/room/{{ room_id }}/files?kind={{ kind }}&amp;before={{ cur }}&amp;append=true"
+            hx-target="#files-load-more"
+            hx-swap="outerHTML"
+            class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">Load more</button>
+    {% endif %}
+  </div>
+  {% endif %}
+{% else %}
+  <div id="files-grid-rows" hx-swap-oob="beforeend">
+    {% for f in files %}
+    {% include "room/file_card.html" %}
+    {% endfor %}
+  </div>
+  <div id="files-load-more" class="mt-3 text-center">
+    {% if let Some(cur) = next_cursor %}
+    <button type="button"
+            hx-get="/room/{{ room_id }}/files?kind={{ kind }}&amp;before={{ cur }}&amp;append=true"
+            hx-target="#files-load-more"
+            hx-swap="outerHTML"
+            class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">Load more</button>
+    {% endif %}
+  </div>
+{% endif %}
