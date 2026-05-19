@@ -315,7 +315,7 @@ pub async fn list_room_files(
                 u.size_bytes, u.storage_path, u.created_at, u.waveform \
            FROM file_uploads u \
            JOIN messages m ON m.id = u.message_id \
-          WHERE m.room_id = ? AND m.deleted_at IS NULL",
+          WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
     );
     match kind {
         FileKindFilter::All => {}

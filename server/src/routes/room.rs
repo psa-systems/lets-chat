@@ -387,6 +387,22 @@ pub async fn post_message(
         return Err(AppError::Forbidden);
     }
 
+    // LC-94: per-user message rate limit. Cap is read from the
+    // settings KV (`rate_limit_messages`); '0' (or missing) = the
+    // feature is off, which is the safe default. The check runs
+    // before any DB work other than the cheap setting fetch so a
+    // spammer cannot make the server thrash on room/access lookups.
+    let msg_cap = crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_messages").await;
+    if let crate::rate_limit::Outcome::Deny { retry_after } =
+        state
+            .rate_limits
+            .check(crate::rate_limit::RateLimitKind::Message, &user.id, msg_cap)
+    {
+        return Err(AppError::TooManyRequests(format!(
+            "you are sending messages too quickly; retry in {retry_after} seconds"
+        )));
+    }
+
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -450,6 +466,31 @@ pub async fn post_message(
         }
     }
 
+    // LC-94: link filter. Walk the body's URLs and check each host
+    // against the admin's deny-list rules. The `find_match` helper
+    // returns the first hit; `block` rejects the send up-front,
+    // `quarantine` defers post-insert handling until we have a
+    // message id, and `warn` falls through to a normal send + audit
+    // log entry. Skipped entirely when the toggle is off, so the
+    // common case pays a single setting fetch.
+    let link_filter_on = db::settings::get_setting(&state.settings, "link_filter_enabled")
+        .await?
+        .as_deref()
+        == Some("true");
+    let link_decision = if link_filter_on {
+        db::anti_spam::find_match(&state.chat, &crate::links::extract_hosts(body)).await?
+    } else {
+        None
+    };
+    if let Some((rule, _)) = &link_decision {
+        if rule.action == db::anti_spam::FilterAction::Block {
+            return Err(AppError::BadRequest(format!(
+                "this message contains a link to a disallowed domain ({})",
+                rule.pattern
+            )));
+        }
+    }
+
     // Validate the quoted message (if any) before the insert. The quoted row
     // must exist, live in the same room as this send, not itself be a thread
     // reply (we don't quote inside threads), and not be the message currently
@@ -478,6 +519,50 @@ pub async fn post_message(
         db::uploads::link_upload_to_message(&state.chat, file_id, new_id).await?;
     }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+
+    // LC-94: handle the link-filter decision now that we have a
+    // message id. `quarantine` flips the row's quarantined bit and
+    // records the catch in `link_filter_quarantine`, then returns
+    // the empty composer fragment without broadcasting - the message
+    // is invisible to everyone (including the author on a refresh,
+    // since `list_messages` filters quarantined rows) until an admin
+    // reviews. `warn` lets the message through but writes an audit
+    // entry the admin can see in the mod log.
+    if let Some((rule, host)) = &link_decision {
+        match rule.action {
+            db::anti_spam::FilterAction::Block => unreachable!("blocked above"),
+            db::anti_spam::FilterAction::Quarantine => {
+                sqlx::query("UPDATE messages SET quarantined = 1 WHERE id = ?")
+                    .bind(new_id)
+                    .execute(&state.chat)
+                    .await?;
+                db::anti_spam::insert_quarantine(&state.chat, new_id, &rule.pattern, host).await?;
+                db::moderation::log_mod_action(
+                    &state.chat,
+                    "link_quarantine",
+                    &user.id,
+                    "system",
+                    Some(&rule.pattern),
+                    Some(room_id),
+                    Some(host),
+                )
+                .await?;
+                return html(&ComposerFragment { room: &room });
+            }
+            db::anti_spam::FilterAction::Warn => {
+                db::moderation::log_mod_action(
+                    &state.chat,
+                    "link_warn",
+                    &user.id,
+                    "system",
+                    Some(&rule.pattern),
+                    Some(room_id),
+                    Some(host),
+                )
+                .await?;
+            }
+        }
+    }
 
     // Re-fetch the inserted row to pick up the server-assigned created_at.
     let raw = db::chat::get_message(&state.chat, new_id)

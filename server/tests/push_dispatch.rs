@@ -63,11 +63,25 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0017_custom_emojis.sql"),
             include_str!("../migrations/chat/0018_emoji_share_globally.sql"),
             include_str!("../migrations/chat/0019_bookmarks.sql"),
+            include_str!("../migrations/chat/0020_quote_reply.sql"),
+            include_str!("../migrations/chat/0021_enclave_invitations_enclave_idx.sql"),
+            include_str!("../migrations/chat/0022_voice_messages.sql"),
+            include_str!("../migrations/chat/0023_system_messages.sql"),
+            include_str!("../migrations/chat/0024_voice_channel_flag.sql"),
+            include_str!("../migrations/chat/0025_message_edits.sql"),
+            include_str!("../migrations/chat/0026_room_categories.sql"),
+            include_str!("../migrations/chat/0027_user_groups.sql"),
+            include_str!("../migrations/chat/0028_room_role_overrides.sql"),
+            include_str!("../migrations/chat/0029_room_posting_policy.sql"),
+            include_str!("../migrations/chat/0030_room_docs_wiki.sql"),
+            include_str!("../migrations/chat/0031_storage_quotas.sql"),
+            include_str!("../migrations/chat/0032_anti_spam.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_anti_spam.sql"),
         ],
         _ => unreachable!(),
     };
@@ -123,6 +137,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     Fixture {
         state,

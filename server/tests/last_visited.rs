@@ -44,6 +44,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     (routes::build_router(state), session, user_id)
 }

@@ -130,7 +130,7 @@ pub async fn list_messages(
     let rows = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
-         WHERE room_id = ? AND deleted_at IS NULL AND parent_id IS NULL \
+         WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
     )
     .bind(room_id)
@@ -163,7 +163,7 @@ pub async fn list_thread_replies(
     let rows = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
-         WHERE parent_id = ? AND deleted_at IS NULL \
+         WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
     )
     .bind(parent_id)
@@ -182,7 +182,7 @@ pub async fn count_replies_for_room(
     let rows = sqlx::query(
         "SELECT parent_id AS pid, COUNT(*) AS c \
          FROM messages \
-         WHERE room_id = ? AND parent_id IS NOT NULL AND deleted_at IS NULL \
+         WHERE room_id = ? AND parent_id IS NOT NULL AND deleted_at IS NULL AND quarantined = 0 \
          GROUP BY parent_id",
     )
     .bind(room_id)
@@ -197,7 +197,7 @@ pub async fn count_replies_for_room(
 pub async fn count_replies(pool: &sqlx::SqlitePool, parent_id: i64) -> Result<i64, sqlx::Error> {
     let row = sqlx::query(
         "SELECT COUNT(*) AS c FROM messages \
-         WHERE parent_id = ? AND deleted_at IS NULL",
+         WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(parent_id)
     .fetch_one(pool)
@@ -235,7 +235,7 @@ pub async fn prior_message_in_room(
     let row = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
-         WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND parent_id IS NULL \
+         WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
     )
     .bind(room_id)
@@ -257,7 +257,7 @@ pub async fn next_message_in_room(
     let row = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
          FROM messages \
-         WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND parent_id IS NULL \
+         WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
     )
     .bind(room_id)
@@ -275,7 +275,7 @@ pub async fn get_message(
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
-         FROM messages WHERE id = ? AND deleted_at IS NULL",
+         FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)
     .fetch_optional(pool)
@@ -851,7 +851,7 @@ pub async fn list_dm_unread_counts(
          LEFT JOIN messages m \
            ON m.room_id = r.id \
           AND m.user_id != ? \
-          AND m.deleted_at IS NULL \
+          AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type = 'dm' \
@@ -886,7 +886,7 @@ pub async fn list_room_unread_counts(
          LEFT JOIN messages m \
            ON m.room_id = r.id \
           AND m.user_id != ? \
-          AND m.deleted_at IS NULL \
+          AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type != 'dm' \
@@ -900,7 +900,7 @@ pub async fn list_room_unread_counts(
          LEFT JOIN messages m \
            ON m.room_id = r.id \
           AND m.user_id != ? \
-          AND m.deleted_at IS NULL \
+          AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type != 'dm' \
@@ -935,7 +935,7 @@ pub async fn get_unread_count(
          LEFT JOIN dm_read_state s ON s.room_id = m.room_id AND s.user_id = ? \
          WHERE m.room_id = ? \
            AND m.user_id != ? \
-           AND m.deleted_at IS NULL \
+           AND m.deleted_at IS NULL AND m.quarantined = 0 \
            AND m.parent_id IS NULL \
            AND m.id > COALESCE(s.last_read_message_id, 0)",
     )
@@ -963,7 +963,7 @@ pub async fn find_dm_seen_state(
          JOIN messages m \
            ON m.room_id = s.room_id \
           AND m.user_id = ? \
-          AND m.deleted_at IS NULL \
+          AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.id <= s.last_read_message_id \
          WHERE s.room_id = ? AND s.user_id = ?",
     )
@@ -1096,7 +1096,7 @@ pub async fn list_room_reactions(
                 MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me \
          FROM message_reactions mr \
          JOIN messages m ON m.id = mr.message_id \
-         WHERE m.room_id = ? AND m.deleted_at IS NULL \
+         WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0 \
          GROUP BY mr.message_id, mr.emoji \
          ORDER BY mr.message_id, MIN(mr.created_at)",
     )
@@ -1224,7 +1224,7 @@ pub async fn search_messages(
          JOIN messages m ON m.id = messages_fts.rowid \
          JOIN rooms    r ON r.id  = m.room_id \
          WHERE messages_fts MATCH ? \
-           AND m.deleted_at IS NULL \
+           AND m.deleted_at IS NULL AND m.quarantined = 0 \
            {room_filter_clause} \
            {scope_clause} \
          ORDER BY messages_fts.rank \

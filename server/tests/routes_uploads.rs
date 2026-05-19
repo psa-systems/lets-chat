@@ -141,11 +141,13 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0029_room_posting_policy.sql"),
             include_str!("../migrations/chat/0030_room_docs_wiki.sql"),
             include_str!("../migrations/chat/0031_storage_quotas.sql"),
+            include_str!("../migrations/chat/0032_anti_spam.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
+            include_str!("../migrations/settings/0004_anti_spam.sql"),
         ],
         _ => unreachable!(),
     };
@@ -188,6 +190,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -281,6 +284,7 @@ async fn upload_anonymous_redirects_to_login() {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     let app = routes::build_router(state);
 
@@ -377,6 +381,7 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     let app = routes::build_router(state);
     (app, sess_a, id_a, sess_b, id_b)

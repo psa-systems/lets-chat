@@ -120,6 +120,7 @@ async fn build_harness() -> Harness {
         mailer: None,
         base_url: "https://chat.example.com".into(),
         ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
     Harness {
         state,
