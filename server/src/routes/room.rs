@@ -305,6 +305,21 @@ pub async fn get_room(
         .unwrap_or(db::notifications::MuteMode::None)
         .as_str();
 
+    // LC-84: header link "Moderators" only rendered for callers who can
+    // grant/revoke per-room role overrides. Same authority as
+    // `routes::room_rbac::require_can_manage`: site admin, or enclave
+    // owner/admin for the room's enclave.
+    let can_manage_overrides = {
+        let enclave_role = if let Some(eid) = current_enclave {
+            db::enclave::get_membership(&state.chat, eid, &user.id)
+                .await?
+                .map(|m| m.role)
+        } else {
+            None
+        };
+        crate::perms::room_can_manage_overrides(enclave_role, &user.role)
+    };
+
     // Pre-render the pinned strip so the page template can inline it
     // verbatim. Builder resolves author labels in a single bulk auth
     // lookup (see `routes::pinned::resolve_author_labels`).
@@ -328,6 +343,7 @@ pub async fn get_room(
         asset_version: &state.asset_version,
         mute_mode,
         pinned_strip_html,
+        can_manage_overrides,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

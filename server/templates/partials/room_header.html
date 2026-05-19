@@ -5,5 +5,12 @@
     <p class="text-sm text-slate-500 truncate">{{ topic }}</p>
     {% endif %}
   </div>
-  {% include "room/notify_dropdown.html" %}
+  <div class="flex items-center gap-2 shrink-0">
+    {% if can_manage_overrides %}
+    <a href="/room/{{ room.id }}/moderators"
+       class="inline-flex items-center rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100"
+       title="Manage per-room moderators">Moderators</a>
+    {% endif %}
+    {% include "room/notify_dropdown.html" %}
+  </div>
 </header>

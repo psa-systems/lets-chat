@@ -56,9 +56,22 @@ pub async fn post_notify_prefs(
     };
     state.hub.broadcast_to_user(&user.id, &event);
 
+    // LC-84: re-resolve the override-manage flag so the rendered header
+    // keeps (or hides) the "Moderators" link consistently with the
+    // initial page render.
+    let enclave_role = if let Some(eid) = super::enclave_for_room(&state, room_id).await? {
+        db::enclave::get_membership(&state.chat, eid, &user.id)
+            .await?
+            .map(|m| m.role)
+    } else {
+        None
+    };
+    let can_manage_overrides = crate::perms::room_can_manage_overrides(enclave_role, &user.role);
+
     let fragment = RoomHeaderFragment {
         room: &room,
         mute_mode: mode.as_str(),
+        can_manage_overrides,
     };
     html(&fragment)
 }
