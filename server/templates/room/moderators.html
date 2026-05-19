@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block title %}Moderators - #{{ room.name }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex-1 overflow-y-auto">
+<section class="p-6 max-w-2xl space-y-6">
+  <div class="flex items-baseline gap-2">
+    <h1 class="text-2xl font-semibold">Moderators</h1>
+    <span class="text-sm text-slate-500">#{{ room.name }}</span>
+  </div>
+  <p class="text-sm text-slate-600">
+    Grant a room-scoped Moderator or Admin role. Overrides only elevate; removing one returns the user to their org-wide role inside this room.
+  </p>
+
+  <section class="space-y-3">
+    <h2 class="font-semibold">Current overrides</h2>
+    {% if overrides.is_empty() %}
+    <p class="text-sm text-slate-500 italic">No overrides yet.</p>
+    {% else %}
+    <ul class="divide-y border rounded">
+      {% for o in overrides %}
+      <li class="p-3 flex items-center justify-between gap-2">
+        <div>
+          <div class="text-sm font-medium">{{ o.user_label }}</div>
+          <div class="text-xs text-slate-500">
+            {{ o.role }} - granted by {{ o.assigned_by_label }} on {{ o.assigned_at }}
+          </div>
+        </div>
+        <button type="button"
+                hx-delete="/room/{{ room.id }}/moderators/{{ o.user_id }}"
+                hx-confirm="Revoke {{ o.role }} for {{ o.user_label }}?"
+                hx-on::after-request="window.location.reload()"
+                class="text-xs text-red-600 hover:underline">Revoke</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section class="space-y-3 border-t pt-4">
+    <h2 class="font-semibold">Grant override</h2>
+    {% if candidates.is_empty() %}
+    <p class="text-sm text-slate-500 italic">Every enclave member already has an override.</p>
+    {% else %}
+    <form method="post" action="/room/{{ room.id }}/moderators" class="space-y-2">
+      <label class="block">
+        <span class="text-sm">Member</span>
+        <select name="user_id" required class="w-full border rounded px-2 py-1 text-sm">
+          {% for c in candidates %}
+          <option value="{{ c.user_id }}">{{ c.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-sm">Role</span>
+        <select name="role" required class="w-full border rounded px-2 py-1 text-sm">
+          <option value="moderator">Moderator (delete others' messages in this room)</option>
+          <option value="admin">Admin (Moderator + room settings, in this room)</option>
+        </select>
+      </label>
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">Grant</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline inline-block">Back to #{{ room.name }}</a>
+</section>
+</div>
+{% endblock %}
