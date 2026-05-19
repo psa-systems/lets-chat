@@ -300,3 +300,31 @@ pub struct QuarantinePage<'a> {
     pub section: &'static str,
     pub entries: &'a [QuarantineEntryView],
 }
+
+// LC-95 backup / restore ----------------------------------------------------
+
+#[derive(Template)]
+#[template(path = "admin/backup_restore.html")]
+pub struct BackupRestorePage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    /// True when a `.restore-pending` marker exists in the data dir;
+    /// the page shows a banner instructing the operator to restart.
+    pub restore_pending: bool,
+    /// Inline error from a failed stage attempt; rendered above the
+    /// upload form on the retry.
+    pub error: Option<String>,
+}

@@ -69,6 +69,7 @@ hmac = { version = "0.12", optional = true }
 hex = { version = "0.4", optional = true }
 jsonwebtoken = { version = "9", optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 kamadak-exif = "0.5"
