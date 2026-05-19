@@ -398,9 +398,10 @@ pub async fn post_message(
             .rate_limits
             .check(crate::rate_limit::RateLimitKind::Message, &user.id, msg_cap)
     {
-        return Err(AppError::TooManyRequests(format!(
-            "you are sending messages too quickly; retry in {retry_after} seconds"
-        )));
+        return Err(AppError::TooManyRequests(
+            format!("you are sending messages too quickly; retry in {retry_after} seconds"),
+            retry_after,
+        ));
     }
 
     let room = db::chat::get_room(&state.chat, room_id)

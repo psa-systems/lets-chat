@@ -98,9 +98,10 @@ pub async fn delete_rule(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> 
 }
 
 /// First rule that matches any host in `hosts`. Rules are scanned in
-/// pattern-alphabetical order (same as `list_rules`) so behavior is
-/// stable across runs; the first hit wins regardless of action
-/// severity. Returns the rule + the matched host so the caller can
+/// severity-then-pattern order (block before quarantine before warn,
+/// then alphabetical within each severity tier) so a `block` rule
+/// always wins over a `warn` rule that happens to sort earlier
+/// alphabetically. Returns the matched rule + host so the caller can
 /// log which URL tripped which rule.
 pub async fn find_match(
     pool: &SqlitePool,
@@ -109,7 +110,12 @@ pub async fn find_match(
     if hosts.is_empty() {
         return Ok(None);
     }
-    let rules = list_rules(pool).await?;
+    let mut rules = list_rules(pool).await?;
+    rules.sort_by_key(|r| match r.action {
+        FilterAction::Block => 0,
+        FilterAction::Quarantine => 1,
+        FilterAction::Warn => 2,
+    });
     for host in hosts {
         for rule in &rules {
             if crate::links::pattern_matches(&rule.pattern, host) {
@@ -201,23 +207,20 @@ pub async fn approve_quarantine(
     Ok(())
 }
 
-/// Reject a quarantined message: soft-delete the message and record
-/// the admin's decision. The quarantine row stays for the audit
-/// trail; the message body is no longer reachable to anyone.
+/// Reject a quarantined message: soft-delete the message via the
+/// canonical helper, then record the admin's decision. The two
+/// writes are not wrapped in a single transaction because the
+/// soft-delete helper takes a pool; the worst-case interleaving is
+/// "message soft-deleted, decision row not yet updated", which the
+/// review queue handles correctly on retry (the queue filter is
+/// `reviewed_at IS NULL`). The quarantine row stays for the audit
+/// trail; the message body is no longer reachable.
 pub async fn reject_quarantine(
     pool: &SqlitePool,
     message_id: i64,
     reviewer: &str,
 ) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query(
-        "UPDATE messages SET deleted_at = datetime('now'), deleted_by = ? \
-         WHERE id = ?",
-    )
-    .bind(reviewer)
-    .bind(message_id)
-    .execute(&mut *tx)
-    .await?;
+    crate::db::moderation::soft_delete_message(pool, message_id, reviewer).await?;
     sqlx::query(
         "UPDATE link_filter_quarantine \
          SET reviewed_by = ?, reviewed_at = datetime('now'), decision = 'reject' \
@@ -225,9 +228,8 @@ pub async fn reject_quarantine(
     )
     .bind(reviewer)
     .bind(message_id)
-    .execute(&mut *tx)
+    .execute(pool)
     .await?;
-    tx.commit().await?;
     Ok(())
 }
 

@@ -1281,6 +1281,37 @@ pub async fn post_quarantine_approve(
         Some(&message_id.to_string()),
     )
     .await?;
+    // LC-94 follow-up: broadcast the freshly-unhidden message so
+    // anyone currently in the room sees it appear live, not just on
+    // the next page load. Mirrors the WS fanout from
+    // `routes::room::post_message`. If the message or room has been
+    // hard-deleted between hold + approve we just skip the
+    // broadcast - the approve-decision is still logged.
+    if let Ok(Some(raw)) = db::chat::get_message(&state.chat, message_id).await {
+        if let Ok(Some(room)) = db::chat::get_room(&state.chat, raw.room_id).await {
+            let author_name = db::auth::find_user_by_id(&state.auth, &raw.user_id)
+                .await?
+                .map(|r| r.username)
+                .unwrap_or_else(|| "(unknown)".to_string());
+            let message = crate::models::Message {
+                id: raw.id,
+                room_id: raw.room_id,
+                user_id: raw.user_id,
+                author_name,
+                body: raw.body,
+                created_at: raw.created_at,
+                edited_at: raw.edited_at,
+                parent_id: raw.parent_id,
+                quote_id: raw.quote_id,
+                is_system: raw.is_system,
+            };
+            let event = ChatEvent::NewMessage {
+                message,
+                is_dm: room.room_type == "dm",
+            };
+            let _ = super::broadcast_room_message(&state, &room, &event).await;
+        }
+    }
     Ok(Redirect::to("/admin/quarantine"))
 }
 

@@ -31,10 +31,17 @@ CREATE TABLE IF NOT EXISTS link_filter_rules (
 CREATE INDEX IF NOT EXISTS idx_link_filter_rules_pattern ON link_filter_rules(pattern);
 
 -- One row per quarantined message; records which rule caught it and
--- carries the moderator's eventual decision. Cascades on message
--- delete so a rejected message drags its quarantine row with it.
+-- carries the moderator's eventual decision. The FK is intentionally
+-- NOT `ON DELETE CASCADE`: messages are soft-deleted in this
+-- codebase (UPDATE messages SET deleted_at = ...), not hard-deleted,
+-- so a cascade would never fire in practice. Keeping the quarantine
+-- row alive after a rejected message is soft-deleted preserves the
+-- audit trail (`reviewed_by` + `decision` are still readable). If a
+-- message is ever hard-purged out-of-band the quarantine row
+-- orphans; the review queue filters on `reviewed_at IS NULL` so the
+-- orphan does not surface.
 CREATE TABLE IF NOT EXISTS link_filter_quarantine (
-    message_id      INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    message_id      INTEGER PRIMARY KEY REFERENCES messages(id),
     matched_pattern TEXT NOT NULL,
     matched_url     TEXT NOT NULL,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
