@@ -139,7 +139,7 @@ mod tests {
             assert_eq!(r.check(RateLimitKind::Message, "bob", 5), Outcome::Allow);
         }
         match r.check(RateLimitKind::Message, "bob", 5) {
-            Outcome::Deny { retry_after } => assert!(retry_after >= 1 && retry_after <= 60),
+            Outcome::Deny { retry_after } => assert!((1..=60).contains(&retry_after)),
             Outcome::Allow => panic!("expected deny after hitting cap"),
         }
     }
