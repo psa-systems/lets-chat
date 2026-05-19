@@ -1,0 +1,17 @@
+{% if html.is_empty() %}
+<p class="text-sm text-slate-500 italic">No wiki page yet.</p>
+{% else %}
+<div class="prose prose-slate max-w-none text-sm">{{ html|safe }}</div>
+<p class="text-xs text-slate-500">
+  Last edited
+  {% if let Some(at) = updated_at %}on {{ at }}{% endif %}
+  {% if let Some(by) = updated_by_label %}by {{ by }}{% endif %}.
+</p>
+{% endif %}
+{% if can_edit_wiki %}
+<button type="button"
+        hx-get="/room/{{ room_id }}/wiki/edit"
+        hx-target="#wiki-content"
+        hx-swap="innerHTML"
+        class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if html.is_empty() %}Create wiki{% else %}Edit wiki{% endif %}</button>
+{% endif %}

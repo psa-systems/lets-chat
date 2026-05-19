@@ -933,6 +933,9 @@ pub async fn post_create_room(
 pub struct RoomEditForm {
     pub name: String,
     pub topic: Option<String>,
+    /// LC-86: long-form description shown on `/room/{id}/info`.
+    /// Optional; empty string clears.
+    pub description: Option<String>,
 }
 
 async fn assert_room_in_enclave(
@@ -982,6 +985,14 @@ pub async fn post_edit_room(
         }
         return Err(e.into());
     }
+    // LC-86: separate column. Always run the update so an empty
+    // string clears it.
+    db::chat::set_room_description(
+        &state.chat,
+        room_id,
+        form.description.as_deref().filter(|s| !s.is_empty()),
+    )
+    .await?;
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
