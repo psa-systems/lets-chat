@@ -20,6 +20,8 @@
        class="px-3 py-2 text-sm border-b-2 {% if active_tab == "docs" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Docs</a>
     <a href="/room/{{ room.id }}/info?tab=pinned"
        class="px-3 py-2 text-sm border-b-2 {% if active_tab == "pinned" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Pinned</a>
+    <a href="/room/{{ room.id }}/info?tab=files"
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "files" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Files</a>
   </nav>
 
   {% if active_tab == "docs" %}
@@ -65,7 +67,7 @@
     </div>
   </section>
 
-  {% else %}
+  {% else if active_tab == "pinned" %}
 
   <section class="space-y-3">
     <h2 class="font-semibold">Pinned messages</h2>
@@ -84,6 +86,52 @@
       {% endfor %}
     </ul>
     {% endif %}
+  </section>
+
+  {% else %}
+
+  <section class="space-y-3">
+    <div class="flex items-baseline justify-between gap-2">
+      <h2 class="font-semibold">Files</h2>
+      <form hx-get="/room/{{ room.id }}/files"
+            hx-trigger="change from:select"
+            hx-target="#files-grid"
+            hx-swap="innerHTML"
+            class="flex items-center gap-2">
+        <label class="text-xs text-slate-600">Filter
+          <select name="kind" class="border rounded px-2 py-1 text-xs">
+            <option value="all" {% if files_kind == "all" %}selected{% endif %}>All files</option>
+            <option value="image" {% if files_kind == "image" %}selected{% endif %}>Images</option>
+            <option value="video" {% if files_kind == "video" %}selected{% endif %}>Video</option>
+            <option value="audio" {% if files_kind == "audio" %}selected{% endif %}>Audio</option>
+            <option value="pdf" {% if files_kind == "pdf" %}selected{% endif %}>PDF</option>
+            <option value="other" {% if files_kind == "other" %}selected{% endif %}>Other</option>
+          </select>
+        </label>
+        <input type="hidden" name="append" value="false">
+      </form>
+    </div>
+    <div id="files-grid">
+      {% if files.is_empty() %}
+      <p class="text-sm text-slate-500 italic">No files uploaded in this room yet.</p>
+      {% else %}
+      <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {% let card_room_id = room.id %}
+        {% for f in files %}
+        {% include "room/file_card.html" %}
+        {% endfor %}
+      </div>
+      <div id="files-load-more" class="mt-3 text-center">
+        {% if let Some(cur) = files_next_cursor %}
+        <button type="button"
+                hx-get="/room/{{ room.id }}/files?kind={{ files_kind }}&amp;before={{ cur }}&amp;append=true"
+                hx-target="#files-load-more"
+                hx-swap="outerHTML"
+                class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">Load more</button>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
   </section>
 
   {% endif %}

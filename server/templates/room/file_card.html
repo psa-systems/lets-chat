@@ -1,0 +1,15 @@
+<div class="border rounded p-2 flex flex-col gap-1">
+  <a href="/room/{{ card_room_id }}#msg-{{ f.message_id }}" class="block">
+    {% if f.is_image %}
+    <img src="/api/files/{{ f.id }}" alt="{{ f.filename }}"
+         class="w-full h-32 object-cover rounded bg-slate-100" loading="lazy">
+    {% else %}
+    <div class="w-full h-32 rounded bg-slate-100 flex items-center justify-center text-3xl font-bold text-slate-400">{{ f.kind_icon }}</div>
+    {% endif %}
+  </a>
+  <a href="/room/{{ card_room_id }}#msg-{{ f.message_id }}"
+     class="text-xs font-medium truncate hover:underline" title="{{ f.filename }}">{{ f.filename }}</a>
+  <div class="text-xs text-slate-500">
+    {{ f.uploader_label }} - {{ f.created_at }}
+  </div>
+</div>

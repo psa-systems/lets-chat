@@ -251,6 +251,99 @@ pub async fn count_orphans(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
 
 /// List every image upload row. Used by the admin regenerate-thumbnails
 /// action to walk all images and backfill missing previews.
+/// LC-87: file-kind filter for the per-room Files tab. `All` returns
+/// every upload regardless of mime; the other variants translate to a
+/// `mime_type LIKE 'image/%'` / `'video/%'` / `'audio/%'` predicate, or
+/// to "pdf" via an exact `application/pdf` match. `Other` returns
+/// everything that is not in any of the named buckets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileKindFilter {
+    All,
+    Image,
+    Video,
+    Audio,
+    Pdf,
+    Other,
+}
+
+impl FileKindFilter {
+    pub fn from_query(s: &str) -> Self {
+        match s {
+            "image" => Self::Image,
+            "video" => Self::Video,
+            "audio" => Self::Audio,
+            "pdf" => Self::Pdf,
+            "other" => Self::Other,
+            _ => Self::All,
+        }
+    }
+    pub fn as_query(&self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Image => "image",
+            Self::Video => "video",
+            Self::Audio => "audio",
+            Self::Pdf => "pdf",
+            Self::Other => "other",
+        }
+    }
+}
+
+/// LC-87: list uploads attached to a room, newest first.
+///
+/// Filters:
+/// - `kind` narrows by mime-type bucket (see [`FileKindFilter`]).
+/// - `before_id` is the cursor: when `Some(n)`, only rows with `id < n`
+///   are returned. Pass `None` for the first page. The next cursor for
+///   the load-more button is the last id of the current page.
+/// - `limit` caps the result set; the caller decides the page size.
+///
+/// Soft-deleted parent messages and orphan uploads (message_id IS NULL)
+/// are excluded: the files-tab UX is "files that landed in messages in
+/// this room and the message still exists".
+pub async fn list_room_files(
+    pool: &SqlitePool,
+    room_id: i64,
+    kind: FileKindFilter,
+    before_id: Option<i64>,
+    limit: i64,
+) -> Result<Vec<UploadRow>, sqlx::Error> {
+    // The mime predicate is composed in Rust so we keep one SQL plan per
+    // filter rather than baking a CASE into the WHERE clause.
+    let mut sql = String::from(
+        "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
+                u.size_bytes, u.storage_path, u.created_at, u.waveform \
+           FROM file_uploads u \
+           JOIN messages m ON m.id = u.message_id \
+          WHERE m.room_id = ? AND m.deleted_at IS NULL",
+    );
+    match kind {
+        FileKindFilter::All => {}
+        FileKindFilter::Image => sql.push_str(" AND u.mime_type LIKE 'image/%'"),
+        FileKindFilter::Video => sql.push_str(" AND u.mime_type LIKE 'video/%'"),
+        FileKindFilter::Audio => sql.push_str(" AND u.mime_type LIKE 'audio/%'"),
+        FileKindFilter::Pdf => sql.push_str(" AND u.mime_type = 'application/pdf'"),
+        FileKindFilter::Other => sql.push_str(
+            " AND u.mime_type NOT LIKE 'image/%' \
+              AND u.mime_type NOT LIKE 'video/%' \
+              AND u.mime_type NOT LIKE 'audio/%' \
+              AND u.mime_type != 'application/pdf'",
+        ),
+    }
+    if before_id.is_some() {
+        sql.push_str(" AND u.id < ?");
+    }
+    sql.push_str(" ORDER BY u.id DESC LIMIT ?");
+
+    let mut q = sqlx::query(&sql).bind(room_id);
+    if let Some(b) = before_id {
+        q = q.bind(b);
+    }
+    q = q.bind(limit);
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows.iter().map(map_upload).collect())
+}
+
 pub async fn list_image_uploads(pool: &SqlitePool) -> Result<Vec<UploadRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, uploader_id, message_id, filename, mime_type, size_bytes, \
