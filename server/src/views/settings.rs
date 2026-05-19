@@ -54,6 +54,13 @@ pub struct UserSettingsPage<'a> {
     pub sessions: &'a [SessionView],
     /// Flash set by `?session_revoked=1` after a successful revoke.
     pub session_revoked: bool,
+    /// LC-93: pre-formatted "N.NN MiB" of the user's current upload
+    /// usage. Always populated; an unlimited account renders the
+    /// usage with an "(unlimited)" tail label.
+    pub storage_usage_display: String,
+    /// LC-93: `Some("N.NN MiB")` when the user has a cap, `None` when
+    /// they are unlimited.
+    pub storage_quota_display: Option<String>,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub git_version: &'a str,

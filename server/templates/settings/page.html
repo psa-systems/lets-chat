@@ -211,6 +211,17 @@
   </div>
 
   <div>
+    <h2 class="font-medium mb-2">Storage usage</h2>
+    <p class="text-sm text-slate-600">
+      {% if let Some(q) = storage_quota_display %}
+      You are using <span class="font-mono">{{ storage_usage_display }}</span> of your <span class="font-mono">{{ q }}</span> upload quota.
+      {% else %}
+      You are using <span class="font-mono">{{ storage_usage_display }}</span> of uploads. No quota is currently set on your account.
+      {% endif %}
+    </p>
+  </div>
+
+  <div>
     <h2 class="font-medium mb-2">Your data</h2>
     <p class="text-sm text-slate-600">
       Download a JSON file containing your profile, messages, reactions, bookmarks, sessions, blocks, room and enclave memberships, mentions, file-upload metadata, and notification preferences.

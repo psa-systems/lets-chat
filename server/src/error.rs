@@ -12,6 +12,8 @@ pub enum AppError {
     Conflict(String),
     #[error("bad request: {0}")]
     BadRequest(String),
+    #[error("payload too large: {0}")]
+    PayloadTooLarge(String),
     #[error("unauthorized")]
     Unauthorized,
     #[error("internal: {0}")]
@@ -27,6 +29,7 @@ impl IntoResponse for AppError {
             AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden").into_response(),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg).into_response(),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            AppError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg).into_response(),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
             AppError::Internal(msg) => {
                 tracing::error!(error = %msg, "internal error");

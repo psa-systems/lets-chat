@@ -191,6 +191,27 @@ pub async fn post_upload(
                 .into_response());
         }
 
+        // LC-93: per-user quota check. We use the post-stream `total` as
+        // the upload's size estimate; the image re-encode below may
+        // shrink it slightly but never grows the recognized formats,
+        // so an under-cap upload will not be falsely rejected here. Run
+        // before the (expensive) re-encode so a rejected upload does not
+        // burn CPU on a file we are about to discard.
+        if let Some(quota) = db::quota::get_user_quota(&state.chat, &user.id).await? {
+            let used = db::quota::sum_user_usage(&state.chat, &user.id).await?;
+            if used.saturating_add(total) > quota {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                return Ok((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    format!(
+                        "upload would exceed your {quota}-byte storage quota \
+                         (using {used}, this upload is {total})"
+                    ),
+                )
+                    .into_response());
+            }
+        }
+
         // Magic-byte sniffing. Never trust the supplied Content-Type.
         let kind = match infer::get_from_path(&tmp_path) {
             Ok(Some(k)) => k,
