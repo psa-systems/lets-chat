@@ -873,6 +873,15 @@ pub async fn post_user_quota(
     axum::Form(form): axum::Form<QuotaForm>,
 ) -> Result<Html, AppError> {
     let quota_bytes = parse_quota_mib(&form.quota_mib)?;
+    // 404 before we touch anything: `user_storage_quotas` has no FK to
+    // auth.users (the two live in different databases), so a typo in
+    // the path would otherwise leave an orphan quota row behind.
+    if db::auth::find_user_by_id(&state.auth, &user_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
     db::quota::set_user_quota(&state.chat, &user_id, quota_bytes).await?;
     let metadata = quota_bytes
         .map(|b| b.to_string())
@@ -900,6 +909,15 @@ pub async fn post_enclave_quota(
     axum::Form(form): axum::Form<QuotaForm>,
 ) -> Result<Redirect, AppError> {
     let quota_bytes = parse_quota_mib(&form.quota_mib)?;
+    // 404 before logging: `set_enclave_quota` is a plain UPDATE, so a
+    // bogus id would just be a silent zero-row write but the audit
+    // log would still record an action that had no effect.
+    if db::enclave::get_enclave(&state.chat, enclave_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
     db::quota::set_enclave_quota(&state.chat, enclave_id, quota_bytes).await?;
     let metadata = quota_bytes
         .map(|b| b.to_string())
