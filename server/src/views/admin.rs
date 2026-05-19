@@ -133,6 +133,11 @@ pub struct SettingsPage<'a> {
     /// preference flipped on. Stored as a string "0" / "1" in the
     /// `settings` table under `default_notify_email_digest`.
     pub default_notify_email_digest: bool,
+    /// Current value of the maintenance-mode toggle.
+    pub maintenance_enabled: bool,
+    /// Operator-facing message shown on the 503 page while maintenance
+    /// is on. Empty hides the message block.
+    pub maintenance_message: String,
     pub saved: bool,
     /// Pre-formatted "N.NN MiB" string; Askama can't do the i64-to-f64
     /// arithmetic inline, so the handler renders it.

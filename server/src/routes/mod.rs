@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::auth::{enforce_2fa_enrollment, inject_user, OptionalUser};
+use crate::auth::{enforce_2fa_enrollment, enforce_maintenance_mode, inject_user, OptionalUser};
 use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
@@ -937,6 +937,10 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             enforce_2fa_enrollment,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            enforce_maintenance_mode,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())
