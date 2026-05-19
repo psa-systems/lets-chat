@@ -58,7 +58,11 @@ pub fn router() -> Router<AppState> {
         .route("/admin/backup", post(post_backup))
         .route(
             "/admin/restore",
-            post(post_restore).layer(DefaultBodyLimit::disable()),
+            // 10 GiB cap. The route is admin-only so the threat model
+            // is narrow (compromised admin creds, or a typo'd file
+            // picker), but an unlimited cap would let either fill
+            // the disk before validation runs.
+            post(post_restore).layer(DefaultBodyLimit::max(10 * 1024 * 1024 * 1024)),
         )
         .route("/admin/quarantine", get(get_quarantine))
         .route(
@@ -1410,21 +1414,6 @@ pub async fn post_backup(
         &tmp_path,
     )
     .await?;
-    db::moderation::log_mod_action(
-        &state.chat,
-        "backup_create",
-        "",
-        &actor.id,
-        None,
-        None,
-        Some(&format!(
-            "{} files, archive {}",
-            manifest.files.len(),
-            tmp_path.display()
-        )),
-    )
-    .await?;
-
     let file = tokio::fs::File::open(&tmp_path)
         .await
         .map_err(|e| AppError::Internal(format!("reopen archive: {e}")))?;
@@ -1433,6 +1422,20 @@ pub async fn post_backup(
         .await
         .map(|m| m.len())
         .map_err(|e| AppError::Internal(format!("stat archive: {e}")))?;
+    // Audit only after we have a sized file ready to stream. The
+    // metadata payload deliberately leaves the system tempfile path
+    // out - it serves no admin-debug purpose and just clutters the
+    // log.
+    db::moderation::log_mod_action(
+        &state.chat,
+        "backup_create",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some(&format!("{} files, {} bytes", manifest.files.len(), size)),
+    )
+    .await?;
     // Unlink immediately: the open handle keeps the bytes available
     // until the last close, so the file is released the moment the
     // stream finishes or the client disconnects.
@@ -1492,24 +1495,39 @@ pub async fn post_restore(
     }
 
     // Validate before staging so a tampered archive never lands on
-    // disk in a location the next startup would consume.
-    let manifest = match crate::backup::verify_archive(&tmp_path) {
-        Ok(m) => m,
-        Err(e) => {
-            let _ = std::fs::remove_file(&tmp_path);
-            let msg = match &e {
-                AppError::BadRequest(s) => s.clone(),
-                _ => "archive validation failed".to_string(),
-            };
-            return Ok(render_backup_page(&state, &actor, Some(msg))
-                .await?
-                .into_response());
-        }
-    };
+    // disk in a location the next startup would consume. Both
+    // `verify_archive` and `stage_extract` are synchronous filesystem
+    // work; defer to the blocking pool so the tokio worker stays
+    // free for a multi-GB archive.
+    let tmp_for_verify = tmp_path.clone();
+    let manifest =
+        match tokio::task::spawn_blocking(move || crate::backup::verify_archive(&tmp_for_verify))
+            .await
+            .map_err(|e| AppError::Internal(format!("verify join: {e}")))?
+        {
+            Ok(m) => m,
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                let msg = match &e {
+                    AppError::BadRequest(s) => s.clone(),
+                    _ => "archive validation failed".to_string(),
+                };
+                return Ok(render_backup_page(&state, &actor, Some(msg))
+                    .await?
+                    .into_response());
+            }
+        };
 
     let data_dir = std::path::PathBuf::from(db::data_dir());
     let staged = crate::backup::staged_dir_for(&data_dir);
-    if let Err(e) = crate::backup::stage_extract(&tmp_path, &staged) {
+    let tmp_for_stage = tmp_path.clone();
+    let staged_for_stage = staged.clone();
+    let stage_res = tokio::task::spawn_blocking(move || {
+        crate::backup::stage_extract(&tmp_for_stage, &staged_for_stage)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("stage join: {e}")))?;
+    if let Err(e) = stage_res {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(e);
     }

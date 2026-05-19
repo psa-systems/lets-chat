@@ -17,6 +17,16 @@
 </div>
 {% endif %}
 
+<div class="mb-6 p-3 rounded bg-slate-50 text-slate-700 text-xs border border-slate-200 max-w-2xl">
+  <strong>Heads up:</strong> every restore leaves the previous data
+  directory on disk as a sibling named
+  <code>{data_dir}.replaced-{timestamp}</code>. These accumulate over
+  time; once you have confirmed the restore is healthy, remove old
+  <code>.replaced-*</code> directories manually to reclaim space.
+  There is no automatic cleanup.
+</div>
+
+
 <section class="mb-8 max-w-2xl">
   <h2 class="text-base font-semibold mb-2">Create backup</h2>
   <p class="text-sm text-slate-600 mb-3">
