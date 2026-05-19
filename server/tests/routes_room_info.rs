@@ -217,11 +217,10 @@ async fn empty_wiki_body_clears_metadata() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (body, at, by): (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT wiki_body, wiki_updated_at, wiki_updated_by FROM rooms WHERE id=1",
-    )
-    .fetch_one(&t.chat)
-    .await
-    .unwrap();
+    let (body, at, by): (Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT wiki_body, wiki_updated_at, wiki_updated_by FROM rooms WHERE id=1")
+            .fetch_one(&t.chat)
+            .await
+            .unwrap();
     assert!(body.is_none() && at.is_none() && by.is_none());
 }
