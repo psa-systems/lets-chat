@@ -165,9 +165,13 @@ pub async fn enforce_2fa_enrollment(
 /// Middleware: when the `maintenance_mode` setting is on, return a 503
 /// maintenance page for everyone except admins. Admins still need the
 /// admin area, the login surface, and static assets to recover, so each
-/// of those is exempt before the setting is even read. The setting read
-/// is one indexed KV lookup against `settings.db`; we skip it entirely
-/// for exempt paths so static asset requests do not pay the cost.
+/// of those is exempt before the setting is even read. The password-
+/// reset surface (`/forgot`, `/reset/...`) is exempt too so a locked-out
+/// admin can recover without an out-of-band DB write. Registration and
+/// email verification stay 503'd: new accounts should not be created
+/// during a maintenance window. The setting read is one indexed KV
+/// lookup against `settings.db`; we skip it entirely for exempt paths
+/// so static asset requests do not pay the cost.
 pub async fn enforce_maintenance_mode(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -179,6 +183,8 @@ pub async fn enforce_maintenance_mode(
         || path == "/login"
         || path.starts_with("/login/")
         || path == "/logout"
+        || path == "/forgot"
+        || path.starts_with("/reset/")
         || path == "/version";
     if exempt {
         return next.run(req).await;
