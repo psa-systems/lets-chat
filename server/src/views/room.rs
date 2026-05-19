@@ -694,6 +694,15 @@ pub struct RoomPage<'a> {
     /// LC-84: viewer is allowed to grant/revoke per-room role overrides.
     /// Drives the "Moderators" link in the room header.
     pub can_manage_overrides: bool,
+    /// LC-85: viewer is allowed to post in this room given the room's
+    /// `posting_allowed_for` policy and their effective role. Drives the
+    /// compose-box render: when false the composer is replaced with a
+    /// read-only notice.
+    pub can_post: bool,
+    /// LC-85: human-readable label for the current policy when the
+    /// composer is disabled (e.g. "Only admins can post in this room").
+    /// Empty string when `can_post` is true.
+    pub posting_locked_reason: &'a str,
 }
 
 #[derive(Template)]

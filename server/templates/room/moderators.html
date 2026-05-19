@@ -13,6 +13,24 @@
     Grant a room-scoped Moderator or Admin role. Overrides only elevate; removing one returns the user to their org-wide role inside this room.
   </p>
 
+  <section class="space-y-3 border rounded p-3">
+    <h2 class="font-semibold">Posting policy</h2>
+    <p class="text-sm text-slate-600">
+      Controls who can post messages in this room. Reactions, pins, and edits of own messages are unaffected.
+    </p>
+    <form method="post" action="/room/{{ room.id }}/posting-policy" class="flex gap-2 items-end">
+      <label class="flex-1">
+        <span class="text-sm">Who can post</span>
+        <select name="policy" class="w-full border rounded px-2 py-1 text-sm">
+          <option value="all" {% if posting_policy == "all" %}selected{% endif %}>Everyone (default)</option>
+          <option value="moderators_only" {% if posting_policy == "moderators_only" %}selected{% endif %}>Moderators only</option>
+          <option value="admins_only" {% if posting_policy == "admins_only" %}selected{% endif %}>Admins only</option>
+        </select>
+      </label>
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">Save</button>
+    </form>
+  </section>
+
   <section class="space-y-3">
     <h2 class="font-semibold">Current overrides</h2>
     {% if overrides.is_empty() %}

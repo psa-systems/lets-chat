@@ -127,6 +127,7 @@ pub async fn get_page(
         room: &room,
         overrides: &overrides,
         candidates: &candidates,
+        posting_policy: &room.posting_allowed_for,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -170,6 +171,50 @@ pub async fn post_grant(
         &state.chat,
         "room_role_grant",
         &form.user_id,
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/room/{room_id}/moderators")))
+}
+
+#[derive(Deserialize)]
+pub struct PostingPolicyForm {
+    /// One of `"all"`, `"moderators_only"`, `"admins_only"`. Anything
+    /// else 400s.
+    pub policy: String,
+}
+
+/// POST /room/{id}/posting-policy
+///
+/// LC-85: flip a room into / out of read-only or moderators-only mode.
+/// Authorized to the same set as override grant/revoke (`enclave_can_
+/// manage`). Writes a `mod_actions` audit row so policy changes are
+/// discoverable in the moderation log.
+pub async fn post_posting_policy(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    Form(form): Form<PostingPolicyForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let policy = form.policy.trim();
+    if !matches!(policy, "all" | "moderators_only" | "admins_only") {
+        return Err(AppError::BadRequest(
+            "policy must be one of: all, moderators_only, admins_only".into(),
+        ));
+    }
+    let n = db::chat::set_room_posting_policy(&state.chat, room_id, policy).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"posting_allowed_for":"{policy}"}}"#);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_posting_policy",
+        "",
         &user.id,
         None,
         Some(room_id),
