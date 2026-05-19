@@ -231,6 +231,23 @@ async fn login_route_stays_reachable_during_maintenance() {
 }
 
 #[tokio::test]
+async fn password_reset_surface_stays_reachable_during_maintenance() {
+    let t = app().await;
+    db::settings::set_setting(&t.settings, "maintenance_mode", "true")
+        .await
+        .unwrap();
+    // An admin who forgot their password must be able to reach the
+    // recovery flow without an out-of-band DB write. The handlers'
+    // own statuses (404 in this test because there's no mailer, OK in
+    // a real deployment) are fine - what we are asserting is that the
+    // maintenance middleware did NOT intercept these paths with a 503.
+    let (status, _) = send(&t.app, None, Method::GET, "/forgot", "").await;
+    assert_ne!(status, StatusCode::SERVICE_UNAVAILABLE);
+    let (status, _) = send(&t.app, None, Method::GET, "/reset/bogus", "").await;
+    assert_ne!(status, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
 async fn ws_upgrade_rejected_for_non_admin_during_maintenance() {
     let t = app().await;
     db::settings::set_setting(&t.settings, "maintenance_mode", "true")
