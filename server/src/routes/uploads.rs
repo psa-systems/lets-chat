@@ -196,7 +196,13 @@ pub async fn post_upload(
         // shrink it slightly but never grows the recognized formats,
         // so an under-cap upload will not be falsely rejected here. Run
         // before the (expensive) re-encode so a rejected upload does not
-        // burn CPU on a file we are about to discard.
+        // burn CPU on a file we are about to discard. The SUM + INSERT
+        // pair is intentionally NOT transactional: two simultaneous
+        // uploads can both observe the same `used` and both commit,
+        // overshooting by at most one upload's worth. Acceptable for
+        // self-hosted volumes; the operator can size the cap with
+        // headroom or set per-user limits below the burst they want
+        // to tolerate.
         if let Some(quota) = db::quota::get_user_quota(&state.chat, &user.id).await? {
             let used = db::quota::sum_user_usage(&state.chat, &user.id).await?;
             if used.saturating_add(total) > quota {

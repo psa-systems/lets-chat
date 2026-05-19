@@ -35,9 +35,15 @@ pub async fn sum_user_usage(pool: &SqlitePool, user_id: &str) -> Result<i64, sql
 
 /// SUM of `file_uploads.size_bytes` attached to messages in any room
 /// of `enclave_id`. Orphan uploads have no room link yet and are not
-/// counted here; they only appear against the user. Soft-deleted and
-/// system messages are excluded so the figure matches what the file
-/// browser shows the operator.
+/// counted here; they only appear against the user.
+///
+/// Soft-deleted messages ARE counted: the upload row stays in
+/// `file_uploads` after a soft delete (the orphan sweeper only claims
+/// rows with `message_id IS NULL`), the bytes stay on disk, and
+/// excluding them would let a member free enclave headroom by
+/// soft-deleting their own old messages. Matches `sum_user_usage`
+/// for the same reason - both queries count what is on disk, not
+/// what the file browser renders.
 pub async fn sum_enclave_usage(pool: &SqlitePool, enclave_id: i64) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT COALESCE(SUM(u.size_bytes), 0) \
@@ -45,8 +51,7 @@ pub async fn sum_enclave_usage(pool: &SqlitePool, enclave_id: i64) -> Result<i64
          JOIN messages m ON m.id = u.message_id \
          JOIN rooms r ON r.id = m.room_id \
          WHERE r.enclave_id = ? \
-           AND m.is_system = 0 \
-           AND m.deleted_at IS NULL",
+           AND m.is_system = 0",
     )
     .bind(enclave_id)
     .fetch_one(pool)

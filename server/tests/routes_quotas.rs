@@ -85,6 +85,11 @@ async fn send(
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+// `admin_session`, `admin_id`, and `auth` are unused under the saas
+// build because the admin-route tests that consume them are
+// `#[cfg(feature = "standalone")]`. Allowing dead code keeps a single
+// struct definition for both builds.
+#[allow(dead_code)]
 struct TestApp {
     app: Router,
     admin_session: String,
@@ -276,6 +281,54 @@ async fn user_usage_excludes_system_messages_and_counts_orphans() {
 }
 
 #[tokio::test]
+async fn soft_deleted_message_still_counts_against_both_quotas() {
+    // Closes the self-delete-to-bypass-cap loophole: a user who
+    // soft-deletes their own message must NOT free quota headroom,
+    // because the upload row + bytes-on-disk are still there.
+    let t = app().await;
+    let mid = db::chat::insert_message(&t.chat, 1, &t.member_id, "hi")
+        .await
+        .unwrap();
+    let up = db::uploads::insert_upload(
+        &t.chat,
+        &t.member_id,
+        "d.png",
+        "image/png",
+        300,
+        "d.png",
+        None,
+    )
+    .await
+    .unwrap();
+    db::uploads::link_upload_to_message(&t.chat, up, mid)
+        .await
+        .unwrap();
+    assert_eq!(
+        db::quota::sum_user_usage(&t.chat, &t.member_id)
+            .await
+            .unwrap(),
+        300
+    );
+    assert_eq!(db::quota::sum_enclave_usage(&t.chat, 1).await.unwrap(), 300);
+
+    db::moderation::soft_delete_message(&t.chat, mid, &t.member_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        db::quota::sum_user_usage(&t.chat, &t.member_id)
+            .await
+            .unwrap(),
+        300,
+        "soft-delete must not free user quota"
+    );
+    assert_eq!(
+        db::quota::sum_enclave_usage(&t.chat, 1).await.unwrap(),
+        300,
+        "soft-delete must not free enclave quota"
+    );
+}
+
+#[tokio::test]
 async fn enclave_usage_joins_through_messages_and_rooms() {
     let t = app().await;
     // General enclave (id=1), General room (id=1).
@@ -423,6 +476,48 @@ async fn non_admin_cannot_set_user_quota() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_quota_form_404s_on_unknown_user_id() {
+    let t = app().await;
+    let (status, _) = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        "/admin/users/nope-not-a-user/quota",
+        "quota_mib=5",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        db::quota::get_user_quota(&t.chat, "nope-not-a-user")
+            .await
+            .unwrap(),
+        None,
+        "no orphan quota row should land for a non-existent user"
+    );
+}
+
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_quota_form_404s_on_unknown_enclave_id() {
+    let t = app().await;
+    let (status, _) = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        "/admin/enclaves/9999/quota",
+        "quota_mib=5",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let actions = db::moderation::list_mod_actions(&t.chat).await.unwrap();
+    assert!(
+        !actions.iter().any(|a| a.action == "quota_set_enclave"),
+        "audit log must not record a no-op",
+    );
 }
 
 #[tokio::test]
