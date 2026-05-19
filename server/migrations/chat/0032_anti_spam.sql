@@ -1,0 +1,67 @@
+-- LC-94: anti-spam rate limits, link filter, quarantine.
+--
+-- Note on rate-limit defaults: the operator-facing settings live in
+-- settings.db and are seeded in `settings/0001` (rate_limit_messages
+-- = '30') and `settings/0004_anti_spam.sql` (the two new IP-keyed
+-- caps default to '0' = disabled). The rate-limit module treats
+-- limit = 0 as disabled, so the seed shape means existing deployments
+-- get rate limiting only for messages until the admin opts in to the
+-- IP-keyed ones from `/admin/anti-spam`.
+--
+-- The quarantined column lets the link filter hold a message after
+-- insert (so we can show it to the admin for review) without
+-- soft-deleting it. `list_messages` adds `AND quarantined = 0` so
+-- held messages never reach the room until a moderator approves.
+ALTER TABLE messages ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0;
+
+-- Admin-managed link-filter rules. `pattern` is either a literal host
+-- ("example.com") or a simple glob ("*.example.com", "*.tk"); the
+-- matcher converts `*` to regex `.*` at check time. `action` decides
+-- how a match is handled:
+--   'block'      - reject the send with 400
+--   'quarantine' - insert with quarantined=1; admin reviews at /admin/quarantine
+--   'warn'       - insert normally + audit-log the match
+CREATE TABLE IF NOT EXISTS link_filter_rules (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern    TEXT NOT NULL UNIQUE,
+    action     TEXT NOT NULL CHECK (action IN ('block', 'quarantine', 'warn')),
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_link_filter_rules_pattern ON link_filter_rules(pattern);
+
+-- One row per quarantined message; records which rule caught it and
+-- carries the moderator's eventual decision. The FK is intentionally
+-- NOT `ON DELETE CASCADE`: messages are soft-deleted in this
+-- codebase (UPDATE messages SET deleted_at = ...), not hard-deleted,
+-- so a cascade would never fire in practice. Keeping the quarantine
+-- row alive after a rejected message is soft-deleted preserves the
+-- audit trail (`reviewed_by` + `decision` are still readable). If a
+-- message is ever hard-purged out-of-band the quarantine row
+-- orphans; the review queue filters on `reviewed_at IS NULL` so the
+-- orphan does not surface.
+CREATE TABLE IF NOT EXISTS link_filter_quarantine (
+    message_id      INTEGER PRIMARY KEY REFERENCES messages(id),
+    matched_pattern TEXT NOT NULL,
+    matched_url     TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_by     TEXT,
+    reviewed_at     TEXT,
+    decision        TEXT CHECK (decision IN ('approve', 'reject'))
+);
+CREATE INDEX IF NOT EXISTS idx_quarantine_unreviewed
+    ON link_filter_quarantine(created_at)
+    WHERE reviewed_at IS NULL;
+
+-- Curated default deny-list: the Freenom free-TLDs (Tokelau, Mali,
+-- Gabon, Central African Republic) have been the dominant source of
+-- throwaway spam domains for years. Seeded with `quarantine` rather
+-- than `block` so the admin sees what would otherwise be silently
+-- dropped and can upgrade to `block` (or remove the rule) per their
+-- own threat model. The `system` actor distinguishes seeded rules
+-- from admin-authored ones in the audit log.
+INSERT OR IGNORE INTO link_filter_rules (pattern, action, created_by) VALUES
+    ('*.tk',  'quarantine', 'system'),
+    ('*.ml',  'quarantine', 'system'),
+    ('*.ga',  'quarantine', 'system'),
+    ('*.cf',  'quarantine', 'system');

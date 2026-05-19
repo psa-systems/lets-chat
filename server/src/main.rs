@@ -107,6 +107,7 @@ async fn main() {
         mailer,
         base_url,
         ice_servers,
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

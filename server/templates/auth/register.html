@@ -36,6 +36,15 @@
       <span class="text-sm">Confirm password</span>
       <input type="password" name="password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
+    {# LC-94 honeypot: off-screen + autocomplete-off so legit users
+       never fill it, but unsophisticated bots that auto-fill every
+       input populate it and trip the server-side check. aria-hidden
+       and tabindex=-1 keep it out of accessible focus order. #}
+    <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+      <label>Leave this field empty
+        <input type="text" name="website" tabindex="-1" autocomplete="off">
+      </label>
+    </div>
     <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Create account</button>
     <p class="text-sm text-center">Have an account? <a href="/login" class="text-blue-600 hover:underline">Sign in</a>.</p>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>

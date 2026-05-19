@@ -62,6 +62,24 @@ pub async fn post_forgot(
     if !state.mail_available() {
         return Err(AppError::NotFound);
     }
+    // LC-94: per-IP rate limit. Skipped when the cap is 0 (default)
+    // or the request has no extractable IP. Sits before the email
+    // validation so a flood of "invalid email" submissions also gets
+    // throttled.
+    let pwr_cap =
+        crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_password_resets").await;
+    if let Some(ip) = crate::rate_limit::client_ip_for_rate_limit(&state.settings, &headers).await {
+        if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check(
+            crate::rate_limit::RateLimitKind::PasswordReset,
+            &ip,
+            pwr_cap,
+        ) {
+            return Err(AppError::TooManyRequests(
+                format!("too many password reset requests from this address; retry in {retry_after} seconds"),
+                retry_after,
+            ));
+        }
+    }
     let email = form.email.trim().to_string();
     if email.is_empty() {
         return Ok(forgot_error(&state, &headers, "Email is required"));
