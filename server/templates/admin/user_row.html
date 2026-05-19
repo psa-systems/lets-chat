@@ -14,6 +14,14 @@
     {% if u.is_banned %}<span class="text-red-600">Banned</span>{% else %}Active{% endif %}
     {% if u.is_muted %} <span class="text-orange-600">Muted</span>{% endif %}
   </td>
+  <td class="py-2 text-xs">
+    <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
+      <span class="font-mono text-slate-500">{{ u.usage_display }}</span>
+      <span>/</span>
+      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" placeholder="unlimited" class="border rounded text-xs px-1 py-0.5 w-20">
+      <button type="submit" class="text-blue-600 hover:underline">Save</button>
+    </form>
+  </td>
   <td class="py-2 text-right text-xs whitespace-nowrap">
     {% if u.is_banned %}
     <button hx-post="/admin/users/{{ u.id }}/unban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Unban</button>

@@ -72,6 +72,12 @@ pub async fn get_settings(
     let password_error = q.password_error.as_deref().and_then(password_error_message);
     let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
     let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
+    let storage_usage_bytes = db::quota::sum_user_usage(&state.chat, &user.id).await?;
+    let storage_quota_bytes = db::quota::get_user_quota(&state.chat, &user.id).await?;
+    let storage_usage_display =
+        format!("{:.2} MiB", storage_usage_bytes as f64 / (1024.0 * 1024.0));
+    let storage_quota_display =
+        storage_quota_bytes.map(|b| format!("{:.2} MiB", b as f64 / (1024.0 * 1024.0)));
     let page = UserSettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -95,6 +101,8 @@ pub async fn get_settings(
         password_error,
         sessions: &sessions,
         session_revoked: q.session_revoked.is_some(),
+        storage_usage_display,
+        storage_quota_display,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,

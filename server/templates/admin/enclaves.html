@@ -17,6 +17,7 @@
       <th class="py-2">Visibility</th>
       <th class="py-2">Owner</th>
       <th class="py-2">Members</th>
+      <th class="py-2">Storage (used / quota MiB)</th>
       <th class="py-2">Created</th>
       <th class="py-2 text-right">Actions</th>
     </tr>
@@ -36,6 +37,14 @@
         {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-slate-400">none</span>{% endif %}
       </td>
       <td class="py-2">{{ e.member_count }}</td>
+      <td class="py-2 text-xs">
+        <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
+          <span class="font-mono text-slate-500">{{ e.usage_display }}</span>
+          <span>/</span>
+          <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="unlimited" class="border rounded text-xs px-1 py-0.5 w-20">
+          <button type="submit" class="text-blue-600 hover:underline">Save</button>
+        </form>
+      </td>
       <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
       <td class="py-2 text-right">
         <a href="/enclave/{{ e.id }}" class="text-blue-600 hover:underline">Open</a>

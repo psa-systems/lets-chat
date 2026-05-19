@@ -427,6 +427,27 @@ pub async fn post_message(
         if row.uploader_id != user.id || row.message_id.is_some() {
             return Err(AppError::Forbidden);
         }
+        // LC-93: per-enclave quota. The user's own quota was already
+        // enforced at upload time; this catches the case where the
+        // upload fit under the user's cap but attaching it to a room
+        // in this enclave would push the enclave over its cap. DMs
+        // (`enclave_id IS NULL`) have no enclave quota and skip.
+        // SUM + insert is intentionally non-transactional for the same
+        // reason as the upload-time user check: simultaneous attaches
+        // can both pass and overshoot by at most one attachment's
+        // bytes, which is fine for self-hosted volumes.
+        if let Some(enclave_id) = db::quota::enclave_id_for_room(&state.chat, room_id).await? {
+            if let Some(quota) = db::quota::get_enclave_quota(&state.chat, enclave_id).await? {
+                let used = db::quota::sum_enclave_usage(&state.chat, enclave_id).await?;
+                if used.saturating_add(row.size_bytes) > quota {
+                    return Err(AppError::PayloadTooLarge(format!(
+                        "attachment would exceed the enclave storage quota \
+                         ({quota} bytes; using {used}, this attachment is {})",
+                        row.size_bytes
+                    )));
+                }
+            }
+        }
     }
 
     // Validate the quoted message (if any) before the insert. The quoted row

@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{id}/mute", post(post_mute))
         .route("/admin/users/{id}/unmute", post(post_unmute))
         .route("/admin/users/{id}/role", post(post_role))
+        .route("/admin/users/{id}/quota", post(post_user_quota))
         .route("/admin/users/{id}/delete", post(post_delete_user))
         .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
@@ -41,6 +42,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/rooms/{id}/invite", post(post_invite_to_room))
         .route("/admin/rooms/{id}/regenerate", post(post_regenerate_invite))
         .route("/admin/enclaves", get(get_enclaves))
+        .route("/admin/enclaves/{id}/quota", post(post_enclave_quota))
         .route("/admin/modlog", get(get_modlog))
         .route(
             "/admin/uploads/regenerate-thumbnails",
@@ -54,9 +56,11 @@ pub async fn get_enclaves(
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
     let raw = db::enclave::list_all_enclaves_with_counts(&state.chat).await?;
-    let enclaves: Vec<AdminEnclaveView> = raw
-        .into_iter()
-        .map(|(e, count, owner_id)| AdminEnclaveView {
+    let mut enclaves: Vec<AdminEnclaveView> = Vec::with_capacity(raw.len());
+    for (e, count, owner_id) in raw {
+        let usage_bytes = db::quota::sum_enclave_usage(&state.chat, e.id).await?;
+        let quota_bytes = db::quota::get_enclave_quota(&state.chat, e.id).await?;
+        enclaves.push(AdminEnclaveView {
             id: e.id,
             name: e.name,
             description: e.description,
@@ -65,8 +69,10 @@ pub async fn get_enclaves(
             member_count: count,
             owner_id,
             created_at: e.created_at,
-        })
-        .collect();
+            usage_display: format_bytes_mib(usage_bytes),
+            quota_mib_value: bytes_to_mib_input(quota_bytes),
+        });
+    }
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -373,16 +379,20 @@ pub async fn get_users(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
     let records = db::auth::list_users(&state.auth).await?;
-    let users: Vec<AdminUserView> = records
-        .into_iter()
-        .map(|r| AdminUserView {
+    let mut users: Vec<AdminUserView> = Vec::with_capacity(records.len());
+    for r in records {
+        let usage_bytes = db::quota::sum_user_usage(&state.chat, &r.id).await?;
+        let quota_bytes = db::quota::get_user_quota(&state.chat, &r.id).await?;
+        users.push(AdminUserView {
             id: r.id,
             username: r.username,
             role: r.role,
             is_banned: r.is_banned,
             is_muted: r.is_muted,
-        })
-        .collect();
+            usage_display: format_bytes_mib(usage_bytes),
+            quota_mib_value: bytes_to_mib_input(quota_bytes),
+        });
+    }
     let page = UsersPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -509,12 +519,16 @@ async fn render_user_row(state: &AppState, user_id: &str) -> Result<Html, AppErr
     let record = db::auth::find_user_by_id(&state.auth, user_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    let usage_bytes = db::quota::sum_user_usage(&state.chat, &record.id).await?;
+    let quota_bytes = db::quota::get_user_quota(&state.chat, &record.id).await?;
     let view = AdminUserView {
         id: record.id,
         username: record.username,
         role: record.role,
         is_banned: record.is_banned,
         is_muted: record.is_muted,
+        usage_display: format_bytes_mib(usage_bytes),
+        quota_mib_value: bytes_to_mib_input(quota_bytes),
     };
     html(&UserRowFragment { u: &view })
 }
@@ -803,4 +817,120 @@ fn random_code(len: usize) -> String {
         .take(len)
         .map(char::from)
         .collect()
+}
+
+// Quotas (LC-93) ------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct QuotaForm {
+    /// Whole MiB, or empty to clear the cap. The form input is a plain
+    /// `<input type="number">`; empty submit means "unlimited".
+    #[serde(default)]
+    pub quota_mib: String,
+}
+
+/// Parse the admin form's MiB input into a byte count. An empty (or
+/// whitespace-only) value returns `Ok(None)` for "unlimited"; a
+/// non-negative integer returns `Ok(Some(mib * 1024 * 1024))`. Anything
+/// else 400s.
+fn parse_quota_mib(s: &str) -> Result<Option<i64>, AppError> {
+    let t = s.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    let n: i64 = t.parse().map_err(|_| {
+        AppError::BadRequest(
+            "quota must be a non-negative whole number of MiB or empty for unlimited".into(),
+        )
+    })?;
+    if n < 0 {
+        return Err(AppError::BadRequest("quota must be non-negative".into()));
+    }
+    Ok(Some(n.saturating_mul(1024 * 1024)))
+}
+
+/// Inverse of `parse_quota_mib`: byte count back to the form-input
+/// string. Truncates to whole MiB; an admin that sets a sub-MiB quota
+/// out-of-band would see the field round down here, which is fine for
+/// a UI that only accepts whole MiB anyway.
+fn bytes_to_mib_input(q: Option<i64>) -> String {
+    match q {
+        Some(b) => (b / (1024 * 1024)).to_string(),
+        None => String::new(),
+    }
+}
+
+fn format_bytes_mib(bytes: i64) -> String {
+    format!("{:.2} MiB", bytes as f64 / (1024.0 * 1024.0))
+}
+
+/// Flip a user's storage quota. Returns the re-rendered admin row
+/// so the HTMX form on `/admin/users` updates in place.
+pub async fn post_user_quota(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(user_id): Path<String>,
+    axum::Form(form): axum::Form<QuotaForm>,
+) -> Result<Html, AppError> {
+    let quota_bytes = parse_quota_mib(&form.quota_mib)?;
+    // 404 before we touch anything: `user_storage_quotas` has no FK to
+    // auth.users (the two live in different databases), so a typo in
+    // the path would otherwise leave an orphan quota row behind.
+    if db::auth::find_user_by_id(&state.auth, &user_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    db::quota::set_user_quota(&state.chat, &user_id, quota_bytes).await?;
+    let metadata = quota_bytes
+        .map(|b| b.to_string())
+        .unwrap_or_else(|| "unlimited".to_string());
+    db::moderation::log_mod_action(
+        &state.chat,
+        "quota_set_user",
+        &user_id,
+        &actor.id,
+        None,
+        None,
+        Some(&metadata),
+    )
+    .await?;
+    render_user_row(&state, &user_id).await
+}
+
+/// Flip an enclave's storage quota. The admin enclaves page is a
+/// plain table (no per-row HTMX fragment yet), so this redirects back
+/// to the page rather than returning a partial.
+pub async fn post_enclave_quota(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(enclave_id): Path<i64>,
+    axum::Form(form): axum::Form<QuotaForm>,
+) -> Result<Redirect, AppError> {
+    let quota_bytes = parse_quota_mib(&form.quota_mib)?;
+    // 404 before logging: `set_enclave_quota` is a plain UPDATE, so a
+    // bogus id would just be a silent zero-row write but the audit
+    // log would still record an action that had no effect.
+    if db::enclave::get_enclave(&state.chat, enclave_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    db::quota::set_enclave_quota(&state.chat, enclave_id, quota_bytes).await?;
+    let metadata = quota_bytes
+        .map(|b| b.to_string())
+        .unwrap_or_else(|| "unlimited".to_string());
+    db::moderation::log_mod_action(
+        &state.chat,
+        "quota_set_enclave",
+        "",
+        &actor.id,
+        None,
+        Some(enclave_id),
+        Some(&metadata),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/enclaves"))
 }

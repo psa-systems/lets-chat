@@ -10,6 +10,13 @@ pub struct AdminUserView {
     pub role: String,
     pub is_banned: bool,
     pub is_muted: bool,
+    /// LC-93: pre-formatted "N.NN MiB" string of the user's current
+    /// upload usage (excludes system messages).
+    pub usage_display: String,
+    /// LC-93: current quota as a whole-MiB string for the form input,
+    /// or empty when the user is unlimited. An empty submit clears the
+    /// quota.
+    pub quota_mib_value: String,
 }
 
 /// Per-row projection for the invites admin table.
@@ -158,6 +165,9 @@ pub struct AdminEnclaveView {
     pub member_count: i64,
     pub owner_id: Option<String>,
     pub created_at: String,
+    /// LC-93: same formatting convention as `AdminUserView`.
+    pub usage_display: String,
+    pub quota_mib_value: String,
 }
 
 #[derive(Template)]
