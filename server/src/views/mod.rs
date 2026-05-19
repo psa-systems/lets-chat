@@ -11,6 +11,7 @@ pub mod home;
 pub mod inbox;
 pub mod layout;
 pub mod login_alert;
+pub mod maintenance;
 pub mod markdown;
 pub mod mentions;
 pub mod not_found;
