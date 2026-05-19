@@ -34,6 +34,16 @@ async fn main() {
         .or_else(|| std::env::var("LETS_CHAT_DATA_DIR").ok())
         .unwrap_or_else(|| "/data".to_string());
     tracing::info!(%data_dir, "starting lets-chat");
+    // LC-95: if the previous run staged a restore archive, swap the
+    // staging directory into place before any pool opens against the
+    // (about-to-be-replaced) data dir. A hard-stop on swap failure
+    // is the right call: half-renamed state would surface as cryptic
+    // pool errors later, and the operator's recovery is to rename
+    // the sibling `.replaced-{ts}` directory back.
+    if let Err(e) = lets_chat::backup::apply_pending_restore(std::path::Path::new(&data_dir)) {
+        tracing::error!(error = %e, "failed to apply pending restore; refusing to start");
+        std::process::exit(1);
+    }
     db::set_data_dir(data_dir);
 
     let auth_pool = db::open_auth_pool().await;
