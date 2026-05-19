@@ -20,16 +20,106 @@ use crate::models::User;
 use crate::state::AppState;
 use crate::views::pinned::PinnedListRow;
 use crate::views::room_info::{
-    DescriptionEditFragment, DescriptionViewFragment, RoomInfoPage, WikiEditFragment,
-    WikiViewFragment,
+    DescriptionEditFragment, DescriptionViewFragment, FileListFragment, RoomFileRow, RoomInfoPage,
+    WikiEditFragment, WikiViewFragment,
 };
 use crate::views::{html, Html};
 
+/// LC-87: page size for the Files tab. Big enough to fill the visible
+/// area on most screens; small enough that the initial render is cheap
+/// even on rooms with tens of thousands of uploads.
+const FILES_PAGE_SIZE: i64 = 40;
+
 #[derive(Deserialize)]
 pub struct InfoQuery {
-    /// `"docs"` (default) or `"pinned"`. Anything else falls back to `"docs"`.
+    /// `"docs"` (default) or `"pinned"` or `"files"`. Anything else falls
+    /// back to `"docs"`.
     #[serde(default)]
     pub tab: Option<String>,
+    /// LC-87: active file-kind filter on the Files tab. Anything we do
+    /// not recognise falls back to `"all"`.
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct FilesQuery {
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Cursor for pagination. Each row's `id` is monotonically
+    /// increasing; the load-more button sends the smallest id on the
+    /// current page as `before`.
+    #[serde(default)]
+    pub before: Option<i64>,
+    /// True when the fragment should append (load-more) rather than
+    /// replace (filter change). Drives `hx-swap-oob` / wrapper
+    /// rendering in the template.
+    #[serde(default)]
+    pub append: Option<bool>,
+}
+
+fn is_image_mime(mime: &str) -> bool {
+    mime.starts_with("image/")
+}
+
+fn kind_icon_for(mime: &str) -> &'static str {
+    if mime.starts_with("video/") {
+        "V"
+    } else if mime.starts_with("audio/") {
+        "A"
+    } else if mime == "application/pdf" {
+        "P"
+    } else {
+        "F"
+    }
+}
+
+/// Materialise file rows + the next-page cursor in one query plus a
+/// bulk auth-label lookup. Peeks one extra row past `limit` to decide
+/// whether the load-more button should render.
+async fn load_room_files(
+    state: &AppState,
+    room_id: i64,
+    kind: db::uploads::FileKindFilter,
+    before_id: Option<i64>,
+) -> Result<(Vec<RoomFileRow>, Option<i64>), AppError> {
+    let mut rows =
+        db::uploads::list_room_files(&state.chat, room_id, kind, before_id, FILES_PAGE_SIZE + 1)
+            .await?;
+    let next_cursor = if rows.len() as i64 > FILES_PAGE_SIZE {
+        rows.truncate(FILES_PAGE_SIZE as usize);
+        rows.last().map(|r| r.id)
+    } else {
+        None
+    };
+    let ids: Vec<&str> = rows.iter().map(|r| r.uploader_id.as_str()).collect();
+    let labels: std::collections::HashMap<String, (String, Option<String>)> =
+        db::auth::display_names_for_ids(&state.auth, &ids)
+            .await?
+            .into_iter()
+            .collect();
+    let view_rows: Vec<RoomFileRow> = rows
+        .into_iter()
+        .map(|r| {
+            let label = labels
+                .get(&r.uploader_id)
+                .map(|(uname, dname)| label_for(uname, dname.as_deref()))
+                .unwrap_or_else(|| format!("@{}", r.uploader_id));
+            let mid = r.message_id.unwrap_or(0);
+            RoomFileRow {
+                id: r.id,
+                message_id: mid,
+                filename: r.filename,
+                mime_type: r.mime_type.clone(),
+                size_bytes: r.size_bytes,
+                created_at: r.created_at,
+                uploader_label: label,
+                is_image: is_image_mime(&r.mime_type),
+                kind_icon: kind_icon_for(&r.mime_type),
+            }
+        })
+        .collect();
+    Ok((view_rows, next_cursor))
 }
 
 fn label_for(username: &str, display_name: Option<&str>) -> String {
@@ -58,7 +148,7 @@ pub async fn get_page(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
-    Query(InfoQuery { tab }): Query<InfoQuery>,
+    Query(InfoQuery { tab, kind }): Query<InfoQuery>,
 ) -> Result<Html, AppError> {
     // Same access predicate as the room page: any room member, or site
     // admin, or any user for `public` rooms within accessible enclaves.
@@ -72,8 +162,13 @@ pub async fn get_page(
 
     let active_tab = match tab.as_deref() {
         Some("pinned") => "pinned",
+        Some("files") => "files",
         _ => "docs",
     };
+
+    let files_kind_raw = kind.as_deref().unwrap_or("all");
+    let files_kind_filter = db::uploads::FileKindFilter::from_query(files_kind_raw);
+    let files_kind = files_kind_filter.as_query();
 
     // Render markdown for description / wiki up front so the template
     // stays presentation-only.
@@ -137,6 +232,13 @@ pub async fn get_page(
         Vec::new()
     };
 
+    // LC-87: file rows + cursor only when the files tab is active.
+    let (files, files_next_cursor) = if active_tab == "files" {
+        load_room_files(&state, room_id, files_kind_filter, None).await?
+    } else {
+        (Vec::new(), None)
+    };
+
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -158,6 +260,9 @@ pub async fn get_page(
         can_edit_wiki,
         can_manage_overrides,
         pinned: &pinned,
+        files: &files,
+        files_kind,
+        files_next_cursor,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -401,4 +506,38 @@ pub async fn patch_wiki(
         can_edit_wiki: true,
     };
     html(&frag)
+}
+
+/// GET /room/{id}/files
+///
+/// HTMX fragment for the Files tab. Two callers:
+/// 1. Filter change (`?kind=image&append=false`) → replace `#files-grid`.
+/// 2. Load-more (`?before=N&kind=...&append=true`) → append rows.
+///
+/// Access is gated the same way as the page handler. Soft-deleted
+/// parent messages are filtered out by the DB layer.
+pub async fn get_files(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    Query(FilesQuery {
+        kind,
+        before,
+        append,
+    }): Query<FilesQuery>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let kind_raw = kind.as_deref().unwrap_or("all");
+    let kind_filter = db::uploads::FileKindFilter::from_query(kind_raw);
+    let (rows, next_cursor) = load_room_files(&state, room_id, kind_filter, before).await?;
+    html(&FileListFragment {
+        room_id,
+        files: &rows,
+        kind: kind_filter.as_query(),
+        next_cursor,
+        append: append.unwrap_or(false),
+    })
 }
