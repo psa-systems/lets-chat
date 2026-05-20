@@ -23,6 +23,40 @@ pub async fn create_user(
     Ok(id)
 }
 
+/// LC-73: create a bot user. `is_bot = 1`, empty password hash (login refuses
+/// it: bots authenticate only via API tokens). Returns the new user id.
+pub async fn create_bot(pool: &SqlitePool, username: &str) -> Result<String, sqlx::Error> {
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, is_bot, last_active_at) \
+         VALUES (?, ?, '', 1, datetime('now'))",
+    )
+    .bind(&id)
+    .bind(username)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+/// LC-73: bot users, newest first.
+pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, username, display_name, password_hash, role, \
+         is_banned, ban_reason, banned_until, \
+         is_muted, muted_until, mute_reason, \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         last_ws_seen_at, last_digest_sent_at, email, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
+         FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_user_record).collect())
+}
+
 pub async fn find_user_by_username(
     pool: &SqlitePool,
     username: &str,
@@ -36,7 +70,7 @@ pub async fn find_user_by_username(
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
          last_ws_seen_at, last_digest_sent_at, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -59,7 +93,7 @@ pub async fn find_user_by_id(
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
          last_ws_seen_at, last_digest_sent_at, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -103,6 +137,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         totp_nonce: r.get("totp_nonce"),
         totp_enabled: r.get("totp_enabled"),
         totp_recovery_hashes: r.get("totp_recovery_hashes"),
+        is_bot: r.get::<i64, _>("is_bot") != 0,
     }
 }
 
@@ -466,7 +501,7 @@ pub async fn get_user_by_session(
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -504,7 +539,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
          last_ws_seen_at, last_digest_sent_at, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -884,7 +919,7 @@ pub async fn search_users(
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
          last_ws_seen_at, last_digest_sent_at, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
@@ -1136,7 +1171,7 @@ pub async fn list_blocked_users(
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
          WHERE b.blocker_id = ? \

@@ -82,7 +82,9 @@ pub async fn post_login(
     axum::Form(form): axum::Form<LoginForm>,
 ) -> Result<Response, AppError> {
     let record = match db::auth::find_user_by_username(&state.auth, &form.username).await? {
-        Some(r) if !r.is_banned => r,
+        // LC-73: bots authenticate only via API tokens; the cookie login path
+        // refuses them (same generic error as a wrong password).
+        Some(r) if !r.is_banned && !r.is_bot => r,
         _ => {
             return Ok(form_error(
                 &state,
@@ -450,7 +452,9 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
 #[cfg(feature = "standalone")]
 async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<bool, AppError> {
     let mut tx = state.auth.begin().await?;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+    // LC-73: bots are excluded so a bot registration cannot consume the
+    // first-user-is-admin slot (and a bot can never become admin this way).
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_bot = 0")
         .fetch_one(&mut *tx)
         .await?;
     let promoted = count == 1;
