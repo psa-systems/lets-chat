@@ -53,6 +53,7 @@
     {% else %}
     <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">Save</button>
     {% endif %}
+    <button hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">Remind</button>
     {% if message.can_edit %}
     <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Edit</button>
     {% endif %}

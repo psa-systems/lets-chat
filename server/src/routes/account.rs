@@ -220,6 +220,13 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
     // is that by the time this transaction commits there are no rows
     // left for the dispatcher to encounter.
     db::scheduled::delete_for_user(&mut tx, user_id).await?;
+    // LC-63: drop reminders this user set (on any message). Reminders on the
+    // user's own messages also cascade when those messages are deleted, but
+    // this clears reminders set on other people's messages too.
+    sqlx::query("DELETE FROM reminders WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM file_uploads WHERE uploader_id = ?")
         .bind(user_id)
         .execute(&mut *tx)

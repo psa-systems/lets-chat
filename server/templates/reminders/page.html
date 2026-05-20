@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+
+{% block title %}Reminders - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+    <h1 class="font-semibold truncate">Reminders</h1>
+  </header>
+  <div class="flex-1 overflow-y-auto p-4 space-y-6 max-w-2xl">
+
+    <section class="space-y-2">
+      <h2 class="text-sm font-semibold text-slate-700">Pending</h2>
+      {% if pending.is_empty() %}
+      <p class="text-sm text-slate-500">
+        No pending reminders. Hover over a message and click "Remind" to set one.
+      </p>
+      {% else %}
+      <ul class="divide-y divide-slate-200 border rounded">
+        {% for r in pending %}
+        <li id="reminder-row-{{ r.id }}" class="px-3 py-2">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>
+              <a href="{{ r.context_path }}" class="text-blue-700 hover:underline">{{ r.context_label }}</a>
+              &middot; remind at {{ r.remind_at }} UTC
+            </span>
+            <button hx-delete="/reminders/{{ r.id }}"
+                    hx-target="#reminder-row-{{ r.id }}"
+                    hx-swap="delete"
+                    class="text-red-700 hover:underline">Cancel</button>
+          </div>
+          <div class="mt-1 text-sm text-slate-800">{{ r.snippet }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    {% if !fired.is_empty() %}
+    <section class="space-y-2">
+      <h2 class="text-sm font-semibold text-slate-700">Recently fired</h2>
+      <ul class="divide-y divide-slate-200 border rounded">
+        {% for r in fired %}
+        <li id="reminder-row-{{ r.id }}" class="px-3 py-2">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>
+              <a href="{{ r.context_path }}" class="text-blue-700 hover:underline">{{ r.context_label }}</a>
+              {% if let Some(at) = r.fired_at %}&middot; fired {{ at }} UTC{% endif %}
+            </span>
+            <button hx-delete="/reminders/{{ r.id }}"
+                    hx-target="#reminder-row-{{ r.id }}"
+                    hx-swap="delete"
+                    class="text-slate-500 hover:underline">Dismiss</button>
+          </div>
+          <div class="mt-1 text-sm text-slate-800">{{ r.snippet }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

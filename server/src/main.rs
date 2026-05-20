@@ -136,6 +136,7 @@ async fn main() {
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
+    spawn_reminders_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
 
     let app = routes::build_router(state);
@@ -271,6 +272,27 @@ fn spawn_analytics_aggregator(state: AppState) {
                 lets_chat::db::analytics::recompute_day(&state.auth, &state.chat, &today).await
             {
                 tracing::warn!(error = %e, "analytics recompute failed");
+            }
+        }
+    });
+}
+
+/// LC-63: poll the reminders table and fire due reminders. Mirrors the
+/// scheduled-message dispatcher: a 30s tick, claim-then-notify, errors
+/// logged and retried next tick.
+fn spawn_reminders_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 30;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::reminders::run_reminder_tick(&state).await {
+                Ok(stats) if stats.fired > 0 => {
+                    tracing::info!(fired = stats.fired, "reminder dispatch tick complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "reminder dispatch tick failed"),
             }
         }
     });

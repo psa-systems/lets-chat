@@ -17,6 +17,7 @@ pub mod password_reset;
 pub mod pinned;
 pub mod push_subscriptions;
 pub mod quota;
+pub mod reminders;
 pub mod room_rbac;
 pub mod scheduled;
 pub mod settings;
