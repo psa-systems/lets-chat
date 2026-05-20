@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}lets-chat{% endblock %}</title>
   <link id="lc-favicon" rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v={{ asset_version }}">
+  <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png">
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
   <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>
@@ -15,6 +18,7 @@
   <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_dnd.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_jump.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-ext="response-targets" class="h-screen overflow-hidden bg-slate-50 text-slate-900">
   {% block body %}{% endblock %}
