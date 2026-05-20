@@ -47,7 +47,7 @@ mod password_reset;
 mod pinned;
 mod push;
 mod reactions;
-mod room;
+pub(crate) mod room;
 mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
