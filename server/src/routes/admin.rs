@@ -1,4 +1,4 @@
-use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -11,11 +11,12 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
-    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AntiSpamPage,
+    AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
     BackupRestorePage, BrandingPage, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView,
-    ModLogPage, QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
-    UserRowFragment, UsersPage,
+    MetricCard, ModLogPage, QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage,
+    SettingsPage, UserRowFragment, UsersPage,
 };
+use crate::views::charts;
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -80,6 +81,8 @@ pub fn router() -> Router<AppState> {
             post(post_quarantine_reject),
         )
         .route("/admin/modlog", get(get_modlog))
+        .route("/admin/analytics", get(get_analytics))
+        .route("/admin/analytics/recompute", post(post_recompute_analytics))
         .route(
             "/admin/uploads/regenerate-thumbnails",
             post(post_regenerate_thumbnails),
@@ -1678,4 +1681,126 @@ pub async fn post_branding(
     )
     .await?;
     Ok(Redirect::to("/admin/branding?saved=1").into_response())
+}
+
+/// Query string for the analytics dashboard. `days` selects the
+/// look-back window; anything outside the supported set falls back to 30.
+#[derive(Deserialize)]
+pub struct AnalyticsQuery {
+    pub days: Option<i64>,
+}
+
+/// Form body for the "Recompute today" button.
+#[derive(Deserialize)]
+pub struct RecomputeForm {
+    pub days: Option<i64>,
+}
+
+/// Clamp an arbitrary `days` query value to a supported range button.
+fn normalize_range(days: Option<i64>) -> i64 {
+    match days {
+        Some(7) => 7,
+        Some(90) => 90,
+        _ => 30,
+    }
+}
+
+/// LC-97: admin analytics dashboard. Reads pre-aggregated daily metrics
+/// from `analytics_daily` (fast, indexed) and computes the retention
+/// triangle on demand, then renders each metric as an inline-SVG chart.
+pub async fn get_analytics(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Query(q): Query<AnalyticsQuery>,
+) -> Result<Html, AppError> {
+    let range_days = normalize_range(q.days);
+
+    // Bound the window with SQLite's own date math so it matches the
+    // `date(...)` keys the aggregator wrote.
+    let today: String = sqlx::query_scalar("SELECT date('now')")
+        .fetch_one(&state.chat)
+        .await?;
+    let from: String = sqlx::query_scalar("SELECT date('now', ?1)")
+        .bind(format!("-{} days", range_days - 1))
+        .fetch_one(&state.chat)
+        .await?;
+
+    use db::analytics::{
+        METRIC_ACTIVE_ROOMS, METRIC_DAU, METRIC_MAU, METRIC_MESSAGES, METRIC_SIGNUPS,
+    };
+    let specs: [(&'static str, &str, &str, bool); 5] = [
+        ("Messages per day", METRIC_MESSAGES, "#2563eb", false),
+        ("Daily active users", METRIC_DAU, "#16a34a", true),
+        ("Monthly active users", METRIC_MAU, "#9333ea", true),
+        ("Active rooms", METRIC_ACTIVE_ROOMS, "#ea580c", true),
+        ("New signups", METRIC_SIGNUPS, "#0891b2", false),
+    ];
+
+    let mut cards: Vec<MetricCard> = Vec::with_capacity(specs.len());
+    for (label, metric, color, is_snapshot) in specs {
+        let points = db::analytics::series(&state.chat, metric, &from, &today).await?;
+        let latest = points.last().map(|p| p.value).unwrap_or(0);
+        let total = points.iter().map(|p| p.value).sum();
+        let chart_svg = charts::line_chart(&points, color);
+        cards.push(MetricCard {
+            label,
+            latest,
+            total,
+            is_snapshot,
+            chart_svg,
+        });
+    }
+
+    const RETENTION_WEEKS: usize = 8;
+    let retention = db::analytics::retention(&state.auth, &state.chat, RETENTION_WEEKS).await?;
+    let retention_headers: Vec<String> = (0..RETENTION_WEEKS).map(|k| format!("W{k}")).collect();
+
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let page = AnalyticsPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "analytics",
+        range_days,
+        today: &today,
+        cards: &cards,
+        retention_headers: &retention_headers,
+        retention: &retention,
+    };
+    html(&page)
+}
+
+/// LC-97: recompute today's metrics on demand, then redirect back to the
+/// dashboard preserving the selected range.
+pub async fn post_recompute_analytics(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    Form(form): Form<RecomputeForm>,
+) -> Result<Response, AppError> {
+    let today: String = sqlx::query_scalar("SELECT date('now')")
+        .fetch_one(&state.chat)
+        .await?;
+    db::analytics::recompute_day(&state.auth, &state.chat, &today).await?;
+    let range_days = normalize_range(form.days);
+    Ok(Redirect::to(&format!("/admin/analytics?days={range_days}")).into_response())
 }

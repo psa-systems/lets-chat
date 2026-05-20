@@ -136,6 +136,7 @@ async fn main() {
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
+    spawn_analytics_aggregator(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -231,6 +232,50 @@ fn spawn_digest_sender(state: AppState) {
 /// 24-hour threshold. Modeled on `spawn_digest_sender`. The sweep itself
 /// short-circuits cheaply when there are no candidates, so this stays quiet
 /// on idle deployments.
+/// LC-97: daily analytics aggregator. On startup it backfills every day
+/// since the install's earliest activity (so a fresh deploy has its full
+/// history immediately), then ticks hourly to keep the current day fresh.
+/// Past days are immutable enough that an hourly recompute of today alone
+/// is sufficient; admins can force a full day recompute from the
+/// dashboard.
+fn spawn_analytics_aggregator(state: AppState) {
+    const TICK_SECS: u64 = 3600;
+    tokio::spawn(async move {
+        match sqlx::query_scalar::<_, String>("SELECT date('now')")
+            .fetch_one(&state.chat)
+            .await
+        {
+            Ok(today) => {
+                match lets_chat::db::analytics::backfill(&state.auth, &state.chat, &today).await {
+                    Ok(n) => tracing::info!(days = n, "analytics backfill complete"),
+                    Err(e) => tracing::warn!(error = %e, "analytics backfill failed"),
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "analytics backfill skipped (date query failed)"),
+        }
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            let today: String = match sqlx::query_scalar("SELECT date('now')")
+                .fetch_one(&state.chat)
+                .await
+            {
+                Ok(d) => d,
+                Err(e) => {
+                    tracing::warn!(error = %e, "analytics tick: date query failed");
+                    continue;
+                }
+            };
+            if let Err(e) =
+                lets_chat::db::analytics::recompute_day(&state.auth, &state.chat, &today).await
+            {
+                tracing::warn!(error = %e, "analytics recompute failed");
+            }
+        }
+    });
+}
+
 fn spawn_orphan_sweeper(state: AppState) {
     const TICK_SECS: u64 = 3600;
     const THRESHOLD_HOURS: i64 = 24;
