@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod analytics;
 pub mod anti_spam;
+pub mod api_tokens;
 pub mod auth;
 pub mod bookmarks;
 pub mod branding;
