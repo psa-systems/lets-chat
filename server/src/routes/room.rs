@@ -565,6 +565,25 @@ pub async fn post_message(
         }
     }
 
+    finalize_message_send(&state, &room, &user, new_id, body).await?;
+
+    let fragment = ComposerFragment { room: &room };
+    html(&fragment)
+}
+
+/// Post-insert side effects shared by the live POST handler and the
+/// scheduled-message dispatcher. Re-fetches the row to pick up the
+/// server-assigned `created_at`, broadcasts the rendered fragment via the
+/// hub, then reconciles mentions and fans out per-user notifications
+/// (including the DM implicit-mention path). Returns the constructed
+/// `Message` so callers can log or attach it to their own response.
+pub(crate) async fn finalize_message_send(
+    state: &AppState,
+    room: &crate::models::Room,
+    author: &User,
+    new_id: i64,
+    body: &str,
+) -> Result<Message, AppError> {
     // Re-fetch the inserted row to pick up the server-assigned created_at.
     let raw = db::chat::get_message(&state.chat, new_id)
         .await?
@@ -595,8 +614,8 @@ pub async fn post_message(
         message: message.clone(),
         is_dm: room.room_type == "dm",
     };
-    state.hub.stop_typing(room_id, &user.id);
-    super::broadcast_room_message(&state, &room, &event).await?;
+    state.hub.stop_typing(room.id, &author.id);
+    super::broadcast_room_message(state, room, &event).await?;
 
     // Mention extraction + fan-out. Only for non-DM rooms (DMs are implicit
     // pings - we emit a Mentioned event below without writing mention rows).
@@ -605,12 +624,17 @@ pub async fn post_message(
     if room.room_type != "dm" {
         let tokens = db::mentions::parse_mention_tokens(body);
         if !tokens.is_empty() {
-            let targets = resolve_tokens_for_room(&state, &room, &user.id, &tokens).await?;
-            let (added, _removed) =
-                db::mentions::reconcile_mentions(&state.chat, new_id, room.id, &user.id, &targets)
-                    .await?;
+            let targets = resolve_tokens_for_room(state, room, &author.id, &tokens).await?;
+            let (added, _removed) = db::mentions::reconcile_mentions(
+                &state.chat,
+                new_id,
+                room.id,
+                &author.id,
+                &targets,
+            )
+            .await?;
             let snippet = build_snippet(body);
-            let author_label = author_label(&user);
+            let author_label = author_label(author);
             let events: Vec<(String, ChatEvent)> = added
                 .iter()
                 .map(|t| {
@@ -630,16 +654,16 @@ pub async fn post_message(
                     )
                 })
                 .collect();
-            fanout_mention_events(&state, events).await;
+            fanout_mention_events(state, events).await;
         }
     } else {
         // DM: implicit mention. Notify the peer regardless of subscription
         // state. No mention row is written; DM unread state already
         // governs read tracking.
         let members = db::chat::list_room_member_ids(&state.chat, room.id).await?;
-        if let Some(peer_id) = members.into_iter().find(|id| id != &user.id) {
+        if let Some(peer_id) = members.into_iter().find(|id| id != &author.id) {
             let snippet = build_snippet(body);
-            let author_label = author_label(&user);
+            let author_label = author_label(author);
             let event = ChatEvent::Mentioned {
                 kind: "dm".into(),
                 room_id: room.id,
@@ -649,19 +673,18 @@ pub async fn post_message(
                 mentioned_user_id: peer_id.clone(),
                 author_label,
                 snippet,
-                target_path: format!("/dm/{}", user.id),
+                target_path: format!("/dm/{}", author.id),
             };
             state.hub.broadcast_to_user(&peer_id, &event);
             // Mute is enforced downstream: the WS `Mentioned` arm and
             // `push::dispatch` both consult `room_mute_mode(peer_id,
             // dm_room_id)` and drop the event when the peer has muted
             // this DM.
-            crate::push::dispatch(&state, &peer_id, &event).await;
+            crate::push::dispatch(state, &peer_id, &event).await;
         }
     }
 
-    let fragment = ComposerFragment { room: &room };
-    html(&fragment)
+    Ok(message)
 }
 
 /// User IDs the caller can mention in this room. For private rooms / DMs,
