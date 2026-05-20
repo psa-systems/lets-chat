@@ -18,6 +18,7 @@ pub mod mentions;
 pub mod not_found;
 pub mod notify_prefs;
 pub mod pinned;
+pub mod reminders;
 pub mod room;
 pub mod room_info;
 pub mod room_moderators;

@@ -154,6 +154,24 @@ pub enum ChatEvent {
         mentioned_user_id: String,
         message_id: i64,
     },
+    /// LC-63: a message reminder fired for its owner. Routed via
+    /// `Hub::broadcast_to_user(user_id, ...)` and dispatched to Web Push.
+    /// Unlike `Mentioned`, it does not bump the client's unread-mention
+    /// counts (the user asked to be pinged; it is not a new message), and
+    /// it ignores room mute (an explicit reminder overrides muting).
+    Reminder {
+        user_id: String,
+        room_id: i64,
+        /// "public" | "private" | "dm" - lets the client label the toast.
+        room_type: String,
+        /// "#general" or the DM peer label.
+        room_label: String,
+        message_id: i64,
+        /// Plain-text preview of the reminded message.
+        snippet: String,
+        /// Deep link to the message, e.g. "/room/{id}#msg-{mid}".
+        target_path: String,
+    },
     /// Per-user notification of a notify-prefs change. Recipients re-render
     /// their sidebar OOB so the muted-room class flips and badges hide/show
     /// across all of their open tabs. Routed via
