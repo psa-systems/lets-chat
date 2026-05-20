@@ -91,6 +91,8 @@ pub(crate) struct AuthorMeta {
     pub avatar_ext: Option<String>,
     pub status: String,
     pub custom_status: Option<String>,
+    /// LC-73: true for bot authors, drives the "bot" badge.
+    pub is_bot: bool,
 }
 
 impl AuthorMeta {
@@ -101,6 +103,7 @@ impl AuthorMeta {
             avatar_ext: None,
             status: db::auth::STATUS_ACTIVE.to_string(),
             custom_status: None,
+            is_bot: false,
         }
     }
 }
@@ -113,6 +116,7 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
             avatar_ext: r.avatar_ext,
             status: r.status,
             custom_status: r.custom_status,
+            is_bot: r.is_bot,
         }
     }
 }
@@ -212,6 +216,7 @@ pub(crate) async fn load_message_view_for_viewer(
             .await
             .ok()
             .flatten(),
+        author_is_bot: meta.is_bot,
     })
 }
 

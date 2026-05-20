@@ -73,6 +73,9 @@ pub struct MessageView {
     /// interactive options block beneath the body (the question lives in
     /// the body). `None` for ordinary messages.
     pub poll: Option<PollView>,
+    /// LC-73: true when the author is a bot. Renders a "bot" badge next to
+    /// the username.
+    pub author_is_bot: bool,
 }
 
 /// LC-66: a poll rendered beneath its anchor message. Built by

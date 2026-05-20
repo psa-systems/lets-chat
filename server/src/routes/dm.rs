@@ -250,6 +250,7 @@ pub async fn get_dm(
             } else {
                 None
             },
+            author_is_bot: meta.is_bot,
         });
     }
 

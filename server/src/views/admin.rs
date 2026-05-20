@@ -445,3 +445,40 @@ pub struct SlashCommandsPage<'a> {
     pub commands: &'a [SlashCommandRowView],
     pub error: Option<String>,
 }
+
+/// LC-73: one bot row on the admin bots page.
+pub struct BotRowView {
+    pub id: String,
+    pub username: String,
+    pub disabled: bool,
+    pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/bots.html")]
+pub struct BotsPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    /// True when the server has a secret key (required to mint the bot's API token).
+    pub available: bool,
+    pub all_scopes: &'a [&'a str],
+    pub bots: &'a [BotRowView],
+    /// Plaintext API token for a just-created bot, shown exactly once.
+    pub new_token: Option<String>,
+    /// The just-created bot's username, paired with new_token.
+    pub new_bot_name: Option<String>,
+    pub error: Option<String>,
+}
