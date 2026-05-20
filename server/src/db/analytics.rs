@@ -239,8 +239,7 @@ pub async fn retention(
             let lo = format!("+{} days", k * 7);
             let hi = format!("+{} days", (k + 1) * 7);
             // IN-list bound by cohort size; fine for an on-demand admin view.
-            let placeholders = std::iter::repeat("?")
-                .take(ids.len())
+            let placeholders = std::iter::repeat_n("?", ids.len())
                 .collect::<Vec<_>>()
                 .join(",");
             let sql = format!(
