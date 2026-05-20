@@ -170,6 +170,26 @@ async fn middleware_injects_brand_vars_into_html_response() {
 }
 
 #[tokio::test]
+async fn middleware_skips_injection_for_htmx_requests() {
+    let t = app().await;
+    // An HX-Request is a fragment fetch with no <head>; the
+    // middleware should bail before buffering or injecting.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/login")
+        .header("hx-request", "true")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let (status, body) = body_string(res).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("data-lc-brand"),
+        "HX-Request response must not get the injected style block"
+    );
+}
+
+#[tokio::test]
 async fn middleware_picks_enclave_scope_from_path() {
     let t = app().await;
     db::branding::upsert(

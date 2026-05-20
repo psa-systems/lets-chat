@@ -1169,12 +1169,13 @@ pub async fn post_branding(
             );
         }
     };
-    // Preserve EXISTING per-enclave fields (no global fallback) so a
-    // partial save does not clobber whatever the operator previously
-    // set for this specific enclave.
-    let existing = db::branding::get(&state.chat, db::branding::Scope::Enclave(id))
-        .await?
-        .unwrap_or_else(crate::db::branding::Branding::defaults_for_global);
+    // Fall back to the RESOLVED branding (this enclave's row if it
+    // exists, otherwise the global row) rather than hard-coded
+    // defaults. The GET form renders the same resolved values, so a
+    // partial save (e.g. editing only the heading) keeps whatever
+    // colors the operator was looking at instead of silently
+    // reverting them to the built-in blue.
+    let existing = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(id)).await?;
     let logo_upload_id = form.new_logo_id.or(existing.logo_upload_id);
     let primary = form.primary_color.unwrap_or(existing.primary_color);
     let accent = form.accent_color.unwrap_or(existing.accent_color);
