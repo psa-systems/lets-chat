@@ -1610,6 +1610,7 @@ async fn render_branding_page(
         login_heading: branding.login_heading,
         login_body: branding.login_body,
         has_logo: branding.logo_upload_id.is_some(),
+        has_favicon: branding.favicon_upload_id.is_some(),
         saved,
         error,
     };
@@ -1644,6 +1645,7 @@ pub async fn post_branding(
     };
     let existing = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
     let logo_upload_id = form.new_logo_id.or(existing.logo_upload_id);
+    let favicon_upload_id = form.new_favicon_id.or(existing.favicon_upload_id);
     let primary = form.primary_color.unwrap_or(existing.primary_color);
     let accent = form.accent_color.unwrap_or(existing.accent_color);
     if !db::branding::is_valid_hex_color(&primary) || !db::branding::is_valid_hex_color(&accent) {
@@ -1663,6 +1665,7 @@ pub async fn post_branding(
         &state.chat,
         db::branding::Scope::Global,
         logo_upload_id,
+        favicon_upload_id,
         &primary,
         &accent,
         &heading,
