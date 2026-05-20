@@ -8,6 +8,17 @@ pub struct LoginPage<'a> {
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub build_date: &'a str,
+    /// LC-96: True when the global branding row has a logo set; the
+    /// template renders `<img src="/branding/logo">` only in that
+    /// case to avoid a guaranteed 404 + broken-image icon.
+    pub brand_logo: bool,
+    /// LC-96: operator-supplied heading shown above the form. Empty
+    /// when unset; the template falls back to the default "Sign in".
+    pub brand_heading: String,
+    /// LC-96: operator-supplied body rendered as restricted markdown
+    /// (no code blocks). Already escaped + sanitized at this point.
+    /// Empty when unset.
+    pub brand_body_html: String,
 }
 
 #[derive(Template)]

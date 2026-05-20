@@ -328,3 +328,32 @@ pub struct BackupRestorePage<'a> {
     /// upload form on the retry.
     pub error: Option<String>,
 }
+
+// LC-96 branding admin page -----------------------------------------------
+
+#[derive(Template)]
+#[template(path = "admin/branding.html")]
+pub struct BrandingPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub primary_color: String,
+    pub accent_color: String,
+    pub login_heading: String,
+    pub login_body: String,
+    pub has_logo: bool,
+    pub saved: bool,
+    pub error: Option<String>,
+}

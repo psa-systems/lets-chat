@@ -123,6 +123,29 @@ pub struct EnclaveSettingsPage<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "enclave/branding.html")]
+pub struct EnclaveBrandingPage<'a> {
+    pub user: &'a User,
+    pub enclave: &'a Enclave,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub primary_color: String,
+    pub accent_color: String,
+    pub login_heading: String,
+    pub login_body: String,
+    pub has_logo: bool,
+    pub saved: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Template)]
 #[template(path = "enclave/discover.html")]
 pub struct DiscoverPage<'a> {
     pub user: &'a User,
