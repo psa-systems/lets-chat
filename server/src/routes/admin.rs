@@ -2156,7 +2156,14 @@ pub async fn post_bots(
     }
     let plaintext = crate::auth::generate_api_token();
     let hash = crate::auth::hash_api_token(secret, &plaintext);
-    db::api_tokens::insert(&state.auth, &bot_id, "bot token", &hash, &scopes, None).await?;
+    // Roll back the bot row if token minting fails, so a failed create does
+    // not leave an orphan bot that blocks retrying the same username.
+    if let Err(e) =
+        db::api_tokens::insert(&state.auth, &bot_id, "bot token", &hash, &scopes, None).await
+    {
+        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        return Err(AppError::from(e));
+    }
     db::moderation::log_mod_action(
         &state.chat,
         "bot_create",
