@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block title %}Scheduled - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+    <h1 class="font-semibold truncate">Scheduled messages</h1>
+    <span class="text-xs text-slate-500">Delivered within 30 seconds of the scheduled time.</span>
+  </header>
+  <div class="flex-1 overflow-y-auto">
+    {% if pending.is_empty() %}
+    <p class="p-4 text-sm text-slate-500">
+      You have no pending scheduled messages. Use the schedule button in any composer to queue one.
+    </p>
+    {% else %}
+    <ul id="scheduled-pending" class="divide-y divide-slate-200">
+      {% for row in pending %}
+        {% include "scheduled_row.html" %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if !dropped.is_empty() %}
+    <section class="border-t border-slate-200 mt-4">
+      <h2 class="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-50">Recently dropped</h2>
+      <ul class="divide-y divide-slate-200">
+        {% for d in dropped %}
+        <li class="px-4 py-3">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>
+              for <a href="{{ d.room_label }}" class="text-blue-700 hover:underline">{{ d.room_label }}</a>
+              &middot; scheduled for {{ d.scheduled_for }} UTC
+              &middot; dropped at {{ d.delivered_at }} UTC
+            </span>
+          </div>
+          <div class="mt-1 text-sm text-red-700">Dropped: {{ d.failed_reason }}</div>
+          <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-slate-800">{{ d.body_html|safe }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

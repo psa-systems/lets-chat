@@ -1,6 +1,6 @@
 //! Per-scope branding (LC-96).
 //!
-//! See `chat/0033_branding.sql` for the schema. A row is identified
+//! See `chat/0034_branding.sql` for the schema. A row is identified
 //! by `(scope_kind, scope_id)`; the global scope sits at
 //! `('global', 0)` and is always present (seeded by the migration).
 //! Per-enclave rows are created on first save; resolution falls back

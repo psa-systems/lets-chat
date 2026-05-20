@@ -17,6 +17,7 @@ pub mod pinned;
 pub mod push_subscriptions;
 pub mod quota;
 pub mod room_rbac;
+pub mod scheduled;
 pub mod settings;
 pub mod sidebar_categories;
 pub mod starred_rooms;

@@ -47,7 +47,8 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0030_room_docs_wiki.sql"),
         include_str!("../migrations/chat/0031_storage_quotas.sql"),
         include_str!("../migrations/chat/0032_anti_spam.sql"),
-        include_str!("../migrations/chat/0033_branding.sql"),
+        include_str!("../migrations/chat/0033_scheduled_messages.sql"),
+        include_str!("../migrations/chat/0034_branding.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
@@ -236,4 +237,54 @@ async fn preview_file_removed_alongside_original() {
         !file_exists(&preview),
         "preview must be removed alongside original"
     );
+}
+
+#[tokio::test]
+async fn orphan_referenced_by_pending_scheduled_message_is_protected() {
+    // LC-62: a scheduled message may reference an attachment uploaded days
+    // before delivery. The sweep must skip uploads still referenced by a
+    // pending scheduled_messages row, and resume sweeping them once the
+    // scheduled row is cancelled or delivered.
+    ensure_tempdir();
+    let pool = open_chat_pool().await;
+    let storage = "scheduled-attachment.png";
+    write_file(storage);
+
+    let upload_id = insert_orphan(&pool, storage, 25).await;
+    let room_id = db::chat::create_room(&pool, "general", None, "public", None, None)
+        .await
+        .unwrap();
+    let sched_id = db::scheduled::insert_scheduled(
+        &pool,
+        room_id,
+        "user-x",
+        "with image",
+        "2099-01-01 00:00:00",
+        None,
+        None,
+        Some(upload_id),
+    )
+    .await
+    .unwrap();
+
+    let stats = uploads::sweep::run_orphan_sweep(&pool, 24).await.unwrap();
+    assert_eq!(
+        stats.rows_deleted, 0,
+        "upload is shielded by the pending scheduled row"
+    );
+    assert!(row_exists(&pool, upload_id).await);
+    assert!(file_exists(storage));
+
+    let cancelled = db::scheduled::delete_scheduled(&pool, sched_id, "user-x")
+        .await
+        .unwrap();
+    assert!(cancelled);
+
+    let stats2 = uploads::sweep::run_orphan_sweep(&pool, 24).await.unwrap();
+    assert_eq!(
+        stats2.rows_deleted, 1,
+        "upload becomes eligible once protection drops"
+    );
+    assert!(!row_exists(&pool, upload_id).await);
+    assert!(!file_exists(storage));
 }
