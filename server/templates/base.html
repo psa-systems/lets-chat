@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}lets-chat{% endblock %}</title>
-  <link id="lc-favicon" rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v={{ asset_version }}">
+  <!-- LC-142: dynamic favicon. Serves the operator's custom favicon when
+       set, else falls back to the bundled SVG, so this link is
+       unconditional. No `type` hint: the served format varies (PNG/ICO/SVG). -->
+  <link id="lc-favicon" rel="icon" href="/branding/favicon?v={{ asset_version }}">
   <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
   <meta name="theme-color" content="#2563eb">
   <link rel="apple-touch-icon" href="/assets/icon-192.png">

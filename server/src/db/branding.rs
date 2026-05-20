@@ -40,6 +40,9 @@ pub struct Branding {
     pub scope_kind: String,
     pub scope_id: i64,
     pub logo_upload_id: Option<i64>,
+    /// LC-142: uploads.id of the custom favicon, or `None` to use the
+    /// static `/assets/favicon.svg`. Global-only in v1.
+    pub favicon_upload_id: Option<i64>,
     pub primary_color: String,
     pub accent_color: String,
     pub login_heading: String,
@@ -53,6 +56,7 @@ impl Branding {
             scope_kind: "global".to_string(),
             scope_id: 0,
             logo_upload_id: None,
+            favicon_upload_id: None,
             primary_color: DEFAULT_PRIMARY.to_string(),
             accent_color: DEFAULT_ACCENT.to_string(),
             login_heading: String::new(),
@@ -67,6 +71,7 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> Branding {
         scope_kind: r.get("scope_kind"),
         scope_id: r.get("scope_id"),
         logo_upload_id: r.get("logo_upload_id"),
+        favicon_upload_id: r.get("favicon_upload_id"),
         primary_color: r.get("primary_color"),
         accent_color: r.get("accent_color"),
         login_heading: r.get("login_heading"),
@@ -79,8 +84,8 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> Branding {
 pub async fn get(pool: &SqlitePool, scope: Scope) -> Result<Option<Branding>, sqlx::Error> {
     let (kind, id) = scope.parts();
     let row = sqlx::query(
-        "SELECT scope_kind, scope_id, logo_upload_id, primary_color, accent_color, \
-                login_heading, login_body, updated_at \
+        "SELECT scope_kind, scope_id, logo_upload_id, favicon_upload_id, primary_color, \
+                accent_color, login_heading, login_body, updated_at \
          FROM branding WHERE scope_kind = ? AND scope_id = ?",
     )
     .bind(kind)
@@ -114,6 +119,7 @@ pub async fn upsert(
     pool: &SqlitePool,
     scope: Scope,
     logo_upload_id: Option<i64>,
+    favicon_upload_id: Option<i64>,
     primary_color: &str,
     accent_color: &str,
     login_heading: &str,
@@ -123,21 +129,23 @@ pub async fn upsert(
     let (kind, id) = scope.parts();
     sqlx::query(
         "INSERT INTO branding \
-            (scope_kind, scope_id, logo_upload_id, primary_color, accent_color, \
+            (scope_kind, scope_id, logo_upload_id, favicon_upload_id, primary_color, accent_color, \
              login_heading, login_body, updated_at, updated_by) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?) \
          ON CONFLICT(scope_kind, scope_id) DO UPDATE SET \
-            logo_upload_id = excluded.logo_upload_id, \
-            primary_color  = excluded.primary_color, \
-            accent_color   = excluded.accent_color, \
-            login_heading  = excluded.login_heading, \
-            login_body     = excluded.login_body, \
-            updated_at     = excluded.updated_at, \
-            updated_by     = excluded.updated_by",
+            logo_upload_id    = excluded.logo_upload_id, \
+            favicon_upload_id = excluded.favicon_upload_id, \
+            primary_color     = excluded.primary_color, \
+            accent_color      = excluded.accent_color, \
+            login_heading     = excluded.login_heading, \
+            login_body        = excluded.login_body, \
+            updated_at        = excluded.updated_at, \
+            updated_by        = excluded.updated_by",
     )
     .bind(kind)
     .bind(id)
     .bind(logo_upload_id)
+    .bind(favicon_upload_id)
     .bind(primary_color)
     .bind(accent_color)
     .bind(login_heading)

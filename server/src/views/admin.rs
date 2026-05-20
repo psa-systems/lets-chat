@@ -400,6 +400,9 @@ pub struct BrandingPage<'a> {
     pub login_heading: String,
     pub login_body: String,
     pub has_logo: bool,
+    /// LC-142: whether a custom global favicon is set (drives the preview
+    /// and the "current favicon" hint on the admin form).
+    pub has_favicon: bool,
     pub saved: bool,
     pub error: Option<String>,
 }
