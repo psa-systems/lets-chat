@@ -153,6 +153,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
                                     render_reaction_bar(&send_state, *message_id, &send_user.id).await
                                 }
+                                ChatEvent::PollUpdated { message_id, .. } => {
+                                    render_poll(&send_state, *message_id, &send_user.id).await
+                                }
                                 ChatEvent::DmRead { user_id, room_id, last_read_message_id, read_at } => {
                                     render_dm_read(
                                         &send_state,
@@ -624,6 +627,18 @@ async fn render_new_message_or_bump(
     render_unread_badge(state, viewer, &room).await
 }
 
+/// LC-66: re-render a poll block for `user_id` (keeps per-viewer
+/// `voted_by_me` highlighting correct). Returns None if the message is not
+/// a poll.
+async fn render_poll(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+    let view = crate::views::room::build_poll_view(&state.chat, &state.auth, message_id, user_id)
+        .await
+        .ok()??;
+    crate::views::room::PollUpdateFragment { poll: &view }
+        .render()
+        .ok()
+}
+
 async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
     let m = db::chat::get_message(&state.chat, message_id)
         .await
@@ -725,6 +740,10 @@ async fn render_new_message(
         custom_emojis,
         quote_preview,
         is_system: message.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
+            .await
+            .ok()
+            .flatten(),
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -824,6 +843,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         custom_emojis,
         quote_preview,
         is_system: m.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
+            .await
+            .ok()
+            .flatten(),
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -890,6 +913,10 @@ async fn render_thread_reply(
         custom_emojis,
         quote_preview: None,
         is_system: message.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
+            .await
+            .ok()
+            .flatten(),
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,

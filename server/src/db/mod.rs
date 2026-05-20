@@ -15,6 +15,7 @@ pub mod moderation;
 pub mod notifications;
 pub mod password_reset;
 pub mod pinned;
+pub mod polls;
 pub mod push_subscriptions;
 pub mod quota;
 pub mod reminders;

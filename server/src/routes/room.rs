@@ -172,6 +172,9 @@ pub async fn get_room(
     let message_ids: Vec<i64> = raw_messages.iter().map(|m| m.id).collect();
     let mut attachments_by_message =
         db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
+    // LC-66: which message ids are polls, so the loop only builds poll views
+    // for actual polls (one query instead of a per-message probe).
+    let poll_ids = db::polls::poll_message_ids(&state.chat, &message_ids).await?;
 
     // Bulk-load mention rows so each MessageView can render @username chips
     // without an N+1 query.
@@ -253,6 +256,14 @@ pub async fn get_room(
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             is_system: m.is_system,
+            poll: if poll_ids.contains(&m.id) {
+                crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            },
         });
     }
 
@@ -497,6 +508,18 @@ pub async fn post_message(
     // reply (we don't quote inside threads), and not be the message currently
     // being inserted (impossible by ordering, but explicitly rejected for
     // future-proofing against any retry/idempotency-key flow).
+    // LC-66: `/poll "Q" "A" "B" ...` posts a poll instead of a plain
+    // message, reusing every access / posting gate already checked above.
+    if body == "/poll" || body.starts_with("/poll ") {
+        let rest = &body["/poll".len()..];
+        let (question, options) = super::polls::parse_command(rest)?;
+        super::polls::create_poll(
+            &state, &room, &user, &question, &options, false, false, None,
+        )
+        .await?;
+        return html(&ComposerFragment { room: &room });
+    }
+
     if let Some(qid) = form.quote_id {
         let quoted = db::chat::get_message(&state.chat, qid)
             .await?
@@ -1098,6 +1121,10 @@ pub async fn patch_message(
         custom_emojis,
         quote_preview,
         is_system: m.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+            .await
+            .ok()
+            .flatten(),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1156,6 +1183,9 @@ pub async fn get_thread_panel(
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
+    // LC-66: polls among the parent + replies, so the loop builds poll views
+    // only for actual polls.
+    let poll_ids = db::polls::poll_message_ids(&state.chat, &all_ids).await?;
 
     let parent_quote_preview = match parent.quote_id {
         Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
@@ -1191,6 +1221,14 @@ pub async fn get_thread_panel(
         custom_emojis: custom_emojis.clone(),
         quote_preview: parent_quote_preview,
         is_system: parent.is_system,
+        poll: if poll_ids.contains(&parent.id) {
+            crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        },
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1233,6 +1271,14 @@ pub async fn get_thread_panel(
             custom_emojis: custom_emojis.clone(),
             quote_preview: None,
             is_system: r.is_system,
+            poll: if poll_ids.contains(&r_id) {
+                crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            },
         });
     }
 
