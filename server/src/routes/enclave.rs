@@ -1,5 +1,5 @@
-use axum::extract::{DefaultBodyLimit, Path, Query, State};
-use axum::response::{IntoResponse, Redirect};
+use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use rand::Rng;
@@ -49,8 +49,9 @@ use crate::perms::enclave_can_manage;
 use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
 use crate::state::AppState;
 use crate::views::enclave::{
-    DiscoverPage, EnclaveInviteCandidate, EnclaveInviteCandidateState, EnclaveInviteRowResult,
-    EnclaveInviteSearchFragment, EnclaveMemberView, EnclavePage, EnclaveSettingsPage,
+    DiscoverPage, EnclaveBrandingPage, EnclaveInviteCandidate, EnclaveInviteCandidateState,
+    EnclaveInviteRowResult, EnclaveInviteSearchFragment, EnclaveMemberView, EnclavePage,
+    EnclaveSettingsPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -107,6 +108,12 @@ pub fn router() -> Router<AppState> {
         .route("/invitations/{id}/accept", post(post_invitation_accept))
         .route("/invitations/{id}/decline", post(post_invitation_decline))
         .route("/enclave/{id}/settings", get(get_settings))
+        .route(
+            "/enclave/{id}/branding",
+            get(get_branding)
+                .post(post_branding)
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
+        )
         .route("/enclave/{id}/edit", post(post_edit))
         .route("/enclave/{id}/transfer", post(post_transfer))
         .route("/enclave/{id}/delete", post(post_delete))
@@ -1082,4 +1089,128 @@ pub async fn get_invitations(
         switcher: &switcher,
         asset_version: &state.asset_version,
     })
+}
+
+// Per-enclave branding (LC-96) --------------------------------------------
+
+#[derive(Deserialize, Default)]
+pub struct EnclaveBrandingQuery {
+    pub saved: Option<i64>,
+}
+
+async fn render_enclave_branding_page(
+    state: &AppState,
+    user: &User,
+    enclave_id: i64,
+    saved: bool,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let Some(enclave) = db::enclave::get_enclave(&state.chat, enclave_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    require_manage(state, user, enclave_id).await?;
+    let branding =
+        db::branding::resolve(&state.chat, db::branding::Scope::Enclave(enclave_id)).await?;
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, Some(enclave_id)).await?;
+    html(&EnclaveBrandingPage {
+        user,
+        enclave: &enclave,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        primary_color: branding.primary_color,
+        accent_color: branding.accent_color,
+        login_heading: branding.login_heading,
+        login_body: branding.login_body,
+        has_logo: branding.logo_upload_id.is_some(),
+        saved,
+        error,
+    })
+}
+
+pub async fn get_branding(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    Query(q): Query<EnclaveBrandingQuery>,
+) -> Result<Html, AppError> {
+    render_enclave_branding_page(&state, &user, id, q.saved.is_some(), None).await
+}
+
+pub async fn post_branding(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    multipart: Multipart,
+) -> Result<Response, AppError> {
+    require_manage(&state, &user, id).await?;
+    let form = match super::branding::parse_branding_multipart(&state, &user.id, multipart).await? {
+        Ok(f) => f,
+        Err(msg) => {
+            return Ok(
+                render_enclave_branding_page(&state, &user, id, false, Some(msg))
+                    .await?
+                    .into_response(),
+            );
+        }
+    };
+    // Preserve EXISTING per-enclave fields (no global fallback) so a
+    // partial save does not clobber whatever the operator previously
+    // set for this specific enclave.
+    let existing = db::branding::get(&state.chat, db::branding::Scope::Enclave(id))
+        .await?
+        .unwrap_or_else(crate::db::branding::Branding::defaults_for_global);
+    let logo_upload_id = form.new_logo_id.or(existing.logo_upload_id);
+    let primary = form.primary_color.unwrap_or(existing.primary_color);
+    let accent = form.accent_color.unwrap_or(existing.accent_color);
+    if !db::branding::is_valid_hex_color(&primary) || !db::branding::is_valid_hex_color(&accent) {
+        return Ok(render_enclave_branding_page(
+            &state,
+            &user,
+            id,
+            false,
+            Some("Colors must be #rgb or #rrggbb hex".into()),
+        )
+        .await?
+        .into_response());
+    }
+    let heading = form.login_heading.unwrap_or(existing.login_heading);
+    let body = form.login_body.unwrap_or(existing.login_body);
+    db::branding::upsert(
+        &state.chat,
+        db::branding::Scope::Enclave(id),
+        logo_upload_id,
+        &primary,
+        &accent,
+        &heading,
+        &body,
+        &user.id,
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "branding_set",
+        "",
+        &user.id,
+        None,
+        None,
+        Some(&format!("enclave={id}")),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/branding?saved=1")).into_response())
 }
