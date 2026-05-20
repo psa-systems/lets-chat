@@ -1,0 +1,16 @@
+{# LC-76: slash-command autocomplete dropdown, swapped into
+   #lc-slash-popover. Empty render hides the popover. Click inserts the
+   command name into the composer via __lcInsertSlash. #}
+{% if !commands.is_empty() %}
+<ul id="lc-slash-list" role="listbox" aria-label="Slash commands"
+    class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg z-20">
+  {% for c in commands %}
+  <li role="option" data-slash-name="{{ c.name }}"
+      class="px-3 py-1.5 text-sm hover:bg-slate-100 cursor-pointer"
+      onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
+    <span class="font-mono text-slate-800">{{ c.usage }}</span>
+    <span class="block text-xs text-slate-500 truncate">{{ c.description }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
