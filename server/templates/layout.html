@@ -133,7 +133,7 @@
     // LC-142: restore to the dynamic branding favicon (custom or default)
     // when there are no unread mentions; the unread "dot" stays the static
     // marker since there is no per-brand dot variant.
-    if (link) link.href = n > 0 ? '/assets/favicon-dot.svg' : '/branding/favicon';
+    if (link) link.href = n > 0 ? '/assets/favicon-dot.svg' : '/branding/favicon?v={{ asset_version }}';
   }
   // OOB-style replace of the sidebar mention chip. n=0 collapses to an empty span.
   function paintBadge(roomId, n){
