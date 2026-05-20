@@ -1942,13 +1942,13 @@ pub async fn post_slash_commands(
                 .into_response(),
         );
     }
-    if kind == db::slash::CustomKind::WebhookPost
-        && !(target.starts_with("http://") || target.starts_with("https://"))
-    {
+    if kind == db::slash::CustomKind::WebhookPost && !super::slash::webhook_url_ok(target) {
         return Ok(render_slash_commands_page(
             &state,
             &actor,
-            Some(err("Webhook target must be an http(s) URL.")),
+            Some(err(
+                "Webhook target must be a public http(s) URL (no localhost or private IPs).",
+            )),
         )
         .await?
         .into_response());
