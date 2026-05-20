@@ -42,6 +42,9 @@
        textarea while the listbox refreshes; aria-activedescendant points
        at the highlighted option. -->
   <div id="lc-mention-popover" data-lc-skip-focus class="relative"></div>
+  <!-- LC-76: slash-command autocomplete + ephemeral command result. -->
+  <div id="lc-slash-popover" data-lc-skip-focus class="relative"></div>
+  <div id="lc-command-result" aria-live="polite"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600" role="alert">
     <span>Could not send.</span>
     <button type="submit" class="underline hover:no-underline">Retry</button>
@@ -647,5 +650,45 @@
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-76: slash-command autocomplete. Fires while the composer holds only a
+// command name (a leading `/word` with no space yet); clears once the user
+// types args or anything non-command. Click-to-insert via __lcInsertSlash.
+(function(){
+  var ta = document.querySelector('#composer textarea[name=body]');
+  var slot = document.getElementById('lc-slash-popover');
+  if (!ta || !slot) return;
+  var SLASH = /^\/([a-z0-9_-]*)$/i;
+  var timer = null;
+
+  function clearPopover(){
+    if (timer) { clearTimeout(timer); timer = null; }
+    slot.innerHTML = '';
+  }
+  function refresh(){
+    var m = ta.value.match(SLASH);
+    if (!m) { clearPopover(); return; }
+    if (timer) clearTimeout(timer);
+    var q = m[1];
+    timer = setTimeout(function(){
+      timer = null;
+      if (window.htmx) {
+        window.htmx.ajax('GET', '/api/slash-commands?q=' + encodeURIComponent(q),
+          { target: '#lc-slash-popover', swap: 'innerHTML' });
+      }
+    }, 120);
+  }
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('blur', function(){ setTimeout(clearPopover, 150); });
+
+  window.__lcInsertSlash = function(name){
+    ta.value = '/' + name + ' ';
+    clearPopover();
+    ta.focus();
+    var send = document.getElementById('composer-send');
+    if (send) send.disabled = !ta.value.trim();
+  };
 })();
 </script>

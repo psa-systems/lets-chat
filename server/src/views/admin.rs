@@ -406,3 +406,42 @@ pub struct BrandingPage<'a> {
     pub saved: bool,
     pub error: Option<String>,
 }
+
+/// LC-76: one custom slash command row on the admin page.
+pub struct SlashCommandRowView {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+    pub kind: String,
+    pub target: String,
+    pub admin_only: bool,
+}
+
+/// LC-76: a built-in command, listed read-only for operator reference.
+pub struct BuiltinCommandRowView {
+    pub usage: String,
+    pub description: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/slash_commands.html")]
+pub struct SlashCommandsPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub builtins: &'a [BuiltinCommandRowView],
+    pub commands: &'a [SlashCommandRowView],
+    pub error: Option<String>,
+}

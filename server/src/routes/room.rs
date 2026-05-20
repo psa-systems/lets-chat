@@ -508,16 +508,13 @@ pub async fn post_message(
     // reply (we don't quote inside threads), and not be the message currently
     // being inserted (impossible by ordering, but explicitly rejected for
     // future-proofing against any retry/idempotency-key flow).
-    // LC-66: `/poll "Q" "A" "B" ...` posts a poll instead of a plain
-    // message, reusing every access / posting gate already checked above.
-    if body == "/poll" || body.starts_with("/poll ") {
-        let rest = &body["/poll".len()..];
-        let (question, options) = super::polls::parse_command(rest)?;
-        super::polls::create_poll(
-            &state, &room, &user, &question, &options, false, false, None,
-        )
-        .await?;
-        return html(&ComposerFragment { room: &room });
+    // LC-76: slash commands. Runs after every access / posting gate above,
+    // so a command can never bypass room RBAC. An unknown `/foo` returns
+    // None and falls through to posting the literal text.
+    if body.starts_with('/') {
+        if let Some(resp) = super::slash::try_dispatch(&state, &room, &user, body).await? {
+            return Ok(resp);
+        }
     }
 
     if let Some(qid) = form.quote_id {
