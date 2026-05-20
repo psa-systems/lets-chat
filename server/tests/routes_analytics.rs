@@ -1,8 +1,14 @@
 #![cfg(feature = "standalone")]
 
+//! LC-97: admin analytics dashboard. Covers the pre-aggregation math
+//! (recompute_day counts, soft-delete / system-message exclusion), the
+//! dashboard route rendering, the recompute button, and the admin auth
+//! gate.
+
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
+use lets_chat::db::analytics;
 use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
 use sqlx::SqlitePool;
 use std::sync::{Arc, OnceLock};
@@ -11,9 +17,8 @@ use tower::ServiceExt;
 fn ensure_tempdir() {
     static INIT: OnceLock<()> = OnceLock::new();
     INIT.get_or_init(|| {
-        let p = std::env::temp_dir().join(format!("lets-chat-admin-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("lets-chat-analytics-{}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
-        std::fs::create_dir_all(p.join("uploads")).unwrap();
         db::set_data_dir(p.to_string_lossy().to_string());
     });
 }
@@ -92,7 +97,14 @@ async fn open_pool(name: &str) -> SqlitePool {
     pool
 }
 
-async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
+struct Harness {
+    app: Router,
+    session: String,
+    auth: SqlitePool,
+    chat: SqlitePool,
+}
+
+async fn make_app(username: &str, role: &str) -> Harness {
     ensure_tempdir();
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
@@ -104,6 +116,8 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
     db::auth::set_user_role(&auth, &user_id, role)
         .await
         .unwrap();
+    // enforce_2fa middleware 303s users with totp_enabled = 0; flip it so
+    // authed admin requests reach the handler.
     sqlx::query("UPDATE users SET totp_enabled=1 WHERE id=?")
         .bind(&user_id)
         .execute(&auth)
@@ -113,7 +127,7 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
-        auth,
+        auth: auth.clone(),
         chat: chat.clone(),
         settings,
         hub: Arc::new(Hub::new()),
@@ -129,107 +143,175 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
     };
-    (routes::build_router(state), session, chat)
+    Harness {
+        app: routes::build_router(state),
+        session,
+        auth,
+        chat,
+    }
 }
 
-async fn post_status(app: Router, sess: Option<&str>, uri: &str) -> StatusCode {
-    let mut builder = Request::builder().method(Method::POST).uri(uri);
+async fn today(chat: &SqlitePool) -> String {
+    sqlx::query_scalar("SELECT date('now')")
+        .fetch_one(chat)
+        .await
+        .unwrap()
+}
+
+async fn get_status_body(app: Router, sess: Option<&str>, uri: &str) -> (StatusCode, String) {
+    let mut builder = Request::builder().method(Method::GET).uri(uri);
     if let Some(s) = sess {
         builder = builder.header(header::COOKIE, format!("session={s}"));
     }
     let req = builder.body(Body::empty()).unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+async fn post_form_status(app: Router, sess: Option<&str>, uri: &str, body: &str) -> StatusCode {
+    let mut builder = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+    if let Some(s) = sess {
+        builder = builder.header(header::COOKIE, format!("session={s}"));
+    }
+    let req = builder.body(Body::from(body.to_string())).unwrap();
     app.oneshot(req).await.unwrap().status()
 }
 
-fn write_png(path: &std::path::Path, size: u32) {
-    use image::ImageEncoder;
-    let img = image::RgbaImage::from_pixel(size, size, image::Rgba([10, 200, 30, 255]));
-    let mut buf = Vec::new();
-    image::codecs::png::PngEncoder::new(&mut buf)
-        .write_image(&img, size, size, image::ExtendedColorType::Rgba8)
+#[tokio::test]
+async fn recompute_day_counts_messages_dau_and_rooms() {
+    let h = make_app("admin-rec", "admin").await;
+    let day = today(&h.chat).await;
+
+    let room = db::chat::create_room(&h.chat, "general", None, "public", None, None)
+        .await
         .unwrap();
-    std::fs::write(path, &buf).unwrap();
+    // Two distinct senders, three messages today.
+    db::chat::insert_message(&h.chat, room, "u1", "hi")
+        .await
+        .unwrap();
+    db::chat::insert_message(&h.chat, room, "u1", "again")
+        .await
+        .unwrap();
+    db::chat::insert_message(&h.chat, room, "u2", "yo")
+        .await
+        .unwrap();
+
+    analytics::recompute_day(&h.auth, &h.chat, &day)
+        .await
+        .unwrap();
+
+    let messages = analytics::series(&h.chat, analytics::METRIC_MESSAGES, &day, &day)
+        .await
+        .unwrap();
+    assert_eq!(messages.last().unwrap().value, 3, "three messages today");
+
+    let dau = analytics::series(&h.chat, analytics::METRIC_DAU, &day, &day)
+        .await
+        .unwrap();
+    assert_eq!(dau.last().unwrap().value, 2, "two distinct senders");
+
+    let rooms = analytics::series(&h.chat, analytics::METRIC_ACTIVE_ROOMS, &day, &day)
+        .await
+        .unwrap();
+    assert_eq!(rooms.last().unwrap().value, 1, "one active room");
 }
 
 #[tokio::test]
-async fn purge_orphans_removes_stale_row() {
-    let (app, sess, chat) = make_app("admin-purge", "admin").await;
-    let id = db::uploads::insert_upload(
-        &chat,
-        "user-x",
-        "f.png",
-        "image/png",
-        10,
-        "admin-purge-test.png",
-        None,
+async fn recompute_excludes_deleted_and_system_messages() {
+    let h = make_app("admin-excl", "admin").await;
+    let day = today(&h.chat).await;
+    let room = db::chat::create_room(&h.chat, "general", None, "public", None, None)
+        .await
+        .unwrap();
+
+    let keep = db::chat::insert_message(&h.chat, room, "u1", "real")
+        .await
+        .unwrap();
+    let gone = db::chat::insert_message(&h.chat, room, "u1", "oops")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE messages SET deleted_at = datetime('now') WHERE id = ?")
+        .bind(gone)
+        .execute(&h.chat)
+        .await
+        .unwrap();
+    // System message must not inflate the count.
+    db::chat::insert_system_message(&h.chat, room, "u1", "u1 started a call")
+        .await
+        .unwrap();
+    let _ = keep;
+
+    analytics::recompute_day(&h.auth, &h.chat, &day)
+        .await
+        .unwrap();
+    let messages = analytics::series(&h.chat, analytics::METRIC_MESSAGES, &day, &day)
+        .await
+        .unwrap();
+    assert_eq!(
+        messages.last().unwrap().value,
+        1,
+        "only the one live human message counts",
+    );
+}
+
+#[tokio::test]
+async fn backfill_records_signup_metric() {
+    let h = make_app("admin-signup", "admin").await;
+    let day = today(&h.chat).await;
+    // The admin user created in make_app registered today, so signups >= 1.
+    analytics::backfill(&h.auth, &h.chat, &day).await.unwrap();
+    let signups = analytics::series(&h.chat, analytics::METRIC_SIGNUPS, &day, &day)
+        .await
+        .unwrap();
+    assert!(
+        signups.last().map(|p| p.value).unwrap_or(0) >= 1,
+        "today's signup count includes the admin",
+    );
+}
+
+#[tokio::test]
+async fn dashboard_renders_for_admin() {
+    let h = make_app("admin-view", "admin").await;
+    let (status, body) = get_status_body(h.app, Some(&h.session), "/admin/analytics").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Daily active users"), "metric card present");
+    assert!(
+        body.contains("Retention by signup cohort"),
+        "retention present"
+    );
+    assert!(body.contains("<svg"), "inline svg chart rendered");
+}
+
+#[tokio::test]
+async fn recompute_button_redirects() {
+    let h = make_app("admin-btn", "admin").await;
+    let status = post_form_status(
+        h.app,
+        Some(&h.session),
+        "/admin/analytics/recompute",
+        "days=30",
     )
-    .await
-    .unwrap();
-    sqlx::query("UPDATE file_uploads SET created_at = datetime('now', '-25 hours') WHERE id = ?")
-        .bind(id)
-        .execute(&chat)
-        .await
-        .unwrap();
-
-    let status = post_status(app, Some(&sess), "/admin/uploads/purge-orphans").await;
-    assert_eq!(
-        status,
-        StatusCode::SEE_OTHER,
-        "expected redirect on success"
-    );
-    assert!(
-        db::uploads::get_upload(&chat, id).await.unwrap().is_none(),
-        "stale orphan should be gone after purge",
-    );
-}
-
-#[tokio::test]
-async fn regenerate_thumbnails_creates_missing_preview() {
-    let (app, sess, chat) = make_app("admin-regen", "admin").await;
-    let storage = "admin-regen-test.png";
-    let original_path = db::uploads_dir().join(storage);
-    write_png(&original_path, 200);
-    let preview_name = lets_chat::uploads::preview_storage_name(storage);
-    let preview_path = db::uploads_dir().join(&preview_name);
-    let _ = std::fs::remove_file(&preview_path);
-    assert!(
-        !preview_path.exists(),
-        "preconditions: preview must be absent"
-    );
-
-    db::uploads::insert_upload(&chat, "user-x", "f.png", "image/png", 1234, storage, None)
-        .await
-        .unwrap();
-
-    let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(
-        status,
-        StatusCode::SEE_OTHER,
-        "expected redirect on success"
-    );
-    assert!(
-        preview_path.exists(),
-        "preview should have been generated at {}",
-        preview_path.display(),
-    );
-}
-
-#[tokio::test]
-async fn admin_uploads_anonymous_redirects_to_login() {
-    let (app, _sess, _chat) = make_app("admin-anon", "admin").await;
-    // Drop the session: hit the endpoint without a cookie. AdminUser
-    // returns a 303 to /login when there is no User in extensions.
-    let status = post_status(app.clone(), None, "/admin/uploads/purge-orphans").await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
-    let status = post_status(app, None, "/admin/uploads/regenerate-thumbnails").await;
+    .await;
     assert_eq!(status, StatusCode::SEE_OTHER);
 }
 
 #[tokio::test]
-async fn admin_uploads_non_admin_rejected_with_403() {
-    let (app, sess, _chat) = make_app("regular-user", "user").await;
-    let status = post_status(app.clone(), Some(&sess), "/admin/uploads/purge-orphans").await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    let status = post_status(app, Some(&sess), "/admin/uploads/regenerate-thumbnails").await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+async fn dashboard_rejects_non_admin_and_anonymous() {
+    let h = make_app("plain-user", "user").await;
+    let (status, _) = get_status_body(h.app.clone(), Some(&h.session), "/admin/analytics").await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "non-admin blocked");
+
+    let (status, _) = get_status_body(h.app, None, "/admin/analytics").await;
+    assert_eq!(
+        status,
+        StatusCode::SEE_OTHER,
+        "anonymous redirected to login"
+    );
 }
