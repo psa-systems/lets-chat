@@ -26,6 +26,8 @@ mod account;
 mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
+mod api;
+mod api_tokens;
 mod auth;
 mod avatar;
 mod bookmarks;
@@ -924,6 +926,15 @@ pub fn build_router(state: AppState) -> Router {
             get(settings::get_blocked_list).post(settings::post_block_by_username),
         )
         .route("/settings/profile", post(settings::post_profile))
+        // LC-72: API-token management - available in both standalone and saas.
+        .route(
+            "/settings/api-tokens",
+            get(api_tokens::get_api_tokens).post(api_tokens::post_api_tokens),
+        )
+        .route(
+            "/settings/api-tokens/{id}/revoke",
+            post(api_tokens::post_revoke),
+        )
         .route(
             "/settings/avatar/delete",
             post(settings::post_avatar_delete),
@@ -1008,6 +1019,11 @@ pub fn build_router(state: AppState) -> Router {
             branding::inject_branding_css,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
+        // LC-72: the JSON API authenticates via bearer tokens (ApiAuth), not
+        // the session cookie. Merge it AFTER the cookie / 2FA / maintenance /
+        // branding layers so those never apply, but BEFORE TraceLayer so API
+        // requests are still traced.
+        .merge(api::router())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
