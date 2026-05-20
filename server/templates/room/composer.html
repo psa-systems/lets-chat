@@ -6,6 +6,7 @@
 <form
   id="composer"
   data-lc-cleanup-root
+  data-room-id="{{ room.id }}"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
   hx-on::after-request="
@@ -86,6 +87,18 @@
         }
       "
     ></textarea>
+    <button
+      type="button"
+      title="Schedule for later"
+      aria-label="Schedule message for later"
+      aria-haspopup="dialog"
+      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      onclick="window.__lcOpenScheduledModal && window.__lcOpenScheduledModal()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM10.75 6a.75.75 0 00-1.5 0v4c0 .2.08.39.22.53l2.5 2.5a.75.75 0 101.06-1.06L10.75 9.69V6z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     <button
       id="composer-send"
       type="submit"
