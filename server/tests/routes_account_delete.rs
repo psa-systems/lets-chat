@@ -173,6 +173,20 @@ async fn delete_wipes_user_and_chat_rows() {
         .execute(&t.chat)
         .await
         .unwrap();
+    // LC-62: a scheduled message authored by the user must also be
+    // wiped, regardless of state (pending / delivered / dropped).
+    let sched_id = db::scheduled::insert_scheduled(
+        &t.chat,
+        room_id,
+        &t.user_id,
+        "scheduled-before-delete",
+        "2099-01-01 00:00:00",
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     sqlx::query("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES (?, ?)")
         .bind(&t.user_id)
         .bind(&t.peer_id)
@@ -268,6 +282,14 @@ async fn delete_wipes_user_and_chat_rows() {
         .await
         .unwrap();
     assert_eq!(n_enc, 0);
+    // LC-62: scheduled row authored by the deleted user is gone.
+    assert!(
+        db::scheduled::get_scheduled(&t.chat, sched_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "scheduled row must be wiped with the user"
+    );
 }
 
 #[cfg(feature = "standalone")]
