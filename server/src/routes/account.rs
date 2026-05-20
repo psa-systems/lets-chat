@@ -214,6 +214,12 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-62: drop scheduled rows authored by this user. The dispatcher's
+    // "author no longer exists" branch in validate_delivery covers any
+    // window between auth-row delete and chat-cleanup, but the contract
+    // is that by the time this transaction commits there are no rows
+    // left for the dispatcher to encounter.
+    db::scheduled::delete_for_user(&mut tx, user_id).await?;
     sqlx::query("DELETE FROM file_uploads WHERE uploader_id = ?")
         .bind(user_id)
         .execute(&mut *tx)
