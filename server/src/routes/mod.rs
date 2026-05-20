@@ -59,6 +59,7 @@ mod scheduled;
 mod search;
 mod settings;
 mod sidebar_categories;
+mod slash;
 mod starred_rooms;
 mod status;
 pub(crate) mod two_factor;
@@ -781,6 +782,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reminders/{id}", delete(reminders::delete_reminder))
         .route("/room/{room_id}/poll", post(polls::post_create))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
+        .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
         .route("/room/{room_id}/info", get(room_info::get_page))

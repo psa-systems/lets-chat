@@ -23,6 +23,7 @@ pub mod room_rbac;
 pub mod scheduled;
 pub mod settings;
 pub mod sidebar_categories;
+pub mod slash;
 pub mod starred_rooms;
 pub mod two_factor;
 pub mod uploads;

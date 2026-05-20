@@ -1,0 +1,17 @@
+{# LC-76: ephemeral /help result. OOB-swapped into #lc-command-result so it
+   shows only to the invoker (never broadcast). Dismissible. #}
+<div id="lc-command-result" hx-swap-oob="innerHTML">
+  <div class="mb-1 rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+    <div class="flex items-center justify-between">
+      <span class="font-semibold text-slate-700">Slash commands</span>
+      <button type="button" aria-label="Dismiss"
+              onclick="var s=document.getElementById('lc-command-result'); if(s)s.innerHTML='';"
+              class="text-slate-400 hover:text-slate-700 leading-none">&times;</button>
+    </div>
+    <ul class="mt-1 space-y-0.5">
+      {% for c in commands %}
+      <li><span class="font-mono text-slate-800">{{ c.usage }}</span> - {{ c.description }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
