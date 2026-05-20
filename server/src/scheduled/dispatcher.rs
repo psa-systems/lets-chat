@@ -130,46 +130,13 @@ async fn validate_delivery(state: &AppState, row: &ScheduledRow) -> Result<Valid
         return Ok(Validation::Deny("author no longer exists"));
     };
     let user: User = user_record.into();
-    if user.is_banned {
-        return Ok(Validation::Deny("author is banned"));
-    }
-    if user.is_muted {
-        return Ok(Validation::Deny("author is muted"));
-    }
-    let is_admin = user.role == "admin";
-    if !db::chat::is_room_accessible(&state.chat, row.room_id, &user.id, is_admin).await? {
-        return Ok(Validation::Deny("author lost room access"));
-    }
-    if !crate::routes::room::can_post_with_policy(
-        state,
-        &user,
-        row.room_id,
-        &room.posting_allowed_for,
-    )
-    .await?
+
+    if let Some(reason) =
+        crate::scheduled::validation::check_delivery_gates(state, &user, &room, &row.body).await?
     {
-        return Ok(Validation::Deny("author cannot post in this room"));
+        return Ok(Validation::Deny(reason.as_str()));
     }
-    if room.room_type == "dm" {
-        let members = db::chat::list_room_member_ids(&state.chat, row.room_id).await?;
-        if let Some(peer_id) = members.iter().find(|id| **id != user.id) {
-            if db::auth::is_blocked_either_way(&state.auth, &user.id, peer_id).await? {
-                return Ok(Validation::Deny("DM peer blocked author"));
-            }
-        }
-    }
-    let link_filter_on = db::settings::get_setting(&state.settings, "link_filter_enabled")
-        .await?
-        .as_deref()
-        == Some("true");
-    if link_filter_on {
-        let hosts = crate::links::extract_hosts(&row.body);
-        if let Some((rule, _host)) = db::anti_spam::find_match(&state.chat, &hosts).await? {
-            if rule.action == db::anti_spam::FilterAction::Block {
-                return Ok(Validation::Deny("body contains a blocked link"));
-            }
-        }
-    }
+
     Ok(Validation::Pass { room, user })
 }
 

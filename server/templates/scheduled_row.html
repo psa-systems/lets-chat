@@ -1,0 +1,14 @@
+<li id="scheduled-row-{{ row.id }}" class="px-4 py-3">
+  <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+    <span>
+      for <a href="{{ row.room_path }}" class="text-blue-700 hover:underline">{{ row.room_label }}</a>
+      &middot; delivers {{ row.scheduled_for }}
+    </span>
+    <button hx-delete="/scheduled/{{ row.id }}"
+            hx-target="#scheduled-row-{{ row.id }}"
+            hx-swap="delete"
+            hx-confirm="Cancel this scheduled message?"
+            class="text-red-700 hover:underline">Cancel</button>
+  </div>
+  <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-slate-800">{{ row.body_html|safe }}</div>
+</li>
