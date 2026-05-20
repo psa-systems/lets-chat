@@ -352,7 +352,7 @@ async fn switcher_home_entry_shows_global_logo_when_set() {
     let (status, body) = get_with_session(&t.app, &t.admin_session, "/").await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        !body.contains("src=\"/branding/logo\""),
+        !body.contains("src=\"/branding/logo?"),
         "no logo set means no logo <img> in the switcher",
     );
 
@@ -374,7 +374,7 @@ async fn switcher_home_entry_shows_global_logo_when_set() {
     let (status, body) = get_with_session(&t.app, &t.admin_session, "/").await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.contains("src=\"/branding/logo\""),
+        body.contains("src=\"/branding/logo?v="),
         "Home switcher icon should render the global logo once set",
     );
 }
@@ -404,7 +404,7 @@ async fn switcher_enclave_entry_shows_enclave_logo_when_set() {
         get_with_session(&t.app, &t.admin_session, &format!("/enclave/{eid}")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.contains(&format!("src=\"/enclave/{eid}/branding/logo\"")),
+        body.contains(&format!("src=\"/enclave/{eid}/branding/logo?v=")),
         "active enclave's switcher icon should render its logo",
     );
 }
