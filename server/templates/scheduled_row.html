@@ -2,7 +2,7 @@
   <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
     <span>
       for <a href="{{ row.room_path }}" class="text-blue-700 hover:underline">{{ row.room_label }}</a>
-      &middot; delivers {{ row.scheduled_for }}
+      &middot; delivers {{ row.scheduled_for }} UTC
     </span>
     <button hx-delete="/scheduled/{{ row.id }}"
             hx-target="#scheduled-row-{{ row.id }}"

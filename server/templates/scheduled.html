@@ -30,8 +30,8 @@
           <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
             <span>
               for <a href="{{ d.room_label }}" class="text-blue-700 hover:underline">{{ d.room_label }}</a>
-              &middot; scheduled for {{ d.scheduled_for }}
-              &middot; dropped at {{ d.delivered_at }}
+              &middot; scheduled for {{ d.scheduled_for }} UTC
+              &middot; dropped at {{ d.delivered_at }} UTC
             </span>
           </div>
           <div class="mt-1 text-sm text-red-700">Dropped: {{ d.failed_reason }}</div>
