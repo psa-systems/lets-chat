@@ -107,6 +107,19 @@ pub async fn revoke(pool: &SqlitePool, id: i64, user_id: &str) -> sqlx::Result<b
     Ok(res.rows_affected() == 1)
 }
 
+/// Revoke every still-active token a user owns (LC-73: disabling a bot
+/// revokes its tokens). Rows are retained for audit.
+pub async fn revoke_all_for_user(pool: &SqlitePool, user_id: &str) -> sqlx::Result<u64> {
+    let res = sqlx::query(
+        "UPDATE api_tokens SET revoked_at = datetime('now') \
+         WHERE user_id = ? AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Best-effort `last_used_at` bump. Called from a detached task so it never
 /// blocks the request.
 pub async fn touch_last_used(pool: &SqlitePool, id: i64) -> sqlx::Result<()> {

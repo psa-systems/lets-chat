@@ -589,7 +589,8 @@ fn render_register_setup_error(
 #[cfg(feature = "standalone")]
 async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<bool, AppError> {
     let mut tx = state.auth.begin().await?;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+    // LC-73: bots excluded so they cannot consume the first-user-is-admin slot.
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_bot = 0")
         .fetch_one(&mut *tx)
         .await?;
     let promoted = count == 1;

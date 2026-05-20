@@ -12,8 +12,8 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
-    BackupRestorePage, BrandingPage, BuiltinCommandRowView, EnclavesPage, InvitesPage,
-    LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage, QuarantineEntryView,
+    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BuiltinCommandRowView, EnclavesPage,
+    InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage, QuarantineEntryView,
     QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView,
     SlashCommandsPage, UserRowFragment, UsersPage,
 };
@@ -82,6 +82,8 @@ pub fn router() -> Router<AppState> {
             post(post_quarantine_reject),
         )
         .route("/admin/modlog", get(get_modlog))
+        .route("/admin/bots", get(get_bots).post(post_bots))
+        .route("/admin/bots/{id}/disable", post(post_bot_disable))
         .route(
             "/admin/slash-commands",
             get(get_slash_commands).post(post_slash_commands),
@@ -2007,4 +2009,207 @@ pub async fn post_slash_commands_delete(
     )
     .await?;
     Ok(Redirect::to("/admin/slash-commands"))
+}
+
+// LC-73: bot accounts ----------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct BotCreateForm {
+    pub username: String,
+    #[serde(default)]
+    pub s_messages_read: Option<String>,
+    #[serde(default)]
+    pub s_messages_write: Option<String>,
+    #[serde(default)]
+    pub s_rooms_read: Option<String>,
+}
+
+async fn render_bots_page(
+    state: &AppState,
+    user: &crate::models::User,
+    new_token: Option<String>,
+    new_bot_name: Option<String>,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let bots: Vec<BotRowView> = db::auth::list_bots(&state.auth)
+        .await?
+        .into_iter()
+        .map(|b| BotRowView {
+            id: b.id,
+            username: b.username,
+            disabled: b.is_banned,
+            created_at: b.created_at,
+        })
+        .collect();
+    let page = BotsPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "bots",
+        available: state.secret_key.is_some(),
+        all_scopes: super::api::ALL_SCOPES,
+        bots: &bots,
+        new_token,
+        new_bot_name,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_bots(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_bots_page(&state, &user, None, None, None).await
+}
+
+pub async fn post_bots(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<BotCreateForm>,
+) -> Result<Response, AppError> {
+    let Some(secret) = state.secret_key.as_ref() else {
+        return Ok(render_bots_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Bots need an API token, which requires a server secret key (LETS_CHAT_SECRET_KEY).".into()),
+        )
+        .await?
+        .into_response());
+    };
+    let username = form.username.trim();
+    if username.is_empty() {
+        return Ok(render_bots_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Bot username is required.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    let mut scopes: Vec<&str> = Vec::new();
+    if form.s_messages_read.is_some() {
+        scopes.push(super::api::SCOPE_MESSAGES_READ);
+    }
+    if form.s_messages_write.is_some() {
+        scopes.push(super::api::SCOPE_MESSAGES_WRITE);
+    }
+    if form.s_rooms_read.is_some() {
+        scopes.push(super::api::SCOPE_ROOMS_READ);
+    }
+    if scopes.is_empty() {
+        return Ok(render_bots_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Select at least one scope for the bot's token.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    let scopes = scopes.join(" ");
+
+    let bot_id = match db::auth::create_bot(&state.auth, username).await {
+        Ok(id) => id,
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            return Ok(render_bots_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("That username is already taken.".into()),
+            )
+            .await?
+            .into_response());
+        }
+        Err(e) => return Err(AppError::from(e)),
+    };
+    // Backfill the bot into the General enclave so it can be added to rooms.
+    if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
+        tracing::warn!(error = %e, "bot general backfill failed");
+    }
+    let plaintext = crate::auth::generate_api_token();
+    let hash = crate::auth::hash_api_token(secret, &plaintext);
+    // Roll back the bot row if token minting fails, so a failed create does
+    // not leave an orphan bot that blocks retrying the same username.
+    if let Err(e) =
+        db::api_tokens::insert(&state.auth, &bot_id, "bot token", &hash, &scopes, None).await
+    {
+        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        return Err(AppError::from(e));
+    }
+    db::moderation::log_mod_action(
+        &state.chat,
+        "bot_create",
+        &bot_id,
+        &actor.id,
+        Some(username),
+        None,
+        Some(&scopes),
+    )
+    .await?;
+    Ok(render_bots_page(
+        &state,
+        &actor,
+        Some(plaintext),
+        Some(username.to_string()),
+        None,
+    )
+    .await?
+    .into_response())
+}
+
+/// POST /admin/bots/{id}/disable - ban the bot and revoke all its API
+/// tokens (LC-73). The id is the bot user's UUID.
+pub async fn post_bot_disable(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Redirect, AppError> {
+    // Only act on actual bot rows so this cannot ban a human.
+    let is_bot = db::auth::find_user_by_id(&state.auth, &id)
+        .await?
+        .map(|u| u.is_bot)
+        .unwrap_or(false);
+    if is_bot {
+        db::auth::ban_user(&state.auth, &id, Some("bot disabled")).await?;
+        let revoked = db::api_tokens::revoke_all_for_user(&state.auth, &id).await?;
+        db::moderation::log_mod_action(
+            &state.chat,
+            "bot_disable",
+            &id,
+            &actor.id,
+            None,
+            None,
+            Some(&format!("revoked {revoked} tokens")),
+        )
+        .await?;
+    }
+    Ok(Redirect::to("/admin/bots"))
 }
