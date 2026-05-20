@@ -490,6 +490,11 @@ pub(crate) async fn handle_not_found(
 pub fn build_router(state: AppState) -> Router {
     let router = Router::new()
         .route("/", get(home::get_home))
+        // Bunyip's app launcher derives every tile target as
+        // `<origin>/dashboard`; lets-chat's home lives at `/`, so this
+        // permanent redirect keeps the launcher tile working without
+        // making the launcher app-aware.
+        .route("/dashboard", get(|| async { Redirect::permanent("/") }))
         .route("/login", get(auth::get_login).post(auth::post_login))
         .route(
             "/login/2fa",
