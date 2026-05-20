@@ -96,4 +96,8 @@ pub struct SwitcherEntry {
     /// global logo). `None` when no logo exists for this scope, in which case
     /// the template renders the single-letter `initial` instead.
     pub logo_url: Option<String>,
+    /// LC-143: true when the viewer may manage this enclave (owner/admin, or
+    /// site admin). Drives the settings gear on the active enclave's tile.
+    /// Always false for the Home entry.
+    pub can_manage: bool,
 }

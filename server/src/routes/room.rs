@@ -286,6 +286,13 @@ pub async fn get_room(
     // Resolve the room's enclave so the switcher highlights the right icon
     // and the sidebar shows that enclave's rooms instead of DMs.
     let current_enclave = super::enclave_for_room(&state, room_id).await?;
+    // LC-143: remember this as the enclave's last-opened room so clicking the
+    // enclave reopens it. Best-effort; a failed write must not break the view.
+    if let Some(eid) = current_enclave {
+        if let Err(e) = db::enclave::set_last_room(&state.chat, &user.id, eid, room_id).await {
+            tracing::warn!(error = %e, "set_last_room failed");
+        }
+    }
     let (
         sidebar_categories,
         sidebar_starred_rooms,

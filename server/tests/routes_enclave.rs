@@ -116,6 +116,42 @@ pub fn cookie(token: &str) -> String {
     format!("session={token}")
 }
 
+/// LC-143: clicking an enclave now redirects to a room; the room page's
+/// sidebar lists every room in the enclave. Follow the redirect and return
+/// that room page's body so tests can grep the enclave's room list.
+async fn enclave_room_list_body(app: &Router, sess: &str, enclave_id: i64) -> String {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/enclave/{enclave_id}"))
+        .header("cookie", cookie(sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let target = res
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let res = match target {
+        // Redirected to a room: fetch the room page (sidebar lists all rooms).
+        Some(path) => {
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri(path)
+                .header("cookie", cookie(sess))
+                .body(Body::empty())
+                .unwrap();
+            app.clone().oneshot(req).await.unwrap()
+        }
+        // No redirect (empty enclave): the landing body itself.
+        None => res,
+    };
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    String::from_utf8(body.to_vec()).unwrap()
+}
+
 #[tokio::test]
 async fn post_enclaves_creates_and_redirects() {
     let (app, sess) = app_with_user("user").await;
@@ -502,17 +538,7 @@ async fn create_room_in_enclave_attaches_to_enclave() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert!(res.status().is_redirection());
 
-    let landing = Request::builder()
-        .method(Method::GET)
-        .uri(format!("/enclave/{id}"))
-        .header("cookie", cookie(&sess))
-        .body(Body::empty())
-        .unwrap();
-    let res = app.clone().oneshot(landing).await.unwrap();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    let s = String::from_utf8(body.to_vec()).unwrap();
+    let s = enclave_room_list_body(&app, &sess, id).await;
     assert!(s.contains("experiments"));
 }
 
@@ -630,25 +656,12 @@ async fn non_member_cannot_post_to_public_room_in_enclave() {
     let res = app.clone().oneshot(mkroom).await.unwrap();
     assert!(res.status().is_redirection());
 
-    // Find the room id by listing the landing and grepping.
-    let list = Request::builder()
-        .method(Method::GET)
-        .uri(format!("/enclave/{enclave_id}"))
-        .header("cookie", cookie(&s1))
-        .body(Body::empty())
-        .unwrap();
-    let res = app.clone().oneshot(list).await.unwrap();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    let s = String::from_utf8(body.to_vec()).unwrap();
-    // Find the room id by walking back from the "lobby" label to the nearest
-    // preceding /room/ link, regardless of whether the template separates the
-    // hash and the name with whitespace.
-    let lobby_pos = s.find("lobby").expect("lobby room link missing");
-    let prefix = &s[..lobby_pos];
-    let last_room_pos = prefix.rfind("/room/").expect("preceding /room/ missing");
-    let after = &s[last_room_pos + "/room/".len()..];
+    // The enclave has exactly one room ("lobby"), so the first `/room/{id}`
+    // reference on the page is it.
+    let s = enclave_room_list_body(&app, &s1, enclave_id).await;
+    assert!(s.contains("lobby"), "lobby room missing from page");
+    let pos = s.find("/room/").expect("/room/ link missing");
+    let after = &s[pos + "/room/".len()..];
     let end = after
         .find(|c: char| !c.is_ascii_digit())
         .unwrap_or(after.len());
