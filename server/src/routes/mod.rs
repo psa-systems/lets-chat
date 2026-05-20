@@ -46,6 +46,7 @@ mod notify_prefs;
 #[cfg(feature = "standalone")]
 mod password_reset;
 mod pinned;
+mod polls;
 mod push;
 mod reactions;
 mod reminders;
@@ -204,6 +205,10 @@ pub(crate) async fn load_message_view_for_viewer(
         custom_emojis,
         quote_preview,
         is_system: m.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
+            .await
+            .ok()
+            .flatten(),
     })
 }
 
@@ -774,6 +779,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/reminders/picker", get(reminders::get_picker))
         .route("/reminders/{id}", delete(reminders::delete_reminder))
+        .route("/room/{room_id}/poll", post(polls::post_create))
+        .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
         .route("/room/{room_id}/info", get(room_info::get_page))

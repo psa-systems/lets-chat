@@ -85,6 +85,11 @@
       {% include "partials/attachment.html" %}
     {% endfor %}
   {% endif %}
+  {% if let Some(poll) = message.poll.as_ref() %}
+  <div id="poll-{{ poll.message_id }}">
+    {% include "partials/poll_block.html" %}
+  </div>
+  {% endif %}
   <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}

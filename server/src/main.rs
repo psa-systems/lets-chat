@@ -137,6 +137,7 @@ async fn main() {
     spawn_orphan_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
     spawn_reminders_dispatcher(state.clone());
+    spawn_polls_closer(state.clone());
     spawn_analytics_aggregator(state.clone());
 
     let app = routes::build_router(state);
@@ -293,6 +294,34 @@ fn spawn_reminders_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "reminder dispatch tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-66: close polls whose deadline has passed and broadcast a re-render
+/// so the UI flips to results-only. 30s tick like the other dispatchers.
+fn spawn_polls_closer(state: AppState) {
+    use lets_chat::ws::events::ChatEvent;
+    const TICK_SECS: u64 = 30;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::db::polls::close_due(&state.chat).await {
+                Ok(closed) => {
+                    for (message_id, room_id) in closed {
+                        state.hub.broadcast_to_room(
+                            room_id,
+                            &ChatEvent::PollUpdated {
+                                message_id,
+                                room_id,
+                            },
+                        );
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "poll closer tick failed"),
             }
         }
     });
