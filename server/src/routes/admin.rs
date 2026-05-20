@@ -12,9 +12,10 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
-    BackupRestorePage, BrandingPage, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView,
-    MetricCard, ModLogPage, QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage,
-    SettingsPage, UserRowFragment, UsersPage,
+    BackupRestorePage, BrandingPage, BuiltinCommandRowView, EnclavesPage, InvitesPage,
+    LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage, QuarantineEntryView,
+    QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView,
+    SlashCommandsPage, UserRowFragment, UsersPage,
 };
 use crate::views::charts;
 use crate::views::{html, Html};
@@ -81,6 +82,14 @@ pub fn router() -> Router<AppState> {
             post(post_quarantine_reject),
         )
         .route("/admin/modlog", get(get_modlog))
+        .route(
+            "/admin/slash-commands",
+            get(get_slash_commands).post(post_slash_commands),
+        )
+        .route(
+            "/admin/slash-commands/{id}/delete",
+            post(post_slash_commands_delete),
+        )
         .route("/admin/analytics", get(get_analytics))
         .route("/admin/analytics/recompute", post(post_recompute_analytics))
         .route(
@@ -1806,4 +1815,196 @@ pub async fn post_recompute_analytics(
     db::analytics::recompute_day(&state.auth, &state.chat, &today).await?;
     let range_days = normalize_range(form.days);
     Ok(Redirect::to(&format!("/admin/analytics?days={range_days}")).into_response())
+}
+
+// LC-76: custom slash commands -------------------------------------------
+
+#[derive(Deserialize)]
+pub struct SlashCommandForm {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub kind: String,
+    pub target: String,
+    #[serde(default)]
+    pub admin_only: Option<String>,
+}
+
+async fn render_slash_commands_page(
+    state: &AppState,
+    user: &crate::models::User,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let builtins: Vec<BuiltinCommandRowView> = crate::commands::BUILTINS
+        .iter()
+        .map(|b| BuiltinCommandRowView {
+            usage: b.usage.to_string(),
+            description: b.description.to_string(),
+        })
+        .collect();
+    let commands: Vec<SlashCommandRowView> = db::slash::list_global(&state.chat)
+        .await?
+        .into_iter()
+        .map(|c| SlashCommandRowView {
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            kind: c.kind.as_str().to_string(),
+            target: c.target,
+            admin_only: c.admin_only,
+        })
+        .collect();
+    let page = SlashCommandsPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "slash_commands",
+        builtins: &builtins,
+        commands: &commands,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_slash_commands(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_slash_commands_page(&state, &user, None).await
+}
+
+pub async fn post_slash_commands(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<SlashCommandForm>,
+) -> Result<Response, AppError> {
+    let name = form
+        .name
+        .trim()
+        .trim_start_matches('/')
+        .to_ascii_lowercase();
+    let err = |msg: &str| msg.to_string();
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Ok(render_slash_commands_page(
+            &state,
+            &actor,
+            Some(err("Name must be non-empty letters, digits, - or _.")),
+        )
+        .await?
+        .into_response());
+    }
+    if crate::commands::find_builtin(&name).is_some() {
+        return Ok(render_slash_commands_page(
+            &state,
+            &actor,
+            Some(err("That name is a built-in command.")),
+        )
+        .await?
+        .into_response());
+    }
+    let Some(kind) = db::slash::CustomKind::parse(&form.kind) else {
+        return Ok(
+            render_slash_commands_page(&state, &actor, Some(err("Unknown kind.")))
+                .await?
+                .into_response(),
+        );
+    };
+    let target = form.target.trim();
+    if target.is_empty() {
+        return Ok(
+            render_slash_commands_page(&state, &actor, Some(err("Target is required.")))
+                .await?
+                .into_response(),
+        );
+    }
+    if kind == db::slash::CustomKind::WebhookPost
+        && !(target.starts_with("http://") || target.starts_with("https://"))
+    {
+        return Ok(render_slash_commands_page(
+            &state,
+            &actor,
+            Some(err("Webhook target must be an http(s) URL.")),
+        )
+        .await?
+        .into_response());
+    }
+    let kind_str = kind.as_str();
+    match db::slash::insert_global(
+        &state.chat,
+        &name,
+        form.description.trim(),
+        kind,
+        target,
+        form.admin_only.is_some(),
+        &actor.id,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            return Ok(render_slash_commands_page(
+                &state,
+                &actor,
+                Some(err("A command with that name already exists.")),
+            )
+            .await?
+            .into_response());
+        }
+        Err(e) => return Err(AppError::from(e)),
+    }
+    db::moderation::log_mod_action(
+        &state.chat,
+        "slash_command_add",
+        "",
+        &actor.id,
+        Some(&name),
+        None,
+        Some(kind_str),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/slash-commands").into_response())
+}
+
+pub async fn post_slash_commands_delete(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    db::slash::delete(&state.chat, id).await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "slash_command_remove",
+        "",
+        &actor.id,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    Ok(Redirect::to("/admin/slash-commands"))
 }
