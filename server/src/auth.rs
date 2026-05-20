@@ -247,3 +247,114 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
         }
     }
 }
+
+// ── LC-72: scoped API tokens ────────────────────────────────────────────
+
+/// Hex HMAC-SHA256 of a token plaintext, keyed by the server secret. Only
+/// this hash is ever stored or compared; the plaintext is never persisted
+/// or logged.
+pub fn hash_api_token(secret: &[u8; 32], token: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC accepts any key length");
+    mac.update(token.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Generate a fresh token plaintext: a `lc_` prefix plus 48 url-safe
+/// alphanumerics. Shown to the user exactly once.
+pub fn generate_api_token() -> String {
+    use rand::Rng;
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    let body: String = (0..48)
+        .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+        .collect();
+    format!("lc_{body}")
+}
+
+fn token_is_expired(expires_at: &Option<String>) -> bool {
+    let Some(s) = expires_at else { return false };
+    // Stored as "YYYY-MM-DD HH:MM:SS" UTC.
+    match chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        Ok(dt) => dt.and_utc() <= chrono::Utc::now(),
+        // Unparseable expiry: treat as expired rather than valid-forever.
+        Err(_) => true,
+    }
+}
+
+/// Extractor for the JSON API: authenticates a `Authorization: Bearer
+/// <token>` request to a `User` plus the token's scope set. Returns 401 for
+/// a missing / unknown / revoked / expired token (or when the deployment has
+/// no secret key, which disables the API). Scope enforcement is per-route
+/// via [`ApiAuth::require`], which returns 403 - never 401 - for a valid
+/// token that lacks the scope.
+pub struct ApiAuth {
+    pub user: User,
+    pub scopes: std::collections::HashSet<String>,
+}
+
+impl ApiAuth {
+    /// Refuse (403) when the token lacks `scope`.
+    pub fn require(&self, scope: &str) -> Result<(), AppError> {
+        if self.scopes.contains(scope) {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden)
+        }
+    }
+}
+
+impl FromRequestParts<AppState> for ApiAuth {
+    type Rejection = Response;
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let unauthorized = || AppError::Unauthorized.into_response();
+
+        // API tokens require a configured secret to key the HMAC.
+        let Some(secret) = state.secret_key.as_ref() else {
+            return Err(unauthorized());
+        };
+        let token = parts
+            .headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(unauthorized)?;
+
+        let hash = hash_api_token(secret, token);
+        let row = match db::api_tokens::find_by_hash(&state.auth, &hash).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return Err(unauthorized()),
+            Err(_) => return Err(unauthorized()),
+        };
+        if row.revoked_at.is_some() || token_is_expired(&row.expires_at) {
+            return Err(unauthorized());
+        }
+        let record = match db::auth::find_user_by_id(&state.auth, &row.user_id).await {
+            Ok(Some(u)) => u,
+            _ => return Err(unauthorized()),
+        };
+
+        // Best-effort `last_used_at` bump; detached so it never blocks.
+        let pool = state.auth.clone();
+        let id = row.id;
+        tokio::spawn(async move {
+            let _ = db::api_tokens::touch_last_used(&pool, id).await;
+        });
+
+        let scopes = row
+            .scopes
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        Ok(ApiAuth {
+            user: record.into(),
+            scopes,
+        })
+    }
+}

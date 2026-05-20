@@ -1,0 +1,88 @@
+{% extends "layout.html" %}
+
+{% block title %}API tokens - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex-1 overflow-y-auto">
+<section class="p-6 max-w-3xl space-y-6">
+  <div class="flex items-baseline justify-between gap-2">
+    <h1 class="text-2xl font-semibold">API tokens</h1>
+    <a href="/settings" class="text-sm text-blue-600 hover:underline">Back to settings</a>
+  </div>
+  <p class="text-sm text-slate-600">
+    Personal bearer tokens for the HTTP API. A token can be scoped narrower
+    than your account and is shown only once. Send it as
+    <code>Authorization: Bearer &lt;token&gt;</code>. See the API reference for
+    routes and required scopes.
+  </p>
+
+  {% if let Some(err) = error %}
+  <div class="p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  {% endif %}
+
+  {% if let Some(tok) = new_token %}
+  <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
+    <p class="font-medium text-green-800">Token created. Copy it now - it won't be shown again.</p>
+    <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
+  </div>
+  {% endif %}
+
+  {% if !available %}
+  <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
+    API tokens are disabled because the server has no secret key configured
+    (<code>LETS_CHAT_SECRET_KEY</code>).
+  </div>
+  {% else %}
+  <form method="post" action="/settings/api-tokens" class="space-y-3 border rounded-lg p-4">
+    <h2 class="font-semibold">Create a token</h2>
+    <label class="block text-sm">
+      <span class="text-slate-700">Name</span>
+      <input name="name" type="text" required maxlength="80" placeholder="ci-bot"
+             class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    </label>
+    <fieldset class="text-sm">
+      <legend class="text-slate-700 mb-1">Scopes</legend>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_read"> <code>messages:read</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_write"> <code>messages:write</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_rooms_read"> <code>rooms:read</code></label>
+    </fieldset>
+    <label class="block text-sm">
+      <span class="text-slate-700">Expires after (days, 0 = never)</span>
+      <input name="expires_days" type="number" min="0" step="1" placeholder="0"
+             class="mt-1 w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+    </label>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create token</button>
+  </form>
+  {% endif %}
+
+  <section class="space-y-2">
+    <h2 class="font-semibold">Your tokens</h2>
+    {% if tokens.is_empty() %}
+    <p class="text-sm text-slate-500 italic">No tokens yet.</p>
+    {% else %}
+    <ul class="divide-y border rounded">
+      {% for t in tokens %}
+      <li class="p-3 text-sm flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-medium {% if t.revoked %}text-slate-400 line-through{% endif %}">{{ t.name }}</div>
+          <div class="text-xs text-slate-500 font-mono break-all">{{ t.scopes }}</div>
+          <div class="text-xs text-slate-400">
+            created {{ t.created_at }}
+            {% if let Some(at) = t.last_used_at %} &middot; last used {{ at }}{% else %} &middot; never used{% endif %}
+            {% if let Some(at) = t.expires_at %} &middot; expires {{ at }}{% endif %}
+            {% if t.revoked %} &middot; <span class="text-red-600">revoked</span>{% endif %}
+          </div>
+        </div>
+        {% if !t.revoked %}
+        <form method="post" action="/settings/api-tokens/{{ t.id }}/revoke">
+          <button type="submit" class="text-red-600 hover:underline text-xs">Revoke</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</section>
+</div>
+{% endblock %}
