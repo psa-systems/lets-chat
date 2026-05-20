@@ -135,6 +135,7 @@ async fn main() {
     spawn_idle_scanner(state.clone());
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
+    spawn_scheduled_dispatcher(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -249,6 +250,34 @@ fn spawn_orphan_sweeper(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "orphan sweep failed"),
+            }
+        }
+    });
+}
+
+/// 30-second tick that calls `scheduled::run_dispatch_tick`. Modeled on
+/// `spawn_idle_scanner`. UI promises delivery within 30 seconds of the
+/// scheduled time. Logs only on non-empty ticks so an idle deployment
+/// stays quiet; warns on tick-level errors (per-row errors are absorbed
+/// inside the tick and surface as bumped `attempt_count`).
+fn spawn_scheduled_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 30;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::scheduled::run_dispatch_tick(&state).await {
+                Ok(stats) if stats.delivered > 0 || stats.dropped > 0 || stats.retries > 0 => {
+                    tracing::info!(
+                        delivered = stats.delivered,
+                        dropped = stats.dropped,
+                        retries = stats.retries,
+                        "scheduled dispatch tick complete",
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "scheduled dispatch tick failed"),
             }
         }
     });

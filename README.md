@@ -17,6 +17,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 - Moderator tools: mute, ban, kick, delete messages
 - Admin panel: user management, room management, settings
 - Email digest of missed mentions and DMs (off by default per user)
+- Scheduled message delivery: pick a future time in the composer, see and edit pending sends at `/scheduled`
 - Role-based access: Admin > Moderator > User
 
 ## Quick Start

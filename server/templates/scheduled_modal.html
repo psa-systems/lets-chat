@@ -1,0 +1,205 @@
+{# LC-62: singleton scheduled-send modal. Lives in the persistent shell so
+   the open/close JS does not have to be re-bound on composer swaps.
+
+   Close paths (must all dispose the focus trap exactly once via
+   closeModal()):
+     1. Cancel button
+     2. Top-right X button
+     3. ESC keydown
+     4. Click on the backdrop (outside the inner content)
+     5. Submit success (fetch returns 2xx)
+
+   On open: the trigger button in composer.html calls
+   window.__lcOpenScheduledModal(). The function reads the current
+   composer's data-room-id + textarea body + hidden file_id, pre-fills the
+   modal fields, sets the datetime-local picker default to now + 1h, then
+   shows the dialog and installs the focus trap.
+#}
+<div data-lc-scheduled-modal
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="lc-scheduled-modal-title"
+     aria-hidden="true">
+  <div data-lc-scheduled-modal-panel
+       class="w-96 rounded-lg bg-white p-5 shadow-xl">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-scheduled-modal-title" class="text-lg font-semibold">Schedule message</h2>
+      <button type="button" data-lc-scheduled-modal-close
+              aria-label="Close dialog"
+              class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+    </div>
+    <form data-lc-scheduled-modal-form class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-slate-700">Deliver at (your local time)</span>
+        <input type="datetime-local"
+               name="scheduled_for_local"
+               required
+               class="rounded border border-slate-300 px-2 py-1">
+      </label>
+      <div data-lc-scheduled-modal-error
+           class="hidden text-sm text-red-600"
+           role="alert"></div>
+      <div class="flex justify-end gap-2 mt-1">
+        <button type="button" data-lc-scheduled-modal-cancel
+                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit"
+                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">Schedule</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-scheduled-modal]');
+  if (!modal) return;
+  var panel = modal.querySelector('[data-lc-scheduled-modal-panel]');
+  var form = modal.querySelector('[data-lc-scheduled-modal-form]');
+  var picker = form.querySelector('input[name=scheduled_for_local]');
+  var errSlot = modal.querySelector('[data-lc-scheduled-modal-error]');
+  var closeBtn = modal.querySelector('[data-lc-scheduled-modal-close]');
+  var cancelBtn = modal.querySelector('[data-lc-scheduled-modal-cancel]');
+
+  // Latched state for the open dialog. trap + opener are populated on
+  // open and cleared on close so a stale handle never leaks across
+  // open/close cycles.
+  var trap = null;
+  var opener = null;
+  var openContext = null; // { composer, roomId, body, fileId }
+
+  function setError(msg){
+    if (!msg) {
+      errSlot.classList.add('hidden');
+      errSlot.textContent = '';
+    } else {
+      errSlot.textContent = msg;
+      errSlot.classList.remove('hidden');
+    }
+  }
+
+  function defaultPickerValue(){
+    var d = new Date(Date.now() + 60 * 60 * 1000);
+    function pad(n){ return String(n).padStart(2, '0'); }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+         + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function openModal(ctx){
+    openContext = ctx;
+    opener = document.activeElement;
+    setError('');
+    picker.value = defaultPickerValue();
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    // Focus the picker so a screen-reader user lands on the time input
+    // rather than on the close button.
+    try { picker.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) {
+      trap = window.__lcDialogTrap(modal);
+    }
+  }
+
+  function closeModal(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    openContext = null;
+    setError('');
+    // Restore focus to the element that opened the modal. Best-effort:
+    // if the opener was swapped away (e.g. composer re-rendered while the
+    // modal was open) the body becomes the implicit focus host.
+    if (opener && document.contains(opener) && typeof opener.focus === 'function') {
+      try { opener.focus(); } catch (e) {}
+    }
+    opener = null;
+  }
+
+  // Close path 1 + 2: Cancel button and X button.
+  cancelBtn.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+
+  // Close path 3: ESC. __lcDialogTrap only wraps Tab; ESC is on us.
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+      e.preventDefault();
+      closeModal();
+    }
+  });
+
+  // Close path 4: backdrop click (mousedown on the modal itself, not on
+  // the inner panel). mousedown rather than click so a drag that starts
+  // inside the panel and releases on the backdrop does not dismiss.
+  modal.addEventListener('mousedown', function(e){
+    if (e.target === modal) closeModal();
+  });
+
+  // Submit: convert local datetime to UTC ISO8601, POST to /scheduled,
+  // close on 2xx, show the server's error text on non-2xx.
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    setError('');
+    var local = picker.value;
+    if (!local) { setError('Pick a delivery time first.'); return; }
+    var dt = new Date(local);
+    if (isNaN(dt.getTime())) { setError('That date is not valid.'); return; }
+    var iso = dt.toISOString();
+    var ctx = openContext;
+    if (!ctx) { setError('Composer lost; reopen the dialog.'); return; }
+    var fd = new URLSearchParams();
+    fd.set('room_id', ctx.roomId);
+    fd.set('body', ctx.body);
+    fd.set('scheduled_for', iso);
+    if (ctx.fileId) fd.set('file_id', ctx.fileId);
+    try {
+      var res = await fetch('/scheduled', {
+        method: 'POST',
+        body: fd,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+      });
+      if (res.ok) {
+        // Reset the composer: matches the live-send afterRequest path so a
+        // scheduled send feels like a normal send (cleared body + cleared
+        // attachment + disabled send button). Best-effort: composer may
+        // have been swapped away mid-modal.
+        var composer = ctx.composer;
+        if (composer && document.contains(composer)) {
+          var ta = composer.querySelector('textarea[name=body]');
+          if (ta) { ta.value = ''; ta.style.height = 'auto'; }
+          var send = composer.querySelector('#composer-send');
+          if (send) send.disabled = true;
+          if (window.__lcClearAttach) window.__lcClearAttach();
+        }
+        // Close path 5: submit success.
+        closeModal();
+      } else {
+        var text = await res.text();
+        setError(text || ('Could not schedule (' + res.status + ')'));
+      }
+    } catch (err) {
+      setError('Network error; the message was not scheduled.');
+    }
+  });
+
+  // Trigger entry point exposed to composer.html (and anywhere else
+  // that wants to open the dialog). Reads the current composer state
+  // at open time rather than caching it, so a composer swap between
+  // page-load and trigger does not leak stale references.
+  window.__lcOpenScheduledModal = function(){
+    var composer = document.getElementById('composer');
+    if (!composer) { return; }
+    var roomId = composer.getAttribute('data-room-id');
+    if (!roomId) { return; }
+    var bodyEl = composer.querySelector('textarea[name=body]');
+    var fileEl = composer.querySelector('input[name=file_id]');
+    var body = bodyEl ? bodyEl.value.trim() : '';
+    var fileId = fileEl ? fileEl.value : '';
+    if (!body && !fileId) {
+      // Same precondition as live send.
+      return;
+    }
+    openModal({ composer: composer, roomId: roomId, body: body, fileId: fileId });
+  };
+})();
+</script>

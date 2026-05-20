@@ -13,6 +13,7 @@ pub mod perms;
 pub mod push;
 pub mod rate_limit;
 pub mod routes;
+pub mod scheduled;
 pub mod state;
 pub mod uploads;
 pub mod version;
