@@ -1,0 +1,22 @@
+{# LC-63: inline confirmation after a reminder is set. Replaces the picker
+   in #lc-reminder-modal, then auto-dismisses. #}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     onmousedown="if(event.target===this)this.parentElement.innerHTML='';">
+  <div class="w-80 rounded-lg bg-white p-5 shadow-xl text-center">
+    <div class="text-2xl mb-2" aria-hidden="true">⏰</div>
+    <p class="text-sm text-slate-700">Reminder set for</p>
+    <p class="font-semibold">{{ remind_at }} UTC</p>
+    <p class="mt-2 text-xs text-slate-500">
+      Manage it on the <a href="/reminders" class="text-blue-700 hover:underline">Reminders</a> page.
+    </p>
+    <button type="button"
+            class="mt-4 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
+            onclick="document.getElementById('lc-reminder-modal').innerHTML='';">Done</button>
+  </div>
+</div>
+<script>
+  setTimeout(function(){
+    var slot = document.getElementById('lc-reminder-modal');
+    if (slot) slot.innerHTML = '';
+  }, 4000);
+</script>

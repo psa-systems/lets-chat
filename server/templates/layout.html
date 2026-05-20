@@ -70,6 +70,10 @@
        retry/discard for messages that failed on replay). -->
   <div id="lc-outbox" role="status" aria-live="polite"
        class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-slate-200 bg-white shadow-lg"></div>
+  <!-- LC-63: singleton slot for the "Remind me" picker / confirmation. Lives
+       in the persistent shell so the message hover-menu can target it across
+       in-place swaps. -->
+  <div id="lc-reminder-modal"></div>
 </div>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser
@@ -157,7 +161,14 @@
       return;
     }
     tryRegisterPush();
-    var title = d.kind === 'dm' ? 'Direct message from ' + d.author : d.author + ' mentioned you in ' + d.roomLabel;
+    var title;
+    if (d.kind === 'reminder') {
+      title = d.roomLabel ? ('Reminder: ' + d.roomLabel) : 'Reminder';
+    } else if (d.kind === 'dm') {
+      title = 'Direct message from ' + d.author;
+    } else {
+      title = d.author + ' mentioned you in ' + d.roomLabel;
+    }
     try {
       var n = new Notification(title, { body: d.snippet, tag: 'lc-' + d.target });
       n.onclick = function(){ window.focus(); location.assign(d.target); n.close(); };
@@ -190,6 +201,16 @@
     } else if (ev === 'mention_cleared') {
       if (counts[roomId]) counts[roomId] = Math.max(0, counts[roomId] - 1);
       paintBadge(roomId, counts[roomId] || 0);
+    } else if (ev === 'reminder') {
+      // LC-63: explicit reminder. Always notify (no background gate, no
+      // unread-count bump - it is not a new message).
+      fireNotification({
+        kind: 'reminder',
+        roomLabel: node.getAttribute('data-room-label'),
+        snippet: node.getAttribute('data-snippet'),
+        target: node.getAttribute('data-target')
+      });
+      playSound();
     }
     refresh();
   }

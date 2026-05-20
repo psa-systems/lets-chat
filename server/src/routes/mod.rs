@@ -48,6 +48,7 @@ mod password_reset;
 mod pinned;
 mod push;
 mod reactions;
+mod reminders;
 pub(crate) mod room;
 mod room_info;
 mod room_rbac;
@@ -767,6 +768,12 @@ pub fn build_router(state: AppState) -> Router {
             "/scheduled/{id}",
             axum::routing::patch(scheduled::patch_scheduled).delete(scheduled::delete_scheduled),
         )
+        .route(
+            "/reminders",
+            get(reminders::get_reminders).post(reminders::post_reminder),
+        )
+        .route("/reminders/picker", get(reminders::get_picker))
+        .route("/reminders/{id}", delete(reminders::delete_reminder))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
         .route("/room/{room_id}/info", get(room_info::get_page))

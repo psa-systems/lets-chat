@@ -188,8 +188,13 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
     if state.vapid.is_none() {
         return;
     }
-    let ChatEvent::Mentioned { room_id, .. } = event else {
-        return;
+    // LC-63: reminders also push. `mute_room` is the room to check against
+    // the recipient's mute setting; `None` (reminders) skips the mute check,
+    // since the user explicitly asked to be pinged.
+    let mute_room = match event {
+        ChatEvent::Mentioned { room_id, .. } => Some(*room_id),
+        ChatEvent::Reminder { .. } => None,
+        _ => return,
     };
 
     let recipient = match db::auth::find_user_by_id(&state.auth, recipient_user_id).await {
@@ -200,11 +205,13 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         return;
     }
 
-    let mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, *room_id)
-        .await
-        .unwrap_or(MuteMode::None);
-    if matches!(mode, MuteMode::All) {
-        return;
+    if let Some(room_id) = mute_room {
+        let mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, room_id)
+            .await
+            .unwrap_or(MuteMode::None);
+        if matches!(mode, MuteMode::All) {
+            return;
+        }
     }
 
     let subs = match db::push_subscriptions::for_user(&state.auth, recipient_user_id).await {

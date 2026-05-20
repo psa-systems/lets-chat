@@ -18,8 +18,9 @@ use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, CallSignalFragment, EditedMessageFragment, MentionClearedFragment,
-    MentionedFragment, NewMessageFragment, ReactionUpdateFragment, SeenIndicatorFragment,
-    SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment, VoiceEventFragment,
+    MentionedFragment, NewMessageFragment, ReactionUpdateFragment, ReminderFragment,
+    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment,
+    VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -223,6 +224,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     mentioned_user_id, ..
                                 } if mentioned_user_id == &send_user.id => {
                                     render_mention_cleared(&e)
+                                }
+                                // LC-63: reminder toast. No mute check - the
+                                // user explicitly asked to be pinged.
+                                ChatEvent::Reminder { user_id, .. }
+                                    if user_id == &send_user.id =>
+                                {
+                                    render_reminder(&e)
                                 }
                                 ChatEvent::RoomNotifyPrefsChanged { user_id, .. }
                                     if user_id == &send_user.id =>
@@ -927,6 +935,26 @@ fn render_mentioned(event: &ChatEvent) -> Option<String> {
         room_label,
         message_id: *message_id,
         author_label,
+        snippet,
+        target_path,
+    }
+    .render()
+    .ok()
+}
+
+/// Render a `Reminder` event for the connected user (LC-63).
+fn render_reminder(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::Reminder {
+        room_label,
+        snippet,
+        target_path,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    ReminderFragment {
+        room_label,
         snippet,
         target_path,
     }
