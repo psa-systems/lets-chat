@@ -29,6 +29,7 @@ mod admin;
 mod auth;
 mod avatar;
 mod bookmarks;
+mod branding;
 mod call;
 mod custom_emojis;
 mod dm;
@@ -909,6 +910,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/call/config", get(call::get_config))
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
+        .route("/branding/logo", get(branding::get_global_logo))
+        .route(
+            "/enclave/{id}/branding/logo",
+            get(branding::get_enclave_logo),
+        )
         .merge(enclave::router());
 
     #[cfg(feature = "standalone")]
@@ -950,6 +956,14 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             enforce_maintenance_mode,
+        ))
+        // LC-96: branding CSS-var injection runs OUTSIDE the
+        // enforcement gates so 503 / 2FA-redirect responses also
+        // pick up the brand colors. Runs INSIDE `inject_user` so
+        // the resolution still has request context.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            branding::inject_branding_css,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         .layer(TraceLayer::new_for_http())

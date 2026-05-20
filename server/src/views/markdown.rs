@@ -144,6 +144,37 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
     out
 }
 
+/// Render a markdown string for a low-trust surface (currently the
+/// login-page heading body, LC-96). Strips raw HTML and code blocks
+/// entirely so the renderer never has to load syntect for a page
+/// that mostly renders once per visitor. Mentions and custom emojis
+/// are intentionally NOT processed - the login page has neither
+/// context.
+pub fn render_login_body(body: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+
+    let parser = Parser::new_ext(body, options);
+    let mut in_code_block = false;
+    let events = parser.filter_map(move |ev| match ev {
+        Event::Html(_) | Event::InlineHtml(_) => None,
+        Event::SoftBreak => Some(Event::HardBreak),
+        Event::Start(Tag::CodeBlock(_)) => {
+            in_code_block = true;
+            None
+        }
+        Event::End(TagEnd::CodeBlock) => {
+            in_code_block = false;
+            None
+        }
+        _ if in_code_block => None,
+        other => Some(other),
+    });
+    let mut out = String::new();
+    pulldown_cmark::html::push_html(&mut out, events);
+    out
+}
+
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
 

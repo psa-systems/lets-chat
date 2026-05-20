@@ -178,6 +178,16 @@
     </form>
   </section>
 
+  <section class="space-y-2 border-t pt-4">
+    <h2 class="font-semibold">Branding</h2>
+    <p class="text-sm text-slate-600">
+      <a href="/enclave/{{ enclave.id }}/branding" class="text-blue-600 hover:underline">Edit logo, colors, and login-page copy</a>
+      for this enclave. These overrides apply only when a member is viewing a URL under
+      <code>/enclave/{{ enclave.id }}/</code>; everywhere else falls back to the
+      deployment-wide branding.
+    </p>
+  </section>
+
   {% if can_delete %}
   <form method="post" action="/enclave/{{ enclave.id }}/delete" class="pt-6 border-t">
     <button type="submit" class="text-red-600"

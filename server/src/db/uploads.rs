@@ -184,11 +184,15 @@ pub async fn attachments_for_message(
 // ── Orphan GC + admin queries ─────────────────────────────────────────────────
 
 /// Select orphans (`message_id IS NULL`) whose `created_at` is older than
-/// `hours` ago. Uses `idx_file_uploads_orphan`. The `NOT EXISTS` clause
-/// excludes uploads still referenced by a pending scheduled message (LC-62);
-/// without it, an attachment on a scheduled-for-tomorrow message would be
-/// swept before delivery. `idx_sched_file` keeps the lookup O(1) per
-/// candidate.
+/// `hours` ago. Uses `idx_file_uploads_orphan`.
+///
+/// Two exemptions keep intentional orphans alive:
+/// - LC-96: rows referenced by `branding.logo_upload_id` - logos are
+///   never attached to a message but must survive the sweep.
+/// - LC-62: rows referenced by a pending scheduled message - an
+///   attachment on a scheduled-for-tomorrow message would otherwise
+///   be swept before delivery. `idx_sched_file` keeps that lookup
+///   O(1) per candidate.
 pub async fn select_orphans_older_than(
     pool: &SqlitePool,
     hours: i64,
@@ -198,6 +202,10 @@ pub async fn select_orphans_older_than(
         "SELECT id, storage_path FROM file_uploads \
          WHERE message_id IS NULL \
            AND created_at < datetime('now', ?) \
+           AND id NOT IN ( \
+               SELECT logo_upload_id FROM branding \
+                WHERE logo_upload_id IS NOT NULL \
+           ) \
            AND NOT EXISTS ( \
                  SELECT 1 FROM scheduled_messages s \
                   WHERE s.file_id = file_uploads.id \
