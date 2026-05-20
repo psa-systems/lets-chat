@@ -264,6 +264,7 @@ pub async fn get_room(
             } else {
                 None
             },
+            author_is_bot: meta.is_bot,
         });
     }
 
@@ -1129,6 +1130,7 @@ pub async fn patch_message(
             .await
             .ok()
             .flatten(),
+        author_is_bot: meta.is_bot,
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1233,6 +1235,7 @@ pub async fn get_thread_panel(
         } else {
             None
         },
+        author_is_bot: parent_meta.is_bot,
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1283,6 +1286,7 @@ pub async fn get_thread_panel(
             } else {
                 None
             },
+            author_is_bot: meta.is_bot,
         });
     }
 

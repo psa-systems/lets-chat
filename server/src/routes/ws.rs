@@ -688,9 +688,15 @@ async fn render_new_message(
     let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
         .await
         .ok();
-    let (display_name, avatar_ext, status, custom_status) = match meta {
-        Some(m) => (m.display_name, m.avatar_ext, m.status, m.custom_status),
-        None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None),
+    let (display_name, avatar_ext, status, custom_status, author_is_bot) = match meta {
+        Some(m) => (
+            m.display_name,
+            m.avatar_ext,
+            m.status,
+            m.custom_status,
+            m.is_bot,
+        ),
+        None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None, false),
     };
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
         .await
@@ -744,6 +750,7 @@ async fn render_new_message(
             .await
             .ok()
             .flatten(),
+        author_is_bot,
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -847,6 +854,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .await
             .ok()
             .flatten(),
+        author_is_bot: meta.is_bot,
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -917,6 +925,7 @@ async fn render_thread_reply(
             .await
             .ok()
             .flatten(),
+        author_is_bot: meta.is_bot,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,

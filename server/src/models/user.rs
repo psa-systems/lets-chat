@@ -39,6 +39,9 @@ pub struct UserRecord {
     pub totp_nonce: Option<Vec<u8>>,
     pub totp_enabled: bool,
     pub totp_recovery_hashes: Option<String>,
+    /// LC-73: true for machine (bot) identities. Bots authenticate only via
+    /// API tokens; the cookie login path rejects them.
+    pub is_bot: bool,
 }
 
 /// Public user info safe to send to the client.
@@ -67,6 +70,8 @@ pub struct User {
     pub notify_email_digest_enabled: bool,
     pub notify_login_alerts_enabled: bool,
     pub totp_enabled: bool,
+    /// LC-73: true for bot identities. Drives the "bot" badge in chat.
+    pub is_bot: bool,
 }
 
 impl User {
@@ -105,6 +110,7 @@ impl From<UserRecord> for User {
             notify_email_digest_enabled: r.notify_email_digest_enabled,
             notify_login_alerts_enabled: r.notify_login_alerts_enabled,
             totp_enabled: r.totp_enabled,
+            is_bot: r.is_bot,
         }
     }
 }
