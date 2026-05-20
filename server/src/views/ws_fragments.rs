@@ -241,6 +241,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveInvitationResolved { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
+        | ChatEvent::PollUpdated { .. }
         | ChatEvent::MentionCleared { .. }
         | ChatEvent::RoomNotifyPrefsChanged { .. }
         | ChatEvent::DmMuteChanged { .. }

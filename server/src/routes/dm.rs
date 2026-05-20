@@ -239,6 +239,10 @@ pub async fn get_dm(
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             is_system: m.is_system,
+            poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                .await
+                .ok()
+                .flatten(),
         });
     }
 

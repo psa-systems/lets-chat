@@ -69,6 +69,93 @@ pub struct MessageView {
     /// The template renders these as a centered, non-interactive line with
     /// no avatar, hover menu, reactions, or thread affordances.
     pub is_system: bool,
+    /// LC-66: `Some(...)` when this message is a poll. Renders an
+    /// interactive options block beneath the body (the question lives in
+    /// the body). `None` for ordinary messages.
+    pub poll: Option<PollView>,
+}
+
+/// LC-66: a poll rendered beneath its anchor message. Built by
+/// [`build_poll_view`]; the template branches on `closed` and `anonymous`.
+pub struct PollView {
+    pub message_id: i64,
+    pub allows_multi: bool,
+    pub anonymous: bool,
+    pub closed: bool,
+    pub closes_at: Option<String>,
+    pub total_voters: i64,
+    pub options: Vec<PollOptionView>,
+}
+
+pub struct PollOptionView {
+    pub id: i64,
+    pub text: String,
+    pub count: i64,
+    /// Percent of distinct voters who picked this option (0-100). Drives the
+    /// result bar width.
+    pub pct: i64,
+    pub voted_by_me: bool,
+    /// Display labels of voters, newest-first. Always empty for anonymous
+    /// polls so identity never leaves the server.
+    pub voters: Vec<String>,
+}
+
+/// Assemble a [`PollView`] for `message_id` as seen by `viewer_id`, or
+/// `None` when the message is not a poll. Resolves voter display names from
+/// the auth pool for non-anonymous polls only.
+pub async fn build_poll_view(
+    chat_pool: &sqlx::SqlitePool,
+    auth_pool: &sqlx::SqlitePool,
+    message_id: i64,
+    viewer_id: &str,
+) -> Result<Option<PollView>, sqlx::Error> {
+    let Some(poll) = db::polls::get(chat_pool, message_id).await? else {
+        return Ok(None);
+    };
+    let tallies = db::polls::options_with_counts(chat_pool, message_id).await?;
+    let total_voters = db::polls::voter_count(chat_pool, message_id).await?;
+    let mine = db::polls::user_votes(chat_pool, message_id, viewer_id).await?;
+    let closed = db::polls::is_closed(chat_pool, message_id).await?;
+
+    let mut options = Vec::with_capacity(tallies.len());
+    for t in tallies {
+        let voters = if poll.anonymous {
+            Vec::new()
+        } else {
+            let ids = db::polls::voter_ids_for_option(chat_pool, t.id).await?;
+            let mut names = Vec::with_capacity(ids.len());
+            for id in ids {
+                let label = db::auth::find_user_by_id(auth_pool, &id)
+                    .await?
+                    .map(|u| u.display_name.unwrap_or(u.username))
+                    .unwrap_or_else(|| "(unknown)".to_string());
+                names.push(label);
+            }
+            names
+        };
+        let pct = if total_voters > 0 {
+            (t.count * 100 / total_voters).min(100)
+        } else {
+            0
+        };
+        options.push(PollOptionView {
+            id: t.id,
+            text: t.text,
+            count: t.count,
+            pct,
+            voted_by_me: mine.contains(&t.id),
+            voters,
+        });
+    }
+    Ok(Some(PollView {
+        message_id,
+        allows_multi: poll.allows_multi,
+        anonymous: poll.anonymous,
+        closed,
+        closes_at: poll.closes_at,
+        total_voters,
+        options,
+    }))
 }
 
 /// Inline preview of the message a quote-reply is responding to. Rendered
@@ -730,6 +817,23 @@ pub struct SingleMessageFragment<'a> {
 pub struct ReactionBarFragment<'a> {
     pub message_id: i64,
     pub reactions: &'a [ReactionView],
+}
+
+/// LC-66: OOB re-render of a poll block after a vote or a close. Swaps the
+/// innerHTML of `#poll-{message_id}` for every connected room member.
+#[derive(Template)]
+#[template(path = "ws/poll_update.html")]
+pub struct PollUpdateFragment<'a> {
+    pub poll: &'a PollView,
+}
+
+/// LC-66: the poll block on its own (no OOB wrapper), returned to the voter
+/// as the direct response to `POST /poll/{id}/vote` (hx-swap=innerHTML into
+/// `#poll-{id}`).
+#[derive(Template)]
+#[template(path = "partials/poll_block.html")]
+pub struct PollBlockFragment<'a> {
+    pub poll: &'a PollView,
 }
 
 /// Right-side thread drawer. Replaces `#thread-panel` outerHTML when opened.

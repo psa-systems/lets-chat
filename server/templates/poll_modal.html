@@ -1,0 +1,111 @@
+{# LC-66: singleton "create poll" modal, in the persistent shell so its JS
+   survives composer swaps. Opened by the composer button via
+   window.__lcOpenPollModal(); reads the current composer's data-room-id at
+   open time. Submits to POST /room/{id}/poll and closes on 2xx. #}
+<div data-lc-poll-modal
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     role="dialog" aria-modal="true" aria-labelledby="lc-poll-modal-title" aria-hidden="true">
+  <div class="w-96 rounded-lg bg-white p-5 shadow-xl">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-poll-modal-title" class="text-lg font-semibold">Create poll</h2>
+      <button type="button" data-lc-poll-close aria-label="Close dialog"
+              class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+    </div>
+    <form data-lc-poll-form class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-slate-700">Question</span>
+        <input type="text" name="question" required maxlength="300"
+               class="rounded border border-slate-300 px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-slate-700">Options (one per line, 2-10)</span>
+        <textarea name="options" rows="4" required
+                  class="rounded border border-slate-300 px-2 py-1"></textarea>
+      </label>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="allows_multi"> Allow multiple choices
+      </label>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="anonymous"> Anonymous (hide who voted)
+      </label>
+      <label class="flex items-center gap-2 text-sm">
+        Close after
+        <input type="number" name="closes_in" min="0" step="1" placeholder="0"
+               class="w-20 rounded border border-slate-300 px-2 py-1"> minutes (0 = never)
+      </label>
+      <div data-lc-poll-error class="hidden text-sm text-red-600" role="alert"></div>
+      <div class="flex justify-end gap-2 mt-1">
+        <button type="button" data-lc-poll-cancel
+                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit"
+                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">Post poll</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-poll-modal]');
+  if (!modal) return;
+  var form = modal.querySelector('[data-lc-poll-form]');
+  var errSlot = modal.querySelector('[data-lc-poll-error]');
+  var roomId = null;
+  var opener = null;
+  var trap = null;
+
+  function setError(msg){
+    if (!msg) { errSlot.classList.add('hidden'); errSlot.textContent = ''; }
+    else { errSlot.textContent = msg; errSlot.classList.remove('hidden'); }
+  }
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    setError('');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  modal.querySelector('[data-lc-poll-close]').addEventListener('click', close);
+  modal.querySelector('[data-lc-poll-cancel]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    setError('');
+    if (!roomId) { setError('No room; reopen the dialog.'); return; }
+    var body = new URLSearchParams();
+    body.set('question', form.question.value);
+    body.set('options', form.options.value);
+    if (form.allows_multi.checked) body.set('allows_multi', 'on');
+    if (form.anonymous.checked) body.set('anonymous', 'on');
+    if (form.closes_in.value) body.set('closes_in', form.closes_in.value);
+    try {
+      var res = await fetch('/room/' + roomId + '/poll', {
+        method: 'POST', body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+      });
+      if (res.ok) { form.reset(); close(); }
+      else { setError((await res.text()) || ('Could not create poll (' + res.status + ')')); }
+    } catch (e2) { setError('Network error; poll not created.'); }
+  });
+
+  window.__lcOpenPollModal = function(){
+    var composer = document.getElementById('composer');
+    if (!composer) return;
+    roomId = composer.getAttribute('data-room-id');
+    if (!roomId) return;
+    opener = document.activeElement;
+    setError('');
+    form.reset();
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { form.question.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  };
+})();
+</script>
