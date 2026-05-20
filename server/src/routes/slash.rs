@@ -236,17 +236,73 @@ fn parse_duration_minutes(s: &str) -> Option<i64> {
     if n <= 0 {
         return None;
     }
+    // checked_mul: a huge value would otherwise overflow (panic in debug).
     match unit {
         "m" => Some(n),
-        "h" => Some(n * 60),
-        "d" => Some(n * 60 * 24),
+        "h" => n.checked_mul(60),
+        "d" => n.checked_mul(60 * 24),
         _ => None,
+    }
+}
+
+/// SSRF guard for webhook command URLs. Requires an http(s) scheme and
+/// rejects hosts that resolve into the loopback / private / link-local
+/// ranges (or are obviously internal by name), so a custom command cannot
+/// be pointed at internal services or a cloud metadata endpoint. Checked
+/// both at admin save time and again here at execution time.
+pub(crate) fn webhook_url_ok(url: &str) -> bool {
+    let rest = match url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+    {
+        Some(r) => r,
+        None => return false,
+    };
+    // Host is up to the first '/', '?', or '#'; strip userinfo and port.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or(authority);
+    let host = host.split(':').next().unwrap_or(host).trim();
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if host.is_empty() {
+        return false;
+    }
+    let lower = host.to_ascii_lowercase();
+    if lower == "localhost" || lower.ends_with(".localhost") || lower.ends_with(".internal") {
+        return false;
+    }
+    // Reject IP literals in loopback / private / link-local ranges. Hostnames
+    // that are not IPs pass (admin-trusted; full DNS-resolution checks are out
+    // of scope for v1).
+    if let Ok(ip) = lower.parse::<std::net::IpAddr>() {
+        return is_public_ip(&ip);
+    }
+    true
+}
+
+fn is_public_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            !(v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.octets()[0] == 0)
+        }
+        std::net::IpAddr::V6(v6) => {
+            !(v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xffc0) == 0xfe80)
+        }
     }
 }
 
 /// POST a custom command's args to its webhook URL and return the response
 /// body (capped). Failures surface as a BadRequest so the invoker sees why.
 async fn run_webhook(url: &str, args: &str) -> Result<String, AppError> {
+    if !webhook_url_ok(url) {
+        return Err(AppError::BadRequest(
+            "custom command webhook URL is not allowed".into(),
+        ));
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(WEBHOOK_TIMEOUT_SECS))
         .build()
@@ -273,4 +329,40 @@ async fn run_webhook(url: &str, args: &str) -> Result<String, AppError> {
         .await
         .map_err(|_| AppError::BadRequest("custom command webhook returned no body".into()))?;
     Ok(text.chars().take(WEBHOOK_MAX_BODY).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webhook_url_guard() {
+        assert!(webhook_url_ok("https://example.com/hook"));
+        assert!(webhook_url_ok("http://api.example.com:8443/x?y=1"));
+        // Rejected: bad scheme, loopback, private, link-local, metadata, internal names.
+        assert!(!webhook_url_ok("ftp://example.com"));
+        assert!(!webhook_url_ok("http://localhost/x"));
+        assert!(!webhook_url_ok("http://127.0.0.1:6379"));
+        assert!(!webhook_url_ok("http://[::1]/x"));
+        assert!(!webhook_url_ok("http://10.0.0.5/x"));
+        assert!(!webhook_url_ok("http://192.168.1.1/x"));
+        assert!(!webhook_url_ok("http://169.254.169.254/latest/meta-data/"));
+        assert!(!webhook_url_ok("http://172.16.0.1/x"));
+        assert!(!webhook_url_ok("http://0.0.0.0/x"));
+        assert!(!webhook_url_ok("http://db.internal/x"));
+        assert!(!webhook_url_ok("not a url"));
+    }
+
+    #[test]
+    fn duration_parsing() {
+        assert_eq!(parse_duration_minutes("15m"), Some(15));
+        assert_eq!(parse_duration_minutes("2h"), Some(120));
+        assert_eq!(parse_duration_minutes("1d"), Some(1440));
+        assert_eq!(parse_duration_minutes("0m"), None);
+        assert_eq!(parse_duration_minutes("5"), None);
+        assert_eq!(parse_duration_minutes(""), None);
+        assert_eq!(parse_duration_minutes("5x"), None);
+        // No overflow panic on a huge value.
+        assert_eq!(parse_duration_minutes("9999999999999999999d"), None);
+    }
 }

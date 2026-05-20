@@ -259,3 +259,33 @@ async fn autocomplete_lists_matching_commands() {
         "autocomplete matches /help for q=he"
     );
 }
+
+#[tokio::test]
+async fn autocomplete_hides_admin_only_from_non_admin() {
+    let t = app().await;
+    db::slash::insert_global(
+        &t.chat,
+        "secretcmd",
+        "admins only",
+        db::slash::CustomKind::StaticText,
+        "x",
+        true, // admin_only
+        "admin",
+    )
+    .await
+    .unwrap();
+    // Bob is a plain user; the admin-only command must not appear.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=secret")
+        .header(header::COOKIE, format!("session={}", t.bob_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        !body.contains("secretcmd"),
+        "admin-only command hidden from non-admin autocomplete"
+    );
+}
