@@ -36,6 +36,15 @@ pub async fn get_global_favicon(State(state): State<AppState>) -> Result<Respons
                     [
                         (header::CONTENT_TYPE, row.mime_type),
                         (header::CACHE_CONTROL, "public, max-age=86400".to_string()),
+                        // The favicon may be an admin-uploaded SVG, which can
+                        // embed <script>. As a `<link rel=icon>` resource that
+                        // never runs, but the route is directly navigable, so
+                        // sandbox the response to neutralize scripts on direct
+                        // access. Does not affect favicon rendering.
+                        (
+                            header::CONTENT_SECURITY_POLICY,
+                            "default-src 'none'; style-src 'unsafe-inline'; sandbox".to_string(),
+                        ),
                     ],
                     bytes,
                 )

@@ -501,3 +501,64 @@ async fn admin_branding_page_shows_favicon_preview_when_set() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("Current favicon"), "preview hint rendered");
 }
+
+#[tokio::test]
+async fn custom_svg_favicon_served_sandboxed() {
+    let t = app().await;
+    // Stage a real upload row + file, then point the global favicon at it.
+    let storage = "lc-test-favicon.svg";
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>";
+    let path = lets_chat::db::uploads_dir().join(storage);
+    tokio::fs::write(&path, svg).await.unwrap();
+    let upload_id = db::uploads::insert_upload(
+        &t.chat,
+        &t.admin_id,
+        "fav.svg",
+        "image/svg+xml",
+        svg.len() as i64,
+        storage,
+        None,
+    )
+    .await
+    .unwrap();
+    db::branding::upsert(
+        &t.chat,
+        db::branding::Scope::Global,
+        None,
+        Some(upload_id),
+        "#2563eb",
+        "#1d4ed8",
+        "",
+        "",
+        "admin",
+    )
+    .await
+    .unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/branding/favicon")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let csp = res
+        .headers()
+        .get(header::CONTENT_SECURITY_POLICY)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let ct = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let (status, body) = body_string(res).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ct, "image/svg+xml", "served the uploaded SVG");
+    assert!(
+        csp.contains("sandbox"),
+        "uploaded SVG must be sandboxed to neutralize embedded scripts; got {csp:?}"
+    );
+    assert!(body.contains("<svg"), "served the SVG bytes");
+}
