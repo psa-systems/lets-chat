@@ -57,6 +57,20 @@
   </div>
 
   <div>
+    <label class="block text-sm font-medium mb-1" for="favicon">Favicon</label>
+    {% if has_favicon %}
+    <div class="mb-2 flex items-center gap-3">
+      <img src="/branding/favicon?v={{ asset_version }}" alt="Current favicon"
+           class="h-8 w-8 object-contain border border-slate-200 rounded p-1 bg-white">
+      <span class="text-xs text-slate-500">Current favicon</span>
+    </div>
+    {% endif %}
+    <input id="favicon" name="favicon" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg"
+           class="block text-sm">
+    <p class="text-xs text-slate-500 mt-1">PNG / ICO / SVG up to 1 MiB. Leave empty to keep the current favicon. Browsers cache favicons aggressively; a change may need a hard refresh to appear.</p>
+  </div>
+
+  <div>
     <label class="block text-sm font-medium mb-1" for="login_heading">Login page heading</label>
     <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">

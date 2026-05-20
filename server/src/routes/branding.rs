@@ -21,6 +21,41 @@ pub async fn get_global_logo(State(state): State<AppState>) -> Result<Response, 
     serve_logo_for_scope(&state, Scope::Global).await
 }
 
+/// `GET /branding/favicon` - public route (LC-142). Serves the global
+/// custom favicon when one is set, otherwise falls back to the static
+/// `/assets/favicon.svg`, so `base.html` can point `<link rel="icon">` at
+/// this URL unconditionally. Global-only in v1.
+pub async fn get_global_favicon(State(state): State<AppState>) -> Result<Response, AppError> {
+    let branding = db::branding::resolve(&state.chat, Scope::Global).await?;
+    if let Some(file_id) = branding.favicon_upload_id {
+        if let Some((row, _)) = db::uploads::get_upload(&state.chat, file_id).await? {
+            let path = db::uploads_dir().join(&row.storage_path);
+            if let Ok(bytes) = tokio::fs::read(&path).await {
+                return Ok((
+                    StatusCode::OK,
+                    [
+                        (header::CONTENT_TYPE, row.mime_type),
+                        (header::CACHE_CONTROL, "public, max-age=86400".to_string()),
+                    ],
+                    bytes,
+                )
+                    .into_response());
+            }
+        }
+    }
+    // Fallback: the bundled default favicon. Inlined so the route always
+    // resolves even when no custom favicon (or its file) is present.
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "image/svg+xml".to_string()),
+            (header::CACHE_CONTROL, "public, max-age=86400".to_string()),
+        ],
+        include_bytes!("../../assets/favicon.svg").as_slice(),
+    )
+        .into_response())
+}
+
 /// `GET /enclave/{id}/branding/logo` - membership-gated. Falls back
 /// to the global logo when the enclave has no row of its own, so the
 /// per-enclave URL always returns something sensible.
@@ -194,8 +229,14 @@ pub async fn parse_branding_multipart(
             Some("accent_color") => out.accent_color = field.text().await.ok(),
             Some("login_heading") => out.login_heading = field.text().await.ok(),
             Some("login_body") => out.login_body = field.text().await.ok(),
-            Some("logo") => match persist_logo_field(state, actor_id, &mut field).await? {
+            Some("logo") => match persist_brand_file(state, actor_id, &mut field, false).await? {
                 Ok(maybe_id) => out.new_logo_id = maybe_id,
+                Err(msg) => return Ok(Err(msg)),
+            },
+            // LC-142: optional favicon upload. Accepts SVG / ICO in
+            // addition to the logo's raster types.
+            Some("favicon") => match persist_brand_file(state, actor_id, &mut field, true).await? {
+                Ok(maybe_id) => out.new_favicon_id = maybe_id,
                 Err(msg) => return Ok(Err(msg)),
             },
             _ => {}
@@ -211,12 +252,19 @@ pub struct BrandingForm {
     pub login_heading: Option<String>,
     pub login_body: Option<String>,
     pub new_logo_id: Option<i64>,
+    /// LC-142: id of a newly uploaded favicon, if the form included one.
+    pub new_favicon_id: Option<i64>,
 }
 
-async fn persist_logo_field(
+/// Persist an uploaded branding image to the content-addressed uploads
+/// store and return its `uploads.id`. `is_favicon` widens the accepted
+/// types to include SVG and ICO (the logo path only takes raster
+/// formats). Shared by the `logo` and `favicon` multipart fields.
+async fn persist_brand_file(
     state: &AppState,
     actor_id: &str,
     field: &mut axum::extract::multipart::Field<'_>,
+    is_favicon: bool,
 ) -> Result<Result<Option<i64>, String>, AppError> {
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
@@ -249,24 +297,36 @@ async fn persist_logo_field(
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Ok(Ok(None));
     }
+    let label = if is_favicon { "Favicon" } else { "Logo" };
     if overflow {
         let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Ok(Err("Logo file exceeds 1 MiB limit".to_string()));
+        return Ok(Err(format!("{label} file exceeds 1 MiB limit")));
     }
-    let (mime_type, ext) = match infer::get_from_path(&tmp_path) {
-        Ok(Some(k)) => match k.mime_type() {
-            m @ "image/png" => (m.to_string(), "png"),
-            m @ "image/jpeg" => (m.to_string(), "jpg"),
-            m @ "image/webp" => (m.to_string(), "webp"),
-            m @ "image/gif" => (m.to_string(), "gif"),
-            m => {
+    let detected = infer::get_from_path(&tmp_path)
+        .ok()
+        .flatten()
+        .map(|k| k.mime_type());
+    let (mime_type, ext): (String, &str) = match detected {
+        Some(m @ "image/png") => (m.to_string(), "png"),
+        Some(m @ "image/jpeg") => (m.to_string(), "jpg"),
+        Some(m @ "image/webp") => (m.to_string(), "webp"),
+        Some(m @ "image/gif") => (m.to_string(), "gif"),
+        // Favicons may also be ICO. SVG is text, so `infer` does not
+        // classify it; sniff the leading bytes below before rejecting.
+        Some(m @ ("image/x-icon" | "image/vnd.microsoft.icon")) if is_favicon => {
+            (m.to_string(), "ico")
+        }
+        other => {
+            if is_favicon && looks_like_svg(&tmp_path).await {
+                ("image/svg+xml".to_string(), "svg")
+            } else {
                 let _ = tokio::fs::remove_file(&tmp_path).await;
-                return Ok(Err(format!("Unsupported logo type: {m}")));
+                let kind = label.to_lowercase();
+                return Ok(Err(match other {
+                    Some(m) => format!("Unsupported {kind} type: {m}"),
+                    None => format!("Could not determine {kind} file type"),
+                }));
             }
-        },
-        _ => {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Ok(Err("Could not determine logo file type".to_string()));
         }
     };
     let hex = {
@@ -309,4 +369,19 @@ async fn persist_logo_field(
 #[allow(dead_code)]
 pub fn upload_path(storage_path: &str) -> PathBuf {
     db::uploads_dir().join(storage_path)
+}
+
+/// Best-effort SVG sniff for favicon uploads. `infer` cannot classify
+/// SVG (it is text, not a magic-byte format), so we peek the leading
+/// bytes for an `<svg` / XML-prolog marker. Permissive by design: the
+/// file is served back verbatim with an `image/svg+xml` type, and only
+/// authenticated admins can upload, so the threat model is narrow.
+async fn looks_like_svg(path: &std::path::Path) -> bool {
+    let Ok(bytes) = tokio::fs::read(path).await else {
+        return false;
+    };
+    let head = &bytes[..bytes.len().min(512)];
+    let text = String::from_utf8_lossy(head);
+    let lower = text.trim_start().to_ascii_lowercase();
+    lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg"))
 }

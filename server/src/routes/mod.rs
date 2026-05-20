@@ -929,6 +929,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
         .route("/branding/logo", get(branding::get_global_logo))
+        .route("/branding/favicon", get(branding::get_global_favicon))
         .route(
             "/enclave/{id}/branding/logo",
             get(branding::get_enclave_logo),

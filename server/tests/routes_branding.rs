@@ -110,6 +110,7 @@ async fn upsert_round_trip_per_enclave_takes_precedence() {
         &t.chat,
         db::branding::Scope::Enclave(1),
         None,
+        None,
         "#aabbcc",
         "#112233",
         "Welcome",
@@ -197,6 +198,7 @@ async fn middleware_picks_enclave_scope_from_path() {
     db::branding::upsert(
         &t.chat,
         db::branding::Scope::Enclave(1),
+        None,
         None,
         "#ff00ff",
         "#112233",
@@ -362,6 +364,7 @@ async fn switcher_home_entry_shows_global_logo_when_set() {
         &t.chat,
         db::branding::Scope::Global,
         Some(42),
+        None,
         "#2563eb",
         "#1d4ed8",
         "",
@@ -391,6 +394,7 @@ async fn switcher_enclave_entry_shows_enclave_logo_when_set() {
         &t.chat,
         db::branding::Scope::Enclave(eid),
         Some(7),
+        None,
         "#2563eb",
         "#1d4ed8",
         "",
@@ -407,4 +411,93 @@ async fn switcher_enclave_entry_shows_enclave_logo_when_set() {
         body.contains(&format!("src=\"/enclave/{eid}/branding/logo?v=")),
         "active enclave's switcher icon should render its logo",
     );
+}
+
+// ── LC-142: per-scope favicon ────────────────────────────────────────────
+
+#[tokio::test]
+async fn favicon_route_falls_back_to_static_svg_when_unset() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/branding/favicon")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let ct = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let (status, body) = body_string(res).await;
+    assert_eq!(status, StatusCode::OK, "favicon route always resolves");
+    assert_eq!(ct, "image/svg+xml", "fallback is the bundled SVG");
+    assert!(body.contains("<svg"), "served the static favicon markup");
+}
+
+#[tokio::test]
+async fn upsert_round_trips_favicon_upload_id() {
+    let t = app().await;
+    db::branding::upsert(
+        &t.chat,
+        db::branding::Scope::Global,
+        None,
+        Some(77),
+        "#2563eb",
+        "#1d4ed8",
+        "",
+        "",
+        "admin",
+    )
+    .await
+    .unwrap();
+    let b = db::branding::resolve(&t.chat, db::branding::Scope::Global)
+        .await
+        .unwrap();
+    assert_eq!(b.favicon_upload_id, Some(77));
+}
+
+#[tokio::test]
+async fn base_html_links_dynamic_favicon() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/login")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = body_string(t.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("href=\"/branding/favicon?v="),
+        "head should link the dynamic favicon route"
+    );
+}
+
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_branding_page_shows_favicon_preview_when_set() {
+    let t = app().await;
+    db::branding::upsert(
+        &t.chat,
+        db::branding::Scope::Global,
+        None,
+        Some(99),
+        "#2563eb",
+        "#1d4ed8",
+        "",
+        "",
+        "admin",
+    )
+    .await
+    .unwrap();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/admin/branding")
+        .header(header::COOKIE, format!("session={}", t.admin_session))
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = body_string(t.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Current favicon"), "preview hint rendered");
 }
