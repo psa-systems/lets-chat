@@ -576,6 +576,18 @@ pub(crate) async fn load_switcher(
         .await?
         .len() as i64;
 
+    // LC-141: render the branding logo on each switcher icon when one is
+    // set. `resolve` returns the effective branding for the scope (an
+    // enclave row, or the global row as fallback), so a logo URL is set
+    // whenever the matching logo route would serve an image.
+    // `?v=asset_version` matches the cache-bust the login page and admin
+    // preview use, so the switcher logo refreshes on deploy alongside the
+    // 1-day Cache-Control the logo route sets.
+    let global_logo = db::branding::resolve(&state.chat, db::branding::Scope::Global)
+        .await?
+        .logo_upload_id
+        .map(|_| format!("/branding/logo?v={}", state.asset_version));
+
     let mut entries = Vec::new();
     entries.push(SwitcherEntry {
         id: None,
@@ -584,6 +596,7 @@ pub(crate) async fn load_switcher(
         unread: dm_unread,
         pending_invites,
         active: current_enclave.is_none(),
+        logo_url: global_logo,
     });
 
     let enclaves = db::enclave::list_enclaves_for_user(&state.chat, &user.id).await?;
@@ -595,6 +608,10 @@ pub(crate) async fn load_switcher(
             .next()
             .map(|c| c.to_uppercase().to_string())
             .unwrap_or_else(|| "?".to_string());
+        let logo_url = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(e.id))
+            .await?
+            .logo_upload_id
+            .map(|_| format!("/enclave/{}/branding/logo?v={}", e.id, state.asset_version));
         entries.push(SwitcherEntry {
             id: Some(e.id),
             label: e.name,
@@ -604,6 +621,7 @@ pub(crate) async fn load_switcher(
             unread: 0,
             pending_invites: 0,
             active: current_enclave == Some(e.id),
+            logo_url,
         });
     }
 

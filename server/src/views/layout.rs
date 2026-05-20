@@ -90,4 +90,10 @@ pub struct SwitcherEntry {
     pub unread: i64,
     pub pending_invites: i64,
     pub active: bool,
+    /// LC-141: branding logo URL for this scope, when one is set. The Home
+    /// entry resolves the global logo (`/branding/logo`); enclave entries
+    /// resolve `/enclave/{id}/branding/logo` (which itself falls back to the
+    /// global logo). `None` when no logo exists for this scope, in which case
+    /// the template renders the single-letter `initial` instead.
+    pub logo_url: Option<String>,
 }
