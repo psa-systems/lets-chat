@@ -182,3 +182,27 @@ async fn settings_gear_visible_to_manager_only() {
         "plain member does not see the settings gear"
     );
 }
+
+#[tokio::test]
+async fn redirect_skips_private_room_owner_is_not_in() {
+    let t = app().await;
+    let eid = db::enclave::create_enclave(&t.chat, "Acme2", None, &t.alice)
+        .await
+        .unwrap();
+    // A private room (sorts first by name) Alice is NOT a member of, plus a
+    // public room. The default must skip the private one (opening it would
+    // 403), landing on the public room.
+    let _private = db::chat::create_room(&t.chat, "aaa", None, "private", Some("c"), Some(eid))
+        .await
+        .unwrap();
+    let public = db::chat::create_room(&t.chat, "zzz", None, "public", None, Some(eid))
+        .await
+        .unwrap();
+    let (status, loc, _) = get(&t.app, &t.alice_session, &format!("/enclave/{eid}")).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        loc.as_deref(),
+        Some(format!("/room/{public}").as_str()),
+        "default room is the openable (public) one, not the inaccessible private room"
+    );
+}
