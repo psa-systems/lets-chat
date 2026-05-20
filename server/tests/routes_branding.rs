@@ -28,6 +28,7 @@ struct TestApp {
     app: Router,
     admin_session: String,
     member_session: String,
+    admin_id: String,
     chat: SqlitePool,
     auth: SqlitePool,
 }
@@ -77,6 +78,7 @@ async fn app() -> TestApp {
         app,
         admin_session,
         member_session,
+        admin_id,
         chat,
         auth,
     }
@@ -329,4 +331,80 @@ fn build_text_multipart(boundary: &str, fields: &[(&str, &str)]) -> Vec<u8> {
     }
     out.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
     out
+}
+
+// ── LC-141: branding logo in the authenticated switcher ──────────────────
+
+async fn get_with_session(app: &Router, session: &str, uri: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    body_string(app.clone().oneshot(req).await.unwrap()).await
+}
+
+#[tokio::test]
+async fn switcher_home_entry_shows_global_logo_when_set() {
+    let t = app().await;
+    // No logo yet: the Home icon renders the "H" initial, not an <img>.
+    let (status, body) = get_with_session(&t.app, &t.admin_session, "/").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("src=\"/branding/logo\""),
+        "no logo set means no logo <img> in the switcher",
+    );
+
+    // Set a global logo (the upload id need not point at a real file; the
+    // switcher only renders the URL).
+    db::branding::upsert(
+        &t.chat,
+        db::branding::Scope::Global,
+        Some(42),
+        "#2563eb",
+        "#1d4ed8",
+        "",
+        "",
+        "admin",
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = get_with_session(&t.app, &t.admin_session, "/").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("src=\"/branding/logo\""),
+        "Home switcher icon should render the global logo once set",
+    );
+}
+
+#[tokio::test]
+async fn switcher_enclave_entry_shows_enclave_logo_when_set() {
+    let t = app().await;
+    // Admin owns (and is a member of) this enclave, so it appears in the
+    // switcher when viewing it.
+    let eid = db::enclave::create_enclave(&t.chat, "Acme", None, &t.admin_id)
+        .await
+        .unwrap();
+    db::branding::upsert(
+        &t.chat,
+        db::branding::Scope::Enclave(eid),
+        Some(7),
+        "#2563eb",
+        "#1d4ed8",
+        "",
+        "",
+        "admin",
+    )
+    .await
+    .unwrap();
+
+    let (status, body) =
+        get_with_session(&t.app, &t.admin_session, &format!("/enclave/{eid}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!("src=\"/enclave/{eid}/branding/logo\"")),
+        "active enclave's switcher icon should render its logo",
+    );
 }
