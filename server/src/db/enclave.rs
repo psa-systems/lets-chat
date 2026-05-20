@@ -508,3 +508,40 @@ pub async fn get_membership(
         joined_at: r.get("joined_at"),
     }))
 }
+
+/// LC-143: record the room a user last opened in an enclave (upsert).
+pub async fn set_last_room(
+    pool: &SqlitePool,
+    user_id: &str,
+    enclave_id: i64,
+    room_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO enclave_last_room (user_id, enclave_id, room_id, updated_at) \
+         VALUES (?, ?, ?, datetime('now')) \
+         ON CONFLICT(user_id, enclave_id) DO UPDATE SET \
+            room_id = excluded.room_id, updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind(enclave_id)
+    .bind(room_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// LC-143: the room a user last opened in an enclave, if any. The caller
+/// validates it is still accessible before redirecting.
+pub async fn get_last_room(
+    pool: &SqlitePool,
+    user_id: &str,
+    enclave_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
+    let row =
+        sqlx::query("SELECT room_id FROM enclave_last_room WHERE user_id = ? AND enclave_id = ?")
+            .bind(user_id)
+            .bind(enclave_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|r| r.get::<i64, _>("room_id")))
+}

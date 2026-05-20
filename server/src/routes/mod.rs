@@ -604,6 +604,7 @@ pub(crate) async fn load_switcher(
         pending_invites,
         active: current_enclave.is_none(),
         logo_url: global_logo,
+        can_manage: false,
     });
 
     let enclaves = db::enclave::list_enclaves_for_user(&state.chat, &user.id).await?;
@@ -619,6 +620,11 @@ pub(crate) async fn load_switcher(
             .await?
             .logo_upload_id
             .map(|_| format!("/enclave/{}/branding/logo?v={}", e.id, state.asset_version));
+        // LC-143: settings gear visibility for the active enclave's tile.
+        let role = db::enclave::get_membership(&state.chat, e.id, &user.id)
+            .await?
+            .map(|m| m.role);
+        let can_manage = crate::perms::enclave_can_manage(role, &user.role);
         entries.push(SwitcherEntry {
             id: Some(e.id),
             label: e.name,
@@ -629,6 +635,7 @@ pub(crate) async fn load_switcher(
             pending_invites: 0,
             active: current_enclave == Some(e.id),
             logo_url,
+            can_manage,
         });
     }
 

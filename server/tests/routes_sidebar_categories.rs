@@ -164,11 +164,26 @@ async fn admin_assigns_room_then_member_sees_it_in_category() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(assignment_count(&t.chat).await, 1);
 
-    // Member fetching /enclave/1 sees the General room inside the
-    // category section, not in "All rooms".
+    // Member opening the enclave sees the General room inside the category
+    // section, not in "All rooms". LC-143: /enclave/1 redirects to a room;
+    // the room page's sidebar carries the same category markup, so follow it.
     let req = Request::builder()
         .method(Method::GET)
         .uri("/enclave/1")
+        .header(header::COOKIE, format!("session={}", t.member_session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let target = resp
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .expect("redirect to a room")
+        .to_string();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(target)
         .header(header::COOKIE, format!("session={}", t.member_session))
         .body(Body::empty())
         .unwrap();
