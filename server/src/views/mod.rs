@@ -20,6 +20,7 @@ pub mod pinned;
 pub mod room;
 pub mod room_info;
 pub mod room_moderators;
+pub mod scheduled;
 pub mod search;
 pub mod settings;
 pub mod two_factor;

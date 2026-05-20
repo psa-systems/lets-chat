@@ -52,6 +52,7 @@ mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
 mod saas_auth;
+mod scheduled;
 mod search;
 mod settings;
 mod sidebar_categories;
@@ -739,6 +740,14 @@ pub fn build_router(state: AppState) -> Router {
             post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
         )
         .route("/saved", get(bookmarks::get_saved))
+        .route(
+            "/scheduled",
+            get(scheduled::get_scheduled).post(scheduled::post_scheduled),
+        )
+        .route(
+            "/scheduled/{id}",
+            axum::routing::patch(scheduled::patch_scheduled).delete(scheduled::delete_scheduled),
+        )
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
         .route("/room/{room_id}/info", get(room_info::get_page))
