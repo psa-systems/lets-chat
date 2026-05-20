@@ -1177,6 +1177,9 @@ pub async fn post_branding(
     // reverting them to the built-in blue.
     let existing = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(id)).await?;
     let logo_upload_id = form.new_logo_id.or(existing.logo_upload_id);
+    // LC-142 favicons are global-only; preserve whatever the row holds
+    // (always None for enclaves) so the enclave form never clears it.
+    let favicon_upload_id = existing.favicon_upload_id;
     let primary = form.primary_color.unwrap_or(existing.primary_color);
     let accent = form.accent_color.unwrap_or(existing.accent_color);
     if !db::branding::is_valid_hex_color(&primary) || !db::branding::is_valid_hex_color(&accent) {
@@ -1196,6 +1199,7 @@ pub async fn post_branding(
         &state.chat,
         db::branding::Scope::Enclave(id),
         logo_upload_id,
+        favicon_upload_id,
         &primary,
         &accent,
         &heading,
