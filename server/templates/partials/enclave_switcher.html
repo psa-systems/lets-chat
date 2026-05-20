@@ -4,7 +4,12 @@
      class="relative w-10 h-10 rounded-lg flex items-center justify-center
             {% if e.active %}bg-blue-600{% else %}bg-slate-700 hover:bg-slate-600{% endif %}"
      title="{{ e.label }}">
+    {% if let Some(logo) = e.logo_url %}
+    <img src="{{ logo }}" alt="{{ e.label }}"
+         class="w-8 h-8 rounded object-contain bg-white p-0.5">
+    {% else %}
     <span class="font-bold">{{ e.initial }}</span>
+    {% endif %}
     {% if e.unread + e.pending_invites > 0 %}
     <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1">
       {{ e.unread + e.pending_invites }}
