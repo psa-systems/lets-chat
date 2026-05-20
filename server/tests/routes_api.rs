@@ -136,6 +136,20 @@ async fn valid_token_resolves_identity() {
 }
 
 #[tokio::test]
+async fn bearer_scheme_is_case_insensitive() {
+    let t = app().await;
+    mint(&t, "lc_lc", "rooms:read", None).await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/v1/me")
+        .header(header::AUTHORIZATION, "bearer lc_lc") // lowercase scheme
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn missing_scope_is_403_not_401() {
     let t = app().await;
     mint(&t, "lc_ro", "rooms:read", None).await;
