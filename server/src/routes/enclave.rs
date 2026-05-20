@@ -202,7 +202,7 @@ pub async fn get_landing(
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
     Query(flash): Query<FlashQuery>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     let Some(enclave) = db::enclave::get_enclave(&state.chat, id).await? else {
         return Err(AppError::NotFound);
     };
@@ -215,7 +215,26 @@ pub async fn get_landing(
     let can_manage = enclave_can_manage(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
+    // LC-143: open the room the user last had here (validated), else the
+    // default (first) room. The redirect target comes from the set the user
+    // can actually OPEN - the same accessibility `get_room` enforces
+    // (site-admin god-mode, else public-in-enclave or explicit private
+    // membership). Using the manage-view list would redirect an enclave owner
+    // who is not a member of a private room straight into a 403.
+    let openable =
+        db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, is_site_admin).await?;
+    let last = db::enclave::get_last_room(&state.chat, &user.id, id).await?;
+    let target = last
+        .filter(|rid| openable.iter().any(|r| r.id == *rid))
+        .or_else(|| openable.first().map(|r| r.id));
+    if let Some(room_id) = target {
+        return Ok(Redirect::to(&format!("/room/{room_id}")).into_response());
+    }
+
+    // No openable room: render the landing as an empty/onboarding state. The
+    // manage-view list (can_manage) shows any rooms the operator can manage.
     let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
+
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -226,7 +245,7 @@ pub async fn get_landing(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, Some(id)).await?;
-    html(&EnclavePage {
+    Ok(html(&EnclavePage {
         user: &user,
         enclave: &enclave,
         members: &member_views,
@@ -242,7 +261,8 @@ pub async fn get_landing(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
-    })
+    })?
+    .into_response())
 }
 
 pub async fn get_discover(
