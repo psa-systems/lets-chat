@@ -65,6 +65,11 @@
        data-browser-enabled="{% if user.notify_browser_enabled %}1{% else %}0{% endif %}"
        data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"
        data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
+  <!-- LC-98: offline-outbox banner. Rendered by /assets/outbox.js from the
+       service worker's queue state (offline notice, queued count, and
+       retry/discard for messages that failed on replay). -->
+  <div id="lc-outbox" role="status" aria-live="polite"
+       class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-slate-200 bg-white shadow-lg"></div>
 </div>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser
