@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Offline - lets-chat</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+           font-family: ui-sans-serif, system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+    .card { text-align: center; padding: 2rem; max-width: 24rem; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 9999px; background: #2563eb; margin: 0 2px; }
+    h1 { font-size: 1.25rem; margin: 1rem 0 0.5rem; }
+    p { color: #475569; font-size: 0.9rem; line-height: 1.4; }
+    button { margin-top: 1.25rem; background: #2563eb; color: #fff; border: 0; border-radius: 0.375rem;
+             padding: 0.5rem 1rem; font-size: 0.875rem; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <h1>You're offline</h1>
+    <p>lets-chat can't reach the server right now. Any messages you send will be queued and delivered automatically when you're back online.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>

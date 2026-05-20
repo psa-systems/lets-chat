@@ -12,9 +12,22 @@ use crate::state::AppState;
 /// GET /sw.js - serve the service worker from root scope. Must NOT live
 /// under /assets/ because the SW's registration scope is bounded by its
 /// own URL.
-pub async fn get_service_worker() -> Response {
-    let body = include_str!("../../assets/sw.js");
-    ([(header::CONTENT_TYPE, "application/javascript")], body).into_response()
+///
+/// The `__ASSET_VERSION__` token in sw.js is substituted with the build's
+/// asset version (LC-98) so the SW's shell-cache name changes on every
+/// deploy; its activate handler then evicts the stale cache. `no-cache`
+/// keeps the browser revalidating the worker script itself on each load.
+pub async fn get_service_worker(State(state): State<AppState>) -> Response {
+    let body =
+        include_str!("../../assets/sw.js").replace("__ASSET_VERSION__", &state.asset_version);
+    (
+        [
+            (header::CONTENT_TYPE, "application/javascript"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        body,
+    )
+        .into_response()
 }
 
 /// GET /push/vapid-public-key - return the base64url-encoded raw P-256
