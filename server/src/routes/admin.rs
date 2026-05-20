@@ -12,9 +12,9 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AntiSpamPage,
-    BackupRestorePage, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, ModLogPage,
-    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, UserRowFragment,
-    UsersPage,
+    BackupRestorePage, BrandingPage, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView,
+    ModLogPage, QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
+    UserRowFragment, UsersPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -63,6 +63,12 @@ pub fn router() -> Router<AppState> {
             // picker), but an unlimited cap would let either fill
             // the disk before validation runs.
             post(post_restore).layer(DefaultBodyLimit::max(10 * 1024 * 1024 * 1024)),
+        )
+        .route(
+            "/admin/branding",
+            get(get_branding)
+                .post(post_branding)
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
         )
         .route("/admin/quarantine", get(get_quarantine))
         .route(
@@ -1554,4 +1560,122 @@ pub async fn post_restore(
     )
     .await?;
     Ok(Redirect::to("/admin/backup-restore").into_response())
+}
+
+// Branding (LC-96) ---------------------------------------------------------
+
+#[derive(Deserialize, Default)]
+pub struct BrandingQuery {
+    pub saved: Option<i64>,
+}
+
+async fn render_branding_page(
+    state: &AppState,
+    user: &crate::models::User,
+    saved: bool,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let branding = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
+    let page = BrandingPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "branding",
+        primary_color: branding.primary_color,
+        accent_color: branding.accent_color,
+        login_heading: branding.login_heading,
+        login_body: branding.login_body,
+        has_logo: branding.logo_upload_id.is_some(),
+        saved,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_branding(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Query(q): Query<BrandingQuery>,
+) -> Result<Html, AppError> {
+    render_branding_page(&state, &user, q.saved.is_some(), None).await
+}
+
+/// Multipart branding upsert. Delegates the multipart parsing +
+/// logo-file persistence to `branding::parse_branding_multipart` so
+/// the per-enclave handler can reuse the exact same logic against a
+/// different scope.
+pub async fn post_branding(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    multipart: Multipart,
+) -> Result<Response, AppError> {
+    let form = match super::branding::parse_branding_multipart(&state, &actor.id, multipart).await?
+    {
+        Ok(f) => f,
+        Err(msg) => {
+            return Ok(render_branding_page(&state, &actor, false, Some(msg))
+                .await?
+                .into_response());
+        }
+    };
+    let existing = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
+    let logo_upload_id = form.new_logo_id.or(existing.logo_upload_id);
+    let primary = form.primary_color.unwrap_or(existing.primary_color);
+    let accent = form.accent_color.unwrap_or(existing.accent_color);
+    if !db::branding::is_valid_hex_color(&primary) || !db::branding::is_valid_hex_color(&accent) {
+        return Ok(render_branding_page(
+            &state,
+            &actor,
+            false,
+            Some("Colors must be #rgb or #rrggbb hex".into()),
+        )
+        .await?
+        .into_response());
+    }
+    let heading = form.login_heading.unwrap_or(existing.login_heading);
+    let body = form.login_body.unwrap_or(existing.login_body);
+
+    db::branding::upsert(
+        &state.chat,
+        db::branding::Scope::Global,
+        logo_upload_id,
+        &primary,
+        &accent,
+        &heading,
+        &body,
+        &actor.id,
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "branding_set",
+        "",
+        &actor.id,
+        None,
+        None,
+        Some("global"),
+    )
+    .await?;
+    Ok(Redirect::to("/admin/branding?saved=1").into_response())
 }

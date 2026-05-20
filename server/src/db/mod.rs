@@ -2,6 +2,7 @@ pub mod activity;
 pub mod anti_spam;
 pub mod auth;
 pub mod bookmarks;
+pub mod branding;
 pub mod chat;
 pub mod custom_emojis;
 pub mod email_verification;

@@ -185,6 +185,11 @@ pub async fn attachments_for_message(
 
 /// Select orphans (`message_id IS NULL`) whose `created_at` is older than
 /// `hours` ago. Uses `idx_file_uploads_orphan`.
+///
+/// LC-96: rows referenced by `branding.logo_upload_id` are exempted -
+/// logos are intentionally orphan uploads (never attached to a
+/// message) and the sweep would otherwise delete them after the
+/// threshold.
 pub async fn select_orphans_older_than(
     pool: &SqlitePool,
     hours: i64,
@@ -192,7 +197,12 @@ pub async fn select_orphans_older_than(
     let modifier = format!("-{hours} hours");
     let rows = sqlx::query(
         "SELECT id, storage_path FROM file_uploads \
-         WHERE message_id IS NULL AND created_at < datetime('now', ?)",
+         WHERE message_id IS NULL \
+           AND created_at < datetime('now', ?) \
+           AND id NOT IN ( \
+               SELECT logo_upload_id FROM branding \
+                WHERE logo_upload_id IS NOT NULL \
+           )",
     )
     .bind(modifier)
     .fetch_all(pool)

@@ -46,14 +46,33 @@ pub struct RegisterForm {
 }
 
 pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
-    let page = LoginPage {
-        error: None,
+    let page = build_login_page(&state, None).await?;
+    html(&page)
+}
+
+/// Resolve global branding and bake it into a `LoginPage`. Both the
+/// fresh-page handler and the form-error retry path share this so a
+/// failed login retry keeps the same branded chrome.
+pub(crate) async fn build_login_page<'a>(
+    state: &'a AppState,
+    error: Option<&'a str>,
+) -> Result<LoginPage<'a>, AppError> {
+    let branding = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
+    let brand_body_html = if branding.login_body.trim().is_empty() {
+        String::new()
+    } else {
+        crate::views::markdown::render_login_body(&branding.login_body)
+    };
+    Ok(LoginPage {
+        error,
         asset_version: &state.asset_version,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
         build_date: version::BUILD_DATE,
-    };
-    html(&page)
+        brand_logo: branding.logo_upload_id.is_some(),
+        brand_heading: branding.login_heading,
+        brand_body_html,
+    })
 }
 
 pub async fn post_login(
@@ -389,6 +408,14 @@ fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) 
                 app_version: version::VERSION,
                 git_hash: version::GIT_HASH,
                 build_date: version::BUILD_DATE,
+                // The retry path is sync (called from form-validation
+                // sites that do not await) so we cannot resolve
+                // branding here. The middleware still injects the
+                // brand CSS vars; the logo + heading + body render as
+                // their unbranded defaults on this retry surface.
+                brand_logo: false,
+                brand_heading: String::new(),
+                brand_body_html: String::new(),
             }
             .render(),
             #[cfg(feature = "standalone")]
