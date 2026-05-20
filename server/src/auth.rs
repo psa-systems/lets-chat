@@ -321,8 +321,11 @@ impl FromRequestParts<AppState> for ApiAuth {
             .headers
             .get(axum::http::header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .map(|s| s.trim())
+            // RFC 7235: the auth scheme is case-insensitive ("Bearer" /
+            // "bearer" / "BEARER").
+            .and_then(|v| v.split_once(' '))
+            .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+            .map(|(_, rest)| rest.trim())
             .filter(|s| !s.is_empty())
             .ok_or_else(unauthorized)?;
 

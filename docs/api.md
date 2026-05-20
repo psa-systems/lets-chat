@@ -22,6 +22,13 @@ A token never grants more than its owning user already has: scopes *narrow*
 access (e.g. read-only), and every route still enforces the user's own room
 membership / access rules on top of the scope check.
 
+The scheme is case-insensitive (`Bearer`, `bearer`, `BEARER` all work).
+
+> **Maintenance mode:** the API is **not** gated by maintenance mode - bearer
+> requests keep working while the web UI shows the maintenance page. This is
+> intentional so bots and integrations are not knocked offline by a UI
+> maintenance window; revoke tokens (or stop the server) to halt API traffic.
+
 ## Scopes
 
 | Scope | Grants |
