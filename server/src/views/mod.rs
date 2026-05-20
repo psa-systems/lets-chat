@@ -2,6 +2,7 @@ pub mod activity;
 pub mod admin;
 pub mod auth;
 pub mod bookmarks;
+pub mod charts;
 pub mod dm;
 pub mod dm_header;
 pub mod email_auth;
