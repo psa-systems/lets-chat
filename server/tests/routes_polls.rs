@@ -382,3 +382,46 @@ async fn slash_command_posts_poll() {
     assert!(poll.is_some(), "slash command created a poll");
     assert_eq!(option_ids(&t.chat, mid).await.len(), 2);
 }
+
+#[tokio::test]
+async fn non_member_cannot_vote() {
+    let t = app().await;
+    // Private room in Alice's enclave; Bob is not an enclave member.
+    let eid = db::enclave::create_enclave(&t.chat, "Acme", None, &t.alice)
+        .await
+        .unwrap();
+    let room = db::chat::create_room(&t.chat, "secret", None, "private", Some("code"), Some(eid))
+        .await
+        .unwrap();
+    db::chat::add_room_member(&t.chat, room, &t.alice)
+        .await
+        .unwrap();
+    let mid = db::polls::create(
+        &t.chat,
+        room,
+        &t.alice,
+        "members only",
+        &["A".into(), "B".into()],
+        false,
+        false,
+        None,
+    )
+    .await
+    .unwrap();
+    let opts = option_ids(&t.chat, mid).await;
+    let bob_session = db::auth::create_session(&t.auth, &t.bob).await.unwrap();
+    let (status, _) = send(
+        &t.app,
+        Some(&bob_session),
+        Method::POST,
+        &format!("/poll/{mid}/vote"),
+        &format!("option_id={}", opts[0]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "non-member cannot vote");
+    assert_eq!(
+        db::polls::voter_count(&t.chat, mid).await.unwrap(),
+        0,
+        "no vote recorded"
+    );
+}

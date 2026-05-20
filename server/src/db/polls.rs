@@ -81,6 +81,31 @@ fn map_poll(r: sqlx::sqlite::SqliteRow) -> Poll {
     }
 }
 
+/// LC-66: which of `message_ids` are polls. Lets the bulk message-history
+/// loaders skip `build_poll_view` for ordinary messages with a single query
+/// instead of one `polls` probe per message.
+pub async fn poll_message_ids(
+    pool: &SqlitePool,
+    message_ids: &[i64],
+) -> sqlx::Result<std::collections::HashSet<i64>> {
+    if message_ids.is_empty() {
+        return Ok(std::collections::HashSet::new());
+    }
+    let placeholders = std::iter::repeat_n("?", message_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!("SELECT message_id FROM polls WHERE message_id IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for id in message_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| r.get::<i64, _>("message_id"))
+        .collect())
+}
+
 pub async fn get(pool: &SqlitePool, message_id: i64) -> sqlx::Result<Option<Poll>> {
     let row = sqlx::query(
         "SELECT message_id, question, allows_multi, anonymous, closes_at, closed_at \
