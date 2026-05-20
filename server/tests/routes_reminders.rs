@@ -287,3 +287,35 @@ async fn soft_deleted_message_reminder_does_not_fire() {
         "reminder for a deleted message does not fire"
     );
 }
+
+#[tokio::test]
+async fn dispatcher_skips_when_owner_lost_room_access() {
+    let t = app().await;
+    let (room, mid) = seed_public_message(&t).await;
+    let due = db::reminders::insert(&t.chat, &t.alice, mid, "2000-01-01 00:00:00")
+        .await
+        .unwrap();
+    // Alice loses access: drop her enclave membership for the room's enclave.
+    let eid: i64 = sqlx::query_scalar("SELECT enclave_id FROM rooms WHERE id = ?")
+        .bind(room)
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM enclave_members WHERE enclave_id = ? AND user_id = ?")
+        .bind(eid)
+        .bind(&t.alice)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    let stats = reminders::run_reminder_tick(&t.state).await.unwrap();
+    assert_eq!(stats.fired, 0, "no notification when access is lost");
+    // Still claimed (fired_at set), so it is not retried each tick.
+    let pending = db::reminders::list_pending_for_user(&t.chat, &t.alice)
+        .await
+        .unwrap();
+    assert!(
+        !pending.iter().any(|r| r.id == due),
+        "reminder is claimed, not left pending"
+    );
+}

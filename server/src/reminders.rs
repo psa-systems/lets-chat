@@ -27,6 +27,14 @@ pub async fn run_reminder_tick(state: &AppState) -> sqlx::Result<ReminderStats> 
         if !crate::db::reminders::mark_fired(&state.chat, r.id).await? {
             continue;
         }
+        // Re-check access at fire time (mirrors the scheduled-message
+        // re-validate-at-delivery pattern). If the user lost access to the
+        // room since setting the reminder, do not push the (freshly read)
+        // snippet to them. The row stays claimed, so it is not re-checked
+        // every tick.
+        if !accessible(state, &r).await {
+            continue;
+        }
         let (room_label, target_path) = link_for(state, &r).await;
         let event = ChatEvent::Reminder {
             user_id: r.user_id.clone(),
@@ -49,6 +57,18 @@ pub async fn run_reminder_tick(state: &AppState) -> sqlx::Result<ReminderStats> 
         stats.fired += 1;
     }
     Ok(stats)
+}
+
+/// True when the reminder's owner can still see the room at fire time.
+/// Resolves the owner's admin status so site admins keep god-mode access.
+async fn accessible(state: &AppState, r: &crate::db::reminders::DueReminder) -> bool {
+    let is_admin = matches!(
+        crate::db::auth::find_user_by_id(&state.auth, &r.user_id).await,
+        Ok(Some(u)) if u.role == "admin"
+    );
+    crate::db::chat::is_room_accessible(&state.chat, r.room_id, &r.user_id, is_admin)
+        .await
+        .unwrap_or(false)
 }
 
 /// Resolve the toast label and message deep link for a due reminder. DMs
