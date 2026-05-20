@@ -91,6 +91,18 @@
     ></textarea>
     <button
       type="button"
+      title="Create poll"
+      aria-label="Create poll"
+      aria-haspopup="dialog"
+      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      onclick="window.__lcOpenPollModal && window.__lcOpenPollModal()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z"/>
+      </svg>
+    </button>
+    <button
+      type="button"
       title="Schedule for later"
       aria-label="Schedule message for later"
       aria-haspopup="dialog"

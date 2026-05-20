@@ -73,6 +73,13 @@ pub enum ChatEvent {
         emoji: String,
         user_id: String,
     },
+    /// LC-66: a poll's tallies changed (a vote, or the poll closed). The
+    /// per-connection render re-renders the poll block for the viewer so
+    /// `voted_by_me` highlighting stays correct across clients.
+    PollUpdated {
+        message_id: i64,
+        room_id: i64,
+    },
     EnclaveMemberAdded {
         enclave_id: i64,
         user_id: String,

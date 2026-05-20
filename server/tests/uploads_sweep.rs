@@ -52,6 +52,7 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0035_analytics_daily.sql"),
         include_str!("../migrations/chat/0036_branding_favicon.sql"),
         include_str!("../migrations/chat/0037_reminders.sql"),
+        include_str!("../migrations/chat/0038_polls.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();

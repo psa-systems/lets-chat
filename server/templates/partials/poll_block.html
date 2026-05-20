@@ -1,0 +1,43 @@
+{# LC-66: poll options + tallies. Expects a `poll` (views::room::PollView)
+   in scope. Used inside the message bubble (wrapped in #poll-{id}) and by
+   the OOB update fragment. The question is the message body, rendered
+   above this block. #}
+<div class="mt-2 space-y-1 max-w-md">
+  {% for opt in poll.options %}
+  {% if poll.closed %}
+  <div class="relative overflow-hidden rounded border border-slate-200 px-3 py-2 text-sm">
+    <div class="absolute inset-y-0 left-0 bg-slate-100" style="width: {{ opt.pct }}%;"></div>
+    <div class="relative flex justify-between gap-2">
+      <span>{% if opt.voted_by_me %}<span aria-label="your vote">&#10003;</span> {% endif %}{{ opt.text }}</span>
+      <span class="tabular-nums text-slate-500">{{ opt.count }} &middot; {{ opt.pct }}%</span>
+    </div>
+    {% if !poll.anonymous && !opt.voters.is_empty() %}
+    <div class="relative mt-0.5 text-xs text-slate-400 truncate">{{ opt.voters|join(", ") }}</div>
+    {% endif %}
+  </div>
+  {% else %}
+  <button type="button"
+          hx-post="/poll/{{ poll.message_id }}/vote"
+          hx-vals='{"option_id": {{ opt.id }}}'
+          hx-target="#poll-{{ poll.message_id }}"
+          hx-swap="innerHTML"
+          aria-pressed="{% if opt.voted_by_me %}true{% else %}false{% endif %}"
+          class="relative w-full overflow-hidden rounded border px-3 py-2 text-left text-sm hover:bg-slate-50 {% if opt.voted_by_me %}border-blue-500 ring-1 ring-blue-500{% else %}border-slate-200{% endif %}">
+    <div class="absolute inset-y-0 left-0 {% if opt.voted_by_me %}bg-blue-100{% else %}bg-slate-100{% endif %}" style="width: {{ opt.pct }}%;"></div>
+    <div class="relative flex justify-between gap-2">
+      <span>{% if opt.voted_by_me %}<span aria-hidden="true">&#10003;</span> {% endif %}{{ opt.text }}</span>
+      <span class="tabular-nums text-slate-500">{{ opt.count }} &middot; {{ opt.pct }}%</span>
+    </div>
+    {% if !poll.anonymous && !opt.voters.is_empty() %}
+    <div class="relative mt-0.5 text-xs text-slate-400 truncate">{{ opt.voters|join(", ") }}</div>
+    {% endif %}
+  </button>
+  {% endif %}
+  {% endfor %}
+  <div class="text-xs text-slate-400 flex gap-2">
+    <span>{{ poll.total_voters }} voted</span>
+    {% if poll.allows_multi %}<span>&middot; multiple choice</span>{% endif %}
+    {% if poll.anonymous %}<span>&middot; anonymous</span>{% endif %}
+    {% if poll.closed %}<span>&middot; closed</span>{% else if let Some(at) = poll.closes_at.as_ref() %}<span>&middot; closes {{ at }} UTC</span>{% endif %}
+  </div>
+</div>

@@ -253,6 +253,10 @@ pub async fn get_room(
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             is_system: m.is_system,
+            poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                .await
+                .ok()
+                .flatten(),
         });
     }
 
@@ -497,6 +501,18 @@ pub async fn post_message(
     // reply (we don't quote inside threads), and not be the message currently
     // being inserted (impossible by ordering, but explicitly rejected for
     // future-proofing against any retry/idempotency-key flow).
+    // LC-66: `/poll "Q" "A" "B" ...` posts a poll instead of a plain
+    // message, reusing every access / posting gate already checked above.
+    if body == "/poll" || body.starts_with("/poll ") {
+        let rest = &body["/poll".len()..];
+        let (question, options) = super::polls::parse_command(rest)?;
+        super::polls::create_poll(
+            &state, &room, &user, &question, &options, false, false, None,
+        )
+        .await?;
+        return html(&ComposerFragment { room: &room });
+    }
+
     if let Some(qid) = form.quote_id {
         let quoted = db::chat::get_message(&state.chat, qid)
             .await?
@@ -1098,6 +1114,10 @@ pub async fn patch_message(
         custom_emojis,
         quote_preview,
         is_system: m.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+            .await
+            .ok()
+            .flatten(),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1191,6 +1211,10 @@ pub async fn get_thread_panel(
         custom_emojis: custom_emojis.clone(),
         quote_preview: parent_quote_preview,
         is_system: parent.is_system,
+        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
+            .await
+            .ok()
+            .flatten(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1233,6 +1257,10 @@ pub async fn get_thread_panel(
             custom_emojis: custom_emojis.clone(),
             quote_preview: None,
             is_system: r.is_system,
+            poll: crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
+                .await
+                .ok()
+                .flatten(),
         });
     }
 
