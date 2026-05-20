@@ -35,6 +35,7 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0019_bookmarks.sql"),
         include_str!("../migrations/chat/0032_anti_spam.sql"),
         include_str!("../migrations/chat/0034_branding.sql"),
+        include_str!("../migrations/chat/0035_analytics_daily.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

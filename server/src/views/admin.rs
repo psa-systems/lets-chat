@@ -1,7 +1,53 @@
 use askama::Template;
 
+use crate::db::analytics::RetentionCohort;
 use crate::models::{ModAction, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
+
+/// LC-97: one headline metric on the analytics dashboard: a label, the
+/// most recent day's value, the sum over the selected range, and the
+/// pre-rendered inline-SVG chart for that metric.
+pub struct MetricCard {
+    pub label: &'static str,
+    pub latest: i64,
+    pub total: i64,
+    /// True for "stock" metrics (DAU/MAU/active rooms) where summing
+    /// across days is meaningless, so the card hides the range total.
+    pub is_snapshot: bool,
+    pub chart_svg: String,
+}
+
+/// LC-97: admin analytics dashboard (`/admin/analytics`). All series are
+/// read from the pre-aggregated `analytics_daily` table; the retention
+/// triangle is computed on demand. Charts are rendered server-side as
+/// inline SVG so the page ships no chart JS.
+#[derive(Template)]
+#[template(path = "admin/analytics.html")]
+pub struct AnalyticsPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    /// Selected look-back window in days (7 / 30 / 90).
+    pub range_days: i64,
+    /// Today's UTC date, shown next to the "Recompute today" button.
+    pub today: &'a str,
+    pub cards: &'a [MetricCard],
+    /// Column headers for the retention triangle ("W0", "W1", ...).
+    pub retention_headers: &'a [String],
+    pub retention: &'a [RetentionCohort],
+}
 
 /// Per-row projection for the users admin table.
 pub struct AdminUserView {
