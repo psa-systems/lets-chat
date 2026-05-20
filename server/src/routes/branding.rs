@@ -72,16 +72,35 @@ async fn serve_logo_for_scope(state: &AppState, scope: Scope) -> Result<Response
 }
 
 /// Tower middleware: stamps the resolved branding's CSS variables
-/// into every text/html response so colors propagate without any
-/// per-template field threading. Skips non-HTML, non-2xx, and
-/// streamed responses; the `<style>` block is inserted right before
-/// the closing `</head>` tag and is a no-op when the tag isn't
-/// found (HTMX fragments, error pages, etc.).
+/// into every full-page text/html response so colors propagate
+/// without any per-template field threading. The `<style>` block is
+/// inserted right before the closing `</head>` tag.
+///
+/// Skipped entirely for:
+/// - HTMX requests (`HX-Request: true`) - those responses are
+///   fragments with no `<head>`, and they are the high-frequency
+///   path (every message send). Skipping them avoids the buffer +
+///   the per-request branding DB query.
+/// - non-HTML or non-2xx responses.
+/// - responses with no `</head>` (fragments / error bodies) - left
+///   byte-for-byte unchanged.
 pub async fn inject_branding_css(
     State(state): State<AppState>,
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    // Fast path: HTMX fragment requests never carry a <head>, so
+    // there is nothing to inject. Bail before touching the DB or
+    // buffering the body.
+    let is_htmx = req
+        .headers()
+        .get("hx-request")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("true"));
+    if is_htmx {
+        return next.run(req).await;
+    }
+
     // Resolve scope from the URL path BEFORE invoking the inner
     // service, so the scope reflects what the user navigated to (and
     // matches the templates that will reference per-enclave assets).
@@ -107,15 +126,36 @@ pub async fn inject_branding_css(
     let bytes = match axum::body::to_bytes(body, 64 * 1024 * 1024).await {
         Ok(b) => b,
         Err(_) => {
-            // Body too big or stream error: skip injection rather than
-            // 500. The page renders with default colors.
-            return Response::from_parts(parts, Body::empty());
+            // The body stream errored or blew the (generous) cap;
+            // it is gone either way - `to_bytes` consumed it. We
+            // cannot serve a partial page, and returning the
+            // original status with an empty body would mask the
+            // failure as a successful blank page, so surface a 500.
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+            )
+                .into_response();
         }
     };
     let original = String::from_utf8_lossy(&bytes);
+    // Defense-in-depth: trust nothing from the DB on the read path.
+    // The write paths validate colors, but a manual DB edit (or a
+    // future un-validated writer) must not be able to break out of
+    // the `<style>` block. Fall back to the safe defaults on any
+    // invalid value.
+    let primary = if crate::db::branding::is_valid_hex_color(&branding.primary_color) {
+        branding.primary_color.as_str()
+    } else {
+        crate::db::branding::DEFAULT_PRIMARY
+    };
+    let accent = if crate::db::branding::is_valid_hex_color(&branding.accent_color) {
+        branding.accent_color.as_str()
+    } else {
+        crate::db::branding::DEFAULT_ACCENT
+    };
     let style = format!(
-        "<style data-lc-brand>:root{{--brand-primary:{};--brand-accent:{}}}</style>",
-        branding.primary_color, branding.accent_color
+        "<style data-lc-brand>:root{{--brand-primary:{primary};--brand-accent:{accent}}}</style>"
     );
     let injected = if let Some(idx) = original.find("</head>") {
         let mut out = String::with_capacity(original.len() + style.len());
