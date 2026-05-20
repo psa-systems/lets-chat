@@ -78,6 +78,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0034_branding.sql"),
             include_str!("../migrations/chat/0035_analytics_daily.sql"),
             include_str!("../migrations/chat/0036_branding_favicon.sql"),
+            include_str!("../migrations/chat/0037_reminders.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),

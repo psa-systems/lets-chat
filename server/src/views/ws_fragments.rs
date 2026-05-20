@@ -125,6 +125,17 @@ pub struct MentionedFragment<'a> {
     pub target_path: &'a str,
 }
 
+/// LC-63: OOB-appended reminder toast. Same `#lc-notify-bus` mechanism as
+/// `MentionedFragment` but tagged `data-event="reminder"` so the client
+/// fires a banner/notification without bumping unread-mention counts.
+#[derive(Template)]
+#[template(path = "ws/reminder.html")]
+pub struct ReminderFragment<'a> {
+    pub room_label: &'a str,
+    pub snippet: &'a str,
+    pub target_path: &'a str,
+}
+
 /// OOB-appended decrement signal: an earlier mention was retracted (the
 /// message was edited to remove the @-token, or deleted). The client
 /// decrements its in-memory unread-mention count for the room.
@@ -229,6 +240,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::EnclaveInvitationCreated { .. }
         | ChatEvent::EnclaveInvitationResolved { .. }
         | ChatEvent::Mentioned { .. }
+        | ChatEvent::Reminder { .. }
         | ChatEvent::MentionCleared { .. }
         | ChatEvent::RoomNotifyPrefsChanged { .. }
         | ChatEvent::DmMuteChanged { .. }
