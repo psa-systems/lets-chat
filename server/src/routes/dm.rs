@@ -314,6 +314,14 @@ pub async fn get_dm(
         .await?
         .render()?;
 
+    // LC-64: server-persisted draft restore + 60-day lazy cleanup, same
+    // shape as the room handler. DMs share the `message_drafts` table
+    // (keyed by user_id + room_id) because DMs are `room_type='dm'`
+    // rows in the same `rooms` table.
+    let initial_draft = db::drafts::get_fresh_or_purge(&state.chat, &user.id, room.id, 60)
+        .await?
+        .unwrap_or_default();
+
     let page = DmPage {
         user: &user,
         peer: &peer,
@@ -330,6 +338,7 @@ pub async fn get_dm(
         asset_version: &state.asset_version,
         mute_mode,
         pinned_strip_html,
+        initial_draft,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

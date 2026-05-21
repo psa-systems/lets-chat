@@ -7,6 +7,7 @@ pub mod bookmarks;
 pub mod branding;
 pub mod chat;
 pub mod custom_emojis;
+pub mod drafts;
 pub mod email_verification;
 pub mod enclave;
 pub mod inbox;

@@ -318,6 +318,14 @@ pub async fn post_scheduled(
     )
     .await?;
 
+    // LC-64: clear the composer's draft for this room now that the
+    // text is safely captured in scheduled_messages. Best-effort; a
+    // DB hiccup must not fail the schedule. The dispatcher's
+    // eventual delivery path goes through finalize_message_send,
+    // which also clears the draft - the redundancy is harmless and
+    // matches the "clear at every commit point" posture.
+    let _ = db::drafts::delete(&state.chat, &user.id, room.id).await;
+
     let success = format!(
         "<div class=\"text-sm text-green-700\" role=\"status\" \
          data-scheduled-id=\"{id}\">Scheduled for {stored} UTC.</div>"
