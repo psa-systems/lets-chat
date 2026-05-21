@@ -188,12 +188,19 @@
 
   // ---- media ---------------------------------------------------------
   function getMedia(withVideo) {
+    // LC-144: honor the user's pinned mic/camera via the shared module.
+    if (window.LetsChatDevices) return window.LetsChatDevices.getUserMedia(withVideo);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.reject(new Error('getUserMedia unavailable'));
     }
     return navigator.mediaDevices.getUserMedia(
       withVideo ? { audio: true, video: true } : { audio: true }
     );
+  }
+  // LC-144: camera-only acquisition honoring the pinned camera.
+  function getCamera() {
+    if (window.LetsChatDevices) return window.LetsChatDevices.getCamera();
+    return navigator.mediaDevices.getUserMedia({ video: true });
   }
   function hasLocalVideo() {
     return !!(localStream && localStream.getVideoTracks().length > 0);
@@ -222,6 +229,8 @@
       var v = tileVideo(userId);
       if (v && ev.streams && ev.streams[0]) {
         v.srcObject = ev.streams[0];
+        // LC-144: route this peer's audio to the user's pinned speaker.
+        if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(v);
         ev.streams[0].onaddtrack = function () { updateTileMedia(userId); };
         ev.streams[0].onremovetrack = function () { updateTileMedia(userId); };
       }
@@ -436,7 +445,7 @@
       updateTileMedia(cfg.selfId);
       setCameraBtn();
     } else {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+      getCamera().then(function (vstream) {
         var vtrack = vstream.getVideoTracks()[0];
         if (!vtrack) return;
         if (!joined || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
@@ -584,7 +593,7 @@
     }
 
     if (wantCamera) {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+      getCamera().then(function (vstream) {
         var vtrack = vstream.getVideoTracks()[0];
         if (!vtrack) return swapAllTo(null);
         if (!joined || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
@@ -719,6 +728,15 @@
     watchBus();
     scan();
     document.body.addEventListener('htmx:afterSettle', scan);
+  });
+
+  // LC-144: re-route every peer tile's audio when the speaker is changed
+  // mid-call from the device picker.
+  document.addEventListener('lc:speaker-change', function () {
+    if (!window.LetsChatDevices) return;
+    Object.keys(peers).forEach(function (uid) {
+      window.LetsChatDevices.applySpeaker(tileVideo(uid));
+    });
   });
 
   // Exposed so the 1:1 DM call (call.js) can drop us out of an enclave
