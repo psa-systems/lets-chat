@@ -8,16 +8,54 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 
 ## Features
 
-- Public chat rooms with real-time messaging
+### Messaging
+
+- Public chat rooms and private/invite-only rooms with real-time messaging
 - Direct messages between users
-- Message editing with live updates
-- Typing indicators
-- Emoji reactions and read receipts
+- Message editing with live updates and an edit-history drawer
+- Typing indicators, read receipts, and message grouping
+- Emoji reactions, including custom emoji
 - Full-text message search
-- Moderator tools: mute, ban, kick, delete messages
-- Admin panel: user management, room management, settings
-- Email digest of missed mentions and DMs (off by default per user)
+- Pinned messages and per-user bookmarks
+- Polls and voting
 - Scheduled message delivery: pick a future time in the composer, see and edit pending sends at `/scheduled`
+- Message reminders ("remind me about this message")
+- Slash commands
+- File and image uploads with link unfurling
+- `@`-mentions, broadcast mentions, and a notifications inbox
+
+### Voice and video
+
+- 1:1 audio and video calls over WebRTC, with mic/camera/speaker selection
+- Multi-party enclave voice channels
+
+### Spaces and organization
+
+- Enclaves: grouped rooms/workspaces, each with a default room and settings gear
+- Room and DM mute, sidebar categories, starred rooms, and user groups
+- Custom user status
+
+### Notifications
+
+- Web push notifications
+- Email digest of missed mentions and DMs (off by default per user)
+
+### Integrations and API
+
+- JSON HTTP API v1 with scoped bearer tokens (see [`docs/api.md`](docs/api.md))
+- First-class bot identities
+- Incoming webhooks (post via secret URL) and outgoing webhooks (signed event subscriptions)
+
+### Administration
+
+- Admin panel: user management, room management, settings
+- Analytics dashboard: DAU/MAU, messages, rooms, signups, retention
+- Branding: custom logo, colors, login text, and favicon
+- Anti-spam: rate limits, link filter, and honeypot
+- Backup and restore archive
+- Moderator tools: mute, ban, kick, delete messages
+- Two-factor authentication (TOTP)
+- Installable PWA with an offline message outbox
 - Role-based access: Admin > Moderator > User
 
 ## Quick Start
@@ -58,6 +96,10 @@ Run `just --list` to see all available recipes.
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
 | `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID key, 2FA TOTP secrets). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
 | `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used in outbound emails (password reset, email verification, digest deep links). |
+| `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for WebRTC calls and voice channels. Add a TURN entry for reliable NAT traversal. |
+| `LETS_CHAT_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID contact address sent with Web Push delivery requests. |
+| `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
+| `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_FROM` / `SMTP_USERNAME` / `SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
 
 ### `LETS_CHAT_SECRET_KEY`
