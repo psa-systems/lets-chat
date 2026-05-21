@@ -159,6 +159,16 @@ async fn create_post_and_attribute_to_webhook() {
 }
 
 #[tokio::test]
+async fn oversized_text_is_400() {
+    let t = app().await;
+    let secret = create_webhook(&t, "Big").await;
+    let huge = "x".repeat(17 * 1024);
+    let json = format!("{{\"text\":\"{huge}\"}}");
+    let (status, _) = post_webhook(&t.app, &secret, &json).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn unknown_secret_is_401() {
     let t = app().await;
     let (status, _) = post_webhook(&t.app, "lc_nope", "{\"text\":\"x\"}").await;
