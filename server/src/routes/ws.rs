@@ -685,18 +685,36 @@ async fn render_new_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (message.user_id.as_str(), message.created_at.as_str()),
     );
-    let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
+    let meta = super::resolve_msg_author(state, &message.user_id, message.webhook_id, &viewer.id)
         .await
         .ok();
-    let (display_name, avatar_ext, status, custom_status, author_is_bot) = match meta {
+    let (
+        display_name,
+        avatar_ext,
+        status,
+        custom_status,
+        author_is_bot,
+        author_is_webhook,
+        webhook_avatar_url,
+    ) = match meta {
         Some(m) => (
             m.display_name,
             m.avatar_ext,
             m.status,
             m.custom_status,
             m.is_bot,
+            m.is_webhook,
+            m.avatar_url,
         ),
-        None => (None, None, db::auth::STATUS_ACTIVE.to_string(), None, false),
+        None => (
+            None,
+            None,
+            db::auth::STATUS_ACTIVE.to_string(),
+            None,
+            false,
+            false,
+            None,
+        ),
     };
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
         .await
@@ -751,6 +769,8 @@ async fn render_new_message(
             .ok()
             .flatten(),
         author_is_bot,
+        author_is_webhook,
+        webhook_avatar_url,
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -768,7 +788,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     {
         return None;
     }
-    let meta = super::load_author_meta(state, &m.user_id, &viewer.id)
+    let meta = super::resolve_msg_author(state, &m.user_id, m.webhook_id, &viewer.id)
         .await
         .ok()?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
@@ -855,6 +875,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
+        author_is_webhook: meta.is_webhook,
+        webhook_avatar_url: meta.avatar_url.clone(),
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -877,7 +899,7 @@ async fn render_thread_reply(
     {
         return None;
     }
-    let meta = super::load_author_meta(state, &message.user_id, &viewer.id)
+    let meta = super::resolve_msg_author(state, &message.user_id, message.webhook_id, &viewer.id)
         .await
         .ok()?;
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
@@ -926,6 +948,8 @@ async fn render_thread_reply(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
+        author_is_webhook: meta.is_webhook,
+        webhook_avatar_url: meta.avatar_url.clone(),
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
@@ -1180,6 +1204,7 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
         parent_id: raw.parent_id,
         quote_id: raw.quote_id,
         is_system: raw.is_system,
+        webhook_id: raw.webhook_id,
     };
     let event = ChatEvent::NewMessage {
         message,

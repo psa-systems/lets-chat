@@ -190,7 +190,8 @@ pub async fn get_dm(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = super::load_author_meta(&state, &m.user_id, &user.id).await?;
+            let entry =
+                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -251,6 +252,8 @@ pub async fn get_dm(
                 None
             },
             author_is_bot: meta.is_bot,
+            author_is_webhook: meta.is_webhook,
+            webhook_avatar_url: meta.avatar_url.clone(),
         });
     }
 

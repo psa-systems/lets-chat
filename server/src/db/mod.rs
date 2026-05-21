@@ -30,6 +30,7 @@ pub mod two_factor;
 pub mod uploads;
 pub mod user_groups;
 pub mod vapid;
+pub mod webhooks;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;

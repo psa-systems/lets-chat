@@ -9,6 +9,9 @@
     <h1 class="text-2xl font-semibold">Moderators</h1>
     <span class="text-sm text-slate-500">#{{ room.name }}</span>
   </div>
+  <p class="text-sm">
+    <a href="/room/{{ room.id }}/webhooks" class="text-blue-600 hover:underline">Manage incoming webhooks</a>
+  </p>
   <p class="text-sm text-slate-600">
     Grant a room-scoped Moderator or Admin role. Overrides only elevate; removing one returns the user to their org-wide role inside this room.
   </p>

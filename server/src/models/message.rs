@@ -20,4 +20,6 @@ pub struct Message {
     /// True for server-authored system notices (e.g. "started a call"),
     /// which render as a centered, non-interactive line.
     pub is_system: bool,
+    /// LC-74: `Some(N)` when posted by incoming webhook `N` (user_id is empty).
+    pub webhook_id: Option<i64>,
 }
