@@ -32,6 +32,14 @@ pub struct SweepStats {
     /// like thread replies; those vanish via the FK CASCADE in the same
     /// transaction but are not counted here).
     pub messages_deleted: u64,
+    /// `(message_id, room_id)` pairs for every message the sweep
+    /// directly deleted. The spawn function iterates this list AFTER
+    /// the transaction commits to broadcast `MessagePurged` events,
+    /// keeping channel writes out of the BEGIN IMMEDIATE critical
+    /// section. Cascade-deleted descendants (thread replies, etc.)
+    /// are not included; the client renders the parent's removal and
+    /// the children's DOM nodes go with it if they were rendered nested.
+    pub purged: Vec<(i64, i64)>,
     /// `true` iff the public `run_retention_sweep` early-returned because
     /// the env flag was not set. Tests call `sweep_once` and never see
     /// this set; production logs key off it to make the off-state visible.
@@ -89,9 +97,13 @@ pub async fn sweep_once(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
             return Ok(SweepStats::default());
         }
 
-        let ids: Vec<i64> = rows.iter().map(|r| r.get::<i64, _>("id")).collect();
+        let purged: Vec<(i64, i64)> = rows
+            .iter()
+            .map(|r| (r.get::<i64, _>("id"), r.get::<i64, _>("room_id")))
+            .collect();
+        let ids: Vec<i64> = purged.iter().map(|(id, _)| *id).collect();
         let rooms_touched: std::collections::HashSet<i64> =
-            rows.iter().map(|r| r.get::<i64, _>("room_id")).collect();
+            purged.iter().map(|(_, room_id)| *room_id).collect();
 
         // Dry-run instrumentation. Kept as a distinct statement
         // immediately before the DELETE so removing it after operator
@@ -112,6 +124,7 @@ pub async fn sweep_once(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
         Ok(SweepStats {
             rooms_touched: rooms_touched.len(),
             messages_deleted: deleted,
+            purged,
             flag_disabled: false,
         })
     }

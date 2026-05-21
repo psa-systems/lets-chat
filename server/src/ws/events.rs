@@ -27,6 +27,16 @@ pub enum ChatEvent {
         message_id: i64,
         room_id: i64,
     },
+    /// Hard-delete by the retention sweep. Distinct from `MessageDeleted`
+    /// (which is the moderation soft-delete tombstone): retention is true
+    /// erasure, and the OOB fragment removes the message node from the
+    /// DOM entirely with `hx-swap-oob="delete"`. No "[deleted]" placeholder
+    /// because a visible tombstone would leak the metadata that a message
+    /// existed there, defeating the compliance posture retention is for.
+    MessagePurged {
+        message_id: i64,
+        room_id: i64,
+    },
     UserTyping {
         room_id: i64,
         user_id: String,

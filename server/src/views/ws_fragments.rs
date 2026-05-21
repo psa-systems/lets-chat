@@ -23,6 +23,17 @@ pub struct DeletedMessageFragment {
     pub message_id: i64,
 }
 
+/// OOB fragment that removes a message node from the DOM outright. Used
+/// by the retention sweep (`ChatEvent::MessagePurged`). Distinct from
+/// `DeletedMessageFragment`, which renders a "[deleted]" tombstone for
+/// moderation soft-delete; retention erases the message visually as well
+/// as in the DB so no metadata-leak placeholder remains.
+#[derive(Template)]
+#[template(path = "ws/purged_message.html")]
+pub struct PurgedMessageFragment {
+    pub message_id: i64,
+}
+
 #[derive(Template)]
 #[template(path = "ws/typing.html")]
 pub struct TypingFragment<'a> {
@@ -199,6 +210,11 @@ pub struct VoiceEventFragment<'a> {
 pub fn render_event(event: &ChatEvent) -> Option<String> {
     match event {
         ChatEvent::MessageDeleted { message_id, .. } => DeletedMessageFragment {
+            message_id: *message_id,
+        }
+        .render()
+        .ok(),
+        ChatEvent::MessagePurged { message_id, .. } => PurgedMessageFragment {
             message_id: *message_id,
         }
         .render()
