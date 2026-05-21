@@ -14,6 +14,7 @@ pub mod login_alerts;
 pub mod mentions;
 pub mod moderation;
 pub mod notifications;
+pub mod outgoing_webhooks;
 pub mod password_reset;
 pub mod pinned;
 pub mod polls;

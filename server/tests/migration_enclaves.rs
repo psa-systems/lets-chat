@@ -14,6 +14,7 @@ async fn fresh_pool() -> SqlitePool {
         include_str!("../migrations/chat/0009_enclaves.sql"),
         include_str!("../migrations/chat/0010_room_name_per_enclave.sql"),
         include_str!("../migrations/chat/0041_incoming_webhooks.sql"),
+        include_str!("../migrations/chat/0042_outgoing_webhooks.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

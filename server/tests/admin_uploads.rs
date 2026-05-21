@@ -85,6 +85,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0039_slash_commands_custom.sql"),
             include_str!("../migrations/chat/0040_enclave_last_room.sql"),
             include_str!("../migrations/chat/0041_incoming_webhooks.sql"),
+            include_str!("../migrations/chat/0042_outgoing_webhooks.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
