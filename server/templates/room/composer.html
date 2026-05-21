@@ -74,6 +74,10 @@
       aria-controls="lc-mention-list"
       aria-haspopup="listbox"
       class="flex-1 resize-none overflow-y-auto rounded border px-3 py-2 max-h-40"
+      hx-put="/room/{{ room.id }}/draft"
+      hx-include="this"
+      hx-swap="none"
+      hx-trigger="keyup[event.key !== 'Enter' || event.shiftKey] changed delay:1000ms"
       oninput="
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 160) + 'px';
@@ -91,7 +95,7 @@
           if (this.value.trim() || this.form.file_id.value) this.form.requestSubmit();
         }
       "
-    ></textarea>
+    >{{ initial_draft }}</textarea>
     <button
       type="button"
       title="Create poll"

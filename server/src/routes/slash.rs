@@ -165,7 +165,10 @@ pub(crate) async fn try_dispatch(
             }
             _ => return Ok(None),
         }
-        return Ok(Some(html(&ComposerFragment { room })?));
+        return Ok(Some(html(&ComposerFragment {
+            room,
+            initial_draft: "",
+        })?));
     }
 
     // Custom (admin-defined) commands.
@@ -182,7 +185,10 @@ pub(crate) async fn try_dispatch(
             return Err(AppError::BadRequest("command produced no output".into()));
         }
         post_message_body(state, room, user, out).await?;
-        return Ok(Some(html(&ComposerFragment { room })?));
+        return Ok(Some(html(&ComposerFragment {
+            room,
+            initial_draft: "",
+        })?));
     }
 
     // Unknown command: fall back to posting the literal text.
