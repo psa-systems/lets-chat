@@ -97,6 +97,78 @@ pub async fn link_sso_identity(
     Ok(())
 }
 
+/// Outcome of [`auto_link_sso_identity_if_safe`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AutoLinkOutcome {
+    /// New `(issuer, subject)` row inserted, or an existing row for the
+    /// exact same `(issuer, subject)` had its `last_seen_at` bumped.
+    Linked,
+    /// Refused: the email matched a local user but that user already has
+    /// a *different* `subject` linked under the same `issuer`. Linking
+    /// would create two IdP subjects for one local account, which is
+    /// the privilege-escalation primitive an attacker would need if
+    /// they can register a second IdP identity claiming the same
+    /// verified email. Callers should fall back to the password-confirm
+    /// interstitial.
+    DifferentSubjectAlreadyLinked,
+}
+
+/// Atomic variant of [`link_sso_identity`] used by the verified-email
+/// auto-link path. Wraps both reads (existing-row check) and the write
+/// in a single immediate transaction so two concurrent callbacks for
+/// the same `(issuer, email)` cannot both insert.
+///
+/// SQLite enforces single-writer-at-a-time; combined with the
+/// `(user_id, issuer)` pre-check inside the transaction, this closes
+/// the race the reviewer flagged where thread A and thread B - each
+/// arriving with a different `subject` but the same verified email -
+/// both find the same `user_id` and both insert.
+pub async fn auto_link_sso_identity_if_safe(
+    pool: &SqlitePool,
+    user_id: &str,
+    issuer: &str,
+    subject: &str,
+    email: Option<&str>,
+) -> Result<AutoLinkOutcome, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    // Look for any prior row for this (user, issuer) with a different
+    // subject. If found we refuse auto-link and return Conflict so the
+    // caller renders the password-confirm interstitial instead.
+    let prior: Option<String> = sqlx::query_scalar(
+        "SELECT subject FROM sso_identities \
+         WHERE user_id = ? AND issuer = ? AND subject <> ? \
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(issuer)
+    .bind(subject)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if prior.is_some() {
+        // Don't commit; rollback on drop.
+        return Ok(AutoLinkOutcome::DifferentSubjectAlreadyLinked);
+    }
+
+    sqlx::query(
+        "INSERT INTO sso_identities (user_id, issuer, subject, email, auto_linked, linked_at, last_seen_at) \
+         VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now')) \
+         ON CONFLICT (issuer, subject) DO UPDATE SET \
+            last_seen_at = datetime('now'), \
+            email = COALESCE(excluded.email, sso_identities.email)",
+    )
+    .bind(user_id)
+    .bind(issuer)
+    .bind(subject)
+    .bind(email)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(AutoLinkOutcome::Linked)
+}
+
 /// Delete every sso_identities row for the user. v1 has at most one
 /// row per user (single IdP); BYO-SSO grows this to one-per-provider
 /// and adds a parallel `unlink_for_provider` helper. Refuses (via the

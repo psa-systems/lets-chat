@@ -92,7 +92,12 @@ pub fn verify(key: &[u8; 32], envelope: &str, now_unix: i64) -> Result<LinkPaylo
         .decode(body_b64)
         .map_err(EnvelopeError::BadBase64)?;
     let payload: LinkPayload = serde_json::from_slice(&body)?;
-    if payload.not_after <= now_unix {
+    // `not_after` is "valid through this unix second". An envelope
+    // verified at exactly `not_after` must still be accepted; only
+    // strictly later requests are expired. The prior `<=` rejected an
+    // envelope on the boundary second, costing one second of lifetime
+    // on every interstitial.
+    if payload.not_after < now_unix {
         return Err(EnvelopeError::Expired);
     }
     Ok(payload)
@@ -164,6 +169,17 @@ mod tests {
     fn expired_envelope_errors() {
         let env = mint(&key(), &payload(1000));
         let err = verify(&key(), &env, 2000).unwrap_err();
+        assert!(matches!(err, EnvelopeError::Expired));
+    }
+
+    /// `not_after` is the last second the envelope is valid, not the
+    /// first second it isn't. Verifying at `now == not_after` must
+    /// succeed; only `now > not_after` should error.
+    #[test]
+    fn boundary_second_still_valid() {
+        let env = mint(&key(), &payload(1_000));
+        verify(&key(), &env, 1_000).expect("not_after second is still valid");
+        let err = verify(&key(), &env, 1_001).unwrap_err();
         assert!(matches!(err, EnvelopeError::Expired));
     }
 }
