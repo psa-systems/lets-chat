@@ -362,6 +362,14 @@ pub async fn get_room(
         .await?
         .render()?;
 
+    // LC-64: server-persisted draft restore + 60-day lazy cleanup.
+    // The helper deletes the row in the same call if it is stale, so
+    // the user sees an empty composer (and the row is gone) without a
+    // background sweep.
+    let initial_draft = db::drafts::get_fresh_or_purge(&state.chat, &user.id, room_id, 60)
+        .await?
+        .unwrap_or_default();
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -380,6 +388,7 @@ pub async fn get_room(
         can_manage_overrides,
         can_post,
         posting_locked_reason,
+        initial_draft: &initial_draft,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -579,7 +588,10 @@ pub async fn post_message(
                     Some(host),
                 )
                 .await?;
-                return html(&ComposerFragment { room: &room });
+                return html(&ComposerFragment {
+                    room: &room,
+                    initial_draft: "",
+                });
             }
             db::anti_spam::FilterAction::Warn => {
                 db::moderation::log_mod_action(
@@ -598,7 +610,10 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body).await?;
 
-    let fragment = ComposerFragment { room: &room };
+    let fragment = ComposerFragment {
+        room: &room,
+        initial_draft: "",
+    };
     html(&fragment)
 }
 

@@ -26,4 +26,8 @@ pub struct DmPage<'a> {
     /// Pre-rendered pinned-strip HTML (or empty string when there are
     /// zero pins). Same shape as `RoomPage::pinned_strip_html`.
     pub pinned_strip_html: String,
+    /// LC-64: the user's persisted draft body for this DM room, if
+    /// any. Same shape as `RoomPage::initial_draft`. Empty string =
+    /// no draft (or stale + just purged).
+    pub initial_draft: String,
 }
