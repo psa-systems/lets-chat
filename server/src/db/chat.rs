@@ -51,6 +51,9 @@ pub struct RawMessage {
     /// `user_id` still records who triggered the event; this only changes
     /// how the message renders.
     pub is_system: bool,
+    /// LC-74: `Some(N)` for messages posted by incoming webhook `N`. Such
+    /// rows carry `user_id = ''` and render with the webhook's name/avatar.
+    pub webhook_id: Option<i64>,
 }
 
 /// One archived prior version of a message. Inserted by `update_message_body`
@@ -128,7 +131,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -151,6 +154,7 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         parent_id: row.get("parent_id"),
         quote_id: row.get("quote_id"),
         is_system: row.get("is_system"),
+        webhook_id: row.get("webhook_id"),
     }
 }
 
@@ -161,7 +165,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
@@ -233,7 +237,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -255,7 +259,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -274,7 +278,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
          FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)
@@ -377,6 +381,26 @@ pub async fn insert_system_message(
 
 /// Like [`insert_message`] but additionally records a `quote_id` reference
 /// to the message being quoted. Pass `None` for a plain top-level message.
+/// LC-74: insert a message authored by an incoming webhook. Stores an empty
+/// user_id plus the webhook id; rendering resolves the name/avatar from the
+/// webhook row.
+pub async fn insert_webhook_message(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    webhook_id: i64,
+    body: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, webhook_id, body) VALUES (?, '', ?, ?)",
+    )
+    .bind(room_id)
+    .bind(webhook_id)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
 pub async fn insert_message_quoted(
     pool: &sqlx::SqlitePool,
     room_id: i64,

@@ -52,6 +52,8 @@ pub enum RateLimitKind {
     Register,
     /// Per-IP cap on `POST /forgot`.
     PasswordReset,
+    /// LC-74: per-webhook cap on `POST /webhook/{secret}`.
+    Webhook,
 }
 
 impl RateLimitKind {
@@ -60,6 +62,7 @@ impl RateLimitKind {
             RateLimitKind::Message => "msg",
             RateLimitKind::Register => "reg",
             RateLimitKind::PasswordReset => "pwr",
+            RateLimitKind::Webhook => "whk",
         }
     }
 }
