@@ -234,12 +234,21 @@
 
   // ---- media + peer connection -------------------------------------
   function getMedia(withVideo) {
+    // LC-144: route through the shared device module so the user's pinned
+    // mic/camera is honored. Falls back to a plain request if the module
+    // failed to load.
+    if (window.LetsChatDevices) return window.LetsChatDevices.getUserMedia(withVideo);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.reject(new Error('getUserMedia unavailable'));
     }
     return navigator.mediaDevices.getUserMedia(
       withVideo ? { audio: true, video: true } : { audio: true }
     );
+  }
+  // LC-144: camera-only acquisition honoring the pinned camera.
+  function getCamera() {
+    if (window.LetsChatDevices) return window.LetsChatDevices.getCamera();
+    return navigator.mediaDevices.getUserMedia({ video: true });
   }
 
   function createPc() {
@@ -252,6 +261,8 @@
       var rv = q('[data-lc-remote-video]');
       if (rv && ev.streams && ev.streams[0]) {
         rv.srcObject = ev.streams[0];
+        // LC-144: route remote audio to the user's pinned speaker.
+        if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(rv);
         ev.streams[0].onaddtrack = function () { refreshRemoteVideo(); };
         ev.streams[0].onremovetrack = function () { refreshRemoteVideo(); };
       }
@@ -467,7 +478,7 @@
       refreshLocalVideo();
       setCameraBtn();
     } else {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+      getCamera().then(function (vstream) {
         var vtrack = vstream.getVideoTracks()[0];
         if (!vtrack) return;
         if (phase === 'idle' || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
@@ -515,7 +526,7 @@
       }
     }
     if (wantCamera) {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(function (vstream) {
+      getCamera().then(function (vstream) {
         var vtrack = vstream.getVideoTracks()[0];
         if (!vtrack) return;
         if (phase === 'idle' || !localStream) { try { vtrack.stop(); } catch (e) {} return; }
@@ -748,5 +759,12 @@
   onReady(function () {
     readSelfId();
     watchBus();
+  });
+
+  // LC-144: re-route the live remote audio when the speaker is changed
+  // mid-call from the device picker.
+  document.addEventListener('lc:speaker-change', function () {
+    if (phase === 'idle') return; // no active call; nothing to re-route
+    if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(q('[data-lc-remote-video]'));
   });
 })();
