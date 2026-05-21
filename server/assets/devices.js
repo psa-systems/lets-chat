@@ -186,7 +186,10 @@
   }
 
   function refresh(card) {
-    enumerate().then(function (devices) { renderBody(card, devices); });
+    enumerate().then(function (devices) {
+      if (!openOverlay) return; // picker closed while enumeration was pending
+      renderBody(card, devices);
+    });
   }
 
   function openPicker() {

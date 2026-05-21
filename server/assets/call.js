@@ -764,6 +764,7 @@
   // LC-144: re-route the live remote audio when the speaker is changed
   // mid-call from the device picker.
   document.addEventListener('lc:speaker-change', function () {
+    if (phase === 'idle') return; // no active call; nothing to re-route
     if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(q('[data-lc-remote-video]'));
   });
 })();
