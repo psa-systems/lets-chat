@@ -127,7 +127,7 @@ pub async fn matching(
          WHERE disabled_at IS NULL AND ( \
              scope_kind = 'global' \
              OR (scope_kind = 'room' AND scope_id = ?) \
-             OR (scope_kind = 'enclave' AND scope_id IS ?) \
+             OR (scope_kind = 'enclave' AND scope_id = ?) \
          )",
     )
     .bind(room_id)

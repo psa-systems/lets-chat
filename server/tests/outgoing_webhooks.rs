@@ -18,6 +18,7 @@ struct Captured {
     body: String,
     signature: String,
     event: String,
+    timestamp: String,
     count: usize,
 }
 
@@ -40,6 +41,11 @@ async fn spawn_receiver(status: u16) -> (String, Shared) {
                         .to_string();
                     c.event = headers
                         .get("X-LetsChat-Event")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    c.timestamp = headers
+                        .get("X-LetsChat-Timestamp")
                         .and_then(|v| v.to_str().ok())
                         .unwrap_or("")
                         .to_string();
@@ -124,8 +130,11 @@ async fn delivery_succeeds_and_is_signed() {
     let c = recv.lock().unwrap().clone();
     assert_eq!(c.count, 1);
     assert_eq!(c.event, "message.posted");
-    let expected = format!("sha256={}", hmac_hex(secret, &c.body));
-    assert_eq!(c.signature, expected, "HMAC signature over the raw body");
+    // Signature is over `timestamp.body` (replay-resistant).
+    let signed = format!("{}.{}", c.timestamp, c.body);
+    let expected = format!("sha256={}", hmac_hex(secret, &signed));
+    assert_eq!(c.signature, expected, "HMAC over timestamp.body");
+    assert!(!c.timestamp.is_empty(), "timestamp header present");
 
     // Delivery + webhook state updated.
     let due = owh::due_deliveries(&chat, 100).await.unwrap();
@@ -214,6 +223,65 @@ async fn disabled_webhook_does_not_match() {
         owh::due_deliveries(&chat, 100).await.unwrap().is_empty(),
         "disabled webhook is not matched"
     );
+}
+
+#[tokio::test]
+async fn scope_matching_room_enclave_global() {
+    let chat = common::pool("chat").await;
+    let g = owh::insert(
+        &chat,
+        "global",
+        None,
+        "message.posted",
+        "http://x/",
+        "s",
+        "a",
+    )
+    .await
+    .unwrap();
+    let e = owh::insert(
+        &chat,
+        "enclave",
+        Some(5),
+        "message.posted",
+        "http://x/",
+        "s",
+        "a",
+    )
+    .await
+    .unwrap();
+    let r = owh::insert(
+        &chat,
+        "room",
+        Some(7),
+        "message.posted",
+        "http://x/",
+        "s",
+        "a",
+    )
+    .await
+    .unwrap();
+
+    // Room 7 in enclave 5: all three match.
+    let mut m = owh::matching(&chat, "message.posted", 7, Some(5))
+        .await
+        .unwrap();
+    m.sort();
+    let mut want = vec![g, e, r];
+    want.sort();
+    assert_eq!(m, want);
+
+    // Room 7, no enclave: global + room only (enclave webhook excluded).
+    let m = owh::matching(&chat, "message.posted", 7, None)
+        .await
+        .unwrap();
+    assert!(m.contains(&g) && m.contains(&r) && !m.contains(&e));
+
+    // Different room in enclave 5: global + enclave, not room 7.
+    let m = owh::matching(&chat, "message.posted", 99, Some(5))
+        .await
+        .unwrap();
+    assert!(m.contains(&g) && m.contains(&e) && !m.contains(&r));
 }
 
 #[tokio::test]

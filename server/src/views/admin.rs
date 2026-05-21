@@ -498,7 +498,6 @@ pub struct OutgoingWebhookRowView {
     pub scope: String,
     pub events: String,
     pub url: String,
-    pub signing_secret: String,
     pub created_at: String,
     pub last_success_at: Option<String>,
     pub last_failure_at: Option<String>,

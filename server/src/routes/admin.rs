@@ -2286,7 +2286,6 @@ async fn render_outgoing_page(
             scope: scope_label(&w.scope_kind, w.scope_id),
             events: w.events,
             url: w.url,
-            signing_secret: w.signing_secret,
             created_at: w.created_at,
             last_success_at: w.last_success_at,
             last_failure_at: w.last_failure_at,
@@ -2342,8 +2341,16 @@ pub async fn post_outgoing_webhooks(
     };
 
     let url = form.url.trim();
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return err(&state, &actor, "URL must be an http(s) URL.").await;
+    // SSRF guard: reject loopback / private / link-local / metadata targets
+    // (reuses the LC-72 custom-command guard) so a webhook can't be pointed
+    // at internal services.
+    if !super::slash::webhook_url_ok(url) {
+        return err(
+            &state,
+            &actor,
+            "URL must be a public http(s) URL (no localhost or private IPs).",
+        )
+        .await;
     }
     let scope_kind = form.scope_kind.as_str();
     let scope_id = match scope_kind {
