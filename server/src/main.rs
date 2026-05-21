@@ -140,6 +140,7 @@ async fn main() {
     spawn_polls_closer(state.clone());
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
+    spawn_message_retention_sweeper(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -406,6 +407,63 @@ fn spawn_scheduled_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "scheduled dispatch tick failed"),
+            }
+        }
+    });
+}
+
+/// 1-hour tick that calls `retention::sweep::sweep_once`. Mirrors
+/// `spawn_orphan_sweeper`'s shape (sibling slow-clock sweep) and skips
+/// the first tick so the first sweep does not fire during the cold-start
+/// window when other background tasks are warming up.
+///
+/// The env flag is checked at spawn time, not per-tick: if
+/// `LETS_CHAT_RETENTION_SWEEP_ENABLED` is unset the task is never spawned
+/// at all. Flipping the flag requires a server restart, which is the
+/// right shape for a destructive-feature gate the operator is opting
+/// into deliberately. The `run_retention_sweep` wrapper still exists for
+/// callers that want the flag check inline (e.g., a future admin
+/// "purge now" handler).
+///
+/// Broadcasting happens AFTER the transaction commits, outside the
+/// `BEGIN IMMEDIATE` critical section, so channel writes do not block
+/// the writer lock. Per-room broadcast goes only to currently-subscribed
+/// clients; clients without the deleted message in their DOM ignore the
+/// fragment silently. The "skip broadcast for messages too old for
+/// anyone to be viewing" optimization is intentionally deferred: at
+/// `SWEEP_LIMIT = 500` per hour and a ~50-byte fragment per delete, the
+/// volume is negligible by chat-server standards. Revisit if metrics
+/// surface pressure on the hub.
+fn spawn_message_retention_sweeper(state: AppState) {
+    if !lets_chat::retention::sweep::flag_enabled() {
+        tracing::info!(
+            "retention sweep disabled (LETS_CHAT_RETENTION_SWEEP_ENABLED unset; set it and restart to enable)",
+        );
+        return;
+    }
+    const TICK_SECS: u64 = 3600;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::retention::sweep::sweep_once(&state.chat).await {
+                Ok(stats) if stats.messages_deleted > 0 => {
+                    tracing::info!(
+                        rooms = stats.rooms_touched,
+                        messages = stats.messages_deleted,
+                        "retention sweep complete",
+                    );
+                    for (message_id, room_id) in &stats.purged {
+                        let event = lets_chat::ws::events::ChatEvent::MessagePurged {
+                            message_id: *message_id,
+                            room_id: *room_id,
+                        };
+                        state.hub.broadcast_to_room(*room_id, &event);
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "retention sweep failed"),
             }
         }
     });

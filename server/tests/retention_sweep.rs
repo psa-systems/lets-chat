@@ -152,13 +152,18 @@ async fn dm_room_with_retention_set_is_skipped_via_predicate() {
 async fn message_past_cutoff_is_deleted() {
     let pool = fresh_pool().await;
     let room = make_room(&pool, "r", Some(30)).await;
-    make_message(&pool, room, "stale", 31).await;
+    let m = make_message(&pool, room, "stale", 31).await;
 
     let stats = sweep_once(&pool).await.unwrap();
 
     assert_eq!(stats.messages_deleted, 1);
     assert_eq!(stats.rooms_touched, 1);
     assert_eq!(count_messages(&pool, room).await, 0);
+    assert_eq!(
+        stats.purged,
+        vec![(m, room)],
+        "purged carries (message_id, room_id) pairs for the spawn function's broadcast loop",
+    );
 }
 
 #[tokio::test]
@@ -494,12 +499,61 @@ async fn preview_count_equals_sweep_actual_delete() {
 
 #[tokio::test]
 async fn sweep_once_default_stats_distinguishable_from_flag_disabled() {
-    // The spawn function in commit 4 will key log output off these
-    // fields; this test pins the shape so refactoring sweep_once cannot
-    // accidentally invert the flag-disabled vs nothing-to-do signals.
+    // The spawn function keys log output off these fields; this test
+    // pins the shape so refactoring sweep_once cannot accidentally
+    // invert the flag-disabled vs nothing-to-do signals.
     let pool = fresh_pool().await;
     let stats: SweepStats = sweep_once(&pool).await.unwrap();
     assert!(!stats.flag_disabled, "sweep_once never sets flag_disabled");
     assert_eq!(stats.messages_deleted, 0);
     assert_eq!(stats.rooms_touched, 0);
+    assert!(stats.purged.is_empty());
+}
+
+#[tokio::test]
+async fn purged_field_groups_messages_by_room_for_broadcast() {
+    // The spawn function iterates `stats.purged` to broadcast
+    // MessagePurged events per (message_id, room_id). This test pins
+    // the contract: purged contains exactly the directly-deleted
+    // messages with their room ids, and cascade-deleted descendants
+    // (thread replies) are NOT in purged because the parent's broadcast
+    // covers the visual removal when the client renders threads nested.
+    let pool = fresh_pool().await;
+    let room_a = make_room(&pool, "a", Some(30)).await;
+    let room_b = make_room(&pool, "b", Some(30)).await;
+    let m_a1 = make_message(&pool, room_a, "a1", 60).await;
+    let m_a2 = make_message(&pool, room_a, "a2", 60).await;
+    let m_b1 = make_message(&pool, room_b, "b1", 60).await;
+    // Thread under m_a1: stale reply cascade-deletes but is NOT in purged.
+    let stale_reply: i64 = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, body, parent_id) \
+         VALUES (?, 'u2', 'stale reply', ?)",
+    )
+    .bind(room_a)
+    .bind(m_a1)
+    .execute(&pool)
+    .await
+    .unwrap()
+    .last_insert_rowid();
+    sqlx::query("UPDATE messages SET created_at = datetime('now', '-45 days') WHERE id = ?")
+        .bind(stale_reply)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let stats = sweep_once(&pool).await.unwrap();
+
+    let mut got = stats.purged.clone();
+    got.sort();
+    let mut want = vec![(m_a1, room_a), (m_a2, room_a), (m_b1, room_b)];
+    want.sort();
+    assert_eq!(
+        got, want,
+        "purged carries only directly-deleted message ids"
+    );
+    assert!(
+        !stats.purged.iter().any(|(id, _)| *id == stale_reply),
+        "cascade-deleted reply must not appear in purged",
+    );
+    assert_eq!(stats.rooms_touched, 2);
 }
