@@ -91,6 +91,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0043_room_retention.sql"),
             include_str!("../migrations/chat/0044_link_filter_quarantine_cascade.sql"),
             include_str!("../migrations/chat/0045_messages_fts_delete_trigger.sql"),
+            include_str!("../migrations/chat/0046_messages_fts_purge_guard.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),

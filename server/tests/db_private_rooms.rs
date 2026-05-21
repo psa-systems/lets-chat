@@ -139,6 +139,12 @@ async fn setup_pool() -> SqlitePool {
     .execute(&pool)
     .await
     .expect("migration 44");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0046_messages_fts_purge_guard.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 45");
 
     pool
 }
