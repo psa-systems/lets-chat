@@ -12,10 +12,11 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
-    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BuiltinCommandRowView, EnclavesPage,
-    InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage, QuarantineEntryView,
-    QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView,
-    SlashCommandsPage, UserRowFragment, UsersPage,
+    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BuiltinCommandRowView, DeliveryRowView,
+    EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage,
+    OutgoingWebhookDeliveriesPage, OutgoingWebhookRowView, OutgoingWebhooksPage,
+    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
+    SlashCommandRowView, SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
 use crate::views::charts;
 use crate::views::{html, Html};
@@ -84,6 +85,26 @@ pub fn router() -> Router<AppState> {
         .route("/admin/modlog", get(get_modlog))
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
+        .route(
+            "/admin/outgoing-webhooks",
+            get(get_outgoing_webhooks).post(post_outgoing_webhooks),
+        )
+        .route(
+            "/admin/outgoing-webhooks/{id}/rotate",
+            post(post_outgoing_rotate),
+        )
+        .route(
+            "/admin/outgoing-webhooks/{id}/toggle",
+            post(post_outgoing_toggle),
+        )
+        .route(
+            "/admin/outgoing-webhooks/{id}/delete",
+            post(post_outgoing_delete),
+        )
+        .route(
+            "/admin/outgoing-webhooks/{id}/deliveries",
+            get(get_outgoing_deliveries),
+        )
         .route(
             "/admin/slash-commands",
             get(get_slash_commands).post(post_slash_commands),
@@ -2213,4 +2234,259 @@ pub async fn post_bot_disable(
         .await?;
     }
     Ok(Redirect::to("/admin/bots"))
+}
+
+// LC-75: outgoing webhooks ------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct OutgoingCreateForm {
+    pub scope_kind: String,
+    #[serde(default)]
+    pub scope_id: Option<i64>,
+    pub url: String,
+    #[serde(default)]
+    pub e_message_posted: Option<String>,
+    #[serde(default)]
+    pub e_message_edited: Option<String>,
+    #[serde(default)]
+    pub e_message_deleted: Option<String>,
+    #[serde(default)]
+    pub e_reaction_added: Option<String>,
+}
+
+fn scope_label(kind: &str, id: Option<i64>) -> String {
+    match (kind, id) {
+        ("global", _) => "global".to_string(),
+        (k, Some(i)) => format!("{k} #{i}"),
+        (k, None) => k.to_string(),
+    }
+}
+
+async fn render_outgoing_page(
+    state: &AppState,
+    user: &crate::models::User,
+    revealed: Option<(i64, String)>,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let webhooks: Vec<OutgoingWebhookRowView> = db::outgoing_webhooks::list_all(&state.chat)
+        .await?
+        .into_iter()
+        .map(|w| OutgoingWebhookRowView {
+            id: w.id,
+            scope: scope_label(&w.scope_kind, w.scope_id),
+            events: w.events,
+            url: w.url,
+            created_at: w.created_at,
+            last_success_at: w.last_success_at,
+            last_failure_at: w.last_failure_at,
+            consecutive_failures: w.consecutive_failures,
+            disabled: w.disabled_at.is_some(),
+        })
+        .collect();
+    let page = OutgoingWebhooksPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "outgoing_webhooks",
+        all_events: OUTGOING_EVENTS,
+        webhooks: &webhooks,
+        revealed,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_outgoing_webhooks(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_outgoing_page(&state, &user, None, None).await
+}
+
+pub async fn post_outgoing_webhooks(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<OutgoingCreateForm>,
+) -> Result<Response, AppError> {
+    let err = |state: &AppState, actor: &crate::models::User, msg: &str| {
+        let msg = msg.to_string();
+        let state = state.clone();
+        let actor = actor.clone();
+        async move {
+            render_outgoing_page(&state, &actor, None, Some(msg))
+                .await
+                .map(IntoResponse::into_response)
+        }
+    };
+
+    let url = form.url.trim();
+    // SSRF guard: reject loopback / private / link-local / metadata targets
+    // (reuses the LC-72 custom-command guard) so a webhook can't be pointed
+    // at internal services.
+    if !super::slash::webhook_url_ok(url) {
+        return err(
+            &state,
+            &actor,
+            "URL must be a public http(s) URL (no localhost or private IPs).",
+        )
+        .await;
+    }
+    let scope_kind = form.scope_kind.as_str();
+    let scope_id = match scope_kind {
+        "global" => None,
+        "enclave" | "room" => match form.scope_id {
+            Some(id) => Some(id),
+            None => return err(&state, &actor, "Enclave/room scope needs a scope id.").await,
+        },
+        _ => return err(&state, &actor, "Invalid scope.").await,
+    };
+    let mut events: Vec<&str> = Vec::new();
+    if form.e_message_posted.is_some() {
+        events.push("message.posted");
+    }
+    if form.e_message_edited.is_some() {
+        events.push("message.edited");
+    }
+    if form.e_message_deleted.is_some() {
+        events.push("message.deleted");
+    }
+    if form.e_reaction_added.is_some() {
+        events.push("reaction.added");
+    }
+    if events.is_empty() {
+        return err(&state, &actor, "Select at least one event.").await;
+    }
+    let events = events.join(" ");
+
+    let secret = crate::auth::generate_api_token();
+    let id = db::outgoing_webhooks::insert(
+        &state.chat,
+        scope_kind,
+        scope_id,
+        &events,
+        url,
+        &secret,
+        &actor.id,
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "outgoing_webhook_create",
+        "",
+        &actor.id,
+        Some(&scope_label(scope_kind, scope_id)),
+        None,
+        Some(&events),
+    )
+    .await?;
+    Ok(
+        render_outgoing_page(&state, &actor, Some((id, secret)), None)
+            .await?
+            .into_response(),
+    )
+}
+
+pub async fn post_outgoing_rotate(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    let secret = crate::auth::generate_api_token();
+    db::outgoing_webhooks::rotate_secret(&state.chat, id, &secret).await?;
+    render_outgoing_page(&state, &actor, Some((id, secret)), None).await
+}
+
+#[derive(Deserialize)]
+pub struct ToggleForm {
+    #[serde(default)]
+    pub enable: Option<String>,
+}
+
+pub async fn post_outgoing_toggle(
+    State(state): State<AppState>,
+    AdminUser(_actor): AdminUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<ToggleForm>,
+) -> Result<Redirect, AppError> {
+    db::outgoing_webhooks::set_enabled(&state.chat, id, form.enable.is_some()).await?;
+    Ok(Redirect::to("/admin/outgoing-webhooks"))
+}
+
+pub async fn post_outgoing_delete(
+    State(state): State<AppState>,
+    AdminUser(_actor): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    db::outgoing_webhooks::delete(&state.chat, id).await?;
+    Ok(Redirect::to("/admin/outgoing-webhooks"))
+}
+
+pub async fn get_outgoing_deliveries(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let deliveries: Vec<DeliveryRowView> =
+        db::outgoing_webhooks::deliveries_for(&state.chat, id, 50)
+            .await?
+            .into_iter()
+            .map(|d| DeliveryRowView {
+                id: d.id,
+                event: d.event,
+                attempt: d.attempt,
+                status: d.status,
+                scheduled_at: d.scheduled_at,
+                delivered_at: d.delivered_at,
+            })
+            .collect();
+    html(&OutgoingWebhookDeliveriesPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "outgoing_webhooks",
+        webhook_id: id,
+        deliveries: &deliveries,
+    })
 }

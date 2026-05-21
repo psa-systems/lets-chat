@@ -649,6 +649,20 @@ pub(crate) async fn finalize_message_send(
     state.hub.stop_typing(room.id, &author.id);
     super::broadcast_room_message(state, room, &event).await?;
 
+    // LC-75: publish to outgoing webhooks (best-effort, never blocks the post).
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.posted",
+        room.id,
+        serde_json::json!({
+            "message_id": message.id,
+            "user_id": message.user_id,
+            "author": message.author_name,
+            "body": message.body,
+        }),
+    )
+    .await;
+
     // Mention extraction + fan-out. Only for non-DM rooms (DMs are implicit
     // pings - we emit a Mentioned event below without writing mention rows).
     // Token resolution covers `@username`, `@here`, and `@channel` via the
@@ -754,6 +768,20 @@ pub(crate) async fn finalize_webhook_message_send(
         is_dm: false,
     };
     super::broadcast_room_message(state, room, &event).await?;
+
+    // LC-75: outgoing webhooks see incoming-webhook posts too.
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.posted",
+        room.id,
+        serde_json::json!({
+            "message_id": new_id,
+            "webhook_id": webhook_id,
+            "author": webhook_name,
+            "body": body,
+        }),
+    )
+    .await;
 
     // Mentions: a webhook can @mention people. No author to exclude (empty
     // author id excludes nobody).
@@ -1092,6 +1120,15 @@ pub async fn patch_message(
         edited_at: edited_at_str.clone(),
     };
     state.hub.broadcast_to_room(m.room_id, &event);
+
+    // LC-75: outgoing webhooks.
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.edited",
+        m.room_id,
+        serde_json::json!({ "message_id": message_id, "body": body }),
+    )
+    .await;
 
     // Reconcile mention rows. Skipped for DM rooms (no rows to reconcile).
     // Token resolution goes through the same helper as post_message so an
@@ -1604,6 +1641,15 @@ pub async fn delete_message(
         room_id: m.room_id,
     };
     state.hub.broadcast_to_room(m.room_id, &event);
+
+    // LC-75: outgoing webhooks.
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.deleted",
+        m.room_id,
+        serde_json::json!({ "message_id": message_id }),
+    )
+    .await;
     // Return the deleted-fragment HTML directly so the requesting tab also updates.
     let body = format!(
         "<div id=\"msg-{message_id}\" class=\"px-4 py-2 italic text-slate-400\">[deleted]</div>"

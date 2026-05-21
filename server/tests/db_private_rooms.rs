@@ -117,6 +117,12 @@ async fn setup_pool() -> SqlitePool {
     .execute(&pool)
     .await
     .expect("migration 40");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0042_outgoing_webhooks.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 41");
 
     pool
 }

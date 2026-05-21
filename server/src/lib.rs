@@ -10,6 +10,7 @@ pub mod last_visited;
 pub mod links;
 pub mod mail;
 pub mod models;
+pub mod outgoing;
 pub mod perms;
 pub mod push;
 pub mod rate_limit;
