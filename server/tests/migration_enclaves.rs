@@ -18,6 +18,7 @@ async fn fresh_pool() -> SqlitePool {
         include_str!("../migrations/chat/0043_room_retention.sql"),
         include_str!("../migrations/chat/0045_messages_fts_delete_trigger.sql"),
         include_str!("../migrations/chat/0046_messages_fts_purge_guard.sql"),
+        include_str!("../migrations/chat/0047_message_drafts.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
