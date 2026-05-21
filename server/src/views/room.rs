@@ -798,12 +798,25 @@ pub struct RoomPage<'a> {
     /// composer is disabled (e.g. "Only admins can post in this room").
     /// Empty string when `can_post` is true.
     pub posting_locked_reason: &'a str,
+    /// LC-64: the user's persisted draft body for this room, if any.
+    /// Empty string means "no draft" (whether absent, stale, or just
+    /// purged by the 60-day lazy-cleanup rule). The composer template
+    /// inlines it as the textarea's initial inner content.
+    pub initial_draft: &'a str,
 }
 
 #[derive(Template)]
 #[template(path = "room/composer.html")]
 pub struct ComposerFragment<'a> {
     pub room: &'a Room,
+    /// LC-64: same field as on `RoomPage` / `DmPage`. Standalone
+    /// composer re-renders (slash command result, link-block result,
+    /// post-message success) pass `""` because those paths run AFTER
+    /// the action and the user's typed text is either committed
+    /// (send / slash) or rejected (link-block); no in-progress draft
+    /// to restore from the server here. The next keystroke will
+    /// re-create the draft if non-empty.
+    pub initial_draft: &'a str,
 }
 
 #[derive(Template)]

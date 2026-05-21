@@ -113,3 +113,47 @@ pub async fn delete_for_user_in_room(
 ) -> Result<u64, sqlx::Error> {
     delete(pool, user_id, room_id).await
 }
+
+/// Read this user's draft for `room_id` and apply the lazy-cleanup
+/// rule: if the row exists but is older than `max_age_days`, silently
+/// delete it and return `None` (the caller renders an empty composer
+/// as if no draft existed). Returns `Some(body)` for fresh drafts,
+/// `None` for stale-or-absent.
+///
+/// The 60-day threshold lives at the call sites (`get_room`, `get_dm`)
+/// so the value is visible at the policy boundary, not buried in the
+/// db module.
+///
+/// **Intentional write-in-read-path.** A GET-render that finds a
+/// stale draft also issues the DELETE in the same call. Cheaper than a
+/// background sweep task for tiny rows (the LC-XXX retention-style
+/// `spawn_*` infrastructure is overkill for kilobyte-scale data); the
+/// cleanup is paid only by the user whose render would have shown the
+/// stale draft. Idempotent: deleting the user's own row from their own
+/// render. Do NOT refactor this into a separate cleanup-sweep task
+/// unless the table ever grows large enough to justify the
+/// infrastructure (it will not for any realistic chat-server scale).
+pub async fn get_fresh_or_purge(
+    pool: &SqlitePool,
+    user_id: &str,
+    room_id: i64,
+    max_age_days: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT body, (updated_at < datetime('now', ?)) AS is_stale \
+         FROM message_drafts WHERE user_id = ? AND room_id = ?",
+    )
+    .bind(format!("-{max_age_days} days"))
+    .bind(user_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = row else { return Ok(None) };
+    let is_stale: i64 = row.get("is_stale");
+    if is_stale != 0 {
+        let _ = delete(pool, user_id, room_id).await;
+        return Ok(None);
+    }
+    Ok(Some(row.get("body")))
+}
