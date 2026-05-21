@@ -482,3 +482,106 @@ pub struct BotsPage<'a> {
     pub new_bot_name: Option<String>,
     pub error: Option<String>,
 }
+
+// LC-75: outgoing webhooks ------------------------------------------------
+
+/// All event names a subscription may select, for the create-form checkboxes.
+pub const OUTGOING_EVENTS: &[&str] = &[
+    "message.posted",
+    "message.edited",
+    "message.deleted",
+    "reaction.added",
+];
+
+pub struct OutgoingWebhookRowView {
+    pub id: i64,
+    pub scope: String,
+    pub events: String,
+    pub url: String,
+    pub signing_secret: String,
+    pub created_at: String,
+    pub last_success_at: Option<String>,
+    pub last_failure_at: Option<String>,
+    pub consecutive_failures: i64,
+    pub disabled: bool,
+}
+
+#[derive(Template)]
+#[template(path = "admin/outgoing_webhooks.html")]
+pub struct OutgoingWebhooksPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub all_events: &'a [&'a str],
+    pub webhooks: &'a [OutgoingWebhookRowView],
+    /// The signing secret of a just-created / just-rotated webhook, with the
+    /// id it belongs to, shown once.
+    pub revealed: Option<(i64, String)>,
+    pub error: Option<String>,
+}
+
+pub struct DeliveryRowView {
+    pub id: i64,
+    pub event: String,
+    pub attempt: i64,
+    pub status: Option<i64>,
+    pub scheduled_at: String,
+    pub delivered_at: Option<String>,
+}
+
+impl DeliveryRowView {
+    /// "ok" (2xx) | "neterr" (0) | "warn" (other code) | "pending" (NULL).
+    /// Keeps the integer comparison out of the template (Askama compares
+    /// `&i64` awkwardly).
+    pub fn status_kind(&self) -> &'static str {
+        match self.status {
+            Some(s) if (200..300).contains(&s) => "ok",
+            Some(0) => "neterr",
+            Some(_) => "warn",
+            None => "pending",
+        }
+    }
+
+    /// Human display of the status column.
+    pub fn status_display(&self) -> String {
+        match self.status {
+            Some(0) => "network error".to_string(),
+            Some(s) => s.to_string(),
+            None => "pending".to_string(),
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "admin/outgoing_webhook_deliveries.html")]
+pub struct OutgoingWebhookDeliveriesPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub webhook_id: i64,
+    pub deliveries: &'a [DeliveryRowView],
+}

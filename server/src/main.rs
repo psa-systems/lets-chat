@@ -138,6 +138,7 @@ async fn main() {
     spawn_scheduled_dispatcher(state.clone());
     spawn_reminders_dispatcher(state.clone());
     spawn_polls_closer(state.clone());
+    spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
 
     let app = routes::build_router(state);
@@ -294,6 +295,37 @@ fn spawn_reminders_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "reminder dispatch tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-75: deliver due outgoing-webhook deliveries. A 10s tick POSTs the
+/// signed payload with retries + backoff; one shared reqwest client is built
+/// once and reused. The URL/secret are never logged.
+fn spawn_outgoing_webhook_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 10;
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .user_agent("lets-chat-webhook/1")
+            .build()
+            .unwrap_or_default();
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::outgoing::run_delivery_tick(&state.chat, &client).await {
+                Ok(stats) if stats.delivered + stats.retried + stats.failed > 0 => {
+                    tracing::info!(
+                        delivered = stats.delivered,
+                        retried = stats.retried,
+                        failed = stats.failed,
+                        "outgoing webhook delivery tick complete"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "outgoing webhook delivery tick failed"),
             }
         }
     });
