@@ -1,0 +1,43 @@
+<div id="retention-preview" class="space-y-2 mt-3 p-3 rounded border border-amber-300 bg-amber-50">
+  {% match new_days %}
+    {% when Some with (n) %}
+      <p class="text-sm">
+        Setting retention to <strong>{{ n }} days</strong> will permanently delete
+        <strong>{% match will_delete %}{% when Some with (c) %}{{ c }}{% when None %}0{% endmatch %}</strong>
+        messages on the next sweep.
+        {% match old_days %}
+          {% when Some with (prev) %}
+            Currently set to {{ prev }} days.
+          {% when None %}
+            Retention is currently disabled.
+        {% endmatch %}
+      </p>
+      <ul class="text-xs text-slate-700 list-disc list-inside space-y-1">
+        <li><strong>Permanent.</strong> Disabling retention later does NOT restore deleted messages.</li>
+        <li><strong>Pinned messages are NOT exempt.</strong> Copy important content to the room wiki to preserve it.</li>
+        <li>Messages older than {{ n }} days are deleted, except messages in threads with replies newer than {{ n }} days (active threads are preserved as a unit).</li>
+        <li>Soft-deleted, quarantined, and system messages older than {{ n }} days are deleted too.</li>
+      </ul>
+      <form method="post" action="/room/{{ room_id }}/retention" class="mt-2">
+        <input type="hidden" name="days" value="{{ n }}" />
+        <button type="submit" class="bg-red-600 text-white rounded px-3 py-1 text-sm hover:bg-red-700">
+          Confirm and apply
+        </button>
+      </form>
+    {% when None %}
+      <p class="text-sm">
+        {% match old_days %}
+          {% when Some with (prev) %}
+            Disable retention. Currently set to <strong>{{ prev }} days</strong>; previously-deleted messages will stay deleted.
+          {% when None %}
+            Retention is already disabled.
+        {% endmatch %}
+      </p>
+      <form method="post" action="/room/{{ room_id }}/retention" class="mt-2">
+        <input type="hidden" name="days" value="" />
+        <button type="submit" class="bg-slate-600 text-white rounded px-3 py-1 text-sm hover:bg-slate-700">
+          Confirm
+        </button>
+      </form>
+  {% endmatch %}
+</div>

@@ -29,6 +29,12 @@ pub struct RoomModeratorsPage<'a> {
     /// LC-85: current `posting_allowed_for` for this room. Drives the
     /// "Posting policy" dropdown's selected option.
     pub posting_policy: &'a str,
+    /// Current `rooms.retention_days`. `None` = retention disabled
+    /// (default); `Some(N)` = messages older than N days are deleted
+    /// on the next sweep. The Retention section in the moderators
+    /// template uses this to pre-fill the form and label the
+    /// current state.
+    pub retention_days: Option<i64>,
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
