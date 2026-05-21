@@ -37,8 +37,20 @@ pub struct SweepStats {
     /// the transaction commits to broadcast `MessagePurged` events,
     /// keeping channel writes out of the BEGIN IMMEDIATE critical
     /// section. Cascade-deleted descendants (thread replies, etc.)
-    /// are not included; the client renders the parent's removal and
-    /// the children's DOM nodes go with it if they were rendered nested.
+    /// are not included; only the directly-deleted ids surface here.
+    ///
+    /// Cosmetic limitation worth being honest about: thread replies
+    /// in the codebase's UI render as flat siblings inside the
+    /// `#thread-replies-{parent_id}` container of the thread side
+    /// panel, NOT as DOM children of the root message bubble.
+    /// `hx-swap-oob="delete"` against the root's id removes the root's
+    /// node but does nothing to the sibling reply nodes that may still
+    /// be in the open panel of any connected client. The replies are
+    /// gone server-side via the FK cascade; the stale DOM resolves on
+    /// the next reload. Emitting `MessagePurged` for cascaded reply
+    /// ids would require a recursive descendant SELECT before the
+    /// DELETE; deferred until the cosmetic gap surfaces as a real
+    /// complaint.
     pub purged: Vec<(i64, i64)>,
     /// `true` iff the public `run_retention_sweep` early-returned because
     /// the env flag was not set. Tests call `sweep_once` and never see
