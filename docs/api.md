@@ -24,6 +24,10 @@ membership / access rules on top of the scope check.
 
 The scheme is case-insensitive (`Bearer`, `bearer`, `BEARER` all work).
 
+### Bots (LC-73)
+
+A bot is a first-class non-human account. An admin creates one at **Admin -> Bots**; creation mints an initial API token (shown once) that authenticates exactly like a user token via the same `Authorization: Bearer` header and scope model. Messages a bot posts are attributed to the bot identity (name + avatar), and the same room-access and ban/mute rules apply.
+
 > **Maintenance mode:** the API is **not** gated by maintenance mode - bearer
 > requests keep working while the web UI shows the maintenance page. This is
 > intentional so bots and integrations are not knocked offline by a UI
