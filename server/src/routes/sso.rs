@@ -40,6 +40,10 @@ pub fn router() -> Router<AppState> {
         .route("/auth/sso/{provider}/start", get(get_start))
         .route("/auth/sso/{provider}/callback", get(get_callback))
         .route(
+            "/auth/sso/{provider}/backchannel-logout",
+            axum::routing::post(post_backchannel_logout),
+        )
+        .route(
             "/auth/sso/finish-link",
             axum::routing::post(post_finish_link),
         )
@@ -742,6 +746,93 @@ fn s256_challenge(verifier: &str) -> String {
 fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(reqwest::Client::new)
+}
+
+#[derive(Deserialize)]
+pub struct BackchannelLogoutForm {
+    pub logout_token: String,
+}
+
+/// `POST /auth/sso/:provider/backchannel-logout`
+///
+/// OIDC Back-Channel Logout 1.0 §2.5: the OP POSTs a signed
+/// `logout_token` here when the user signs out at the OP (typically
+/// via Bunyip's logout button). We verify the token against the
+/// provider's JWKS, find the local user via `sso_identities.(issuer,
+/// subject)`, and delete every session row that user owns so their
+/// next request gets a fresh /login.
+///
+/// Always responds 200 once the token verifies, even when no local
+/// user matches the `sub` (§2.5 step 4 — the OP shouldn't retry). The
+/// only 4xx is "the token itself is invalid" so a misconfigured OP
+/// sees a clear error.
+pub async fn post_backchannel_logout(
+    State(state): State<AppState>,
+    Path(provider_id): Path<String>,
+    axum::Form(form): axum::Form<BackchannelLogoutForm>,
+) -> Result<Response, AppError> {
+    let entry = state
+        .sso
+        .lookup(&provider_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+
+    let discovery = entry
+        .discovery(http_client())
+        .await
+        .map_err(|e| {
+            tracing::warn!(provider = %provider_id, error = %e, "sso discovery failed");
+            AppError::Internal("sso discovery failed".into())
+        })?;
+
+    let claims = match oidc::verify_logout_token(
+        &form.logout_token,
+        &discovery.jwks_json,
+        &entry.row.issuer_url,
+        &entry.row.client_id,
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(provider = %provider_id, error = ?e, "back-channel logout_token verify failed");
+            return Err(AppError::BadRequest("invalid logout_token".into()));
+        }
+    };
+
+    // Resolve the local user. find_user_by_sso filters out banned
+    // users; a banned user has no live sessions anyway, so falling
+    // through to a 200 with no row deleted is the right behaviour
+    // (spec §2.5 step 4).
+    let user_id =
+        db::sso::find_user_by_sso(&state.auth, &entry.row.issuer_url, &claims.sub).await?;
+
+    if let Some(uid) = user_id {
+        match db::auth::delete_user_sessions(&state.auth, &uid).await {
+            Ok(()) => {
+                tracing::info!(
+                    provider = %provider_id,
+                    user_id = %uid,
+                    jti = %claims.jti,
+                    "back-channel logout: sessions deleted"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    provider = %provider_id,
+                    user_id = %uid,
+                    error = %e,
+                    "back-channel logout: session delete failed"
+                );
+            }
+        }
+    } else {
+        tracing::debug!(
+            provider = %provider_id,
+            sub = %claims.sub,
+            "back-channel logout: no local user matches sub; ignoring per §2.5 step 4"
+        );
+    }
+
+    Ok((axum::http::StatusCode::OK, "").into_response())
 }
 
 #[cfg(test)]

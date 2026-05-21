@@ -195,6 +195,118 @@ pub fn verify_id_token(
     })
 }
 
+/// Validated `logout_token` claims (OIDC Back-Channel Logout 1.0 §2.4).
+///
+/// The spec mandates:
+///   - `typ` header == `logout+jwt`
+///   - issuer + audience matched against the registered provider
+///   - `iat` present (used for freshness)
+///   - no `exp` (mokosh follows the spec and omits it)
+///   - either `sub` or `sid` present; we require `sub` since the
+///     handler resolves the local user by `sso_identities.subject`
+///   - `events` map contains the backchannel-logout event URI
+///   - no `nonce` (id_token-only field; logout_tokens MUST NOT carry it)
+#[derive(Debug)]
+pub struct LogoutTokenClaims {
+    pub sub: String,
+    #[allow(dead_code)]
+    pub sid: Option<String>,
+    #[allow(dead_code)]
+    pub jti: String,
+    #[allow(dead_code)]
+    pub iat: i64,
+}
+
+/// Verify a back-channel logout_token against the provider's JWKS.
+///
+/// Signature check + issuer + audience use the same path as
+/// `verify_id_token`; the diffs from id-token verification are
+/// codified per §2.6 of the spec:
+///   - `typ` must be `logout+jwt` (RFC 8417 SET).
+///   - `exp` MUST NOT be validated (the spec doesn't issue one).
+///   - `nonce` MUST NOT appear; we reject if present.
+///   - `events` claim must contain the backchannel-logout event URI.
+pub fn verify_logout_token(
+    logout_token: &str,
+    jwks_json: &str,
+    expected_issuer: &str,
+    expected_audience: &str,
+) -> Result<LogoutTokenClaims, OidcError> {
+    let jwks: JwkSet = serde_json::from_str(jwks_json).map_err(OidcError::BadJwks)?;
+    let header = jsonwebtoken::decode_header(logout_token).map_err(OidcError::BadHeader)?;
+
+    if header.typ.as_deref() != Some("logout+jwt") {
+        return Err(OidcError::Verify(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        )));
+    }
+
+    let jwk = match (&header.kid, jwks.keys.as_slice()) {
+        (Some(kid), keys) => keys
+            .iter()
+            .find(|k| k.common.key_id.as_deref() == Some(kid.as_str()))
+            .ok_or_else(|| OidcError::UnknownKid(kid.clone()))?,
+        (None, [single]) => single,
+        (None, _) => return Err(OidcError::AmbiguousKid),
+    };
+    let key = decoding_key_for(jwk)?;
+
+    let mut validation = Validation::new(header.alg);
+    validation.set_issuer(&[expected_issuer]);
+    validation.set_audience(&[expected_audience]);
+    validation.validate_exp = false;
+    validation.required_spec_claims = std::collections::HashSet::new();
+    validation.leeway = 30;
+
+    let token = jsonwebtoken::decode::<Map<String, Value>>(logout_token, &key, &validation)
+        .map_err(OidcError::Verify)?;
+    let raw = token.claims;
+
+    if raw.contains_key("nonce") {
+        return Err(OidcError::Verify(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        )));
+    }
+
+    let events = raw.get("events").and_then(|v| v.as_object()).ok_or_else(|| {
+        OidcError::Verify(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("events".into()),
+        ))
+    })?;
+    if !events.contains_key("http://schemas.openid.net/event/backchannel-logout") {
+        return Err(OidcError::Verify(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        )));
+    }
+
+    let sub = raw
+        .get("sub")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            OidcError::Verify(jsonwebtoken::errors::Error::from(
+                jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("sub".into()),
+            ))
+        })?
+        .to_string();
+    let sid = raw.get("sid").and_then(|v| v.as_str()).map(str::to_string);
+    let jti = raw
+        .get("jti")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            OidcError::Verify(jsonwebtoken::errors::Error::from(
+                jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("jti".into()),
+            ))
+        })?
+        .to_string();
+    let iat = raw.get("iat").and_then(|v| v.as_i64()).ok_or_else(|| {
+        OidcError::Verify(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("iat".into()),
+        ))
+    })?;
+
+    Ok(LogoutTokenClaims { sub, sid, jti, iat })
+}
+
 fn decoding_key_for(jwk: &Jwk) -> Result<DecodingKey, OidcError> {
     use jsonwebtoken::jwk::AlgorithmParameters;
     match &jwk.algorithm {
