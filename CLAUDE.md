@@ -122,7 +122,7 @@ Tailwind is compiled by Bun (`server/package.json` scripts). The output `server/
 
 ## Test maintenance
 
-Test files under `server/tests/` each open their own in-memory SQLite pools and construct their own `AppState`. There is no shared `tests/common/` helper. This means any change to `AppState`'s shape, to the migration set, to a `#[cfg]`-gated route module, or to a handler's request/response contract can silently rot tests that touch the affected surface. Tests are integration binaries: a test file that fails to compile prevents none of the OTHER test files from running, so a single quietly-broken file can sit unnoticed across multiple phases until someone audits.
+Test files under `server/tests/` each open their own in-memory SQLite pools and construct their own `AppState`. Most files (40+) use shared pool helpers at `server/tests/common/mod.rs` (`common::chat_pool()` and siblings, backed by `sqlx::migrate!` so new migrations land automatically); a smaller set hand-rolls the migration list and is drift-prone (see category 2). This means any change to `AppState`'s shape, to the migration set, to a `#[cfg]`-gated route module, or to a handler's request/response contract can silently rot tests that touch the affected surface. Tests are integration binaries: a test file that fails to compile prevents none of the OTHER test files from running, so a single quietly-broken file can sit unnoticed across multiple phases until someone audits.
 
 **Test files compiling AND passing is a precondition for landing a phase PR, not optional.** Run `just test` and `just test-saas` before opening the PR. If either fails or refuses to compile a binary, that is in scope for the phase that introduced the change, not "later cleanup."
 
@@ -144,18 +144,19 @@ Update every match. The canonical construction shape is at `server/src/main.rs` 
 
 **Trigger.** Adding a `.sql` file under `server/migrations/{auth,chat,settings}/`. Production picks it up automatically via the migrator at startup; each test file's hand-rolled `setup_*_pool()` helper hardcodes the migration set as `include_str!(...)` calls and does not.
 
-**Two patterns coexist.** Don't pretend only one shape exists:
+**Three patterns coexist.** Don't pretend only one shape exists:
 
-- **Array form (most files).** A `for sql in [include_str!(...), include_str!(...), ...]` array, executed in a single loop. Adding a new migration means appending one more `include_str!(...)` line inside the array. Indentation varies by file: some use 8-space (function-level), some 12-space (nested inside a struct or match arm).
-- **Verbose per-migration form (`db_dm.rs`, `db_moderation.rs`, `message_editing.rs`).** Each migration is its own `let chat_mN = include_str!(...);` followed by `sqlx::raw_sql(chat_mN).execute(&pool).await.expect("chat migration N");`. Adding a new migration means appending an analogous 5-line block before the function return.
+- **Common helpers via `sqlx::migrate!` (drift-immune).** 40+ files do `mod common;` and call `common::chat_pool().await` (or `common::auth_pool()` / `common::settings_pool()`) from `server/tests/common/mod.rs`. The macro picks up every `.sql` file in the migrations dir at compile time, so new migrations land in these tests automatically. A small number of files (e.g. `db_dm.rs`) inline `sqlx::migrate!` directly without going through `common` and are equivalently immune. **Prefer this pattern for new test files** so the migration-list drift category does not apply at all (the cure for migration-list drift is to stop maintaining the list).
+- **Array form (drift-prone).** 17 files hand-list migrations via a `for sql in [include_str!(...), include_str!(...), ...]` array, executed in a single loop. Adding a new migration means appending one more `include_str!(...)` line inside the array. Indentation varies: some use 8-space (function-level), some 12-space (nested inside a `match` arm).
+- **Verbose per-migration form (drift-prone).** 1 file: `db_private_rooms.rs`. Each migration is its own 5-line `sqlx::raw_sql(include_str!(...)).execute(&pool).await.expect("migration N")` block. The per-block label numbering is off-by-one against the migration filename; continue that convention rather than re-numbering everything.
 
-The two patterns are functionally equivalent and intentionally not consolidated; whichever a file currently uses is what new migrations get added to.
+The three patterns are functionally equivalent and intentionally not consolidated; whichever a file currently uses is what new migrations get added to.
 
 **Prevention.** When adding a migration:
 ```nu
 grep --recursive --line-number '<previous_migration_filename>' server/tests/
 ```
-For each match, eyeball the surrounding code to determine the pattern, then add the new migration in the matching shape. Don't grep-replace blindly — array form takes 1 line, verbose form takes 5.
+For each match, eyeball the surrounding code to determine the pattern, then add the new migration in the matching shape. Don't grep-replace blindly: array form is one line, verbose form is one 5-line block, common-helper files do not match the grep at all and need no edit. New test files should use `common::*_pool()` and skip this whole category.
 
 **Detection.** `just test` (and `just test-saas`). A missed migration usually surfaces as `SqliteError { code: 1, message: "table X has no column named Y" }` at runtime; downstream HTTP tests see this as a 500 in route handlers.
 
