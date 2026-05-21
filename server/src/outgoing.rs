@@ -103,8 +103,11 @@ pub async fn run_delivery_tick(
             continue;
         }
 
-        let signature = sign(&t.signing_secret, &d.payload);
+        // Sign `timestamp.body` (not the body alone) so a captured delivery
+        // cannot be replayed indefinitely: the signature is bound to the
+        // timestamp the receiver also checks.
         let timestamp = chrono::Utc::now().timestamp();
+        let signature = sign(&t.signing_secret, &format!("{timestamp}.{}", d.payload));
         let resp = client
             .post(&t.url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
