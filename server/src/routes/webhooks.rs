@@ -22,6 +22,10 @@ use crate::views::{html, Html};
 /// system cannot flood a room beyond this.
 const WEBHOOK_RATE_PER_MIN: u32 = 60;
 
+/// Cap on a single webhook message's length (bytes). Generous for alerts
+/// while bounding what one unauthenticated POST can push into a room.
+const WEBHOOK_MAX_TEXT_BYTES: usize = 16 * 1024;
+
 /// Public router for the unauthenticated incoming endpoint. Merged after the
 /// TraceLayer in `build_router` so the secret is never logged.
 pub fn public_router() -> Router<AppState> {
@@ -105,6 +109,9 @@ pub async fn post_incoming(
     let text = payload.text.trim();
     if text.is_empty() {
         return Err(AppError::BadRequest("text cannot be empty".into()));
+    }
+    if text.len() > WEBHOOK_MAX_TEXT_BYTES {
+        return Err(AppError::BadRequest("text too long".into()));
     }
     let body = if payload.markdown {
         text.to_string()
