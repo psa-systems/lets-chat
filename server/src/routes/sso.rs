@@ -310,36 +310,63 @@ pub async fn get_callback(
     {
         let email = claims.email.as_deref().unwrap();
         if let Some(user_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
-            db::sso::link_sso_identity(
+            // Atomic find-and-link inside one transaction. Closes the
+            // race where two concurrent callbacks for the same
+            // (issuer, email) but different subjects both link
+            // themselves to the same local user. The helper refuses
+            // when the user already has a *different* subject linked
+            // under this issuer; we then fall through to the password-
+            // confirm interstitial below so the human can prove they
+            // own the local account before we accept the new subject.
+            match db::sso::auto_link_sso_identity_if_safe(
                 &state.auth,
                 &user_id,
                 &metadata.issuer,
                 &claims.sub,
                 Some(email),
-                true,
             )
-            .await?;
-            tracing::warn!(
-                target: "lets_chat.auth.sso",
-                event = "sso_account_auto_linked",
-                user_id = %user_id,
-                provider = %provider_id,
-                issuer = %metadata.issuer,
-                subject = %claims.sub,
-                email = %email,
-                "auto-linked existing account on verified email match"
-            );
-            return finalize_sign_in(
-                &state,
-                &user_id,
-                &provider_id,
-                &flow.return_to,
-                &headers,
-                jar,
-                claims.groups.as_deref(),
-                claims.mokosh_active_tenant.as_deref(),
-            )
-            .await;
+            .await?
+            {
+                db::sso::AutoLinkOutcome::Linked => {
+                    tracing::warn!(
+                        target: "lets_chat.auth.sso",
+                        event = "sso_account_auto_linked",
+                        user_id = %user_id,
+                        provider = %provider_id,
+                        issuer = %metadata.issuer,
+                        subject = %claims.sub,
+                        email = %email,
+                        "auto-linked existing account on verified email match"
+                    );
+                    return finalize_sign_in(
+                        &state,
+                        &user_id,
+                        &provider_id,
+                        &flow.return_to,
+                        &headers,
+                        jar,
+                        claims.groups.as_deref(),
+                        claims.mokosh_active_tenant.as_deref(),
+                    )
+                    .await;
+                }
+                db::sso::AutoLinkOutcome::DifferentSubjectAlreadyLinked => {
+                    tracing::warn!(
+                        target: "lets_chat.auth.sso",
+                        event = "sso_auto_link_refused_subject_conflict",
+                        user_id = %user_id,
+                        provider = %provider_id,
+                        issuer = %metadata.issuer,
+                        subject = %claims.sub,
+                        email = %email,
+                        "auto-link refused: another subject from this \
+                         issuer already linked to the same local user; \
+                         requiring password confirmation"
+                    );
+                    // Intentional fall-through to the link-required
+                    // interstitial below.
+                }
+            }
         }
     }
 
