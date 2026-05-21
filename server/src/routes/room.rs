@@ -730,6 +730,12 @@ pub(crate) async fn finalize_message_send(
         }
     }
 
+    // LC-64: clear the sent author's draft for this room. Single
+    // chokepoint covers both direct sends and LC-62 scheduled-message
+    // deliveries (the dispatcher funnels through here). Best-effort:
+    // a DB hiccup on the draft delete must not fail the send.
+    let _ = db::drafts::delete(&state.chat, &author.id, room.id).await;
+
     Ok(message)
 }
 
