@@ -552,6 +552,39 @@ pub async fn set_room_posting_policy(
     Ok(res.rows_affected())
 }
 
+/// Read the per-room retention policy. `None` means retention is
+/// disabled; `Some(N)` means messages older than N days are eligible
+/// for the retention sweep. The CHECK in migration 0043 enforces
+/// `N IS NULL OR N >= 1` at write time.
+pub async fn get_room_retention_days(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar("SELECT retention_days FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await
+        .map(|opt| opt.flatten())
+}
+
+/// Set (or clear) the per-room retention policy. Pass `None` to disable
+/// retention on the room; `Some(N >= 1)` to enable. Returns the number
+/// of rows updated (0 if `room_id` does not exist). The route handler
+/// validates the `N >= 1` floor before calling this; the schema CHECK
+/// is the second line of defence.
+pub async fn set_room_retention_days(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    days: Option<i64>,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET retention_days = ? WHERE id = ?")
+        .bind(days)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
 pub async fn list_rooms_in_enclave(
     pool: &sqlx::SqlitePool,
     enclave_id: i64,

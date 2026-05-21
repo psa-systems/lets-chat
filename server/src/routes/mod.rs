@@ -52,6 +52,7 @@ mod polls;
 mod push;
 mod reactions;
 mod reminders;
+mod retention;
 pub(crate) mod room;
 mod room_info;
 mod room_rbac;
@@ -873,6 +874,11 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/posting-policy",
             post(room_rbac::post_posting_policy),
         )
+        .route(
+            "/room/{room_id}/retention/preview",
+            get(retention::get_preview),
+        )
+        .route("/room/{room_id}/retention", post(retention::post_set))
         .route(
             "/enclave/{enclave_id}/groups",
             post(user_groups::post_create),
