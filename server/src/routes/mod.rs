@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::collections::HashMap;
@@ -36,6 +36,7 @@ mod call;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
+mod drafts;
 #[cfg(feature = "standalone")]
 pub(crate) mod email_verification;
 mod enclave;
@@ -790,6 +791,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route("/room/{room_id}/draft", put(drafts::put_draft))
         .route(
             "/room/{room_id}/notify-prefs",
             post(notify_prefs::post_notify_prefs),

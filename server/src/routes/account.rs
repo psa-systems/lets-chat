@@ -227,6 +227,11 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-64: drop server-persisted drafts. message_drafts.room_id has
+    // ON DELETE CASCADE so room deletion alone covers room-vanishing
+    // cleanup; this clears the user's drafts in rooms that survive
+    // the purge (every room they were drafting in).
+    db::drafts::delete_for_user(&mut *tx, user_id).await?;
     sqlx::query("DELETE FROM file_uploads WHERE uploader_id = ?")
         .bind(user_id)
         .execute(&mut *tx)
