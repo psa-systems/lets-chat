@@ -207,7 +207,8 @@ pub async fn get_room(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry = super::load_author_meta(&state, &m.user_id, &user.id).await?;
+            let entry =
+                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -265,6 +266,8 @@ pub async fn get_room(
                 None
             },
             author_is_bot: meta.is_bot,
+            author_is_webhook: meta.is_webhook,
+            webhook_avatar_url: meta.avatar_url.clone(),
         });
     }
 
@@ -636,6 +639,7 @@ pub(crate) async fn finalize_message_send(
         parent_id: raw.parent_id,
         quote_id: raw.quote_id,
         is_system: raw.is_system,
+        webhook_id: raw.webhook_id,
     };
 
     let event = ChatEvent::NewMessage {
@@ -713,6 +717,77 @@ pub(crate) async fn finalize_message_send(
     }
 
     Ok(message)
+}
+
+/// LC-74: broadcast + fan out a message authored by an incoming webhook.
+/// Mirrors the non-DM path of `finalize_message_send` but attributes the
+/// message to the webhook (empty user_id, `webhook_id` set, name as the
+/// author label) and has no author to exclude from mentions.
+pub(crate) async fn finalize_webhook_message_send(
+    state: &AppState,
+    room: &crate::models::Room,
+    webhook_id: i64,
+    webhook_name: &str,
+    new_id: i64,
+    body: &str,
+) -> Result<(), AppError> {
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted webhook message vanished".into(),
+        ))?;
+    let message = Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: String::new(),
+        author_name: webhook_name.to_string(),
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
+        is_system: raw.is_system,
+        webhook_id: Some(webhook_id),
+    };
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: false,
+    };
+    super::broadcast_room_message(state, room, &event).await?;
+
+    // Mentions: a webhook can @mention people. No author to exclude (empty
+    // author id excludes nobody).
+    if room.room_type != "dm" {
+        let tokens = db::mentions::parse_mention_tokens(body);
+        if !tokens.is_empty() {
+            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+            let (added, _removed) =
+                db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
+                    .await?;
+            let snippet = build_snippet(body);
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: room.id,
+                            room_type: room.room_type.clone(),
+                            room_label: format!("#{}", room.name),
+                            message_id: new_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: webhook_name.to_string(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", room.id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(state, events).await;
+        }
+    }
+    Ok(())
 }
 
 /// User IDs the caller can mention in this room. For private rooms / DMs,
@@ -1074,7 +1149,7 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta = super::load_author_meta(&state, &m.user_id, &user.id).await?;
+    let meta = super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
@@ -1131,6 +1206,8 @@ pub async fn patch_message(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
+        author_is_webhook: meta.is_webhook,
+        webhook_avatar_url: meta.avatar_url.clone(),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1177,7 +1254,8 @@ pub async fn get_thread_panel(
         .filter(|r| !blocked_authors.contains(&r.user_id))
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
-    let parent_meta = super::load_author_meta(&state, &parent.user_id, &user.id).await?;
+    let parent_meta =
+        super::resolve_msg_author(&state, &parent.user_id, parent.webhook_id, &user.id).await?;
 
     // Bulk-load attachments for the parent and every reply in a single query.
     let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
@@ -1236,6 +1314,8 @@ pub async fn get_thread_panel(
             None
         },
         author_is_bot: parent_meta.is_bot,
+        author_is_webhook: parent_meta.is_webhook,
+        webhook_avatar_url: parent_meta.avatar_url.clone(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1243,7 +1323,8 @@ pub async fn get_thread_panel(
         let meta = if let Some(entry) = author_cache.get(&r.user_id) {
             entry.clone()
         } else {
-            let entry = super::load_author_meta(&state, &r.user_id, &user.id).await?;
+            let entry =
+                super::resolve_msg_author(&state, &r.user_id, r.webhook_id, &user.id).await?;
             author_cache.insert(r.user_id.clone(), entry.clone());
             entry
         };
@@ -1287,6 +1368,8 @@ pub async fn get_thread_panel(
                 None
             },
             author_is_bot: meta.is_bot,
+            author_is_webhook: meta.is_webhook,
+            webhook_avatar_url: meta.avatar_url.clone(),
         });
     }
 
@@ -1365,6 +1448,7 @@ pub async fn post_thread_reply(
         parent_id: raw.parent_id,
         quote_id: raw.quote_id,
         is_system: raw.is_system,
+        webhook_id: raw.webhook_id,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);

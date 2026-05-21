@@ -63,3 +63,34 @@ curl -X POST https://chat.example/api/v1/rooms/1/messages \
   -H "Content-Type: application/json" \
   -d '{"body":"hello from a bot"}'
 ```
+
+## Incoming webhooks (LC-74)
+
+A separate, **unauthenticated** ingress for external systems (Grafana, CI,
+alerting) that speak HTTP + JSON but cannot hold a bearer token. A room
+moderator creates a webhook at **#room -> Moderators -> Manage incoming
+webhooks**; the secret URL is the credential and is shown exactly once.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/webhook/{secret}` | the secret in the URL | Append a message to the webhook's room, attributed to the webhook (name + optional avatar), not a user. |
+
+Request body:
+
+```json
+{ "text": "alert fired", "markdown": true }
+```
+
+- `text` (required): the message body. `markdown` (optional, default `false`):
+  when `true` the text renders through the markdown pipeline; otherwise it is
+  escaped and renders literally.
+- **401** unknown/invalid secret, **410** revoked webhook, **429** (with
+  `Retry-After`) past the per-webhook rate cap (60/min). **204** on success.
+- Requires `LETS_CHAT_SECRET_KEY` (only an HMAC of the secret is stored). The
+  secret never appears in request logs.
+
+```sh
+curl -X POST https://chat.example/webhook/lc_xxxxxxxx \
+  -H "Content-Type: application/json" \
+  -d '{"text":"deploy finished :rocket:","markdown":true}'
+```

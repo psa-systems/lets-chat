@@ -69,6 +69,7 @@ mod unfurl;
 mod uploads;
 mod user_groups;
 mod users;
+mod webhooks;
 mod ws;
 
 /// Override a persisted status with `"offline"` when the user has no live
@@ -93,6 +94,10 @@ pub(crate) struct AuthorMeta {
     pub custom_status: Option<String>,
     /// LC-73: true for bot authors, drives the "bot" badge.
     pub is_bot: bool,
+    /// LC-74: true for incoming-webhook authors. Suppresses the DM link and
+    /// renders a "webhook" badge; `avatar_url` (if set) is the avatar source.
+    pub is_webhook: bool,
+    pub avatar_url: Option<String>,
 }
 
 impl AuthorMeta {
@@ -104,6 +109,8 @@ impl AuthorMeta {
             status: db::auth::STATUS_ACTIVE.to_string(),
             custom_status: None,
             is_bot: false,
+            is_webhook: false,
+            avatar_url: None,
         }
     }
 }
@@ -117,8 +124,38 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
             status: r.status,
             custom_status: r.custom_status,
             is_bot: r.is_bot,
+            is_webhook: false,
+            avatar_url: None,
         }
     }
+}
+
+/// LC-74: resolve the author identity for a message that may be authored by
+/// a user OR an incoming webhook. Webhook messages (`webhook_id = Some`)
+/// render with the webhook's name/avatar and no DM link.
+pub(crate) async fn resolve_msg_author(
+    state: &AppState,
+    user_id: &str,
+    webhook_id: Option<i64>,
+    viewer_id: &str,
+) -> Result<AuthorMeta, AppError> {
+    if let Some(wid) = webhook_id {
+        let (name, avatar_url) = db::webhooks::identity(&state.chat, wid)
+            .await?
+            .map(|w| (w.name, w.avatar_url))
+            .unwrap_or_else(|| ("webhook".to_string(), None));
+        return Ok(AuthorMeta {
+            username: name,
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+            is_bot: false,
+            is_webhook: true,
+            avatar_url,
+        });
+    }
+    load_author_meta(state, user_id, viewer_id).await
 }
 
 pub(crate) async fn load_author_meta(
@@ -156,7 +193,7 @@ pub(crate) async fn load_message_view_for_viewer(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let meta = load_author_meta(state, &m.user_id, &viewer.id).await?;
+    let meta = resolve_msg_author(state, &m.user_id, m.webhook_id, &viewer.id).await?;
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id
         || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
@@ -217,6 +254,8 @@ pub(crate) async fn load_message_view_for_viewer(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
+        author_is_webhook: meta.is_webhook,
+        webhook_avatar_url: meta.avatar_url.clone(),
     })
 }
 
@@ -823,6 +862,14 @@ pub fn build_router(state: AppState) -> Router {
             delete(room_rbac::delete_revoke),
         )
         .route(
+            "/room/{room_id}/webhooks",
+            get(webhooks::get_webhooks).post(webhooks::post_webhooks),
+        )
+        .route(
+            "/room/{room_id}/webhooks/{wid}/revoke",
+            post(webhooks::post_revoke),
+        )
+        .route(
             "/room/{room_id}/posting-policy",
             post(room_rbac::post_posting_policy),
         )
@@ -1030,6 +1077,10 @@ pub fn build_router(state: AppState) -> Router {
         // requests are still traced.
         .merge(api::router())
         .layer(TraceLayer::new_for_http())
+        // LC-74: the incoming-webhook route carries the secret in its path.
+        // Merge it AFTER TraceLayer so the secret is never written to request
+        // logs (only the webhook id is logged, from the handler).
+        .merge(webhooks::public_router())
         .with_state(state)
 }
 
