@@ -43,6 +43,17 @@ pub async fn toggle_reaction(
     };
     state.hub.broadcast_to_room(m.room_id, &event);
 
+    // LC-75: publish reaction.added to outgoing webhooks (additions only).
+    if added {
+        crate::outgoing::enqueue(
+            &state.chat,
+            "reaction.added",
+            m.room_id,
+            serde_json::json!({ "message_id": message_id, "emoji": emoji, "user_id": user.id }),
+        )
+        .await;
+    }
+
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let counts = db::chat::list_reactions(&state.chat, message_id, &user.id).await?;
     let reactions: Vec<ReactionView> = counts

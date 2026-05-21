@@ -94,3 +94,28 @@ curl -X POST https://chat.example/webhook/lc_xxxxxxxx \
   -H "Content-Type: application/json" \
   -d '{"text":"deploy finished :rocket:","markdown":true}'
 ```
+
+## Outgoing webhooks (LC-75)
+
+Event subscriptions: an admin registers a delivery URL + event filter + scope
+at **Admin -> Webhooks**. When a matching event fires, the server POSTs a
+signed JSON body to the URL. Events: `message.posted`, `message.edited`,
+`message.deleted`, `reaction.added`. Scopes: `global`, `enclave` (id), `room` (id).
+
+Payload (stable, versioned):
+
+```json
+{ "version": "1", "event": "message.posted", "room_id": 1, "data": { "...": "..." } }
+```
+
+Each POST carries:
+
+- `X-LetsChat-Event` - the event name.
+- `X-LetsChat-Timestamp` - unix seconds (use for replay protection).
+- `X-LetsChat-Signature: sha256=<hmac>` - HMAC-SHA256 over the **raw body**,
+  keyed by the webhook's signing secret (shown once at creation, rotatable).
+
+Verify by recomputing the HMAC and comparing. Delivery is at-least-once with
+retries (1s, 4s, 16s, 1m, 5m, 30m; 6 attempts). After repeated failed
+deliveries the webhook auto-disables; an admin can re-enable it. Per-webhook
+delivery history is visible in the admin UI. URLs and secrets are never logged.

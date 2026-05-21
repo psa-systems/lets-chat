@@ -1,0 +1,42 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Webhook deliveries - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<div class="flex items-baseline gap-2 mb-4">
+  <h1 class="text-lg font-semibold">Deliveries</h1>
+  <span class="text-sm text-slate-500">webhook #{{ webhook_id }}</span>
+  <a href="/admin/outgoing-webhooks" class="ml-auto text-sm text-blue-600 hover:underline">Back</a>
+</div>
+
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2">Event</th>
+      <th class="py-2">Attempt</th>
+      <th class="py-2">Status</th>
+      <th class="py-2">Scheduled</th>
+      <th class="py-2">Delivered</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in deliveries %}
+    <tr class="border-t border-slate-200">
+      <td class="py-1 text-xs font-mono">{{ d.event }}</td>
+      <td class="py-1 text-xs">{{ d.attempt }}</td>
+      <td class="py-1 text-xs">
+        {% if d.status_kind() == "ok" %}<span class="text-green-700">{{ d.status_display() }}</span>
+        {% else if d.status_kind() == "neterr" %}<span class="text-red-600">{{ d.status_display() }}</span>
+        {% else if d.status_kind() == "warn" %}<span class="text-amber-700">{{ d.status_display() }}</span>
+        {% else %}<span class="text-slate-400">pending</span>{% endif %}
+      </td>
+      <td class="py-1 text-xs text-slate-500">{{ d.scheduled_at }}</td>
+      <td class="py-1 text-xs text-slate-500">{% if let Some(at) = d.delivered_at %}{{ at }}{% else %}-{% endif %}</td>
+    </tr>
+    {% endfor %}
+    {% if deliveries.is_empty() %}
+    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No deliveries recorded.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}
