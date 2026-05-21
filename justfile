@@ -316,3 +316,89 @@ verify: build-css
 [group('format')]
 fmt:
     ./dev/cargo fmt --all
+
+# ── Release ──────────────────────────────────────────────────────────────
+
+# Create a release: bump major (vx.0.0), minor (v0.x.0), or hotfix (v0.0.x), push branch, and open the release PR via fj.
+# After the PR is merged, the create-release workflow creates the tag and release automatically.
+[group: 'release']
+create-release bump:
+    #!/usr/bin/env nu
+    let bump = "{{ bump }}"
+
+    # Abort if there are uncommitted changes
+    let status = git status --porcelain | str trim
+    if ($status | is-not-empty) {
+        print $"(ansi red)Working tree is dirty. Please stash or commit your changes first.(ansi reset)"
+        exit 1
+    }
+
+    # Switch to main if not already there
+    let branch = git branch --show-current | str trim
+    if $branch != "main" {
+        print $"Switching from ($branch) to main..."
+        git checkout main
+    }
+
+    # Pull latest changes
+    git pull --rebase origin main
+
+    # Calculate next version
+    let current = (open Cargo.toml | get workspace.package.version | split row "." | each { into int })
+    let next = match $bump {
+        "major" => [$"($current.0 + 1)" "0" "0"],
+        "minor" => [$"($current.0)" $"($current.1 + 1)" "0"],
+        "hotfix" => [$"($current.0)" $"($current.1)" $"($current.2 + 1)"],
+        _ => { print $"(ansi red)Usage: just create-release <major|minor|hotfix>(ansi reset)"; exit 1 }
+    }
+    let bare = ($next | str join ".")
+    let tag = $"v($bare)"
+    let release_branch = $"release/($tag)"
+
+    # Create release branch, bump version, and commit
+    git checkout -b $release_branch
+    open Cargo.toml | update workspace.package.version $bare | to toml | collect | save --force Cargo.toml
+    git add Cargo.toml
+    git commit --signoff --message $"Release ($tag)"
+
+    # Push release branch
+    git push --set-upstream origin $release_branch
+
+    # Open the release PR via fj. Body lives in a tempfile so the
+    # changelog can grow later without inline escaping pain.
+    let body_file = (mktemp --tmpdir --suffix .md)
+    [
+        $"Automated release PR for ($tag)."
+        ""
+        $"After merge, `.forgejo/workflows/create-release.yml` tags and publishes ($tag) to the Generic Packages registry."
+    ] | str join "\n" | save --force $body_file
+    let fj_result = (^fj --host dev.a8n.run pr create $"Release ($tag)" --body-file $body_file | complete)
+    rm $body_file
+    if $fj_result.exit_code != 0 {
+        print $"(ansi red)fj pr create failed(ansi reset)"
+        print $fj_result.stderr
+        exit 1
+    }
+
+    # `fj pr create` prints `created pull request #N: <title>` on success.
+    # Parse the number out and build the PR URL from `origin`.
+    let pr_num = (
+        $fj_result.stdout
+        | str trim
+        | parse --regex 'created pull request #(?P<num>\d+)'
+        | get num.0?
+    )
+    let remote = (git remote get-url origin | str trim)
+    let base_url = if ($remote | str starts-with "ssh://") {
+        $remote | str replace "ssh://git@" "https://" | str replace "git.a8n.run" "dev.a8n.run" | str replace ".git" ""
+    } else {
+        $remote | str replace --regex "git@([^:]+):" "https://$1/" | str replace "git.a8n.run" "dev.a8n.run" | str replace ".git" ""
+    }
+    print $"(ansi green)Pushed ($release_branch)(ansi reset)"
+    if ($pr_num | is-not-empty) {
+        print $"PR: ($base_url)/pulls/($pr_num)"
+    } else {
+        # fj output format drifted; fall back to whatever it said.
+        print $"fj output: ($fj_result.stdout | str trim)"
+    }
+    print $"After merging, the create-release workflow will tag and release ($tag) automatically."
