@@ -106,6 +106,7 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens |
 | `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for 1:1 WebRTC calls. Add a TURN entry for reliable NAT traversal. |
 | `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. The updater fetches `${URL}/latest/latest.json` for the manifest and downloads platform binaries from `${URL}/${version}/lets-chat-desktop-{linux,windows}-x86_64[.exe]`. Override to test against a fork or a local fixture (eg. `http://127.0.0.1:18180`). |
+| `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Gates `spawn_message_retention_sweeper`. Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room `retention_days`. Off by default while the strict-vs-loose semantics question for thread retention is open with the ticket author; current behavior is loosest-correct (sweep-by-newest-reply preserves active threads). Flipping requires a server restart; the spawn function reads the var at startup and does not poll. |
 
 ## Workspace Layout
 

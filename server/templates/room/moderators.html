@@ -34,6 +34,45 @@
     </form>
   </section>
 
+  {% if room.room_type != "dm" %}
+  <section class="space-y-3 border rounded p-3 border-red-200">
+    <h2 class="font-semibold text-red-800">Message retention</h2>
+    <p class="text-sm text-slate-700">
+      Permanently delete messages older than N days. <strong>This cannot be undone.</strong>
+      Disabling retention later does not restore previously-deleted messages.
+      Pinned messages are not exempt; copy important content to the
+      <a href="/room/{{ room.id }}/info?tab=docs" class="text-blue-600 hover:underline">room wiki</a>
+      to preserve it.
+      Messages in threads with replies newer than the cutoff are preserved as a unit (active threads survive).
+    </p>
+    <p class="text-sm">
+      {% match retention_days %}
+        {% when Some with (d) %}
+          <span>Currently <strong class="text-red-700">enabled</strong>: messages older than <strong>{{ d }} days</strong> are deleted.</span>
+        {% when None %}
+          <span>Currently <strong>disabled</strong>.</span>
+      {% endmatch %}
+    </p>
+    <form hx-get="/room/{{ room.id }}/retention/preview"
+          hx-target="#retention-preview"
+          hx-swap="outerHTML"
+          class="flex gap-2 items-end">
+      <label class="flex-1">
+        <span class="text-sm">Retention (days, blank to disable)</span>
+        <input type="number"
+               name="days"
+               min="1"
+               step="1"
+               value="{% match retention_days %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %}"
+               placeholder="Off"
+               class="w-full border rounded px-2 py-1 text-sm" />
+      </label>
+      <button type="submit" class="bg-slate-600 text-white rounded px-3 py-1 text-sm">Preview</button>
+    </form>
+    <div id="retention-preview"></div>
+  </section>
+  {% endif %}
+
   <section class="space-y-3">
     <h2 class="font-semibold">Current overrides</h2>
     {% if overrides.is_empty() %}

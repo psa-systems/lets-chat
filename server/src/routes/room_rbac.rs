@@ -28,7 +28,13 @@ pub struct GrantForm {
 
 /// Authorize the caller. The room's enclave determines who can manage
 /// overrides; rooms with no enclave (legacy) fall back to site-admin only.
-async fn require_can_manage(state: &AppState, user: &User, room_id: i64) -> Result<(), AppError> {
+/// `pub(crate)` so sibling route modules with the same gating (retention,
+/// future room-admin settings) can share the check.
+pub(crate) async fn require_can_manage(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+) -> Result<(), AppError> {
     let enclave_id = super::enclave_for_room(state, room_id).await?;
     let enclave_role = if let Some(eid) = enclave_id {
         db::enclave::get_membership(&state.chat, eid, &user.id)
@@ -122,12 +128,15 @@ pub async fn get_page(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, enclave_id_for_chrome).await?;
 
+    let retention_days = db::chat::get_room_retention_days(&state.chat, room_id).await?;
+
     html(&RoomModeratorsPage {
         user: &user,
         room: &room,
         overrides: &overrides,
         candidates: &candidates,
         posting_policy: &room.posting_allowed_for,
+        retention_days,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
