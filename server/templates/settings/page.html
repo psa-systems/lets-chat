@@ -145,6 +145,69 @@
     <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
   </form>
 
+  <section class="space-y-4 border-t border-slate-200 pt-6">
+    <div class="flex items-center gap-2">
+      <h2 class="font-medium">Do Not Disturb</h2>
+      {% if dnd_active %}
+      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">Active now</span>
+      {% endif %}
+    </div>
+    <p class="text-xs text-slate-500">During Do Not Disturb, push notifications are suppressed and the email digest holds your missed mentions for the next send. In-app activity is still recorded. Others see a "do not disturb" badge on your avatar.</p>
+
+    <div class="space-y-2">
+      <h3 class="text-sm font-medium">Pause notifications</h3>
+      {% if dnd_paused_until != "" %}
+      <p class="text-xs text-slate-600">Paused until <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> (UTC).</p>
+      <form method="post" action="/settings/dnd/resume">
+        <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">Resume now</button>
+      </form>
+      {% else %}
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">30 minutes</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">2 hours</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">8 hours</button></form>
+        <form method="post" action="/settings/dnd/pause" class="flex items-center gap-1">
+          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-slate-300 px-2 py-1 text-sm" aria-label="Pause minutes">
+          <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">min</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/settings/dnd" class="space-y-3">
+      <h3 class="text-sm font-medium">Quiet hours schedule</h3>
+      <label class="block text-sm">
+        <span class="block text-xs text-slate-600">Timezone (leave as Off to disable the schedule)</span>
+        <select name="timezone" class="mt-1 w-full max-w-xs rounded border border-slate-300 px-2 py-1 text-sm">
+          <option value="" {% if dnd_timezone == "" %}selected{% endif %}>Off</option>
+          {% for tz in timezones %}
+          <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="grid grid-cols-2 gap-3 max-w-md">
+        <label class="block text-sm">
+          <span class="block text-xs text-slate-600">Weekdays start</span>
+          <input type="time" name="weekday_start" value="{{ dnd_weekday_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+        </label>
+        <label class="block text-sm">
+          <span class="block text-xs text-slate-600">Weekdays end</span>
+          <input type="time" name="weekday_end" value="{{ dnd_weekday_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+        </label>
+        <label class="block text-sm">
+          <span class="block text-xs text-slate-600">Weekend start</span>
+          <input type="time" name="weekend_start" value="{{ dnd_weekend_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+        </label>
+        <label class="block text-sm">
+          <span class="block text-xs text-slate-600">Weekend end</span>
+          <input type="time" name="weekend_end" value="{{ dnd_weekend_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+        </label>
+      </div>
+      <p class="text-xs text-slate-500">Leave a start/end pair blank to skip that group. A window whose end is earlier than its start spans midnight (e.g. 22:00 to 07:00).</p>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save schedule</button>
+    </form>
+  </section>
+
   {% if password_change_available %}
   <form method="post" action="/settings/password" class="space-y-4">
     <h2 class="font-medium">Change password</h2>

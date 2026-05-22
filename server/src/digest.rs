@@ -242,6 +242,18 @@ async fn send_one_digest(
     server_url: &str,
     cfg: &DigestConfig,
 ) -> Result<(), AppError> {
+    // LC-88: Do Not Disturb holds (does not drop) the digest. If the
+    // recipient is in a quiet window right now, return without sending AND
+    // without marking `last_digest_sent_at`, so the same misses stay eligible
+    // and roll into the next tick once DND lifts.
+    if crate::dnd::is_suppressed_raw(
+        candidate.dnd_schedule_json.as_deref(),
+        candidate.dnd_paused_until.as_deref(),
+        chrono::Utc::now(),
+    ) {
+        return Ok(());
+    }
+
     let mentions = load_missed_mentions(
         &state.chat,
         &candidate.id,
