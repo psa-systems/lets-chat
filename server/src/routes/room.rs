@@ -16,6 +16,25 @@ use crate::views::room::{
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
+/// LC-153: upper bound on a message body, counted in characters so multibyte
+/// (CJK, emoji) text is not unfairly penalized. Generous for chat use while
+/// stopping ~2 MiB bodies from being stored and broadcast to every subscriber
+/// (the send path otherwise only checked for emptiness). Applies to new
+/// messages, thread replies, and edits.
+const MAX_MESSAGE_CHARS: usize = 16_000;
+
+/// Reject an over-length body before any DB write or broadcast. `body` is the
+/// already-trimmed message text. `pub(crate)` so the JSON API v1 message POST
+/// (`routes::api`) enforces the same cap as the web composer.
+pub(crate) fn check_message_length(body: &str) -> Result<(), AppError> {
+    if body.chars().count() > MAX_MESSAGE_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "message too long (max {MAX_MESSAGE_CHARS} characters)"
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct MessageForm {
     pub body: String,
@@ -409,6 +428,7 @@ pub async fn post_message(
     if body.is_empty() && form.file_id.is_none() {
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
+    check_message_length(body)?;
 
     // Banned/muted users cannot post anywhere.
     if user.is_banned {
@@ -1131,6 +1151,7 @@ pub async fn patch_message(
     if body.is_empty() {
         return Err(AppError::BadRequest("empty body".into()));
     }
+    check_message_length(body)?;
 
     let edited_at_str = db::chat::update_message_body(&state.chat, message_id, body).await?;
 
@@ -1452,6 +1473,7 @@ pub async fn post_thread_reply(
     if body.is_empty() {
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
+    check_message_length(body)?;
     if user.is_banned || user.is_muted {
         return Err(AppError::Forbidden);
     }
