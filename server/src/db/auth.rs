@@ -411,7 +411,8 @@ pub async fn create_session_with_origin(
     ip: Option<&str>,
 ) -> Result<String, sqlx::Error> {
     use rand::Rng;
-    let token: String = rand::thread_rng()
+    // LC-155: explicit OS CSPRNG for the session token (see generate_api_token).
+    let token: String = rand::rngs::OsRng
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(64)
         .map(char::from)

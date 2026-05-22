@@ -54,11 +54,19 @@ pub async fn get_unfurl(
     // Cache hit and not yet expired? Render directly.
     if let Some(row) = db::uploads::get_link_preview(&state.chat, &url_hash).await? {
         if !is_expired(&row.fetched_at) {
+            // LC-155: rows written before the og:image scheme guard (or by any
+            // future writer) are re-sanitized on read, so a stale row cannot
+            // surface a non-http(s) image source. Resolve against the row's URL.
+            let cached_image = row.image_url.as_deref().and_then(|raw| {
+                Url::parse(&row.url)
+                    .ok()
+                    .and_then(|base| sanitize_image_url(&base, raw))
+            });
             let frag = LinkPreviewFragment {
                 url: &row.url,
                 title: row.title.as_deref(),
                 description: row.description.as_deref(),
-                image_url: row.image_url.as_deref(),
+                image_url: cached_image.as_deref(),
             };
             return Ok(axum::response::Html(frag.render().unwrap_or_default()).into_response());
         }
@@ -157,13 +165,23 @@ pub async fn get_unfurl(
     };
     let parsed_meta = parse_meta(&html_str);
 
+    // LC-155: the `og:image` comes from the remote page and lands in an
+    // `<img src>`. Resolve it against the final page URL and keep it only if
+    // it is an absolute http/https URL, so a page cannot inject a
+    // `javascript:` / `data:` (or other-scheme) image source. Dropped rather
+    // than neutralized: a preview with no image is fine.
+    let image_url = parsed_meta
+        .image_url
+        .as_deref()
+        .and_then(|raw| sanitize_image_url(&current, raw));
+
     db::uploads::upsert_link_preview(
         &state.chat,
         &url_hash,
         parsed.as_str(),
         parsed_meta.title.as_deref(),
         parsed_meta.description.as_deref(),
-        parsed_meta.image_url.as_deref(),
+        image_url.as_deref(),
     )
     .await?;
 
@@ -171,7 +189,7 @@ pub async fn get_unfurl(
         url: parsed.as_str(),
         title: parsed_meta.title.as_deref(),
         description: parsed_meta.description.as_deref(),
-        image_url: parsed_meta.image_url.as_deref(),
+        image_url: image_url.as_deref(),
     };
     Ok(axum::response::Html(frag.render().unwrap_or_default()).into_response())
 }
@@ -181,6 +199,15 @@ struct PageMeta {
     title: Option<String>,
     description: Option<String>,
     image_url: Option<String>,
+}
+
+/// LC-155: resolve an `og:image` against the page URL and accept it only if it
+/// is an absolute http/https URL. Relative paths resolve against `base`;
+/// absolute non-http(s) schemes (`javascript:`, `data:`, ...) are rejected so
+/// they cannot reach an `<img src>`.
+fn sanitize_image_url(base: &Url, raw: &str) -> Option<String> {
+    let resolved = base.join(raw.trim()).ok()?;
+    matches!(resolved.scheme(), "http" | "https").then(|| resolved.to_string())
 }
 
 fn parse_meta(html_str: &str) -> PageMeta {
@@ -235,4 +262,41 @@ fn is_expired(fetched_at: &str) -> bool {
 
 fn empty_preview() -> Response {
     (StatusCode::OK, axum::response::Html(String::new())).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base() -> Url {
+        Url::parse("https://example.com/page").unwrap()
+    }
+
+    #[test]
+    fn image_url_accepts_absolute_and_relative_http() {
+        assert_eq!(
+            sanitize_image_url(&base(), "https://cdn.example.com/a.png").as_deref(),
+            Some("https://cdn.example.com/a.png")
+        );
+        // Relative resolves against the page URL.
+        assert_eq!(
+            sanitize_image_url(&base(), "/img/b.png").as_deref(),
+            Some("https://example.com/img/b.png")
+        );
+    }
+
+    #[test]
+    fn image_url_rejects_dangerous_schemes() {
+        for raw in [
+            "javascript:alert(1)",
+            "data:image/png;base64,AAAA",
+            "vbscript:x",
+            "file:///etc/passwd",
+        ] {
+            assert!(
+                sanitize_image_url(&base(), raw).is_none(),
+                "{raw} must be rejected"
+            );
+        }
+    }
 }
