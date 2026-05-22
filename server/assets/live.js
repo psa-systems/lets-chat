@@ -43,9 +43,17 @@
     subscribeWithin(evt.detail.socketWrapper, document);
   });
 
-  // Content loaded (initial render or an htmx swap into an already-open socket):
-  // subscribe any live elements in the freshly-loaded subtree.
-  document.body.addEventListener('htmx:load', function (evt) {
+  // A live page swapped into an already-open socket (notably the reconnect
+  // soft-refresh, which replaces #main without tearing the socket down):
+  // subscribe any live elements in the freshly-settled subtree. We listen on
+  // both htmx:load and htmx:afterSettle because the soft-refresh path drives
+  // re-scans via afterSettle (the same event the sidebar mention-count and
+  // voice re-scan logic key on), while a plain content load fires htmx:load;
+  // covering both avoids depending on which one a given swap emits.
+  // Re-subscribing is idempotent server-side, so the overlap is free.
+  function onContentSwap(evt) {
     if (window.__lcWS) subscribeWithin(window.__lcWS, evt.target);
-  });
+  }
+  document.body.addEventListener('htmx:load', onContentSwap);
+  document.body.addEventListener('htmx:afterSettle', onContentSwap);
 })();
