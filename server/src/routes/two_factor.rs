@@ -149,6 +149,8 @@ pub async fn post_login_challenge(
     jar: CookieJar,
     axum::Form(form): axum::Form<CodeForm>,
 ) -> Result<Response, AppError> {
+    // LC-151: throttle TOTP guessing on the shared per-IP login budget.
+    crate::routes::auth::enforce_login_rate_limit(&state, &headers).await?;
     let Some(key) = state.secret_key.as_ref().map(|k| **k) else {
         return Err(AppError::NotFound);
     };
@@ -218,6 +220,8 @@ pub async fn post_login_recovery(
     jar: CookieJar,
     axum::Form(form): axum::Form<CodeForm>,
 ) -> Result<Response, AppError> {
+    // LC-151: throttle recovery-code guessing on the shared per-IP login budget.
+    crate::routes::auth::enforce_login_rate_limit(&state, &headers).await?;
     if !state.two_factor_available() {
         return Err(AppError::NotFound);
     }
