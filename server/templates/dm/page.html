@@ -3,7 +3,7 @@
 {% block title %}@{{ peer.username }} - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex flex-1 overflow-hidden">
+<div class="flex flex-1 overflow-hidden" data-lc-live-room="{{ room.id }}">
   <div class="flex flex-col flex-1 overflow-hidden">
     {% let mute_mode = mute_mode.as_str() %}
     {% include "partials/dm_header.html" %}
@@ -16,33 +16,7 @@
   <aside id="history-panel" class="hidden"></aside>
 </div>
 
-<script>
-(function() {
-  // The DM page subscribes its connection to the DM room so message events
-  // broadcast to room subscribers reach this tab. `window.__lcWS` is now
-  // assigned globally in layout.html; here we only need to issue the
-  // subscribe frame. Tearing the listener down on #main swap keeps the
-  // reconnect soft-refresh from stacking duplicate subscribes per reload.
-  var subscribeFrame = JSON.stringify({ type: 'subscribe', room_id: {{ room.id }} });
-  function onWsOpen(evt) {
-    evt.detail.socketWrapper.send(subscribeFrame);
-  }
-  document.body.addEventListener('htmx:wsOpen', onWsOpen);
-  // If the WS handshake completed BEFORE this script attached (the
-  // reconnect soft-refresh swaps #main while leaving the socket open,
-  // so htmx:wsOpen has already fired for this connection), `__lcWS` is
-  // already populated. Send the subscribe directly so the sender's
-  // own newly-posted DM messages reach this tab and auto_scroll fires.
-  if (window.__lcWS) {
-    try { window.__lcWS.send(subscribeFrame); } catch (_) {}
-  }
-  function teardown() {
-    document.body.removeEventListener('htmx:wsOpen', onWsOpen);
-  }
-  var root = document.currentScript.closest('[data-lc-cleanup-root]')
-          || document.currentScript.parentElement;
-  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
-})();
-</script>
+{# LC-156: WS room subscription handled declaratively by live.js via the
+   data-lc-live-room attribute on the page root above. #}
 {% include "partials/auto_scroll.html" %}
 {% endblock %}

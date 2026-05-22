@@ -3,7 +3,7 @@
 {% block title %}#{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex flex-1 overflow-hidden">
+<div class="flex flex-1 overflow-hidden" data-lc-live-room="{{ room.id }}">
   <div class="flex flex-col flex-1 overflow-hidden">
     {% include "partials/room_header.html" %}
     {{ pinned_strip_html|safe }}
@@ -20,30 +20,7 @@
   <aside id="thread-panel" class="hidden"></aside>
   <aside id="history-panel" class="hidden"></aside>
 </div>
-<script>
-(function() {
-  var subscribeFrame = JSON.stringify({ type: 'subscribe', room_id: {{ room.id }} });
-  function onWsOpen(evt) {
-    window.__lcWS = evt.detail.socketWrapper;
-    evt.detail.socketWrapper.send(subscribeFrame);
-  }
-  document.body.addEventListener('htmx:wsOpen', onWsOpen);
-  // If WS already open by the time this script attaches (reconnect
-  // soft-refresh swaps #main without tearing the socket down), send
-  // subscribe directly so message events still reach this tab.
-  if (window.__lcWS) {
-    try { window.__lcWS.send(subscribeFrame); } catch (_) {}
-  }
-  // Teardown when #main is swapped (e.g. by the reconnect soft-refresh).
-  // Without this, every soft-refresh would add another wsOpen listener and
-  // the subscribe frame would fire N times per reconnect.
-  function teardown() {
-    document.body.removeEventListener('htmx:wsOpen', onWsOpen);
-  }
-  var root = document.currentScript.closest('[data-lc-cleanup-root]')
-          || document.currentScript.parentElement;
-  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
-})();
-</script>
+{# LC-156: WS room subscription is handled declaratively by live.js via the
+   data-lc-live-room attribute on the page root above. #}
 {% include "partials/auto_scroll.html" %}
 {% endblock %}
