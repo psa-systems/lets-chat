@@ -234,6 +234,45 @@ pub fn render_login_body(body: &str) -> String {
             None
         }
         _ if in_code_block => None,
+        // LC-154: same link/image scheme allowlist as the message renderer, so
+        // an admin-set login body cannot smuggle a `javascript:` link to every
+        // pre-auth visitor.
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
+            let dest_url = if link_scheme_is_safe(&dest_url) {
+                dest_url
+            } else {
+                "#".into()
+            };
+            Some(Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }))
+        }
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
+            let dest_url = if link_scheme_is_safe(&dest_url) {
+                dest_url
+            } else {
+                "#".into()
+            };
+            Some(Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }))
+        }
         other => Some(other),
     });
     let mut out = String::new();
@@ -427,6 +466,12 @@ mod tests {
         );
         assert!(out.contains(r#"href="/rel/path""#), "relative lost: {out}");
         assert!(out.contains(r#"href="mailto:x@y.z""#), "mailto lost: {out}");
+    }
+
+    #[test]
+    fn login_body_neutralizes_dangerous_link_schemes() {
+        let out = render_login_body("[x](javascript:alert(1))");
+        assert!(!out.contains("javascript:"), "login body js link: {out}");
     }
 
     #[test]
