@@ -81,3 +81,74 @@ pub async fn post_subscribe(
     .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
+
+#[derive(Deserialize)]
+pub struct ApnsRegisterBody {
+    pub device_token: String,
+    #[serde(default)]
+    pub topic: Option<String>,
+}
+
+/// POST /push/apns - register or replace an APNs (iOS) device token for the
+/// authenticated user. LC-91: tokens are accepted even before the server-side
+/// APNs sender is configured, so a native client can register early and
+/// delivery begins the moment credentials are wired. Returns 204.
+pub async fn post_apns_register(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    headers: HeaderMap,
+    Json(body): Json<ApnsRegisterBody>,
+) -> Result<Response, AppError> {
+    if body.device_token.trim().is_empty() {
+        return Err(AppError::BadRequest("missing device_token".into()));
+    }
+    let topic = body
+        .topic
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    db::apns_subscriptions::insert_or_replace(
+        &state.auth,
+        &user.id,
+        body.device_token.trim(),
+        topic,
+        user_agent.as_deref(),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[derive(Deserialize)]
+pub struct FcmRegisterBody {
+    pub registration_token: String,
+}
+
+/// POST /push/fcm - register or replace an FCM (Android) registration token
+/// for the authenticated user. Accepted before the FCM sender is configured;
+/// see `post_apns_register`. Returns 204.
+pub async fn post_fcm_register(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    headers: HeaderMap,
+    Json(body): Json<FcmRegisterBody>,
+) -> Result<Response, AppError> {
+    if body.registration_token.trim().is_empty() {
+        return Err(AppError::BadRequest("missing registration_token".into()));
+    }
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    db::fcm_subscriptions::insert_or_replace(
+        &state.auth,
+        &user.id,
+        body.registration_token.trim(),
+        user_agent.as_deref(),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}

@@ -6,7 +6,7 @@ use crate::auth::LastSeenLedger;
 use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
-use crate::push::PushClient;
+use crate::push::{ApnsClient, FcmClient, PushClient};
 use crate::rate_limit::RateLimits;
 use crate::ws::hub::Hub;
 
@@ -37,6 +37,13 @@ pub struct AppState {
     /// Always present. When `vapid` is `None`, the dispatch helper
     /// short-circuits before any client method is called.
     pub push_client: Arc<dyn PushClient>,
+    /// LC-91: APNs (iOS) sender. `None` until the native client (LC-99/123)
+    /// and operator APNs credentials exist; dispatch skips the channel when
+    /// unconfigured. Device tokens are still recorded so delivery starts the
+    /// moment a sender is wired.
+    pub apns_client: Option<Arc<dyn ApnsClient>>,
+    /// LC-91: FCM (Android) sender. `None` until configured; see `apns_client`.
+    pub fcm_client: Option<Arc<dyn FcmClient>>,
     /// `Some` when `LETS_CHAT_SMTP_URL` + `LETS_CHAT_SMTP_FROM` are set.
     /// `None` disables outbound mail; password reset routes return 404
     /// and the digest tick short-circuits.
