@@ -972,6 +972,9 @@ pub fn build_router(state: AppState) -> Router {
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
+        .route("/settings/dnd", post(settings::post_dnd_schedule))
+        .route("/settings/dnd/pause", post(settings::post_dnd_pause))
+        .route("/settings/dnd/resume", post(settings::post_dnd_resume))
         .route("/settings/export-data", get(export::get_export))
         .route(
             "/settings/delete-account",

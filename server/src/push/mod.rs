@@ -205,6 +205,14 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         return;
     }
 
+    // LC-88: Do Not Disturb. A web push is a real-time toast; there is no
+    // point delivering one that arrives during the user's quiet hours, so we
+    // drop it (the in-app activity record was already written upstream). The
+    // email digest, by contrast, holds and re-sends; see digest::run_tick.
+    if crate::dnd::is_suppressed(&recipient, chrono::Utc::now()) {
+        return;
+    }
+
     if let Some(room_id) = mute_room {
         let mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, room_id)
             .await

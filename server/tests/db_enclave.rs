@@ -34,6 +34,7 @@ async fn auth_pool() -> SqlitePool {
         include_str!("../migrations/auth/0018_starred_rooms.sql"),
         include_str!("../migrations/auth/0019_api_tokens.sql"),
         include_str!("../migrations/auth/0020_bots.sql"),
+        include_str!("../migrations/auth/0021_user_dnd.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
