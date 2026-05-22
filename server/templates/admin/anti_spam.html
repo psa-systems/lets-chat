@@ -23,6 +23,12 @@
              class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
     </div>
     <div>
+      <label class="block text-sm font-medium mb-1" for="rate_limit_logins">Login attempts per IP</label>
+      <input id="rate_limit_logins" name="rate_limit_logins" type="number" min="0" value="{{ rate_limit_logins }}"
+             class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+      <p class="text-xs text-slate-500 mt-1">Covers the password form and the 2FA / recovery challenge (shared budget). Per IP, so it requires a trusted reverse proxy. 0 disables.</p>
+    </div>
+    <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_password_resets">Password reset requests per IP</label>
       <input id="rate_limit_password_resets" name="rate_limit_password_resets" type="number" min="0" value="{{ rate_limit_password_resets }}"
              class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">

@@ -240,6 +240,52 @@ async fn register_rate_limit_returns_429_after_cap() {
     assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
 }
 
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn login_rate_limit_returns_429_after_cap() {
+    let t = app().await;
+    db::settings::set_setting(&t.settings, "rate_limit_logins", "3")
+        .await
+        .unwrap();
+    // Wrong-password attempts still count: the limit is checked before the
+    // password verify, so it throttles brute force regardless of outcome.
+    let body = "username=member&password=wrong";
+    for _ in 0..3 {
+        let status = send_with_ip(&t.app, "7.7.7.7", Method::POST, "/login", body).await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+    let status = send_with_ip(&t.app, "7.7.7.7", Method::POST, "/login", body).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    // A different IP is unaffected.
+    let status = send_with_ip(&t.app, "7.7.7.8", Method::POST, "/login", body).await;
+    assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn login_and_2fa_challenge_share_one_per_ip_budget() {
+    let t = app().await;
+    db::settings::set_setting(&t.settings, "rate_limit_logins", "2")
+        .await
+        .unwrap();
+    // Burn the per-IP login budget on the password form.
+    for _ in 0..2 {
+        send_with_ip(
+            &t.app,
+            "9.9.9.9",
+            Method::POST,
+            "/login",
+            "username=member&password=wrong",
+        )
+        .await;
+    }
+    // The 2FA challenge endpoint draws from the same Login bucket, so an attempt
+    // from the same IP is now throttled - and the rate-limit check runs before
+    // the pending-cookie check, so it 429s even with no valid challenge.
+    let status = send_with_ip(&t.app, "9.9.9.9", Method::POST, "/login/2fa", "code=000000").await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+}
+
 // LC-94 follow-up TODO: end-to-end /forgot rate-limit test needs a
 // stub `Mailer` in the test AppState. The current AppState literal
 // hard-codes `mailer: None`, which makes `state.mail_available()`
