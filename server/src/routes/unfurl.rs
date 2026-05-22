@@ -54,11 +54,19 @@ pub async fn get_unfurl(
     // Cache hit and not yet expired? Render directly.
     if let Some(row) = db::uploads::get_link_preview(&state.chat, &url_hash).await? {
         if !is_expired(&row.fetched_at) {
+            // LC-155: rows written before the og:image scheme guard (or by any
+            // future writer) are re-sanitized on read, so a stale row cannot
+            // surface a non-http(s) image source. Resolve against the row's URL.
+            let cached_image = row.image_url.as_deref().and_then(|raw| {
+                Url::parse(&row.url)
+                    .ok()
+                    .and_then(|base| sanitize_image_url(&base, raw))
+            });
             let frag = LinkPreviewFragment {
                 url: &row.url,
                 title: row.title.as_deref(),
                 description: row.description.as_deref(),
-                image_url: row.image_url.as_deref(),
+                image_url: cached_image.as_deref(),
             };
             return Ok(axum::response::Html(frag.render().unwrap_or_default()).into_response());
         }
