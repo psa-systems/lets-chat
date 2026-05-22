@@ -49,6 +49,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0019_api_tokens.sql"),
             include_str!("../migrations/auth/0020_bots.sql"),
             include_str!("../migrations/auth/0021_user_dnd.sql"),
+            include_str!("../migrations/auth/0022_mobile_push.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -134,6 +135,8 @@ async fn build_state() -> AppState {
         secret_key: None,
         vapid: None,
         push_client,
+        apns_client: None,
+        fcm_client: None,
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),

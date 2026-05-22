@@ -114,6 +114,11 @@ async fn main() {
         secret_key,
         vapid,
         push_client,
+        // LC-91: mobile push senders are not wired yet (no native client +
+        // no operator credentials). Device tokens are still accepted and
+        // stored; delivery begins once these become `Some`.
+        apns_client: None,
+        fcm_client: None,
         mailer,
         base_url,
         ice_servers,

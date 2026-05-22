@@ -2,7 +2,10 @@ use bytes::Bytes;
 use lets_chat::db::notifications::MuteMode;
 use lets_chat::db::push_subscriptions::PushSubscription;
 use lets_chat::db::vapid::VapidKeypair;
-use lets_chat::push::{self, MockPushClient, PushClient, PushError};
+use lets_chat::push::{
+    self, ApnsClient, FcmClient, MockApnsClient, MockFcmClient, MockPushClient, PushClient,
+    PushError,
+};
 use lets_chat::ws::events::ChatEvent;
 use lets_chat::{db, state::AppState, ws::hub::Hub};
 use sqlx::SqlitePool;
@@ -45,6 +48,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/auth/0019_api_tokens.sql"),
             include_str!("../migrations/auth/0020_bots.sql"),
             include_str!("../migrations/auth/0021_user_dnd.sql"),
+            include_str!("../migrations/auth/0022_mobile_push.sql"),
         ],
         "chat" => vec![
             include_str!("../migrations/chat/0001_create_tables.sql"),
@@ -122,6 +126,8 @@ struct Fixture {
     recipient_id: String,
     room_id: i64,
     mock: Arc<MockPushClient>,
+    apns_mock: Arc<MockApnsClient>,
+    fcm_mock: Arc<MockFcmClient>,
 }
 
 async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixture {
@@ -140,6 +146,11 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         .unwrap();
     // Seeded "general" room is id 1.
     let bg = lets_chat::bg::spawn(auth.clone());
+    // LC-91: always wire mobile mocks so the multi-channel fan-out is
+    // exercised. Web-Push-only tests register no APNs/FCM tokens, so these
+    // record nothing and stay invisible to them.
+    let apns_mock = Arc::new(MockApnsClient::default());
+    let fcm_mock = Arc::new(MockFcmClient::default());
     let state = AppState {
         auth,
         chat,
@@ -152,6 +163,8 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         secret_key: Some(Arc::new([0u8; 32])),
         vapid: Some(fake_vapid()),
         push_client: client,
+        apns_client: Some(apns_mock.clone() as Arc<dyn ApnsClient>),
+        fcm_client: Some(fcm_mock.clone() as Arc<dyn FcmClient>),
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
@@ -163,6 +176,8 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         recipient_id,
         room_id: 1,
         mock,
+        apns_mock,
+        fcm_mock,
     }
 }
 
@@ -183,6 +198,24 @@ async fn add_sub(state: &AppState, user_id: &str, endpoint: &str) {
     )
     .await
     .unwrap();
+}
+
+async fn add_apns_sub(state: &AppState, user_id: &str, token: &str) {
+    db::apns_subscriptions::insert_or_replace(
+        &state.auth,
+        user_id,
+        token,
+        Some("com.lc.app"),
+        Some("ua"),
+    )
+    .await
+    .unwrap();
+}
+
+async fn add_fcm_sub(state: &AppState, user_id: &str, token: &str) {
+    db::fcm_subscriptions::insert_or_replace(&state.auth, user_id, token, Some("ua"))
+        .await
+        .unwrap();
 }
 
 fn mention_event(room_id: i64, recipient: &str) -> ChatEvent {
@@ -468,4 +501,188 @@ fn payload_room_kind_uses_room_title_format() {
     let bytes = push::payload::build(&ev).unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["title"], "alice in #general");
+}
+
+// ---- LC-91: mobile push (APNs / FCM) fan-out -----------------------------
+
+/// Always-dead APNs token, mirrors `GoneClient` for the prune path.
+struct GoneApns;
+#[async_trait::async_trait]
+impl ApnsClient for GoneApns {
+    async fn send(
+        &self,
+        sub: &lets_chat::db::apns_subscriptions::ApnsSubscription,
+        _p: Bytes,
+    ) -> Result<(), PushError> {
+        Err(PushError::EndpointGone(sub.device_token.clone()))
+    }
+}
+
+/// Always-dead FCM token.
+struct GoneFcm;
+#[async_trait::async_trait]
+impl FcmClient for GoneFcm {
+    async fn send(
+        &self,
+        sub: &lets_chat::db::fcm_subscriptions::FcmSubscription,
+        _p: Bytes,
+    ) -> Result<(), PushError> {
+        Err(PushError::EndpointGone(sub.registration_token.clone()))
+    }
+}
+
+#[tokio::test]
+async fn dispatch_fans_out_to_all_channels_in_parallel() {
+    let mock = Arc::new(MockPushClient::default());
+    let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    enable_push(&f.state, &f.recipient_id).await;
+    add_sub(&f.state, &f.recipient_id, "https://e1.example/x").await;
+    add_apns_sub(&f.state, &f.recipient_id, "apns-tok-1").await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-tok-1").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    // One delivery per channel, all carrying the same payload (AC: consistent
+    // shape across channels).
+    let web = f.mock.sent.lock().await;
+    let apns = f.apns_mock.sent.lock().await;
+    let fcm = f.fcm_mock.sent.lock().await;
+    assert_eq!(web.len(), 1, "web push");
+    assert_eq!(apns.len(), 1, "apns");
+    assert_eq!(fcm.len(), 1, "fcm");
+    assert_eq!(apns[0].token, "apns-tok-1");
+    assert_eq!(fcm[0].token, "fcm-tok-1");
+    assert_eq!(apns[0].payload, web[0].payload);
+    assert_eq!(fcm[0].payload, web[0].payload);
+}
+
+#[tokio::test]
+async fn apns_dead_token_is_pruned() {
+    let mock = Arc::new(MockPushClient::default());
+    let mut f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    f.state.apns_client = Some(Arc::new(GoneApns) as Arc<dyn ApnsClient>);
+    enable_push(&f.state, &f.recipient_id).await;
+    add_apns_sub(&f.state, &f.recipient_id, "apns-dead").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    let remaining = db::apns_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+        .await
+        .unwrap();
+    assert!(
+        remaining.is_empty(),
+        "BadDeviceToken must prune the apns row"
+    );
+}
+
+#[tokio::test]
+async fn fcm_dead_token_is_pruned() {
+    let mock = Arc::new(MockPushClient::default());
+    let mut f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    f.state.fcm_client = Some(Arc::new(GoneFcm) as Arc<dyn FcmClient>);
+    enable_push(&f.state, &f.recipient_id).await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-dead").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    let remaining = db::fcm_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+        .await
+        .unwrap();
+    assert!(
+        remaining.is_empty(),
+        "NOT_REGISTERED must prune the fcm row"
+    );
+}
+
+#[tokio::test]
+async fn mobile_channels_skipped_when_notify_disabled() {
+    let mock = Arc::new(MockPushClient::default());
+    let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    // notify_push_enabled stays 0 (enable_push not called).
+    add_apns_sub(&f.state, &f.recipient_id, "apns-tok").await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-tok").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    assert!(f.apns_mock.sent.lock().await.is_empty());
+    assert!(f.fcm_mock.sent.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn mobile_channels_skipped_when_room_muted_all() {
+    let mock = Arc::new(MockPushClient::default());
+    let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    enable_push(&f.state, &f.recipient_id).await;
+    db::notifications::set_room_mute_mode(&f.state.chat, &f.recipient_id, f.room_id, MuteMode::All)
+        .await
+        .unwrap();
+    add_apns_sub(&f.state, &f.recipient_id, "apns-tok").await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-tok").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    assert!(f.apns_mock.sent.lock().await.is_empty());
+    assert!(f.fcm_mock.sent.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn mobile_channels_skipped_during_dnd() {
+    let mock = Arc::new(MockPushClient::default());
+    let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    enable_push(&f.state, &f.recipient_id).await;
+    // LC-88 manual pause far into the future suppresses every channel.
+    db::auth::set_dnd_pause(&f.state.auth, &f.recipient_id, Some("2099-01-01T00:00:00Z"))
+        .await
+        .unwrap();
+    add_apns_sub(&f.state, &f.recipient_id, "apns-tok").await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-tok").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    assert!(f.apns_mock.sent.lock().await.is_empty());
+    assert!(f.fcm_mock.sent.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn unconfigured_mobile_channel_is_a_no_op_and_keeps_tokens() {
+    let mock = Arc::new(MockPushClient::default());
+    let mut f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    // Simulate production: no mobile sender wired.
+    f.state.apns_client = None;
+    f.state.fcm_client = None;
+    enable_push(&f.state, &f.recipient_id).await;
+    add_apns_sub(&f.state, &f.recipient_id, "apns-keep").await;
+    add_fcm_sub(&f.state, &f.recipient_id, "fcm-keep").await;
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    // Tokens survive (a missing sender must not look like a dead token).
+    assert_eq!(
+        db::apns_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        db::fcm_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
