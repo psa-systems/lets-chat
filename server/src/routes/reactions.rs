@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Response};
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
+use crate::models::User;
 use crate::state::AppState;
 use crate::views::room::{ReactionBarFragment, ReactionView};
 use crate::views::{html, Html};
@@ -11,6 +12,28 @@ use crate::ws::events::ChatEvent;
 
 // percent_encoding is already a transitive dep via the workspace; the picker
 // uses it to URL-encode shortcodes/glyphs into the reactions path segment.
+
+/// LC-149: every reaction handler must verify the caller can access the
+/// message's room before touching it, exactly like the pinned/bookmark/poll
+/// handlers. Without this a caller could react in (or enumerate the custom
+/// emoji of) a private room / DM / enclave they are not a member of.
+async fn require_room_access(state: &AppState, user: &User, room_id: i64) -> Result<(), AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
+/// Upper bound on a reaction token. Legitimate values are a single unicode
+/// emoji (a few bytes) or a `:shortcode:` (shortcode is `[a-z0-9_]{2,32}`, so
+/// <= 34 bytes). 64 bytes is generous headroom while blocking junk rows from
+/// the raw `{emoji}` path segment (LC-149 / audit S3).
+const MAX_REACTION_BYTES: usize = 64;
+
+fn is_valid_reaction(emoji: &str) -> bool {
+    !emoji.is_empty() && emoji.len() <= MAX_REACTION_BYTES && !emoji.chars().any(|c| c.is_control())
+}
 
 /// POST /messages/:message_id/reactions/:emoji
 /// Toggle the caller's reaction for the given emoji on the given message.
@@ -24,6 +47,10 @@ pub async fn toggle_reaction(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    require_room_access(&state, &user, m.room_id).await?;
+    if !is_valid_reaction(&emoji) {
+        return Err(AppError::BadRequest("invalid reaction".into()));
+    }
 
     let added = db::chat::toggle_reaction(&state.chat, message_id, &user.id, &emoji).await?;
     let event = if added {
@@ -73,8 +100,18 @@ pub async fn toggle_reaction(
 /// the message's enclave (DMs and non-enclave rooms see unicode only).
 pub async fn get_picker(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Path(message_id): Path<i64>,
 ) -> Result<Response, AppError> {
+    // LC-149: gate before disclosing the room's custom-emoji inventory (and
+    // before the handler doubles as an unauthenticated message-existence
+    // oracle). 404 the message first so a non-member cannot distinguish
+    // "no such message" from "no access".
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    require_room_access(&state, &user, m.room_id).await?;
+
     let unicode_defaults = ["👍", "❤", "😂", "🎉", "😮", "😢"];
     let mut buttons = String::new();
     for e in &unicode_defaults {
@@ -84,22 +121,20 @@ pub async fn get_picker(
         ));
     }
 
-    if let Some(m) = db::chat::get_message(&state.chat, message_id).await? {
-        let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
-        for emoji in &emojis {
-            let key = format!(":{}:", emoji.shortcode);
-            let encoded =
-                percent_encoding::utf8_percent_encode(&key, percent_encoding::NON_ALPHANUMERIC);
-            // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
-            // so it is safe to inline into the markup without escaping.
-            buttons.push_str(&format!(
-                r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
-                id = message_id,
-                enc = encoded,
-                code = emoji.shortcode,
-                eid = emoji.id,
-            ));
-        }
+    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    for emoji in &emojis {
+        let key = format!(":{}:", emoji.shortcode);
+        let encoded =
+            percent_encoding::utf8_percent_encode(&key, percent_encoding::NON_ALPHANUMERIC);
+        // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
+        // so it is safe to inline into the markup without escaping.
+        buttons.push_str(&format!(
+            r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
+            id = message_id,
+            enc = encoded,
+            code = emoji.shortcode,
+            eid = emoji.id,
+        ));
     }
 
     let body = format!(
