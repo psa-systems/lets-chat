@@ -338,6 +338,31 @@ async fn dispatch_skips_dm_kind_when_room_muted() {
 }
 
 #[tokio::test]
+async fn dispatch_fires_when_room_mute_none() {
+    // Completes the none/except_mentions/all push triplet (LC-90): the
+    // default unmuted mode delivers a mention push.
+    let mock = Arc::new(MockPushClient::default());
+    let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;
+    enable_push(&f.state, &f.recipient_id).await;
+    add_sub(&f.state, &f.recipient_id, "https://e1.example/x").await;
+    db::notifications::set_room_mute_mode(
+        &f.state.chat,
+        &f.recipient_id,
+        f.room_id,
+        MuteMode::None,
+    )
+    .await
+    .unwrap();
+
+    let ev = mention_event(f.room_id, &f.recipient_id);
+    push::dispatch(&f.state, &f.recipient_id, &ev).await;
+    drain_spawns().await;
+
+    assert_eq!(f.mock.sent.lock().await.len(), 1);
+    let _ = f.sender_id;
+}
+
+#[tokio::test]
 async fn dispatch_fires_dm_kind_when_room_unmuted() {
     let mock = Arc::new(MockPushClient::default());
     let f = fixture(mock.clone() as Arc<dyn PushClient>, mock.clone()).await;

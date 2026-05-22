@@ -254,3 +254,36 @@ async fn muting_room_excludes_its_mentions_from_eligibility_floor_check() {
         "muted-all room must filter out alice's mention from the digest set"
     );
 }
+
+#[tokio::test]
+async fn except_mentions_keeps_mention_in_digest_set() {
+    // Symmetric to the muted-all test (LC-90): 'except_mentions' must NOT
+    // exclude the mention. The digest filter only drops 'all', so a user who
+    // muted plain chatter still receives their @mentions in the digest.
+    let h = build_harness().await;
+    db::notifications::set_room_mute_mode(
+        &h.state.chat,
+        &h.alice_id,
+        h.room_id,
+        db::notifications::MuteMode::ExceptMentions,
+    )
+    .await
+    .unwrap();
+    let mention_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) \
+           FROM mentions m \
+           LEFT JOIN room_notification_settings rns \
+                  ON rns.user_id = m.mentioned_user_id AND rns.room_id = m.room_id \
+          WHERE m.mentioned_user_id = ? \
+            AND m.read_at IS NULL \
+            AND (rns.mute_mode IS NULL OR rns.mute_mode <> 'all')",
+    )
+    .bind(&h.alice_id)
+    .fetch_one(&h.state.chat)
+    .await
+    .unwrap();
+    assert_eq!(
+        mention_count, 1,
+        "except_mentions must keep the mention in the digest set"
+    );
+}
