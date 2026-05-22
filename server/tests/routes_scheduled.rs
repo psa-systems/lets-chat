@@ -64,6 +64,8 @@ async fn fresh_app() -> TestApp {
         secret_key: None,
         vapid: None,
         push_client: Arc::new(lets_chat::push::MockPushClient::default()),
+        apns_client: None,
+        fcm_client: None,
         mailer: None,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),

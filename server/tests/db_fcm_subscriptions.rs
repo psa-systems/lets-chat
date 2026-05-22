@@ -1,4 +1,4 @@
-use lets_chat::db::push_subscriptions::{self, delete_by_endpoint, for_user, insert_or_replace};
+use lets_chat::db::fcm_subscriptions::{self, delete_by_token, for_user, insert_or_replace};
 use sqlx::SqlitePool;
 
 async fn setup_auth_pool() -> SqlitePool {
@@ -35,113 +35,72 @@ async fn setup_auth_pool() -> SqlitePool {
 #[tokio::test]
 async fn insert_persists_a_row() {
     let pool = setup_auth_pool().await;
-    let id = insert_or_replace(
-        &pool,
-        "u1",
-        "https://endpoint.example/abc",
-        "p256",
-        "auth",
-        Some("ua"),
-    )
-    .await
-    .unwrap();
+    let id = insert_or_replace(&pool, "u1", "reg-token-1", Some("ua"))
+        .await
+        .unwrap();
     assert!(id > 0);
     let subs = for_user(&pool, "u1").await.unwrap();
     assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].endpoint, "https://endpoint.example/abc");
-    assert_eq!(subs[0].p256dh_key, "p256");
+    assert_eq!(subs[0].registration_token, "reg-token-1");
 }
 
 #[tokio::test]
-async fn endpoint_conflict_replaces_owning_user() {
+async fn token_conflict_replaces_owning_user() {
     let pool = setup_auth_pool().await;
-    insert_or_replace(
-        &pool,
-        "u1",
-        "https://endpoint.example/abc",
-        "p1",
-        "a1",
-        None,
-    )
-    .await
-    .unwrap();
-    insert_or_replace(
-        &pool,
-        "u2",
-        "https://endpoint.example/abc",
-        "p2",
-        "a2",
-        None,
-    )
-    .await
-    .unwrap();
+    insert_or_replace(&pool, "u1", "tok", None).await.unwrap();
+    insert_or_replace(&pool, "u2", "tok", None).await.unwrap();
     assert!(for_user(&pool, "u1").await.unwrap().is_empty());
-    let subs = for_user(&pool, "u2").await.unwrap();
-    assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].p256dh_key, "p2");
-    assert_eq!(subs[0].auth_key, "a2");
+    assert_eq!(for_user(&pool, "u2").await.unwrap().len(), 1);
 }
 
 #[tokio::test]
 async fn for_user_lists_all_devices() {
     let pool = setup_auth_pool().await;
-    insert_or_replace(&pool, "u1", "https://e1", "p", "a", None)
-        .await
-        .unwrap();
-    insert_or_replace(&pool, "u1", "https://e2", "p", "a", None)
-        .await
-        .unwrap();
-    insert_or_replace(&pool, "u2", "https://e3", "p", "a", None)
-        .await
-        .unwrap();
-    let subs = for_user(&pool, "u1").await.unwrap();
-    assert_eq!(subs.len(), 2);
+    insert_or_replace(&pool, "u1", "t1", None).await.unwrap();
+    insert_or_replace(&pool, "u1", "t2", None).await.unwrap();
+    insert_or_replace(&pool, "u2", "t3", None).await.unwrap();
+    assert_eq!(for_user(&pool, "u1").await.unwrap().len(), 2);
 }
 
 #[tokio::test]
-async fn delete_by_endpoint_removes_one_row() {
+async fn delete_by_token_removes_one_row() {
     let pool = setup_auth_pool().await;
-    insert_or_replace(&pool, "u1", "https://e1", "p", "a", None)
-        .await
-        .unwrap();
-    insert_or_replace(&pool, "u1", "https://e2", "p", "a", None)
-        .await
-        .unwrap();
-    delete_by_endpoint(&pool, "https://e1").await.unwrap();
+    insert_or_replace(&pool, "u1", "t1", None).await.unwrap();
+    insert_or_replace(&pool, "u1", "t2", None).await.unwrap();
+    delete_by_token(&pool, "t1").await.unwrap();
     let subs = for_user(&pool, "u1").await.unwrap();
     assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].endpoint, "https://e2");
+    assert_eq!(subs[0].registration_token, "t2");
 }
 
 #[tokio::test]
 async fn bump_last_seen_updates_timestamp() {
     let pool = setup_auth_pool().await;
-    insert_or_replace(&pool, "u1", "https://e1", "p", "a", None)
-        .await
-        .unwrap();
-    // Rewind last_seen_at so the bump observably differs without sleeping.
+    insert_or_replace(&pool, "u1", "t1", None).await.unwrap();
     sqlx::query(
-        "UPDATE push_subscriptions SET last_seen_at = datetime('now', '-2 seconds') \
-          WHERE endpoint = ?",
+        "UPDATE fcm_subscriptions SET last_seen_at = datetime('now', '-2 seconds') \
+          WHERE registration_token = ?",
     )
-    .bind("https://e1")
+    .bind("t1")
     .execute(&pool)
     .await
     .unwrap();
-    let before: String =
-        sqlx::query_scalar("SELECT last_seen_at FROM push_subscriptions WHERE endpoint = ?")
-            .bind("https://e1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    push_subscriptions::bump_last_seen(&pool, "https://e1")
+    let before: String = sqlx::query_scalar(
+        "SELECT last_seen_at FROM fcm_subscriptions WHERE registration_token = ?",
+    )
+    .bind("t1")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    fcm_subscriptions::bump_last_seen(&pool, "t1")
         .await
         .unwrap();
-    let after: String =
-        sqlx::query_scalar("SELECT last_seen_at FROM push_subscriptions WHERE endpoint = ?")
-            .bind("https://e1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let after: String = sqlx::query_scalar(
+        "SELECT last_seen_at FROM fcm_subscriptions WHERE registration_token = ?",
+    )
+    .bind("t1")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_ne!(before, after);
 }
