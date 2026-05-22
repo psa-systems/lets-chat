@@ -36,7 +36,17 @@ pub const SESSION_COOKIE: &str = "session";
 /// control. Client IP prefers `X-Forwarded-For` (first hop) and falls back
 /// to `X-Real-IP`; when the deployment runs without a reverse proxy these
 /// will both be missing and the column stays NULL, which is fine.
-pub fn extract_session_origin(headers: &axum::http::HeaderMap) -> (Option<String>, Option<String>) {
+/// Extract the User-Agent and client IP for the session audit trail / login
+/// alert. LC-155: the IP is read from `X-Forwarded-For` / `X-Real-IP`, both
+/// trivially spoofable, so it is only trusted when `trust_proxy` is set (the
+/// operator runs behind a reverse proxy that sets them). Without that, the IP
+/// is `None` rather than a forgeable value, matching the rate limiter's
+/// posture. The User-Agent is always captured: it is display-only, not a
+/// security decision.
+pub fn extract_session_origin(
+    headers: &axum::http::HeaderMap,
+    trust_proxy: bool,
+) -> (Option<String>, Option<String>) {
     fn header_str(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
         headers
             .get(name)
@@ -46,12 +56,29 @@ pub fn extract_session_origin(headers: &axum::http::HeaderMap) -> (Option<String
     }
 
     let ua = header_str(headers, "user-agent").map(|s| truncate(&s, 256));
-    let ip = header_str(headers, "x-forwarded-for")
-        .and_then(|s| s.split(',').next().map(|p| p.trim().to_string()))
-        .filter(|s| !s.is_empty())
-        .or_else(|| header_str(headers, "x-real-ip"))
-        .map(|s| truncate(&s, 64));
+    let ip = if trust_proxy {
+        header_str(headers, "x-forwarded-for")
+            .and_then(|s| s.split(',').next().map(|p| p.trim().to_string()))
+            .filter(|s| !s.is_empty())
+            .or_else(|| header_str(headers, "x-real-ip"))
+            .map(|s| truncate(&s, 64))
+    } else {
+        None
+    };
     (ua, ip)
+}
+
+/// Whether the deployment trusts client-IP proxy headers (`X-Forwarded-For` /
+/// `X-Real-IP`). Operator opt-in via the `trust_proxy_headers` setting; the
+/// default migration seeds it `true`. Shared by the session-origin extractor
+/// and the per-IP rate limiter so both honor one switch.
+pub async fn proxy_headers_trusted(settings: &sqlx::SqlitePool) -> bool {
+    crate::db::settings::get_setting(settings, "trust_proxy_headers")
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("true")
 }
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -265,8 +292,12 @@ pub fn hash_api_token(secret: &[u8; 32], token: &str) -> String {
 /// alphanumerics. Shown to the user exactly once.
 pub fn generate_api_token() -> String {
     use rand::Rng;
+    // LC-155: use the OS CSPRNG explicitly. `thread_rng` is currently
+    // CSPRNG-backed too, but for a security token (also reused as the
+    // incoming-webhook secret) the guarantee should be in the source, not
+    // incidental to the default RNG.
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::OsRng;
     let body: String = (0..48)
         .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
         .collect();
