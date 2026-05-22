@@ -65,6 +65,27 @@ pub struct UserSettingsPage<'a> {
     pub git_hash: &'a str,
     pub git_version: &'a str,
     pub build_date: &'a str,
+    /// LC-88: Do Not Disturb. `dnd_active` drives the "currently quiet"
+    /// banner; `dnd_paused_until` is the raw stored instant (empty when no
+    /// manual pause). The five schedule fields are pre-split from the stored
+    /// JSON so the form renders the user's current quiet hours. `timezones`
+    /// is the IANA name list for the timezone picker.
+    pub dnd_active: bool,
+    pub dnd_paused_until: String,
+    pub dnd_timezone: String,
+    pub dnd_weekday_start: String,
+    pub dnd_weekday_end: String,
+    pub dnd_weekend_start: String,
+    pub dnd_weekend_end: String,
+    pub timezones: Vec<TzOption>,
+}
+
+/// One entry in the DND timezone picker. `selected` is precomputed so the
+/// template needs no string comparison (Askama can't compare `String` to the
+/// `&&str` yielded by iterating a `&[&str]`).
+pub struct TzOption {
+    pub name: &'static str,
+    pub selected: bool,
 }
 
 pub struct BlockedUserView {

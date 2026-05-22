@@ -5,6 +5,7 @@ pub mod commands;
 pub mod crypto;
 pub mod db;
 pub mod digest;
+pub mod dnd;
 pub mod error;
 pub mod last_visited;
 pub mod links;

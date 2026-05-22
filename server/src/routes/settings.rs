@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::auth::{AuthUser, CurrentSessionId, SESSION_COOKIE};
 use crate::db;
+use crate::dnd;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
@@ -48,6 +49,50 @@ pub struct SettingsForm {
     pub notify_login_alerts_enabled: Option<String>,
 }
 
+/// LC-88: the DND fields split out of a `UserRecord` for form rendering.
+#[derive(Default)]
+struct DndView {
+    paused_until: String,
+    timezone: String,
+    weekday_start: String,
+    weekday_end: String,
+    weekend_start: String,
+    weekend_end: String,
+}
+
+/// Split a stored DND schedule + pause into flat strings for the settings
+/// form. Missing/invalid values render as empty (the "Off" state).
+fn dnd_view_from(schedule_json: Option<&str>, paused_until: Option<&str>) -> DndView {
+    let mut v = DndView {
+        paused_until: paused_until.unwrap_or_default().to_string(),
+        ..Default::default()
+    };
+    if let Some(s) = crate::dnd::Schedule::parse(schedule_json) {
+        v.timezone = s.timezone;
+        if let Some(w) = s.weekday {
+            v.weekday_start = w.start;
+            v.weekday_end = w.end;
+        }
+        if let Some(w) = s.weekend {
+            v.weekend_start = w.start;
+            v.weekend_end = w.end;
+        }
+    }
+    v
+}
+
+/// IANA timezone options for the DND picker, with the user's current
+/// selection pre-marked.
+fn timezone_options(selected: &str) -> Vec<crate::views::settings::TzOption> {
+    chrono_tz::TZ_VARIANTS
+        .iter()
+        .map(|tz| crate::views::settings::TzOption {
+            name: tz.name(),
+            selected: tz.name() == selected,
+        })
+        .collect()
+}
+
 pub async fn get_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -78,6 +123,17 @@ pub async fn get_settings(
         format!("{:.2} MiB", storage_usage_bytes as f64 / (1024.0 * 1024.0));
     let storage_quota_display =
         storage_quota_bytes.map(|b| format!("{:.2} MiB", b as f64 / (1024.0 * 1024.0)));
+    // LC-88: read the raw DND columns (the public `User` only carries the
+    // computed `dnd_active` flag, not the stored schedule/pause) to render the
+    // editor in its current state.
+    let dnd = match db::auth::find_user_by_id(&state.auth, &user.id).await? {
+        Some(rec) => dnd_view_from(
+            rec.dnd_schedule_json.as_deref(),
+            rec.dnd_paused_until.as_deref(),
+        ),
+        None => DndView::default(),
+    };
+    let timezones = timezone_options(&dnd.timezone);
     let page = UserSettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -107,6 +163,14 @@ pub async fn get_settings(
         git_hash: version::GIT_HASH,
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
+        dnd_active: user.dnd_active,
+        dnd_paused_until: dnd.paused_until,
+        dnd_timezone: dnd.timezone,
+        dnd_weekday_start: dnd.weekday_start,
+        dnd_weekday_end: dnd.weekday_end,
+        dnd_weekend_start: dnd.weekend_start,
+        dnd_weekend_end: dnd.weekend_end,
+        timezones,
     };
     html(&page)
 }
@@ -326,6 +390,99 @@ pub async fn post_settings(
     let login_alerts = form.notify_login_alerts_enabled.is_some();
     db::auth::set_notify_login_alerts_enabled(&state.auth, &user.id, login_alerts).await?;
 
+    Ok(Redirect::to("/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct DndScheduleForm {
+    #[serde(default)]
+    pub timezone: String,
+    #[serde(default)]
+    pub weekday_start: String,
+    #[serde(default)]
+    pub weekday_end: String,
+    #[serde(default)]
+    pub weekend_start: String,
+    #[serde(default)]
+    pub weekend_end: String,
+}
+
+/// Validate a `"HH:MM"` pair into a `Window`, returning `None` when either
+/// side is blank or malformed so a partial/garbage entry disables that group
+/// instead of persisting an unusable window.
+fn parse_window(start: &str, end: &str) -> Option<dnd::Window> {
+    let (s, e) = (start.trim(), end.trim());
+    if s.is_empty() || e.is_empty() {
+        return None;
+    }
+    let valid = |x: &str| chrono::NaiveTime::parse_from_str(x, "%H:%M").is_ok();
+    if !valid(s) || !valid(e) {
+        return None;
+    }
+    Some(dnd::Window {
+        start: s.to_string(),
+        end: e.to_string(),
+    })
+}
+
+/// LC-88: save (or clear) the recurring DND schedule. An empty/invalid
+/// timezone, or a timezone with no usable windows, clears the schedule.
+pub async fn post_dnd_schedule(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<DndScheduleForm>,
+) -> Result<Response, AppError> {
+    let tz = form.timezone.trim();
+    let schedule_json = if tz.is_empty() || tz.parse::<chrono_tz::Tz>().is_err() {
+        None
+    } else {
+        let weekday = parse_window(&form.weekday_start, &form.weekday_end);
+        let weekend = parse_window(&form.weekend_start, &form.weekend_end);
+        if weekday.is_none() && weekend.is_none() {
+            // Timezone set but no windows: nothing to suppress, so store NULL
+            // rather than an inert schedule object.
+            None
+        } else {
+            let schedule = dnd::Schedule {
+                timezone: tz.to_string(),
+                weekday,
+                weekend,
+            };
+            Some(
+                serde_json::to_string(&schedule)
+                    .map_err(|e| AppError::Internal(format!("dnd schedule serialize: {e}")))?,
+            )
+        }
+    };
+    db::auth::set_dnd_schedule(&state.auth, &user.id, schedule_json.as_deref()).await?;
+    Ok(Redirect::to("/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct DndPauseForm {
+    pub minutes: i64,
+}
+
+/// LC-88: pause notifications for a fixed duration. Auto-expires by storing a
+/// future instant; no sweeper needed. Capped at 7 days so a stray value can
+/// never silence a user indefinitely.
+pub async fn post_dnd_pause(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<DndPauseForm>,
+) -> Result<Response, AppError> {
+    let minutes = form.minutes.clamp(1, 7 * 24 * 60);
+    let until = chrono::Utc::now() + chrono::Duration::minutes(minutes);
+    db::auth::set_dnd_pause(&state.auth, &user.id, Some(&until.to_rfc3339())).await?;
+    Ok(Redirect::to("/settings").into_response())
+}
+
+/// LC-88: clear an active manual pause (resume notifications now).
+pub async fn post_dnd_resume(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Response, AppError> {
+    db::auth::set_dnd_pause(&state.auth, &user.id, None).await?;
     Ok(Redirect::to("/settings").into_response())
 }
 
