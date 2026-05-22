@@ -315,6 +315,9 @@ fn spawn_outgoing_webhook_dispatcher(state: AppState) {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .user_agent("lets-chat-webhook/1")
+            // LC-152: do not follow redirects; a 3xx to an internal host would
+            // bypass the delivery-time SSRF check in run_delivery_tick.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_default();
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
