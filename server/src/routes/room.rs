@@ -24,8 +24,9 @@ use crate::ws::events::ChatEvent;
 const MAX_MESSAGE_CHARS: usize = 16_000;
 
 /// Reject an over-length body before any DB write or broadcast. `body` is the
-/// already-trimmed message text.
-fn check_message_length(body: &str) -> Result<(), AppError> {
+/// already-trimmed message text. `pub(crate)` so the JSON API v1 message POST
+/// (`routes::api`) enforces the same cap as the web composer.
+pub(crate) fn check_message_length(body: &str) -> Result<(), AppError> {
     if body.chars().count() > MAX_MESSAGE_CHARS {
         return Err(AppError::BadRequest(format!(
             "message too long (max {MAX_MESSAGE_CHARS} characters)"
