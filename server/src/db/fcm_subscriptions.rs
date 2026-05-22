@@ -36,7 +36,29 @@ pub async fn insert_or_replace(
     .bind(user_agent)
     .fetch_one(pool)
     .await?;
+    evict_over_cap(pool, user_id).await?;
     Ok(row.get("id"))
+}
+
+/// LC-147: keep at most `MAX_PUSH_SUBSCRIPTIONS_PER_USER` fcm rows for
+/// `user_id`, dropping the least-recently-seen first. See the Web Push
+/// `evict_over_cap` for the tie-break rationale.
+async fn evict_over_cap(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM fcm_subscriptions \
+          WHERE user_id = ?1 \
+            AND id NOT IN ( \
+                SELECT id FROM fcm_subscriptions \
+                 WHERE user_id = ?1 \
+                 ORDER BY last_seen_at DESC, id DESC \
+                 LIMIT ?2 \
+            )",
+    )
+    .bind(user_id)
+    .bind(crate::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn for_user(

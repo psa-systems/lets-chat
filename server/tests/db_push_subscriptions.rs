@@ -114,6 +114,46 @@ async fn delete_by_endpoint_removes_one_row() {
 }
 
 #[tokio::test]
+async fn register_beyond_cap_evicts_least_recently_seen() {
+    let pool = setup_auth_pool().await;
+    let cap = lets_chat::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER as usize;
+    for i in 0..(cap + 2) {
+        insert_or_replace(&pool, "u1", &format!("https://e{i}"), "p", "a", None)
+            .await
+            .unwrap();
+    }
+    let subs = for_user(&pool, "u1").await.unwrap();
+    assert_eq!(
+        subs.len(),
+        cap,
+        "user must be capped at the per-channel max"
+    );
+    let endpoints: Vec<String> = subs.iter().map(|s| s.endpoint.clone()).collect();
+    // The two earliest registrations (lowest ids, same-second last_seen) evict.
+    assert!(!endpoints.contains(&"https://e0".to_string()));
+    assert!(!endpoints.contains(&"https://e1".to_string()));
+    assert!(endpoints.contains(&format!("https://e{}", cap + 1)));
+}
+
+#[tokio::test]
+async fn reregistering_existing_endpoint_does_not_count_against_cap() {
+    let pool = setup_auth_pool().await;
+    let cap = lets_chat::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER as usize;
+    for i in 0..cap {
+        insert_or_replace(&pool, "u1", &format!("https://e{i}"), "p", "a", None)
+            .await
+            .unwrap();
+    }
+    // Re-register an existing endpoint: upserts in place, no new row, no eviction.
+    insert_or_replace(&pool, "u1", "https://e0", "p2", "a2", None)
+        .await
+        .unwrap();
+    let subs = for_user(&pool, "u1").await.unwrap();
+    assert_eq!(subs.len(), cap);
+    assert!(subs.iter().any(|s| s.endpoint == "https://e0"));
+}
+
+#[tokio::test]
 async fn bump_last_seen_updates_timestamp() {
     let pool = setup_auth_pool().await;
     insert_or_replace(&pool, "u1", "https://e1", "p", "a", None)
