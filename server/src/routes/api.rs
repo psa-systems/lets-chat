@@ -167,6 +167,9 @@ async fn post_message(
     if body.is_empty() {
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
+    // LC-153: same length cap as the web composer; the bearer-token API is
+    // otherwise an unbounded-body amplification path.
+    super::room::check_message_length(body)?;
     let room = require_room_access(&state, &auth, room_id).await?;
     let new_id = db::chat::insert_message(&state.chat, room_id, &auth.user.id, body).await?;
     let message =
