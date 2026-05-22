@@ -19,6 +19,7 @@ const PREVIEW_TTL_SECS: i64 = 24 * 60 * 60;
 const MAX_PREVIEW_BYTES: usize = 1024 * 1024;
 const FETCH_TIMEOUT_SECS: u64 = 5;
 const USER_AGENT: &str = "lets-chat-unfurler/1.0";
+const MAX_REDIRECTS: usize = 3;
 
 #[derive(Deserialize)]
 pub struct UnfurlParams {
@@ -64,43 +65,59 @@ pub async fn get_unfurl(
         }
     }
 
-    // SSRF: resolve the host and reject any non-public IPs before we let the
-    // reqwest client connect. This is the cheap belt-and-braces version of
-    // a custom resolver - DNS rebinding remains possible but is mitigated by
-    // the short response window and small body cap.
-    let host = match parsed.host_str() {
-        Some(h) => h,
-        None => return Ok(empty_preview()),
-    };
-    let port = parsed.port_or_known_default().unwrap_or(80);
-    let lookup = tokio::net::lookup_host((host, port)).await;
-    let Ok(addrs) = lookup else {
-        return Ok(empty_preview());
-    };
-    let mut any_addr = false;
-    for sa in addrs {
-        any_addr = true;
-        if !is_globally_routable(sa.ip()) {
-            return Ok(empty_preview());
-        }
-    }
-    if !any_addr {
-        return Ok(empty_preview());
-    }
-
     // Build a one-shot reqwest client per request so timeouts are scoped.
+    // Redirects are followed MANUALLY (Policy::none) so every hop is
+    // re-validated: reqwest's own redirect follower would connect to the
+    // redirect target without re-running the SSRF host check, letting an
+    // attacker-controlled page 302 us to 169.254.169.254 / 127.0.0.1 and
+    // defeat the pre-flight entirely (LC-150 / audit S4).
     let Ok(client) = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
-        .redirect(reqwest::redirect::Policy::limited(3))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
         return Ok(empty_preview());
     };
 
-    let resp = match client.get(parsed.as_str()).send().await {
-        Ok(r) => r,
-        Err(_) => return Ok(empty_preview()),
+    let mut current = parsed.clone();
+    let mut redirects = 0usize;
+    let resp = loop {
+        // Re-check on EVERY hop, not just the first: scheme (a redirect can
+        // jump to file:// / gopher://) and the host's resolved IPs (reject any
+        // non-globally-routable address before we connect). DNS rebinding
+        // across the resolve-then-connect gap remains a small residual risk,
+        // mitigated by the 5s timeout and 1 MiB body cap.
+        if !matches!(current.scheme(), "http" | "https") {
+            return Ok(empty_preview());
+        }
+        if !host_resolves_public(&current).await {
+            return Ok(empty_preview());
+        }
+        let r = match client.get(current.as_str()).send().await {
+            Ok(r) => r,
+            Err(_) => return Ok(empty_preview()),
+        };
+        if r.status().is_redirection() {
+            let Some(loc) = r
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+            else {
+                return Ok(empty_preview());
+            };
+            // Resolve relative redirects against the current URL.
+            let Ok(next) = current.join(loc) else {
+                return Ok(empty_preview());
+            };
+            redirects += 1;
+            if redirects > MAX_REDIRECTS {
+                return Ok(empty_preview());
+            }
+            current = next;
+            continue;
+        }
+        break r;
     };
     if !resp.status().is_success() {
         return Ok(empty_preview());
@@ -198,6 +215,28 @@ fn parse_meta(html_str: &str) -> PageMeta {
     meta
 }
 
+/// SSRF guard for a single URL: resolve its host and require that EVERY
+/// resolved address is globally routable. Returns false on no host, DNS
+/// failure, an empty address set, or any non-public address. Called for the
+/// initial URL and again for each redirect hop.
+async fn host_resolves_public(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let port = url.port_or_known_default().unwrap_or(80);
+    let Ok(addrs) = tokio::net::lookup_host((host, port)).await else {
+        return false;
+    };
+    let mut any_addr = false;
+    for sa in addrs {
+        any_addr = true;
+        if !is_globally_routable(sa.ip()) {
+            return false;
+        }
+    }
+    any_addr
+}
+
 /// IP allowlist: globally routable unicast only. Rejects loopback, private,
 /// link-local, CGNAT, multicast, broadcast, unspecified, documentation, and
 /// reserved addresses. Stable Rust does not yet expose IpAddr::is_global, so
@@ -280,4 +319,75 @@ fn is_expired(fetched_at: &str) -> bool {
 
 fn empty_preview() -> Response {
     (StatusCode::OK, axum::response::Html(String::new())).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv6Addr;
+
+    fn v4(s: &str) -> IpAddr {
+        s.parse::<std::net::Ipv4Addr>().unwrap().into()
+    }
+    fn v6(s: &str) -> IpAddr {
+        s.parse::<Ipv6Addr>().unwrap().into()
+    }
+
+    #[test]
+    fn rejects_non_public_v4() {
+        for s in [
+            "127.0.0.1",     // loopback
+            "10.0.0.1",      // private
+            "172.16.5.4",    // private
+            "192.168.1.1",   // private
+            "169.254.10.10", // link-local
+            "100.64.0.1",    // CGNAT
+            "198.18.0.1",    // benchmark
+            "240.0.0.1",     // reserved
+            "0.0.0.0",       // unspecified
+            "255.255.255.255",
+        ] {
+            assert!(!is_globally_routable(v4(s)), "{s} must be rejected");
+        }
+    }
+
+    #[test]
+    fn accepts_public_v4() {
+        for s in ["1.1.1.1", "8.8.8.8", "93.184.216.34"] {
+            assert!(is_globally_routable(v4(s)), "{s} must be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_non_public_v6() {
+        for s in ["::1", "fc00::1", "fd12::1", "fe80::1", "::"] {
+            assert!(!is_globally_routable(v6(s)), "{s} must be rejected");
+        }
+        // IPv4-mapped loopback must follow the v4 verdict.
+        assert!(!is_globally_routable(v6("::ffff:127.0.0.1")));
+        assert!(!is_globally_routable(v6("::ffff:10.0.0.1")));
+    }
+
+    #[test]
+    fn accepts_public_v6() {
+        assert!(is_globally_routable(v6("2606:4700:4700::1111")));
+    }
+
+    #[tokio::test]
+    async fn host_resolves_public_rejects_ip_literals_in_private_ranges() {
+        // IP literals resolve without DNS, so these are offline-safe.
+        for u in [
+            "http://127.0.0.1/",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/", // cloud metadata - the canonical SSRF target
+            "http://[::1]/",
+            "http://[fc00::1]/",
+        ] {
+            let url = Url::parse(u).unwrap();
+            assert!(
+                !host_resolves_public(&url).await,
+                "{u} must be rejected by the SSRF guard"
+            );
+        }
+    }
 }
