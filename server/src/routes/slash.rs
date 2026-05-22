@@ -276,29 +276,13 @@ pub(crate) fn webhook_url_ok(url: &str) -> bool {
     if lower == "localhost" || lower.ends_with(".localhost") || lower.ends_with(".internal") {
         return false;
     }
-    // Reject IP literals in loopback / private / link-local ranges. Hostnames
-    // that are not IPs pass (admin-trusted; full DNS-resolution checks are out
-    // of scope for v1).
+    // Reject IP literals in any non-globally-routable range (shared SSRF
+    // predicate). Hostnames that are not IP literals pass this cheap check and
+    // are resolved + re-validated at delivery time in `run_webhook`.
     if let Ok(ip) = lower.parse::<std::net::IpAddr>() {
-        return is_public_ip(&ip);
+        return crate::ssrf::is_globally_routable(ip);
     }
     true
-}
-
-fn is_public_ip(ip: &std::net::IpAddr) -> bool {
-    match ip {
-        std::net::IpAddr::V4(v4) => {
-            !(v4.is_loopback()
-                || v4.is_private()
-                || v4.is_link_local()
-                || v4.is_unspecified()
-                || v4.is_broadcast()
-                || v4.octets()[0] == 0)
-        }
-        std::net::IpAddr::V6(v6) => {
-            !(v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xffc0) == 0xfe80)
-        }
-    }
 }
 
 /// POST a custom command's args to its webhook URL and return the response
@@ -309,8 +293,21 @@ async fn run_webhook(url: &str, args: &str) -> Result<String, AppError> {
             "custom command webhook URL is not allowed".into(),
         ));
     }
+    // LC-152: the string check above only stops IP-literal internal URLs.
+    // Resolve the host here and reject any that maps to a non-public address
+    // (a hostname pointing at internal services / cloud metadata).
+    let parsed = url::Url::parse(url)
+        .map_err(|_| AppError::BadRequest("custom command webhook URL is invalid".into()))?;
+    if !crate::ssrf::host_resolves_public(&parsed).await {
+        return Err(AppError::BadRequest(
+            "custom command webhook URL is not allowed".into(),
+        ));
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(WEBHOOK_TIMEOUT_SECS))
+        // LC-152: no redirect-following; a 3xx to an internal host would
+        // bypass the resolve check above.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| AppError::Internal(format!("http client: {e}")))?;
     // reqwest's `json` feature is not enabled in this build; serialize the
