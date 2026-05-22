@@ -111,6 +111,8 @@ async fn build_harness() -> Harness {
         secret_key: Some(Arc::new([42u8; 32])),
         vapid: None,
         push_client: Arc::new(push::MockPushClient::default()),
+        apns_client: None,
+        fcm_client: None,
         // The merged digest path goes through `mail::Mailer` for the
         // actual send, which is concrete and not test-substitutable.
         // Setting `mailer: None` exercises every code path through to

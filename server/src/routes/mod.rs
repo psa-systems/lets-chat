@@ -1010,6 +1010,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sw.js", get(push::get_service_worker))
         .route("/push/vapid-public-key", get(push::get_vapid_public_key))
         .route("/push/subscribe", post(push::post_subscribe))
+        .route("/push/apns", post(push::post_apns_register))
+        .route("/push/fcm", post(push::post_fcm_register))
         // The upload handler streams + caps bytes itself based on settings,
         // so disable Axum's default 2 MiB body cap on this route only.
         .route(

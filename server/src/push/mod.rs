@@ -18,7 +18,8 @@ use web_push_native::{
 };
 
 use crate::db::{
-    self, notifications::MuteMode, push_subscriptions::PushSubscription, vapid::VapidKeypair,
+    self, apns_subscriptions::ApnsSubscription, fcm_subscriptions::FcmSubscription,
+    notifications::MuteMode, push_subscriptions::PushSubscription, vapid::VapidKeypair,
 };
 use crate::state::AppState;
 use crate::ws::events::ChatEvent;
@@ -139,6 +140,73 @@ impl PushClient for MockPushClient {
     }
 }
 
+// LC-91: native mobile push channels. Each is a thin trait so the dispatch
+// fan-out stays channel-agnostic; the production HTTP senders (APNs
+// token-based JWT, FCM HTTP v1) land when the native client (LC-99/LC-123)
+// and operator credentials exist. `AppState` carries each as an `Option`, so
+// an unconfigured channel is simply skipped at dispatch time.
+
+#[async_trait]
+pub trait ApnsClient: Send + Sync {
+    /// Deliver `payload` to one iOS device token. A dead token (APNs
+    /// `BadDeviceToken` / `Unregistered`) must surface as
+    /// `PushError::EndpointGone(device_token)` so the dispatch path prunes it.
+    async fn send(&self, sub: &ApnsSubscription, payload: Bytes) -> Result<(), PushError>;
+}
+
+#[async_trait]
+pub trait FcmClient: Send + Sync {
+    /// Deliver `payload` to one Android registration token. A dead token (FCM
+    /// `NOT_REGISTERED` / `UNREGISTERED`) must surface as
+    /// `PushError::EndpointGone(registration_token)` so it is pruned.
+    async fn send(&self, sub: &FcmSubscription, payload: Bytes) -> Result<(), PushError>;
+}
+
+/// One recorded mobile send (APNs or FCM), keyed by the device/registration
+/// token. Mirrors `RecordedSend` for the Web Push mock.
+#[derive(Debug, Clone)]
+pub struct RecordedMobileSend {
+    pub token: String,
+    pub user_id: String,
+    pub payload: Bytes,
+}
+
+/// Test-only `ApnsClient`. Records every `send` for assertion.
+#[derive(Default)]
+pub struct MockApnsClient {
+    pub sent: tokio::sync::Mutex<Vec<RecordedMobileSend>>,
+}
+
+#[async_trait]
+impl ApnsClient for MockApnsClient {
+    async fn send(&self, sub: &ApnsSubscription, payload: Bytes) -> Result<(), PushError> {
+        self.sent.lock().await.push(RecordedMobileSend {
+            token: sub.device_token.clone(),
+            user_id: sub.user_id.clone(),
+            payload,
+        });
+        Ok(())
+    }
+}
+
+/// Test-only `FcmClient`. Records every `send` for assertion.
+#[derive(Default)]
+pub struct MockFcmClient {
+    pub sent: tokio::sync::Mutex<Vec<RecordedMobileSend>>,
+}
+
+#[async_trait]
+impl FcmClient for MockFcmClient {
+    async fn send(&self, sub: &FcmSubscription, payload: Bytes) -> Result<(), PushError> {
+        self.sent.lock().await.push(RecordedMobileSend {
+            token: sub.registration_token.clone(),
+            user_id: sub.user_id.clone(),
+            payload,
+        });
+        Ok(())
+    }
+}
+
 /// Process-global cap on the number of concurrent `client.send()` calls in
 /// flight at any moment. Sized for a single-server deployment talking to
 /// FCM / Mozilla autopush from one origin: well within typical per-server
@@ -185,7 +253,10 @@ fn push_fanout_sem() -> &'static tokio::sync::Semaphore {
 /// vendor, the OS owns the notification. Same semantics as `@username`
 /// today; documented here for future readers.
 pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEvent) {
-    if state.vapid.is_none() {
+    // LC-91: bail cheap if no channel is configured at all. Web Push needs
+    // VAPID; the mobile channels each carry their own client (`None` until the
+    // live senders + operator credentials land).
+    if state.vapid.is_none() && state.apns_client.is_none() && state.fcm_client.is_none() {
         return;
     }
     // LC-63: reminders also push. `mute_room` is the room to check against
@@ -205,10 +276,12 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         return;
     }
 
-    // LC-88: Do Not Disturb. A web push is a real-time toast; there is no
-    // point delivering one that arrives during the user's quiet hours, so we
-    // drop it (the in-app activity record was already written upstream). The
-    // email digest, by contrast, holds and re-sends; see digest::run_tick.
+    // LC-88: Do Not Disturb. A push is a real-time toast; there is no point
+    // delivering one that arrives during the user's quiet hours, so we drop it
+    // (the in-app activity record was already written upstream). The email
+    // digest, by contrast, holds and re-sends; see digest::run_tick. LC-91:
+    // this and the mute check below gate every channel uniformly, since they
+    // run before any per-channel fan-out.
     if crate::dnd::is_suppressed(&recipient, chrono::Utc::now()) {
         return;
     }
@@ -222,21 +295,31 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
         }
     }
 
-    let subs = match db::push_subscriptions::for_user(&state.auth, recipient_user_id).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!(error = %e, "push: subscription lookup failed");
-            return;
-        }
-    };
-    if subs.is_empty() {
-        return;
-    }
-
+    // One payload shape for every channel (AC: consistent deep-link / title /
+    // body across Web Push, APNs, FCM). Built once and cloned per send.
     let payload = match payload::build(event) {
         Ok(p) => p,
         Err(e) => {
             tracing::warn!(error = %e, "push: payload build failed");
+            return;
+        }
+    };
+
+    fan_out_webpush(state, recipient_user_id, &payload).await;
+    fan_out_apns(state, recipient_user_id, &payload).await;
+    fan_out_fcm(state, recipient_user_id, &payload).await;
+}
+
+/// Web Push fan-out: one spawned task per stored subscription. No-op when
+/// VAPID is unconfigured.
+async fn fan_out_webpush(state: &AppState, recipient_user_id: &str, payload: &Bytes) {
+    if state.vapid.is_none() {
+        return;
+    }
+    let subs = match db::push_subscriptions::for_user(&state.auth, recipient_user_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "push: webpush subscription lookup failed");
             return;
         }
     };
@@ -263,6 +346,86 @@ pub async fn dispatch(state: &AppState, recipient_user_id: &str, event: &ChatEve
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, endpoint = %sub.endpoint, "push send failed");
+                }
+            }
+        });
+    }
+}
+
+/// APNs (iOS) fan-out. No-op when no APNs client is configured. A dead token
+/// (`EndpointGone`) is pruned inline, mirroring the Web Push 410 path.
+async fn fan_out_apns(state: &AppState, recipient_user_id: &str, payload: &Bytes) {
+    let Some(client) = state.apns_client.clone() else {
+        return;
+    };
+    let subs = match db::apns_subscriptions::for_user(&state.auth, recipient_user_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "push: apns subscription lookup failed");
+            return;
+        }
+    };
+    for sub in subs {
+        let client = client.clone();
+        let auth_pool = state.auth.clone();
+        let payload = payload.clone();
+        tokio::spawn(async move {
+            let _permit = push_fanout_sem()
+                .acquire()
+                .await
+                .expect("push fan-out semaphore not closed");
+            match client.send(&sub, payload).await {
+                Ok(()) => {
+                    let _ =
+                        db::apns_subscriptions::bump_last_seen(&auth_pool, &sub.device_token).await;
+                }
+                Err(PushError::EndpointGone(_)) => {
+                    let _ = db::apns_subscriptions::delete_by_token(&auth_pool, &sub.device_token)
+                        .await;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, token = %sub.device_token, "apns send failed");
+                }
+            }
+        });
+    }
+}
+
+/// FCM (Android) fan-out. No-op when no FCM client is configured. A dead token
+/// (`EndpointGone`) is pruned inline.
+async fn fan_out_fcm(state: &AppState, recipient_user_id: &str, payload: &Bytes) {
+    let Some(client) = state.fcm_client.clone() else {
+        return;
+    };
+    let subs = match db::fcm_subscriptions::for_user(&state.auth, recipient_user_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "push: fcm subscription lookup failed");
+            return;
+        }
+    };
+    for sub in subs {
+        let client = client.clone();
+        let auth_pool = state.auth.clone();
+        let payload = payload.clone();
+        tokio::spawn(async move {
+            let _permit = push_fanout_sem()
+                .acquire()
+                .await
+                .expect("push fan-out semaphore not closed");
+            match client.send(&sub, payload).await {
+                Ok(()) => {
+                    let _ =
+                        db::fcm_subscriptions::bump_last_seen(&auth_pool, &sub.registration_token)
+                            .await;
+                }
+                Err(PushError::EndpointGone(_)) => {
+                    let _ =
+                        db::fcm_subscriptions::delete_by_token(&auth_pool, &sub.registration_token)
+                            .await;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, token = %sub.registration_token, "fcm send failed");
                 }
             }
         });
