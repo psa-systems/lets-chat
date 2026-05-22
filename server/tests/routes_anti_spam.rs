@@ -188,6 +188,39 @@ async fn message_rate_limit_disabled_when_cap_is_zero() {
     }
 }
 
+// ── Message length cap (LC-153) ───────────────────────────────────────────
+
+#[tokio::test]
+async fn message_over_length_cap_returns_400() {
+    let t = app().await;
+    // 16_001 chars: one past MAX_MESSAGE_CHARS.
+    let huge = "x".repeat(16_001);
+    let (status, _) = send(
+        &t.app,
+        Some(&t.member_session),
+        Method::POST,
+        "/room/1/messages",
+        &format!("body={huge}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn message_at_length_cap_is_accepted() {
+    let t = app().await;
+    let at_limit = "y".repeat(16_000);
+    let (status, _) = send(
+        &t.app,
+        Some(&t.member_session),
+        Method::POST,
+        "/room/1/messages",
+        &format!("body={at_limit}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
 // ── Honeypot + register ───────────────────────────────────────────────────
 
 #[cfg(feature = "standalone")]

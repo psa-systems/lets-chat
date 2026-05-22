@@ -194,6 +194,23 @@ async fn write_scope_posts_and_read_scope_reads() {
 }
 
 #[tokio::test]
+async fn api_message_over_length_cap_returns_400() {
+    // LC-153: the bearer-token POST enforces the same 16k-char cap as the web
+    // composer, so the API is not an unbounded-body amplification path.
+    let t = app().await;
+    mint(&t, "lc_big", "messages:write", None).await;
+    let huge = "x".repeat(16_001);
+    let (status, _) = api_post(
+        &t.app,
+        "lc_big",
+        &format!("/api/v1/rooms/{}/messages", t.room),
+        &format!("{{\"body\":\"{huge}\"}}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn expired_token_is_401() {
     let t = app().await;
     mint(&t, "lc_old", "rooms:read", Some("2000-01-01 00:00:00")).await;
