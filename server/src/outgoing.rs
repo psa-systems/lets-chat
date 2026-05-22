@@ -85,10 +85,30 @@ pub struct DeliveryStats {
     pub failed: usize,
 }
 
-/// Attempt all due deliveries once. Driven by the background loop.
+/// Attempt all due deliveries once. Driven by the background loop. Enforces the
+/// LC-152 delivery-time SSRF guard on every target URL.
 pub async fn run_delivery_tick(
     chat: &SqlitePool,
     client: &reqwest::Client,
+) -> sqlx::Result<DeliveryStats> {
+    deliver_due(chat, client, true).await
+}
+
+/// Test seam: a delivery tick with the SSRF guard disabled, so the delivery-path
+/// tests can target a loopback receiver (which the guard would otherwise, and in
+/// production correctly does, reject). Production always uses `run_delivery_tick`.
+#[doc(hidden)]
+pub async fn run_delivery_tick_unchecked(
+    chat: &SqlitePool,
+    client: &reqwest::Client,
+) -> sqlx::Result<DeliveryStats> {
+    deliver_due(chat, client, false).await
+}
+
+async fn deliver_due(
+    chat: &SqlitePool,
+    client: &reqwest::Client,
+    check_ssrf: bool,
 ) -> sqlx::Result<DeliveryStats> {
     let due = db::outgoing_webhooks::due_deliveries(chat, BATCH).await?;
     let mut stats = DeliveryStats::default();
@@ -100,6 +120,27 @@ pub async fn run_delivery_tick(
         };
         if t.disabled_at.is_some() {
             db::outgoing_webhooks::mark_failed(chat, d.id, 0, Some("webhook disabled")).await?;
+            continue;
+        }
+
+        // LC-152: re-validate the destination at delivery time. Creation only
+        // does a string check that lets any hostname through, so a URL whose
+        // host resolves to an internal / cloud-metadata address would be
+        // fetched here with signed payloads. Resolve and reject non-public
+        // targets (and non-http(s) schemes) before connecting. Terminal, not
+        // retried: a blocked URL will not become public on a later tick.
+        let url_ok = !check_ssrf
+            || match url::Url::parse(&t.url) {
+                Ok(u) => {
+                    matches!(u.scheme(), "http" | "https")
+                        && crate::ssrf::host_resolves_public(&u).await
+                }
+                Err(_) => false,
+            };
+        if !url_ok {
+            db::outgoing_webhooks::mark_failed(chat, d.id, 0, Some("blocked: non-public URL"))
+                .await?;
+            stats.failed += 1;
             continue;
         }
 
