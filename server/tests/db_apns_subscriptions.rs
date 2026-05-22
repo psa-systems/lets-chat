@@ -97,6 +97,40 @@ async fn delete_by_token_removes_one_row() {
 }
 
 #[tokio::test]
+async fn register_beyond_cap_evicts_least_recently_seen() {
+    let pool = setup_auth_pool().await;
+    let cap = lets_chat::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER as usize;
+    for i in 0..(cap + 2) {
+        insert_or_replace(&pool, "u1", &format!("tok{i}"), None, None)
+            .await
+            .unwrap();
+    }
+    let subs = for_user(&pool, "u1").await.unwrap();
+    assert_eq!(subs.len(), cap);
+    let tokens: Vec<String> = subs.iter().map(|s| s.device_token.clone()).collect();
+    assert!(!tokens.contains(&"tok0".to_string()));
+    assert!(!tokens.contains(&"tok1".to_string()));
+    assert!(tokens.contains(&format!("tok{}", cap + 1)));
+}
+
+#[tokio::test]
+async fn reregistering_existing_token_does_not_count_against_cap() {
+    let pool = setup_auth_pool().await;
+    let cap = lets_chat::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER as usize;
+    for i in 0..cap {
+        insert_or_replace(&pool, "u1", &format!("tok{i}"), None, None)
+            .await
+            .unwrap();
+    }
+    insert_or_replace(&pool, "u1", "tok0", Some("changed"), None)
+        .await
+        .unwrap();
+    let subs = for_user(&pool, "u1").await.unwrap();
+    assert_eq!(subs.len(), cap);
+    assert!(subs.iter().any(|s| s.device_token == "tok0"));
+}
+
+#[tokio::test]
 async fn bump_last_seen_updates_timestamp() {
     let pool = setup_auth_pool().await;
     insert_or_replace(&pool, "u1", "t1", None, None)

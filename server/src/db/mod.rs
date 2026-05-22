@@ -43,6 +43,14 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+/// LC-147: maximum active push subscriptions a single user may hold *per
+/// channel* (Web Push, APNs, FCM each get their own budget). Registering
+/// beyond this evicts the least-recently-seen rows for that user in that
+/// channel. Generous for real multi-device use; far below abuse levels. The
+/// register endpoints require an authenticated session, so this caps a
+/// logged-in user's storage footprint rather than an anonymous one.
+pub const MAX_PUSH_SUBSCRIPTIONS_PER_USER: i64 = 20;
+
 static DATA_DIR: OnceLock<String> = OnceLock::new();
 
 /// Initialize the global data directory. Called once at startup from main.

@@ -41,7 +41,30 @@ pub async fn insert_or_replace(
     .bind(user_agent)
     .fetch_one(pool)
     .await?;
+    evict_over_cap(pool, user_id).await?;
     Ok(row.get("id"))
+}
+
+/// LC-147: keep at most `MAX_PUSH_SUBSCRIPTIONS_PER_USER` rows for `user_id`,
+/// dropping the least-recently-seen first. The row just upserted has
+/// `last_seen_at = now`, so it always survives. Tie-break on `id` so a burst
+/// of same-second registrations evicts deterministically (oldest id first).
+async fn evict_over_cap(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM push_subscriptions \
+          WHERE user_id = ?1 \
+            AND id NOT IN ( \
+                SELECT id FROM push_subscriptions \
+                 WHERE user_id = ?1 \
+                 ORDER BY last_seen_at DESC, id DESC \
+                 LIMIT ?2 \
+            )",
+    )
+    .bind(user_id)
+    .bind(crate::db::MAX_PUSH_SUBSCRIPTIONS_PER_USER)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn for_user(
