@@ -30,6 +30,7 @@ struct TestApp {
     session: String,
     viewer_id: String,
     peer_id: String,
+    auth: SqlitePool,
     chat: SqlitePool,
 }
 
@@ -56,6 +57,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
+    let auth_for_test = auth.clone();
     let chat_for_test = chat.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
@@ -81,6 +83,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         session,
         viewer_id,
         peer_id,
+        auth: auth_for_test,
         chat: chat_for_test,
     }
 }
@@ -544,4 +547,38 @@ fn allows_unread_bump_matrix() {
     assert!(MuteMode::None.allows_unread_bump());
     assert!(!MuteMode::ExceptMentions.allows_unread_bump());
     assert!(!MuteMode::All.allows_unread_bump());
+}
+
+#[tokio::test]
+async fn private_room_page_renders_notify_dropdown() {
+    // LC-90 AC: the all/mentions/none toggle must be reachable from the room
+    // header for every room kind that supports it. The seeded general room
+    // (the label test) covers the public + enclave-scoped case as an admin;
+    // this guards that a NON-admin plain member of a standalone private
+    // channel sees the same shared dropdown (it lives in the shared
+    // room_header partial with no role gate, so a member must get it too).
+    let t = app_with_two_users("viewer", "alice").await;
+    // Scope the private channel to the seeded General enclave (peer is a member
+    // via backfill); a non-admin reaches a private room through enclave
+    // membership plus an explicit room_members row, so a standalone
+    // enclave-less private room would 403 for them.
+    let enclave_id: i64 = sqlx::query_scalar("SELECT enclave_id FROM rooms WHERE id = 1")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    let room_id = db::chat::create_room(&t.chat, "secret", None, "private", None, Some(enclave_id))
+        .await
+        .unwrap();
+    // `peer` ("alice") is a plain user, not an admin; add them as a member and
+    // view the page through their own session.
+    db::chat::add_room_member(&t.chat, room_id, &t.peer_id)
+        .await
+        .unwrap();
+    let peer_session = db::auth::create_session(&t.auth, &t.peer_id).await.unwrap();
+    let (status, body) = get_room_page(&t.app, &peer_session, room_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!(r#"id="lc-notify-toggle-{room_id}""#)),
+        "private room page must render the notify dropdown for a non-admin member: {body}"
+    );
 }
