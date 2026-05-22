@@ -103,7 +103,12 @@ pub async fn get_unfurl(
                 .headers()
                 .get(reqwest::header::LOCATION)
                 .and_then(|v| v.to_str().ok())
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
             else {
+                // No / empty Location: a 3xx with nothing to follow. Bail
+                // rather than `join("")` back onto the same URL (which would
+                // just burn redirect budget re-fetching it).
                 return Ok(empty_preview());
             };
             // Resolve relative redirects against the current URL.
