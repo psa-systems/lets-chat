@@ -19,6 +19,7 @@ pub mod reminders;
 pub mod retention;
 pub mod routes;
 pub mod scheduled;
+pub mod ssrf;
 pub mod state;
 pub mod uploads;
 pub mod version;

@@ -122,7 +122,7 @@ async fn delivery_succeeds_and_is_signed() {
     .unwrap();
     lets_chat::outgoing::enqueue(&chat, "message.posted", 1, serde_json::json!({"x":1})).await;
 
-    let stats = lets_chat::outgoing::run_delivery_tick(&chat, &client())
+    let stats = lets_chat::outgoing::run_delivery_tick_unchecked(&chat, &client())
         .await
         .unwrap();
     assert_eq!(stats.delivered, 1);
@@ -153,7 +153,7 @@ async fn failed_delivery_reschedules_with_backoff() {
         .unwrap();
     lets_chat::outgoing::enqueue(&chat, "message.posted", 1, serde_json::json!({})).await;
 
-    let stats = lets_chat::outgoing::run_delivery_tick(&chat, &client())
+    let stats = lets_chat::outgoing::run_delivery_tick_unchecked(&chat, &client())
         .await
         .unwrap();
     assert_eq!(stats.retried, 1, "5xx schedules a retry");
@@ -169,6 +169,37 @@ async fn failed_delivery_reschedules_with_backoff() {
             .unwrap();
     assert_eq!(any.0, 1, "attempt incremented");
     assert!(any.1.is_none(), "not delivered");
+}
+
+#[tokio::test]
+async fn delivery_blocks_non_public_url_and_is_terminal() {
+    // LC-152: a webhook URL whose host resolves to a non-public address must be
+    // rejected at delivery time (before connecting) and not retried, even
+    // though it passed the creation-time string check.
+    let chat = common::pool("chat").await;
+    owh::insert(
+        &chat,
+        "global",
+        None,
+        "message.posted",
+        "http://127.0.0.1:9/hook",
+        "s",
+        "admin",
+    )
+    .await
+    .unwrap();
+    lets_chat::outgoing::enqueue(&chat, "message.posted", 1, serde_json::json!({})).await;
+
+    let stats = lets_chat::outgoing::run_delivery_tick(&chat, &client())
+        .await
+        .unwrap();
+    assert_eq!(stats.failed, 1, "loopback URL must be blocked");
+    assert_eq!(stats.delivered, 0);
+    // Terminal: marked failed, not rescheduled for a later tick.
+    assert!(
+        owh::due_deliveries(&chat, 100).await.unwrap().is_empty(),
+        "blocked delivery must not be retried"
+    );
 }
 
 #[tokio::test]
