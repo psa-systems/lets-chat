@@ -71,6 +71,32 @@ pub fn render(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Strin
     rendered
 }
 
+/// LC-154: is a markdown link/image destination safe to emit as an `href` /
+/// `src`? Allows relative URLs (fragment, query, path, or scheme-less) and the
+/// `http`/`https`/`mailto` schemes; rejects `javascript:`, `data:`, `vbscript:`
+/// and anything else that could execute on click.
+fn link_scheme_is_safe(dest: &str) -> bool {
+    let d = dest.trim();
+    // Relative / fragment / query / protocol-relative-but-pathless are safe;
+    // they cannot carry an executable scheme.
+    if d.starts_with('/') || d.starts_with('#') || d.starts_with('?') {
+        return true;
+    }
+    match d.split_once(':') {
+        // No colon: scheme-less (relative) reference.
+        None => true,
+        // A colon that appears after a '/' is part of the path, not a scheme
+        // (e.g. `foo/bar:baz`), so the reference is relative and safe.
+        Some((scheme, _)) if scheme.contains('/') => true,
+        Some((scheme, _)) => {
+            matches!(
+                scheme.trim().to_ascii_lowercase().as_str(),
+                "http" | "https" | "mailto"
+            )
+        }
+    }
+}
+
 fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -106,9 +132,49 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
             code_buf.push_str(&t);
             None
         }
-        ev @ Event::Start(Tag::Link { .. }) => {
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
             link_depth += 1;
-            Some(ev)
+            // LC-154: pulldown_cmark writes the destination into `href`
+            // verbatim, so `[x](javascript:alert(1))` would render a
+            // click-to-execute XSS anchor. Neutralize any destination whose
+            // scheme is not on the allowlist by pointing it at `#`.
+            let dest_url = if link_scheme_is_safe(&dest_url) {
+                dest_url
+            } else {
+                "#".into()
+            };
+            Some(Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }))
+        }
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) => {
+            // Same allowlist for image sources (defense-in-depth; a
+            // `javascript:` img src does not execute in modern browsers, but a
+            // disallowed scheme has no business in an `<img src>`).
+            let dest_url = if link_scheme_is_safe(&dest_url) {
+                dest_url
+            } else {
+                "#".into()
+            };
+            Some(Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }))
         }
         ev @ Event::End(TagEnd::Link) => {
             link_depth = link_depth.saturating_sub(1);
@@ -323,6 +389,60 @@ mod tests {
     fn soft_break_renders_as_line_break() {
         let out = render("line one\nline two", &[], &[]);
         assert!(out.contains("<br"), "no <br>: {out}");
+    }
+
+    #[test]
+    fn javascript_link_scheme_is_neutralized() {
+        let out = render("[click](javascript:alert(document.cookie))", &[], &[]);
+        assert!(!out.contains("javascript:"), "js scheme survived: {out}");
+        assert!(out.contains(r##"href="#""##), "not neutralized: {out}");
+        assert!(out.contains("click"), "label lost: {out}");
+    }
+
+    #[test]
+    fn data_and_vbscript_link_schemes_are_neutralized() {
+        for bad in [
+            "[x](data:text/plain;base64,AAAA)",
+            "[x](vbscript:msgbox)",
+            "[x](VBScript:msgbox)", // case-insensitive
+        ] {
+            let out = render(bad, &[], &[]);
+            assert!(
+                !out.to_lowercase().contains("data:") && !out.to_lowercase().contains("vbscript:"),
+                "scheme survived for {bad}: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn safe_link_schemes_are_preserved() {
+        let out = render(
+            "[a](https://example.com/p) [b](/rel/path) [c](mailto:x@y.z)",
+            &[],
+            &[],
+        );
+        assert!(
+            out.contains(r#"href="https://example.com/p""#),
+            "https lost: {out}"
+        );
+        assert!(out.contains(r#"href="/rel/path""#), "relative lost: {out}");
+        assert!(out.contains(r#"href="mailto:x@y.z""#), "mailto lost: {out}");
+    }
+
+    #[test]
+    fn link_scheme_predicate_matrix() {
+        assert!(link_scheme_is_safe("https://x.com"));
+        assert!(link_scheme_is_safe("http://x.com"));
+        assert!(link_scheme_is_safe("mailto:a@b.c"));
+        assert!(link_scheme_is_safe("/relative"));
+        assert!(link_scheme_is_safe("#frag"));
+        assert!(link_scheme_is_safe("example.com/path")); // scheme-less
+        assert!(link_scheme_is_safe("path/to:thing")); // colon in path, not a scheme
+        assert!(!link_scheme_is_safe("javascript:alert(1)"));
+        assert!(!link_scheme_is_safe("  javascript:alert(1)")); // leading ws
+        assert!(!link_scheme_is_safe("data:text/html,x"));
+        assert!(!link_scheme_is_safe("vbscript:x"));
+        assert!(!link_scheme_is_safe("file:///etc/passwd"));
     }
 
     #[test]
