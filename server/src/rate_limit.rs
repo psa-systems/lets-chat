@@ -50,6 +50,9 @@ pub enum RateLimitKind {
     Message,
     /// Per-IP cap on `POST /register`.
     Register,
+    /// LC-151: per-IP cap shared by `POST /login`, `POST /login/2fa`, and
+    /// `POST /login/recovery` to blunt online password + code brute force.
+    Login,
     /// Per-IP cap on `POST /forgot`.
     PasswordReset,
     /// LC-74: per-webhook cap on `POST /webhook/{secret}`.
@@ -61,6 +64,7 @@ impl RateLimitKind {
         match self {
             RateLimitKind::Message => "msg",
             RateLimitKind::Register => "reg",
+            RateLimitKind::Login => "login",
             RateLimitKind::PasswordReset => "pwr",
             RateLimitKind::Webhook => "whk",
         }

@@ -280,6 +280,7 @@ pub struct AntiSpamPage<'a> {
     pub section: &'static str,
     pub rate_limit_messages: u32,
     pub rate_limit_registrations: u32,
+    pub rate_limit_logins: u32,
     pub rate_limit_password_resets: u32,
     pub link_filter_enabled: bool,
     pub honeypot_enabled: bool,

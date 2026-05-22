@@ -1020,6 +1020,8 @@ pub struct AntiSpamForm {
     #[serde(default)]
     pub rate_limit_registrations: Option<String>,
     #[serde(default)]
+    pub rate_limit_logins: Option<String>,
+    #[serde(default)]
     pub rate_limit_password_resets: Option<String>,
     /// Checkboxes: present when on, omitted when off.
     #[serde(default)]
@@ -1069,6 +1071,11 @@ pub async fn get_anti_spam(
             "rate_limit_registrations",
         )
         .await,
+        rate_limit_logins: crate::rate_limit::read_u32_setting(
+            &state.settings,
+            "rate_limit_logins",
+        )
+        .await,
         rate_limit_password_resets: crate::rate_limit::read_u32_setting(
             &state.settings,
             "rate_limit_password_resets",
@@ -1107,6 +1114,7 @@ pub async fn post_anti_spam(
     }
     let msg = cap_or_zero(&form.rate_limit_messages);
     let reg = cap_or_zero(&form.rate_limit_registrations);
+    let login = cap_or_zero(&form.rate_limit_logins);
     let pwr = cap_or_zero(&form.rate_limit_password_resets);
     let link = if form.link_filter_enabled.is_some() {
         "true"
@@ -1120,10 +1128,11 @@ pub async fn post_anti_spam(
     };
     db::settings::set_setting(&state.settings, "rate_limit_messages", &msg).await?;
     db::settings::set_setting(&state.settings, "rate_limit_registrations", &reg).await?;
+    db::settings::set_setting(&state.settings, "rate_limit_logins", &login).await?;
     db::settings::set_setting(&state.settings, "rate_limit_password_resets", &pwr).await?;
     db::settings::set_setting(&state.settings, "link_filter_enabled", link).await?;
     db::settings::set_setting(&state.settings, "honeypot_enabled", hp).await?;
-    let summary = format!("msg={msg} reg={reg} pwr={pwr} link={link} hp={hp}");
+    let summary = format!("msg={msg} reg={reg} login={login} pwr={pwr} link={link} hp={hp}");
     db::moderation::log_mod_action(
         &state.chat,
         "anti_spam_settings",

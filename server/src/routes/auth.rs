@@ -75,12 +75,43 @@ pub(crate) async fn build_login_page<'a>(
     })
 }
 
+/// LC-151: per-IP throttle shared by the login form and the 2FA / recovery
+/// challenge endpoints, to blunt online password + code brute force. Like the
+/// register limiter it is per-IP, so it is only effective behind a trusted
+/// reverse proxy (`client_ip_for_rate_limit` returns `None` and the check
+/// no-ops otherwise). The operator sets the cap via the `rate_limit_logins`
+/// setting; `0` (default) disables it. All three endpoints share one `Login`
+/// bucket so attempts against the password and the second factor draw from the
+/// same per-IP budget.
+pub(crate) async fn enforce_login_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(), AppError> {
+    let cap = crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_logins").await;
+    if let Some(ip) = crate::rate_limit::client_ip_for_rate_limit(&state.settings, headers).await {
+        if let crate::rate_limit::Outcome::Deny { retry_after } =
+            state
+                .rate_limits
+                .check(crate::rate_limit::RateLimitKind::Login, &ip, cap)
+        {
+            return Err(AppError::TooManyRequests(
+                format!(
+                    "too many login attempts from this address; retry in {retry_after} seconds"
+                ),
+                retry_after,
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub async fn post_login(
     State(state): State<AppState>,
     headers: HeaderMap,
     jar: CookieJar,
     axum::Form(form): axum::Form<LoginForm>,
 ) -> Result<Response, AppError> {
+    enforce_login_rate_limit(&state, &headers).await?;
     let record = match db::auth::find_user_by_username(&state.auth, &form.username).await? {
         // LC-73: bots authenticate only via API tokens; the cookie login path
         // refuses them (same generic error as a wrong password).
