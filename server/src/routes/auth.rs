@@ -152,7 +152,8 @@ pub async fn post_login(
         return Ok((jar, Redirect::to("/login/2fa")).into_response());
     }
 
-    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
     let token =
         db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
             .await?;
@@ -366,7 +367,8 @@ pub async fn post_register(
         }
     }
 
-    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
     let token =
         db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
             .await?;

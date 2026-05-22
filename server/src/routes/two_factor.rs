@@ -264,7 +264,8 @@ async fn finalize_2fa_login(
     pending_token: &str,
     user_id: &str,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = crate::auth::extract_session_origin(headers);
+    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
+    let (ua, ip) = crate::auth::extract_session_origin(headers, trust_proxy);
     let session =
         db::auth::create_session_with_origin(&state.auth, user_id, ua.as_deref(), ip.as_deref())
             .await?;
@@ -544,7 +545,8 @@ pub async fn post_register_2fa(
         }
     }
 
-    let (ua, ip) = crate::auth::extract_session_origin(&headers);
+    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
+    let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
     let session =
         db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
             .await?;

@@ -106,16 +106,11 @@ pub async fn client_ip_for_rate_limit(
     pool: &sqlx::SqlitePool,
     headers: &axum::http::HeaderMap,
 ) -> Option<String> {
-    let trust = crate::db::settings::get_setting(pool, "trust_proxy_headers")
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true");
-    if !trust {
+    if !crate::auth::proxy_headers_trusted(pool).await {
         return None;
     }
-    crate::auth::extract_session_origin(headers).1
+    // Trust already confirmed; extract the proxy-supplied client IP.
+    crate::auth::extract_session_origin(headers, true).1
 }
 
 /// Read a `settings.db` KV value as `u32`. Missing keys and blank
