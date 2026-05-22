@@ -545,3 +545,24 @@ fn allows_unread_bump_matrix() {
     assert!(!MuteMode::ExceptMentions.allows_unread_bump());
     assert!(!MuteMode::All.allows_unread_bump());
 }
+
+#[tokio::test]
+async fn private_room_page_renders_notify_dropdown() {
+    // LC-90 AC: the all/mentions/none toggle must be reachable from the room
+    // header for every room kind that supports it. The seeded general room
+    // (id 1) covers the public + enclave-scoped case; this guards a
+    // standalone private channel rendering the same shared dropdown.
+    let t = app_with_two_users("viewer", "alice").await;
+    let room_id = db::chat::create_room(&t.chat, "secret", None, "private", None, None)
+        .await
+        .unwrap();
+    db::chat::add_room_member(&t.chat, room_id, &t.viewer_id)
+        .await
+        .unwrap();
+    let (status, body) = get_room_page(&t.app, &t.session, room_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!(r#"id="lc-notify-toggle-{room_id}""#)),
+        "private room page must render the notify dropdown: {body}"
+    );
+}
