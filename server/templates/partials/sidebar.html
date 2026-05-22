@@ -5,7 +5,7 @@
         {% let avatar_user_id = user.id.clone() %}
         {% let avatar_username = user.username.clone() %}
         {% let avatar_ext = user.avatar_ext.clone() %}
-        {% let avatar_status = user.status.clone() %}
+        {% let avatar_status = user.effective_status() %}
         {% let avatar_custom_status = user.custom_status.clone() %}
         {% let avatar_size = "h-8 w-8 text-sm" %}
         {% include "partials/avatar.html" %}

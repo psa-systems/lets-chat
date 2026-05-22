@@ -2,7 +2,7 @@
   {% let avatar_user_id = peer.id.clone() %}
   {% let avatar_username = peer.username.clone() %}
   {% let avatar_ext = peer.avatar_ext.clone() %}
-  {% let avatar_status = peer.status.clone() %}
+  {% let avatar_status = peer.effective_status() %}
   {% let avatar_custom_status = peer.custom_status.clone() %}
   {% let avatar_size = "h-8 w-8 text-sm" %}
   {% include "partials/avatar.html" %}

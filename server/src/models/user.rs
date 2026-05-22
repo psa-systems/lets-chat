@@ -30,6 +30,12 @@ pub struct UserRecord {
     pub notify_login_alerts_enabled: bool,
     pub last_ws_seen_at: Option<String>,
     pub last_digest_sent_at: Option<String>,
+    /// LC-88: recurring Do Not Disturb schedule (quiet hours), JSON or NULL.
+    /// See `crate::dnd::Schedule` for the shape.
+    pub dnd_schedule_json: Option<String>,
+    /// LC-88: explicit manual pause instant (ISO-8601 UTC) or NULL. When in
+    /// the future it supersedes the schedule.
+    pub dnd_paused_until: Option<String>,
     /// Optional notification address. Used by the email digest tick and
     /// eventually by other email features. Deliberately NOT mirrored
     /// onto the public `User` projection - email is recipient metadata,
@@ -72,6 +78,10 @@ pub struct User {
     pub totp_enabled: bool,
     /// LC-73: true for bot identities. Drives the "bot" badge in chat.
     pub is_bot: bool,
+    /// LC-88: true when Do Not Disturb is currently active (manual pause or a
+    /// schedule window). Computed at projection time from the record's DND
+    /// columns against the wall clock; surfaces the "do not disturb" badge.
+    pub dnd_active: bool,
 }
 
 impl User {
@@ -82,10 +92,25 @@ impl User {
             _ => &self.username,
         }
     }
+
+    /// Presence status to render in the avatar badge. LC-88: an active Do Not
+    /// Disturb shows the "do not disturb" (red) dot regardless of the stored
+    /// presence status, so others can see the user is quiet.
+    pub fn effective_status(&self) -> &str {
+        if self.dnd_active {
+            "dnd"
+        } else {
+            &self.status
+        }
+    }
 }
 
 impl From<UserRecord> for User {
     fn from(r: UserRecord) -> Self {
+        // Compute DND state against the current instant before the record is
+        // consumed below. `is_suppressed` early-outs cheaply when neither a
+        // pause nor a schedule is set, which is the common case.
+        let dnd_active = crate::dnd::is_suppressed(&r, chrono::Utc::now());
         User {
             id: r.id,
             username: r.username,
@@ -111,6 +136,7 @@ impl From<UserRecord> for User {
             notify_login_alerts_enabled: r.notify_login_alerts_enabled,
             totp_enabled: r.totp_enabled,
             is_bot: r.is_bot,
+            dnd_active,
         }
     }
 }

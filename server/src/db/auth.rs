@@ -48,7 +48,8 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
-         last_ws_seen_at, last_digest_sent_at, email, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
     )
@@ -69,7 +70,8 @@ pub async fn find_user_by_username(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
-         last_ws_seen_at, last_digest_sent_at, email, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -92,7 +94,8 @@ pub async fn find_user_by_id(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
-         last_ws_seen_at, last_digest_sent_at, email, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users WHERE id = ?",
     )
@@ -132,6 +135,8 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         notify_login_alerts_enabled: r.get::<i64, _>("notify_login_alerts_enabled") != 0,
         last_ws_seen_at: r.get("last_ws_seen_at"),
         last_digest_sent_at: r.get("last_digest_sent_at"),
+        dnd_schedule_json: r.get("dnd_schedule_json"),
+        dnd_paused_until: r.get("dnd_paused_until"),
         email: r.get("email"),
         totp_secret_encrypted: r.get("totp_secret_encrypted"),
         totp_nonce: r.get("totp_nonce"),
@@ -273,6 +278,10 @@ pub struct DigestCandidate {
     /// it as the lower bound on "missed" mention/DM created_at, AND as
     /// the comparison point for `last_digest_sent_at`.
     pub activity_floor: String,
+    /// LC-88: DND schedule + manual pause, carried so the digest tick can
+    /// hold a send while the recipient is in a quiet window.
+    pub dnd_schedule_json: Option<String>,
+    pub dnd_paused_until: Option<String>,
 }
 
 /// Find users currently eligible for an email-digest send. A user is
@@ -296,7 +305,7 @@ pub async fn find_digest_candidates(
 ) -> Result<Vec<DigestCandidate>, sqlx::Error> {
     let quiet_modifier = format!("-{quiet_period_secs} seconds");
     let rows = sqlx::query(
-        "SELECT id, username, email, \
+        "SELECT id, username, email, dnd_schedule_json, dnd_paused_until, \
                 MAX(last_active_at, COALESCE(last_ws_seen_at, '')) AS activity_floor \
            FROM users \
           WHERE notify_email_digest_enabled = 1 \
@@ -315,6 +324,8 @@ pub async fn find_digest_candidates(
             username: r.get("username"),
             email: r.get("email"),
             activity_floor: r.get("activity_floor"),
+            dnd_schedule_json: r.get("dnd_schedule_json"),
+            dnd_paused_until: r.get("dnd_paused_until"),
         })
         .collect())
 }
@@ -500,7 +511,8 @@ pub async fn get_user_by_session(
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
-         u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
+         u.last_ws_seen_at, u.last_digest_sent_at, \
+         u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -538,7 +550,8 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
-         last_ws_seen_at, last_digest_sent_at, email, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users ORDER BY created_at ASC",
     )
@@ -799,6 +812,39 @@ pub async fn set_notify_login_alerts_enabled(
     Ok(())
 }
 
+/// LC-88: persist a user's DND schedule. `schedule_json` is `None` to clear
+/// the schedule (no quiet hours). The caller is responsible for validating
+/// the JSON shape before storing.
+pub async fn set_dnd_schedule(
+    pool: &SqlitePool,
+    user_id: &str,
+    schedule_json: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET dnd_schedule_json = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(schedule_json)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// LC-88: set or clear the manual pause instant. `paused_until` is an
+/// ISO-8601 UTC string, or `None` to resume immediately.
+pub async fn set_dnd_pause(
+    pool: &SqlitePool,
+    user_id: &str,
+    paused_until: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET dnd_paused_until = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(paused_until)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Toggle the digest-opt-in flag for `user_id`. Used by the register
 /// flow when the operator has flipped `default_notify_email_digest` to
 /// `1`: new users start opted in, but the column default in the schema
@@ -918,7 +964,8 @@ pub async fn search_users(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
-         last_ws_seen_at, last_digest_sent_at, email, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
          FROM users \
          WHERE is_banned = 0 \
@@ -1170,7 +1217,8 @@ pub async fn list_blocked_users(
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
-         u.last_ws_seen_at, u.last_digest_sent_at, u.email, \
+         u.last_ws_seen_at, u.last_digest_sent_at, \
+         u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
