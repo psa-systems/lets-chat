@@ -64,6 +64,17 @@ p256 = { version = "0.13", features = ["pkcs8", "pem", "ecdh"] }
 bytes = "1"
 base64 = "0.22"
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+# LC-59: server-side LaTeX -> MathML rendering for inline `$...$` and
+# display `$$...$$` math in message bodies. Pure Rust, no JS engine.
+#
+# Pinned EXACTLY to 0.7.1 with `=`. The control-sequence blocklist in
+# `views::math` is validated against this version's specific macro
+# surface and evasions (whitespace, `\let` aliasing, `\csname`, TeX
+# comments). A minor bump could add a macro-defining primitive the
+# blocklist misses, silently re-opening the process-abort vector via
+# `\def`-family stack overflow (uncatchable by `catch_unwind`).
+# Re-run the LC-59 spike before merging any version bump.
+pulldown-latex = "=0.7.1"
 syntect = { version = "5", default-features = false, features = ["default-fancy", "html"] }
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "rustls-tls", "hostname"] }
 hmac = { version = "0.12" }
