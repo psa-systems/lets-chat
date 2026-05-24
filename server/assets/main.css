@@ -266,3 +266,23 @@ html, body {
     font-variant-numeric: tabular-nums;
     flex: none;
 }
+
+/* LC-59 server-rendered math. pulldown-latex emits `<math display="...">`
+   elements which the browser styles natively (per MathML Core). We do NOT
+   set `display: block` on display math: that CSS property overrides the
+   browser's native math layout and causes children (the integral sign,
+   the integrand, etc.) to stack vertically instead of flowing
+   horizontally. The display="block" ATTRIBUTE already makes the element
+   a centered block; only add vertical spacing.
+
+   The chat-math subset (`x^2`, sums, integrals, fractions, Greek,
+   sub/super, matrices, sqrt) renders correctly under this rule in
+   WebKit2GTK (Linux dev-desktop) and should render correctly under
+   WebView2 / WKWebView too - both also support MathML Core. Confirmed
+   pre-merge per the LC-59 plan's hand-test gate. */
+math[display="block"] {
+    margin: 0.5rem 0;
+}
+math {
+    vertical-align: -0.15em;
+}
