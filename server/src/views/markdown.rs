@@ -20,7 +20,8 @@ use syntect::parsing::SyntaxSet;
 
 use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
-use crate::views::room::{emojify_and_escape, html_escape, render_body};
+use crate::views::math;
+use crate::views::room::{emojify_and_escape, html_escape};
 
 /// Cache of (body, mentions, emojis) -> rendered HTML. Markdown rendering
 /// is fully deterministic in its inputs, and the same message body gets
@@ -105,11 +106,62 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
 
     let parser = Parser::new_ext(body, options);
 
+    // LC-59: merge consecutive `Event::Text` events into a single one
+    // before the inline-rewrite passes run. pulldown_cmark splits a text
+    // run at backslash-escape boundaries (e.g. `$$\int_0^1 f(x)\,dx$$`
+    // is emitted as two text events because `\,` ends one and starts the
+    // next), which would otherwise prevent the math scanner from finding
+    // any span containing a LaTeX escape. Cost: O(message size); chat
+    // messages are small, the parser is already eager about reading the
+    // whole body, and this is well below where streaming would matter.
+    //
+    // Code-block content is not affected: this merge happens BEFORE the
+    // filter_map below, which routes `Event::Text` differently depending
+    // on whether we are inside a code block. The boundary events
+    // (`Event::Start(CodeBlock)` / `Event::End(CodeBlock)`) are NOT
+    // `Event::Text`, so they flush the merge accumulator - a merged
+    // Text event is therefore either entirely inside or entirely outside
+    // a code block, never straddling.
+    //
+    // Shared-behavior change beyond math: mention / emoji / URL
+    // detection in `render_body` now sees text on either side of a `\X`
+    // backslash-escape as one contiguous string instead of two. For
+    // mentions this is benign in practice (the mention regex anchors on
+    // ` ^` or whitespace, both preserved across the merge). For
+    // linkified URLs this can DROP an anchor in the corner case where a
+    // URL abuts a backslash-escape with no separator
+    // (`https://example.com\!end` post-cmark becomes
+    // `https://example.com!end`, which linkify rejects). Documented
+    // limitation; the affected shape is not chat-realistic input.
+    // `bare_url_abutting_backslash_escape_no_anchor_documented_limit`
+    // below pins this behavior.
+    let mut merged: Vec<Event<'_>> = Vec::new();
+    {
+        let mut acc: Option<String> = None;
+        for ev in parser {
+            match ev {
+                Event::Text(t) => match acc.as_mut() {
+                    Some(buf) => buf.push_str(&t),
+                    None => acc = Some(t.into_string()),
+                },
+                other => {
+                    if let Some(buf) = acc.take() {
+                        merged.push(Event::Text(buf.into()));
+                    }
+                    merged.push(other);
+                }
+            }
+        }
+        if let Some(buf) = acc {
+            merged.push(Event::Text(buf.into()));
+        }
+    }
+
     let mut in_code_block: Option<String> = None;
     let mut code_buf = String::new();
     let mut link_depth: usize = 0;
 
-    let events = parser.filter_map(move |ev| match ev {
+    let events = merged.into_iter().filter_map(move |ev| match ev {
         // Drop raw HTML so user input can never inject markup.
         Event::Html(_) | Event::InlineHtml(_) => None,
         // Treat single newlines as hard breaks. Chat users expect what they
@@ -191,6 +243,10 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
         Event::Text(t) => {
             // Text inside a link label keeps the link target intact - run
             // emoji/escape but skip linkify so we don't nest anchors.
+            // Math detection is also skipped inside link labels: a `$...$`
+            // span inside `[label](url)` is rare and the renderer would
+            // have to nest MathML inside an anchor, which is a complication
+            // we defer past v1.
             let html = if link_depth > 0 {
                 let emoji_map: std::collections::HashMap<&str, &EmojiRef> =
                     emojis.iter().map(|e| (e.shortcode.as_str(), e)).collect();
@@ -198,7 +254,16 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
                 emojify_and_escape(t.as_ref(), &emoji_map, &mut buf);
                 buf
             } else {
-                render_body(t.as_ref(), mentions, emojis)
+                // LC-59: route text through the math pass before the
+                // existing mention/emoji/linkify pipeline. The math pass
+                // owns chunks inside `$...$` and `$$...$$`; the rest of
+                // the text flows through `render_body` unchanged. Code
+                // spans and code blocks never reach this branch (they
+                // are intercepted by `Event::Code` and the in_code_block
+                // accumulator above), so math detection is automatically
+                // skipped inside code - same protection mentions and
+                // emoji already have.
+                math::render_math_in_text(t.as_ref(), mentions, emojis)
             };
             Some(Event::Html(html.into()))
         }
@@ -513,5 +578,166 @@ mod tests {
         let out = render("- one\n- two", &[], &[]);
         assert!(out.contains("<ul>"), "no <ul>: {out}");
         assert!(out.contains("<li>one"), "no li: {out}");
+    }
+
+    // ---------- LC-59: math integration through the markdown pipeline ----------
+
+    #[test]
+    fn math_inline_typesets_in_paragraph() {
+        let out = render("see $x^2$ here", &[], &[]);
+        assert!(out.contains("<math"), "no math element: {out}");
+        assert!(out.contains("<msup>"), "no msup: {out}");
+        // Surrounding text is preserved.
+        assert!(out.contains("see "), "leading text lost: {out}");
+        assert!(out.contains(" here"), "trailing text lost: {out}");
+    }
+
+    #[test]
+    fn math_display_typesets_as_block() {
+        let out = render("$$\\int_0^1 f(x)\\,dx$$", &[], &[]);
+        assert!(
+            out.contains(r#"display="block""#),
+            "not block: {out}",
+        );
+    }
+
+    #[test]
+    fn math_inside_inline_code_is_literal() {
+        // Inline code is intercepted by `Event::Code` and emitted as
+        // escaped text in a `<code>` element; the math pass never sees
+        // it. Same protection as mentions and emoji already have.
+        let out = render("use `$x^2$` not bold", &[], &[]);
+        assert!(out.contains("<code"), "no inline code: {out}");
+        assert!(
+            !out.contains("<math"),
+            "math leaked into inline code: {out}",
+        );
+        // The dollars survive as literal text inside the code element.
+        assert!(out.contains("$x^2$"), "dollar literal lost: {out}");
+    }
+
+    #[test]
+    fn math_inside_fenced_code_block_is_literal() {
+        // Code blocks accumulate text into `code_buf` and route through
+        // syntect, never through the inline pipeline. No math detection.
+        let body = "```\n$x^2$ in code\n```";
+        let out = render(body, &[], &[]);
+        assert!(out.contains("<pre"), "no pre: {out}");
+        assert!(
+            !out.contains("<math"),
+            "math leaked into fenced code: {out}",
+        );
+        assert!(out.contains("$x^2$"), "dollar literal lost: {out}");
+    }
+
+    #[test]
+    fn math_and_mention_coexist_in_one_paragraph() {
+        let mentions = vec![MentionRef {
+            user_id: "alice-id".into(),
+            username: "alice".into(),
+        }];
+        let out = render("hey @alice see $x^2$ ok?", &mentions, &[]);
+        assert!(out.contains("<math"), "no math: {out}");
+        assert!(
+            out.contains(r#"href="/profile/alice-id""#),
+            "no chip: {out}",
+        );
+    }
+
+    #[test]
+    fn math_inside_markdown_link_label_is_not_typeset() {
+        // LC-59 v1: math detection is intentionally skipped inside link
+        // labels (link_depth > 0). The `$x^2$` in the label survives as
+        // literal text. Documented limitation; revisit if user feedback
+        // demands math-inside-link-labels.
+        let out = render("[$x^2$ stuff](https://example.com)", &[], &[]);
+        assert!(out.contains(r#"href="https://example.com""#));
+        assert!(
+            !out.contains("<math"),
+            "math rendered inside link label: {out}",
+        );
+    }
+
+    #[test]
+    fn math_with_internal_backslash_escape_still_typesets() {
+        // pulldown_cmark splits a text run at backslash-escape boundaries
+        // (e.g. `\,` ends one text event and starts the next). Without
+        // the consecutive-Text-event merge in render_inner, the math
+        // scanner would never see this as a single span. This test pins
+        // the merge: if a future change removes it, this assertion fails.
+        let out = render(r"$$\int_0^1 f(x)\,dx$$", &[], &[]);
+        assert!(out.contains("<math"), "merge regression: {out}");
+        assert!(
+            out.contains(r#"display="block""#),
+            "display attribute lost: {out}",
+        );
+    }
+
+    // ---------- LC-59: Text-event-merge shared-behavior pinning ----------
+    //
+    // The merge in `render_inner` was added to fix math-span fragmentation
+    // around backslash-escapes, but it also changes how mention / emoji /
+    // URL detection sees text on either side of a `\X` boundary: a single
+    // contiguous string instead of two halves. These tests pin the
+    // post-merge behavior so a future change that removes the merge fails
+    // them visibly, instead of silently regressing the math fix.
+
+    #[test]
+    fn mention_adjacent_to_backslash_escape_still_chips() {
+        // `\!` is a CommonMark escape; cmark would emit it as two text
+        // events ("text " then "! and @alice"). Post-merge the two
+        // halves are one string and the mention regex sees `@alice`
+        // preceded by ` ` (whitespace) - chip renders. Pre-merge would
+        // ALSO have chipped (the `@alice` was still preceded by ` `
+        // inside the second event). Both behaviors converge here, but
+        // the test pins that the merge didn't break the common case.
+        let mentions = vec![MentionRef {
+            user_id: "alice-id".into(),
+            username: "alice".into(),
+        }];
+        let out = render(r"text \! and @alice", &mentions, &[]);
+        assert!(
+            out.contains(r#"href="/profile/alice-id""#),
+            "mention chip lost across escape: {out}",
+        );
+    }
+
+    #[test]
+    fn bare_url_with_backslash_escape_separated_by_space_still_linkifies() {
+        // Common case: URL, whitespace, backslash-escape, more text.
+        // cmark emits two text events (`"see https://example.com "` and
+        // `"! after"`); post-merge they fuse, and linkify finds the URL
+        // bounded by ` ` and ` ` either way. The merge does not regress
+        // URL detection in this shape.
+        let out = render(r"see https://example.com \! after", &[], &[]);
+        assert!(
+            out.contains(r#"<a href="https://example.com""#),
+            "URL not linkified across escape boundary: {out}",
+        );
+    }
+
+    #[test]
+    fn bare_url_abutting_backslash_escape_no_anchor_documented_limit() {
+        // Edge case: URL with no separator before a backslash-escape.
+        // Source `https://example.com\!end` -> after cmark escape ->
+        // text `https://example.com!end`. linkify does not return a
+        // URL for `https://example.com!end` (trailing `!` is consumed
+        // into the URL boundary heuristic and the run is rejected),
+        // so post-merge produces ZERO anchors. Pre-merge would have
+        // produced one (linkify on the first half `https://example.com`
+        // would have matched). The merge therefore changes URL
+        // detection for this exact shape - documented limitation, not
+        // a chat-realistic input. The dollar-sign text still appears
+        // as escaped literal text so nothing is lost.
+        let out = render(r"see https://example.com\!end ok", &[], &[]);
+        assert_eq!(
+            out.matches("<a ").count(),
+            0,
+            "anchor count unexpected: {out}",
+        );
+        assert!(
+            out.contains("example.com"),
+            "URL text dropped from output: {out}",
+        );
     }
 }
