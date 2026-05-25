@@ -57,6 +57,10 @@ pub enum RateLimitKind {
     PasswordReset,
     /// LC-74: per-webhook cap on `POST /webhook/{secret}`.
     Webhook,
+    /// LC-77: per-email-inbox cap. Keyed by the inbox row id. Counts inbound
+    /// messages processed per minute by the IMAP poll loop; over-limit
+    /// messages are dropped silently and logged.
+    EmailInbox,
 }
 
 impl RateLimitKind {
@@ -67,6 +71,7 @@ impl RateLimitKind {
             RateLimitKind::Login => "login",
             RateLimitKind::PasswordReset => "pwr",
             RateLimitKind::Webhook => "whk",
+            RateLimitKind::EmailInbox => "eml",
         }
     }
 }
