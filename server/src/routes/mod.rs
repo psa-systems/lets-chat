@@ -19,6 +19,7 @@ use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::version;
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::message_actor::MessageActor;
 use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
@@ -256,8 +257,7 @@ pub(crate) async fn load_message_view_for_viewer(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        author_is_webhook: meta.is_webhook,
-        webhook_avatar_url: meta.avatar_url.clone(),
+        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
     })
 }
 

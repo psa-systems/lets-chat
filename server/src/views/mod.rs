@@ -17,6 +17,7 @@ pub mod maintenance;
 pub mod markdown;
 pub mod math;
 pub mod mentions;
+pub mod message_actor;
 pub mod not_found;
 pub mod notify_prefs;
 pub mod pinned;
