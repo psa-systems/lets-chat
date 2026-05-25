@@ -45,6 +45,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 - JSON HTTP API v1 with scoped bearer tokens (see [`docs/api.md`](docs/api.md))
 - First-class bot identities
 - Incoming webhooks (post via secret URL) and outgoing webhooks (signed event subscriptions)
+- Email ingress: per-room IMAP-poll inboxes that turn an `<token>@<ingress-domain>` address into chat posts (see [`docs/email-ingress.md`](docs/email-ingress.md))
 
 ### Administration
 
