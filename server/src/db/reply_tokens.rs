@@ -105,6 +105,48 @@ pub async fn resolve(pool: &SqlitePool, token: &str) -> sqlx::Result<Option<Repl
     }))
 }
 
+/// Look up a token AND tell the caller whether it has expired, in one
+/// round trip. The bool is true when `expires_at < datetime('now')` per
+/// SQLite's wall clock. Used by the email-ingress reply resolver so it
+/// can drop with a specific `ReplyExpired` reason rather than the
+/// catch-all `AddressNoMatch`.
+pub async fn resolve_active_or_expired(
+    pool: &SqlitePool,
+    token: &str,
+) -> sqlx::Result<Option<(ReplyTokenRow, bool)>> {
+    let row = sqlx::query(
+        "SELECT user_id, message_id, issued_at, expires_at, \
+                (expires_at < datetime('now')) AS expired \
+         FROM reply_tokens WHERE token = ?",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| {
+        let token_row = ReplyTokenRow {
+            user_id: r.get("user_id"),
+            message_id: r.get("message_id"),
+            issued_at: r.get("issued_at"),
+            expires_at: r.get("expires_at"),
+        };
+        let expired: bool = r.get::<i64, _>("expired") != 0;
+        (token_row, expired)
+    }))
+}
+
+/// Consume (delete) a reply token by its plaintext. Returns true if a
+/// row was deleted. Used by the email-ingress reply path so a token can
+/// only be used once (replay defense): even if a forwarded notification
+/// email reaches a third party, the first successful POST consumes the
+/// token and subsequent attempts drop as `AddressNoMatch`.
+pub async fn consume(pool: &SqlitePool, token: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM reply_tokens WHERE token = ?")
+        .bind(token)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// Drop every row whose `expires_at` is in the past. Returns the count
 /// of rows deleted for the orphan sweeper's log line.
 pub async fn sweep_expired(pool: &SqlitePool) -> sqlx::Result<u64> {

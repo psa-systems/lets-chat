@@ -25,7 +25,7 @@ use crate::db::imap_config::ImapConfig;
 use crate::rate_limit::{Outcome as RlOutcome, RateLimitKind};
 use crate::state::AppState;
 
-use super::resolve::{resolve_inbox, ResolveOutcome};
+use super::resolve::{resolve_address, ResolveOutcome};
 use super::{actor, parse, DropReason};
 
 /// Poll cadence. Matches the brainstorm decision (5 minutes; email is
@@ -325,12 +325,35 @@ pub async fn process_polled_message(
             detail: format!("{reason_header} present"),
         };
     }
-    let inbox = match resolve_inbox(&state.chat, secret_key, &message, ingress_domain).await {
+    let inbox = match resolve_address(&state.chat, secret_key, &message, ingress_domain).await {
         Ok(ResolveOutcome::Match(inbox)) => inbox,
         Ok(ResolveOutcome::Revoked(inbox)) => {
             return ProcessOutcome::Dropped {
                 reason: DropReason::RevokedInbox,
                 detail: format!("inbox id {} revoked_at = {:?}", inbox.id, inbox.revoked_at),
+            };
+        }
+        // ReplyMatch / ReplyExpired land here in commit 2a; the actor
+        // dispatch for ReplyMatch wires in commit 2c. Until then, an
+        // active reply-token drops with a tight detail so an operator
+        // running the in-flight branch sees the right diagnostic, and a
+        // late reply drops with the permanent `ReplyExpired` reason.
+        Ok(ResolveOutcome::ReplyMatch(row)) => {
+            return ProcessOutcome::Dropped {
+                reason: DropReason::InternalError,
+                detail: format!(
+                    "reply-token resolved (user_id={}, message_id={}) but actor dispatch not yet wired",
+                    row.user_id, row.message_id
+                ),
+            };
+        }
+        Ok(ResolveOutcome::ReplyExpired(row)) => {
+            return ProcessOutcome::Dropped {
+                reason: DropReason::ReplyExpired,
+                detail: format!(
+                    "reply-token expired (user_id={}, message_id={}, expires_at={})",
+                    row.user_id, row.message_id, row.expires_at
+                ),
             };
         }
         Ok(ResolveOutcome::NotFound { tried_addresses }) => {
@@ -342,7 +365,7 @@ pub async fn process_polled_message(
         Err(e) => {
             return ProcessOutcome::Dropped {
                 reason: DropReason::InternalError,
-                detail: format!("resolve_inbox: {e}"),
+                detail: format!("resolve_address: {e}"),
             };
         }
     };
