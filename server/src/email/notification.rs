@@ -172,7 +172,7 @@ pub async fn dispatch_mention_notification(
     let ingress_domain = ingress_domain(state).await;
     let reply_to: Option<String> = ingress_domain
         .as_deref()
-        .map(|d| format!("reply-{token}@{d}"));
+        .map(|d| format!("{}{token}@{d}", crate::email_ingress::resolve::REPLY_PREFIX));
     let reply_supported = reply_to.is_some();
 
     // 7. Compose subject + URLs + snippet (parallel text + html).

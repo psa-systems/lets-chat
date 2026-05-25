@@ -95,6 +95,35 @@ pub fn extract_body(message: &Message<'_>) -> ExtractedBody {
     }
 }
 
+/// Extract just the text/plain body, WITHOUT the subject Markdown
+/// prefix that [`extract_body`] applies. Used by the reply-by-email
+/// path ([`super::reply_actor::post_reply_message`]) because a reply's
+/// `Subject: Re: [lets-chat] ...` is mail-routing metadata, not chat
+/// content, and prefixing it as bold would clutter the post. Otherwise
+/// identical to [`extract_body`]: same `MAX_BODY_BYTES` cap, same
+/// truncation marker.
+pub fn extract_body_no_subject(message: &Message<'_>) -> ExtractedBody {
+    let body_text = message
+        .body_text(0)
+        .map(|c| c.into_owned())
+        .unwrap_or_default();
+    if body_text.len() <= MAX_BODY_BYTES {
+        return ExtractedBody {
+            body: body_text,
+            truncated: false,
+        };
+    }
+    let mut truncated = body_text;
+    let cap = MAX_BODY_BYTES.saturating_sub(TRUNCATION_MARKER.len());
+    let split_at = floor_char_boundary(&truncated, cap);
+    truncated.truncate(split_at);
+    truncated.push_str(TRUNCATION_MARKER);
+    ExtractedBody {
+        body: truncated,
+        truncated: true,
+    }
+}
+
 /// Find the highest valid UTF-8 char boundary ≤ `n`. Equivalent to the
 /// nightly `str::floor_char_boundary`; reimplemented because we target
 /// stable Rust.

@@ -39,7 +39,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 
 - Web push notifications
 - Email digest of missed mentions and DMs (off by default per user)
-- Per-mention and per-DM notification emails (off by default per user; carries a `Reply-To` for the in-flight reply-by-email feature)
+- Per-mention and per-DM notification emails (off by default per user); reply to one of those emails to post that reply to chat as yourself
 
 ### Integrations and API
 
