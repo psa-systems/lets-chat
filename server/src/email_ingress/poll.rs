@@ -361,7 +361,7 @@ pub async fn process_polled_message(
         };
     }
     let extracted = parse::extract_body(&message);
-    if extracted.body.is_empty() {
+    if extracted.body.trim().is_empty() {
         return ProcessOutcome::Dropped {
             reason: DropReason::ParseFail,
             detail: "empty subject and body after parse".to_string(),
