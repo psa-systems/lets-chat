@@ -38,6 +38,7 @@ mod custom_emojis;
 mod dm;
 mod dm_mute;
 mod drafts;
+mod email_inboxes;
 #[cfg(feature = "standalone")]
 pub(crate) mod email_verification;
 mod enclave;
@@ -899,6 +900,14 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/room/{room_id}/webhooks/{wid}/revoke",
             post(webhooks::post_revoke),
+        )
+        .route(
+            "/room/{room_id}/email-inboxes",
+            get(email_inboxes::get_email_inboxes).post(email_inboxes::post_email_inboxes),
+        )
+        .route(
+            "/room/{room_id}/email-inboxes/{inbox_id}/revoke",
+            post(email_inboxes::post_revoke),
         )
         .route(
             "/room/{room_id}/posting-policy",
