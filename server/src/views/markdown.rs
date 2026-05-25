@@ -595,10 +595,7 @@ mod tests {
     #[test]
     fn math_display_typesets_as_block() {
         let out = render("$$\\int_0^1 f(x)\\,dx$$", &[], &[]);
-        assert!(
-            out.contains(r#"display="block""#),
-            "not block: {out}",
-        );
+        assert!(out.contains(r#"display="block""#), "not block: {out}",);
     }
 
     #[test]

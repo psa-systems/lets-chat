@@ -405,6 +405,27 @@ pub async fn insert_webhook_message(
     Ok(result.last_insert_rowid())
 }
 
+/// LC-77: insert a message authored by an email-ingress inbox. Mirrors
+/// `insert_webhook_message`: empty user_id, the inbox id stored in
+/// `email_inbox_id` (NULL `webhook_id`); rendering resolves name/avatar
+/// from the `email_inboxes` row.
+pub async fn insert_email_inbox_message(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    email_inbox_id: i64,
+    body: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, email_inbox_id, body) VALUES (?, '', ?, ?)",
+    )
+    .bind(room_id)
+    .bind(email_inbox_id)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
 pub async fn insert_message_quoted(
     pool: &sqlx::SqlitePool,
     room_id: i64,

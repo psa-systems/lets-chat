@@ -22,6 +22,13 @@ async fn main() {
         return;
     }
     init_tracing();
+    // LC-77: rustls 0.23 requires a process-wide CryptoProvider before any
+    // TLS connect. The IMAP poll loop (and any future rustls consumer in
+    // this binary) panics on first use without this call. install_default
+    // returns Err if a provider is already installed; we treat that as a
+    // benign no-op since reqwest may install ring transitively in some
+    // builds and we just need SOMETHING installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     tracing::info!(
         app = APP_NAME,
         version = version::VERSION,
@@ -146,6 +153,7 @@ async fn main() {
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
     spawn_message_retention_sweeper(state.clone());
+    lets_chat::email_ingress::poll::spawn_email_poll(state.clone());
 
     let app = routes::build_router(state);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());

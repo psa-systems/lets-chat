@@ -686,26 +686,23 @@ async fn render_new_message(
             .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
         (message.user_id.as_str(), message.created_at.as_str()),
     );
-    let meta = super::resolve_msg_author(state, &message.user_id, message.webhook_id, &viewer.id)
-        .await
-        .ok();
-    let (
-        display_name,
-        avatar_ext,
-        status,
-        custom_status,
-        author_is_bot,
-        author_is_webhook,
-        webhook_avatar_url,
-    ) = match meta {
+    let meta = super::resolve_msg_author(
+        state,
+        &message.user_id,
+        message.webhook_id,
+        message.email_inbox_id,
+        &viewer.id,
+    )
+    .await
+    .ok();
+    let (display_name, avatar_ext, status, custom_status, author_is_bot, actor) = match meta {
         Some(m) => (
             m.display_name,
             m.avatar_ext,
             m.status,
             m.custom_status,
             m.is_bot,
-            m.is_webhook,
-            m.avatar_url,
+            m.actor,
         ),
         None => (
             None,
@@ -713,8 +710,7 @@ async fn render_new_message(
             db::auth::STATUS_ACTIVE.to_string(),
             None,
             false,
-            false,
-            None,
+            MessageActor::User,
         ),
     };
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
@@ -770,7 +766,7 @@ async fn render_new_message(
             .ok()
             .flatten(),
         author_is_bot,
-        actor: MessageActor::from_webhook_flag(author_is_webhook, webhook_avatar_url),
+        actor,
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -788,9 +784,15 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     {
         return None;
     }
-    let meta = super::resolve_msg_author(state, &m.user_id, m.webhook_id, &viewer.id)
-        .await
-        .ok()?;
+    let meta = super::resolve_msg_author(
+        state,
+        &m.user_id,
+        m.webhook_id,
+        m.email_inbox_id,
+        &viewer.id,
+    )
+    .await
+    .ok()?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
         .await
         .ok()
@@ -875,7 +877,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+        actor: meta.actor.clone(),
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -898,9 +900,15 @@ async fn render_thread_reply(
     {
         return None;
     }
-    let meta = super::resolve_msg_author(state, &message.user_id, message.webhook_id, &viewer.id)
-        .await
-        .ok()?;
+    let meta = super::resolve_msg_author(
+        state,
+        &message.user_id,
+        message.webhook_id,
+        message.email_inbox_id,
+        &viewer.id,
+    )
+    .await
+    .ok()?;
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
         .await
         .ok()
@@ -947,7 +955,7 @@ async fn render_thread_reply(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+        actor: meta.actor.clone(),
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,

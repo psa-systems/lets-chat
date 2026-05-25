@@ -97,10 +97,12 @@ pub(crate) struct AuthorMeta {
     pub custom_status: Option<String>,
     /// LC-73: true for bot authors, drives the "bot" badge.
     pub is_bot: bool,
-    /// LC-74: true for incoming-webhook authors. Suppresses the DM link and
-    /// renders a "webhook" badge; `avatar_url` (if set) is the avatar source.
-    pub is_webhook: bool,
-    pub avatar_url: Option<String>,
+    /// LC-77: actor identity (User / Webhook / EmailInbox). For synthetic
+    /// actors (Webhook, EmailInbox), the variant payload carries the
+    /// configured avatar URL. The display name is populated into
+    /// `username` above for all three variants so the template can read
+    /// it uniformly.
+    pub actor: MessageActor,
 }
 
 impl AuthorMeta {
@@ -112,8 +114,7 @@ impl AuthorMeta {
             status: db::auth::STATUS_ACTIVE.to_string(),
             custom_status: None,
             is_bot: false,
-            is_webhook: false,
-            avatar_url: None,
+            actor: MessageActor::User,
         }
     }
 }
@@ -127,19 +128,25 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
             status: r.status,
             custom_status: r.custom_status,
             is_bot: r.is_bot,
-            is_webhook: false,
-            avatar_url: None,
+            actor: MessageActor::User,
         }
     }
 }
 
-/// LC-74: resolve the author identity for a message that may be authored by
-/// a user OR an incoming webhook. Webhook messages (`webhook_id = Some`)
-/// render with the webhook's name/avatar and no DM link.
+/// Resolve the author identity for a message that may be authored by a real
+/// user, an incoming webhook (LC-74), or an email-ingress inbox (LC-77).
+/// Synthetic-actor messages (`webhook_id = Some` or `email_inbox_id = Some`)
+/// render with the actor's configured name + avatar and no DM link.
+///
+/// At most one of `webhook_id` and `email_inbox_id` is `Some` for any given
+/// message; if both are unexpectedly set, webhook wins (this is the older
+/// surface and we prefer not to silently flip rendering identity when a
+/// future migration accidentally double-tags a row).
 pub(crate) async fn resolve_msg_author(
     state: &AppState,
     user_id: &str,
     webhook_id: Option<i64>,
+    email_inbox_id: Option<i64>,
     viewer_id: &str,
 ) -> Result<AuthorMeta, AppError> {
     if let Some(wid) = webhook_id {
@@ -154,8 +161,22 @@ pub(crate) async fn resolve_msg_author(
             status: db::auth::STATUS_ACTIVE.to_string(),
             custom_status: None,
             is_bot: false,
-            is_webhook: true,
-            avatar_url,
+            actor: MessageActor::Webhook(avatar_url),
+        });
+    }
+    if let Some(eid) = email_inbox_id {
+        let (name, avatar_url) = db::email_inbox::identity(&state.chat, eid)
+            .await?
+            .map(|w| (w.name, w.avatar_url))
+            .unwrap_or_else(|| ("email".to_string(), None));
+        return Ok(AuthorMeta {
+            username: name,
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+            is_bot: false,
+            actor: MessageActor::EmailInbox(avatar_url),
         });
     }
     load_author_meta(state, user_id, viewer_id).await
@@ -196,7 +217,14 @@ pub(crate) async fn load_message_view_for_viewer(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let meta = resolve_msg_author(state, &m.user_id, m.webhook_id, &viewer.id).await?;
+    let meta = resolve_msg_author(
+        state,
+        &m.user_id,
+        m.webhook_id,
+        m.email_inbox_id,
+        &viewer.id,
+    )
+    .await?;
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id
         || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
@@ -257,7 +285,7 @@ pub(crate) async fn load_message_view_for_viewer(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+        actor: meta.actor.clone(),
     })
 }
 

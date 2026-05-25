@@ -10,7 +10,6 @@ use crate::state::AppState;
 use crate::views::dm::DmPage;
 use crate::views::home::WelcomePage;
 use crate::views::html;
-use crate::views::message_actor::MessageActor;
 use crate::views::room::{MessageView, ReactionView};
 use crate::ws::events::ChatEvent;
 
@@ -191,8 +190,14 @@ pub async fn get_dm(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -253,7 +258,7 @@ pub async fn get_dm(
                 None
             },
             author_is_bot: meta.is_bot,
-            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+            actor: meta.actor.clone(),
         });
     }
 
