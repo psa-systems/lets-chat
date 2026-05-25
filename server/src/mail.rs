@@ -140,6 +140,89 @@ impl Mailer {
             .map_err(|e| MailError::Smtp(e.to_string()))?;
         Ok(())
     }
+
+    /// LC-77-REPLY: send a multipart/alternative message with a Reply-To
+    /// header set AND `Auto-Submitted: auto-generated`. Reply-To carries the
+    /// `reply-<token>@<ingress-domain>` address the email-ingress stage 2
+    /// resolver consumes; Auto-Submitted breaks reciprocal-loop chains with
+    /// the recipient's auto-responder per RFC 3834.
+    ///
+    /// `reply_to` is `None` when the ingress domain isn't configured (mention
+    /// emails still send, just without the reply-back affordance). When it is
+    /// `Some(addr)`, the address MUST be a well-formed mailbox or
+    /// construction returns `MailError::Address`.
+    pub async fn send_multipart_with_reply_to(
+        &self,
+        to: &str,
+        reply_to: Option<&str>,
+        subject: &str,
+        text_body: &str,
+        html_body: &str,
+    ) -> Result<(), MailError> {
+        use lettre::message::{MultiPart, SinglePart};
+
+        let from = self
+            .from
+            .parse()
+            .map_err(|e: lettre::address::AddressError| MailError::Address(e.to_string()))?;
+        let to_addr = to
+            .parse()
+            .map_err(|e: lettre::address::AddressError| MailError::Address(e.to_string()))?;
+
+        let mut builder = Message::builder()
+            .from(from)
+            .to(to_addr)
+            .subject(subject)
+            .header(AutoSubmitted("auto-generated".to_string()));
+        if let Some(rt) = reply_to {
+            let rt_mbox: lettre::message::Mailbox = rt
+                .parse()
+                .map_err(|e: lettre::address::AddressError| MailError::Address(e.to_string()))?;
+            builder = builder.reply_to(rt_mbox);
+        }
+
+        let message = builder
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(text_body.to_string()),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_HTML)
+                            .body(html_body.to_string()),
+                    ),
+            )
+            .map_err(|e| MailError::Build(e.to_string()))?;
+        self.transport
+            .send(message)
+            .await
+            .map_err(|e| MailError::Smtp(e.to_string()))?;
+        Ok(())
+    }
+}
+
+/// LC-77-REPLY: `Auto-Submitted` header (RFC 3834). Set to
+/// `auto-generated` on every notification email so a recipient's
+/// auto-responder knows not to reply, breaking reciprocal-loop chains.
+/// lettre 0.11 has no typed header for this; we implement the trait
+/// inline.
+#[derive(Clone)]
+struct AutoSubmitted(String);
+
+impl lettre::message::header::Header for AutoSubmitted {
+    fn name() -> lettre::message::header::HeaderName {
+        lettre::message::header::HeaderName::new_from_ascii("Auto-Submitted".to_string())
+            .expect("Auto-Submitted is valid ASCII")
+    }
+    fn parse(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(Self(s.to_string()))
+    }
+    fn display(&self) -> lettre::message::header::HeaderValue {
+        lettre::message::header::HeaderValue::new(Self::name(), self.0.clone())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

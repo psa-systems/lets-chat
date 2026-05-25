@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 16px; color: #1e293b;">
+  <p style="margin: 0 0 12px;">
+    {% if is_dm %}<strong>{{ sender_label }}</strong> sent you a direct message:{% else %}<strong>{{ sender_label }}</strong> mentioned you in <strong>#{{ room_label }}</strong>:{% endif %}
+  </p>
+
+  <blockquote style="margin: 0 0 16px; padding: 8px 12px; border-left: 3px solid #cbd5e1; background: #f8fafc; color: #475569;">{{ snippet_html|safe }}</blockquote>
+
+  <p style="margin: 0 0 16px;">
+    <a href="{{ message_url }}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 8px 14px; border-radius: 4px; text-decoration: none;">View in chat</a>
+  </p>
+
+  {% if reply_supported %}
+  <p style="margin: 0 0 16px; font-size: 14px; color: #475569;">
+    You can reply to this email and your response will be posted to the chat as you.
+    The reply window closes in {{ reply_expires_hours }} hours.
+  </p>
+  {% endif %}
+
+  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0 12px;">
+  <p style="margin: 0; font-size: 12px; color: #94a3b8;">
+    You are receiving this because mention/DM email notifications are enabled on your account.
+    <a href="{{ settings_url }}" style="color: #64748b;">Toggle off in settings</a>.
+  </p>
+</body>
+</html>
