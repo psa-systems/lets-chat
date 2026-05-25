@@ -62,7 +62,8 @@ pub async fn read(
     let encrypted: Vec<u8> = r.get("password_encrypted");
     let nonce: Vec<u8> = r.get("password_nonce");
     let password_bytes = crypto::open(secret_key, &nonce, &encrypted)?;
-    let password = String::from_utf8(password_bytes).map_err(|_| ImapConfigError::PasswordEncoding)?;
+    let password =
+        String::from_utf8(password_bytes).map_err(|_| ImapConfigError::PasswordEncoding)?;
     Ok(Some(ImapConfig {
         host: r.get("host"),
         port,

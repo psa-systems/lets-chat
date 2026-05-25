@@ -784,9 +784,15 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     {
         return None;
     }
-    let meta = super::resolve_msg_author(state, &m.user_id, m.webhook_id, m.email_inbox_id, &viewer.id)
-        .await
-        .ok()?;
+    let meta = super::resolve_msg_author(
+        state,
+        &m.user_id,
+        m.webhook_id,
+        m.email_inbox_id,
+        &viewer.id,
+    )
+    .await
+    .ok()?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
         .await
         .ok()
@@ -894,9 +900,15 @@ async fn render_thread_reply(
     {
         return None;
     }
-    let meta = super::resolve_msg_author(state, &message.user_id, message.webhook_id, message.email_inbox_id, &viewer.id)
-        .await
-        .ok()?;
+    let meta = super::resolve_msg_author(
+        state,
+        &message.user_id,
+        message.webhook_id,
+        message.email_inbox_id,
+        &viewer.id,
+    )
+    .await
+    .ok()?;
     let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
         .await
         .ok()

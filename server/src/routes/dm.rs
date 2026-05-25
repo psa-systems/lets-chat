@@ -190,8 +190,14 @@ pub async fn get_dm(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };

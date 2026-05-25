@@ -226,8 +226,14 @@ pub async fn get_room(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -1317,7 +1323,9 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta = super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id).await?;
+    let meta =
+        super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id)
+            .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
@@ -1421,8 +1429,14 @@ pub async fn get_thread_panel(
         .filter(|r| !blocked_authors.contains(&r.user_id))
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
-    let parent_meta =
-        super::resolve_msg_author(&state, &parent.user_id, parent.webhook_id, parent.email_inbox_id, &user.id).await?;
+    let parent_meta = super::resolve_msg_author(
+        &state,
+        &parent.user_id,
+        parent.webhook_id,
+        parent.email_inbox_id,
+        &user.id,
+    )
+    .await?;
 
     // Bulk-load attachments for the parent and every reply in a single query.
     let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
@@ -1489,8 +1503,14 @@ pub async fn get_thread_panel(
         let meta = if let Some(entry) = author_cache.get(&r.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &r.user_id, r.webhook_id, r.email_inbox_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &r.user_id,
+                r.webhook_id,
+                r.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(r.user_id.clone(), entry.clone());
             entry
         };

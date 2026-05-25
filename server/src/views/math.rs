@@ -107,8 +107,14 @@ fn blocklist_re() -> &'static Regex {
 /// the `content` range (delimiters stripped, fed to the renderer).
 #[derive(Debug, PartialEq)]
 enum Chunk {
-    Text { range: Range<usize> },
-    Math { full: Range<usize>, content: Range<usize>, display: bool },
+    Text {
+        range: Range<usize>,
+    },
+    Math {
+        full: Range<usize>,
+        content: Range<usize>,
+        display: bool,
+    },
 }
 
 /// Split `text` into alternating text and math chunks. Math span rules
@@ -152,9 +158,15 @@ fn scan(text: &str) -> Vec<Chunk> {
 
         if let Some((content, end)) = try_display_at(bytes, i) {
             if last_text_start < i {
-                chunks.push(Chunk::Text { range: last_text_start..i });
+                chunks.push(Chunk::Text {
+                    range: last_text_start..i,
+                });
             }
-            chunks.push(Chunk::Math { full: i..end, content, display: true });
+            chunks.push(Chunk::Math {
+                full: i..end,
+                content,
+                display: true,
+            });
             i = end;
             last_text_start = i;
             continue;
@@ -162,9 +174,15 @@ fn scan(text: &str) -> Vec<Chunk> {
 
         if let Some((content, end)) = try_inline_at(bytes, i) {
             if last_text_start < i {
-                chunks.push(Chunk::Text { range: last_text_start..i });
+                chunks.push(Chunk::Text {
+                    range: last_text_start..i,
+                });
             }
-            chunks.push(Chunk::Math { full: i..end, content, display: false });
+            chunks.push(Chunk::Math {
+                full: i..end,
+                content,
+                display: false,
+            });
             i = end;
             last_text_start = i;
             continue;
@@ -174,7 +192,9 @@ fn scan(text: &str) -> Vec<Chunk> {
     }
 
     if last_text_start < bytes.len() {
-        chunks.push(Chunk::Text { range: last_text_start..bytes.len() });
+        chunks.push(Chunk::Text {
+            range: last_text_start..bytes.len(),
+        });
     }
     chunks
 }
@@ -310,11 +330,15 @@ pub fn render_math_in_text(text: &str, mentions: &[MentionRef], emojis: &[EmojiR
             Chunk::Text { range } => {
                 out.push_str(&render_body(&text[range], mentions, emojis));
             }
-            Chunk::Math { full, content, display } => {
+            Chunk::Math {
+                full,
+                content,
+                display,
+            } => {
                 let source = &text[content];
                 let over_count = span_count >= MATH_MAX_SPANS_PER_MESSAGE;
-                let over_total = total_math_chars.saturating_add(source.len())
-                    > MATH_MAX_TOTAL_CHARS;
+                let over_total =
+                    total_math_chars.saturating_add(source.len()) > MATH_MAX_TOTAL_CHARS;
                 let rendered = if over_count || over_total {
                     None
                 } else {
@@ -360,7 +384,11 @@ mod tests {
         let chunks = scan("$x^2$");
         assert_eq!(
             chunks,
-            vec![Chunk::Math { full: 0..5, content: 1..4, display: false }]
+            vec![Chunk::Math {
+                full: 0..5,
+                content: 1..4,
+                display: false
+            }]
         );
     }
 
@@ -369,7 +397,11 @@ mod tests {
         let chunks = scan("$$x^2$$");
         assert_eq!(
             chunks,
-            vec![Chunk::Math { full: 0..7, content: 2..5, display: true }]
+            vec![Chunk::Math {
+                full: 0..7,
+                content: 2..5,
+                display: true
+            }]
         );
     }
 
@@ -380,7 +412,11 @@ mod tests {
             chunks,
             vec![
                 Chunk::Text { range: 0..4 },
-                Chunk::Math { full: 4..7, content: 5..6, display: false },
+                Chunk::Math {
+                    full: 4..7,
+                    content: 5..6,
+                    display: false
+                },
                 Chunk::Text { range: 7..12 },
             ]
         );
@@ -401,8 +437,16 @@ mod tests {
         assert_eq!(
             chunks,
             vec![
-                Chunk::Math { full: 0..3, content: 1..2, display: false },
-                Chunk::Math { full: 3..6, content: 4..5, display: false },
+                Chunk::Math {
+                    full: 0..3,
+                    content: 1..2,
+                    display: false
+                },
+                Chunk::Math {
+                    full: 3..6,
+                    content: 4..5,
+                    display: false
+                },
             ]
         );
     }
@@ -436,9 +480,17 @@ mod tests {
         assert_eq!(
             chunks,
             vec![
-                Chunk::Math { full: 0..3, content: 1..2, display: false },
+                Chunk::Math {
+                    full: 0..3,
+                    content: 1..2,
+                    display: false
+                },
                 Chunk::Text { range: 3..4 },
-                Chunk::Math { full: 4..7, content: 5..6, display: false },
+                Chunk::Math {
+                    full: 4..7,
+                    content: 5..6,
+                    display: false
+                },
             ]
         );
     }
@@ -449,9 +501,17 @@ mod tests {
         assert_eq!(
             chunks,
             vec![
-                Chunk::Math { full: 0..5, content: 2..3, display: true },
+                Chunk::Math {
+                    full: 0..5,
+                    content: 2..3,
+                    display: true
+                },
                 Chunk::Text { range: 5..6 },
-                Chunk::Math { full: 6..9, content: 7..8, display: false },
+                Chunk::Math {
+                    full: 6..9,
+                    content: 7..8,
+                    display: false
+                },
             ]
         );
     }
@@ -467,7 +527,11 @@ mod tests {
             chunks,
             vec![
                 Chunk::Text { range: 0..1 },
-                Chunk::Math { full: 1..4, content: 2..3, display: false },
+                Chunk::Math {
+                    full: 1..4,
+                    content: 2..3,
+                    display: false
+                },
                 Chunk::Text { range: 4..7 },
             ]
         );
@@ -529,7 +593,11 @@ mod tests {
             chunks,
             vec![
                 Chunk::Text { range: 0..1 },
-                Chunk::Math { full: 1..4, content: 2..3, display: false },
+                Chunk::Math {
+                    full: 1..4,
+                    content: 2..3,
+                    display: false
+                },
                 Chunk::Text { range: 4..6 },
             ]
         );
@@ -554,7 +622,11 @@ mod tests {
         let chunks = scan("$x$: rest");
         assert_eq!(
             chunks[0],
-            Chunk::Math { full: 0..3, content: 1..2, display: false }
+            Chunk::Math {
+                full: 0..3,
+                content: 1..2,
+                display: false
+            }
         );
     }
 
@@ -566,9 +638,17 @@ mod tests {
         assert_eq!(
             chunks,
             vec![
-                Chunk::Math { full: 0..3, content: 1..2, display: false },
+                Chunk::Math {
+                    full: 0..3,
+                    content: 1..2,
+                    display: false
+                },
                 Chunk::Text { range: 3..17 },
-                Chunk::Math { full: 17..20, content: 18..19, display: false },
+                Chunk::Math {
+                    full: 17..20,
+                    content: 18..19,
+                    display: false
+                },
             ]
         );
     }
@@ -645,11 +725,7 @@ mod tests {
             r"\url{http://x}",
             r"\csname x\endcsname",
         ] {
-            assert_eq!(
-                try_render_math(cs, false),
-                None,
-                "blocklist missed: {cs}"
-            );
+            assert_eq!(try_render_math(cs, false), None, "blocklist missed: {cs}");
         }
     }
 
@@ -683,10 +759,7 @@ mod tests {
     #[test]
     fn integration_display_math_typesets_as_block() {
         let out = render_math_in_text("$$x^2$$", &[], &[]);
-        assert!(
-            out.contains(r#"display="block""#),
-            "not block: {out}",
-        );
+        assert!(out.contains(r#"display="block""#), "not block: {out}",);
     }
 
     #[test]
@@ -787,4 +860,3 @@ mod tests {
         assert!(out.contains("$x^2"), "text lost: {out}");
     }
 }
-

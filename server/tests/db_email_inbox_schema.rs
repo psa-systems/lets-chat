@@ -121,10 +121,9 @@ async fn email_inboxes_schema_round_trip() {
 
     // Create a room to satisfy the FK, then insert an inbox, then read back
     // via the public identity helper. Mirrors the LC-74 webhook insert path.
-    let room_id =
-        db::chat::create_room(&chat, "ops", None, "public", None, None)
-            .await
-            .unwrap();
+    let room_id = db::chat::create_room(&chat, "ops", None, "public", None, None)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO email_inboxes (room_id, name, avatar_url, secret_hash, created_by) \
          VALUES (?, ?, ?, ?, ?)",
@@ -184,10 +183,11 @@ async fn messages_email_inbox_id_column_present_and_round_trips() {
     .execute(&chat)
     .await
     .unwrap();
-    let inbox_id: i64 = sqlx::query_scalar("SELECT id FROM email_inboxes WHERE secret_hash = 'hash-aaaa'")
-        .fetch_one(&chat)
-        .await
-        .unwrap();
+    let inbox_id: i64 =
+        sqlx::query_scalar("SELECT id FROM email_inboxes WHERE secret_hash = 'hash-aaaa'")
+            .fetch_one(&chat)
+            .await
+            .unwrap();
 
     sqlx::query(
         "INSERT INTO messages (room_id, user_id, body, email_inbox_id) \

@@ -23,7 +23,9 @@
 
 use std::sync::{Arc, OnceLock};
 
-use lets_chat::email_ingress::poll::{process_polled_message, ProcessOutcome, POLL_RATE_LIMIT_PER_MIN};
+use lets_chat::email_ingress::poll::{
+    process_polled_message, ProcessOutcome, POLL_RATE_LIMIT_PER_MIN,
+};
 use lets_chat::email_ingress::DropReason;
 use lets_chat::{auth, db, state::AppState, ws::hub::Hub};
 use sqlx::SqlitePool;
@@ -57,7 +59,9 @@ async fn setup() -> Fixture {
     let settings_pool = common::settings_pool().await;
 
     // Need at least one admin user so backfill_general_membership runs.
-    let admin = db::auth::create_user(&auth_pool, "admin", "h").await.unwrap();
+    let admin = db::auth::create_user(&auth_pool, "admin", "h")
+        .await
+        .unwrap();
     sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
         .bind(&admin)
         .execute(&auth_pool)
@@ -178,7 +182,10 @@ async fn delivered_to_header_resolves() {
         "body",
     );
     let outcome = process_polled_message(&fx.state, &fx.secret_key, INGRESS_DOMAIN, &raw).await;
-    assert!(matches!(outcome, ProcessOutcome::Posted { .. }), "got {outcome:?}");
+    assert!(
+        matches!(outcome, ProcessOutcome::Posted { .. }),
+        "got {outcome:?}"
+    );
 }
 
 #[tokio::test]
@@ -191,20 +198,21 @@ async fn x_original_to_header_resolves() {
         "body",
     );
     let outcome = process_polled_message(&fx.state, &fx.secret_key, INGRESS_DOMAIN, &raw).await;
-    assert!(matches!(outcome, ProcessOutcome::Posted { .. }), "got {outcome:?}");
+    assert!(
+        matches!(outcome, ProcessOutcome::Posted { .. }),
+        "got {outcome:?}"
+    );
 }
 
 #[tokio::test]
 async fn cc_header_resolves() {
     let fx = setup().await;
-    let raw = email_to(
-        "Cc",
-        &format!("{TOKEN}@{INGRESS_DOMAIN}"),
-        "via cc",
-        "body",
-    );
+    let raw = email_to("Cc", &format!("{TOKEN}@{INGRESS_DOMAIN}"), "via cc", "body");
     let outcome = process_polled_message(&fx.state, &fx.secret_key, INGRESS_DOMAIN, &raw).await;
-    assert!(matches!(outcome, ProcessOutcome::Posted { .. }), "got {outcome:?}");
+    assert!(
+        matches!(outcome, ProcessOutcome::Posted { .. }),
+        "got {outcome:?}"
+    );
 }
 
 #[tokio::test]
@@ -221,7 +229,10 @@ async fn unknown_secret_drops_with_address_no_match() {
         panic!("expected Dropped, got {outcome:?}");
     };
     assert_eq!(reason, DropReason::AddressNoMatch);
-    assert!(detail.contains("lc_unknown"), "detail should list tried address: {detail}");
+    assert!(
+        detail.contains("lc_unknown"),
+        "detail should list tried address: {detail}"
+    );
     assert_eq!(message_count(&fx.state.chat, fx.room_id).await, 0);
 }
 
@@ -348,7 +359,10 @@ async fn rate_limit_blocks_burst_above_cap() {
         let outcome = process_polled_message(&fx.state, &fx.secret_key, INGRESS_DOMAIN, &raw).await;
         match outcome {
             ProcessOutcome::Posted { .. } => posted += 1,
-            ProcessOutcome::Dropped { reason: DropReason::RateLimited, .. } => {
+            ProcessOutcome::Dropped {
+                reason: DropReason::RateLimited,
+                ..
+            } => {
                 rate_limited += 1;
             }
             other => panic!("unexpected outcome at iter {i}: {other:?}"),
