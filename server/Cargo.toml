@@ -77,6 +77,31 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["html
 pulldown-latex = "=0.7.1"
 syntect = { version = "5", default-features = false, features = ["default-fancy", "html"] }
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "rustls-tls", "hostname"] }
+# LC-77: MIME parser for IMAP-polled message bodies.
+#
+# Pinned EXACTLY to 0.10.2 with `=`. mail-parser parses hostile input from
+# operator-configured mailboxes; the LC-77 spike A corpus (truncated
+# multipart, malformed Content-Type, 50-level nesting, 1 MiB headers,
+# broken RFC 2047, invalid UTF-8, jpeg-claiming-zip) ran clean with 0
+# panics in 2.59 ms total against this version. A minor bump could
+# change parsing tolerance or surface a regression: re-run the LC-77
+# mail-parser corpus spike under spike/lc-77-mail-parser-corpus before
+# any version bump.
+mail-parser = "=0.10.2"
+# LC-77: async IMAP client for the email-ingress poll loop.
+#
+# Pinned EXACTLY to 0.10.4 with `=`. The LC-77 spike B drove the 7-step
+# poll cycle (TLS connect, LOGIN, SELECT, UID SEARCH UNSEEN, FETCH,
+# STORE +Seen, re-FETCH confirm, LOGOUT) against a local greenmail
+# server with this version. A minor bump could change error variants
+# we depend on for the failure-log taxonomy (Io / No / ConnectionLost)
+# or the TLS feature pin: re-run spike B before bumping.
+async-imap = { version = "=0.10.4", default-features = false, features = ["runtime-tokio"] }
+# LC-77: TLS for async-imap. ring crypto provider (no aws-lc-rs, no
+# OpenSSL). Pinned to the same line tokio-rustls uses elsewhere; minor
+# bumps within 0.23 are accepted.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+tokio-rustls = "0.26"
 hmac = { version = "0.12" }
 hex = { version = "0.4" }
 jsonwebtoken = { version = "9", optional = true }

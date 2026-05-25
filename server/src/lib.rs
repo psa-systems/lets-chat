@@ -6,6 +6,7 @@ pub mod crypto;
 pub mod db;
 pub mod digest;
 pub mod dnd;
+pub mod email_ingress;
 pub mod error;
 pub mod last_visited;
 pub mod links;
