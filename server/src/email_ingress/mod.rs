@@ -54,6 +54,12 @@ pub enum DropReason {
     /// so an operator can tell a late reply ("user replied 2 weeks after
     /// the notification") from a garbage `reply-` address.
     ReplyExpired,
+    /// LC-77-MID-DEDUP: the message's RFC 5322 Message-ID has already
+    /// been processed in a prior tick (recorded in
+    /// `chat.db::processed_message_ids`). Drops without re-posting so a
+    /// crash between (process) and (STORE +Seen) on the same UID can't
+    /// double-post.
+    Duplicate,
     /// Catch-all: DB error, disk full, anything that prevents posting.
     /// Detail must carry the specific cause for the log.
     InternalError,
@@ -68,6 +74,7 @@ impl DropReason {
             Self::LoopDetected => "loop_detected",
             Self::RateLimited => "rate_limited",
             Self::ReplyExpired => "reply_expired",
+            Self::Duplicate => "duplicate",
             Self::InternalError => "internal_error",
         }
     }
