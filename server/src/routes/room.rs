@@ -8,7 +8,6 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
-use crate::views::message_actor::MessageActor;
 use crate::views::room::{
     ComposerFragment, ComposerQuoteChip, EditFormFragment, HistoryEntryView,
     HistoryPanelClosedFragment, HistoryPanelFragment, MessageView, ReactionView, RoomPage,
@@ -228,7 +227,7 @@ pub async fn get_room(
             entry.clone()
         } else {
             let entry =
-                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
+                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id).await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -286,7 +285,7 @@ pub async fn get_room(
                 None
             },
             author_is_bot: meta.is_bot,
-            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+            actor: meta.actor.clone(),
         });
     }
 
@@ -1230,7 +1229,7 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta = super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
+    let meta = super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id).await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
@@ -1287,7 +1286,7 @@ pub async fn patch_message(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+        actor: meta.actor.clone(),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1335,7 +1334,7 @@ pub async fn get_thread_panel(
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let parent_meta =
-        super::resolve_msg_author(&state, &parent.user_id, parent.webhook_id, &user.id).await?;
+        super::resolve_msg_author(&state, &parent.user_id, parent.webhook_id, parent.email_inbox_id, &user.id).await?;
 
     // Bulk-load attachments for the parent and every reply in a single query.
     let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
@@ -1394,10 +1393,7 @@ pub async fn get_thread_panel(
             None
         },
         author_is_bot: parent_meta.is_bot,
-        actor: MessageActor::from_webhook_flag(
-            parent_meta.is_webhook,
-            parent_meta.avatar_url.clone(),
-        ),
+        actor: parent_meta.actor.clone(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1406,7 +1402,7 @@ pub async fn get_thread_panel(
             entry.clone()
         } else {
             let entry =
-                super::resolve_msg_author(&state, &r.user_id, r.webhook_id, &user.id).await?;
+                super::resolve_msg_author(&state, &r.user_id, r.webhook_id, r.email_inbox_id, &user.id).await?;
             author_cache.insert(r.user_id.clone(), entry.clone());
             entry
         };
@@ -1450,7 +1446,7 @@ pub async fn get_thread_panel(
                 None
             },
             author_is_bot: meta.is_bot,
-            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+            actor: meta.actor.clone(),
         });
     }
 

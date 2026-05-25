@@ -1,18 +1,15 @@
-//! LC-77 pre-refactor baseline: pin the rendered HTML of a webhook-authored
-//! message under the current LC-74 `author_is_webhook` boolean shape.
+//! LC-77 render fixture pins.
 //!
-//! The MessageActor enum refactor in commit 1B replaces `author_is_webhook` +
-//! `webhook_avatar_url` with a sum type. After the refactor, this test still
-//! produces the same rendered HTML byte-for-byte (or DOM-for-DOM in the
-//! fallback). The fixture files committed alongside this test are the
-//! load-bearing baseline that proves the refactor was behavior-preserving for
-//! LC-74 webhooks.
+//! The MessageActor enum (commit 1B) replaced the original LC-74
+//! `author_is_webhook` boolean + `webhook_avatar_url` pair with a sum
+//! type. The fixture files committed alongside this test are the
+//! load-bearing baseline that proved the refactor was behavior-preserving
+//! for LC-74 webhooks; they also pin the new LC-77 EmailInbox arm so a
+//! future change cannot silently break the third actor's render shape.
 //!
-//! Two cases:
-//!   - Webhook without an avatar URL: renders initials fallback (template
-//!     line 22, `room/message.html`).
-//!   - Webhook with an avatar URL: renders `<img src="...">` (template
-//!     line 20).
+//! Cases (each with and without an avatar URL):
+//!   - Webhook (LC-74).
+//!   - EmailInbox (LC-77).
 //!
 //! Generation mode: set `FIXTURE_WRITE=1` to (re)write the fixture files.
 //! Verification mode (default): reads the committed fixture, asserts the
@@ -26,22 +23,22 @@ use lets_chat::views::ws_fragments::NewMessageFragment;
 
 const FIXTURE_DIR: &str = "tests/fixtures";
 
-fn webhook_view(with_avatar: bool) -> MessageView {
+fn synthetic_view(actor: MessageActor, username: &str, body: &str) -> MessageView {
     MessageView {
         id: 1,
         room_id: 1,
-        // LC-74 convention: webhook-authored rows store an empty user_id.
+        // Synthetic-actor convention: user_id is empty.
         user_id: String::new(),
-        // The "username" field carries the webhook display name for webhook
-        // posts (set by resolve_msg_author when webhook_id is Some).
-        username: "Test Webhook".to_string(),
+        // The "username" field carries the synthetic actor's display name
+        // (set by resolve_msg_author when webhook_id or email_inbox_id is Some).
+        username: username.to_string(),
         display_name: None,
         avatar_ext: None,
         status: "active".to_string(),
         custom_status: None,
         created_at: "2026-01-01T00:00:00Z".to_string(),
         edited_at: None,
-        body: "hello from a webhook".to_string(),
+        body: body.to_string(),
         reactions: vec![],
         can_edit: false,
         can_delete: false,
@@ -60,15 +57,29 @@ fn webhook_view(with_avatar: bool) -> MessageView {
         is_system: false,
         poll: None,
         author_is_bot: false,
-        actor: MessageActor::Webhook(if with_avatar {
-            Some("https://example.com/avatar.png".to_string())
-        } else {
-            None
-        }),
+        actor,
     }
 }
 
-fn render_webhook_fragment(view: &MessageView) -> String {
+fn webhook_view(with_avatar: bool) -> MessageView {
+    let avatar = with_avatar.then(|| "https://example.com/avatar.png".to_string());
+    synthetic_view(
+        MessageActor::Webhook(avatar),
+        "Test Webhook",
+        "hello from a webhook",
+    )
+}
+
+fn email_inbox_view(with_avatar: bool) -> MessageView {
+    let avatar = with_avatar.then(|| "https://example.com/avatar.png".to_string());
+    synthetic_view(
+        MessageActor::EmailInbox(avatar),
+        "Test Inbox",
+        "hello from an email inbox",
+    )
+}
+
+fn render_fragment(view: &MessageView) -> String {
     NewMessageFragment { message: view }
         .render()
         .expect("template render must succeed under fixture conditions")
@@ -111,13 +122,27 @@ fn assert_fixture_matches(name: &str, actual: &str) {
 #[test]
 fn webhook_render_no_avatar_matches_fixture() {
     let view = webhook_view(false);
-    let html = render_webhook_fragment(&view);
+    let html = render_fragment(&view);
     assert_fixture_matches("lc77_webhook_render_no_avatar.html", &html);
 }
 
 #[test]
 fn webhook_render_with_avatar_matches_fixture() {
     let view = webhook_view(true);
-    let html = render_webhook_fragment(&view);
+    let html = render_fragment(&view);
     assert_fixture_matches("lc77_webhook_render_with_avatar.html", &html);
+}
+
+#[test]
+fn email_inbox_render_no_avatar_matches_fixture() {
+    let view = email_inbox_view(false);
+    let html = render_fragment(&view);
+    assert_fixture_matches("lc77_email_inbox_render_no_avatar.html", &html);
+}
+
+#[test]
+fn email_inbox_render_with_avatar_matches_fixture() {
+    let view = email_inbox_view(true);
+    let html = render_fragment(&view);
+    assert_fixture_matches("lc77_email_inbox_render_with_avatar.html", &html);
 }

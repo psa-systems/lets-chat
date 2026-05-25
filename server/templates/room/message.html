@@ -24,6 +24,15 @@
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1 py-0.5" title="Posted by an incoming webhook">webhook</span>
+    {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
+    {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
+    {% if let Some(url) = email_avatar_url %}
+    <img src="{{ url }}" alt="" class="h-6 w-6 rounded-full object-cover">
+    {% else %}
+    <div class="h-6 w-6 text-xs rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    {% endif %}
+    <span class="font-medium">{{ message.label() }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 rounded px-1 py-0.5" title="Posted via email ingress">email</span>
     {% when crate::views::message_actor::MessageActor::User %}
     {% let avatar_user_id = message.user_id.clone() %}
     {% let avatar_username = message.username.clone() %}
