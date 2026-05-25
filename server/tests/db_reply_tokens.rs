@@ -148,3 +148,61 @@ async fn notify_email_activity_enabled_round_trips_via_setter() {
         .unwrap();
     assert!(!user.notify_email_activity_enabled);
 }
+
+#[tokio::test]
+async fn resolve_active_or_expired_distinguishes_fresh_and_stale_tokens() {
+    let chat = common::chat_pool().await;
+    let room_id = fresh_room(&chat).await;
+    let message_id = insert_message(&chat, room_id, "alice").await;
+
+    let fresh = db::reply_tokens::mint_token();
+    let stale = db::reply_tokens::mint_token();
+    db::reply_tokens::insert(&chat, &fresh, "alice", message_id, "2099-01-01 00:00:00")
+        .await
+        .unwrap();
+    db::reply_tokens::insert(&chat, &stale, "alice", message_id, "2000-01-01 00:00:00")
+        .await
+        .unwrap();
+
+    let (row, expired) = db::reply_tokens::resolve_active_or_expired(&chat, &fresh)
+        .await
+        .unwrap()
+        .expect("fresh row exists");
+    assert_eq!(row.user_id, "alice");
+    assert_eq!(row.message_id, message_id);
+    assert!(!expired);
+
+    let (row, expired) = db::reply_tokens::resolve_active_or_expired(&chat, &stale)
+        .await
+        .unwrap()
+        .expect("stale row exists");
+    assert_eq!(row.user_id, "alice");
+    assert!(
+        expired,
+        "a token whose expires_at predates now must report expired=true",
+    );
+
+    let out = db::reply_tokens::resolve_active_or_expired(&chat, "UNKNOWN")
+        .await
+        .unwrap();
+    assert!(out.is_none());
+}
+
+#[tokio::test]
+async fn consume_returns_true_once_and_then_false() {
+    let chat = common::chat_pool().await;
+    let room_id = fresh_room(&chat).await;
+    let message_id = insert_message(&chat, room_id, "alice").await;
+    let token = db::reply_tokens::mint_token();
+    db::reply_tokens::insert(&chat, &token, "alice", message_id, "2099-01-01 00:00:00")
+        .await
+        .unwrap();
+
+    assert!(db::reply_tokens::consume(&chat, &token).await.unwrap());
+    // Second consume is a no-op; the row is gone.
+    assert!(!db::reply_tokens::consume(&chat, &token).await.unwrap());
+    assert!(db::reply_tokens::resolve(&chat, &token)
+        .await
+        .unwrap()
+        .is_none());
+}
