@@ -63,6 +63,79 @@
   <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
 </form>
 
+<h1 class="text-lg font-semibold mt-8 mb-4">Email ingress (IMAP poll)</h1>
+{% if imap_saved %}
+<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">IMAP settings saved. Restart the server to pick up the new configuration.</div>
+{% endif %}
+{% if let Some(err) = imap_error %}
+<div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+{% endif %}
+<p class="text-sm text-slate-600 max-w-lg mb-3">
+  Lets-chat polls this mailbox every 5 minutes; messages addressed to
+  <code>&lt;token&gt;@&lt;ingress domain&gt;</code> post to their target room as the synthetic
+  email actor. Set up a dedicated mailbox at your provider and point this form
+  at it. The password is encrypted at rest under <code>LETS_CHAT_SECRET_KEY</code>.
+  After saving, restart the server: the spawn gate reads this row at startup,
+  not per tick.
+</p>
+<form method="post" action="/admin/settings/imap" class="max-w-lg space-y-4">
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_host">IMAP host</label>
+    <input id="imap_host" name="imap_host" type="text" value="{{ imap_host }}"
+           placeholder="imap.example.com"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_port">IMAP port</label>
+    <input id="imap_port" name="imap_port" type="text" value="{{ imap_port }}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">993 for IMAPS (recommended). The TLS toggle below should match.</p>
+  </div>
+  <div>
+    <label class="flex items-start gap-2 text-sm cursor-pointer">
+      <input id="imap_tls" name="imap_tls" type="checkbox" value="1" class="mt-0.5"
+        {% if imap_tls %}checked{% endif %}>
+      <span>Use TLS (port 993)</span>
+    </label>
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_username">IMAP username</label>
+    <input id="imap_username" name="imap_username" type="text" value="{{ imap_username }}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_password">IMAP password (write-only)</label>
+    <input id="imap_password" name="imap_password" type="password" value=""
+           placeholder="{% if imap_password_configured %}leave blank to keep existing{% else %}not configured yet{% endif %}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_folder">Folder to poll</label>
+    <input id="imap_folder" name="imap_folder" type="text" value="{{ imap_folder }}"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" for="imap_ingress_domain">Ingress domain</label>
+    <input id="imap_ingress_domain" name="imap_ingress_domain" type="text" value="{{ imap_ingress_domain }}"
+           placeholder="mail.example.com"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">The <code>@&lt;domain&gt;</code> half of the address an external sender mails. Per-room inbox addresses become <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
+  </div>
+  <div>
+    <label class="flex items-start gap-2 text-sm cursor-pointer">
+      <input id="imap_enabled" name="imap_enabled" type="checkbox" value="1" class="mt-0.5"
+        {% if imap_enabled %}checked{% endif %}>
+      <span>
+        Enable IMAP poll
+        <span class="block text-xs text-slate-500 mt-1">
+          Off until you have verified the configuration. The poll loop refuses to spawn on missing fields; check server logs after restart.
+        </span>
+      </span>
+    </label>
+  </div>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save IMAP settings</button>
+</form>
+
 <h2 class="text-base font-semibold mt-8 mb-3">Uploads</h2>
 {% if let Some(n) = regenerated %}
 <div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">Generated {{ n }} preview(s).</div>

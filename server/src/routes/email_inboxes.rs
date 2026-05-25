@@ -134,9 +134,7 @@ pub async fn post_email_inboxes(
             &user,
             room_id,
             None,
-            Some(
-                "Email inboxes need a server secret key (LETS_CHAT_SECRET_KEY).".into(),
-            ),
+            Some("Email inboxes need a server secret key (LETS_CHAT_SECRET_KEY).".into()),
         )
         .await?
         .into_response());
@@ -147,9 +145,7 @@ pub async fn post_email_inboxes(
             &user,
             room_id,
             None,
-            Some(
-                "Email inboxes need the IMAP ingress domain configured in admin settings.".into(),
-            ),
+            Some("Email inboxes need the IMAP ingress domain configured in admin settings.".into()),
         )
         .await?
         .into_response());

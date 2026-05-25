@@ -182,6 +182,26 @@ pub struct SettingsPage<'a> {
     pub smtp_port: String,
     pub smtp_user: String,
     pub smtp_from: String,
+    /// LC-77: IMAP poll configuration for email ingress. These mirror
+    /// the SMTP fields above. `imap_password_configured` is `true` when
+    /// a non-empty sealed password is stored, so the template can show
+    /// "configured" without ever rendering the plaintext.
+    pub imap_host: String,
+    pub imap_port: String,
+    pub imap_tls: bool,
+    pub imap_username: String,
+    pub imap_password_configured: bool,
+    pub imap_folder: String,
+    pub imap_ingress_domain: String,
+    pub imap_enabled: bool,
+    /// `Some(msg)` when an IMAP form save just failed (typically because the
+    /// secret key is unset and the password can't be sealed). Distinct from
+    /// the SMTP form's silent-save shape; the IMAP form needs error
+    /// reporting because the seal step can fail in a way SMTP's plaintext
+    /// settings.set cannot.
+    pub imap_error: Option<String>,
+    /// `true` when the IMAP form just saved successfully.
+    pub imap_saved: bool,
     /// Whether newly-registered users start with the email-digest
     /// preference flipped on. Stored as a string "0" / "1" in the
     /// `settings` table under `default_notify_email_digest`.

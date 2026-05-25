@@ -130,7 +130,12 @@ async fn app() -> TestApp {
     app_with_ingress_domain(Some(INGRESS_DOMAIN)).await
 }
 
-async fn post_create(app: &Router, session: &str, room_id: i64, name: &str) -> (StatusCode, String) {
+async fn post_create(
+    app: &Router,
+    session: &str,
+    room_id: i64,
+    name: &str,
+) -> (StatusCode, String) {
     let req = Request::builder()
         .method(Method::POST)
         .uri(format!("/room/{room_id}/email-inboxes"))
