@@ -3,9 +3,7 @@ use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use futures::StreamExt;
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -482,36 +480,10 @@ pub async fn get_file(
         .into_response())
 }
 
-/// Sha256 an in-memory byte slice. Used for image uploads where the canonical
-/// filename derives from the STRIPPED re-encoded bytes, not the temp file.
-fn sha256_bytes(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-
-/// Sha256 a file by streaming through it 64 KiB at a time. Returns the hex
-/// digest. Used to derive the canonical content-addressed filename.
-async fn sha256_file(path: &PathBuf) -> std::io::Result<String> {
-    use tokio::io::AsyncReadExt;
-    let mut file = File::open(path).await?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 64 * 1024];
-    loop {
-        let n = file.read(&mut buf).await?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    let digest = hasher.finalize();
-    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
-    Ok(hex)
-}
+// LC-77 commit 5: sha256_bytes + sha256_file moved to `crate::uploads`
+// so the email-ingress attachment pipeline can share them. Behavior is
+// byte-identical; this surface lives via the re-export below.
+use crate::uploads::{sha256_bytes, sha256_file};
 
 /// Strip path separators and control characters from a user-supplied
 /// filename so it cannot be used to escape into other directories. The
