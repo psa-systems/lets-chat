@@ -675,6 +675,7 @@ pub(crate) async fn finalize_message_send(
         quote_id: raw.quote_id,
         is_system: raw.is_system,
         webhook_id: raw.webhook_id,
+        email_inbox_id: raw.email_inbox_id,
     };
 
     let event = ChatEvent::NewMessage {
@@ -803,6 +804,7 @@ pub(crate) async fn finalize_webhook_message_send(
         quote_id: raw.quote_id,
         is_system: raw.is_system,
         webhook_id: Some(webhook_id),
+        email_inbox_id: None,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -1529,6 +1531,7 @@ pub async fn post_thread_reply(
         quote_id: raw.quote_id,
         is_system: raw.is_system,
         webhook_id: raw.webhook_id,
+        email_inbox_id: raw.email_inbox_id,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);

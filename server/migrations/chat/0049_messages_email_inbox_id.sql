@@ -1,0 +1,11 @@
+-- LC-77: messages.email_inbox_id, parallel to messages.webhook_id
+-- (chat/0041_incoming_webhooks.sql). Set for messages authored by an
+-- email-ingress synthetic actor; NULL otherwise.
+--
+-- A FK to email_inboxes(id) with ON DELETE SET NULL preserves message history
+-- if an inbox is hard-deleted (which v1 does NOT do, but the constraint is
+-- the safe shape if a future cleanup pass ever does). Existing webhook_id
+-- uses ALTER TABLE ADD COLUMN without a FK clause; we add the FK here
+-- because email_inboxes exists at migration time (chat/0048) whereas
+-- webhook_id had to predate its referenced table for the LC-74 ordering.
+ALTER TABLE messages ADD COLUMN email_inbox_id INTEGER REFERENCES email_inboxes(id) ON DELETE SET NULL;

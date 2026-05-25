@@ -9,6 +9,7 @@ pub mod branding;
 pub mod chat;
 pub mod custom_emojis;
 pub mod drafts;
+pub mod email_inbox;
 pub mod email_verification;
 pub mod enclave;
 pub mod fcm_subscriptions;

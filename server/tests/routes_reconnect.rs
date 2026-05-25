@@ -99,12 +99,15 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0045_messages_fts_delete_trigger.sql"),
             include_str!("../migrations/chat/0046_messages_fts_purge_guard.sql"),
             include_str!("../migrations/chat/0047_message_drafts.sql"),
+            include_str!("../migrations/chat/0048_email_inboxes.sql"),
+            include_str!("../migrations/chat/0049_messages_email_inbox_id.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),
             include_str!("../migrations/settings/0002_uploads.sql"),
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
             include_str!("../migrations/settings/0004_anti_spam.sql"),
+            include_str!("../migrations/settings/0005_imap_inbox_config.sql"),
         ],
         _ => unreachable!(),
     };

@@ -9,6 +9,7 @@ async fn setup_settings_pool() -> SqlitePool {
         include_str!("../migrations/settings/0002_uploads.sql"),
         include_str!("../migrations/settings/0003_vapid_keypair.sql"),
         include_str!("../migrations/settings/0004_anti_spam.sql"),
+        include_str!("../migrations/settings/0005_imap_inbox_config.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
