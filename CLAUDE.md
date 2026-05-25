@@ -108,6 +108,10 @@ Each database has its own SQLx pool and is initialized independently at startup.
 | `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. The updater fetches `${URL}/latest/latest.json` for the manifest and downloads platform binaries from `${URL}/${version}/lets-chat-desktop-{linux,windows}-x86_64[.exe]`. Override to test against a fork or a local fixture (eg. `http://127.0.0.1:18180`). |
 | `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Gates `spawn_message_retention_sweeper`. Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room `retention_days`. Off by default while the strict-vs-loose semantics question for thread retention is open with the ticket author; current behavior is loosest-correct (sweep-by-newest-reply preserves active threads). Flipping requires a server restart; the spawn function reads the var at startup and does not poll. |
 
+## Email ingress (LC-77)
+
+`spawn_email_poll` polls an operator-configured IMAP mailbox every 5 minutes; messages addressed to `<token>@<ingress-domain>` post to their room as the `MessageActor::EmailInbox` synthetic actor. See `docs/email-ingress.md` for the operator deployment guide, threat model, and failure-log taxonomy. Gated at startup on `LETS_CHAT_SECRET_KEY` set + `imap_inbox_config.enabled = 1` + `imap_inbox_config.ingress_domain` set; flipping `enabled` requires a server restart (same precedent as the retention sweeper). The IMAP password is AES-256-GCM-sealed at rest under `LETS_CHAT_SECRET_KEY` via `db::imap_config`; per-room inbox secrets are HMAC-SHA256-hashed via `db::email_inbox`. The named link-filter skip decision (mirroring the LC-74 webhook posture) is anchored in a code comment in `routes::room::finalize_email_inbox_message_send`.
+
 ## Workspace Layout
 
 `Cargo.toml` at the repo root defines a Cargo workspace with two members:
