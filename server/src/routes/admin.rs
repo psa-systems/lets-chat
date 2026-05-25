@@ -178,14 +178,21 @@ pub async fn get_enclaves(
 
 // Settings ------------------------------------------------------------------
 
-#[derive(Deserialize)]
-pub struct SettingsForm {
-    pub smtp_host: String,
-    pub smtp_port: String,
-    pub smtp_user: String,
-    pub smtp_from: String,
-    pub smtp_pass: String,
-}
+// LC-77-SMTP-SEAL: the SMTP fields used to live here (smtp_host, _port,
+// _user, _pass, _from) and got persisted to `settings.db` by `post_settings`.
+// They were write-only - no code read them back, because
+// `mail::Mailer::from_env` is the actual SMTP loader and reads exclusively
+// from the `SMTP_*` env vars. The admin form was misleading UX scaffolding;
+// the password sitting in `settings.db` plaintext was the only real
+// consequence. The form is gone; SMTP is documented as env-var-only in
+// `README.md`. Existing settings.db rows are dropped by migration
+// `settings/0006_drop_smtp_settings.sql`.
+//
+// `SettingsForm` is retained as an empty struct so the `axum::Form` extractor
+// on `post_settings` still has a target; it has no fields. Future
+// non-SMTP knobs land here.
+#[derive(Deserialize, Default)]
+pub struct SettingsForm {}
 
 #[derive(Deserialize, Default)]
 pub struct SettingsQuery {
@@ -231,18 +238,6 @@ pub async fn get_settings(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
-    let smtp_host = db::settings::get_setting(&state.settings, "smtp_host")
-        .await?
-        .unwrap_or_default();
-    let smtp_port = db::settings::get_setting(&state.settings, "smtp_port")
-        .await?
-        .unwrap_or_else(|| "587".to_string());
-    let smtp_user = db::settings::get_setting(&state.settings, "smtp_user")
-        .await?
-        .unwrap_or_default();
-    let smtp_from = db::settings::get_setting(&state.settings, "smtp_from")
-        .await?
-        .unwrap_or_default();
     let default_notify_email_digest =
         db::settings::get_setting(&state.settings, "default_notify_email_digest")
             .await?
@@ -285,14 +280,9 @@ pub async fn get_settings(
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
         section: "settings",
-        smtp_host,
-        smtp_port,
-        smtp_user,
-        smtp_from,
         default_notify_email_digest,
         maintenance_enabled,
         maintenance_message,
-        saved: false,
         uploads_total_display,
         uploads_orphan_count,
         regenerated: q.regenerated,
@@ -461,27 +451,25 @@ pub async fn post_purge_orphans(
     )))
 }
 
+/// LC-77-SMTP-SEAL: previously wrote the SMTP form into `settings.db`
+/// (host/port/user/from plain, password plain), but `mail::Mailer::from_env`
+/// is the actual SMTP loader and reads exclusively from `SMTP_*` env vars,
+/// so the writes were dead storage. The form is gone; this handler is
+/// retained as an empty no-op redirect so a future non-SMTP settings field
+/// has somewhere to land without re-wiring the route. The route itself
+/// stays registered so a stale browser POST does not 404.
 pub async fn post_settings(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     AdminUser(_user): AdminUser,
-    axum::Form(form): axum::Form<SettingsForm>,
+    axum::Form(_form): axum::Form<SettingsForm>,
 ) -> Result<Response, AppError> {
-    db::settings::set_setting(&state.settings, "smtp_host", &form.smtp_host).await?;
-    db::settings::set_setting(&state.settings, "smtp_port", &form.smtp_port).await?;
-    db::settings::set_setting(&state.settings, "smtp_user", &form.smtp_user).await?;
-    db::settings::set_setting(&state.settings, "smtp_from", &form.smtp_from).await?;
-    if !form.smtp_pass.is_empty() {
-        db::settings::set_setting(&state.settings, "smtp_pass", &form.smtp_pass).await?;
-    }
     Ok(Redirect::to("/admin/settings").into_response())
 }
 
-/// LC-77: save the IMAP-poll config. Mirrors the SMTP post handler's
-/// shape but routes through `db::imap_config::write` so the password
-/// is AES-256-GCM-sealed under the process secret key. An empty
-/// password input preserves the existing sealed value (matching the
-/// SMTP password's write-only UX); a non-empty input re-seals and
-/// overwrites.
+/// LC-77: save the IMAP-poll config. Routes through `db::imap_config::write`
+/// so the password is AES-256-GCM-sealed under the process secret key. An
+/// empty password input preserves the existing sealed value; a non-empty
+/// input re-seals and overwrites.
 pub async fn post_imap_settings(
     State(state): State<AppState>,
     AdminUser(_user): AdminUser,
