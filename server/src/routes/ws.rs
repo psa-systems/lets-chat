@@ -13,6 +13,7 @@ use crate::auth::OptionalUser;
 use crate::db;
 use crate::models::{self, User};
 use crate::state::AppState;
+use crate::views::message_actor::MessageActor;
 use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
@@ -769,8 +770,7 @@ async fn render_new_message(
             .ok()
             .flatten(),
         author_is_bot,
-        author_is_webhook,
-        webhook_avatar_url,
+        actor: MessageActor::from_webhook_flag(author_is_webhook, webhook_avatar_url),
     };
     render_template(&NewMessageFragment { message: &view }).ok()
 }
@@ -875,8 +875,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        author_is_webhook: meta.is_webhook,
-        webhook_avatar_url: meta.avatar_url.clone(),
+        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -948,8 +947,7 @@ async fn render_thread_reply(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        author_is_webhook: meta.is_webhook,
-        webhook_avatar_url: meta.avatar_url.clone(),
+        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,

@@ -6,6 +6,7 @@ use crate::models::custom_emoji::EmojiRef;
 use crate::models::{Attachment, Room, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::markdown;
+use crate::views::message_actor::MessageActor;
 
 pub struct MessageView {
     pub id: i64,
@@ -76,11 +77,11 @@ pub struct MessageView {
     /// LC-73: true when the author is a bot. Renders a "bot" badge next to
     /// the username.
     pub author_is_bot: bool,
-    /// LC-74: true when the author is an incoming webhook. Suppresses the DM
-    /// link and renders a "webhook" badge.
-    pub author_is_webhook: bool,
-    /// LC-74: avatar URL for a webhook author (None = render initials).
-    pub webhook_avatar_url: Option<String>,
+    /// LC-77: actor identity for branching the avatar + label affordances
+    /// in `room/message.html`. Carries the LC-74 webhook avatar URL
+    /// inline; the User variant is unit because the user-identity scalars
+    /// already live on this struct.
+    pub actor: MessageActor,
 }
 
 /// LC-66: a poll rendered beneath its anchor message. Built by
