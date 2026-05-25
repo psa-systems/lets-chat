@@ -20,6 +20,7 @@
 //! test prints a unified diff snippet so the divergence is obvious.
 
 use askama::Template;
+use lets_chat::views::message_actor::MessageActor;
 use lets_chat::views::room::MessageView;
 use lets_chat::views::ws_fragments::NewMessageFragment;
 
@@ -59,12 +60,11 @@ fn webhook_view(with_avatar: bool) -> MessageView {
         is_system: false,
         poll: None,
         author_is_bot: false,
-        author_is_webhook: true,
-        webhook_avatar_url: if with_avatar {
+        actor: MessageActor::Webhook(if with_avatar {
             Some("https://example.com/avatar.png".to_string())
         } else {
             None
-        },
+        }),
     }
 }
 

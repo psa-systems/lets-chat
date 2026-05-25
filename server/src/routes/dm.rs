@@ -10,6 +10,7 @@ use crate::state::AppState;
 use crate::views::dm::DmPage;
 use crate::views::home::WelcomePage;
 use crate::views::html;
+use crate::views::message_actor::MessageActor;
 use crate::views::room::{MessageView, ReactionView};
 use crate::ws::events::ChatEvent;
 
@@ -252,8 +253,7 @@ pub async fn get_dm(
                 None
             },
             author_is_bot: meta.is_bot,
-            author_is_webhook: meta.is_webhook,
-            webhook_avatar_url: meta.avatar_url.clone(),
+            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
         });
     }
 
