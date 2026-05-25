@@ -3197,6 +3197,7 @@ dependencies = [
  "url",
  "uuid",
  "web-push-native",
+ "webpki-roots 0.26.11",
  "zip",
 ]
 
