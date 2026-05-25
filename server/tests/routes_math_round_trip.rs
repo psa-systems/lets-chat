@@ -26,8 +26,8 @@ fn ensure_tempdir() -> &'static str {
     static TEMPDIR: OnceLock<String> = OnceLock::new();
     TEMPDIR
         .get_or_init(|| {
-            let p =
-                std::env::temp_dir().join(format!("lc-math-round-trip-tests-{}", std::process::id()));
+            let p = std::env::temp_dir()
+                .join(format!("lc-math-round-trip-tests-{}", std::process::id()));
             std::fs::create_dir_all(&p).expect("create test data dir");
             db::set_data_dir(p.to_string_lossy().to_string());
             p.to_string_lossy().to_string()
@@ -50,7 +50,9 @@ async fn app_with_user(username: &str) -> TestApp {
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
-    let user_id = db::auth::create_user(&auth, username, "hash").await.unwrap();
+    let user_id = db::auth::create_user(&auth, username, "hash")
+        .await
+        .unwrap();
     // Promote to admin so backfill_general_membership runs (it early-returns
     // when no admin exists). Set totp_enabled=1 so the enforce_2fa_enrollment
     // middleware does not redirect every authed request to /settings/2fa/setup

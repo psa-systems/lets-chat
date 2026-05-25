@@ -217,7 +217,14 @@ pub(crate) async fn load_message_view_for_viewer(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let meta = resolve_msg_author(state, &m.user_id, m.webhook_id, m.email_inbox_id, &viewer.id).await?;
+    let meta = resolve_msg_author(
+        state,
+        &m.user_id,
+        m.webhook_id,
+        m.email_inbox_id,
+        &viewer.id,
+    )
+    .await?;
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id
         || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)

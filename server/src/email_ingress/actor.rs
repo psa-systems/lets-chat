@@ -49,8 +49,13 @@ pub async fn post_email_message(
         };
     }
 
-    let new_id = match db::chat::insert_email_inbox_message(&state.chat, inbox.room_id, inbox.id, body)
-        .await
+    let new_id = match db::chat::insert_email_inbox_message(
+        &state.chat,
+        inbox.room_id,
+        inbox.id,
+        body,
+    )
+    .await
     {
         Ok(id) => id,
         Err(e) => {
@@ -120,7 +125,5 @@ pub async fn post_email_message(
         );
     }
 
-    PostOutcome::Posted {
-        message_id: new_id,
-    }
+    PostOutcome::Posted { message_id: new_id }
 }
