@@ -57,3 +57,36 @@ pub async fn write_atomic(final_path: &std::path::Path, bytes: &[u8]) -> std::io
     }
     Ok(())
 }
+
+/// Sha256 an in-memory byte slice. Used for image uploads where the canonical
+/// filename derives from the STRIPPED re-encoded bytes, not the temp file.
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Sha256 a file by streaming through it 64 KiB at a time. Returns the hex
+/// digest. Used to derive the canonical content-addressed filename.
+pub async fn sha256_file(path: &std::path::Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncReadExt;
+    let mut file = tokio::fs::File::open(path).await?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(hex)
+}

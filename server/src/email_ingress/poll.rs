@@ -361,13 +361,22 @@ pub async fn process_polled_message(
         };
     }
     let extracted = parse::extract_body(&message);
-    if extracted.body.trim().is_empty() {
+    let attachments = parse::extract_attachments(&message);
+    if extracted.body.trim().is_empty() && attachments.is_empty() {
         return ProcessOutcome::Dropped {
             reason: DropReason::ParseFail,
-            detail: "empty subject and body after parse".to_string(),
+            detail: "empty subject and body after parse, no attachments".to_string(),
         };
     }
-    match actor::post_email_message(state, &inbox, &extracted.body).await {
+    // A whitespace-only body with attachments is acceptable: the actor
+    // posts a body of " " so the markdown pipeline produces a valid row
+    // and the attachment partial fills the visual space.
+    let body_for_post = if extracted.body.trim().is_empty() {
+        String::new()
+    } else {
+        extracted.body
+    };
+    match actor::post_email_message(state, &inbox, &body_for_post, &attachments).await {
         actor::PostOutcome::Posted { message_id } => ProcessOutcome::Posted { message_id },
         actor::PostOutcome::Dropped { reason, detail } => {
             ProcessOutcome::Dropped { reason, detail }
