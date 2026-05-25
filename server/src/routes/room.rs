@@ -8,6 +8,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
+use crate::views::message_actor::MessageActor;
 use crate::views::room::{
     ComposerFragment, ComposerQuoteChip, EditFormFragment, HistoryEntryView,
     HistoryPanelClosedFragment, HistoryPanelFragment, MessageView, ReactionView, RoomPage,
@@ -285,8 +286,7 @@ pub async fn get_room(
                 None
             },
             author_is_bot: meta.is_bot,
-            author_is_webhook: meta.is_webhook,
-            webhook_avatar_url: meta.avatar_url.clone(),
+            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
         });
     }
 
@@ -1285,8 +1285,7 @@ pub async fn patch_message(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        author_is_webhook: meta.is_webhook,
-        webhook_avatar_url: meta.avatar_url.clone(),
+        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1393,8 +1392,10 @@ pub async fn get_thread_panel(
             None
         },
         author_is_bot: parent_meta.is_bot,
-        author_is_webhook: parent_meta.is_webhook,
-        webhook_avatar_url: parent_meta.avatar_url.clone(),
+        actor: MessageActor::from_webhook_flag(
+            parent_meta.is_webhook,
+            parent_meta.avatar_url.clone(),
+        ),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1447,8 +1448,7 @@ pub async fn get_thread_panel(
                 None
             },
             author_is_bot: meta.is_bot,
-            author_is_webhook: meta.is_webhook,
-            webhook_avatar_url: meta.avatar_url.clone(),
+            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
         });
     }
 
