@@ -178,14 +178,10 @@ pub struct SettingsPage<'a> {
     pub git_version: &'a str,
     pub build_date: &'a str,
     pub section: &'static str,
-    pub smtp_host: String,
-    pub smtp_port: String,
-    pub smtp_user: String,
-    pub smtp_from: String,
-    /// LC-77: IMAP poll configuration for email ingress. These mirror
-    /// the SMTP fields above. `imap_password_configured` is `true` when
-    /// a non-empty sealed password is stored, so the template can show
-    /// "configured" without ever rendering the plaintext.
+    /// LC-77: IMAP poll configuration for email ingress.
+    /// `imap_password_configured` is `true` when a non-empty sealed password
+    /// is stored, so the template can show "configured" without ever
+    /// rendering the plaintext.
     pub imap_host: String,
     pub imap_port: String,
     pub imap_tls: bool,
@@ -195,10 +191,7 @@ pub struct SettingsPage<'a> {
     pub imap_ingress_domain: String,
     pub imap_enabled: bool,
     /// `Some(msg)` when an IMAP form save just failed (typically because the
-    /// secret key is unset and the password can't be sealed). Distinct from
-    /// the SMTP form's silent-save shape; the IMAP form needs error
-    /// reporting because the seal step can fail in a way SMTP's plaintext
-    /// settings.set cannot.
+    /// secret key is unset and the password can't be sealed).
     pub imap_error: Option<String>,
     /// `true` when the IMAP form just saved successfully.
     pub imap_saved: bool,
@@ -211,7 +204,6 @@ pub struct SettingsPage<'a> {
     /// Operator-facing message shown on the 503 page while maintenance
     /// is on. Empty hides the message block.
     pub maintenance_message: String,
-    pub saved: bool,
     /// Pre-formatted "N.NN MiB" string; Askama can't do the i64-to-f64
     /// arithmetic inline, so the handler renders it.
     pub uploads_total_display: String,

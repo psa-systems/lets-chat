@@ -102,6 +102,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/settings/0003_vapid_keypair.sql"),
             include_str!("../migrations/settings/0004_anti_spam.sql"),
             include_str!("../migrations/settings/0005_imap_inbox_config.sql"),
+            include_str!("../migrations/settings/0006_drop_smtp_settings.sql"),
         ],
         _ => unreachable!(),
     };
