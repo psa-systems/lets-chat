@@ -47,6 +47,11 @@ pub struct SettingsForm {
     pub notify_email_digest_enabled: Option<String>,
     #[serde(default)]
     pub notify_login_alerts_enabled: Option<String>,
+    /// LC-77-REPLY: per-message mention + DM email opt-in. Separate from
+    /// the digest opt-in because the cadence + content differ
+    /// substantially (single-event vs hourly batch).
+    #[serde(default)]
+    pub notify_email_activity_enabled: Option<String>,
 }
 
 /// LC-88: the DND fields split out of a `UserRecord` for form rendering.
@@ -389,6 +394,12 @@ pub async fn post_settings(
     // when mail is unavailable.
     let login_alerts = form.notify_login_alerts_enabled.is_some();
     db::auth::set_notify_login_alerts_enabled(&state.auth, &user.id, login_alerts).await?;
+    // LC-77-REPLY: same operator-gate posture as the digest. Persist the
+    // user's chosen value even when mail is unavailable so the toggle
+    // survives a future SMTP enablement; the dispatch path is already a
+    // no-op when state.mailer is None.
+    let email_activity = form.notify_email_activity_enabled.is_some() && state.mail_available();
+    db::auth::set_notify_email_activity_enabled(&state.auth, &user.id, email_activity).await?;
 
     Ok(Redirect::to("/settings").into_response())
 }

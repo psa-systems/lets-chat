@@ -741,7 +741,7 @@ pub(crate) async fn finalize_message_send(
                     )
                 })
                 .collect();
-            fanout_mention_events(state, events).await;
+            fanout_mention_events(state, room, events).await;
         }
     } else {
         // DM: implicit mention. Notify the peer regardless of subscription
@@ -768,6 +768,26 @@ pub(crate) async fn finalize_message_send(
             // dm_room_id)` and drop the event when the peer has muted
             // this DM.
             crate::push::dispatch(state, &peer_id, &event).await;
+            // LC-77-REPLY: per-DM email notification with Reply-To. Fire-
+            // and-forget so the post handler does not wait on SMTP. The
+            // dispatcher's gates (verified email + opt-in + rate limit)
+            // are the actual filtering surface.
+            let send_state = state.clone();
+            let peer_id_for_email = peer_id.clone();
+            let room_id = room.id;
+            let room_name = room.name.clone();
+            let message_id_for_email = new_id;
+            tokio::spawn(async move {
+                let _ = crate::email::notification::dispatch_mention_notification(
+                    &send_state,
+                    &peer_id_for_email,
+                    message_id_for_email,
+                    crate::email::notification::NotificationKind::Dm,
+                    room_id,
+                    &room_name,
+                )
+                .await;
+            });
         }
     }
 
@@ -860,8 +880,30 @@ pub(crate) async fn finalize_email_inbox_message_send(
                     )
                 })
                 .collect();
+            // WS fan-out + LC-77-REPLY email dispatch for each mentioned
+            // user. Email-inbox messages don't go through `fanout_mention_events`
+            // because they predate the helper (LC-77 v1 inlined the loop);
+            // mirror the helper's email-side spawn here.
             for (user_id, event) in events {
                 state.hub.broadcast_to_user(&user_id, &event);
+                if let ChatEvent::Mentioned { message_id, .. } = &event {
+                    let message_id = *message_id;
+                    let send_state = state.clone();
+                    let room_id = room.id;
+                    let room_name = room.name.clone();
+                    let user_id_for_dispatch = user_id.clone();
+                    tokio::spawn(async move {
+                        let _ = crate::email::notification::dispatch_mention_notification(
+                            &send_state,
+                            &user_id_for_dispatch,
+                            message_id,
+                            crate::email::notification::NotificationKind::Mention,
+                            room_id,
+                            &room_name,
+                        )
+                        .await;
+                    });
+                }
             }
         }
     }
@@ -948,7 +990,7 @@ pub(crate) async fn finalize_webhook_message_send(
                     )
                 })
                 .collect();
-            fanout_mention_events(state, events).await;
+            fanout_mention_events(state, room, events).await;
         }
     }
     Ok(())
@@ -1014,15 +1056,45 @@ pub(crate) async fn resolve_channel_targets(
 /// devices would block the HTTP response for 3 sequential push round-
 /// trips). Capping at the inner level binds the only metric that matters
 /// (concurrent HTTP to push services) without that latency cost.
-async fn fanout_mention_events(state: &AppState, events: Vec<(String, ChatEvent)>) {
+async fn fanout_mention_events(
+    state: &AppState,
+    room: &crate::models::Room,
+    events: Vec<(String, ChatEvent)>,
+) {
     for (user_id, event) in &events {
         state.hub.broadcast_to_user(user_id, event);
     }
     for (user_id, event) in events {
         let send_state = state.clone();
+        let send_state_email = state.clone();
+        let room_id = room.id;
+        let room_name = room.name.clone();
+        // Push dispatch (Web Push / APNs / FCM) - existing path.
+        let event_for_push = event.clone();
+        let user_for_push = user_id.clone();
         tokio::spawn(async move {
-            crate::push::dispatch(&send_state, &user_id, &event).await;
+            crate::push::dispatch(&send_state, &user_for_push, &event_for_push).await;
         });
+        // LC-77-REPLY: email-side dispatch in parallel. Per-recipient
+        // gates + rate limit are in the dispatcher; no need to re-check
+        // here. Mention events carry message_id; DM events do too. Both
+        // map to NotificationKind::Mention here (the in-app Mentioned
+        // event with kind="dm" is only fired from the DM branch which
+        // calls dispatch_mention_notification directly with Dm).
+        if let ChatEvent::Mentioned { message_id, .. } = &event {
+            let message_id = *message_id;
+            tokio::spawn(async move {
+                let _ = crate::email::notification::dispatch_mention_notification(
+                    &send_state_email,
+                    &user_id,
+                    message_id,
+                    crate::email::notification::NotificationKind::Mention,
+                    room_id,
+                    &room_name,
+                )
+                .await;
+            });
+        }
     }
 }
 
@@ -1307,7 +1379,7 @@ pub async fn patch_message(
                     )
                 })
                 .collect();
-            fanout_mention_events(&state, events).await;
+            fanout_mention_events(&state, edited_room, events).await;
             // MentionCleared events are WS-only (no Push, no badge attention)
             // and cheap to fire inline. Keep them sequential.
             for t in &removed {
