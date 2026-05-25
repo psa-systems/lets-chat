@@ -25,8 +25,8 @@ use crate::db::imap_config::ImapConfig;
 use crate::rate_limit::{Outcome as RlOutcome, RateLimitKind};
 use crate::state::AppState;
 
-use super::resolve::{resolve_inbox, ResolveOutcome};
-use super::{actor, parse, DropReason};
+use super::resolve::{resolve_address, ResolveOutcome};
+use super::{actor, parse, reply_actor, DropReason};
 
 /// Poll cadence. Matches the brainstorm decision (5 minutes; email is
 /// not real-time). Skip-first-tick pattern mirrors the retention sweeper.
@@ -325,12 +325,48 @@ pub async fn process_polled_message(
             detail: format!("{reason_header} present"),
         };
     }
-    let inbox = match resolve_inbox(&state.chat, secret_key, &message, ingress_domain).await {
+    let inbox = match resolve_address(&state.chat, secret_key, &message, ingress_domain).await {
         Ok(ResolveOutcome::Match(inbox)) => inbox,
         Ok(ResolveOutcome::Revoked(inbox)) => {
             return ProcessOutcome::Dropped {
                 reason: DropReason::RevokedInbox,
                 detail: format!("inbox id {} revoked_at = {:?}", inbox.id, inbox.revoked_at),
+            };
+        }
+        Ok(ResolveOutcome::ReplyMatch(row)) => {
+            // Reply-by-email path: extract the body WITHOUT the subject
+            // prefix (a reply's `Subject: Re: ...` is mail-routing
+            // metadata, not chat content), then hand to the reply
+            // actor. The actor enforces its own per-user gates
+            // (banned/muted, room access, posting policy, DM block,
+            // message rate cap), strips the quoted-original and
+            // signature, inserts as a real user, and consumes the
+            // token on success.
+            let extracted = parse::extract_body_no_subject(&message);
+            let token_plaintext = row.token.clone();
+            return match reply_actor::post_reply_message(
+                state,
+                &row,
+                &token_plaintext,
+                &extracted.body,
+            )
+            .await
+            {
+                reply_actor::ReplyOutcome::Posted { message_id } => {
+                    ProcessOutcome::Posted { message_id }
+                }
+                reply_actor::ReplyOutcome::Dropped { reason, detail } => {
+                    ProcessOutcome::Dropped { reason, detail }
+                }
+            };
+        }
+        Ok(ResolveOutcome::ReplyExpired(row)) => {
+            return ProcessOutcome::Dropped {
+                reason: DropReason::ReplyExpired,
+                detail: format!(
+                    "reply-token expired (user_id={}, message_id={}, expires_at={})",
+                    row.user_id, row.message_id, row.expires_at
+                ),
             };
         }
         Ok(ResolveOutcome::NotFound { tried_addresses }) => {
@@ -342,7 +378,7 @@ pub async fn process_polled_message(
         Err(e) => {
             return ProcessOutcome::Dropped {
                 reason: DropReason::InternalError,
-                detail: format!("resolve_inbox: {e}"),
+                detail: format!("resolve_address: {e}"),
             };
         }
     };

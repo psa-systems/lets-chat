@@ -2,7 +2,7 @@
 
 LC-77 lets external senders mail a chat room directly. An operator-configured IMAP mailbox is polled every 5 minutes; messages addressed to `<token>@<ingress-domain>` post to their target room as a synthetic "Email" actor (no real user impersonation, no DM link, "email" badge in the rendered row).
 
-**LC-77-REPLY stage 1 (#201, shipped):** lets-chat now sends per-message notification emails for mentions and DMs to users who opt in at `/settings`. Those emails carry a `Reply-To: reply-<token>@<ingress-domain>` header. The inbound side that consumes those replies (stage 2) is still in flight; see "Notification emails" below for the operator surface that's shipped, and the followup ticket for what's pending.
+**LC-77-REPLY (#201, shipped):** lets-chat sends per-message notification emails for mentions and DMs to users who opt in at `/settings` (stage 1), and the IMAP poll loop consumes replies to those notification emails and posts them to chat as the real user (stage 2). See "Notification emails" and "Reply-by-email" below.
 
 ## What this is, and what it isn't
 
@@ -143,15 +143,63 @@ When an email is dispatched, a row is inserted in `chat.db::reply_tokens` mappin
 
 ### Operator deployment
 
-Same SMTP env vars as the digest and the other existing email surfaces (password reset, email verify, login alert). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back. That's the v0 of stage 2 (no reply ingress yet).
+Same SMTP env vars as the digest and the other existing email surfaces (password reset, email verify, login alert). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back.
+
+## Reply-by-email (LC-77-REPLY stage 2)
+
+The IMAP poll loop now consumes replies to the stage-1 notification emails. A reply addressed to `reply-<token>@<ingress-domain>` is resolved against the `chat.db::reply_tokens` table, the user's quote/signature is stripped, and the reply posts to the original message's room as a real-user message (NOT as the email-inbox synthetic actor).
+
+### Namespace fork
+
+The poll resolver disambiguates two address namespaces on the local part:
+
+- `reply-<token>@<ingress-domain>`: a reply-by-email token. Looked up against `chat.db::reply_tokens`; the row maps to `(user_id, message_id, expires_at)`. Active rows post as the real user.
+- `<inbox-secret>@<ingress-domain>`: a per-room ingress inbox secret. HMAC-hashed against `chat.db::email_inboxes`; matching rows post as the email-inbox synthetic actor.
+
+The two namespaces are structurally disjoint: per-room inbox secrets are minted with an `lc_` prefix by `auth::generate_api_token`, so a `reply-` address can never accidentally collide with an inbox secret. A `reply-<token>` whose token is unknown does NOT fall back to the HMAC path (and vice versa); the namespace is the discriminator.
+
+### Posting gates
+
+The reply actor mirrors the HTTP `post_message` path point-for-point:
+
+1. Recipient user still exists (drops `address_no_match` if the token was minted for a since-deleted user).
+2. User is neither banned nor muted (drops with a detail-tagged `internal_error`).
+3. Per-user message rate limit (`RateLimitKind::Message`, cap from `rate_limit_messages` setting). Drops `rate_limited` on cap.
+4. `is_room_accessible` (enclave membership / DM membership / public-eligible). Drops `address_no_match` if the user was removed from the enclave between mint and reply.
+5. `can_post_with_policy` (read-only / moderators-only / admins-only gates). Drops `address_no_match` for non-eligible callers.
+6. DM block (either direction). Drops `address_no_match` if either party blocked the other after mint.
+
+A gate failure does NOT consume the token, so a fixable error (rate limit, transient state) leaves the user's reply window intact. The token is consumed (`db::reply_tokens::consume`) only after a successful post; this is the one-shot replay defense.
+
+### Quote and signature stripping
+
+Conservative line-based heuristic (`email_ingress::reply_actor::strip_quoted_reply`):
+
+- Cut at the first occurrence of an RFC 3676 signature delimiter (`-- ` on its own line, trailing space required).
+- Cut at the first line matching `On ... wrote:` (Gmail / Apple Mail intro).
+- After the cut, drop a trailing block of `>`-prefixed quote lines plus their preceding blank line.
+
+Errs on the side of leaving extra text in chat (a missed strip is recoverable; an over-aggressive strip would lose the user's real reply). A reply that strips to empty drops with `parse_fail`.
+
+### Threat model additions (over notification-email + v1 ingress)
+
+- **The reply token is a bearer credential.** A forwarded notification email lets the recipient of the forward post as the original user until the token expires OR the token is consumed. Mitigations: 7-day TTL, single `(user_id, message_id)` binding (the token can't be replayed against other messages), per-user opt-in, per-user rate cap, AND one-shot consumption on success (the first successful reply burns the token; a forward racing the user loses).
+- **Forged `From` cannot change identity.** The token determines the author, not the email's `From` header. An attacker who possesses the token can post as the token's `user_id` regardless of what `From` they craft; this is intentional and matches the v1 ingress posture for inbox secrets.
+- **Gate failures cannot consume the token.** A banned user / blocked DM / removed-from-enclave drop leaves the token in place so the legitimate user can recover after the gating condition lifts.
+- **`Auto-Submitted: auto-generated` on the OUTBOUND notification** prevents the recipient's auto-responder from triggering the poll loop's `Auto-Submitted` drop, which would otherwise look like a `loop_detected` to operators.
+
+### Not consumed
+
+- **Replies do not auto-quote the original.** A chat reply posts as a sibling of the original; threading the original into the chat row would surprise other room participants who never saw the email round trip.
+- **Attachments in the reply are NOT processed.** Stage 2 v1 is text-only. An attachment in a reply is silently ignored; the body still posts. Tracked as a stage-2 follow-up if operator demand surfaces.
+- **Slash commands in the reply are NOT dispatched.** `/me` in an email reply is treated as literal text; a polled email isn't an interactive surface and the surprise factor of executing commands via mail is high. The body posts verbatim.
 
 ## Not supported (deferred)
 
-- **Reply-by-email (LC-77-REPLY stage 2).** Mailing a reply to a chat notification email does not yet post to chat. The outbound `Reply-To` address is set on stage-1 notification mails (see below), but the inbound resolver branch that recognizes `reply-<token>@<ingress-domain>` lands in stage 2. Until then, replies hit the polled mailbox and drop with `reason=address_no_match`.
 - **Mailing list ingestion.** Messages with `List-Id` are dropped. This is intentionally conservative: a sender that tags itself as a list is usually broadcasting, not communicating with a chat. If your monitoring tool sets `List-Id` and you NEED to ingest its mail, reconfigure the tool not to set `List-Id`, or wait for the follow-up that adds per-inbox loop-detection overrides.
 - **Auto-responder ingestion.** Out-of-office replies and vacation messages drop with `loop_detected detail="Auto-Submitted: ..."`. Same posture as `List-Id`.
 - **HTML email rich rendering.** HTML-only messages either drop with `parse_fail` (no text fallback recoverable) or post the stripped-to-text version. A dedicated HTML-to-Markdown converter is a follow-up.
-- **Signature / quoted-history stripping.** v1 ingress is for external automated senders sending clean bodies; signature stripping lands with the reply-by-email half where humans actually quote prior messages.
+- **Signature / quoted-history stripping for the per-room inbox actor.** Stripping is wired ONLY on the reply-by-email path (where humans actually quote). The synthetic-actor path posts the body verbatim to preserve external-sender output as-is.
 - **Bouncing failed messages.** No bounce email is ever generated. The operator's only diagnostic is the structured log. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
 - **Dead-letter folder for poison messages.** A malformed message gets marked `\Seen` after one processing attempt and is never reprocessed, but the original copy stays in the polled mailbox. Tracked as `LC-77-DEAD-LETTER`.
 - **Exactly-once dedup.** v1 is at-least-once with `\Seen`-after-attempt. A crash between processing and the `\Seen` STORE will reprocess the message on the next tick (rare duplicate). Tracked as `LC-77-MID-DEDUP`.

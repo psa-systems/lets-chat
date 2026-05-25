@@ -28,6 +28,7 @@ pub mod actor;
 pub mod attachments;
 pub mod parse;
 pub mod poll;
+pub mod reply_actor;
 pub mod resolve;
 
 /// Reason a polled message was dropped without posting. Always logged at
@@ -48,6 +49,11 @@ pub enum DropReason {
     LoopDetected,
     /// Per-inbox rate limit (60/min) tripped.
     RateLimited,
+    /// `reply-<token>@<ingress-domain>` namespace; token row exists but
+    /// `expires_at` is in the past. Distinguished from `AddressNoMatch`
+    /// so an operator can tell a late reply ("user replied 2 weeks after
+    /// the notification") from a garbage `reply-` address.
+    ReplyExpired,
     /// Catch-all: DB error, disk full, anything that prevents posting.
     /// Detail must carry the specific cause for the log.
     InternalError,
@@ -61,6 +67,7 @@ impl DropReason {
             Self::RevokedInbox => "revoked_inbox",
             Self::LoopDetected => "loop_detected",
             Self::RateLimited => "rate_limited",
+            Self::ReplyExpired => "reply_expired",
             Self::InternalError => "internal_error",
         }
     }
