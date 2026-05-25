@@ -165,6 +165,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0048_email_inboxes.sql"),
             include_str!("../migrations/chat/0049_messages_email_inbox_id.sql"),
             include_str!("../migrations/chat/0050_reply_tokens.sql"),
+            include_str!("../migrations/chat/0051_processed_message_ids.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),

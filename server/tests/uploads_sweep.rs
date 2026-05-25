@@ -65,6 +65,7 @@ async fn open_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0048_email_inboxes.sql"),
         include_str!("../migrations/chat/0049_messages_email_inbox_id.sql"),
         include_str!("../migrations/chat/0050_reply_tokens.sql"),
+        include_str!("../migrations/chat/0051_processed_message_ids.sql"),
     ];
     for sql in migrations {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
