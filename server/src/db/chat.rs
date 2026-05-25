@@ -54,6 +54,9 @@ pub struct RawMessage {
     /// LC-74: `Some(N)` for messages posted by incoming webhook `N`. Such
     /// rows carry `user_id = ''` and render with the webhook's name/avatar.
     pub webhook_id: Option<i64>,
+    /// LC-77: `Some(N)` for messages posted by email-ingress inbox `N`.
+    /// Parallel to `webhook_id`; same `user_id = ''` synthetic-actor shape.
+    pub email_inbox_id: Option<i64>,
 }
 
 /// One archived prior version of a message. Inserted by `update_message_body`
@@ -131,7 +134,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -155,6 +158,7 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         quote_id: row.get("quote_id"),
         is_system: row.get("is_system"),
         webhook_id: row.get("webhook_id"),
+        email_inbox_id: row.get("email_inbox_id"),
     }
 }
 
@@ -165,7 +169,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
@@ -237,7 +241,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -259,7 +263,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -278,7 +282,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
          FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)
