@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
+        .route("/admin/settings/imap", post(post_imap_settings))
         .route(
             "/admin/settings/email-digest-default",
             post(post_email_digest_default),
@@ -190,6 +191,29 @@ pub struct SettingsForm {
 pub struct SettingsQuery {
     pub regenerated: Option<i64>,
     pub purged: Option<i64>,
+    /// Set after a successful /admin/settings/imap POST so the settings
+    /// page renders the IMAP-saved confirmation banner under that section
+    /// (distinct from the SMTP `saved` banner, which uses the in-place
+    /// render flag instead of a query param).
+    pub imap_saved: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct ImapSettingsForm {
+    pub imap_host: String,
+    pub imap_port: String,
+    pub imap_username: String,
+    /// Write-only password input. Empty string preserves the existing
+    /// sealed value; non-empty re-seals and overwrites.
+    pub imap_password: String,
+    pub imap_folder: String,
+    pub imap_ingress_domain: String,
+    /// Form-checkbox convention: present + non-empty when checked, absent
+    /// when unchecked.
+    #[serde(default)]
+    pub imap_tls: Option<String>,
+    #[serde(default)]
+    pub imap_enabled: Option<String>,
 }
 
 pub async fn get_settings(
@@ -235,6 +259,16 @@ pub async fn get_settings(
     let uploads_total_display =
         format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
     let uploads_orphan_count = db::uploads::count_orphans(&state.chat).await?;
+    let (
+        imap_host,
+        imap_port,
+        imap_tls,
+        imap_username,
+        imap_password_configured,
+        imap_folder,
+        imap_ingress_domain,
+        imap_enabled,
+    ) = load_imap_settings_for_display(&state).await;
     let page = SettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -263,8 +297,83 @@ pub async fn get_settings(
         uploads_orphan_count,
         regenerated: q.regenerated,
         purged: q.purged,
+        imap_host,
+        imap_port,
+        imap_tls,
+        imap_username,
+        imap_password_configured,
+        imap_folder,
+        imap_ingress_domain,
+        imap_enabled,
+        imap_error: None,
+        imap_saved: q.imap_saved.is_some(),
     };
     html(&page)
+}
+
+/// Read the singleton imap_inbox_config row for display. `secret_key` is
+/// needed only to decrypt the password byte length; we expose
+/// `imap_password_configured: bool` to the template, never the plaintext.
+/// Falls back to defaults on missing row OR missing secret_key OR decrypt
+/// failure (so an admin who rotated the secret key after writing IMAP
+/// creds at least sees the page; they will need to re-enter the password
+/// before the spawn gate succeeds again).
+async fn load_imap_settings_for_display(
+    state: &AppState,
+) -> (String, String, bool, String, bool, String, String, bool) {
+    let Some(key) = state.secret_key.as_ref() else {
+        // No secret key -> no sealed creds readable. All fields default
+        // to empty and the template surfaces a missing-LETS_CHAT_SECRET_KEY
+        // help line via the existing 2FA-style affordance.
+        return (
+            String::new(),
+            "993".to_string(),
+            true,
+            String::new(),
+            false,
+            "INBOX".to_string(),
+            String::new(),
+            false,
+        );
+    };
+    match db::imap_config::read(&state.settings, key.as_ref()).await {
+        Ok(Some(cfg)) => (
+            cfg.host,
+            cfg.port.to_string(),
+            cfg.tls,
+            cfg.username,
+            !cfg.password.is_empty(),
+            cfg.folder,
+            cfg.ingress_domain.unwrap_or_default(),
+            cfg.enabled,
+        ),
+        // A missing row (Ok(None)) is a fresh install; render empty
+        // defaults so the operator can fill the form for the first time.
+        Ok(None) => (
+            String::new(),
+            "993".to_string(),
+            true,
+            String::new(),
+            false,
+            "INBOX".to_string(),
+            String::new(),
+            false,
+        ),
+        // A decrypt failure (e.g. rotated secret key) is rare; surface
+        // the form with empty fields so the admin can re-enter creds. A
+        // future commit could add a banner; for v1 the spawn-loop log
+        // already tells the operator the IMAP poll is disabled.
+        Err(_) => (
+            String::new(),
+            "993".to_string(),
+            true,
+            String::new(),
+            false,
+            "INBOX".to_string(),
+            String::new(),
+            false,
+        ),
+    }
 }
 
 /// Walk every image upload and write a preview for any row that lacks one on
@@ -365,6 +474,80 @@ pub async fn post_settings(
         db::settings::set_setting(&state.settings, "smtp_pass", &form.smtp_pass).await?;
     }
     Ok(Redirect::to("/admin/settings").into_response())
+}
+
+/// LC-77: save the IMAP-poll config. Mirrors the SMTP post handler's
+/// shape but routes through `db::imap_config::write` so the password
+/// is AES-256-GCM-sealed under the process secret key. An empty
+/// password input preserves the existing sealed value (matching the
+/// SMTP password's write-only UX); a non-empty input re-seals and
+/// overwrites.
+pub async fn post_imap_settings(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    Form(form): Form<ImapSettingsForm>,
+) -> Result<Response, AppError> {
+    let Some(key) = state.secret_key.as_ref() else {
+        return Err(AppError::BadRequest(
+            "IMAP settings require LETS_CHAT_SECRET_KEY to be set on the server".into(),
+        ));
+    };
+    let port: u16 = form.imap_port.trim().parse().map_err(|_| {
+        AppError::BadRequest(format!(
+            "IMAP port must be a 1-65535 integer; got {:?}",
+            form.imap_port
+        ))
+    })?;
+    let host = form.imap_host.trim().to_string();
+    let username = form.imap_username.trim().to_string();
+    let folder = {
+        let f = form.imap_folder.trim();
+        if f.is_empty() {
+            "INBOX".to_string()
+        } else {
+            f.to_string()
+        }
+    };
+    let ingress_domain = {
+        let d = form.imap_ingress_domain.trim();
+        if d.is_empty() {
+            None
+        } else {
+            Some(d.to_string())
+        }
+    };
+    let tls = form.imap_tls.is_some();
+    let enabled = form.imap_enabled.is_some();
+
+    // Empty password input = preserve existing sealed value. Read the
+    // existing row to recover the plaintext password we just decrypted
+    // for display, then write it back through the same seal/open path.
+    // If the row does not exist yet, an empty input means "no password"
+    // which the spawn gate will refuse to use anyway.
+    let password = if form.imap_password.is_empty() {
+        match db::imap_config::read(&state.settings, key.as_ref()).await {
+            Ok(Some(existing)) => existing.password,
+            _ => String::new(),
+        }
+    } else {
+        form.imap_password
+    };
+
+    let cfg = crate::db::imap_config::ImapConfig {
+        host,
+        port,
+        tls,
+        username,
+        password,
+        folder,
+        ingress_domain,
+        enabled,
+    };
+    db::imap_config::write(&state.settings, key.as_ref(), &cfg)
+        .await
+        .map_err(|e| AppError::Internal(format!("imap_config write: {e}")))?;
+
+    Ok(Redirect::to("/admin/settings?imap_saved=1").into_response())
 }
 
 #[derive(Deserialize)]
