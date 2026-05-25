@@ -396,6 +396,17 @@ fn spawn_orphan_sweeper(state: AppState) {
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "orphan sweep failed"),
             }
+            // LC-77-REPLY: expired reply-by-email tokens piggyback on the
+            // hourly orphan tick. The sweep is a single DELETE keyed on the
+            // expires_at index; an idle deployment (no tokens issued)
+            // touches zero rows.
+            match lets_chat::db::reply_tokens::sweep_expired(&state.chat).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(rows = n, "reply-token sweep complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "reply-token sweep failed"),
+            }
         }
     });
 }

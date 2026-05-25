@@ -61,6 +61,12 @@ pub enum RateLimitKind {
     /// messages processed per minute by the IMAP poll loop; over-limit
     /// messages are dropped silently and logged.
     EmailInbox,
+    /// LC-77-REPLY: per-user cap on outbound mention/DM notification emails.
+    /// Keyed by recipient user_id. 20/minute (~ hourly cap on per-minute
+    /// rate); over-limit emails drop silently with `Outcome::Deny` and the
+    /// dispatcher returns SkippedRateLimit. A future
+    /// LC-77-REPLY-COALESCE follow-up may replace this with a debounce.
+    EmailMentionNotification,
 }
 
 impl RateLimitKind {
@@ -72,6 +78,7 @@ impl RateLimitKind {
             RateLimitKind::PasswordReset => "pwr",
             RateLimitKind::Webhook => "whk",
             RateLimitKind::EmailInbox => "eml",
+            RateLimitKind::EmailMentionNotification => "emn",
         }
     }
 }
