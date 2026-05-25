@@ -102,6 +102,12 @@ async-imap = { version = "=0.10.4", default-features = false, features = ["runti
 # bumps within 0.23 are accepted.
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 tokio-rustls = "0.26"
+# LC-77: Mozilla root CA list for verifying the IMAP server's TLS cert.
+# Pinned ranges, not exact, because the root list is rotated by Mozilla
+# periodically and we want to pick up new CAs on a routine cargo update
+# without re-running the spike. The data is the root list itself, not
+# code: it cannot regress in a way the spike would catch.
+webpki-roots = "0.26"
 hmac = { version = "0.12" }
 hex = { version = "0.4" }
 jsonwebtoken = { version = "9", optional = true }

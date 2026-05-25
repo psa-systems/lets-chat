@@ -19,6 +19,7 @@
 
 pub mod actor;
 pub mod parse;
+pub mod poll;
 pub mod resolve;
 
 /// Reason a polled message was dropped without posting. Always logged at
