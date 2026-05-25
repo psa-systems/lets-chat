@@ -21,9 +21,13 @@
 use rand::RngCore;
 use sqlx::{Row, SqlitePool};
 
-/// One reply-token row. Returned by `resolve`.
+/// One reply-token row. Returned by `resolve`. The `token` field is the
+/// row's primary key (the bearer credential); included so callers that
+/// need to `consume` the row after a successful post don't have to
+/// thread the plaintext through separately.
 #[derive(Debug, Clone)]
 pub struct ReplyTokenRow {
+    pub token: String,
     pub user_id: String,
     pub message_id: i64,
     pub issued_at: String,
@@ -91,13 +95,14 @@ pub async fn insert(
 /// reason rather than the catch-all "not found".
 pub async fn resolve(pool: &SqlitePool, token: &str) -> sqlx::Result<Option<ReplyTokenRow>> {
     let row = sqlx::query(
-        "SELECT user_id, message_id, issued_at, expires_at \
+        "SELECT token, user_id, message_id, issued_at, expires_at \
          FROM reply_tokens WHERE token = ?",
     )
     .bind(token)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|r| ReplyTokenRow {
+        token: r.get("token"),
         user_id: r.get("user_id"),
         message_id: r.get("message_id"),
         issued_at: r.get("issued_at"),
@@ -115,7 +120,7 @@ pub async fn resolve_active_or_expired(
     token: &str,
 ) -> sqlx::Result<Option<(ReplyTokenRow, bool)>> {
     let row = sqlx::query(
-        "SELECT user_id, message_id, issued_at, expires_at, \
+        "SELECT token, user_id, message_id, issued_at, expires_at, \
                 (expires_at < datetime('now')) AS expired \
          FROM reply_tokens WHERE token = ?",
     )
@@ -124,6 +129,7 @@ pub async fn resolve_active_or_expired(
     .await?;
     Ok(row.map(|r| {
         let token_row = ReplyTokenRow {
+            token: r.get("token"),
             user_id: r.get("user_id"),
             message_id: r.get("message_id"),
             issued_at: r.get("issued_at"),
