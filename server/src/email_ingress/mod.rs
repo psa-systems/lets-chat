@@ -6,18 +6,26 @@
 //!
 //! - [`resolve`]: parsed-message → inbox row, via the
 //!   Delivered-To / X-Original-To / To / Cc header precedence.
-//! - [`parse`]: MIME body extraction. v1 takes the first text/plain part
-//!   and prefixes the subject if any; richer extraction (HTML strip,
-//!   attachments, signature stripping) is the LC-77 commit-5 surface.
+//! - [`parse`]: MIME body extraction + attachment-candidate scan. Takes
+//!   the first text/plain part (or HTML-stripped fallback), prefixes
+//!   the subject as Markdown-bold, and walks `message.attachments()` for
+//!   up to `MAX_ATTACHMENTS_PER_MESSAGE` candidates.
+//! - [`attachments`]: programmatic upload pipeline. Streams a raw
+//!   attachment to a temp file, magic-byte sniffs via `infer::get_from_path`
+//!   (NOT the sender's Content-Type), allowlist + EXIF-strip via the
+//!   shared image pipeline, content-addressed storage. Per-attachment
+//!   drops are non-fatal: the parent message still posts.
 //! - [`actor`]: post a resolved + parsed message to its room as the
-//!   email-inbox synthetic actor; broadcasts ChatEvent::NewMessage.
+//!   email-inbox synthetic actor; broadcasts ChatEvent::NewMessage and
+//!   links any successfully-processed attachment uploads.
 //! - [`poll`]: the spawn_email_poll background task + the testable
-//!   poll_once tick (commit 3d).
+//!   poll_once tick.
 //!
 //! Failure-log taxonomy (the SOLE diagnostic channel; no bounces, no
 //! dead-letter folder in v1) is shared across the module via [`DropReason`].
 
 pub mod actor;
+pub mod attachments;
 pub mod parse;
 pub mod poll;
 pub mod resolve;
