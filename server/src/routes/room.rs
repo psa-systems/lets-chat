@@ -8,7 +8,6 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
-use crate::views::message_actor::MessageActor;
 use crate::views::room::{
     ComposerFragment, ComposerQuoteChip, EditFormFragment, HistoryEntryView,
     HistoryPanelClosedFragment, HistoryPanelFragment, MessageView, ReactionView, RoomPage,
@@ -227,8 +226,14 @@ pub async fn get_room(
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
             entry
         };
@@ -286,7 +291,7 @@ pub async fn get_room(
                 None
             },
             author_is_bot: meta.is_bot,
-            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+            actor: meta.actor.clone(),
         });
     }
 
@@ -775,6 +780,94 @@ pub(crate) async fn finalize_message_send(
     Ok(message)
 }
 
+/// LC-77: broadcast + fan out a message authored by an email-ingress inbox.
+/// Email-shaped sibling of [`finalize_webhook_message_send`]. Same posture:
+/// empty user_id, `email_inbox_id` set, inbox name as the author label, no
+/// author to exclude from mentions.
+///
+/// **Named decision (NOT inherited from LC-74 silently): the link filter
+/// (link_filter_quarantine block in `post_message`) is skipped for
+/// email-ingress messages, mirroring the webhook posture.** The
+/// secret-gates-it trust model is consistent: the admin who issued the
+/// ingress address authorized that channel to post. External senders
+/// forwarding into the inbox carry unvetted links, but the same is true
+/// of webhooks (an admin-configured webhook may carry an upstream link
+/// the admin didn't vet content-by-content). If the link-filter posture
+/// needs to change for email specifically, revisit at that point; it is
+/// a deliberate choice here, not drift.
+pub(crate) async fn finalize_email_inbox_message_send(
+    state: &AppState,
+    room: &crate::models::Room,
+    email_inbox_id: i64,
+    inbox_name: &str,
+    new_id: i64,
+    body: &str,
+) -> Result<(), AppError> {
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted email-inbox message vanished".into(),
+        ))?;
+    let message = Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: String::new(),
+        author_name: inbox_name.to_string(),
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
+        is_system: raw.is_system,
+        webhook_id: None,
+        email_inbox_id: Some(email_inbox_id),
+    };
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: false,
+    };
+    super::broadcast_room_message(state, room, &event).await?;
+
+    // Mentions: an email-ingress sender can @mention people. No author to
+    // exclude (empty author id excludes nobody). DM rooms are not a target
+    // for email ingress (an inbox is per-room, and DMs have no per-room
+    // admin to issue an address), so we gate the mention reconcile by
+    // room_type the same way the webhook path does.
+    if room.room_type != "dm" {
+        let tokens = db::mentions::parse_mention_tokens(body);
+        if !tokens.is_empty() {
+            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+            let (added, _removed) =
+                db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
+                    .await?;
+            let snippet = build_snippet(body);
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: room.id,
+                            room_type: room.room_type.clone(),
+                            room_label: format!("#{}", room.name),
+                            message_id: new_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: inbox_name.to_string(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", room.id),
+                        },
+                    )
+                })
+                .collect();
+            for (user_id, event) in events {
+                state.hub.broadcast_to_user(&user_id, &event);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// LC-74: broadcast + fan out a message authored by an incoming webhook.
 /// Mirrors the non-DM path of `finalize_message_send` but attributes the
 /// message to the webhook (empty user_id, `webhook_id` set, name as the
@@ -1230,7 +1323,9 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta = super::resolve_msg_author(&state, &m.user_id, m.webhook_id, &user.id).await?;
+    let meta =
+        super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id)
+            .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
@@ -1287,7 +1382,7 @@ pub async fn patch_message(
             .ok()
             .flatten(),
         author_is_bot: meta.is_bot,
-        actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+        actor: meta.actor.clone(),
     };
     let fragment = SingleMessageFragment {
         message: &view,
@@ -1334,8 +1429,14 @@ pub async fn get_thread_panel(
         .filter(|r| !blocked_authors.contains(&r.user_id))
         .collect();
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
-    let parent_meta =
-        super::resolve_msg_author(&state, &parent.user_id, parent.webhook_id, &user.id).await?;
+    let parent_meta = super::resolve_msg_author(
+        &state,
+        &parent.user_id,
+        parent.webhook_id,
+        parent.email_inbox_id,
+        &user.id,
+    )
+    .await?;
 
     // Bulk-load attachments for the parent and every reply in a single query.
     let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
@@ -1394,10 +1495,7 @@ pub async fn get_thread_panel(
             None
         },
         author_is_bot: parent_meta.is_bot,
-        actor: MessageActor::from_webhook_flag(
-            parent_meta.is_webhook,
-            parent_meta.avatar_url.clone(),
-        ),
+        actor: parent_meta.actor.clone(),
     };
 
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
@@ -1405,8 +1503,14 @@ pub async fn get_thread_panel(
         let meta = if let Some(entry) = author_cache.get(&r.user_id) {
             entry.clone()
         } else {
-            let entry =
-                super::resolve_msg_author(&state, &r.user_id, r.webhook_id, &user.id).await?;
+            let entry = super::resolve_msg_author(
+                &state,
+                &r.user_id,
+                r.webhook_id,
+                r.email_inbox_id,
+                &user.id,
+            )
+            .await?;
             author_cache.insert(r.user_id.clone(), entry.clone());
             entry
         };
@@ -1450,7 +1554,7 @@ pub async fn get_thread_panel(
                 None
             },
             author_is_bot: meta.is_bot,
-            actor: MessageActor::from_webhook_flag(meta.is_webhook, meta.avatar_url.clone()),
+            actor: meta.actor.clone(),
         });
     }
 

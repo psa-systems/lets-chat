@@ -13,6 +13,7 @@ pub mod email_inbox;
 pub mod email_verification;
 pub mod enclave;
 pub mod fcm_subscriptions;
+pub mod imap_config;
 pub mod inbox;
 pub mod login_alerts;
 pub mod mentions;
