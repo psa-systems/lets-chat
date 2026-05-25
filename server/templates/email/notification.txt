@@ -1,0 +1,15 @@
+{% if is_dm %}{{ sender_label }} sent you a direct message{% else %}{{ sender_label }} mentioned you in #{{ room_label }}{% endif %}:
+
+{{ snippet_plain }}
+
+View in chat:
+{{ message_url }}
+
+{% if reply_supported -%}
+You can reply to this email and your response will be posted to the chat
+as you. The reply window closes in {{ reply_expires_hours }} hours.
+{%- endif %}
+
+---
+You are receiving this because mention/DM email notifications are enabled
+on your account. Toggle off at: {{ settings_url }}

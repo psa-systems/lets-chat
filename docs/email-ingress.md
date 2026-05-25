@@ -2,7 +2,7 @@
 
 LC-77 lets external senders mail a chat room directly. An operator-configured IMAP mailbox is polled every 5 minutes; messages addressed to `<token>@<ingress-domain>` post to their target room as a synthetic "Email" actor (no real user impersonation, no DM link, "email" badge in the rendered row).
 
-The reply-by-email half of LC-77 is not in v1; this doc covers the per-room ingress surface only.
+**LC-77-REPLY stage 1 (#201, shipped):** lets-chat now sends per-message notification emails for mentions and DMs to users who opt in at `/settings`. Those emails carry a `Reply-To: reply-<token>@<ingress-domain>` header. The inbound side that consumes those replies (stage 2) is still in flight; see "Notification emails" below for the operator surface that's shipped, and the followup ticket for what's pending.
 
 ## What this is, and what it isn't
 
@@ -103,9 +103,51 @@ Attachment drops are logged separately at `INFO` with `target: "email_ingress::a
 
 "Hardcoded" means: changing requires a code change + release. The admin UI does not expose these. If you need a different value, file a followup.
 
+## Notification emails (LC-77-REPLY stage 1)
+
+lets-chat sends a notification email to a user for each `@username` mention or DM they receive, gated by per-user opt-in. The email body shows the sender, the room, a 140-char snippet, and a CTA link back to the message. If email-ingress is configured on the deployment, the email also carries a `Reply-To: reply-<token>@<ingress-domain>` header; the inbound resolver that consumes those replies lands in stage 2 (deferred).
+
+### Opt-in
+
+Per-user toggle at `/settings`: "Email me for each mention and direct message." OFF by default. Mirrors the existing digest opt-in's conservative default.
+
+### Gates
+
+The dispatcher short-circuits on first miss in this order:
+
+1. Recipient has an email address.
+2. Recipient's `email_verified_at` is non-NULL.
+3. Recipient's `notify_email_activity_enabled = 1`.
+4. SMTP mailer is configured.
+5. Per-recipient rate limit (20 emails / minute / user, keyed on `RateLimitKind::EmailMentionNotification`).
+6. The mentioned message still exists (race with delete).
+7. Sender label resolvable.
+
+### Outbound headers
+
+- `From`: the operator's `SMTP_FROM`.
+- `To`: the recipient's verified email.
+- `Subject`: `[lets-chat] {sender} mentioned you in #{room}` or `[lets-chat] {sender} sent you a direct message`.
+- `Reply-To`: `reply-<token>@<ingress-domain>` when email-ingress is configured; omitted otherwise.
+- `Auto-Submitted: auto-generated` (RFC 3834) on every notification so a recipient's auto-responder breaks the reciprocal loop.
+
+### Reply tokens
+
+When an email is dispatched, a row is inserted in `chat.db::reply_tokens` mapping the random 32-byte token to `(user_id, message_id, expires_at)`. TTL: 7 days. Expired rows are swept by the hourly orphan sweeper (`spawn_orphan_sweeper`). Deleting the original message CASCADEs and drops outstanding tokens.
+
+### Threat model additions (over the v1 ingress threat model)
+
+- **The reply token is a bearer credential.** A forwarded notification email lets the recipient of the forward post as the original user until the token expires. Mitigations: 7-day TTL, single `(user_id, message_id)` binding (token can't be replayed against other messages), per-user opt-in, per-user rate cap. The risk is acknowledged because the notification email is, by definition, sent to a verified address the user controls; forwarding is a user-side choice.
+- **Outbound emails set `Auto-Submitted: auto-generated`** so the recipient's vacation responder won't reply. Catches the reciprocal-loop case symmetrically with the inbound v1 loop-detection.
+- **No mention email rendering of HTML the sender provided**: the email body comes from the chat message's body text after the markdown pipeline already stripped raw HTML. The notification email NEVER echoes user-supplied HTML.
+
+### Operator deployment
+
+Same SMTP env vars as the digest and the other existing email surfaces (password reset, email verify, login alert). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back. That's the v0 of stage 2 (no reply ingress yet).
+
 ## Not supported (deferred)
 
-- **Reply-by-email.** Mailing a reply to a chat notification email does not post to chat in v1. Tracked as the `LC-77-REPLY` follow-up. Depends on a per-message notification email surface that doesn't exist yet.
+- **Reply-by-email (LC-77-REPLY stage 2).** Mailing a reply to a chat notification email does not yet post to chat. The outbound `Reply-To` address is set on stage-1 notification mails (see below), but the inbound resolver branch that recognizes `reply-<token>@<ingress-domain>` lands in stage 2. Until then, replies hit the polled mailbox and drop with `reason=address_no_match`.
 - **Mailing list ingestion.** Messages with `List-Id` are dropped. This is intentionally conservative: a sender that tags itself as a list is usually broadcasting, not communicating with a chat. If your monitoring tool sets `List-Id` and you NEED to ingest its mail, reconfigure the tool not to set `List-Id`, or wait for the follow-up that adds per-inbox loop-detection overrides.
 - **Auto-responder ingestion.** Out-of-office replies and vacation messages drop with `loop_detected detail="Auto-Submitted: ..."`. Same posture as `List-Id`.
 - **HTML email rich rendering.** HTML-only messages either drop with `parse_fail` (no text fallback recoverable) or post the stripped-to-text version. A dedicated HTML-to-Markdown converter is a follow-up.

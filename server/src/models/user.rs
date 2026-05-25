@@ -28,6 +28,10 @@ pub struct UserRecord {
     pub notify_push_enabled: bool,
     pub notify_email_digest_enabled: bool,
     pub notify_login_alerts_enabled: bool,
+    /// LC-77-REPLY: per-user opt-in for per-message mention + DM email
+    /// notifications. Distinct from the hourly digest opt-in. OFF by default;
+    /// mention emails are noisy and operators opt their users in deliberately.
+    pub notify_email_activity_enabled: bool,
     pub last_ws_seen_at: Option<String>,
     pub last_digest_sent_at: Option<String>,
     /// LC-88: recurring Do Not Disturb schedule (quiet hours), JSON or NULL.
@@ -75,6 +79,8 @@ pub struct User {
     pub notify_push_enabled: bool,
     pub notify_email_digest_enabled: bool,
     pub notify_login_alerts_enabled: bool,
+    /// LC-77-REPLY: per-message mention + DM email opt-in. See UserRecord.
+    pub notify_email_activity_enabled: bool,
     pub totp_enabled: bool,
     /// LC-73: true for bot identities. Drives the "bot" badge in chat.
     pub is_bot: bool,
@@ -134,6 +140,7 @@ impl From<UserRecord> for User {
             notify_push_enabled: r.notify_push_enabled,
             notify_email_digest_enabled: r.notify_email_digest_enabled,
             notify_login_alerts_enabled: r.notify_login_alerts_enabled,
+            notify_email_activity_enabled: r.notify_email_activity_enabled,
             totp_enabled: r.totp_enabled,
             is_bot: r.is_bot,
             dnd_active,

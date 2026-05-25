@@ -48,6 +48,7 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
@@ -70,6 +71,7 @@ pub async fn find_user_by_username(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
@@ -94,6 +96,7 @@ pub async fn find_user_by_id(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
@@ -133,6 +136,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         notify_push_enabled: r.get::<i64, _>("notify_push_enabled") != 0,
         notify_email_digest_enabled: r.get::<i64, _>("notify_email_digest_enabled") != 0,
         notify_login_alerts_enabled: r.get::<i64, _>("notify_login_alerts_enabled") != 0,
+        notify_email_activity_enabled: r.get::<i64, _>("notify_email_activity_enabled") != 0,
         last_ws_seen_at: r.get("last_ws_seen_at"),
         last_digest_sent_at: r.get("last_digest_sent_at"),
         dnd_schedule_json: r.get("dnd_schedule_json"),
@@ -512,6 +516,7 @@ pub async fn get_user_by_session(
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
+         u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \
@@ -551,6 +556,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
@@ -865,6 +871,25 @@ pub async fn set_notify_email_digest_enabled(
     Ok(())
 }
 
+/// LC-77-REPLY: toggle the per-message mention + DM email opt-in. Separate
+/// from `set_notification_prefs` so the existing 4-arg bulk-update signature
+/// stays unchanged for callers that only care about the original notification
+/// toggles.
+pub async fn set_notify_email_activity_enabled(
+    pool: &SqlitePool,
+    user_id: &str,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET notify_email_activity_enabled = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(enabled as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Bulk-resolve display fields for a set of user ids in a single query.
 /// Returns a map keyed by user id with `(username, display_name)`.
 /// Missing ids are absent from the map; callers fall back to the raw id
@@ -965,6 +990,7 @@ pub async fn search_users(
          bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
          notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
          notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot \
@@ -1218,6 +1244,7 @@ pub async fn list_blocked_users(
          u.bio, u.avatar_ext, u.status, u.custom_status, u.last_active_at, u.is_profile_public, \
          u.notify_browser_enabled, u.notify_sound_enabled, u.notify_push_enabled, \
          u.notify_email_digest_enabled, u.notify_login_alerts_enabled, \
+         u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot \

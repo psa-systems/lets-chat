@@ -40,6 +40,7 @@ async fn setup_chat_pool() -> SqlitePool {
         include_str!("../migrations/chat/0047_message_drafts.sql"),
         include_str!("../migrations/chat/0048_email_inboxes.sql"),
         include_str!("../migrations/chat/0049_messages_email_inbox_id.sql"),
+        include_str!("../migrations/chat/0050_reply_tokens.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }
