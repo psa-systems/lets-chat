@@ -28,6 +28,7 @@ pub mod actor;
 pub mod attachments;
 pub mod parse;
 pub mod poll;
+pub mod reply_actor;
 pub mod resolve;
 
 /// Reason a polled message was dropped without posting. Always logged at
