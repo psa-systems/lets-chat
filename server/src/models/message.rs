@@ -22,4 +22,8 @@ pub struct Message {
     pub is_system: bool,
     /// LC-74: `Some(N)` when posted by incoming webhook `N` (user_id is empty).
     pub webhook_id: Option<i64>,
+    /// LC-77: `Some(N)` when posted by email-ingress inbox `N` (user_id is
+    /// empty). Parallel to `webhook_id`; exactly one of the two is `Some`
+    /// for any synthetic-actor message, both `None` for real-user messages.
+    pub email_inbox_id: Option<i64>,
 }
