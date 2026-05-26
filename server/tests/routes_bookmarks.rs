@@ -166,6 +166,36 @@ async fn post_bookmark_returns_rerendered_bubble_with_unsave_button() {
     assert_eq!(n, 1);
 }
 
+// LC-178: the /saved page renders its list inside the swappable #lc-saved-list
+// region (the OOB target a bookmark/unbookmark broadcasts to), and the saved
+// message appears there. Pins the region + that the shared row-builder still
+// produces the list after the get_saved refactor.
+#[tokio::test]
+async fn saved_page_renders_live_region_with_the_bookmarked_message() {
+    let t = app_with_two_users().await;
+    let room = seed_public_room(&t, "general-room").await;
+    let msg = seed_message(&t, room, &t.viewer_id, "remember this").await;
+    send(
+        &t.app,
+        &t.viewer_session,
+        Method::POST,
+        &format!("/messages/{msg}/bookmark"),
+    )
+    .await;
+
+    let (status, body) = send(&t.app, &t.viewer_session, Method::GET, "/saved").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(r#"id="lc-saved-list""#),
+        "saved list must live in the swappable region the OOB fragment targets",
+    );
+    assert!(
+        body.contains(&format!(r#"id="saved-row-{msg}""#)),
+        "the bookmarked message must appear in the saved list",
+    );
+    assert!(body.contains("remember this"), "row shows the message body");
+}
+
 #[tokio::test]
 async fn delete_bookmark_flips_button_back_to_save() {
     let t = app_with_two_users().await;

@@ -16,6 +16,15 @@ pub struct SavedListRow {
     pub context_path: String,
 }
 
+/// LC-178: OOB swap of the /saved list region (`#lc-saved-list`) after a
+/// bookmark/unbookmark, so every tab refreshes without a reload. Shares
+/// `saved/items.html` with `SavedPage`.
+#[derive(Template)]
+#[template(path = "ws/saved_live.html")]
+pub struct SavedListFragment<'a> {
+    pub entries: &'a [SavedListRow],
+}
+
 #[derive(Template)]
 #[template(path = "saved/page.html")]
 pub struct SavedPage<'a> {
