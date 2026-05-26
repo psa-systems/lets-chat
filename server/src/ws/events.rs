@@ -283,6 +283,20 @@ pub enum ChatEvent {
         kind: String,
         payload: Option<String>,
     },
+    /// LC-183: remote-control consent handshake between the two members of a
+    /// DM call. `kind` is `request` / `grant` / `deny` / `revoke`. Relayed only
+    /// after a server-side gate (both peers email-verified, neither blocked).
+    /// Carries no input payload - the actual input stream rides a separate
+    /// WebRTC data channel (LC-184); this is consent signaling only. Routed via
+    /// `Hub::broadcast_to_user(to_user_id, ...)`.
+    RemoteControlSignal {
+        room_id: i64,
+        to_user_id: String,
+        from_user_id: String,
+        /// Display name of the sender, for the consent prompt without a lookup.
+        from_name: String,
+        kind: String,
+    },
     /// A user joined an enclave voice channel. Broadcast to everyone already
     /// in that channel so they render the new participant and await the
     /// joiner's offer (the newest joiner is always the mesh offerer).
