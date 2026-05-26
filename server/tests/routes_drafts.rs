@@ -626,6 +626,26 @@ async fn room_delete_cascades_drafts_via_fk() {
 // composer template renders it as the textarea inner content.
 // ----------------------------------------------------------------------
 
+// LC-173: the sidebar self block (own avatar + name) lives in the swappable
+// #sidebar-self region the own-profile OOB fragment targets, so a profile edit
+// refreshes it live in every tab. Pin the region + its contents so the
+// extraction into partials/sidebar_self.html cannot silently regress.
+#[tokio::test]
+async fn sidebar_self_block_is_present_and_swappable() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"sidebar-self\""),
+        "sidebar self block must be in the swappable region the own-profile OOB fragment targets",
+    );
+    assert!(
+        body.contains("id=\"own-avatar-wrapper\""),
+        "own avatar (status trigger) must remain inside the self block",
+    );
+    assert!(body.contains("@alice"), "self block shows the username");
+}
+
 #[tokio::test]
 async fn room_render_pre_populates_textarea_with_draft() {
     let t = app().await;
