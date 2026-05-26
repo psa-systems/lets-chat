@@ -1,0 +1,10 @@
+{# LC-174: OOB swap of the enclave-keyed sidebar nav when a room is added to or
+   removed from enclave {{ enclave_id }}. Targets #sidebar-nav-{enclave_id},
+   which is present only on a connection currently viewing that enclave (its
+   landing, settings, or one of its rooms); every other page has a different
+   nav id and htmx drops the swap. Rendered per recipient via
+   load_sidebar(viewer, Some(enclave_id)) so unread / mention / active state
+   stays correct. #}
+<nav id="sidebar-nav-{{ enclave_id }}" class="flex-1 overflow-y-auto p-2 space-y-4" hx-swap-oob="outerHTML">
+  {% include "partials/sidebar_nav.html" %}
+</nav>
