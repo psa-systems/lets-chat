@@ -289,6 +289,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         // LC-175/177: rendered per recipient in the WS send task (admin row OOB).
         | ChatEvent::AdminUserChanged { .. }
         | ChatEvent::AdminRoomChanged { .. }
+        // LC-178: rendered per recipient in the WS send task (/saved list OOB).
+        | ChatEvent::SavedChanged { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
         | ChatEvent::PollUpdated { .. }

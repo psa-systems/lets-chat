@@ -137,6 +137,12 @@ pub enum ChatEvent {
     UserProfileChanged {
         user_id: String,
     },
+    /// LC-178: the user's saved-message set changed (bookmark / unbookmark).
+    /// Routed via `broadcast_to_user(user_id, ...)` so every tab refreshes the
+    /// /saved list OOB without a reload. Tabs not on /saved drop the swap.
+    SavedChanged {
+        user_id: String,
+    },
     /// LC-175: a user's admin-list row changed (ban / mute / role / quota) or
     /// was removed (delete). Broadcast on the `admin` topic so every admin's
     /// open user list refreshes the `#user-{id}` row OOB. `removed` swaps the

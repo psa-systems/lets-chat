@@ -9,6 +9,7 @@ use crate::state::AppState;
 use crate::views::bookmarks::{SavedListRow, SavedPage};
 use crate::views::room::SingleMessageFragment;
 use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
 use askama::Template;
 
 /// Resolve the room id for the URL-supplied message id, or 404 for
@@ -47,6 +48,14 @@ pub async fn post_bookmark(
 
     db::bookmarks::bookmark_message(&state.chat, &user.id, message_id).await?;
 
+    // LC-178: refresh the viewer's /saved list in every tab.
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::SavedChanged {
+            user_id: user.id.clone(),
+        },
+    );
+
     render_bookmark_response(&state, &user, message_id, true).await
 }
 
@@ -62,6 +71,14 @@ pub async fn delete_bookmark(
     require_room_access(&state, &user, room_id).await?;
 
     db::bookmarks::unbookmark_message(&state.chat, &user.id, message_id).await?;
+
+    // LC-178: refresh the viewer's /saved list in every tab.
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::SavedChanged {
+            user_id: user.id.clone(),
+        },
+    );
 
     render_bookmark_response(&state, &user, message_id, false).await
 }
@@ -98,15 +115,14 @@ async fn render_bookmark_response(
     Ok(Html(bubble).into_response())
 }
 
-/// GET /saved
-///
-/// Standalone page listing every bookmark the viewer has, newest-first.
-/// Each row carries a link back to its room (or DM) so the viewer can
-/// jump to the message in context.
-pub async fn get_saved(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-) -> Result<Html, AppError> {
+/// Resolve the viewer's bookmarks into render-ready `SavedListRow`s
+/// (newest-first), with author labels resolved in one bulk lookup and a
+/// per-row context link. Shared by `get_saved` (full page) and the LC-178 WS
+/// re-render so both produce an identical list.
+pub(crate) async fn build_saved_rows(
+    state: &AppState,
+    user: &User,
+) -> Result<Vec<SavedListRow>, AppError> {
     let rows = db::bookmarks::bookmarks_for_user(&state.chat, &user.id).await?;
 
     // Resolve author labels in a single bulk auth lookup.
@@ -160,6 +176,19 @@ pub async fn get_saved(
             context_path,
         });
     }
+    Ok(entries)
+}
+
+/// GET /saved
+///
+/// Standalone page listing every bookmark the viewer has, newest-first.
+/// Each row carries a link back to its room (or DM) so the viewer can
+/// jump to the message in context.
+pub async fn get_saved(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Html, AppError> {
+    let entries = build_saved_rows(&state, &user).await?;
 
     // Sidebar + enclave switcher in one call; passing `None` for the
     // current enclave matches the chrome shown on the Home and Settings

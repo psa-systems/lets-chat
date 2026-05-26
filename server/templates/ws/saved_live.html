@@ -1,0 +1,6 @@
+{# LC-178: OOB swap of the /saved list when the viewer bookmarks or unbookmarks
+   a message anywhere. Swaps #lc-saved-list by id; tabs not on /saved have no
+   matching id and htmx drops it silently. #}
+<div id="lc-saved-list" hx-swap-oob="outerHTML">
+  {% include "saved/items.html" %}
+</div>
