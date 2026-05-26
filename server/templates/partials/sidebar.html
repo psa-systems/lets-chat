@@ -1,20 +1,7 @@
 <aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
   <div class="p-4 border-b border-slate-200">
-    <div class="flex items-center gap-2">
-      <button id="own-avatar-wrapper" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" title="Set status" aria-label="Set status">
-        {% let avatar_user_id = user.id.clone() %}
-        {% let avatar_username = user.username.clone() %}
-        {% let avatar_ext = user.avatar_ext.clone() %}
-        {% let avatar_status = user.effective_status() %}
-        {% let avatar_custom_status = user.custom_status.clone() %}
-        {% let avatar_size = "h-8 w-8 text-sm" %}
-        {% include "partials/avatar.html" %}
-      </button>
-      <div class="min-w-0">
-        <div class="font-semibold truncate">{{ user.display_label() }}</div>
-        <div class="text-xs text-slate-500 truncate">@{{ user.username }}</div>
-        <div data-user-custom="{{ user.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
-      </div>
+    <div id="sidebar-self" class="flex items-center gap-2">
+      {% include "partials/sidebar_self.html" %}
     </div>
     <div id="status-picker" class="mt-2"></div>
   </div>

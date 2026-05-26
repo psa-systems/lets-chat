@@ -129,6 +129,14 @@ pub enum ChatEvent {
         status: String,
         custom_status: Option<String>,
     },
+    /// LC-173: a user edited their own profile (avatar / display name / bio).
+    /// Routed via `broadcast_to_user(user_id, ...)` so every tab of the editor
+    /// refreshes their sidebar self block (avatar + name) without a reload.
+    /// Cross-surface refresh of OTHER viewers' author rows is a separate
+    /// follow-up.
+    UserProfileChanged {
+        user_id: String,
+    },
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.

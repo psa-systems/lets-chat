@@ -239,6 +239,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::EnclaveRoomRemoved { enclave_id, .. } => {
                                     render_enclave_rooms(&send_state, &send_user, *enclave_id).await
                                 }
+                                // LC-173: the editor's own profile changed.
+                                // broadcast_to_user fans to all their tabs;
+                                // refresh the sidebar self block OOB. Gated to
+                                // the editor (defensive; the event is only ever
+                                // routed to them via broadcast_to_user).
+                                ChatEvent::UserProfileChanged { user_id }
+                                    if user_id == &send_user.id =>
+                                {
+                                    render_own_profile(&send_state, &send_user.id).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -1483,6 +1493,20 @@ async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
 /// fragments are emitted in one frame: a connection on the landing page matches
 /// only the first id, a connection on settings matches only the second, and
 /// htmx silently drops the unmatched OOB target.
+/// LC-173: re-render the sidebar self block (avatar + name + custom status) as
+/// an OOB fragment after the user edits their profile. Re-fetches the user so
+/// the fresh display_name / avatar_ext / custom_status are reflected. Returns
+/// None if the user row vanished (deleted account mid-flight).
+async fn render_own_profile(state: &AppState, user_id: &str) -> Option<String> {
+    let record = db::auth::find_user_by_id(&state.auth, user_id)
+        .await
+        .ok()??;
+    let user = User::from(record);
+    crate::views::ws_fragments::OwnProfileLiveFragment { user: &user }
+        .render()
+        .ok()
+}
+
 async fn render_enclave_members(
     state: &AppState,
     viewer: &User,
