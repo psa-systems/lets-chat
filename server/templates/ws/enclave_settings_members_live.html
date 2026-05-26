@@ -1,0 +1,7 @@
+{# LC-172: OOB fragment pushed over the WS when an enclave's membership or a
+   member's role changes. Swaps the #lc-enclave-settings-members region by id;
+   tabs not on this enclave's settings page have no matching id and htmx drops
+   it silently (the landing page carries #lc-enclave-members instead). #}
+<div id="lc-enclave-settings-members" hx-swap-oob="outerHTML">
+  {% include "enclave/settings_members_items.html" %}
+</div>
