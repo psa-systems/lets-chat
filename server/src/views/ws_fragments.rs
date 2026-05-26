@@ -286,6 +286,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::SidebarCategoriesChanged { .. }
         | ChatEvent::EnclaveInvitationCreated { .. }
         | ChatEvent::EnclaveInvitationResolved { .. }
+        // LC-175: rendered per recipient in the WS send task (admin row OOB).
+        | ChatEvent::AdminUserChanged { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
         | ChatEvent::PollUpdated { .. }
