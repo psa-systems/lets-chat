@@ -1,0 +1,6 @@
+{# LC-170: OOB fragment pushed over the WS when an enclave's room set changes.
+   Swaps the #lc-enclave-rooms region by id; tabs not on this enclave's landing
+   page have no matching id and htmx drops it silently. #}
+<div id="lc-enclave-rooms" hx-swap-oob="outerHTML">
+  {% include "enclave/rooms_items.html" %}
+</div>

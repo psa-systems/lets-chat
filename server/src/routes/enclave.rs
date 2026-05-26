@@ -59,7 +59,7 @@ use crate::ws::events::ChatEvent;
 /// Resolve each membership row to an `EnclaveMemberView` carrying a
 /// human-readable label (display_name when set, otherwise `@username`,
 /// otherwise the raw user_id as a last resort).
-async fn resolve_member_views(
+pub(crate) async fn resolve_member_views(
     state: &AppState,
     members: Vec<EnclaveMembership>,
 ) -> Result<Vec<EnclaveMemberView>, AppError> {
@@ -81,12 +81,15 @@ async fn resolve_member_views(
     Ok(out)
 }
 
-async fn broadcast_to_enclave(state: &AppState, enclave_id: i64, event: &ChatEvent) {
-    if let Ok(members) = db::enclave::list_members(&state.chat, enclave_id).await {
-        for m in members {
-            state.hub.broadcast_to_user(&m.user_id, event);
-        }
-    }
+/// LC-170: fan an enclave list-mutation event out to every connection
+/// subscribed to the `enclave:{id}` topic (the landing page subscribes via
+/// `data-lc-live-topic`). The WS send task re-renders the member/room list
+/// OOB per recipient. Replaces the older per-member `broadcast_to_user` fan,
+/// whose events rendered nothing and only reached the mutation's own subject.
+fn broadcast_enclave_topic(state: &AppState, enclave_id: i64, event: &ChatEvent) {
+    state
+        .hub
+        .broadcast_to_topic(&format!("enclave:{enclave_id}"), event);
 }
 
 pub fn router() -> Router<AppState> {
@@ -375,8 +378,9 @@ pub async fn post_discover_join(
         return Ok(Redirect::to(&format!("/enclave/{id}")));
     }
     db::enclave::add_member(&state.chat, id, &user.id, EnclaveRole::Member).await?;
-    state.hub.broadcast_to_user(
-        &user.id,
+    broadcast_enclave_topic(
+        &state,
+        id,
         &ChatEvent::EnclaveMemberAdded {
             enclave_id: id,
             user_id: user.id.clone(),
@@ -407,8 +411,9 @@ pub async fn post_join_by_code(
         return Ok(Redirect::to(&format!("/enclave/{}", enclave.id)));
     }
     db::enclave::add_member(&state.chat, enclave.id, &user.id, EnclaveRole::Member).await?;
-    state.hub.broadcast_to_user(
-        &user.id,
+    broadcast_enclave_topic(
+        &state,
+        enclave.id,
         &ChatEvent::EnclaveMemberAdded {
             enclave_id: enclave.id,
             user_id: user.id.clone(),
@@ -584,8 +589,9 @@ pub async fn post_invitation_accept(
         return Err(AppError::Forbidden);
     }
     let (eid, _) = db::enclave::accept_invitation(&state.chat, id).await?;
-    state.hub.broadcast_to_user(
-        &user.id,
+    broadcast_enclave_topic(
+        &state,
+        eid,
         &ChatEvent::EnclaveMemberAdded {
             enclave_id: eid,
             user_id: user.id.clone(),
@@ -801,8 +807,9 @@ pub async fn post_leave(
     let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &user.id).await?;
     db::starred_rooms::forget_rooms(&state.auth, &user.id, &lost_ids).await?;
-    state.hub.broadcast_to_user(
-        &user.id,
+    broadcast_enclave_topic(
+        &state,
+        id,
         &ChatEvent::EnclaveMemberRemoved {
             enclave_id: id,
             user_id: user.id.clone(),
@@ -832,6 +839,14 @@ pub async fn post_member_role(
         _ => return Err(AppError::BadRequest("invalid role".into())),
     };
     db::enclave::update_role(&state.chat, id, &target, new_role).await?;
+    broadcast_enclave_topic(
+        &state,
+        id,
+        &ChatEvent::EnclaveMemberRoleChanged {
+            enclave_id: id,
+            user_id: target.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
@@ -856,8 +871,9 @@ pub async fn post_kick(
     let lost_ids: Vec<i64> = lost_rooms.iter().map(|r| r.id).collect();
     db::enclave::remove_member(&state.chat, id, &target).await?;
     db::starred_rooms::forget_rooms(&state.auth, &target, &lost_ids).await?;
-    state.hub.broadcast_to_user(
-        &target,
+    broadcast_enclave_topic(
+        &state,
+        id,
         &ChatEvent::EnclaveMemberRemoved {
             enclave_id: id,
             user_id: target.clone(),
@@ -944,15 +960,14 @@ pub async fn post_create_room(
     if form.room_type == "private" {
         db::chat::add_room_member(&state.chat, room_id, &user.id).await?;
     }
-    broadcast_to_enclave(
+    broadcast_enclave_topic(
         &state,
         id,
         &ChatEvent::EnclaveRoomAdded {
             enclave_id: id,
             room_id,
         },
-    )
-    .await;
+    );
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
@@ -1031,15 +1046,14 @@ pub async fn post_delete_room(
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     db::chat::delete_room(&state.chat, room_id).await?;
-    broadcast_to_enclave(
+    broadcast_enclave_topic(
         &state,
         id,
         &ChatEvent::EnclaveRoomRemoved {
             enclave_id: id,
             room_id,
         },
-    )
-    .await;
+    );
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
