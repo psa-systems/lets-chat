@@ -231,13 +231,35 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     render_enclave_members(&send_state, &send_user, *enclave_id)
                                         .await
                                 }
-                                // LC-170: enclave landing-page room list.
-                                // Rendered per recipient because the per-row
-                                // Remove control and the room set itself are
-                                // gated on this viewer's manage rights.
+                                // LC-170/174: an enclave's room set changed.
+                                // Refresh both the landing-page room list
+                                // (#lc-enclave-rooms) and the enclave-keyed
+                                // sidebar nav (#sidebar-nav-{eid}); each is
+                                // rendered per recipient and htmx applies only
+                                // whichever id is on this connection's page.
                                 ChatEvent::EnclaveRoomAdded { enclave_id, .. }
                                 | ChatEvent::EnclaveRoomRemoved { enclave_id, .. } => {
-                                    render_enclave_rooms(&send_state, &send_user, *enclave_id).await
+                                    let mut out = render_enclave_rooms(
+                                        &send_state,
+                                        &send_user,
+                                        *enclave_id,
+                                    )
+                                    .await
+                                    .unwrap_or_default();
+                                    if let Some(nav) = render_enclave_sidebar_nav(
+                                        &send_state,
+                                        &send_user,
+                                        *enclave_id,
+                                    )
+                                    .await
+                                    {
+                                        out.push_str(&nav);
+                                    }
+                                    if out.is_empty() {
+                                        None
+                                    } else {
+                                        Some(out)
+                                    }
                                 }
                                 // LC-173: the editor's own profile changed.
                                 // broadcast_to_user fans to all their tabs;
@@ -1493,6 +1515,42 @@ async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
 /// fragments are emitted in one frame: a connection on the landing page matches
 /// only the first id, a connection on settings matches only the second, and
 /// htmx silently drops the unmatched OOB target.
+/// LC-174: re-render the enclave-keyed sidebar nav for `viewer` after a room is
+/// added to / removed from `enclave_id`. Per recipient so unread / mention /
+/// active state is correct; the fragment's `#sidebar-nav-{enclave_id}` target
+/// is present only on a connection currently viewing that enclave, so htmx
+/// drops it for everyone else (Home, a different enclave, a stale subscriber).
+async fn render_enclave_sidebar_nav(
+    state: &AppState,
+    viewer: &User,
+    enclave_id: i64,
+) -> Option<String> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_sidebar(state, viewer, Some(enclave_id))
+        .await
+        .ok()?;
+    crate::views::ws_fragments::SidebarNavLiveFragment {
+        user: viewer,
+        enclave_id,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+    }
+    .render()
+    .ok()
+}
+
 /// LC-173: re-render the sidebar self block (avatar + name + custom status) as
 /// an OOB fragment after the user edits their profile. Re-fetches the user so
 /// the fresh display_name / avatar_ext / custom_status are reflected. Returns

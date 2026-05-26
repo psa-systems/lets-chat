@@ -41,113 +41,11 @@
       <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
   </div>
-  <nav class="flex-1 overflow-y-auto p-2 space-y-4">
-    {% if !sidebar_starred_rooms.is_empty() || !sidebar_starred_peers.is_empty() %}
-    <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">&#9733; Starred</h2>
-      <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
-        {% for room in sidebar_starred_rooms %}
-        <li data-room-id="{{ room.id }}" draggable="true">
-          {% let is_starred = true %}
-          {% let room_id_str = room.id.to_string() %}
-          {% include "partials/sidebar_room_row.html" %}
-        </li>
-        {% endfor %}
-        {% for peer in sidebar_starred_peers %}
-        <li data-room-id="{{ peer.dm_room_id }}" draggable="true">
-          {% let is_starred = true %}
-          {% include "partials/sidebar_peer_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-    {% if let Some(_eid) = sidebar_current_enclave %}
-    <div data-category-list{% if can_manage_sidebar_categories %} data-positions-url="/enclave/{{ _eid }}/sidebar/categories/positions"{% endif %} class="space-y-4">
-    {% for category in sidebar_categories %}
-    <section data-category-id="{{ category.id }}"{% if can_manage_sidebar_categories %} draggable="true"{% endif %}>
-      <div class="flex items-center justify-between px-2">
-        {# Per-user collapse toggle. Any enclave member may fold their own
-           view, so this form is unconditional (no admin RBAC). #}
-        <form hx-patch="/sidebar/categories/{{ category.id }}/collapse" hx-target="#sidebar" hx-swap="outerHTML" class="flex-1 min-w-0">
-          {% if category.collapsed %}
-          {# Submitting without `collapsed` unfolds. #}
-          {% else %}
-          <input type="hidden" name="collapsed" value="1">
-          {% endif %}
-          <button type="submit" class="w-full text-left text-xs uppercase text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded flex items-center gap-1" title="{% if category.collapsed %}Expand{% else %}Collapse{% endif %}">
-            <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-slate-400 normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
-            {% if category.collapsed && category.unread_total > 0 %}
-            <span class="text-xs bg-blue-600 text-white rounded px-2 normal-case">{{ category.unread_total }}</span>
-            {% endif %}
-            {% if category.collapsed && category.mention_total > 0 %}
-            <span class="text-[10px] font-bold uppercase bg-red-600 text-white rounded px-1.5">@{{ category.mention_total }}</span>
-            {% endif %}
-          </button>
-        </form>
-        {% if can_manage_sidebar_categories %}
-        <details class="relative">
-          <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1" title="Category actions">&#8230;</summary>
-          <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-sm w-56 p-2 space-y-2">
-            <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1">
-              <input type="text" name="name" value="{{ category.name }}" maxlength="50" required class="flex-1 border rounded px-1 py-0.5 text-xs">
-              <button type="submit" class="px-2 text-xs bg-blue-600 text-white rounded">Rename</button>
-            </form>
-            <form hx-delete="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="Delete category &quot;{{ category.name }}&quot;? Its rooms move back to All rooms." class="text-right">
-              <button type="submit" class="text-xs text-red-600 hover:underline">Delete category</button>
-            </form>
-          </div>
-        </details>
-        {% endif %}
-      </div>
-      {% if !category.collapsed %}
-      <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories %} data-room-list data-positions-url="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}/positions"{% endif %}>
-        {% for room in category.rooms %}
-        <li{% if can_manage_sidebar_categories %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
-          {% let is_starred = false %}
-          {% let room_id_str = room.id.to_string() %}
-          {% include "partials/sidebar_room_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-    </section>
-    {% endfor %}
-    </div>
-    {% endif %}
-    {% if !sidebar_rooms.is_empty() %}
-    <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}All rooms{% else %}Rooms{% endif %}</h2>
-      <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
-        {% for room in sidebar_rooms %}
-        <li{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
-          {% let is_starred = false %}
-          {% let room_id_str = room.id.to_string() %}
-          {% include "partials/sidebar_room_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-    {% if !sidebar_peers.is_empty() %}
-    <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">Direct messages</h2>
-      <ul class="mt-1">
-        {% for peer in sidebar_peers %}
-        <li>
-          {% let is_starred = false %}
-          {% include "partials/sidebar_peer_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-    {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
-    <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-slate-200">
-      <input type="text" name="name" placeholder="New category" maxlength="50" required class="flex-1 border rounded px-2 py-1 text-xs">
-      <button type="submit" class="px-2 text-xs bg-slate-200 hover:bg-slate-300 rounded">+ Add</button>
-    </form>
-    {% endif %}{% endif %}
+  {# LC-174: enclave-keyed id so an enclave room add/remove can OOB-swap just
+     this nav for members currently viewing that enclave. A connection on Home
+     or a different enclave has a different id and htmx drops the swap. #}
+  <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" class="flex-1 overflow-y-auto p-2 space-y-4">
+    {% include "partials/sidebar_nav.html" %}
   </nav>
   <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
     {% if user.role == "admin" || user.role == "moderator" %}
