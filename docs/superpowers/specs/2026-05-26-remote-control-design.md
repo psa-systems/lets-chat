@@ -45,7 +45,7 @@ Neither requesting nor granting control is permitted unless BOTH peers have a ve
 
 saas vs standalone semantics (decide + encode in LC-183):
 - **standalone**: `email_verified_at` is set by the `#[cfg(standalone)]` email-verification flow. The gate is literally `email_verified_at IS NOT NULL`.
-- **saas**: SaaS auth may verify emails out-of-band (the platform owns identity). Either (a) treat SaaS-authenticated accounts as verified, or (b) require the same `email_verified_at` column to be populated by the SaaS auth bridge. The design's requirement is "both peers verified by the build's definition of verified"; LC-183 picks the concrete check per build.
+- **saas**: SaaS auth may verify emails out-of-band (the platform owns identity). Either (a) treat SaaS-authenticated accounts as verified, or (b) require the same `email_verified_at` column to be populated by the SaaS auth bridge. **These are different trust models** - (a) says SaaS auth is itself the verification; (b) keeps a second gate. They are not interchangeable: if (b) is chosen but the column is never populated, the gate silently denies everyone. LC-183 must pick deliberately and, if the check is build-conditional (not just a column read), say so. The design's requirement is "both peers verified by the build's definition of verified."
 
 ## Consent lifecycle
 
@@ -66,10 +66,14 @@ viewer: Request control  ──signal──▶  sharer: Grant / Deny prompt
 
 Invariants: one active controller per shared session at a time; the "Request control" affordance only renders when both peers are verified AND a screen share is active; a blocked peer never sees it and is rejected server-side anyway.
 
+The **kill-switch belongs to the controlled (desktop) side** - it is the machine being driven, so it always has both the on-banner button and the global hotkey. The controller (web or desktop) has no kill-switch because it is not being controlled; it just stops capturing when control ends. So the UI is intentionally asymmetric by role, not by client type.
+
+**Held-input cleanup (stuck-key prevention - mandate for LC-185/186):** the controlled side must track every currently-pressed key/mouse button and force-synthesize the matching key-up / button-up on ANY end path - clean revoke, kill-switch, OR abrupt data-channel drop. Without this, a `keydown(Ctrl)` whose `keyup` never arrives (channel dropped) leaves Ctrl stuck down at the OS level. The injector tracks held state locally; "release all held" is part of flipping the revoke flag, and also fires on a channel-drop / heartbeat-timeout detected independently of any inbound message.
+
 ## Transport + protocol sketch
 
-- **Signaling** (request / grant / deny / revoke): low-rate control messages. Either extend the `CallSignal` `kind` set (`CALL_SIGNAL_KINDS` in `routes/ws.rs`, relayed by `relay_call_signal` between the two call participants) or add dedicated `ChatEvent` variants. The verified-email + block-list gate lives on this relay path.
-- **Input stream** (high-rate, while active): a dedicated WebRTC **data channel** on the existing 1:1 `RTCPeerConnection` (not the WS - keep input peer-to-peer + off the server). Event shape (compact): pointer move/down/up/wheel + key down/up with modifiers and (for keys) scan codes.
+- **Signaling** (request / grant / deny / revoke): low-rate control messages relayed only between the two call participants. **Prefer dedicated `ChatEvent` variants** over extending `CALL_SIGNAL_KINDS`: that const is a whitelist (`routes/ws.rs:74`) checked at relay (`:1251`), and `relay_call_signal` special-cases certain kinds (e.g. `invite` glare handling) - new kinds need their own relay branch, not just a whitelist entry, so reusing it is necessary-but-not-sufficient and entangles control with call glare logic. New variants get a clean relay path. Whichever path, the verified-email + block-list gate lives here, slotted next to the existing fail-closed `is_blocked_either_way` check (`relay_call_signal`, ~`:1273`).
+- **Input stream** (high-rate, while active): a dedicated WebRTC **data channel** on the existing 1:1 `RTCPeerConnection` (`call.js`; the PC currently carries only audio/video tracks, so the channel is new - not the WS, keep input peer-to-peer + off the server). Open it **up-front** as part of the initial offer (negotiated/in-band) so it does not trigger an `onnegotiationneeded` renegotiation mid-call; the **controlled (desktop) side** is the natural creator since it is the one that must receive + inject. Event shape (compact): pointer move/down/up/wheel + key down/up with modifiers and (for keys) scan codes.
 - **Coordinates**: the controller sends **normalized [0,1]** surface coordinates (computed from the scaled/letterboxed `<video>`), never pixels. The controlled side maps [0,1] to absolute screen pixels using its own monitor/window geometry + DPI. This keeps the protocol resolution- and DPI-independent.
 - **Rate**: coalesce pointer-move to ~60-120 Hz (rAF or a timer); send clicks/keys immediately.
 
@@ -82,6 +86,8 @@ Invariants: one active controller per shared session at a time; the "Request con
 | macOS | `CGEvent` | Requires the user to grant Accessibility permission (prompt + deep link to System Settings). Deferred. |
 
 Non-Windows targets ship as `#[cfg(...)]` no-ops until their slice lands; the web controller works against any controllable peer regardless.
+
+Implementation notes for LC-185: the desktop crate is **already Tauri 2** (`desktop/Cargo.toml`), and no input-injection code exists yet. LC-185 picks the mechanism - a cross-platform crate (`enigo` / `rdev`) vs raw per-OS calls (`SendInput` via `windows`/`webview2-com`'s win32 bindings, which the project already depends on). The **JS->native bridge (Tauri command/IPC) is the desktop-side trust boundary**: the webview hands input events to native, which injects them - so the native side must re-assert that control is currently granted+active before injecting any event, never trusting the channel alone.
 
 ## Audit + limits
 
