@@ -250,6 +250,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::ThreadReply { .. }
         | ChatEvent::EnclaveMemberAdded { .. }
         | ChatEvent::EnclaveMemberRemoved { .. }
+        | ChatEvent::EnclaveMemberRoleChanged { .. }
         | ChatEvent::EnclaveRoomAdded { .. }
         | ChatEvent::EnclaveRoomRemoved { .. }
         | ChatEvent::SidebarCategoriesChanged { .. }

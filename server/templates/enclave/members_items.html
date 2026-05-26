@@ -1,0 +1,13 @@
+{# LC-170: the dynamic member list, shared by the enclave landing page and the
+   live OOB fragment (ws/enclave_members_live.html) so both render identically.
+   References `members` from whichever parent struct includes it. Read-only
+   (label + role); the invite box and settings link stay in the page. #}
+<h2 class="font-semibold">Members ({{ members.len() }})</h2>
+<ul class="mt-2 space-y-1">
+  {% for m in members %}
+  <li class="flex items-center justify-between gap-2">
+    <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
+    <span class="text-xs uppercase text-slate-500">{{ m.role.as_str() }}</span>
+  </li>
+  {% endfor %}
+</ul>
