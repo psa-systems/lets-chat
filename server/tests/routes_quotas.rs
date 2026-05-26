@@ -380,6 +380,30 @@ async fn upload_under_user_quota_succeeds() {
     assert_eq!(status, StatusCode::OK, "body: {body}");
 }
 
+// LC-175: the admin user list subscribes to the `admin` topic so ban / mute /
+// role / quota / delete refresh the row live across all admins. Pin the
+// subscription, the member row id (the OOB target), and that the page-rendered
+// row is NOT itself OOB (oob=false on the HTTP path).
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_user_list_is_wired_for_live_row_updates() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.admin_session, Method::GET, "/admin/users", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-live-topic=\"admin\""),
+        "admin pages must subscribe to the admin topic for live row updates",
+    );
+    assert!(
+        body.contains(&format!("id=\"user-{}\"", t.member_id)),
+        "user list renders the OOB-targetable row id",
+    );
+    assert!(
+        !body.contains("hx-swap-oob"),
+        "page-rendered rows must not be OOB (only the live WS row is)",
+    );
+}
+
 #[cfg(feature = "standalone")]
 #[tokio::test]
 async fn admin_form_persists_user_quota_and_writes_audit_row() {

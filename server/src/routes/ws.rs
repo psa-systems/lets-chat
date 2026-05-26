@@ -271,6 +271,19 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_own_profile(&send_state, &send_user.id).await
                                 }
+                                // LC-175: a user's admin-list row changed.
+                                // Broadcast on the `admin` topic (only admins
+                                // can subscribe), so every admin's open user
+                                // list updates the row OOB. Same row for all
+                                // admins; one render serves every recipient.
+                                // Standalone-only: the admin routes module (and
+                                // its row builder) is #[cfg(standalone)]; in
+                                // saas this event is never broadcast and falls
+                                // through to render_event (None).
+                                #[cfg(feature = "standalone")]
+                                ChatEvent::AdminUserChanged { user_id, removed } => {
+                                    render_admin_user_row(&send_state, user_id, *removed).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -1546,6 +1559,31 @@ async fn render_enclave_sidebar_nav(
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-175: render the OOB swap for a changed admin user-list row. `removed`
+/// emits an `hx-swap-oob="delete"` tombstone for `#user-{id}`; otherwise the
+/// fresh row (oob) is rendered. Returns None if a non-removal event races a
+/// just-deleted user (the row is gone). Standalone-only: the admin routes
+/// module that builds the row is `#[cfg(standalone)]`.
+#[cfg(feature = "standalone")]
+async fn render_admin_user_row(state: &AppState, user_id: &str, removed: bool) -> Option<String> {
+    if removed {
+        return crate::views::admin::UserRowDeleteFragment {
+            user_id: user_id.to_string(),
+        }
+        .render()
+        .ok();
+    }
+    let view = super::admin::build_admin_user_view(state, user_id)
+        .await
+        .ok()??;
+    crate::views::admin::UserRowFragment {
+        u: &view,
+        oob: true,
     }
     .render()
     .ok()
