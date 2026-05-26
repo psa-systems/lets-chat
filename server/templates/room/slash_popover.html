@@ -6,6 +6,7 @@
     class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg z-20">
   {% for c in commands %}
   <li role="option" data-slash-name="{{ c.name }}"
+      id="lc-slash-option-{{ loop.index0 }}" aria-selected="false"
       class="px-3 py-1.5 text-sm hover:bg-slate-100 cursor-pointer"
       onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
     <span class="font-mono text-slate-800">{{ c.usage }}</span>
