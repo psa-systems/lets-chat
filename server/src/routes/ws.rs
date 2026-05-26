@@ -92,10 +92,17 @@ async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> 
         return user.role == "admin";
     }
     match topic.split_once(':') {
+        // Site admins get the same god-mode read of an enclave's member/room
+        // lists over the topic that `get_landing` already grants them on the
+        // page (LC-170), so a non-member admin viewing the landing still sees
+        // live updates rather than a silently static list.
         Some(("enclave", id)) => match id.parse::<i64>() {
-            Ok(eid) => db::enclave::is_enclave_member(&state.chat, eid, &user.id)
-                .await
-                .unwrap_or(false),
+            Ok(eid) => {
+                user.role == "admin"
+                    || db::enclave::is_enclave_member(&state.chat, eid, &user.id)
+                        .await
+                        .unwrap_or(false)
+            }
             Err(_) => false,
         },
         Some(("user", id)) => id == user.id,
