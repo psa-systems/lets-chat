@@ -641,6 +641,33 @@ async fn room_render_pre_populates_textarea_with_draft() {
     );
 }
 
+// LC-171: the composer's Enter-to-submit handler must defer to an open
+// mention/slash combobox so Enter never both submits the partial text and
+// inserts the highlighted option. The guard is a single inline check in the
+// textarea's onkeydown; this pins it so a refactor of the composer cannot
+// silently drop it and reintroduce the double-fire. We assert the guard
+// short-circuits BEFORE the submit call, since order is what makes it correct.
+#[tokio::test]
+async fn composer_enter_handler_defers_to_open_combobox() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    let guard = "#lc-mention-popover li[role=option][aria-selected=true], #lc-slash-popover li[role=option][aria-selected=true]";
+    assert!(
+        body.contains(guard),
+        "composer Enter handler must check for an open combobox option before submitting",
+    );
+    let guard_pos = body.find(guard).unwrap();
+    let submit_pos = body[guard_pos..]
+        .find("requestSubmit()")
+        .map(|p| guard_pos + p)
+        .expect("composer must still submit on Enter");
+    assert!(
+        guard_pos < submit_pos,
+        "the combobox guard must short-circuit before requestSubmit, or the double-fire returns",
+    );
+}
+
 #[tokio::test]
 async fn room_render_with_stale_draft_renders_empty_and_purges_row() {
     let t = app().await;
