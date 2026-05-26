@@ -189,6 +189,7 @@ pub struct SettingsPage<'a> {
     pub imap_password_configured: bool,
     pub imap_folder: String,
     pub imap_ingress_domain: String,
+    pub imap_dead_letter_folder: String,
     pub imap_enabled: bool,
     /// `Some(msg)` when an IMAP form save just failed (typically because the
     /// secret key is unset and the password can't be sealed).

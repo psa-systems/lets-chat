@@ -28,6 +28,11 @@ pub struct ImapConfig {
     pub folder: String,
     pub ingress_domain: Option<String>,
     pub enabled: bool,
+    /// LC-77-DEAD-LETTER (#203): IMAP folder to UID COPY dropped
+    /// messages into before marking `\Seen` on the source UID.
+    /// `None` keeps the v1 always-`\Seen` posture; structured drop logs
+    /// remain the only diagnostic.
+    pub dead_letter_folder: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -51,7 +56,7 @@ pub async fn read(
 ) -> Result<Option<ImapConfig>, ImapConfigError> {
     let row = sqlx::query(
         "SELECT host, port, tls, username, password_encrypted, password_nonce, \
-                folder, ingress_domain, enabled \
+                folder, ingress_domain, enabled, dead_letter_folder \
          FROM imap_inbox_config WHERE id = 1",
     )
     .fetch_optional(pool)
@@ -73,6 +78,7 @@ pub async fn read(
         folder: r.get("folder"),
         ingress_domain: r.get("ingress_domain"),
         enabled: r.get::<i64, _>("enabled") != 0,
+        dead_letter_folder: r.get("dead_letter_folder"),
     }))
 }
 
@@ -89,8 +95,8 @@ pub async fn write(
     sqlx::query(
         "INSERT INTO imap_inbox_config \
              (id, host, port, tls, username, password_encrypted, password_nonce, \
-              folder, ingress_domain, enabled, updated_at) \
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) \
+              folder, ingress_domain, enabled, dead_letter_folder, updated_at) \
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) \
          ON CONFLICT(id) DO UPDATE SET \
              host                = excluded.host, \
              port                = excluded.port, \
@@ -101,6 +107,7 @@ pub async fn write(
              folder              = excluded.folder, \
              ingress_domain      = excluded.ingress_domain, \
              enabled             = excluded.enabled, \
+             dead_letter_folder  = excluded.dead_letter_folder, \
              updated_at          = excluded.updated_at",
     )
     .bind(&cfg.host)
@@ -112,6 +119,7 @@ pub async fn write(
     .bind(&cfg.folder)
     .bind(cfg.ingress_domain.as_deref())
     .bind(cfg.enabled as i64)
+    .bind(cfg.dead_letter_folder.as_deref())
     .execute(pool)
     .await?;
     Ok(())

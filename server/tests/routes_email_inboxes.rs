@@ -88,6 +88,7 @@ async fn app_with_ingress_domain(domain: Option<&str>) -> TestApp {
             folder: "INBOX".into(),
             ingress_domain: Some(d.to_string()),
             enabled: false,
+            dead_letter_folder: None,
         };
         db::imap_config::write(&settings, &SECRET, &cfg)
             .await

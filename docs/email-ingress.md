@@ -201,8 +201,34 @@ Errs on the side of leaving extra text in chat (a missed strip is recoverable; a
 - **HTML email rich rendering.** HTML-only messages either drop with `parse_fail` (no text fallback recoverable) or post the stripped-to-text version. A dedicated HTML-to-Markdown converter is a follow-up.
 - **Signature / quoted-history stripping for the per-room inbox actor.** Stripping is wired ONLY on the reply-by-email path (where humans actually quote). The synthetic-actor path posts the body verbatim to preserve external-sender output as-is.
 - **Bouncing failed messages.** No bounce email is ever generated. The operator's only diagnostic is the structured log. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
-- **Dead-letter folder for poison messages.** A malformed message gets marked `\Seen` after one processing attempt and is never reprocessed, but the original copy stays in the polled mailbox. Tracked as `LC-77-DEAD-LETTER`.
 - **Voice-format attachments.** Email attachments cannot be voice messages in v1; voice has a `MediaRecorder` origin emails don't produce.
+
+## Dead-letter folder (LC-77-DEAD-LETTER)
+
+Optional: if you set an IMAP folder name in the admin IMAP settings as the dead-letter folder, every dropped message is `UID COPY`d into that folder before being marked `\Seen` on the source UID. You then have a per-drop record of the raw message (headers, body, attachments) in the folder, recoverable via any IMAP client.
+
+When the field is empty (the default), the v1 always-`\Seen` posture stands: dropped messages stay in the source folder marked Seen and the structured WARN log under `target=email_ingress::drop` is the only diagnostic.
+
+### What gets dead-lettered
+
+Every `ProcessOutcome::Dropped` from `process_polled_message` plus the two pre-process paths (FETCH failure, oversize raw payload). The `reason` tag passed to the COPY's log line tells you which drop kind triggered it.
+
+### Operator setup
+
+1. Create the dead-letter folder at your IMAP provider (e.g. `INBOX/lets-chat-rejected`). lets-chat does NOT auto-create it.
+2. Enter the folder name in the IMAP settings admin form.
+3. Restart the server. The poll loop reads `imap_inbox_config` once at startup, matching the existing pattern.
+
+### Failure modes
+
+- The dead-letter folder doesn't exist OR the IMAP server denies COPY. lets-chat logs at INFO under `target=email_ingress::dead_letter` with the error and proceeds with the `\Seen` STORE. A misconfigured dead-letter folder cannot block the queue.
+- The dead-letter COPY succeeds but the `\Seen` STORE then fails (rare; FETCH succeeded so the session is alive). On the next tick the UID is UNSEEN again, gets re-fetched, re-processed (no double-post thanks to LC-77-MID-DEDUP), re-dead-lettered. You'd see two copies in the dead-letter folder. Cost: storage, not correctness.
+
+### Anti-scope
+
+- No bounces. Senders never get feedback that their mail dropped.
+- No auto-cleanup of the dead-letter folder. Configure your IMAP provider's retention if you want the folder pruned.
+- Per-attachment drops (attachments rejected by the upload pipeline; the parent message still posts) are NOT dead-lettered. The dead-letter surface only covers message-level drops.
 
 ## Duplicate suppression (LC-77-MID-DEDUP)
 
