@@ -20,11 +20,16 @@
       <span class="text-xs text-slate-500 truncate">{{ label }}</span>
       {% endif %}
       {% else %}
-      {% if let Some(ext) = s.avatar_ext.as_ref() %}
-      <img src="/avatars/{{ s.user_id }}" alt="" class="h-5 w-5 rounded-full object-cover" data-ext="{{ ext }}">
-      {% else %}
-      <span class="h-5 w-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-semibold">{% if let Some(c) = s.username.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
-      {% endif %}
+      {# LC-169: one avatar renderer. Bind the loop row's fields to the
+         avatar_* names partials/avatar.html expects, exactly like the user /
+         invite search lists, instead of re-implementing the badge inline. #}
+      {% let avatar_user_id = s.user_id.clone() %}
+      {% let avatar_username = s.username.clone() %}
+      {% let avatar_ext = s.avatar_ext.clone() %}
+      {% let avatar_status = s.status.clone() %}
+      {% let avatar_custom_status = s.custom_status.clone() %}
+      {% let avatar_size = "h-5 w-5 text-[10px]" %}
+      {% include "partials/avatar.html" %}
       <span class="font-medium">{{ s.username }}</span>
       {% if let Some(dn) = s.display_name.as_ref() %}
       <span class="text-xs text-slate-500 truncate">{{ dn }}</span>

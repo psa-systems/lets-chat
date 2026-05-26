@@ -29,9 +29,7 @@
     <div class="text-sm text-slate-600 prose prose-sm max-w-none">{{ brand_body_html|safe }}</div>
     {% endif %}
     <div id="form-errors">
-      {% if let Some(error) = error %}
-      <p class="text-red-600 text-sm">{{ error }}</p>
-      {% endif %}
+      {% include "auth/form_errors.html" %}
     </div>
     <label class="block">
       <span class="text-sm">Username</span>
