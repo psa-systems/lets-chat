@@ -1,16 +1,18 @@
 {# LC-63: "Remind me" picker, swapped into #lc-reminder-modal. Presets post
    via HTMX (no JS); the custom time converts datetime-local -> UTC in a
    small inline script before posting. Any successful POST returns the
-   confirm fragment, which replaces this picker in the same slot. #}
+   confirm fragment, which replaces this picker in the same slot.
+   LC-158: brought to modal-a11y parity with the poll/scheduled modals -
+   focus trap (window.__lcDialogTrap), Escape to close, and focus restored
+   to the opener on cancel. #}
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
      role="dialog" aria-modal="true" aria-label="Set a reminder"
-     onmousedown="if(event.target===this)this.parentElement.innerHTML='';">
+     data-lc-reminder-dialog>
   <div class="w-80 rounded-lg bg-white p-5 shadow-xl">
     <div class="flex items-center justify-between gap-2 mb-3">
       <h2 class="text-lg font-semibold">Remind me about this</h2>
-      <button type="button" aria-label="Close"
-              class="text-slate-400 hover:text-slate-700 text-xl leading-none"
-              onclick="document.getElementById('lc-reminder-modal').innerHTML='';">&times;</button>
+      <button type="button" aria-label="Close" data-lc-reminder-close
+              class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
       {% for opt in [("15m", "In 15 minutes"), ("1h", "In 1 hour"), ("3h", "In 3 hours"), ("tomorrow", "Tomorrow")] %}
@@ -34,9 +36,36 @@
 </div>
 <script>
 (function(){
+  var slot = document.getElementById('lc-reminder-modal');
+  if (!slot) return;
+  var dialog = slot.querySelector('[data-lc-reminder-dialog]');
+  if (!dialog) return;
+
+  // Capture the element that opened the picker so focus can return there on
+  // cancel, then trap Tab inside the dialog and move focus into it.
+  var opener = document.activeElement;
+  var trap = window.__lcDialogTrap ? window.__lcDialogTrap(dialog) : null;
+  try {
+    (dialog.querySelector('button, [href], input, select, textarea') || dialog).focus();
+  } catch (e) {}
+
+  // Cancel paths (X, backdrop, Escape) tear the trap down, restore focus, and
+  // clear the slot. Success paths (preset/custom POST) swap the confirm
+  // fragment into the slot, which removes this dialog (and its trap listener)
+  // outright, so they need no explicit teardown.
+  function close(){
+    if (trap) { trap.dispose(); trap = null; }
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    slot.innerHTML = '';
+  }
+  dialog.querySelector('[data-lc-reminder-close]').addEventListener('click', close);
+  dialog.addEventListener('mousedown', function(e){ if (e.target === dialog) close(); });
+  dialog.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+
   var form = document.getElementById('lc-reminder-custom');
   if (!form) return;
-  var slot = document.getElementById('lc-reminder-modal');
   var err = form.querySelector('.lc-reminder-error');
   form.addEventListener('submit', async function(e){
     e.preventDefault();
