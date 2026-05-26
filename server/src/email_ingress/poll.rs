@@ -200,6 +200,7 @@ pub async fn poll_once(
         .ingress_domain
         .as_deref()
         .expect("spawn_email_poll guards ingress_domain.is_some()");
+    let dead_letter_folder = config.dead_letter_folder.as_deref();
     for uid in &unseen {
         report.fetched += 1;
         let raw = match fetch_one(&mut session, *uid).await {
@@ -212,6 +213,11 @@ pub async fn poll_once(
                     "FETCH failed; marking Seen and continuing",
                 );
                 report.count_drop(DropReason::InternalError);
+                // LC-77-DEAD-LETTER: we tried to FETCH and failed; COPY
+                // is unlikely to succeed either but we attempt for
+                // visibility. The helper logs INFO on failure and
+                // returns; \Seen still marks below.
+                dead_letter_uid(&mut session, *uid, dead_letter_folder, "fetch_failed").await;
                 let _ = mark_seen(&mut session, *uid).await;
                 continue;
             }
@@ -227,6 +233,7 @@ pub async fn poll_once(
                 "email ingress dropped message",
             );
             report.count_drop(DropReason::InternalError);
+            dead_letter_uid(&mut session, *uid, dead_letter_folder, "oversize").await;
             let _ = mark_seen(&mut session, *uid).await;
             continue;
         }
@@ -249,6 +256,11 @@ pub async fn poll_once(
                     "email ingress dropped message",
                 );
                 report.count_drop(reason);
+                // LC-77-DEAD-LETTER: COPY the dropped UID into the
+                // configured folder so the operator can inspect what
+                // was rejected without grepping logs. No-op when the
+                // config has no dead-letter folder set.
+                dead_letter_uid(&mut session, *uid, dead_letter_folder, reason.as_str()).await;
             }
         }
         if let Err(e) = mark_seen(&mut session, *uid).await {
@@ -285,6 +297,42 @@ async fn fetch_one(
         "UID FETCH returned no rows".into(),
     ))?;
     Ok(fetch.body().map(<[u8]>::to_vec).unwrap_or_default())
+}
+
+/// LC-77-DEAD-LETTER: best-effort `UID COPY` of one UID into the
+/// operator-configured dead-letter folder. Logs INFO on success, INFO
+/// on failure, and returns without error in either case. The caller
+/// still issues `STORE +Seen` on the source UID so a misconfigured
+/// dead-letter folder (does not exist, server denies COPY, etc.)
+/// cannot block the queue. No-op when `folder` is `None`.
+async fn dead_letter_uid(
+    session: &mut async_imap::Session<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>,
+    uid: u32,
+    folder: Option<&str>,
+    reason: &str,
+) {
+    let Some(folder) = folder else { return };
+    match session.uid_copy(uid.to_string(), folder).await {
+        Ok(_) => {
+            tracing::info!(
+                target: "email_ingress::dead_letter",
+                uid,
+                folder,
+                reason,
+                "dead-lettered dropped UID",
+            );
+        }
+        Err(e) => {
+            tracing::info!(
+                target: "email_ingress::dead_letter",
+                uid,
+                folder,
+                reason,
+                error = %e,
+                "dead-letter UID COPY failed; \\Seen will still mark the source",
+            );
+        }
+    }
 }
 
 /// STORE +FLAGS (\Seen) on one UID.

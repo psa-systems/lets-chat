@@ -122,6 +122,10 @@ Stage 2 (reply ingress): the IMAP poll loop's namespace-forked resolver (`email_
 
 `db::email_ingress_dedup` records the HMAC-SHA256 (under `LETS_CHAT_SECRET_KEY`) of every successfully-posted message's RFC 5322 `Message-ID:` header in `chat.db::processed_message_ids`. `process_polled_message` checks the table BEFORE resolving so a wire-byte-identical replay (the crash-between-process-and-STORE-Seen race) drops with `DropReason::Duplicate` instead of posting again. The table is opaque (hashes only; no plaintext leak). Sweep at 30 days piggybacks on the hourly orphan sweeper. A message without a `Message-ID:` header falls back to v1 at-least-once.
 
+### Dead-letter folder (LC-77-DEAD-LETTER, #203)
+
+Optional `imap_inbox_config.dead_letter_folder` column. When set, `poll_once` issues `UID COPY <uid> <folder>` for every dropped UID (including FETCH-fail and oversize-payload pre-process drops) before marking `\Seen` on the source. COPY failures are logged INFO under `target=email_ingress::dead_letter` and never block the `\Seen` STORE so a misconfigured folder cannot stop the queue. The operator must pre-create the folder at the IMAP provider; lets-chat does not auto-create it. Empty field = feature off (v1 always-`\Seen` posture; structured drop log is the only diagnostic).
+
 ## Workspace Layout
 
 `Cargo.toml` at the repo root defines a Cargo workspace with two members:
