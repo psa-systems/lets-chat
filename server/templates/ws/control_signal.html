@@ -1,0 +1,11 @@
+{# LC-183: remote-control consent signal, appended to #lc-control-bus. A
+   MutationObserver in the client consumes each data-lc-control-event node
+   (request/grant/deny/revoke) and drives the consent UI. Mirrors the
+   #lc-call-bus pattern. Consent signaling only - no input payload. #}
+<div id="lc-control-bus" hx-swap-oob="beforeend">
+  <div data-lc-control-event
+       data-room-id="{{ room_id }}"
+       data-from-id="{{ from_user_id }}"
+       data-from-name="{{ from_name }}"
+       data-kind="{{ kind }}"></div>
+</div>
