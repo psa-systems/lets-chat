@@ -185,6 +185,27 @@ async fn settings_gear_visible_to_manager_only() {
     );
 }
 
+// LC-174: a room page in an enclave subscribes to that enclave's topic and its
+// sidebar nav carries the enclave-keyed id, so a room add/remove in the enclave
+// OOB-swaps the nav for members sitting in one of its rooms (not just on the
+// landing). The enclave-keyed id is what makes the swap land only on viewers of
+// THIS enclave; Home / another enclave have a different id and drop it.
+#[tokio::test]
+async fn room_page_subscribes_to_enclave_topic_and_keys_sidebar_nav() {
+    let t = app().await;
+    let (eid, alpha, _beta) = seed(&t).await;
+    let (status, _, body) = get(&t.app, &t.alice_session, &format!("/room/{alpha}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!("data-lc-live-topic=\"enclave:{eid}\"")),
+        "room page in an enclave must subscribe to the enclave topic",
+    );
+    assert!(
+        body.contains(&format!("id=\"sidebar-nav-{eid}\"")),
+        "sidebar nav must be enclave-keyed so the room-list OOB swap lands only on viewers of this enclave",
+    );
+}
+
 // LC-172: the settings page subscribes to the enclave topic and renders the
 // member list inside the swappable #lc-enclave-settings-members region, so
 // joins/kicks/role-changes update it live (the broadcasts landed in LC-170).
