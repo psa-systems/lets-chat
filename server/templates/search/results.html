@@ -3,9 +3,9 @@
   <p class="text-sm text-slate-500">No results.</p>
 </div>
 {% else %}
-<div class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">
+<div role="listbox" class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">
   {% for r in results %}
-  <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" class="block px-3 py-2 hover:bg-slate-100 border-b border-slate-100 last:border-b-0">
+  <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="block px-3 py-2 hover:bg-slate-100 border-b border-slate-100 last:border-b-0">
     <div class="text-xs text-slate-500">{{ r.context_label }} - {{ r.created_at }}</div>
     <div class="text-sm truncate">{{ r.snippet }}</div>
   </a>

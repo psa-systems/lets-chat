@@ -27,6 +27,12 @@
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#search-msg-results"
         hx-swap="innerHTML"
+        data-lc-search
+        data-lc-search-results="#search-msg-results"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="search-msg-results"
+        aria-autocomplete="list"
         class="w-full border rounded px-2 py-1 text-sm">
       <div id="search-msg-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
@@ -38,6 +44,12 @@
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#search-people-results"
         hx-swap="innerHTML"
+        data-lc-search
+        data-lc-search-results="#search-people-results"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="search-people-results"
+        aria-autocomplete="list"
         class="w-full border rounded px-2 py-1 text-sm">
       <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
