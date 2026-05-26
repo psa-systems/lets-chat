@@ -336,6 +336,30 @@ impl Hub {
             .insert(conn_id);
     }
 
+    /// LC-176: unsubscribe a single connection from a typed topic. Idempotent.
+    pub fn unsubscribe_topic(&self, conn_id: ConnId, topic: &str) {
+        if let Some(mut conns) = self.topics.get_mut(topic) {
+            conns.remove(&conn_id);
+        }
+    }
+
+    /// LC-176: drop every one of a user's connections from `topic`, so a user
+    /// who just lost access (kicked from / left / had-deleted an enclave) stops
+    /// receiving that topic's events immediately instead of leaking updates
+    /// until they happen to navigate. No-op if the user has no live
+    /// connections. Connection ids are collected before mutating `topics` so no
+    /// `user_conns` borrow is held across the topic update.
+    pub fn unsubscribe_user_from_topic(&self, user_id: &str, topic: &str) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        for conn_id in conn_ids {
+            self.unsubscribe_topic(conn_id, topic);
+        }
+    }
+
     /// LC-160: broadcast an event to every connection subscribed to `topic`.
     pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
         if let Some(conns) = self.topics.get(topic) {
@@ -501,5 +525,52 @@ impl Hub {
             };
             self.broadcast_to_room(room_id, &event);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-176: a user dropped from a topic stops receiving its events on every
+    // one of their connections, while other users on the topic are unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_stops_delivery_for_that_user_only() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("u1", "u1");
+        let (c2, mut rx2, _) = hub.connect("u1", "u1"); // u1's second tab
+        let (c3, mut rx3, _) = hub.connect("u2", "u2");
+        let topic = "enclave:5";
+        hub.subscribe_topic(c1, topic);
+        hub.subscribe_topic(c2, topic);
+        hub.subscribe_topic(c3, topic);
+        let evt = ChatEvent::EnclaveMemberRemoved {
+            enclave_id: 5,
+            user_id: "x".into(),
+        };
+
+        hub.broadcast_to_topic(topic, &evt);
+        assert!(rx1.try_recv().is_ok());
+        assert!(rx2.try_recv().is_ok());
+        assert!(rx3.try_recv().is_ok());
+
+        hub.unsubscribe_user_from_topic("u1", topic);
+        hub.broadcast_to_topic(topic, &evt);
+        assert!(
+            rx1.try_recv().is_err(),
+            "u1 tab 1 must not receive after unsubscribe"
+        );
+        assert!(
+            rx2.try_recv().is_err(),
+            "u1 tab 2 must not receive after unsubscribe"
+        );
+        assert!(rx3.try_recv().is_ok(), "u2 stays subscribed");
+    }
+
+    #[test]
+    fn unsubscribe_user_from_topic_is_noop_for_unknown_user() {
+        let hub = Hub::new();
+        // No connections / no subscription; must not panic.
+        hub.unsubscribe_user_from_topic("ghost", "enclave:1");
     }
 }
