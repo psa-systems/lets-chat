@@ -20,6 +20,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "ci-build/Dockerfile.desktop-windows"
+      - "ci-build/Dockerfile.desktop-windows-installer"
+      - "desktop/installer/**"
       - "ci-build/get-tags.nu"
       - ".forgejo/workflows/build-desktop-windows.yml"
 
@@ -98,9 +100,36 @@ jobs:
               "artifacts/"
           )
           ^docker rm $container
+          # Keep the plain `lets-chat-desktop.exe` in place (the installer
+          # Dockerfile COPYs it from the build context) AND make the versioned
+          # copy the upload step publishes.
           let dest = $"artifacts/lets-chat-desktop-($version)-windows-x86_64.exe"
-          mv artifacts/lets-chat-desktop.exe $dest
+          cp artifacts/lets-chat-desktop.exe $dest
           print $"Artifact: ($dest)"
+
+      - name: Build Windows installer
+        shell: nu {0}
+        run: |
+          let version = "${{ steps.get-version.outputs.version }}"
+          # Wrap the cross-built exe (already staged at
+          # artifacts/lets-chat-desktop.exe) in an NSIS installer, built from
+          # Linux with makensis. LC-131 - no Windows host, no wine.
+          (
+            ^docker buildx build
+              --build-arg $"APP_VERSION=($version)"
+              --tag lets-chat-windows-installer:build
+              --load
+              -f ci-build/Dockerfile.desktop-windows-installer
+              .
+          )
+          let container = (^docker create lets-chat-windows-installer:build)
+          (
+            ^docker cp
+              $"($container):/out/lets-chat-desktop-setup-x86_64.exe"
+              $"artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
+          )
+          ^docker rm $container
+          print $"Installer: artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
 
       - name: Upload binary to Generic Packages
         shell: nu {0}
@@ -135,6 +164,52 @@ jobs:
           # twice returns 409. Delete any existing copy first: 204 means
           # it was removed, 404 means nothing was there to remove. Any
           # other status fails the step (yotun pattern).
+          print $"Deleting existing ($url) if present"
+          let delete_status = (
+            http delete --full --allow-errors --headers $auth $url | get status
+          )
+          if $delete_status not-in [204 404] {
+            print --stderr $"Unexpected DELETE status: ($delete_status)"
+            exit 1
+          }
+          print $"DELETE returned ($delete_status)"
+
+          print $"Uploading ($src) to ($url)"
+          (
+            http put
+              --content-type application/octet-stream
+              --headers $auth
+              $url
+              (open --raw $src)
+          )
+          print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
+
+      - name: Upload installer to Generic Packages
+        shell: nu {0}
+        env:
+          FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+        run: |
+          let version = "${{ steps.get-version.outputs.version }}"
+          # Stable filename, parallel to the raw binary above (LC-131).
+          let file = "lets-chat-desktop-setup-windows-x86_64.exe"
+          let src = $"artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
+          let url = (
+            $env.GITHUB_SERVER_URL
+            | url parse
+            | update path ([
+                "api"
+                "packages"
+                $env.PACKAGE_OWNER
+                "generic"
+                $env.PACKAGE_NAME
+                $version
+                $file
+              ] | str join "/")
+            | url join
+          )
+          let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
+
+          # Generic Packages files are immutable: delete-then-PUT (204/404 ok).
           print $"Deleting existing ($url) if present"
           let delete_status = (
             http delete --full --allow-errors --headers $auth $url | get status

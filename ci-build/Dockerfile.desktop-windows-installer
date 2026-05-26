@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1.6
+
+# LC-131 spike: build the Windows installer (.exe) FROM LINUX with makensis.
+#
+# Standalone packaging stage, deliberately decoupled from
+# Dockerfile.desktop-windows (which cross-builds the raw binary and whose
+# artifact-extraction the release workflow already depends on). This image
+# takes the already-cross-built desktop binary from the build context and
+# wraps it in an NSIS installer - no Windows host, no wine, no tauri-cli
+# host-gate. makensis ships a native Linux build in the `nsis` package.
+#
+# Expected build context layout (the workflow stages these before building):
+#   artifacts/lets-chat-desktop.exe     <- from Dockerfile.desktop-windows
+#   desktop/installer/lets-chat.nsi
+#
+# Build:
+#   docker build -f ci-build/Dockerfile.desktop-windows-installer \
+#     --build-arg APP_VERSION=$VERSION -t lc-win-installer .
+# Extract:
+#   id=$(docker create lc-win-installer)
+#   docker cp $id:/out/lets-chat-desktop-setup-x86_64.exe .
+#   docker rm $id
+#
+# Debian trixie matches the rust-builder-glibc-windows base (also trixie), so
+# the nsis package version is the one the cross-build toolchain is pinned near.
+FROM debian:trixie-slim AS installer
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends nsis curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+ARG APP_VERSION=0.0.0-dev
+
+WORKDIR /pkg
+COPY desktop/installer/lets-chat.nsi ./
+COPY artifacts/lets-chat-desktop.exe /out/lets-chat-desktop.exe
+
+# Bundle the Microsoft Edge WebView2 Evergreen *bootstrapper* (~2 MB). It is
+# not the runtime itself - it fetches + installs the runtime online when the
+# installer runs it on a machine that lacks it (see lets-chat.nsi). The fwlink
+# is Microsoft's stable Evergreen Bootstrapper URL.
+RUN curl -fsSL -o /pkg/MicrosoftEdgeWebview2Setup.exe \
+      "https://go.microsoft.com/fwlink/p/?LinkId=2124703" \
+ && test -s /pkg/MicrosoftEdgeWebview2Setup.exe
+
+# makensis resolves the File path from -DAPP_EXE; OUT_FILE is the installer.
+RUN makensis -V2 \
+      -DAPP_VERSION="${APP_VERSION}" \
+      -DAPP_EXE=/out/lets-chat-desktop.exe \
+      -DWEBVIEW2_BOOTSTRAPPER=/pkg/MicrosoftEdgeWebview2Setup.exe \
+      -DOUT_FILE=/out/lets-chat-desktop-setup-x86_64.exe \
+      lets-chat.nsi \
+ && test -s /out/lets-chat-desktop-setup-x86_64.exe \
+ && echo "built installer:" && ls -l /out/lets-chat-desktop-setup-x86_64.exe
