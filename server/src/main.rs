@@ -407,6 +407,18 @@ fn spawn_orphan_sweeper(state: AppState) {
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "reply-token sweep failed"),
             }
+            // LC-77-MID-DEDUP: drop processed-Message-ID dedup rows
+            // older than 30 days. A sender re-issuing the same Message-ID
+            // after that window is treated as a fresh message; this
+            // matches typical mail-system Message-ID lifetimes (most
+            // senders include a timestamp + nonce that never recurs).
+            match lets_chat::db::email_ingress_dedup::sweep_old(&state.chat, 30).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(rows = n, "email-ingress dedup sweep complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "email-ingress dedup sweep failed"),
+            }
         }
     });
 }

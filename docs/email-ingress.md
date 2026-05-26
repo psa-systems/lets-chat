@@ -202,8 +202,33 @@ Errs on the side of leaving extra text in chat (a missed strip is recoverable; a
 - **Signature / quoted-history stripping for the per-room inbox actor.** Stripping is wired ONLY on the reply-by-email path (where humans actually quote). The synthetic-actor path posts the body verbatim to preserve external-sender output as-is.
 - **Bouncing failed messages.** No bounce email is ever generated. The operator's only diagnostic is the structured log. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
 - **Dead-letter folder for poison messages.** A malformed message gets marked `\Seen` after one processing attempt and is never reprocessed, but the original copy stays in the polled mailbox. Tracked as `LC-77-DEAD-LETTER`.
-- **Exactly-once dedup.** v1 is at-least-once with `\Seen`-after-attempt. A crash between processing and the `\Seen` STORE will reprocess the message on the next tick (rare duplicate). Tracked as `LC-77-MID-DEDUP`.
 - **Voice-format attachments.** Email attachments cannot be voice messages in v1; voice has a `MediaRecorder` origin emails don't produce.
+
+## Duplicate suppression (LC-77-MID-DEDUP)
+
+The poll loop's posture is still always-`\Seen`-after-attempt so a poison message never retries forever. The dedup layer is a SECOND defense for the rare race where a crash lands between (process) and (STORE +Seen) on the same UID: the next tick would re-fetch the same UID and otherwise re-post the message a second time.
+
+### How it works
+
+- Every successfully-posted message's RFC 5322 `Message-ID:` header is HMAC-SHA256-hashed under `LETS_CHAT_SECRET_KEY` and recorded in `chat.db::processed_message_ids` (only the hash is stored; the plaintext never persists).
+- Before each post, the poll loop checks the table. If the Message-ID has been processed before, the message drops with `reason=duplicate` and posts nothing.
+- The check runs BEFORE the resolver, so even if the inbox or reply token has changed state (revoked, expired) since the original post, a wire-byte-identical replay drops as `duplicate` rather than as the new state's failure reason. The operator log shows the dedup is doing its job.
+
+### Coverage gaps
+
+- **A message with no `Message-ID:` header cannot be deduped.** RFC 5322 says senders SHOULD include one; almost all real mail does. A polled message without a Message-ID falls back to v1 at-least-once behavior and would re-post on the crash-before-STORE-Seen race. If you see this happen, the sending system is non-compliant; consider raising it with the sender.
+- **The Message-ID is sender-controlled.** A malicious or buggy sender that re-uses the same Message-ID across distinct messages would have the second message silently dropped as `duplicate`. The risk is low (Message-IDs are typically opaque, timestamp + nonce constructions that never recur for any sane sender), but worth knowing.
+- **30-day TTL.** Hashes older than 30 days are swept by the hourly orphan sweeper. A sender that re-issues the same Message-ID after that window is treated as a fresh message. This matches typical mail-system Message-ID lifetimes.
+
+### Operator surface
+
+The table is opaque (only HMAC hashes; nothing is operator-visible by inspecting the rows). If you need to force a re-process for a specific Message-ID, drop the row:
+
+```sql
+DELETE FROM processed_message_ids WHERE message_id_hash = ?;
+```
+
+The hash is computed as `HMAC-SHA256(LETS_CHAT_SECRET_KEY, message_id_plaintext)`; the same primitive `auth::hash_api_token` uses elsewhere. There is no `forget by Message-ID plaintext` admin endpoint in v1.
 
 ## Privacy notes
 
