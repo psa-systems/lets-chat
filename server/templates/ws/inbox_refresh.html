@@ -1,0 +1,8 @@
+{# LC-179: OOB reveal of the /inbox refresh bar when a new unread arrives.
+   Swaps the shown variant over #lc-inbox-refresh; connections not on /inbox
+   have no such id and drop it. Identical markup to inbox/page.html's button
+   minus `hidden`, plus hx-swap-oob. #}
+<button id="lc-inbox-refresh" type="button" onclick="location.reload()" hx-swap-oob="outerHTML"
+        class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
+  &uarr; New unread messages - click to refresh
+</button>

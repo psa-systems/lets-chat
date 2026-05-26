@@ -106,6 +106,24 @@ async fn empty_inbox_renders_all_caught_up() {
     );
 }
 
+// LC-179: the inbox carries the hidden refresh bar the WS reveal targets, so a
+// new unread surfaces a "refresh" affordance without clobbering infinite-scroll.
+#[tokio::test]
+async fn inbox_has_hidden_refresh_bar() {
+    let t = app().await;
+    let (status, body) = get(&t.app, &t.session, "/inbox").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(r#"id="lc-inbox-refresh""#),
+        "inbox must carry the refresh-bar id the WS reveal targets",
+    );
+    // Page-rendered bar starts hidden (only the WS reveal un-hides it).
+    assert!(
+        body.contains("id=\"lc-inbox-refresh\" type=\"button\" hidden"),
+        "the page-rendered refresh bar must start hidden",
+    );
+}
+
 #[tokio::test]
 async fn unread_message_appears_in_inbox() {
     let t = app().await;

@@ -44,6 +44,18 @@ pub struct TypingFragment<'a> {
 #[template(path = "ws/stopped_typing.html")]
 pub struct StoppedTypingFragment;
 
+/// LC-179: OOB reveal of the /inbox "new unread - refresh" bar
+/// (`#lc-inbox-refresh`). Dropped on connections not on /inbox.
+#[derive(Template)]
+#[template(path = "ws/inbox_refresh.html")]
+pub struct InboxRefreshFragment;
+
+/// LC-179: OOB reveal of the /activity "new activity - refresh" bar
+/// (`#lc-activity-refresh`). Dropped on connections not on /activity.
+#[derive(Template)]
+#[template(path = "ws/activity_refresh.html")]
+pub struct ActivityRefreshFragment;
+
 #[derive(Template)]
 #[template(path = "ws/reaction_update.html")]
 pub struct ReactionUpdateFragment<'a> {
