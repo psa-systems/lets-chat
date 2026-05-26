@@ -271,6 +271,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_own_profile(&send_state, &send_user.id).await
                                 }
+                                // LC-178: the viewer's saved set changed.
+                                // broadcast_to_user fans to all their tabs;
+                                // refresh the /saved list OOB (dropped on tabs
+                                // not on /saved). Gated to the owner (defensive).
+                                ChatEvent::SavedChanged { user_id }
+                                    if user_id == &send_user.id =>
+                                {
+                                    render_saved_list(&send_state, &send_user).await
+                                }
                                 // LC-175: a user's admin-list row changed.
                                 // Broadcast on the `admin` topic (only admins
                                 // can subscribe), so every admin's open user
@@ -1629,6 +1638,18 @@ async fn render_own_profile(state: &AppState, user_id: &str) -> Option<String> {
         .ok()??;
     let user = User::from(record);
     crate::views::ws_fragments::OwnProfileLiveFragment { user: &user }
+        .render()
+        .ok()
+}
+
+/// LC-178: re-render the viewer's /saved list as an OOB fragment after a
+/// bookmark/unbookmark. Reuses the page's row-builder so the live list matches
+/// a fresh page load.
+async fn render_saved_list(state: &AppState, viewer: &User) -> Option<String> {
+    let entries = super::bookmarks::build_saved_rows(state, viewer)
+        .await
+        .ok()?;
+    crate::views::bookmarks::SavedListFragment { entries: &entries }
         .render()
         .ok()
 }
