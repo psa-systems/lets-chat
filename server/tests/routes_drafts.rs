@@ -652,12 +652,22 @@ async fn composer_enter_handler_defers_to_open_combobox() {
     let t = app().await;
     let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
     assert_eq!(status, StatusCode::OK);
-    let guard = "#lc-mention-popover li[role=option][aria-selected=true], #lc-slash-popover li[role=option][aria-selected=true]";
+    // Assert the guard's two stable anchors independently (rather than the full
+    // selector literal) so reordering the two popover clauses or reflowing
+    // whitespace inside the selector does not break the test; what matters is
+    // that both popovers' selected-option state is consulted and that the check
+    // short-circuits BEFORE the submit call, since order is what makes it work.
+    let mention_anchor = "#lc-mention-popover li[role=option][aria-selected=true]";
+    let slash_anchor = "#lc-slash-popover li[role=option][aria-selected=true]";
     assert!(
-        body.contains(guard),
-        "composer Enter handler must check for an open combobox option before submitting",
+        body.contains(mention_anchor),
+        "composer Enter handler must consult the mention popover's selected option",
     );
-    let guard_pos = body.find(guard).unwrap();
+    assert!(
+        body.contains(slash_anchor),
+        "composer Enter handler must consult the slash popover's selected option",
+    );
+    let guard_pos = body.find("[aria-selected=true]").unwrap();
     let submit_pos = body[guard_pos..]
         .find("requestSubmit()")
         .map(|p| guard_pos + p)
