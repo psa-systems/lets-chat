@@ -325,6 +325,36 @@ pub async fn process_polled_message(
             detail: format!("{reason_header} present"),
         };
     }
+
+    // LC-77-MID-DEDUP: if the RFC 5322 Message-ID has already been
+    // processed in a prior tick (recorded after a successful post in
+    // `db::email_ingress_dedup::mark_processed`), drop without
+    // re-posting. This catches the rare race where a crash between
+    // (process) and (STORE +Seen) on the same UID would otherwise
+    // re-fetch and re-post on the next tick. A message with no
+    // Message-ID header falls back to v1 at-least-once behavior
+    // (RFC 5322 says SHOULD; messages without are vanishingly rare).
+    let mid_hash = extract_message_id(&message)
+        .map(|mid| crate::db::email_ingress_dedup::hash_message_id(secret_key, &mid));
+    if let Some(ref h) = mid_hash {
+        match crate::db::email_ingress_dedup::is_processed(&state.chat, h).await {
+            Ok(true) => {
+                return ProcessOutcome::Dropped {
+                    reason: DropReason::Duplicate,
+                    detail: "Message-ID already processed in a prior tick".to_string(),
+                };
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    target: "email_ingress",
+                    error = %e,
+                    "dedup is_processed lookup failed; continuing at-least-once",
+                );
+            }
+        }
+    }
+
     let inbox = match resolve_address(&state.chat, secret_key, &message, ingress_domain).await {
         Ok(ResolveOutcome::Match(inbox)) => inbox,
         Ok(ResolveOutcome::Revoked(inbox)) => {
@@ -353,6 +383,7 @@ pub async fn process_polled_message(
             .await
             {
                 reply_actor::ReplyOutcome::Posted { message_id } => {
+                    record_processed(state, mid_hash.as_deref()).await;
                     ProcessOutcome::Posted { message_id }
                 }
                 reply_actor::ReplyOutcome::Dropped { reason, detail } => {
@@ -413,11 +444,59 @@ pub async fn process_polled_message(
         extracted.body
     };
     match actor::post_email_message(state, &inbox, &body_for_post, &attachments).await {
-        actor::PostOutcome::Posted { message_id } => ProcessOutcome::Posted { message_id },
+        actor::PostOutcome::Posted { message_id } => {
+            record_processed(state, mid_hash.as_deref()).await;
+            ProcessOutcome::Posted { message_id }
+        }
         actor::PostOutcome::Dropped { reason, detail } => {
             ProcessOutcome::Dropped { reason, detail }
         }
     }
+}
+
+/// Record a successfully-posted message's Message-ID hash so a future
+/// tick that re-fetches the same UID (e.g. a crash between this post
+/// and the STORE +Seen) drops with `DropReason::Duplicate` instead of
+/// double-posting. Hash is None when the source mail had no Message-ID
+/// header; we fall back to v1 at-least-once for those.
+async fn record_processed(state: &AppState, mid_hash: Option<&str>) {
+    let Some(hash) = mid_hash else {
+        return;
+    };
+    if let Err(e) = crate::db::email_ingress_dedup::mark_processed(&state.chat, hash).await {
+        tracing::warn!(
+            target: "email_ingress",
+            error = %e,
+            "dedup mark_processed failed; a crash before STORE +Seen on this UID could double-post",
+        );
+    }
+}
+
+/// Extract the trimmed RFC 5322 Message-ID header value from a parsed
+/// message. Walks `headers()` rather than relying on a typed accessor so
+/// a malformed message that mail-parser couldn't structurally classify
+/// still surfaces. Returns `None` when the header is absent or empty.
+fn extract_message_id(message: &mail_parser::Message<'_>) -> Option<String> {
+    for h in message.headers() {
+        if !h.name.as_str().eq_ignore_ascii_case("Message-Id") {
+            continue;
+        }
+        match &h.value {
+            mail_parser::HeaderValue::Text(t) => {
+                let trimmed = t.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+            mail_parser::HeaderValue::TextList(list) => {
+                if let Some(first) = list.iter().map(|s| s.trim()).find(|s| !s.is_empty()) {
+                    return Some(first.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Loop-detection header heuristic. Returns the first matching header
