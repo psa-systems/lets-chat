@@ -49,12 +49,15 @@
     (dialog.querySelector('button, [href], input, select, textarea') || dialog).focus();
   } catch (e) {}
 
-  // Cancel paths (X, backdrop, Escape) tear the trap down, restore focus, and
-  // clear the slot. Success paths (preset/custom POST) swap the confirm
-  // fragment into the slot, which removes this dialog (and its trap listener)
-  // outright, so they need no explicit teardown.
+  function disposeTrap(){ if (trap) { trap.dispose(); trap = null; } }
+  // Cancel paths (X, backdrop, Escape) dispose the trap, restore focus, and
+  // clear the slot. Success paths swap the confirm fragment into the slot,
+  // removing this dialog: the custom-fetch path disposes inline, the HTMX
+  // preset path disposes via htmx:beforeCleanupElement below. So every path
+  // disposes the trap explicitly rather than relying on the detached node
+  // being garbage-collected.
   function close(){
-    if (trap) { trap.dispose(); trap = null; }
+    disposeTrap();
     if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
     slot.innerHTML = '';
   }
@@ -63,6 +66,9 @@
   dialog.addEventListener('keydown', function(e){
     if (e.key === 'Escape') { e.preventDefault(); close(); }
   });
+  // HTMX removes this dialog when a preset POST swaps the confirm fragment into
+  // the slot; dispose the trap as it is torn down.
+  dialog.addEventListener('htmx:beforeCleanupElement', disposeTrap, { once: true });
 
   var form = document.getElementById('lc-reminder-custom');
   if (!form) return;
@@ -83,7 +89,7 @@
         credentials: 'same-origin',
       });
       var text = await res.text();
-      if (res.ok) { slot.innerHTML = text; }
+      if (res.ok) { disposeTrap(); slot.innerHTML = text; }
       else { err.textContent = text || ('Could not set reminder (' + res.status + ')'); err.classList.remove('hidden'); }
     } catch (e2) { err.textContent = 'Network error.'; err.classList.remove('hidden'); }
   });
