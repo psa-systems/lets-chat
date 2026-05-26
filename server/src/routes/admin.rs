@@ -215,6 +215,11 @@ pub struct ImapSettingsForm {
     pub imap_password: String,
     pub imap_folder: String,
     pub imap_ingress_domain: String,
+    /// LC-77-DEAD-LETTER: optional IMAP folder name that dropped
+    /// messages are UID COPYd into before being marked Seen on the
+    /// source UID. Empty preserves the v1 always-Seen posture.
+    #[serde(default)]
+    pub imap_dead_letter_folder: String,
     /// Form-checkbox convention: present + non-empty when checked, absent
     /// when unchecked.
     #[serde(default)]
@@ -262,6 +267,7 @@ pub async fn get_settings(
         imap_password_configured,
         imap_folder,
         imap_ingress_domain,
+        imap_dead_letter_folder,
         imap_enabled,
     ) = load_imap_settings_for_display(&state).await;
     let page = SettingsPage {
@@ -294,6 +300,7 @@ pub async fn get_settings(
         imap_password_configured,
         imap_folder,
         imap_ingress_domain,
+        imap_dead_letter_folder,
         imap_enabled,
         imap_error: None,
         imap_saved: q.imap_saved.is_some(),
@@ -310,12 +317,19 @@ pub async fn get_settings(
 /// before the spawn gate succeeds again).
 async fn load_imap_settings_for_display(
     state: &AppState,
-) -> (String, String, bool, String, bool, String, String, bool) {
-    let Some(key) = state.secret_key.as_ref() else {
-        // No secret key -> no sealed creds readable. All fields default
-        // to empty and the template surfaces a missing-LETS_CHAT_SECRET_KEY
-        // help line via the existing 2FA-style affordance.
-        return (
+) -> (
+    String,
+    String,
+    bool,
+    String,
+    bool,
+    String,
+    String,
+    String,
+    bool,
+) {
+    let defaults = || {
+        (
             String::new(),
             "993".to_string(),
             true,
@@ -323,8 +337,15 @@ async fn load_imap_settings_for_display(
             false,
             "INBOX".to_string(),
             String::new(),
+            String::new(),
             false,
-        );
+        )
+    };
+    let Some(key) = state.secret_key.as_ref() else {
+        // No secret key -> no sealed creds readable. All fields default
+        // to empty and the template surfaces a missing-LETS_CHAT_SECRET_KEY
+        // help line via the existing 2FA-style affordance.
+        return defaults();
     };
     match db::imap_config::read(&state.settings, key.as_ref()).await {
         Ok(Some(cfg)) => (
@@ -335,34 +356,17 @@ async fn load_imap_settings_for_display(
             !cfg.password.is_empty(),
             cfg.folder,
             cfg.ingress_domain.unwrap_or_default(),
+            cfg.dead_letter_folder.unwrap_or_default(),
             cfg.enabled,
         ),
         // A missing row (Ok(None)) is a fresh install; render empty
         // defaults so the operator can fill the form for the first time.
-        Ok(None) => (
-            String::new(),
-            "993".to_string(),
-            true,
-            String::new(),
-            false,
-            "INBOX".to_string(),
-            String::new(),
-            false,
-        ),
+        Ok(None) => defaults(),
         // A decrypt failure (e.g. rotated secret key) is rare; surface
         // the form with empty fields so the admin can re-enter creds. A
         // future commit could add a banner; for v1 the spawn-loop log
         // already tells the operator the IMAP poll is disabled.
-        Err(_) => (
-            String::new(),
-            "993".to_string(),
-            true,
-            String::new(),
-            false,
-            "INBOX".to_string(),
-            String::new(),
-            false,
-        ),
+        Err(_) => defaults(),
     }
 }
 
@@ -504,6 +508,14 @@ pub async fn post_imap_settings(
             Some(d.to_string())
         }
     };
+    let dead_letter_folder = {
+        let d = form.imap_dead_letter_folder.trim();
+        if d.is_empty() {
+            None
+        } else {
+            Some(d.to_string())
+        }
+    };
     let tls = form.imap_tls.is_some();
     let enabled = form.imap_enabled.is_some();
 
@@ -530,6 +542,7 @@ pub async fn post_imap_settings(
         folder,
         ingress_domain,
         enabled,
+        dead_letter_folder,
     };
     db::imap_config::write(&state.settings, key.as_ref(), &cfg)
         .await
