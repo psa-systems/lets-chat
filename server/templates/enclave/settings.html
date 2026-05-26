@@ -3,7 +3,11 @@
 {% block title %}{{ enclave.name }} settings - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex-1 overflow-y-auto">
+{# LC-172: subscribe to the enclave topic so the member list below updates live
+   on join / kick / leave / role-change without a manual reload. live.js sends
+   the SubscribeTopic frame; the server authorizes enclave membership (and site
+   admins) before joining the fan-out set. #}
+<div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
 <section class="p-6 max-w-2xl space-y-6">
   {% if let Some(msg) = flash_error %}
   <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -49,31 +53,9 @@
   </section>
 
   <section>
-    <h2 class="font-semibold">Members</h2>
-    <ul class="mt-2 space-y-1">
-      {% for m in members %}
-      <li class="flex items-center justify-between gap-2">
-        <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
-        <span class="text-xs uppercase text-slate-500 mr-auto">{{ m.role.as_str() }}</span>
-        {% if can_delete && m.role.as_str() != "owner" %}
-        <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role" class="inline">
-          <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}"
-                  type="submit" class="text-xs bg-slate-200 rounded px-2 py-0.5">
-            {% if m.role.as_str() == "admin" %}Demote{% else %}Promote{% endif %}
-          </button>
-        </form>
-        <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick" class="inline">
-          <button type="submit" class="text-xs text-red-600">Kick</button>
-        </form>
-        <form method="post" action="/enclave/{{ enclave.id }}/transfer" class="inline">
-          <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
-          <button type="submit" class="text-xs text-blue-600"
-                  onclick="return confirm('Transfer ownership to {{ m.label }}?')">Transfer</button>
-        </form>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
+    <div id="lc-enclave-settings-members">
+      {% include "enclave/settings_members_items.html" %}
+    </div>
   </section>
 
   <section class="space-y-3">
