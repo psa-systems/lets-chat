@@ -202,6 +202,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         None
                                     }
                                 }
+                                // LC-161: the invitations page updates live.
+                                // Both events broadcast_to_user, so this conn
+                                // only receives them when send_user is the
+                                // invitee; render the fresh list OOB.
+                                ChatEvent::EnclaveInvitationCreated { invitee_id }
+                                | ChatEvent::EnclaveInvitationResolved { invitee_id }
+                                    if invitee_id == &send_user.id =>
+                                {
+                                    render_invitations(&send_state, &send_user).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -1422,6 +1432,19 @@ fn relay_voice_signal(
 /// Render a full sidebar OOB replacement for `viewer` reflecting current
 /// room/DM membership and unread counts. Used to live-update the sidebar
 /// when membership changes (new DM, room kick, room invite).
+/// LC-161: re-render the viewer's pending-invitations region as an OOB
+/// fragment. Pushed when an EnclaveInvitation{Created,Resolved} event reaches
+/// this connection (broadcast_to_user already targets the right user); the
+/// swap is a no-op on tabs not currently showing the invitations page.
+async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
+    let invs = db::enclave::list_invitations_for_user(&state.chat, &viewer.id)
+        .await
+        .ok()?;
+    crate::views::enclave::InvitationsLiveFragment { invitations: &invs }
+        .render()
+        .ok()
+}
+
 async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
     // Live OOB sidebar refreshes only fire from DM-creation today, so render
     // the Home (DM-only) variant. When per-enclave events ship OOB rendering,

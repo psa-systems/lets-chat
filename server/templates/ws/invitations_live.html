@@ -1,0 +1,6 @@
+{# LC-161: OOB fragment pushed over the WS when a user's invitation set
+   changes. Swaps the #lc-invitations region by id; on tabs not currently on
+   the invitations page there is no matching id and htmx drops it silently. #}
+<div id="lc-invitations" hx-swap-oob="outerHTML">
+  {% include "invitations/items.html" %}
+</div>
