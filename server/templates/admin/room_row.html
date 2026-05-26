@@ -1,4 +1,4 @@
-<tr id="room-{{ r.id }}" class="border-t border-slate-200 align-top">
+<tr id="room-{{ r.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="border-t border-slate-200 align-top">
   <td class="py-2">
     <details>
       <summary class="cursor-pointer">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-slate-400 text-xs">{{ topic }}</span>{% endif %}</summary>

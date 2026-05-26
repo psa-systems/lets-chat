@@ -21,6 +21,8 @@
     </tr>
   </thead>
   <tbody>
+    {# LC-177: page-render rows are not OOB; the live update sets oob=true. #}
+    {% let oob = false %}
     {% for r in rooms_admin %}
     {% include "admin/room_row.html" %}
     {% endfor %}

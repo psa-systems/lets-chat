@@ -981,6 +981,14 @@ pub async fn post_archive_room(
         None,
     )
     .await?;
+    // LC-177: drop the row from every other admin's open room list.
+    state.hub.broadcast_to_topic(
+        "admin",
+        &ChatEvent::AdminRoomChanged {
+            room_id,
+            removed: true,
+        },
+    );
     Ok(Html(String::new()))
 }
 
@@ -1044,12 +1052,18 @@ pub async fn post_regenerate_invite(
     render_room_row(&state, room_id).await
 }
 
-async fn render_room_row(state: &AppState, room_id: i64) -> Result<Html, AppError> {
-    let r = db::chat::get_room(&state.chat, room_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+/// Build the admin-list view-row for one room, or None if the room is gone.
+/// Shared by the actor's HTTP row response and the LC-177 `admin`-topic WS
+/// broadcast so both render an identical row.
+pub(crate) async fn build_admin_room_view(
+    state: &AppState,
+    room_id: i64,
+) -> Result<Option<AdminRoomView>, AppError> {
+    let Some(r) = db::chat::get_room(&state.chat, room_id).await? else {
+        return Ok(None);
+    };
     let members = db::chat::count_room_members(&state.chat, room_id).await?;
-    let view = AdminRoomView {
+    Ok(Some(AdminRoomView {
         id: r.id,
         name: r.name,
         topic: r.topic,
@@ -1057,8 +1071,27 @@ async fn render_room_row(state: &AppState, room_id: i64) -> Result<Html, AppErro
         invite_code: r.invite_code,
         members,
         created_at: r.created_at,
-    };
-    html(&RoomRowFragment { r: &view })
+    }))
+}
+
+/// Render the actor's HTTP row response AND broadcast the same change to the
+/// `admin` topic so every other admin's open room list updates the row live
+/// (LC-177). Call after any mutation that changes a still-existing room row.
+async fn render_room_row(state: &AppState, room_id: i64) -> Result<Html, AppError> {
+    let view = build_admin_room_view(state, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    state.hub.broadcast_to_topic(
+        "admin",
+        &ChatEvent::AdminRoomChanged {
+            room_id,
+            removed: false,
+        },
+    );
+    html(&RoomRowFragment {
+        r: &view,
+        oob: false,
+    })
 }
 
 // Mod log -------------------------------------------------------------------

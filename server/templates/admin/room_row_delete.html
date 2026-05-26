@@ -1,0 +1,4 @@
+{# LC-177: OOB removal of an archived room's admin-list row. Swaps out
+   #room-{id} with hx-swap-oob="delete"; admin pages without that row (or
+   admins not on the room list) drop it silently. #}
+<tr id="room-{{ room_id }}" hx-swap-oob="delete"></tr>
