@@ -15,9 +15,7 @@
   >
     <h1 class="text-xl font-semibold">Register</h1>
     <div id="form-errors">
-      {% if let Some(error) = error %}
-      <p class="text-red-600 text-sm">{{ error }}</p>
-      {% endif %}
+      {% include "auth/form_errors.html" %}
     </div>
     <label class="block">
       <span class="text-sm">Username</span>
