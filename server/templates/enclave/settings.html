@@ -163,6 +163,12 @@
               hx-target="#group-{{ g.id }}-add-results"
               hx-swap="innerHTML"
               autocomplete="off"
+              data-lc-search
+              data-lc-search-results="#group-{{ g.id }}-add-results"
+              role="combobox"
+              aria-expanded="false"
+              aria-controls="group-{{ g.id }}-add-results"
+              aria-autocomplete="list"
               class="w-full border rounded px-2 py-1 text-xs">
             <div id="group-{{ g.id }}-add-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
           </div>
