@@ -103,6 +103,36 @@ async fn chat_pool() -> SqlitePool {
 }
 
 #[tokio::test]
+async fn is_enclave_member_reflects_membership() {
+    // LC-160: gates the enclave: WS topic subscription.
+    let pool = chat_pool().await;
+    let id = lets_chat::db::enclave::create_enclave(&pool, "rust", None, "u-creator")
+        .await
+        .unwrap();
+    assert!(
+        lets_chat::db::enclave::is_enclave_member(&pool, id, "u-creator")
+            .await
+            .unwrap(),
+        "creator is the owner member"
+    );
+    assert!(
+        !lets_chat::db::enclave::is_enclave_member(&pool, id, "stranger")
+            .await
+            .unwrap(),
+        "non-member must not be a member"
+    );
+    lets_chat::db::enclave::add_member(&pool, id, "u2", EnclaveRole::Member)
+        .await
+        .unwrap();
+    assert!(
+        lets_chat::db::enclave::is_enclave_member(&pool, id, "u2")
+            .await
+            .unwrap(),
+        "added member is a member"
+    );
+}
+
+#[tokio::test]
 async fn create_enclave_inserts_owner_membership() {
     let pool = chat_pool().await;
     let id = lets_chat::db::enclave::create_enclave(&pool, "rust", Some("rustaceans"), "u-creator")
