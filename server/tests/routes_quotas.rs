@@ -380,6 +380,33 @@ async fn upload_under_user_quota_succeeds() {
     assert_eq!(status, StatusCode::OK, "body: {body}");
 }
 
+// LC-177: the admin room list renders rows inside the swappable #room-{id}
+// region the OOB fragment targets, and page-rendered rows are NOT OOB
+// (oob=false on the HTTP path). The admin topic subscription is shared with the
+// user list via admin_layout.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_room_list_is_wired_for_live_row_updates() {
+    let t = app().await;
+    let rid = db::chat::create_room(&t.chat, "liveroom", None, "public", None, None)
+        .await
+        .unwrap();
+    let (status, body) = send(&t.app, &t.admin_session, Method::GET, "/admin/rooms", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-live-topic=\"admin\""),
+        "admin pages subscribe to the admin topic",
+    );
+    assert!(
+        body.contains(&format!("id=\"room-{rid}\"")),
+        "room list renders the OOB-targetable row id",
+    );
+    assert!(
+        !body.contains("hx-swap-oob"),
+        "page-rendered rows must not be OOB (only the live WS row is)",
+    );
+}
+
 // LC-175: the admin user list subscribes to the `admin` topic so ban / mute /
 // role / quota / delete refresh the row live across all admins. Pin the
 // subscription, the member row id (the OOB target), and that the page-rendered
