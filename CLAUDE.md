@@ -118,6 +118,10 @@ Stage 1 (notification emails): `crate::email::notification::dispatch_mention_not
 
 Stage 2 (reply ingress): the IMAP poll loop's namespace-forked resolver (`email_ingress::resolve::resolve_address`) routes `reply-<token>@<ingress-domain>` addresses to `email_ingress::reply_actor::post_reply_message`. The actor mirrors the HTTP `post_message` posting gates (banned/muted, room access, posting policy, DM block, message rate cap), strips the quoted-original and signature via `strip_quoted_reply`, posts as the real user, and consumes the token on success (one-shot replay defense). Gate failures leave the token in place so the user can recover after the gating condition lifts. See `docs/email-ingress.md` for the threat model and the namespace-fork rules.
 
+### Exactly-once dedup (LC-77-MID-DEDUP, #202)
+
+`db::email_ingress_dedup` records the HMAC-SHA256 (under `LETS_CHAT_SECRET_KEY`) of every successfully-posted message's RFC 5322 `Message-ID:` header in `chat.db::processed_message_ids`. `process_polled_message` checks the table BEFORE resolving so a wire-byte-identical replay (the crash-between-process-and-STORE-Seen race) drops with `DropReason::Duplicate` instead of posting again. The table is opaque (hashes only; no plaintext leak). Sweep at 30 days piggybacks on the hourly orphan sweeper. A message without a `Message-ID:` header falls back to v1 at-least-once.
+
 ## Workspace Layout
 
 `Cargo.toml` at the repo root defines a Cargo workspace with two members:
