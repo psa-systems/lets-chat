@@ -50,6 +50,15 @@
     <button type="submit" class="underline hover:no-underline">Retry</button>
   </div>
   <input type="hidden" name="file_id">
+  <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
+       combobox (mention or slash) has a highlighted option open, Enter belongs
+       to that combobox (insert the option), not the form. The combobox keydown
+       handlers run on this same textarea and preventDefault, but they use
+       stopPropagation (which does NOT stop this same-target inline listener)
+       and the inline handler is registered at parse time so it runs first.
+       The guard below makes the inline handler defer when an aria-selected
+       option exists in either popover, so Enter never both submits the partial
+       text AND inserts. One guard, both comboboxes (no slash/mention divergence). -->
   <div class="flex items-end gap-2">
     <button type="button" title="Attach file" aria-label="Attach file"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
@@ -91,6 +100,7 @@
       "
       onkeydown="
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+          if (document.querySelector('#lc-mention-popover li[role=option][aria-selected=true], #lc-slash-popover li[role=option][aria-selected=true]')) return;
           event.preventDefault();
           if (this.value.trim() || this.form.file_id.value) this.form.requestSubmit();
         }
