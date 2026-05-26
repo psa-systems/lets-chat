@@ -2,6 +2,23 @@
 
 Shared front-end patterns every new surface should inherit instead of re-deriving. Born out of the LC-148 audit's C3 finding (each new surface silently re-implements a concept rather than reusing it). Keep this list short; when a pattern here changes, update the doc in the same PR.
 
+## Live updates
+
+A new page that shows mutable data should update over the WebSocket without a manual reload (LC-148 gap C1, closed by the LC-156 epic). The recipe, end to end:
+
+1. **Extract the mutable region into an Askama partial** (e.g. `enclave/members_items.html`, `saved/items.html`) and include it from the full page wrapped in a stable id (`<div id="lc-saved-list">{% include ... %}</div>`). If the page handler builds rows with non-trivial logic, factor that into a `pub(crate)` row-builder so the page and the live render share it.
+2. **Add a live OOB fragment** (`server/templates/ws/<name>_live.html`) that includes the SAME partial inside `<... id="<same-id>" hx-swap-oob="outerHTML">`, with a matching `#[derive(Template)]` struct in `views::ws_fragments` (or the surface's view module).
+3. **Broadcast on the mutation.** For data scoped to one user (own profile, saved, invitations) use `hub.broadcast_to_user` - no client subscription needed. For data shared by a group (enclave lists, admin lists) use `hub.broadcast_to_topic` and add `data-lc-live-topic="<topic>"` to the page so `live.js` subscribes; authorize the topic in `ws.rs::topic_subscribe_allowed`.
+4. **Render per recipient in the WS send task** (`routes/ws.rs`), gating on identity where the event is per-user (`if user_id == &send_user.id`) and rendering with the recipient's own state so per-viewer controls (`can_manage`, unread counts) are correct.
+
+Why id-keyed OOB regions instead of swapping the whole `#sidebar` or re-rendering the page: htmx silently drops an OOB swap whose id is absent from the current DOM, so the fragment lands **only** on connections actually viewing that region and is a no-op everywhere else. This means the server never has to know which page a connection is on, and a stale subscription cannot corrupt an unrelated view. Scope ids that vary by entity (enclave room nav -> `#sidebar-nav-{enclave_id}`) so one enclave's update can't swap into another's.
+
+Exceptions / gotchas:
+
+- **Paginated or filtered lists** (infinite-scroll `/inbox`, tab-filtered `/activity`) carry per-connection view-state the server can't see; a full-list swap would clobber it. Use a **refresh affordance** instead: a hidden bar revealed over the WS that reloads the current URL on click (LC-179).
+- **Admin-only surfaces**: `routes::admin` is `#[cfg(standalone)]`, so gate the WS arm + renderer `#[cfg(feature = "standalone")]` (the event falls to `render_event` -> None in saas). Skipping this breaks `just test-saas`.
+- **Access loss**: if losing access to a topic's data should stop its events, call `Hub::unsubscribe_user_from_topic` from the access-loss handler (see kick/leave/enclave-delete, LC-176).
+
 ## Confirmation dialogs
 
 Three confirmation styles exist in the codebase. Pick by blast radius, not by convenience.

@@ -329,7 +329,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     .await
                                     .unwrap_or(db::notifications::MuteMode::None)
                                     .allows_room_mention();
-                                    if allow {
+                                    let notify = if allow {
                                         // The in-app surface is about to fire
                                         // for this user. Record it for the
                                         // digest, throttled per-connection so
@@ -345,6 +345,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         render_mentioned(&e)
                                     } else {
                                         None
+                                    };
+                                    // LC-179: a new mention also enters the
+                                    // /activity feed, so reveal that page's
+                                    // refresh bar regardless of toast-mute. The
+                                    // #lc-activity-refresh id exists only on
+                                    // /activity, so other connections drop it.
+                                    let mut out = notify.unwrap_or_default();
+                                    if let Ok(bar) =
+                                        crate::views::ws_fragments::ActivityRefreshFragment.render()
+                                    {
+                                        out.push_str(&bar);
+                                    }
+                                    if out.is_empty() {
+                                        None
+                                    } else {
+                                        Some(out)
                                     }
                                 }
                                 ChatEvent::MentionCleared {
@@ -757,7 +773,20 @@ async fn render_new_message_or_bump(
     let room = db::chat::get_room(&state.chat, message.room_id)
         .await
         .ok()??;
-    render_unread_badge(state, viewer, &room).await
+    // LC-179: a new unread arrived for a background recipient. Emit the sidebar
+    // unread badge AND reveal the /inbox refresh bar. The bar's #lc-inbox-refresh
+    // id exists only on the /inbox page, so connections elsewhere drop it.
+    let mut out = render_unread_badge(state, viewer, &room)
+        .await
+        .unwrap_or_default();
+    if let Ok(bar) = crate::views::ws_fragments::InboxRefreshFragment.render() {
+        out.push_str(&bar);
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 /// LC-66: re-render a poll block for `user_id` (keeps per-viewer

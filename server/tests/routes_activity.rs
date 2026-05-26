@@ -103,6 +103,20 @@ async fn empty_activity_renders_empty_state() {
     assert!(body.contains("Nothing to see here"), "{body}");
 }
 
+// LC-179: the activity page carries the hidden refresh bar the WS reveal
+// targets when a new mention arrives (the reveal preserves the active tab by
+// reloading the current URL, so the server never re-renders the filtered list).
+#[tokio::test]
+async fn activity_has_hidden_refresh_bar() {
+    let t = app().await;
+    let (status, body) = get(&t.app, &t.viewer_session, "/activity").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"lc-activity-refresh\" type=\"button\" hidden"),
+        "the page-rendered activity refresh bar must be present and start hidden",
+    );
+}
+
 #[tokio::test]
 async fn peer_mention_appears_in_activity() {
     let t = app().await;

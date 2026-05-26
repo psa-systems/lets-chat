@@ -14,6 +14,14 @@
     </nav>
   </header>
   <div class="flex-1 overflow-y-auto">
+    {# LC-179: hidden until a new mention arrives over the WS, when the send
+       task swaps in the shown variant (ws/activity_refresh.html). Clicking
+       reloads the current URL, preserving the active tab. Avoids re-rendering
+       the tab-filtered list server-side (the WS cannot know the active tab). #}
+    <button id="lc-activity-refresh" type="button" hidden onclick="location.reload()"
+            class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
+      &uarr; New activity - click to refresh
+    </button>
     {% if items.is_empty() %}
     <p class="p-8 text-center text-sm text-slate-500">Nothing to see here. New mentions, replies, and reactions will show up as they happen.</p>
     {% else %}
