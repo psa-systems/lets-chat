@@ -666,10 +666,31 @@
   if (!ta || !slot) return;
   var SLASH = /^\/([a-z0-9_-]*)$/i;
   var timer = null;
+  // Whether the popover currently holds options. Gates the keyboard handler so
+  // it no-ops (and lets the textarea's normal keys through) when slash is not
+  // the active token. The mention combobox shares this textarea but is
+  // mutually exclusive: its `@token` cannot match while the whole value is a
+  // single `/command`, so the two keydown handlers never both act.
+  var open = false;
 
+  // LC-168: keyboard navigation to match the mention combobox. Options carry
+  // role="option" + a stable id; aria-selected lives on the <li>, and the
+  // textarea's aria-activedescendant tracks the highlighted option.
+  function items() { return slot.querySelectorAll('li[role="option"]'); }
+  function selected() { return slot.querySelector('li[role="option"][aria-selected="true"]'); }
+  function select(li) {
+    items().forEach(function(l){ l.setAttribute('aria-selected', l === li ? 'true' : 'false'); });
+    if (li) {
+      if (li.id) ta.setAttribute('aria-activedescendant', li.id);
+      if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
+    }
+  }
   function clearPopover(){
     if (timer) { clearTimeout(timer); timer = null; }
     slot.innerHTML = '';
+    open = false;
+    ta.setAttribute('aria-expanded', 'false');
+    ta.removeAttribute('aria-activedescendant');
   }
   function refresh(){
     var m = ta.value.match(SLASH);
@@ -684,8 +705,45 @@
       }
     }, 120);
   }
+  function insert(li){
+    if (!li) return clearPopover();
+    var name = li.getAttribute('data-slash-name');
+    if (name == null) return clearPopover();
+    window.__lcInsertSlash(name);
+  }
   ta.addEventListener('input', refresh);
   ta.addEventListener('blur', function(){ setTimeout(clearPopover, 150); });
+  ta.addEventListener('keydown', function(e){
+    var list = items();
+    if (!open || list.length === 0) return;
+    var sel = selected() || list[0];
+    var idx = Array.prototype.indexOf.call(list, sel);
+    if (e.key === 'ArrowDown')      { e.preventDefault(); e.stopPropagation(); select(list[Math.min(idx + 1, list.length - 1)]); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); e.stopPropagation(); select(list[Math.max(idx - 1, 0)]); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); insert(sel); }
+    else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); clearPopover(); }
+  }, true);
+  // Highlight the first option after each swap (or mark closed when empty), so
+  // Enter inserts a sensible default without an explicit ArrowDown first.
+  function onAfterSwap(e){
+    if (!e.target || e.target.id !== 'lc-slash-popover') return;
+    var first = slot.querySelector('li[role="option"]');
+    if (first) {
+      open = true;
+      first.setAttribute('aria-selected', 'true');
+      ta.setAttribute('aria-expanded', 'true');
+      if (first.id) ta.setAttribute('aria-activedescendant', first.id);
+    } else {
+      open = false;
+      ta.setAttribute('aria-expanded', 'false');
+      ta.removeAttribute('aria-activedescendant');
+    }
+  }
+  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  function teardown(){ document.body.removeEventListener('htmx:afterSwap', onAfterSwap); }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 
   window.__lcInsertSlash = function(name){
     ta.value = '/' + name + ' ';

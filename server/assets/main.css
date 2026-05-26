@@ -286,3 +286,13 @@ math[display="block"] {
 math {
     vertical-align: -0.15em;
 }
+
+/* LC-168: visible highlight for the keyboard-active option in autocomplete
+   listboxes (slash-command + mention comboboxes). These set
+   aria-selected="true" on the active <li> as the user arrows through, but
+   the option's own hover style only triggers on mouse; without this rule the
+   keyboard selection is announced to screen readers yet invisible to sighted
+   keyboard users. Applies to any role="option" the project marks selected. */
+[role="option"][aria-selected="true"] {
+    background-color: rgb(241 245 249); /* slate-100 */
+}
