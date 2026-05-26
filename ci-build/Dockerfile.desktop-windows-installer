@@ -26,7 +26,7 @@
 FROM debian:trixie-slim AS installer
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends nsis \
+ && apt-get install -y --no-install-recommends nsis curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 ARG APP_VERSION=0.0.0-dev
@@ -35,10 +35,19 @@ WORKDIR /pkg
 COPY desktop/installer/lets-chat.nsi ./
 COPY artifacts/lets-chat-desktop.exe /out/lets-chat-desktop.exe
 
+# Bundle the Microsoft Edge WebView2 Evergreen *bootstrapper* (~2 MB). It is
+# not the runtime itself - it fetches + installs the runtime online when the
+# installer runs it on a machine that lacks it (see lets-chat.nsi). The fwlink
+# is Microsoft's stable Evergreen Bootstrapper URL.
+RUN curl -fsSL -o /pkg/MicrosoftEdgeWebview2Setup.exe \
+      "https://go.microsoft.com/fwlink/p/?LinkId=2124703" \
+ && test -s /pkg/MicrosoftEdgeWebview2Setup.exe
+
 # makensis resolves the File path from -DAPP_EXE; OUT_FILE is the installer.
 RUN makensis -V2 \
       -DAPP_VERSION="${APP_VERSION}" \
       -DAPP_EXE=/out/lets-chat-desktop.exe \
+      -DWEBVIEW2_BOOTSTRAPPER=/pkg/MicrosoftEdgeWebview2Setup.exe \
       -DOUT_FILE=/out/lets-chat-desktop-setup-x86_64.exe \
       lets-chat.nsi \
  && test -s /out/lets-chat-desktop-setup-x86_64.exe \

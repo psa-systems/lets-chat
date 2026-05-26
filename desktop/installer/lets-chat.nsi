@@ -61,14 +61,27 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File "/oname=${APP_EXE_NAME}" "${APP_EXE}"
 
-  ; WebView2 runtime check. Tauri's Windows webview requires the Evergreen
-  ; runtime; warn (don't hard-fail) if it's absent. Bootstrapping it (running
-  ; MicrosoftEdgeWebview2Setup.exe) is a follow-up - see the issue caveats.
+  ; WebView2 runtime. Tauri's Windows webview requires the Evergreen runtime.
+  ; Detect via the EdgeUpdate client key (per-machine, then per-user).
   ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
   StrCmp $0 "" 0 webview2_ok
   ReadRegStr $0 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
   StrCmp $0 "" 0 webview2_ok
+!ifdef WEBVIEW2_BOOTSTRAPPER
+  ; Absent: run the bundled Evergreen bootstrapper (it fetches + installs the
+  ; runtime online). Staged into the temp $PLUGINSDIR (auto-cleaned on exit).
+  ; CI bundles it via -DWEBVIEW2_BOOTSTRAPPER; with no define (the standalone
+  ; spike build) the script falls through to the warn path below.
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe" "${WEBVIEW2_BOOTSTRAPPER}"
+  DetailPrint "Installing the Microsoft Edge WebView2 Runtime..."
+  ExecWait '"$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe" /silent /install' $1
+  StrCmp $1 "0" webview2_ok 0
+  MessageBox MB_OK|MB_ICONEXCLAMATION "The WebView2 Runtime installer exited with code $1. If ${APP_NAME} shows a blank window, install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703."
+  Goto webview2_ok
+!else
   MessageBox MB_OK|MB_ICONEXCLAMATION "Microsoft Edge WebView2 Runtime was not detected. ${APP_NAME} needs it to display its UI. Install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703 if the app shows a blank window."
+!endif
 webview2_ok:
 
   ; Start Menu shortcut.
