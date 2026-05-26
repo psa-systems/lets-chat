@@ -96,6 +96,16 @@ pub struct SidebarUpdateFragment<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
 }
 
+/// LC-173: OOB swap of the sidebar self block (`#sidebar-self`) when the user
+/// edits their own profile, so the avatar / display name / custom status
+/// refresh in every one of their tabs. Shares `partials/sidebar_self.html`
+/// with the sidebar so the page and the live update render identically.
+#[derive(Template)]
+#[template(path = "ws/own_profile_live.html")]
+pub struct OwnProfileLiveFragment<'a> {
+    pub user: &'a User,
+}
+
 /// OOB-append a single thread reply into `#thread-replies-{parent_id}`. The
 /// container only exists in the DOM when the recipient has the thread panel
 /// open for that parent, so HTMX silently drops the swap otherwise.
@@ -268,7 +278,10 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceJoined { .. }
         | ChatEvent::VoiceLeft { .. }
         | ChatEvent::VoiceRoster { .. }
-        | ChatEvent::VoiceSignal { .. } => None,
+        | ChatEvent::VoiceSignal { .. }
+        // LC-173: rendered per recipient in the WS send task (own sidebar
+        // self block), so the recipient-independent path emits nothing.
+        | ChatEvent::UserProfileChanged { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

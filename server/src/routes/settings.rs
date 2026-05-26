@@ -11,6 +11,7 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::settings::{BlockedListPage, BlockedUserView, SessionView, UserSettingsPage};
 use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
 const MAX_DISPLAY_NAME_CHARS: usize = 64;
@@ -649,6 +650,18 @@ pub async fn post_profile(
         }
         db::auth::set_user_avatar_ext(&state.auth, &user.id, Some(new_ext)).await?;
     }
+
+    // LC-173: refresh the editor's sidebar self block (avatar + name) in every
+    // one of their other tabs. broadcast_to_user fans to all of this user's
+    // connections; the WS send task gates on the recipient being the editor and
+    // re-renders #sidebar-self OOB. Cross-surface refresh of how OTHER users
+    // see this profile (message author rows, DM headers) is a follow-up.
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::UserProfileChanged {
+            user_id: user.id.clone(),
+        },
+    );
 
     Ok(Redirect::to("/settings").into_response())
 }

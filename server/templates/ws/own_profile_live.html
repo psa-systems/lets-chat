@@ -1,0 +1,8 @@
+{# LC-173: OOB fragment pushed over the WS to every tab of a user who edited
+   their profile. Swaps the sidebar self block (#sidebar-self) by id so the
+   avatar, display name, and custom status refresh without a reload. The
+   #status-picker slot and the room/peer lists below are outside this block and
+   are left untouched. #}
+<div id="sidebar-self" class="flex items-center gap-2" hx-swap-oob="outerHTML">
+  {% include "partials/sidebar_self.html" %}
+</div>
