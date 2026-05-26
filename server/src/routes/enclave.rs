@@ -768,6 +768,7 @@ pub async fn post_delete(
     }
     let former_members = db::enclave::list_members(&state.chat, id).await?;
     db::enclave::delete_enclave(&state.chat, id).await?;
+    let topic = format!("enclave:{id}");
     for fm in former_members {
         state.hub.broadcast_to_user(
             &fm.user_id,
@@ -776,6 +777,9 @@ pub async fn post_delete(
                 user_id: fm.user_id.clone(),
             },
         );
+        // LC-176: the enclave is gone; drop every member's subscription to its
+        // now-defunct topic so no stale tab keeps receiving its events.
+        state.hub.unsubscribe_user_from_topic(&fm.user_id, &topic);
     }
     Ok(Redirect::to("/"))
 }
@@ -815,6 +819,11 @@ pub async fn post_leave(
             user_id: user.id.clone(),
         },
     );
+    // LC-176: the leaver no longer has access; drop their subscription to the
+    // enclave topic so their open tabs stop receiving its events.
+    state
+        .hub
+        .unsubscribe_user_from_topic(&user.id, &format!("enclave:{id}"));
     Ok(Redirect::to("/"))
 }
 
@@ -879,6 +888,11 @@ pub async fn post_kick(
             user_id: target.clone(),
         },
     );
+    // LC-176: the kicked user has lost access; drop their subscription to the
+    // enclave topic so their open tabs stop receiving its events.
+    state
+        .hub
+        .unsubscribe_user_from_topic(&target, &format!("enclave:{id}"));
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
