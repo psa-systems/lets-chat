@@ -106,6 +106,26 @@ pub struct OwnProfileLiveFragment<'a> {
     pub user: &'a User,
 }
 
+/// LC-174: OOB swap of the enclave-keyed sidebar nav (`#sidebar-nav-{enclave_id}`)
+/// when a room is added to / removed from that enclave, so members currently
+/// viewing it (its landing, settings, or one of its rooms) see the room list
+/// change without a reload. Rendered per recipient (unread / mention / active
+/// state) via the same fields the full sidebar uses; `enclave_id` drives the
+/// target id and `sidebar_current_enclave` must equal `Some(enclave_id)`.
+#[derive(Template)]
+#[template(path = "ws/sidebar_nav_live.html")]
+pub struct SidebarNavLiveFragment<'a> {
+    pub user: &'a User,
+    pub enclave_id: i64,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+}
+
 /// OOB-append a single thread reply into `#thread-replies-{parent_id}`. The
 /// container only exists in the DOM when the recipient has the thread panel
 /// open for that parent, so HTMX silently drops the swap otherwise.
