@@ -92,10 +92,17 @@ async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> 
         return user.role == "admin";
     }
     match topic.split_once(':') {
+        // Site admins get the same god-mode read of an enclave's member/room
+        // lists over the topic that `get_landing` already grants them on the
+        // page (LC-170), so a non-member admin viewing the landing still sees
+        // live updates rather than a silently static list.
         Some(("enclave", id)) => match id.parse::<i64>() {
-            Ok(eid) => db::enclave::is_enclave_member(&state.chat, eid, &user.id)
-                .await
-                .unwrap_or(false),
+            Ok(eid) => {
+                user.role == "admin"
+                    || db::enclave::is_enclave_member(&state.chat, eid, &user.id)
+                        .await
+                        .unwrap_or(false)
+            }
             Err(_) => false,
         },
         Some(("user", id)) => id == user.id,
@@ -211,6 +218,25 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     if invitee_id == &send_user.id =>
                                 {
                                     render_invitations(&send_state, &send_user).await
+                                }
+                                // LC-170: enclave landing-page member list.
+                                // Broadcast on the enclave:{id} topic, so only
+                                // connections subscribed to that enclave (i.e.
+                                // sitting on its landing page) reach here. The
+                                // list is read-only, so one render is correct
+                                // for every recipient.
+                                ChatEvent::EnclaveMemberAdded { enclave_id, .. }
+                                | ChatEvent::EnclaveMemberRemoved { enclave_id, .. }
+                                | ChatEvent::EnclaveMemberRoleChanged { enclave_id, .. } => {
+                                    render_enclave_members(&send_state, *enclave_id).await
+                                }
+                                // LC-170: enclave landing-page room list.
+                                // Rendered per recipient because the per-row
+                                // Remove control and the room set itself are
+                                // gated on this viewer's manage rights.
+                                ChatEvent::EnclaveRoomAdded { enclave_id, .. }
+                                | ChatEvent::EnclaveRoomRemoved { enclave_id, .. } => {
+                                    render_enclave_rooms(&send_state, &send_user, *enclave_id).await
                                 }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
@@ -1443,6 +1469,47 @@ async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
     crate::views::enclave::InvitationsLiveFragment { invitations: &invs }
         .render()
         .ok()
+}
+
+/// LC-170: re-render the enclave landing-page member list as an OOB fragment.
+/// The list is read-only (label + role), so this does not depend on the
+/// recipient's identity; one fragment is correct for every subscriber.
+async fn render_enclave_members(state: &AppState, enclave_id: i64) -> Option<String> {
+    let members = db::enclave::list_members(&state.chat, enclave_id)
+        .await
+        .ok()?;
+    let member_views = super::enclave::resolve_member_views(state, members)
+        .await
+        .ok()?;
+    crate::views::enclave::EnclaveMembersLiveFragment {
+        members: &member_views,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-170: re-render the enclave landing-page room list as an OOB fragment for
+/// `viewer`. Per-viewer because the per-row Remove control is gated on
+/// `can_manage` and the room set is access-filtered to what this viewer can
+/// see (mirrors the `get_landing` build).
+async fn render_enclave_rooms(state: &AppState, viewer: &User, enclave_id: i64) -> Option<String> {
+    let enclave = db::enclave::get_enclave(&state.chat, enclave_id)
+        .await
+        .ok()??;
+    let membership = db::enclave::get_membership(&state.chat, enclave_id, &viewer.id)
+        .await
+        .ok()?;
+    let can_manage = crate::perms::enclave_can_manage(membership.map(|m| m.role), &viewer.role);
+    let rooms = db::chat::list_rooms_in_enclave(&state.chat, enclave_id, &viewer.id, can_manage)
+        .await
+        .ok()?;
+    crate::views::enclave::EnclaveRoomsLiveFragment {
+        enclave: &enclave,
+        rooms: &rooms,
+        can_manage,
+    }
+    .render()
+    .ok()
 }
 
 async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
