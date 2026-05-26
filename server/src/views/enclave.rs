@@ -238,6 +238,30 @@ pub struct InvitationsLiveFragment<'a> {
     pub invitations: &'a [(EnclaveInvitation, Enclave)],
 }
 
+/// LC-170: OOB fragment swapping the live `#lc-enclave-members` region on the
+/// enclave landing page when membership/roles change. The member list is
+/// read-only (label + role, no per-viewer controls), so one rendered fragment
+/// is correct for every subscriber. Shares `enclave/members_items.html` with
+/// `EnclavePage` so the page and the live update render identically.
+#[derive(Template)]
+#[template(path = "ws/enclave_members_live.html")]
+pub struct EnclaveMembersLiveFragment<'a> {
+    pub members: &'a [EnclaveMemberView],
+}
+
+/// LC-170: OOB fragment swapping the live `#lc-enclave-rooms` region on the
+/// enclave landing page when rooms are added/removed. Rendered per recipient
+/// in the WS send task because the per-row Remove button depends on the
+/// viewer's `can_manage`, and the room set itself is access-filtered per
+/// viewer. Shares `enclave/rooms_items.html` with `EnclavePage`.
+#[derive(Template)]
+#[template(path = "ws/enclave_rooms_live.html")]
+pub struct EnclaveRoomsLiveFragment<'a> {
+    pub enclave: &'a Enclave,
+    pub rooms: &'a [Room],
+    pub can_manage: bool,
+}
+
 #[derive(Template)]
 #[template(path = "invitations/page.html")]
 pub struct InvitationsPage<'a> {

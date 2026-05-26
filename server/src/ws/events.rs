@@ -98,6 +98,12 @@ pub enum ChatEvent {
         enclave_id: i64,
         user_id: String,
     },
+    /// LC-170: a member's enclave role changed (member <-> admin). Drives the
+    /// live member-list refresh on the `enclave:{id}` topic; no sidebar effect.
+    EnclaveMemberRoleChanged {
+        enclave_id: i64,
+        user_id: String,
+    },
     EnclaveRoomAdded {
         enclave_id: i64,
         room_id: i64,
