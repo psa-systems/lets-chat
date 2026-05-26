@@ -89,6 +89,18 @@ pub struct AdminRoomView {
 #[template(path = "admin/room_row.html")]
 pub struct RoomRowFragment<'a> {
     pub r: &'a AdminRoomView,
+    /// LC-177: when true the `<tr>` carries `hx-swap-oob="outerHTML"` so it
+    /// replaces the matching `#room-{id}` row over the WebSocket. The HTTP
+    /// path (the acting admin's own response) leaves it false.
+    pub oob: bool,
+}
+
+/// LC-177: OOB row-removal pushed on the `admin` topic when a room is archived,
+/// so every admin's room list drops the `#room-{id}` row without a reload.
+#[derive(Template)]
+#[template(path = "admin/room_row_delete.html")]
+pub struct RoomRowDeleteFragment {
+    pub room_id: i64,
 }
 
 #[derive(Template)]

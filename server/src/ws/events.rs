@@ -145,6 +145,14 @@ pub enum ChatEvent {
         user_id: String,
         removed: bool,
     },
+    /// LC-177: a room's admin-list row changed (edit / invite / regenerate) or
+    /// was removed (archive). Broadcast on the `admin` topic so every admin's
+    /// open room list refreshes the `#room-{id}` row OOB. `removed` swaps the
+    /// row out with `hx-swap-oob="delete"`.
+    AdminRoomChanged {
+        room_id: i64,
+        removed: bool,
+    },
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.

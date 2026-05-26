@@ -284,6 +284,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::AdminUserChanged { user_id, removed } => {
                                     render_admin_user_row(&send_state, user_id, *removed).await
                                 }
+                                // LC-177: admin room-list row changed. Same
+                                // admin-topic / standalone-only shape as the
+                                // user row above.
+                                #[cfg(feature = "standalone")]
+                                ChatEvent::AdminRoomChanged { room_id, removed } => {
+                                    render_admin_room_row(&send_state, *room_id, *removed).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -1583,6 +1590,29 @@ async fn render_admin_user_row(state: &AppState, user_id: &str, removed: bool) -
         .ok()??;
     crate::views::admin::UserRowFragment {
         u: &view,
+        oob: true,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-177: render the OOB swap for a changed admin room-list row. `removed`
+/// emits an `hx-swap-oob="delete"` tombstone for `#room-{id}`; otherwise the
+/// fresh row (oob) is rendered. Returns None if a non-removal event races a
+/// just-archived room. Standalone-only (admin routes module is
+/// `#[cfg(standalone)]`).
+#[cfg(feature = "standalone")]
+async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) -> Option<String> {
+    if removed {
+        return crate::views::admin::RoomRowDeleteFragment { room_id }
+            .render()
+            .ok();
+    }
+    let view = super::admin::build_admin_room_view(state, room_id)
+        .await
+        .ok()??;
+    crate::views::admin::RoomRowFragment {
+        r: &view,
         oob: true,
     }
     .render()
