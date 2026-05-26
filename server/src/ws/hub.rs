@@ -67,6 +67,11 @@ pub struct Hub {
     connections: DashMap<ConnId, Connection>,
     /// room_id -> set of conn_ids subscribed
     rooms: DashMap<i64, HashSet<ConnId>>,
+    /// LC-160: typed topic string ("enclave:5", "user:abc", "admin") -> set of
+    /// conn_ids subscribed. Parallel to `rooms` so room fan-out is unchanged;
+    /// this carries the non-room live-update channels. Subscription is
+    /// authorized per topic kind at subscribe time (see ws.rs).
+    topics: DashMap<String, HashSet<ConnId>>,
     /// user_id -> set of conn_ids (a user may have multiple tabs)
     user_conns: DashMap<String, HashSet<ConnId>>,
     /// (room_id, user_id) -> last typing Instant (ephemeral, no DB)
@@ -99,6 +104,7 @@ impl Hub {
         Self {
             connections: DashMap::new(),
             rooms: DashMap::new(),
+            topics: DashMap::new(),
             user_conns: DashMap::new(),
             typing: DashMap::new(),
             thread_typing: DashMap::new(),
@@ -302,6 +308,10 @@ impl Hub {
             entry.value_mut().remove(&conn_id);
         });
         self.rooms.retain(|_, conns| !conns.is_empty());
+        self.topics.iter_mut().for_each(|mut entry| {
+            entry.value_mut().remove(&conn_id);
+        });
+        self.topics.retain(|_, conns| !conns.is_empty());
         became_offline
     }
 
@@ -314,6 +324,26 @@ impl Hub {
     pub fn unsubscribe(&self, conn_id: ConnId, room_id: i64) {
         if let Some(mut conns) = self.rooms.get_mut(&room_id) {
             conns.remove(&conn_id);
+        }
+    }
+
+    /// LC-160: subscribe a connection to a typed topic (caller authorizes
+    /// first). Re-subscribing is idempotent (the set dedups).
+    pub fn subscribe_topic(&self, conn_id: ConnId, topic: &str) {
+        self.topics
+            .entry(topic.to_string())
+            .or_default()
+            .insert(conn_id);
+    }
+
+    /// LC-160: broadcast an event to every connection subscribed to `topic`.
+    pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
+        if let Some(conns) = self.topics.get(topic) {
+            for &conn_id in conns.iter() {
+                if let Some(conn) = self.connections.get(&conn_id) {
+                    let _ = conn.tx.send(event.clone());
+                }
+            }
         }
     }
 

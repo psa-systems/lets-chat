@@ -31,6 +31,11 @@ use crate::ws::hub::{ConnId, RingingResult};
 enum ClientFrame {
     #[serde(rename = "subscribe")]
     Subscribe { room_id: i64 },
+    /// LC-160: subscribe to a typed live-update topic ("enclave:{id}",
+    /// "user:{id}", "admin"). Authorized per kind before the connection joins
+    /// the topic's fan-out set.
+    #[serde(rename = "subscribe_topic")]
+    SubscribeTopic { topic: String },
     #[serde(rename = "typing")]
     Typing { room_id: i64 },
     #[serde(rename = "thread_typing")]
@@ -77,6 +82,26 @@ const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
 /// 64 KiB leaves generous headroom while bounding what one peer can push
 /// through the relay in a single frame.
 const MAX_CALL_PAYLOAD: usize = 64 * 1024;
+
+/// LC-160: authorize a typed-topic subscription. `admin` requires the admin
+/// role; `enclave:{id}` requires membership of that enclave; `user:{id}`
+/// requires the id to be the caller's own (so a tab only subscribes to its own
+/// per-user channel). Unknown / malformed topics are denied.
+async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> bool {
+    if topic == "admin" {
+        return user.role == "admin";
+    }
+    match topic.split_once(':') {
+        Some(("enclave", id)) => match id.parse::<i64>() {
+            Ok(eid) => db::enclave::is_enclave_member(&state.chat, eid, &user.id)
+                .await
+                .unwrap_or(false),
+            Err(_) => false,
+        },
+        Some(("user", id)) => id == user.id,
+        _ => false,
+    }
+}
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -351,6 +376,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             if allowed {
                                 state.hub.subscribe(conn_id, room_id);
                                 subscribed.lock().unwrap().insert(room_id);
+                            }
+                        }
+                        ClientFrame::SubscribeTopic { topic } => {
+                            // LC-160: authorize per topic kind before joining
+                            // the fan-out set. Unauthorized subscribes are
+                            // silently dropped (the client simply gets no
+                            // updates for a topic it cannot see).
+                            if topic_subscribe_allowed(&state, &user, &topic).await {
+                                state.hub.subscribe_topic(conn_id, &topic);
                             }
                         }
                         ClientFrame::Typing { room_id } => {

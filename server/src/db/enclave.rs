@@ -101,6 +101,22 @@ pub async fn remove_member(
     Ok(())
 }
 
+/// LC-160: is `user_id` a member of `enclave_id`? Used to authorize an
+/// `enclave:{id}` WebSocket topic subscription before the connection is added
+/// to that topic's fan-out set.
+pub async fn is_enclave_member(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT 1 FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.is_some())
+}
+
 pub async fn update_role(
     pool: &SqlitePool,
     enclave_id: i64,
