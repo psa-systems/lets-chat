@@ -111,11 +111,18 @@ pub async fn get_autocomplete(
                 continue;
             }
         }
+        // Resolve presence the same way every other avatar surface does, so
+        // the mention row's badge (rendered via partials/avatar.html) matches
+        // user search / the sidebar (LC-169). Candidates exclude the viewer,
+        // so effective_status (offline-when-disconnected) is always correct.
+        let status = super::effective_status(&state, &rec.id, &rec.status);
         results.push(MentionSuggestion::user(
             rec.id,
             rec.username,
             rec.display_name,
             rec.avatar_ext,
+            status,
+            rec.custom_status,
         ));
     }
 

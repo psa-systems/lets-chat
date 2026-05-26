@@ -16,6 +16,14 @@ pub struct MentionSuggestion {
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
+    /// Presence status ("online"/"idle"/"dnd"/"offline") driving the avatar
+    /// badge for user rows, so the mention popover shares
+    /// `partials/avatar.html` with every other avatar surface (LC-169).
+    /// Empty for broadcast/group rows, which render a glyph badge instead of
+    /// an avatar and never reach the avatar partial.
+    pub status: String,
+    /// Custom-status tooltip text for user rows; None for broadcast/group.
+    pub custom_status: Option<String>,
     /// Short explainer rendered next to the token on a broadcast row, e.g.
     /// "Notify online members." None for user rows.
     pub subtitle: Option<&'static str>,
@@ -30,6 +38,8 @@ impl MentionSuggestion {
         username: String,
         display_name: Option<String>,
         avatar_ext: Option<String>,
+        status: String,
+        custom_status: Option<String>,
     ) -> Self {
         Self {
             kind: "user",
@@ -37,6 +47,8 @@ impl MentionSuggestion {
             username,
             display_name,
             avatar_ext,
+            status,
+            custom_status,
             subtitle: None,
         }
     }
@@ -51,6 +63,8 @@ impl MentionSuggestion {
             username: token.to_string(),
             display_name: None,
             avatar_ext: None,
+            status: String::new(),
+            custom_status: None,
             subtitle: Some(subtitle),
         }
     }
@@ -71,6 +85,8 @@ impl MentionSuggestion {
             username: name,
             display_name: Some(label),
             avatar_ext: None,
+            status: String::new(),
+            custom_status: None,
             subtitle: None,
         }
     }
