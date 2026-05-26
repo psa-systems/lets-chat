@@ -72,3 +72,14 @@ Every topic subscribe is access-checked server-side (room membership, enclave me
 ## Out of scope
 
 - Client-side rendering / a SPA rewrite. This stays server-rendered-HTML-over-WS (the existing model); the change is making subscription declarative and topic-typed.
+
+## Shipped
+
+Delivered across LC-156 (declarative subscribe via `live.js` + `data-lc-live-room`/`data-lc-live-topic`), LC-160 (typed topics `enclave:{id}`/`user:{id}`/`admin` + subscribe-time authz), and the per-surface fills: LC-161 invitations, LC-170 enclave landing member/room lists, LC-172 settings member list, LC-173 own-profile sidebar block, LC-174 sidebar room nav, LC-175 admin user list, LC-177 admin room list, LC-178 `/saved`. LC-176 added `Hub::unsubscribe_user_from_topic` for access-loss cleanup.
+
+Two deviations from the original sketch, both forced by reality and documented in `docs/ui-conventions.md`:
+
+- The "one wrapper subscribes the page and merges fragments" idea landed as **id-keyed OOB regions** rather than a generic merge wrapper: the live fragment swaps an element by id and htmx drops it when the id is absent, which self-limits delivery to the right page without per-connection page tracking and survives stale subscriptions.
+- **Paginated / filtered surfaces** (`/inbox` infinite-scroll, `/activity` tabs, LC-179) carry view-state the server can't see, so they use a reveal-a-refresh-bar affordance instead of an auto full-list swap. Author-row cross-surface refresh on profile edits (other users' views of your avatar/name) was explicitly deferred as the expensive case (LC-173 phase 3).
+
+The audit's stale-surface list is at zero for the surfaces with a per-user or topic broadcast; the remaining gap (replies/reactions to your own messages revealing the `/activity` bar) is noted in LC-179 as needing a new per-user event.

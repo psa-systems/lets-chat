@@ -9,6 +9,14 @@
     <button type="button" data-lc-jump-unread class="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 border rounded">Jump to next unread (Alt+Shift+&darr;)</button>
   </header>
   <div class="flex-1 overflow-y-auto" id="lc-inbox-list">
+    {# LC-179: hidden until a new unread arrives over the WS, when the send
+       task swaps in the shown variant (ws/inbox_refresh.html). Clicking
+       reloads the current page (preserving nothing view-specific is needed -
+       inbox has a single ordering). Avoids clobbering infinite-scroll. #}
+    <button id="lc-inbox-refresh" type="button" hidden onclick="location.reload()"
+            class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
+      &uarr; New unread messages - click to refresh
+    </button>
     {% if items.is_empty() %}
     <p class="p-8 text-center text-sm text-slate-500">&#10003; All caught up - no unread messages.</p>
     {% else %}

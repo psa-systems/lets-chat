@@ -88,8 +88,21 @@ desktop/                   # Tao + Wry wrapper
 
 1. Client connects to `/ws` after login; the handler authenticates via the session cookie.
 2. The browser uses the `htmx-ext-ws` extension. The server pushes pre-rendered HTML fragments tagged with `hx-swap-oob` attributes; HTMX merges them into the DOM without any client-side JSON-to-DOM translation.
-3. Mutations (send message, edit, react, mark-read) go through normal HTTP handlers, which write to the database and then call `hub.broadcast(room_id, event)` to fan out the rendered fragment.
-4. The hub maintains a `DashMap<RoomId, Vec<UnboundedSender<...>>>`; each connection subscribes/unsubscribes as the user navigates between rooms.
+3. Mutations (send message, edit, react, mark-read) go through normal HTTP handlers, which write to the database and then broadcast a `ChatEvent` (`server/src/ws/events.rs`) to fan out the rendered fragment.
+4. The hub (`server/src/ws/hub.rs`) holds `connections: DashMap<ConnId, Connection>` plus three fan-out indexes: `rooms: DashMap<i64, HashSet<ConnId>>` (room subscriptions), `topics: DashMap<String, HashSet<ConnId>>` (typed topics, LC-160), and `user_conns: DashMap<String, HashSet<ConnId>>` (a user's tabs). Fan-out methods: `broadcast_to_room`, `broadcast_to_topic`, `broadcast_to_user`, `broadcast_global`.
+5. The per-connection send task in `server/src/routes/ws.rs` receives each `ChatEvent` and renders it to an OOB fragment **for that recipient** (so per-viewer state - `can_edit`, `can_manage`, unread counts - is correct), or to `None` to skip. Recipient-independent events render via `views::ws_fragments::render_event`.
+
+### Live updates by default (LC-156 epic)
+
+A new page should be live "by construction." The conventions that make that work:
+
+- **Declarative subscription.** A page element carries `data-lc-live-room="<id>"` or `data-lc-live-topic="<topic>"`; `server/assets/live.js` sends the subscribe frame on socket open / htmx settle. Topics are `enclave:{id}`, `user:{id}`, `admin`; `ws.rs::topic_subscribe_allowed` authorizes each kind at subscribe time (enclave membership or site-admin; own id; admin role).
+- **Two fan-out shapes.** Per-user surfaces (own profile, saved list, invitations) use `broadcast_to_user` - no topic needed, the WS arm gates on `user_id == send_user.id`. Shared surfaces (enclave member/room lists, admin user/room lists) use `broadcast_to_topic`.
+- **id-keyed OOB regions are self-limiting.** The live fragment swaps an element by id (e.g. `#lc-enclave-settings-members`, `#sidebar-self`, `#sidebar-nav-{enclave_id}`, `#lc-saved-list`, `#user-{id}`). A connection whose current page lacks that id silently drops the swap - so correctness does **not** depend on knowing each connection's current page, and stale subscriptions are harmless. Enclave-scoped regions are keyed by enclave id so a viewer of a different enclave never gets the wrong list.
+- **Shared partial.** The list/region body is an Askama partial included by BOTH the full page and the OOB fragment (`enclave/members_items.html`, `partials/sidebar_self.html`, `saved/items.html`, ...), so the live update and a fresh page load render identically. Per-page row-builders are factored into `pub(crate)` helpers shared by the page handler and the WS render.
+- **Admin surfaces are `#[cfg(standalone)]`.** `routes::admin` is standalone-only, so the WS arms + renderers for `AdminUserChanged`/`AdminRoomChanged` are gated; in saas the events never fire and fall through to `render_event` (None). Mirror this for any future admin-only live surface or `just test-saas` breaks.
+- **Topic cleanup on access loss (LC-176).** `Hub::unsubscribe_user_from_topic` is called from kick/leave/enclave-delete so a departed member stops receiving an enclave's events immediately (not just on disconnect).
+- **Paginated / filtered pages use a refresh affordance, not a full swap (LC-179).** `/inbox` (infinite-scroll) and `/activity` (tab-filtered) carry view-state the server can't see, so a full-list swap would clobber it. They reveal a hidden "refresh" bar over the WS instead; clicking reloads the current URL.
 
 ### Database Domain Separation
 
