@@ -262,6 +262,19 @@ pub struct EnclaveRoomsLiveFragment<'a> {
     pub can_manage: bool,
 }
 
+/// LC-172: OOB fragment swapping the live `#lc-enclave-settings-members` region
+/// on the enclave settings page when membership/roles change. Unlike the
+/// read-only landing list, this carries the role-toggle / kick / transfer
+/// controls gated on `can_delete`, so it is rendered per recipient. Shares
+/// `enclave/settings_members_items.html` with `EnclaveSettingsPage`.
+#[derive(Template)]
+#[template(path = "ws/enclave_settings_members_live.html")]
+pub struct EnclaveSettingsMembersLiveFragment<'a> {
+    pub enclave: &'a Enclave,
+    pub members: &'a [EnclaveMemberView],
+    pub can_delete: bool,
+}
+
 #[derive(Template)]
 #[template(path = "invitations/page.html")]
 pub struct InvitationsPage<'a> {

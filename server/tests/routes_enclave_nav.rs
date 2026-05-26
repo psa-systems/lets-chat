@@ -185,6 +185,32 @@ async fn settings_gear_visible_to_manager_only() {
     );
 }
 
+// LC-172: the settings page subscribes to the enclave topic and renders the
+// member list inside the swappable #lc-enclave-settings-members region, so
+// joins/kicks/role-changes update it live (the broadcasts landed in LC-170).
+#[tokio::test]
+async fn settings_page_is_wired_for_live_member_updates() {
+    let t = app().await;
+    let (eid, _alpha, _beta) = seed(&t).await;
+    let (status, _, body) = get(
+        &t.app,
+        &t.alice_session,
+        &format!("/enclave/{eid}/settings"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!("data-lc-live-topic=\"enclave:{eid}\"")),
+        "settings page must subscribe to the enclave topic for live member updates",
+    );
+    assert!(
+        body.contains("id=\"lc-enclave-settings-members\""),
+        "settings member list must live in the swappable region the OOB fragment targets",
+    );
+    // Owner (can_delete) still sees the kick control inside that region.
+    assert!(body.contains("/kick"), "owner sees member controls");
+}
+
 #[tokio::test]
 async fn redirect_skips_private_room_owner_is_not_in() {
     let t = app().await;

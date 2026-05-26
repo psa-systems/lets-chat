@@ -219,16 +219,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_invitations(&send_state, &send_user).await
                                 }
-                                // LC-170: enclave landing-page member list.
-                                // Broadcast on the enclave:{id} topic, so only
-                                // connections subscribed to that enclave (i.e.
-                                // sitting on its landing page) reach here. The
-                                // list is read-only, so one render is correct
-                                // for every recipient.
+                                // LC-170/172: enclave member list. Broadcast on
+                                // the enclave:{id} topic, so only connections
+                                // subscribed to that enclave reach here. One
+                                // frame carries both the read-only landing list
+                                // and the per-viewer settings list; htmx applies
+                                // whichever id is on the recipient's page.
                                 ChatEvent::EnclaveMemberAdded { enclave_id, .. }
                                 | ChatEvent::EnclaveMemberRemoved { enclave_id, .. }
                                 | ChatEvent::EnclaveMemberRoleChanged { enclave_id, .. } => {
-                                    render_enclave_members(&send_state, *enclave_id).await
+                                    render_enclave_members(&send_state, &send_user, *enclave_id)
+                                        .await
                                 }
                                 // LC-170: enclave landing-page room list.
                                 // Rendered per recipient because the per-row
@@ -1474,18 +1475,49 @@ async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
 /// LC-170: re-render the enclave landing-page member list as an OOB fragment.
 /// The list is read-only (label + role), so this does not depend on the
 /// recipient's identity; one fragment is correct for every subscriber.
-async fn render_enclave_members(state: &AppState, enclave_id: i64) -> Option<String> {
+/// LC-170/172: re-render the enclave member list for both surfaces that show
+/// it. The landing-page list (`#lc-enclave-members`) is read-only, so one
+/// render serves every subscriber; the settings-page list
+/// (`#lc-enclave-settings-members`) carries kick/role/transfer controls gated
+/// on the recipient's `can_delete`, so it is rendered per `viewer`. Both
+/// fragments are emitted in one frame: a connection on the landing page matches
+/// only the first id, a connection on settings matches only the second, and
+/// htmx silently drops the unmatched OOB target.
+async fn render_enclave_members(
+    state: &AppState,
+    viewer: &User,
+    enclave_id: i64,
+) -> Option<String> {
     let members = db::enclave::list_members(&state.chat, enclave_id)
         .await
         .ok()?;
     let member_views = super::enclave::resolve_member_views(state, members)
         .await
         .ok()?;
-    crate::views::enclave::EnclaveMembersLiveFragment {
+    let mut out = crate::views::enclave::EnclaveMembersLiveFragment {
         members: &member_views,
     }
     .render()
-    .ok()
+    .ok()?;
+    // Settings-page variant (per recipient). Skipped if the enclave row is
+    // gone, leaving the landing fragment as the sole output.
+    if let Ok(Some(enclave)) = db::enclave::get_enclave(&state.chat, enclave_id).await {
+        let membership = db::enclave::get_membership(&state.chat, enclave_id, &viewer.id)
+            .await
+            .ok()
+            .flatten();
+        let can_delete = crate::perms::enclave_can_delete(membership.map(|m| m.role), &viewer.role);
+        if let Ok(settings) = (crate::views::enclave::EnclaveSettingsMembersLiveFragment {
+            enclave: &enclave,
+            members: &member_views,
+            can_delete,
+        })
+        .render()
+        {
+            out.push_str(&settings);
+        }
+    }
+    Some(out)
 }
 
 /// LC-170: re-render the enclave landing-page room list as an OOB fragment for
