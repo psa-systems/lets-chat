@@ -137,6 +137,14 @@ pub enum ChatEvent {
     UserProfileChanged {
         user_id: String,
     },
+    /// LC-175: a user's admin-list row changed (ban / mute / role / quota) or
+    /// was removed (delete). Broadcast on the `admin` topic so every admin's
+    /// open user list refreshes the `#user-{id}` row OOB. `removed` swaps the
+    /// row out with `hx-swap-oob="delete"`.
+    AdminUserChanged {
+        user_id: String,
+        removed: bool,
+    },
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.

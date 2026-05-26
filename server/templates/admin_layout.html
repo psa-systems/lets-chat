@@ -19,7 +19,11 @@
   <a href="/admin/outgoing-webhooks" class="{% if section == "outgoing_webhooks" %}font-semibold{% endif %}">Webhooks</a>
   <span class="ml-auto text-xs text-slate-400 font-mono" title="Release {{ git_version }} - built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
 </nav>
-<div class="flex-1 overflow-y-auto p-4">
+{# LC-175: subscribe admin pages to the `admin` topic so moderation actions
+   (ban / mute / role / quota / delete) refresh the user list live across all
+   admins. topic_subscribe_allowed gates this on the admin role; admin pages
+   without a matching #user-{id} row drop the OOB swap harmlessly. #}
+<div class="flex-1 overflow-y-auto p-4" data-lc-live-topic="admin">
   {% block admin_main %}{% endblock %}
 </div>
 {% endblock %}
