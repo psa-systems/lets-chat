@@ -767,16 +767,30 @@ pub async fn post_delete_user(
     state.hub.broadcast_global(&ChatEvent::UserBanned {
         user_id: user_id.clone(),
     });
+    // LC-175: drop the row from every other admin's open user list.
+    state.hub.broadcast_to_topic(
+        "admin",
+        &ChatEvent::AdminUserChanged {
+            user_id: user_id.clone(),
+            removed: true,
+        },
+    );
     Ok(Html(String::new()))
 }
 
-async fn render_user_row(state: &AppState, user_id: &str) -> Result<Html, AppError> {
-    let record = db::auth::find_user_by_id(&state.auth, user_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+/// Build the admin-list view-row for one user, or None if the user is gone.
+/// Shared by the actor's HTTP row response and the LC-175 `admin`-topic WS
+/// broadcast so both render an identical row.
+pub(crate) async fn build_admin_user_view(
+    state: &AppState,
+    user_id: &str,
+) -> Result<Option<AdminUserView>, AppError> {
+    let Some(record) = db::auth::find_user_by_id(&state.auth, user_id).await? else {
+        return Ok(None);
+    };
     let usage_bytes = db::quota::sum_user_usage(&state.chat, &record.id).await?;
     let quota_bytes = db::quota::get_user_quota(&state.chat, &record.id).await?;
-    let view = AdminUserView {
+    Ok(Some(AdminUserView {
         id: record.id,
         username: record.username,
         role: record.role,
@@ -784,8 +798,27 @@ async fn render_user_row(state: &AppState, user_id: &str) -> Result<Html, AppErr
         is_muted: record.is_muted,
         usage_display: format_bytes_mib(usage_bytes),
         quota_mib_value: bytes_to_mib_input(quota_bytes),
-    };
-    html(&UserRowFragment { u: &view })
+    }))
+}
+
+/// Render the actor's HTTP row response AND broadcast the same change to the
+/// `admin` topic so every other admin's open user list updates the row live
+/// (LC-175). Call after any mutation that changes a still-existing user row.
+async fn render_user_row(state: &AppState, user_id: &str) -> Result<Html, AppError> {
+    let view = build_admin_user_view(state, user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    state.hub.broadcast_to_topic(
+        "admin",
+        &ChatEvent::AdminUserChanged {
+            user_id: user_id.to_string(),
+            removed: false,
+        },
+    );
+    html(&UserRowFragment {
+        u: &view,
+        oob: false,
+    })
 }
 
 // Invites -------------------------------------------------------------------

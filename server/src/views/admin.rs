@@ -116,6 +116,18 @@ pub struct UsersPage<'a> {
 #[template(path = "admin/user_row.html")]
 pub struct UserRowFragment<'a> {
     pub u: &'a AdminUserView,
+    /// LC-175: when true the `<tr>` carries `hx-swap-oob="outerHTML"` so it
+    /// replaces the matching `#user-{id}` row over the WebSocket. The HTTP
+    /// path (the acting admin's own response) leaves it false.
+    pub oob: bool,
+}
+
+/// LC-175: OOB row-removal pushed on the `admin` topic when a user is deleted,
+/// so every admin's user list drops the `#user-{id}` row without a reload.
+#[derive(Template)]
+#[template(path = "admin/user_row_delete.html")]
+pub struct UserRowDeleteFragment {
+    pub user_id: String,
 }
 
 #[derive(Template)]

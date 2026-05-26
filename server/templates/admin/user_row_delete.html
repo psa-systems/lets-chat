@@ -1,0 +1,4 @@
+{# LC-175: OOB removal of a deleted user's admin-list row. Swaps out
+   #user-{id} with hx-swap-oob="delete"; admin pages without that row (or
+   admins not on the user list) drop it silently. #}
+<tr id="user-{{ user_id }}" hx-swap-oob="delete"></tr>

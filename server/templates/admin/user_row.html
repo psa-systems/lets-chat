@@ -1,4 +1,4 @@
-<tr id="user-{{ u.id }}" class="border-t border-slate-200 align-top">
+<tr id="user-{{ u.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="border-t border-slate-200 align-top">
   <td class="py-2">{{ u.username }}</td>
   <td class="py-2">
     <form hx-post="/admin/users/{{ u.id }}/role" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1">
