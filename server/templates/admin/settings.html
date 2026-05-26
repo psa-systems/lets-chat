@@ -106,6 +106,13 @@
     <p class="text-xs text-slate-500 mt-1">The <code>@&lt;domain&gt;</code> half of the address an external sender mails. Per-room inbox addresses become <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
   </div>
   <div>
+    <label class="block text-sm font-medium mb-1" for="imap_dead_letter_folder">Dead-letter folder (optional)</label>
+    <input id="imap_dead_letter_folder" name="imap_dead_letter_folder" type="text" value="{{ imap_dead_letter_folder }}"
+           placeholder="INBOX/lets-chat-rejected"
+           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-xs text-slate-500 mt-1">When set, dropped messages are UID-COPYd into this IMAP folder before being marked <code>\Seen</code> on the source. You must create the folder at your IMAP provider; lets-chat does not auto-create it. Empty = off (drops are diagnosed by log only).</p>
+  </div>
+  <div>
     <label class="flex items-start gap-2 text-sm cursor-pointer">
       <input id="imap_enabled" name="imap_enabled" type="checkbox" value="1" class="mt-0.5"
         {% if imap_enabled %}checked{% endif %}>
