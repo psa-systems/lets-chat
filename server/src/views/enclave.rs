@@ -230,6 +230,14 @@ pub struct EnclaveInviteRowResult<'a> {
     pub message: &'a str,
 }
 
+/// LC-161: OOB fragment swapping the live `#lc-invitations` region over the
+/// WebSocket when a user's invitation set changes.
+#[derive(Template)]
+#[template(path = "ws/invitations_live.html")]
+pub struct InvitationsLiveFragment<'a> {
+    pub invitations: &'a [(EnclaveInvitation, Enclave)],
+}
+
 #[derive(Template)]
 #[template(path = "invitations/page.html")]
 pub struct InvitationsPage<'a> {
