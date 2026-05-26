@@ -50,6 +50,11 @@ enum ClientFrame {
         #[serde(default)]
         payload: Option<String>,
     },
+    /// LC-183: remote-control consent handshake. `kind` is
+    /// request/grant/deny/revoke; relayed to the DM peer after the
+    /// verified-email + block gate. No payload (input rides a data channel).
+    #[serde(rename = "remote_control_signal")]
+    RemoteControlSignal { room_id: i64, kind: String },
     /// Join an enclave voice channel (`room_type = 'voice'`).
     #[serde(rename = "voice_join")]
     VoiceJoin { room_id: i64 },
@@ -77,6 +82,9 @@ const CALL_SIGNAL_KINDS: &[&str] = &[
 
 /// Recognized `kind` discriminators for a voice-channel mesh signal.
 const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
+
+/// LC-183: recognized `kind`s for the remote-control consent handshake.
+const REMOTE_CONTROL_KINDS: &[&str] = &["request", "grant", "deny", "revoke"];
 
 /// Upper bound on a relayed signaling payload. An SDP blob is a few KiB;
 /// 64 KiB leaves generous headroom while bounding what one peer can push
@@ -438,6 +446,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_call_signal(&e)
                                 }
+                                // LC-183: remote-control consent signal, gated +
+                                // relayed to this user by relay_control_signal.
+                                ChatEvent::RemoteControlSignal { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_control_signal(&e)
+                                }
                                 ChatEvent::VoiceJoined { .. } | ChatEvent::VoiceLeft { .. } => {
                                     render_voice_event(&e)
                                 }
@@ -520,6 +535,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         } => {
                             relay_call_signal(&state, &user, &username, room_id, &kind, payload)
                                 .await;
+                        }
+                        ClientFrame::RemoteControlSignal { room_id, kind } => {
+                            relay_control_signal(&state, &user, &username, room_id, &kind).await;
                         }
                         ClientFrame::VoiceJoin { room_id } => {
                             handle_voice_join(&state, &user, &username, conn_id, room_id).await;
@@ -1383,6 +1401,110 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
     }
 }
 
+/// LC-183: is this user "email-verified" for the purpose of the remote-control
+/// gate? The two builds define verification differently (see the LC-182 design
+/// doc): standalone has the `#[cfg(standalone)]` email-verification flow that
+/// sets `users.email_verified_at`, so the gate is literally that column being
+/// non-NULL; saas never populates that column (no verification flow), so a saas
+/// account is verified by virtue of being authenticated (the platform owns
+/// identity). One place to flip if saas later grows its own column check.
+#[cfg(feature = "standalone")]
+pub(crate) async fn remote_control_email_verified(auth: &sqlx::SqlitePool, user_id: &str) -> bool {
+    db::auth::get_user_email_verified_at(auth, user_id)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+#[cfg(not(feature = "standalone"))]
+pub(crate) async fn remote_control_email_verified(
+    _auth: &sqlx::SqlitePool,
+    _user_id: &str,
+) -> bool {
+    true
+}
+
+/// LC-183: the security gate for any remote-control consent signal between
+/// `a` and `b`. Both must be email-verified (per the build's definition) and
+/// neither may have blocked the other. Fails closed: any lookup error denies.
+pub(crate) async fn remote_control_allowed(auth: &sqlx::SqlitePool, a: &str, b: &str) -> bool {
+    if db::auth::is_blocked_either_way(auth, a, b)
+        .await
+        .unwrap_or(true)
+    {
+        return false;
+    }
+    remote_control_email_verified(auth, a).await && remote_control_email_verified(auth, b).await
+}
+
+/// LC-183: validate + relay one remote-control consent signal to the other
+/// member of a DM room. Like `relay_call_signal` it confirms the sender belongs
+/// to a `dm` room and resolves the peer; additionally it enforces
+/// `remote_control_allowed` (both verified, not blocked) before forwarding.
+/// Consent-only - no input payload is carried here.
+async fn relay_control_signal(
+    state: &AppState,
+    user: &User,
+    from_name: &str,
+    room_id: i64,
+    kind: &str,
+) {
+    if !REMOTE_CONTROL_KINDS.contains(&kind) {
+        return;
+    }
+    // Remote control is a DM-call feature only (mirrors relay_call_signal's
+    // dm-room gate). Confirm the room is a DM; the row itself is unused.
+    match db::chat::get_room(&state.chat, room_id).await {
+        Ok(Some(r)) if r.room_type == "dm" => {}
+        _ => return,
+    }
+    let members = match db::chat::list_room_member_ids(&state.chat, room_id).await {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    if !members.iter().any(|id| id == &user.id) {
+        return;
+    }
+    let Some(peer_id) = members.into_iter().find(|id| id != &user.id) else {
+        return;
+    };
+    if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
+        return;
+    }
+    let event = ChatEvent::RemoteControlSignal {
+        room_id,
+        to_user_id: peer_id.clone(),
+        from_user_id: user.id.clone(),
+        from_name: from_name.to_string(),
+        kind: kind.to_string(),
+    };
+    state.hub.broadcast_to_user(&peer_id, &event);
+}
+
+/// Render an inbound `RemoteControlSignal` into the `#lc-control-bus` OOB
+/// fragment the client's consent UI consumes.
+fn render_control_signal(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::RemoteControlSignal {
+        room_id,
+        from_user_id,
+        from_name,
+        kind,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    crate::views::ws_fragments::ControlSignalFragment {
+        room_id: *room_id,
+        from_user_id,
+        from_name,
+        kind,
+    }
+    .render()
+    .ok()
+}
+
 /// Render a voice-channel event into the `#lc-voice-bus` OOB fragment the
 /// browser's voice mesh consumes.
 fn render_voice_event(event: &ChatEvent) -> Option<String> {
@@ -1824,4 +1946,66 @@ async fn render_pin_event(
         Err(_) => String::new(),
     };
     Some(format!("{bubble_html}{strip_html}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::SqlitePool;
+
+    async fn auth_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn verify(pool: &SqlitePool, id: &str) {
+        sqlx::query("UPDATE users SET email_verified_at = datetime('now') WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    // LC-183: the remote-control gate allows two email-verified, mutually
+    // unblocked users. (In saas builds verification is implicit, so the
+    // verify() calls are no-ops there but the assertion still holds.)
+    #[tokio::test]
+    async fn gate_allows_two_verified_unblocked_users() {
+        let auth = auth_pool().await;
+        let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
+        let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
+        verify(&auth, &a).await;
+        verify(&auth, &b).await;
+        assert!(remote_control_allowed(&auth, &a, &b).await);
+    }
+
+    // Standalone-only: an unverified peer is denied in either direction. In
+    // saas the column is not the gate, so this assertion does not apply.
+    #[cfg(feature = "standalone")]
+    #[tokio::test]
+    async fn gate_denies_when_a_peer_is_unverified() {
+        let auth = auth_pool().await;
+        let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
+        let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
+        verify(&auth, &a).await; // b stays unverified
+        assert!(!remote_control_allowed(&auth, &a, &b).await);
+        assert!(!remote_control_allowed(&auth, &b, &a).await);
+    }
+
+    // A block in either direction denies, regardless of verification/build.
+    #[tokio::test]
+    async fn gate_denies_when_blocked_either_way() {
+        let auth = auth_pool().await;
+        let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
+        let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
+        verify(&auth, &a).await;
+        verify(&auth, &b).await;
+        db::auth::block_user(&auth, &a, &b).await.unwrap();
+        assert!(!remote_control_allowed(&auth, &a, &b).await);
+        assert!(!remote_control_allowed(&auth, &b, &a).await);
+    }
 }

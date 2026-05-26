@@ -228,6 +228,19 @@ pub struct CallSignalFragment<'a> {
     pub payload: Option<&'a str>,
 }
 
+/// LC-183: OOB-appended remote-control consent signal. The client's
+/// `#lc-control-bus` MutationObserver consumes the `kind`
+/// (request/grant/deny/revoke) to drive the consent UI. No payload - the input
+/// stream is a separate data channel (LC-184).
+#[derive(Template)]
+#[template(path = "ws/control_signal.html")]
+pub struct ControlSignalFragment<'a> {
+    pub room_id: i64,
+    pub from_user_id: &'a str,
+    pub from_name: &'a str,
+    pub kind: &'a str,
+}
+
 /// OOB-appended voice-channel event. The client's `#lc-voice-bus`
 /// MutationObserver consumes this and feeds it into the per-channel mesh
 /// of `RTCPeerConnection`s. `kind` is `joined` / `left` / `roster` /
@@ -312,6 +325,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::MessagePinned { .. }
         | ChatEvent::MessageUnpinned { .. }
         | ChatEvent::CallSignal { .. }
+        // LC-183: rendered per recipient in the WS send task (#lc-control-bus).
+        | ChatEvent::RemoteControlSignal { .. }
         | ChatEvent::VoiceJoined { .. }
         | ChatEvent::VoiceLeft { .. }
         | ChatEvent::VoiceRoster { .. }
