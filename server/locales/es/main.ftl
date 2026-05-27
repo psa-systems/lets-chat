@@ -20,6 +20,8 @@ settings-appearance-save = Guardar apariencia
 theme-system = Usar la configuración del sistema
 theme-light = Claro
 theme-dark = Oscuro
+theme-hc-light = Alto contraste (claro)
+theme-hc-dark = Alto contraste (oscuro)
 
 ## Login
 login-title = Iniciar sesión

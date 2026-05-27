@@ -22,6 +22,8 @@ settings-appearance-save = Save appearance
 theme-system = Use system setting
 theme-light = Light
 theme-dark = Dark
+theme-hc-light = High contrast (light)
+theme-hc-dark = High contrast (dark)
 
 ## Login
 login-title = Sign in

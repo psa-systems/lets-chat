@@ -11,15 +11,19 @@
   <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
   <meta name="theme-color" content="#2563eb">
   <link rel="apple-touch-icon" href="/assets/icon-192.png">
-  {# LC-191: no-flash theme bootstrap. Synchronous + BEFORE the stylesheets so
-     `data-theme` is set before CSS loads (no flash-of-wrong-theme). Source
-     order: the `lc-theme` cookie (kept in sync with users.theme by the locale
-     middleware), else localStorage (set by the picker), else the OS via
-     prefers-color-scheme. Also keeps <meta theme-color> in step and follows OS
-     changes while on system. #}
+  {# LC-191/LC-192: no-flash theme bootstrap. Synchronous + BEFORE the
+     stylesheets so `data-theme` is set before CSS loads (no flash-of-wrong-
+     theme). Source order: the `lc-theme` cookie (kept in sync with users.theme
+     by the locale middleware), else localStorage (set by the picker), else the
+     OS. Explicit values (light/dark/hc-light/hc-dark) pass through; "system"/
+     unset resolves prefers-color-scheme, upgraded to high-contrast when
+     prefers-contrast:more. Keeps <meta theme-color> in step and re-resolves on
+     OS color-scheme / contrast changes while on system. #}
   <script>
     (function () {
       var d = document.documentElement;
+      var META = { light: "#f8fafc", dark: "#0f172a", "hc-light": "#ffffff", "hc-dark": "#000000" };
+      var EXPLICIT = { light: 1, dark: 1, "hc-light": 1, "hc-dark": 1 };
       function cookie(n) {
         var m = document.cookie.match("(?:^|; )" + n + "=([^;]*)");
         return m ? decodeURIComponent(m[1]) : null;
@@ -29,20 +33,27 @@
         if (!p) { try { p = localStorage.getItem("lc-theme"); } catch (e) {} }
         return p;
       }
+      function resolve(p) {
+        if (EXPLICIT[p]) return p;
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        var hc = matchMedia("(prefers-contrast: more)").matches;
+        if (hc) return dark ? "hc-dark" : "hc-light";
+        return dark ? "dark" : "light";
+      }
       function apply(p) {
-        var t = (p === "light" || p === "dark")
-          ? p
-          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        var t = resolve(p);
         d.setAttribute("data-theme", t);
         var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.setAttribute("content", t === "dark" ? "#0f172a" : "#f8fafc");
+        if (m) m.setAttribute("content", META[t] || META.light);
       }
       apply(pref());
+      function onSystemChange() {
+        var p = pref();
+        if (!EXPLICIT[p]) apply(p); // only follow the OS while on system/unset
+      }
       try {
-        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
-          var p = pref();
-          if (p !== "light" && p !== "dark") apply(p);
-        });
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onSystemChange);
+        matchMedia("(prefers-contrast: more)").addEventListener("change", onSystemChange);
       } catch (e) {}
       // Used by the Settings appearance picker to apply instantly + remember
       // the choice on this device (the form POST persists it server-side).
