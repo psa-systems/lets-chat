@@ -56,6 +56,10 @@ pub fn router() -> Router<AppState> {
             "/api/v1/bridges/{bridge_id}/messages",
             axum::routing::post(post_bridge_message),
         )
+        .route(
+            "/api/v1/bridges/{bridge_id}/heartbeat",
+            axum::routing::post(post_bridge_heartbeat),
+        )
 }
 
 #[derive(Serialize)]
@@ -379,5 +383,66 @@ async fn post_bridge_message(
         author: foreign_name.to_string(),
         body: raw.body,
         created_at: raw.created_at,
+    }))
+}
+
+#[derive(Deserialize, Default)]
+struct HeartbeatBody {
+    /// Optional daemon-reported error string. `None` = healthy; `Some` puts
+    /// the bridge in `errored` status and stores the message for the admin
+    /// UI. Cap the length so a daemon cannot bloat the row.
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct HeartbeatAck {
+    ok: bool,
+    status: &'static str,
+}
+
+/// Maximum length of a daemon-reported error string. Bounds row growth + UI
+/// rendering; longer messages are truncated rather than rejected (the
+/// daemon should not refuse to heartbeat just because its error message
+/// is verbose).
+const HEARTBEAT_ERROR_MAX_BYTES: usize = 4096;
+
+/// LC-78: POST /api/v1/bridges/{bridge_id}/heartbeat - record a daemon
+/// liveness ping. Scope: `bridge:heartbeat`. The bridge daemon SHOULD POST
+/// this on its own interval (typical: 30s); the admin UI surfaces `stale`
+/// when the most-recent heartbeat is older than 3x interval (chunk 7).
+/// Owner-gated: the authenticated bot must be the bridge's registered bot.
+async fn post_bridge_heartbeat(
+    State(state): State<AppState>,
+    auth: ApiAuth,
+    Path(bridge_id): Path<i64>,
+    payload: Option<Json<HeartbeatBody>>,
+) -> Result<Json<HeartbeatAck>, AppError> {
+    auth.require(SCOPE_BRIDGE_HEARTBEAT)?;
+    let bridge = db::bridges::find_by_id(&state.chat, bridge_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if bridge.bot_user_id != auth.user.id {
+        return Err(AppError::Forbidden);
+    }
+    let mut error_owned;
+    let error_ref: Option<&str> = match payload.and_then(|Json(p)| p.error) {
+        Some(e) if !e.trim().is_empty() => {
+            error_owned = e;
+            if error_owned.len() > HEARTBEAT_ERROR_MAX_BYTES {
+                error_owned.truncate(HEARTBEAT_ERROR_MAX_BYTES);
+            }
+            Some(error_owned.as_str())
+        }
+        _ => None,
+    };
+    db::bridges::record_heartbeat(&state.chat, bridge_id, error_ref).await?;
+    Ok(Json(HeartbeatAck {
+        ok: true,
+        status: if error_ref.is_some() {
+            "errored"
+        } else {
+            "healthy"
+        },
     }))
 }

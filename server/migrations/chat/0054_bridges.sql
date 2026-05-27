@@ -4,9 +4,11 @@
 -- and surface health from periodic heartbeats. Daemons authenticate to the
 -- API as a dedicated bot user (LC-73) with bridge-scoped tokens (LC-72).
 --
--- config_sealed is AES-256-GCM-sealed under LETS_CHAT_SECRET_KEY (same posture
--- as imap_inbox_config in LC-77). A chat.db leak cannot reconstruct usable
--- Matrix shared secrets.
+-- config_encrypted + config_nonce hold the AES-256-GCM-sealed daemon config
+-- under LETS_CHAT_SECRET_KEY (same two-column convention as imap_inbox_config
+-- in LC-77 and vapid_keys). A chat.db leak cannot reconstruct usable Matrix
+-- shared secrets. The plaintext is an opaque-to-the-server config blob (JSON
+-- in practice: homeserver URL, shared secret, etc.) shaped by the daemon.
 --
 -- kind is plain TEXT, not CHECK-constrained, so adding IRC / XMPP / future
 -- protocols is a code-level validation loosening, not a migration. v1 accepts
@@ -25,7 +27,8 @@ CREATE TABLE IF NOT EXISTS bridges (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id           INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     kind              TEXT    NOT NULL,
-    config_sealed     BLOB    NOT NULL,
+    config_encrypted  BLOB    NOT NULL,
+    config_nonce      BLOB    NOT NULL,
     bot_user_id       TEXT    NOT NULL,
     status            TEXT    NOT NULL DEFAULT 'pending',
     last_heartbeat_at TEXT,

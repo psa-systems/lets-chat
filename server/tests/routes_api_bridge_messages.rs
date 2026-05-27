@@ -64,8 +64,8 @@ async fn app() -> TestApp {
         .unwrap();
     // Insert the bridge row directly (db::bridges::insert lands in chunk 4).
     let bridge_id: i64 = sqlx::query_scalar(
-        "INSERT INTO bridges (room_id, kind, config_sealed, bot_user_id, created_by) \
-         VALUES (?, 'matrix', X'00', ?, ?) RETURNING id",
+        "INSERT INTO bridges (room_id, kind, config_encrypted, config_nonce, bot_user_id, created_by) \
+         VALUES (?, 'matrix', X'00', X'01', ?, ?) RETURNING id",
     )
     .bind(room)
     .bind(&bot_id)
