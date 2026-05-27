@@ -26,4 +26,16 @@ pub struct Message {
     /// empty). Parallel to `webhook_id`; exactly one of the two is `Some`
     /// for any synthetic-actor message, both `None` for real-user messages.
     pub email_inbox_id: Option<i64>,
+    /// LC-78: `Some(N)` when posted by protocol bridge `N` (user_id is
+    /// empty). At most one of webhook_id / email_inbox_id / bridge_id is
+    /// `Some` for any given message.
+    pub bridge_id: Option<i64>,
+    /// LC-78: snapshotted foreign display name (e.g. Matrix `alice:server`).
+    /// `Some` iff `bridge_id` is `Some`. Carried on the Message broadcast so
+    /// the WS render reaches the actor resolver without a re-query; same
+    /// pass-through shape as `webhook_id` + the join-resolved webhook name.
+    pub bridge_foreign_name: Option<String>,
+    /// LC-78: snapshotted protocol kind (`matrix` / `irc` / `xmpp`). `Some`
+    /// iff `bridge_id` is `Some`.
+    pub bridge_kind: Option<String>,
 }

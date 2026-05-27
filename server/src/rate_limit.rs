@@ -71,6 +71,11 @@ pub enum RateLimitKind {
     /// the requesting user_id. Blunts request spam / re-request harassment;
     /// over-limit requests drop silently in `relay_control_signal`.
     RemoteControlRequest,
+    /// LC-78: per-bridge cap on `POST /api/v1/bridges/{id}/messages`. Keyed
+    /// by the bridges.id. Separate bucket from `Message` so bursty foreign
+    /// traffic (federated Matrix rooms can be chatty) does not share a
+    /// counter with human posting.
+    BridgeMessage,
 }
 
 impl RateLimitKind {
@@ -84,6 +89,7 @@ impl RateLimitKind {
             RateLimitKind::EmailInbox => "eml",
             RateLimitKind::EmailMentionNotification => "emn",
             RateLimitKind::RemoteControlRequest => "rcr",
+            RateLimitKind::BridgeMessage => "brm",
         }
     }
 }
