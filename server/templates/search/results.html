@@ -1,6 +1,6 @@
 {% if results.is_empty() %}
 <div class="bg-white border border-slate-300 rounded shadow-lg p-3">
-  <p class="text-sm text-slate-500">No results.</p>
+  <p class="text-sm text-slate-500">{{ "search-no-results"|t }}</p>
 </div>
 {% else %}
 <div role="listbox" class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">

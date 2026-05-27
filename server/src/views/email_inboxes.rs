@@ -3,7 +3,9 @@
 //! shape divergence is the help text + the "address shown once" affordance
 //! (full `<token>@<domain>` instead of LC-74's `<base>/webhook/<secret>`).
 
-use askama::Template;
+#[allow(unused_imports)]
+use crate::i18n::filters;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 use crate::models::{Room, User};
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};

@@ -1,17 +1,14 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Outgoing webhooks - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-webhooks-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Outgoing webhooks</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-webhooks-heading"|t }}</h1>
 <p class="text-sm text-slate-600 mb-4">
-  Register a URL to receive a signed <code>POST</code> when matching events
-  fire. The body is
-  <code>{"version":"1","event":"...","room_id":N,"data":{...}}</code> and each
-  request carries <code>X-LetsChat-Signature: sha256=&lt;hmac&gt;</code> over the
-  raw body, keyed by the webhook's signing secret, plus
-  <code>X-LetsChat-Timestamp</code>. Verify both. Failed deliveries retry with
-  backoff; after repeated failures the webhook auto-disables.
+  {{ "admin-webhooks-intro-1"|t }} <code>POST</code> {{ "admin-webhooks-intro-2"|t }}
+  <code>{"version":"1","event":"...","room_id":N,"data":{...}}</code> {{ "admin-webhooks-intro-3"|t }}
+  <code>X-LetsChat-Signature: sha256=&lt;hmac&gt;</code> {{ "admin-webhooks-intro-4"|t }}
+  <code>X-LetsChat-Timestamp</code>. {{ "admin-webhooks-intro-5"|t }}
 </p>
 
 {% if let Some(err) = error %}
@@ -20,51 +17,51 @@
 
 {% if let Some(rev) = revealed %}
 <div class="mb-4 p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-  <p class="font-medium text-green-800">Signing secret for webhook #{{ rev.0 }} - copy it now, it won't be shown again.</p>
+  <p class="font-medium text-green-800">{{ "admin-webhooks-secret-prefix"|t }} #{{ rev.0 }} {{ "admin-webhooks-secret-suffix"|t }}</p>
   <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ rev.1 }}</code>
 </div>
 {% endif %}
 
 <form method="post" action="/admin/outgoing-webhooks" class="space-y-3 border rounded-lg p-4 mb-6 max-w-2xl">
-  <h2 class="font-semibold">Create a webhook</h2>
+  <h2 class="font-semibold">{{ "admin-webhooks-create-heading"|t }}</h2>
   <div class="grid grid-cols-2 gap-3">
     <label class="block text-sm">
-      <span class="text-slate-700">Scope</span>
+      <span class="text-slate-700">{{ "admin-webhooks-scope"|t }}</span>
       <select name="scope_kind" class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
-        <option value="global">global</option>
-        <option value="enclave">enclave</option>
-        <option value="room">room</option>
+        <option value="global">{{ "admin-webhooks-scope-global"|t }}</option>
+        <option value="enclave">{{ "admin-webhooks-scope-enclave"|t }}</option>
+        <option value="room">{{ "admin-webhooks-scope-room"|t }}</option>
       </select>
     </label>
     <label class="block text-sm">
-      <span class="text-slate-700">Scope id (enclave/room)</span>
-      <input name="scope_id" type="number" min="1" placeholder="(blank for global)"
+      <span class="text-slate-700">{{ "admin-webhooks-scope-id"|t }}</span>
+      <input name="scope_id" type="number" min="1" placeholder="{{ "admin-webhooks-scope-id-placeholder"|t }}"
              class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </label>
   </div>
   <label class="block text-sm">
-    <span class="text-slate-700">Delivery URL</span>
+    <span class="text-slate-700">{{ "admin-webhooks-delivery-url"|t }}</span>
     <input name="url" type="url" required placeholder="https://example.com/hook"
            class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </label>
   <fieldset class="text-sm">
-    <legend class="text-slate-700 mb-1">Events</legend>
+    <legend class="text-slate-700 mb-1">{{ "admin-webhooks-events"|t }}</legend>
     <label class="flex items-center gap-2"><input type="checkbox" name="e_message_posted" checked> <code>message.posted</code></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="e_message_edited"> <code>message.edited</code></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="e_message_deleted"> <code>message.deleted</code></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="e_reaction_added"> <code>reaction.added</code></label>
   </fieldset>
-  <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create webhook</button>
+  <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "admin-webhooks-create-button"|t }}</button>
 </form>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Scope</th>
-      <th class="py-2">Events</th>
-      <th class="py-2">URL</th>
-      <th class="py-2">Status</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-webhooks-th-scope"|t }}</th>
+      <th class="py-2">{{ "admin-webhooks-th-events"|t }}</th>
+      <th class="py-2">{{ "admin-webhooks-th-url"|t }}</th>
+      <th class="py-2">{{ "admin-webhooks-th-status"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-webhooks-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -74,27 +71,27 @@
       <td class="py-1 text-xs font-mono">{{ w.events }}</td>
       <td class="py-1 text-xs font-mono break-all max-w-xs">{{ w.url }}</td>
       <td class="py-1 text-xs">
-        {% if w.disabled %}<span class="text-red-600">disabled</span>
-        {% else %}active{% endif %}
-        {% if w.consecutive_failures > 0 %}<span class="text-amber-600">({{ w.consecutive_failures }} fails)</span>{% endif %}
+        {% if w.disabled %}<span class="text-red-600">{{ "admin-webhooks-status-disabled"|t }}</span>
+        {% else %}{{ "admin-webhooks-status-active"|t }}{% endif %}
+        {% if w.consecutive_failures > 0 %}<span class="text-amber-600">({{ w.consecutive_failures }} {{ "admin-webhooks-fails"|t }})</span>{% endif %}
       </td>
       <td class="py-1 text-right space-x-2 whitespace-nowrap">
-        <a href="/admin/outgoing-webhooks/{{ w.id }}/deliveries" class="text-blue-600 hover:underline text-xs">History</a>
+        <a href="/admin/outgoing-webhooks/{{ w.id }}/deliveries" class="text-blue-600 hover:underline text-xs">{{ "admin-webhooks-history"|t }}</a>
         <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/rotate" class="inline">
-          <button type="submit" class="text-slate-600 hover:underline text-xs">Rotate secret</button>
+          <button type="submit" class="text-slate-600 hover:underline text-xs">{{ "admin-webhooks-rotate"|t }}</button>
         </form>
         <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/toggle" class="inline">
           {% if !w.disabled %}<input type="hidden" name="_off" value="1">{% else %}<input type="hidden" name="enable" value="1">{% endif %}
-          <button type="submit" class="text-slate-600 hover:underline text-xs">{% if w.disabled %}Enable{% else %}Disable{% endif %}</button>
+          <button type="submit" class="text-slate-600 hover:underline text-xs">{% if w.disabled %}{{ "admin-webhooks-enable"|t }}{% else %}{{ "admin-webhooks-disable"|t }}{% endif %}</button>
         </form>
         <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/delete" class="inline">
-          <button type="submit" class="text-red-600 hover:underline text-xs">Delete</button>
+          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-webhooks-delete"|t }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
     {% if webhooks.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No outgoing webhooks yet.</td></tr>
+    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "admin-webhooks-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

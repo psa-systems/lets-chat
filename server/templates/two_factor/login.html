@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Two-factor code - lets-chat{% endblock %}
+{% block title %}{{ "twofactor-login-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="h-screen overflow-y-auto p-6">
@@ -10,21 +10,21 @@
     action="/login/2fa"
     class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
   >
-    <h1 class="text-xl font-semibold">Two-factor code</h1>
-    <p class="text-sm text-slate-600">Enter the 6-digit code from your authenticator app.</p>
+    <h1 class="text-xl font-semibold">{{ "twofactor-login-title"|t }}</h1>
+    <p class="text-sm text-slate-600">{{ "twofactor-login-help"|t }}</p>
     {% if let Some(error) = error %}
     <p class="text-red-600 text-sm">{{ error }}</p>
     {% endif %}
     <label class="block">
-      <span class="text-sm">Code</span>
+      <span class="text-sm">{{ "twofactor-login-code"|t }}</span>
       <input name="code" required inputmode="numeric" autocomplete="one-time-code"
              pattern="[0-9]{6}" maxlength="6" autofocus
              oninput="if (this.value.length === 6) this.form.requestSubmit();"
              class="mt-1 block w-full border rounded px-2 py-1 font-mono tracking-widest text-center">
     </label>
-    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Verify</button>
+    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{{ "twofactor-login-verify"|t }}</button>
     <p class="text-sm text-center">
-      Lost your device? <a href="/login/recovery" class="text-blue-600 hover:underline">Use a recovery code</a>.
+      {{ "twofactor-login-lost-device"|t }} <a href="/login/recovery" class="text-blue-600 hover:underline">{{ "twofactor-login-recovery-link"|t }}</a>.
     </p>
   </form>
   </div>

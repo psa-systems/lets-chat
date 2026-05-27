@@ -6,31 +6,31 @@
    focus trap (window.__lcDialogTrap), Escape to close, and focus restored
    to the opener on cancel. #}
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-     role="dialog" aria-modal="true" aria-label="Set a reminder"
+     role="dialog" aria-modal="true" aria-label="{{ "reminders-picker-label"|t }}"
      data-lc-reminder-dialog>
   <div class="w-80 rounded-lg bg-white p-5 shadow-xl">
     <div class="flex items-center justify-between gap-2 mb-3">
-      <h2 class="text-lg font-semibold">Remind me about this</h2>
-      <button type="button" aria-label="Close" data-lc-reminder-close
+      <h2 class="text-lg font-semibold">{{ "reminders-picker-title"|t }}</h2>
+      <button type="button" aria-label="{{ "reminders-close"|t }}" data-lc-reminder-close
               class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
-      {% for opt in [("15m", "In 15 minutes"), ("1h", "In 1 hour"), ("3h", "In 3 hours"), ("tomorrow", "Tomorrow")] %}
+      {% for opt in [("15m", "reminders-preset-15m"), ("1h", "reminders-preset-1h"), ("3h", "reminders-preset-3h"), ("tomorrow", "reminders-preset-tomorrow")] %}
       <button hx-post="/reminders"
               hx-vals='{"message_id": {{ message_id }}, "preset": "{{ opt.0 }}"}'
               hx-target="#lc-reminder-modal"
               hx-swap="innerHTML"
-              class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">{{ opt.1 }}</button>
+              class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">{{ opt.1|t }}</button>
       {% endfor %}
     </div>
     <form id="lc-reminder-custom" class="mt-4 flex flex-col gap-2" data-message-id="{{ message_id }}">
-      <label class="text-sm text-slate-700">Custom time (your local time)
+      <label class="text-sm text-slate-700">{{ "reminders-custom-time"|t }}
         <input type="datetime-local" name="when" required
                class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
       </label>
       <div class="lc-reminder-error hidden text-sm text-red-600" role="alert"></div>
       <button type="submit"
-              class="self-end rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">Set reminder</button>
+              class="self-end rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">{{ "reminders-set"|t }}</button>
     </form>
   </div>
 </div>

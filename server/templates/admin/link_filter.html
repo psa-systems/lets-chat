@@ -1,14 +1,14 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Link filter - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-linkfilter-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Link filter rules</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-linkfilter-heading"|t }}</h1>
 <p class="text-sm text-slate-600 mb-4">
-  Patterns match the host of every URL in a message body. Use a literal domain
-  (<code>example.com</code>) or a simple glob with <code>*</code>
-  (<code>*.example.com</code>, <code>*.tk</code>). Matching is case-insensitive.
-  Make sure the feature is enabled on the <a href="/admin/anti-spam" class="text-blue-600 hover:underline">Anti-spam settings page</a>.
+  {{ "admin-linkfilter-intro-1"|t }}
+  (<code>example.com</code>) {{ "admin-linkfilter-intro-2"|t }} <code>*</code>
+  (<code>*.example.com</code>, <code>*.tk</code>). {{ "admin-linkfilter-intro-3"|t }}
+  {{ "admin-linkfilter-intro-4"|t }} <a href="/admin/anti-spam" class="text-blue-600 hover:underline">{{ "admin-linkfilter-intro-link"|t }}</a>.
 </p>
 
 {% if let Some(err) = error %}
@@ -17,29 +17,29 @@
 
 <form method="post" action="/admin/link-filter" class="flex gap-2 items-end mb-6 max-w-2xl">
   <div class="flex-1">
-    <label class="block text-xs text-slate-500 mb-1" for="pattern">Pattern</label>
+    <label class="block text-xs text-slate-500 mb-1" for="pattern">{{ "admin-linkfilter-pattern"|t }}</label>
     <input id="pattern" name="pattern" type="text" required placeholder="*.example.com"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-xs text-slate-500 mb-1" for="action">Action</label>
+    <label class="block text-xs text-slate-500 mb-1" for="action">{{ "admin-linkfilter-action"|t }}</label>
     <select id="action" name="action" class="border border-slate-300 rounded px-2 py-1 text-sm">
-      <option value="warn">warn</option>
-      <option value="quarantine">quarantine</option>
-      <option value="block">block</option>
+      <option value="warn">{{ "admin-linkfilter-warn"|t }}</option>
+      <option value="quarantine">{{ "admin-linkfilter-quarantine"|t }}</option>
+      <option value="block">{{ "admin-linkfilter-block"|t }}</option>
     </select>
   </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Add rule</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-linkfilter-add-rule"|t }}</button>
 </form>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Pattern</th>
-      <th class="py-2">Action</th>
-      <th class="py-2">Added by</th>
-      <th class="py-2">Added</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-linkfilter-th-pattern"|t }}</th>
+      <th class="py-2">{{ "admin-linkfilter-th-action"|t }}</th>
+      <th class="py-2">{{ "admin-linkfilter-th-added-by"|t }}</th>
+      <th class="py-2">{{ "admin-linkfilter-th-added"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-linkfilter-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -47,21 +47,21 @@
     <tr class="border-t border-slate-200">
       <td class="py-1 font-mono text-xs">{{ r.pattern }}</td>
       <td class="py-1 text-xs">
-        {% if r.action == "block" %}<span class="text-red-700">block</span>
-        {% else if r.action == "quarantine" %}<span class="text-amber-700">quarantine</span>
-        {% else %}<span class="text-slate-700">warn</span>{% endif %}
+        {% if r.action == "block" %}<span class="text-red-700">{{ "admin-linkfilter-block"|t }}</span>
+        {% else if r.action == "quarantine" %}<span class="text-amber-700">{{ "admin-linkfilter-quarantine"|t }}</span>
+        {% else %}<span class="text-slate-700">{{ "admin-linkfilter-warn"|t }}</span>{% endif %}
       </td>
       <td class="py-1 text-xs font-mono">{{ r.created_by }}</td>
       <td class="py-1 text-xs text-slate-500">{{ r.created_at }}</td>
       <td class="py-1 text-right">
         <form method="post" action="/admin/link-filter/{{ r.id }}/delete" class="inline">
-          <button type="submit" class="text-red-600 hover:underline text-xs">Delete</button>
+          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-linkfilter-delete"|t }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
     {% if rules.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No rules. Add one above to start filtering.</td></tr>
+    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "admin-linkfilter-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

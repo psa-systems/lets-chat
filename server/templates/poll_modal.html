@@ -7,38 +7,38 @@
      role="dialog" aria-modal="true" aria-labelledby="lc-poll-modal-title" aria-hidden="true">
   <div class="w-96 rounded-lg bg-white p-5 shadow-xl">
     <div class="flex items-center justify-between gap-2 mb-3">
-      <h2 id="lc-poll-modal-title" class="text-lg font-semibold">Create poll</h2>
-      <button type="button" data-lc-poll-close aria-label="Close dialog"
+      <h2 id="lc-poll-modal-title" class="text-lg font-semibold">{{ "poll-create-title"|t }}</h2>
+      <button type="button" data-lc-poll-close aria-label="{{ "poll-close-dialog"|t }}"
               class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
     </div>
     <form data-lc-poll-form class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-slate-700">Question</span>
+        <span class="text-slate-700">{{ "poll-question"|t }}</span>
         <input type="text" name="question" required maxlength="300"
                class="rounded border border-slate-300 px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-slate-700">Options (one per line, 2-10)</span>
+        <span class="text-slate-700">{{ "poll-options"|t }}</span>
         <textarea name="options" rows="4" required
                   class="rounded border border-slate-300 px-2 py-1"></textarea>
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="allows_multi"> Allow multiple choices
+        <input type="checkbox" name="allows_multi"> {{ "poll-allow-multi"|t }}
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="anonymous"> Anonymous (hide who voted)
+        <input type="checkbox" name="anonymous"> {{ "poll-anonymous"|t }}
       </label>
       <label class="flex items-center gap-2 text-sm">
-        Close after
+        {{ "poll-close-after"|t }}
         <input type="number" name="closes_in" min="0" step="1" placeholder="0"
-               class="w-20 rounded border border-slate-300 px-2 py-1"> minutes (0 = never)
+               class="w-20 rounded border border-slate-300 px-2 py-1"> {{ "poll-close-after-suffix"|t }}
       </label>
       <div data-lc-poll-error class="hidden text-sm text-red-600" role="alert"></div>
       <div class="flex justify-end gap-2 mt-1">
         <button type="button" data-lc-poll-cancel
-                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">{{ "action-cancel"|t }}</button>
         <button type="submit"
-                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">Post poll</button>
+                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">{{ "poll-post"|t }}</button>
       </div>
     </form>
   </div>

@@ -5,63 +5,60 @@
 {% block main %}
 <div class="flex-1 overflow-y-auto p-4">
   <nav class="text-sm text-slate-500 mb-3">
-    <a href="/enclave/{{ enclave.id }}/settings" class="text-blue-600 hover:underline">{{ enclave.name }} settings</a>
-    &raquo; Branding
+    <a href="/enclave/{{ enclave.id }}/settings" class="text-blue-600 hover:underline">{{ enclave.name }} {{ "enclave-branding-breadcrumb-settings"|t }}</a>
+    &raquo; {{ "enclave-branding-breadcrumb-current"|t }}
   </nav>
-  <h1 class="text-lg font-semibold mb-4">Branding for {{ enclave.name }}</h1>
+  <h1 class="text-lg font-semibold mb-4">{{ "enclave-branding-heading-prefix"|t }} {{ enclave.name }}</h1>
   {% if saved %}
-  <div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">Saved.</div>
+  <div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "enclave-branding-saved"|t }}</div>
   {% endif %}
   {% if let Some(err) = error %}
   <div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
   {% endif %}
   <p class="text-sm text-slate-600 mb-6 max-w-2xl">
-    These colors apply only when a member views a page under this enclave
-    (URLs starting with <code>/enclave/{{ enclave.id }}/</code>). The
-    deployment-wide branding set under <code>/admin/branding</code> covers
-    everything else. The logo is served from
+    {{ "enclave-branding-intro-1"|t }} <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-branding-intro-2"|t }} <code>/admin/branding</code> {{ "enclave-branding-intro-3"|t }}
     <a href="/enclave/{{ enclave.id }}/branding/logo" target="_blank" class="text-blue-600 hover:underline"><code>/enclave/{{ enclave.id }}/branding/logo</code></a>.
   </p>
 
   <form method="post" action="/enclave/{{ enclave.id }}/branding" enctype="multipart/form-data" class="max-w-2xl space-y-5">
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-sm font-medium mb-1" for="primary_color">Primary color</label>
+        <label class="block text-sm font-medium mb-1" for="primary_color">{{ "enclave-branding-primary-color"|t }}</label>
         <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}"
                class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
       </div>
       <div>
-        <label class="block text-sm font-medium mb-1" for="accent_color">Accent color</label>
+        <label class="block text-sm font-medium mb-1" for="accent_color">{{ "enclave-branding-accent-color"|t }}</label>
         <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}"
                class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
       </div>
     </div>
 
     <div>
-      <label class="block text-sm font-medium mb-1" for="logo">Logo</label>
+      <label class="block text-sm font-medium mb-1" for="logo">{{ "enclave-branding-logo"|t }}</label>
       {% if has_logo %}
       <div class="mb-2 flex items-center gap-3">
-        <img src="/enclave/{{ enclave.id }}/branding/logo?v={{ asset_version }}" alt="Current logo"
+        <img src="/enclave/{{ enclave.id }}/branding/logo?v={{ asset_version }}" alt="{{ "enclave-branding-current-logo-alt"|t }}"
              class="max-h-12 max-w-32 object-contain border border-slate-200 rounded p-1 bg-white">
       </div>
       {% endif %}
       <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
              class="block text-sm">
-      <p class="text-xs text-slate-500 mt-1">PNG / JPEG / WebP / GIF up to 1 MiB. Leave empty to keep the current logo.</p>
+      <p class="text-xs text-slate-500 mt-1">{{ "enclave-branding-logo-help"|t }}</p>
     </div>
 
     <div>
-      <label class="block text-sm font-medium mb-1" for="login_heading">Login page heading (only relevant when this enclave is the active scope)</label>
+      <label class="block text-sm font-medium mb-1" for="login_heading">{{ "enclave-branding-login-heading-label"|t }}</label>
       <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}"
              class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </div>
     <div>
-      <label class="block text-sm font-medium mb-1" for="login_body">Login page body</label>
+      <label class="block text-sm font-medium mb-1" for="login_body">{{ "enclave-branding-login-body-label"|t }}</label>
       <textarea id="login_body" name="login_body" rows="6" maxlength="2000"
                 class="w-full border border-slate-300 rounded px-2 py-1 text-sm font-mono">{{ login_body }}</textarea>
     </div>
 
-    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save</button>
+    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "enclave-branding-save"|t }}</button>
   </form>
 </div>
 {% endblock %}

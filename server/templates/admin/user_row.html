@@ -3,36 +3,36 @@
   <td class="py-2">
     <form hx-post="/admin/users/{{ u.id }}/role" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1">
       <select name="role" class="border rounded text-xs px-1 py-0.5">
-        <option value="user"{% if u.role == "user" %} selected{% endif %}>user</option>
-        <option value="moderator"{% if u.role == "moderator" %} selected{% endif %}>moderator</option>
-        <option value="admin"{% if u.role == "admin" %} selected{% endif %}>admin</option>
+        <option value="user"{% if u.role == "user" %} selected{% endif %}>{{ "admin-userrow-role-user"|t }}</option>
+        <option value="moderator"{% if u.role == "moderator" %} selected{% endif %}>{{ "admin-userrow-role-moderator"|t }}</option>
+        <option value="admin"{% if u.role == "admin" %} selected{% endif %}>{{ "admin-userrow-role-admin"|t }}</option>
       </select>
-      <button type="submit" class="text-blue-600 hover:underline text-xs">Save</button>
+      <button type="submit" class="text-blue-600 hover:underline text-xs">{{ "admin-userrow-save"|t }}</button>
     </form>
   </td>
   <td class="py-2 text-xs">
-    {% if u.is_banned %}<span class="text-red-600">Banned</span>{% else %}Active{% endif %}
-    {% if u.is_muted %} <span class="text-orange-600">Muted</span>{% endif %}
+    {% if u.is_banned %}<span class="text-red-600">{{ "admin-userrow-banned"|t }}</span>{% else %}{{ "admin-userrow-active"|t }}{% endif %}
+    {% if u.is_muted %} <span class="text-orange-600">{{ "admin-userrow-muted"|t }}</span>{% endif %}
   </td>
   <td class="py-2 text-xs">
     <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
       <span class="font-mono text-slate-500">{{ u.usage_display }}</span>
       <span>/</span>
-      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" placeholder="unlimited" class="border rounded text-xs px-1 py-0.5 w-20">
-      <button type="submit" class="text-blue-600 hover:underline">Save</button>
+      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" placeholder="{{ "admin-userrow-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
+      <button type="submit" class="text-blue-600 hover:underline">{{ "admin-userrow-save"|t }}</button>
     </form>
   </td>
   <td class="py-2 text-right text-xs whitespace-nowrap">
     {% if u.is_banned %}
-    <button hx-post="/admin/users/{{ u.id }}/unban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">Unban</button>
+    <button hx-post="/admin/users/{{ u.id }}/unban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">{{ "admin-userrow-unban"|t }}</button>
     {% else %}
-    <button hx-post="/admin/users/{{ u.id }}/ban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">Ban</button>
+    <button hx-post="/admin/users/{{ u.id }}/ban" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">{{ "admin-userrow-ban"|t }}</button>
     {% endif %}
     {% if u.is_muted %}
-    <button hx-post="/admin/users/{{ u.id }}/unmute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline ml-2">Unmute</button>
+    <button hx-post="/admin/users/{{ u.id }}/unmute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline ml-2">{{ "admin-userrow-unmute"|t }}</button>
     {% else %}
-    <button hx-post="/admin/users/{{ u.id }}/mute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-orange-600 hover:underline ml-2">Mute</button>
+    <button hx-post="/admin/users/{{ u.id }}/mute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="text-orange-600 hover:underline ml-2">{{ "admin-userrow-mute"|t }}</button>
     {% endif %}
-    <button hx-post="/admin/users/{{ u.id }}/delete" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="Permanently delete {{ u.username }}? This cannot be undone." class="text-red-700 hover:underline ml-2">Delete</button>
+    <button hx-post="/admin/users/{{ u.id }}/delete" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-delete-confirm-prefix"|t }} {{ u.username }}? {{ "admin-userrow-delete-confirm-suffix"|t }}" class="text-red-700 hover:underline ml-2">{{ "admin-userrow-delete"|t }}</button>
   </td>
 </tr>

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}#{{ room.name }} info - lets-chat{% endblock %}
+{% block title %}#{{ room.name }} {{ "room-info-title-suffix"|t }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
@@ -12,25 +12,25 @@
       <p class="text-sm text-slate-600">{{ topic }}</p>
       {% endif %}
     </div>
-    <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline">Back to chat</a>
+    <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline">{{ "room-info-back-to-chat"|t }}</a>
   </div>
 
-  <nav class="border-b border-slate-200 flex gap-1" aria-label="Room info tabs">
+  <nav class="border-b border-slate-200 flex gap-1" aria-label="{{ "room-info-tabs-aria"|t }}">
     <a href="/room/{{ room.id }}/info?tab=docs"
-       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "docs" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Docs</a>
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "docs" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">{{ "room-info-tab-docs"|t }}</a>
     <a href="/room/{{ room.id }}/info?tab=pinned"
-       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "pinned" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Pinned</a>
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "pinned" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">{{ "room-info-tab-pinned"|t }}</a>
     <a href="/room/{{ room.id }}/info?tab=files"
-       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "files" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">Files</a>
+       class="px-3 py-2 text-sm border-b-2 {% if active_tab == "files" %}border-blue-600 text-blue-700 font-medium{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">{{ "room-info-tab-files"|t }}</a>
   </nav>
 
   {% if active_tab == "docs" %}
 
   <section class="space-y-2">
-    <h2 class="font-semibold">Description</h2>
+    <h2 class="font-semibold">{{ "room-info-description-heading"|t }}</h2>
     <div id="description-content" class="space-y-2">
       {% if description_html.is_empty() %}
-      <p class="text-sm text-slate-500 italic">No description set.</p>
+      <p class="text-sm text-slate-500 italic">{{ "room-description-empty"|t }}</p>
       {% else %}
       <div class="prose prose-slate max-w-none text-sm">{{ description_html|safe }}</div>
       {% endif %}
@@ -39,22 +39,22 @@
               hx-get="/room/{{ room.id }}/description/edit"
               hx-target="#description-content"
               hx-swap="innerHTML"
-              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if description_html.is_empty() %}Set description{% else %}Edit description{% endif %}</button>
+              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if description_html.is_empty() %}{{ "room-description-set"|t }}{% else %}{{ "room-description-edit"|t }}{% endif %}</button>
       {% endif %}
     </div>
   </section>
 
   <section class="space-y-2">
-    <h2 class="font-semibold">Wiki</h2>
+    <h2 class="font-semibold">{{ "room-info-wiki-heading"|t }}</h2>
     <div id="wiki-content" class="space-y-2">
       {% if wiki_html.is_empty() %}
-      <p class="text-sm text-slate-500 italic">No wiki page yet.</p>
+      <p class="text-sm text-slate-500 italic">{{ "room-info-wiki-empty"|t }}</p>
       {% else %}
       <div class="prose prose-slate max-w-none text-sm">{{ wiki_html|safe }}</div>
       <p class="text-xs text-slate-500">
-        Last edited
-        {% if let Some(at) = room.wiki_updated_at.as_ref() %}on {{ at }}{% endif %}
-        {% if let Some(by) = wiki_updated_by_label.as_ref() %}by {{ by }}{% endif %}.
+        {{ "room-info-wiki-last-edited"|t }}
+        {% if let Some(at) = room.wiki_updated_at.as_ref() %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}
+        {% if let Some(by) = wiki_updated_by_label.as_ref() %}{{ "room-info-wiki-by"|t }} {{ by }}{% endif %}.
       </p>
       {% endif %}
       {% if can_edit_wiki %}
@@ -62,7 +62,7 @@
               hx-get="/room/{{ room.id }}/wiki/edit"
               hx-target="#wiki-content"
               hx-swap="innerHTML"
-              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if wiki_html.is_empty() %}Create wiki{% else %}Edit wiki{% endif %}</button>
+              class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if wiki_html.is_empty() %}{{ "room-info-wiki-create"|t }}{% else %}{{ "room-info-wiki-edit"|t }}{% endif %}</button>
       {% endif %}
     </div>
   </section>
@@ -70,16 +70,16 @@
   {% else if active_tab == "pinned" %}
 
   <section class="space-y-3">
-    <h2 class="font-semibold">Pinned messages</h2>
+    <h2 class="font-semibold">{{ "room-info-pinned-heading"|t }}</h2>
     {% if pinned.is_empty() %}
-    <p class="text-sm text-slate-500 italic">No pinned messages yet.</p>
+    <p class="text-sm text-slate-500 italic">{{ "room-info-pinned-empty"|t }}</p>
     {% else %}
     <ul class="divide-y border rounded">
       {% for p in pinned %}
       <li class="p-3 space-y-1">
         <div class="text-xs text-slate-500">
           <span class="font-medium text-slate-700">{{ p.author_label }}</span>
-          - pinned by {{ p.pinner_label }} on {{ p.pinned_at }}
+          - {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} {{ "room-info-pinned-on"|t }} {{ p.pinned_at }}
         </div>
         <div class="text-sm whitespace-pre-wrap">{{ p.body }}</div>
       </li>
@@ -92,20 +92,20 @@
 
   <section class="space-y-3">
     <div class="flex items-baseline justify-between gap-2">
-      <h2 class="font-semibold">Files</h2>
+      <h2 class="font-semibold">{{ "room-info-files-heading"|t }}</h2>
       <form hx-get="/room/{{ room.id }}/files"
             hx-trigger="change from:select"
             hx-target="#files-grid"
             hx-swap="innerHTML"
             class="flex items-center gap-2">
-        <label class="text-xs text-slate-600">Filter
+        <label class="text-xs text-slate-600">{{ "room-info-files-filter"|t }}
           <select name="kind" class="border rounded px-2 py-1 text-xs">
-            <option value="all" {% if files_kind == "all" %}selected{% endif %}>All files</option>
-            <option value="image" {% if files_kind == "image" %}selected{% endif %}>Images</option>
-            <option value="video" {% if files_kind == "video" %}selected{% endif %}>Video</option>
-            <option value="audio" {% if files_kind == "audio" %}selected{% endif %}>Audio</option>
-            <option value="pdf" {% if files_kind == "pdf" %}selected{% endif %}>PDF</option>
-            <option value="other" {% if files_kind == "other" %}selected{% endif %}>Other</option>
+            <option value="all" {% if files_kind == "all" %}selected{% endif %}>{{ "room-info-files-all"|t }}</option>
+            <option value="image" {% if files_kind == "image" %}selected{% endif %}>{{ "room-info-files-images"|t }}</option>
+            <option value="video" {% if files_kind == "video" %}selected{% endif %}>{{ "room-info-files-video"|t }}</option>
+            <option value="audio" {% if files_kind == "audio" %}selected{% endif %}>{{ "room-info-files-audio"|t }}</option>
+            <option value="pdf" {% if files_kind == "pdf" %}selected{% endif %}>{{ "room-info-files-pdf"|t }}</option>
+            <option value="other" {% if files_kind == "other" %}selected{% endif %}>{{ "room-info-files-other"|t }}</option>
           </select>
         </label>
         <input type="hidden" name="append" value="false">
@@ -113,7 +113,7 @@
     </div>
     <div id="files-grid">
       {% if files.is_empty() %}
-      <p class="text-sm text-slate-500 italic">No files uploaded in this room yet.</p>
+      <p class="text-sm text-slate-500 italic">{{ "room-info-files-empty"|t }}</p>
       {% else %}
       <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
         {% let card_room_id = room.id %}
@@ -127,7 +127,7 @@
                 hx-get="/room/{{ room.id }}/files?kind={{ files_kind }}&amp;before={{ cur }}&amp;append=true"
                 hx-target="#files-load-more"
                 hx-swap="outerHTML"
-                class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">Load more</button>
+                class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{{ "room-files-load-more"|t }}</button>
         {% endif %}
       </div>
       {% endif %}

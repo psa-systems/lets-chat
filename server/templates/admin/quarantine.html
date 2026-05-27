@@ -1,22 +1,22 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Quarantine - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-quarantine-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Quarantined messages</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-quarantine-heading"|t }}</h1>
 <p class="text-sm text-slate-600 mb-4">
-  Messages held by the link filter pending moderator review. Approving releases the message into the room; rejecting soft-deletes it.
+  {{ "admin-quarantine-intro"|t }}
 </p>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Author</th>
-      <th class="py-2">Room</th>
-      <th class="py-2">Body</th>
-      <th class="py-2">Matched</th>
-      <th class="py-2">Held</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-quarantine-th-author"|t }}</th>
+      <th class="py-2">{{ "admin-quarantine-th-room"|t }}</th>
+      <th class="py-2">{{ "admin-quarantine-th-body"|t }}</th>
+      <th class="py-2">{{ "admin-quarantine-th-matched"|t }}</th>
+      <th class="py-2">{{ "admin-quarantine-th-held"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-quarantine-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -34,16 +34,16 @@
       <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
       <td class="py-2 text-right whitespace-nowrap">
         <form method="post" action="/admin/quarantine/{{ e.message_id }}/approve" class="inline">
-          <button type="submit" class="text-blue-600 hover:underline text-xs">Approve</button>
+          <button type="submit" class="text-blue-600 hover:underline text-xs">{{ "admin-quarantine-approve"|t }}</button>
         </form>
         <form method="post" action="/admin/quarantine/{{ e.message_id }}/reject" class="inline ml-2">
-          <button type="submit" class="text-red-600 hover:underline text-xs">Reject</button>
+          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-quarantine-reject"|t }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
     {% if entries.is_empty() %}
-    <tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">Nothing in the queue.</td></tr>
+    <tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">{{ "admin-quarantine-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

@@ -1,11 +1,11 @@
 {% extends "layout.html" %}
 
-{% block title %}Saved - lets-chat{% endblock %}
+{% block title %}{{ "saved-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
-    <h1 class="font-semibold truncate">Saved messages</h1>
+    <h1 class="font-semibold truncate">{{ "saved-heading"|t }}</h1>
   </header>
   {# LC-178: live region. bookmark/unbookmark broadcasts SavedChanged to every
      tab; the WS send task swaps #lc-saved-list. Tabs not on /saved have no

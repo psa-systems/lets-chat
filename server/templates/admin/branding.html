@@ -1,29 +1,26 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Branding - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-branding-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Branding</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-branding-heading"|t }}</h1>
 {% if saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">Branding saved.</div>
+<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-branding-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = error %}
 <div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
 {% endif %}
 
 <p class="text-sm text-slate-600 mb-6 max-w-2xl">
-  Colors propagate to every page via CSS variables (no Tailwind rebuild
-  required). The logo is shown on the login page and is served from
+  {{ "admin-branding-intro-1"|t }}
   <a href="/branding/logo" target="_blank" class="text-blue-600 hover:underline"><code>/branding/logo</code></a>.
-  The login heading and body render through a restricted markdown
-  pipeline: bold, italic, links, lists, and paragraphs are allowed; raw
-  HTML and fenced code blocks are stripped.
+  {{ "admin-branding-intro-2"|t }}
 </p>
 
 <form method="post" action="/admin/branding" enctype="multipart/form-data" class="max-w-2xl space-y-5">
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label class="block text-sm font-medium mb-1" for="primary_color">Primary color</label>
+      <label class="block text-sm font-medium mb-1" for="primary_color">{{ "admin-branding-primary-color"|t }}</label>
       <div class="flex gap-2 items-center">
         <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}"
                class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
@@ -32,7 +29,7 @@
       </div>
     </div>
     <div>
-      <label class="block text-sm font-medium mb-1" for="accent_color">Accent color</label>
+      <label class="block text-sm font-medium mb-1" for="accent_color">{{ "admin-branding-accent-color"|t }}</label>
       <div class="flex gap-2 items-center">
         <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}"
                class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
@@ -43,47 +40,47 @@
   </div>
 
   <div>
-    <label class="block text-sm font-medium mb-1" for="logo">Logo</label>
+    <label class="block text-sm font-medium mb-1" for="logo">{{ "admin-branding-logo"|t }}</label>
     {% if has_logo %}
     <div class="mb-2 flex items-center gap-3">
-      <img src="/branding/logo?v={{ asset_version }}" alt="Current logo"
+      <img src="/branding/logo?v={{ asset_version }}" alt="{{ "admin-branding-current-logo-alt"|t }}"
            class="max-h-12 max-w-32 object-contain border border-slate-200 rounded p-1 bg-white">
-      <span class="text-xs text-slate-500">Current logo</span>
+      <span class="text-xs text-slate-500">{{ "admin-branding-current-logo"|t }}</span>
     </div>
     {% endif %}
     <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
            class="block text-sm">
-    <p class="text-xs text-slate-500 mt-1">PNG / JPEG / WebP / GIF up to 1 MiB. Leave empty to keep the current logo.</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-logo-help"|t }}</p>
   </div>
 
   <div>
-    <label class="block text-sm font-medium mb-1" for="favicon">Favicon</label>
+    <label class="block text-sm font-medium mb-1" for="favicon">{{ "admin-branding-favicon"|t }}</label>
     {% if has_favicon %}
     <div class="mb-2 flex items-center gap-3">
-      <img src="/branding/favicon?v={{ asset_version }}" alt="Current favicon"
+      <img src="/branding/favicon?v={{ asset_version }}" alt="{{ "admin-branding-current-favicon-alt"|t }}"
            class="h-8 w-8 object-contain border border-slate-200 rounded p-1 bg-white">
-      <span class="text-xs text-slate-500">Current favicon</span>
+      <span class="text-xs text-slate-500">{{ "admin-branding-current-favicon"|t }}</span>
     </div>
     {% endif %}
     <input id="favicon" name="favicon" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg"
            class="block text-sm">
-    <p class="text-xs text-slate-500 mt-1">PNG / ICO / SVG up to 1 MiB. Leave empty to keep the current favicon. Browsers cache favicons aggressively; a change may need a hard refresh to appear.</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-favicon-help"|t }}</p>
   </div>
 
   <div>
-    <label class="block text-sm font-medium mb-1" for="login_heading">Login page heading</label>
+    <label class="block text-sm font-medium mb-1" for="login_heading">{{ "admin-branding-login-heading"|t }}</label>
     <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">Plain text. Shown above the sign-in form. Empty falls back to "Sign in".</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-login-heading-help"|t }}</p>
   </div>
 
   <div>
-    <label class="block text-sm font-medium mb-1" for="login_body">Login page body</label>
+    <label class="block text-sm font-medium mb-1" for="login_body">{{ "admin-branding-login-body"|t }}</label>
     <textarea id="login_body" name="login_body" rows="6" maxlength="2000"
               class="w-full border border-slate-300 rounded px-2 py-1 text-sm font-mono">{{ login_body }}</textarea>
-    <p class="text-xs text-slate-500 mt-1">Restricted markdown. Use it for a welcome note, a link to your privacy policy, or operator contact info.</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-login-body-help"|t }}</p>
   </div>
 
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save branding</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-branding-save"|t }}</button>
 </form>
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Reset password - lets-chat{% endblock %}
+{% block title %}{{ "reset-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
@@ -13,19 +13,19 @@
     hx-swap="innerHTML"
     class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
   >
-    <h1 class="text-xl font-semibold">Choose a new password</h1>
+    <h1 class="text-xl font-semibold">{{ "reset-title"|t }}</h1>
     <div id="form-errors">
       {% include "auth/form_errors.html" %}
     </div>
     <label class="block">
-      <span class="text-sm">New password</span>
+      <span class="text-sm">{{ "reset-new-password"|t }}</span>
       <input type="password" name="password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block">
-      <span class="text-sm">Confirm new password</span>
+      <span class="text-sm">{{ "reset-confirm-password"|t }}</span>
       <input type="password" name="password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
-    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save new password</button>
+    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{{ "reset-submit"|t }}</button>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>

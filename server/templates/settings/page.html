@@ -1,15 +1,15 @@
 {% extends "layout.html" %}
 
-{% block title %}Settings - lets-chat{% endblock %}
+{% block title %}{{ "settings-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
 <header class="border-b border-slate-200 px-4 py-2">
-  <h1 class="font-semibold">Settings</h1>
+  <h1 class="font-semibold">{{ "settings-heading"|t }}</h1>
 </header>
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-xl space-y-8">
   {% if saved %}
-  <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Saved.</div>
+  <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-saved"|t }}</div>
   {% endif %}
 
   {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
@@ -25,15 +25,15 @@
   </form>
 
   <div>
-    <h2 class="font-medium mb-2">Account</h2>
+    <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
     <dl class="text-sm text-slate-700 space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Username</dt><dd>{{ user.username }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Role</dt><dd>{{ user.role }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-username"|t }}</dt><dd>{{ user.username }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-role"|t }}</dt><dd>{{ user.role }}</dd></div>
     </dl>
   </div>
 
   <form method="post" action="/settings/profile" enctype="multipart/form-data" class="space-y-4">
-    <h2 class="font-medium">Profile</h2>
+    <h2 class="font-medium">{{ "settings-profile"|t }}</h2>
     <div class="flex items-start gap-4">
       <div class="shrink-0">
         <span class="relative inline-block"{% if let Some(t) = user.custom_status.as_ref() %} title="{{ t }}"{% endif %}>
@@ -42,48 +42,48 @@
           {% else %}
           <div class="h-16 w-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
           {% endif %}
-          <span data-user-status="{{ user.id }}" aria-label="{% if user.status == "dnd" %}Do not disturb{% else if user.status == "idle" || user.status == "away" %}Away{% else if user.status == "offline" %}Offline{% else %}Online{% endif %}" class="absolute bottom-0 right-0 h-4 w-4 rounded-full ring-2 ring-white {% if user.status == "dnd" %}bg-red-500{% else if user.status == "idle" || user.status == "away" %}bg-yellow-400{% else if user.status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
+          <span data-user-status="{{ user.id }}" aria-label="{% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else if user.status == "offline" %}{{ "settings-presence-offline"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-4 w-4 rounded-full ring-2 ring-white {% if user.status == "dnd" %}bg-red-500{% else if user.status == "idle" || user.status == "away" %}bg-yellow-400{% else if user.status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
         </span>
-        <div class="text-xs text-slate-500 mt-1">Status: {% if user.status == "dnd" %}Do not disturb{% else if user.status == "idle" || user.status == "away" %}Away{% else %}Online{% endif %}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ "settings-status-label"|t }} {% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
       </div>
       <div class="flex-1 space-y-2">
         <label class="block text-sm">
-          <span class="text-slate-600">Profile picture</span>
+          <span class="text-slate-600">{{ "settings-profile-picture"|t }}</span>
           <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block mt-1 text-sm">
-          <span class="text-xs text-slate-500">PNG, JPEG, or WebP. Max 1 MiB.</span>
+          <span class="text-xs text-slate-500">{{ "settings-avatar-formats"|t }}</span>
         </label>
       </div>
     </div>
     <label class="block text-sm">
-      <span class="text-slate-600">Display name</span>
+      <span class="text-slate-600">{{ "settings-display-name"|t }}</span>
       <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">Email</span>
+      <span class="text-slate-600">{{ "settings-email"|t }}</span>
       <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
-      <span class="text-xs text-slate-500">Used only for password reset. Leave blank to remove.</span>
+      <span class="text-xs text-slate-500">{{ "settings-email-help"|t }}</span>
       {% if email_verification_available && email.is_some() %}
       <div class="mt-1 flex items-center gap-2 text-xs">
         {% if email_verified %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">Verified</span>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">{{ "settings-email-verified"|t }}</span>
         {% else %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Unverified</span>
-        <button type="submit" form="email-verify-resend" class="text-blue-600 hover:underline">Resend verification email</button>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">{{ "settings-email-unverified"|t }}</span>
+        <button type="submit" form="email-verify-resend" class="text-blue-600 hover:underline">{{ "settings-email-resend"|t }}</button>
         {% endif %}
       </div>
       {% if email_verify_sent %}
-      <p class="text-xs text-green-700 mt-1">If your account has an unverified email on file, we sent a fresh verification link.</p>
+      <p class="text-xs text-green-700 mt-1">{{ "settings-email-verify-sent"|t }}</p>
       {% endif %}
       {% endif %}
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">Bio</span>
+      <span class="text-slate-600">{{ "settings-bio"|t }}</span>
       <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
     </label>
     <div class="flex items-center gap-2">
-      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save profile</button>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-save-profile"|t }}</button>
       {% if user.avatar_ext.is_some() %}
-      <button type="submit" form="avatar-delete-form" class="text-sm text-red-600 hover:underline">Remove avatar</button>
+      <button type="submit" form="avatar-delete-form" class="text-sm text-red-600 hover:underline">{{ "settings-remove-avatar"|t }}</button>
       {% endif %}
     </div>
   </form>
@@ -95,36 +95,36 @@
   {% endif %}
 
   <form method="post" action="/settings" class="space-y-4">
-    <h2 class="font-medium">Preferences</h2>
+    <h2 class="font-medium">{{ "settings-preferences"|t }}</h2>
     <label class="flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
-      <span>Send and receive read receipts</span>
+      <span>{{ "settings-pref-read-receipts"|t }}</span>
     </label>
     <label class="flex items-start gap-2 cursor-pointer">
       <input type="checkbox" name="is_profile_public" value="1" class="mt-0.5" {% if user.is_profile_public %}checked{% endif %}>
       <span>
-        Public profile
-        <span class="block text-xs text-slate-500">When off, your profile is hidden from people search and others cannot start a new DM with you.</span>
+        {{ "settings-pref-public-profile"|t }}
+        <span class="block text-xs text-slate-500">{{ "settings-pref-public-profile-help"|t }}</span>
       </span>
     </label>
     <label class="flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
-      <span>Show browser notifications when I am @mentioned or DM'd</span>
+      <span>{{ "settings-pref-browser-notify"|t }}</span>
     </label>
     <label class="flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
-      <span>Play a sound on new mentions and DMs</span>
+      <span>{{ "settings-pref-sound"|t }}</span>
     </label>
     <label class="flex items-start gap-2 cursor-pointer">
       <input type="checkbox" name="notify_push_enabled" value="1" class="mt-0.5"
         {% if user.notify_push_enabled %}checked{% endif %}
         {% if !push_available %}disabled{% endif %}>
       <span>
-        Enable push notifications (works when tab is closed)
+        {{ "settings-pref-push"|t }}
         {% if !push_available %}
-        <span class="block text-xs text-slate-500">Unavailable: set the <code class="font-mono">LETS_CHAT_SECRET_KEY</code> environment variable on the server and restart to enable push notifications.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">A browser permission prompt will appear on the next mention.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-push-available"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -133,11 +133,11 @@
         {% if user.notify_email_digest_enabled %}checked{% endif %}
         {% if !email_available %}disabled{% endif %}>
       <span>
-        Email me a digest of missed mentions and DMs
+        {{ "settings-pref-email-digest"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">Sent at most once per offline session (after at least an hour of inactivity). Set your email address above to receive them.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-email-digest-help"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -146,11 +146,11 @@
         {% if user.notify_login_alerts_enabled %}checked{% endif %}
         {% if !email_available %}disabled{% endif %}>
       <span>
-        Email me when a new device signs in to my account
+        {{ "settings-pref-login-alerts"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">Sent the first time a browser or IP signs in. No alert is sent for devices already on file.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-login-alerts-help"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -159,52 +159,52 @@
         {% if user.notify_email_activity_enabled %}checked{% endif %}
         {% if !email_available %}disabled{% endif %}>
       <span>
-        Email me for each mention and direct message
+        {{ "settings-pref-email-activity"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">Unavailable: the server administrator has not configured SMTP.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">One email per event (not batched like the digest). If the operator has email-ingress configured, replying to the email posts your response back to the chat as you. Capped at 20 emails per minute per recipient.</span>
+        <span class="block text-xs text-slate-500">{{ "settings-pref-email-activity-help"|t }}</span>
         {% endif %}
       </span>
     </label>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save preferences</button>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-save-preferences"|t }}</button>
   </form>
 
   <section class="space-y-4 border-t border-slate-200 pt-6">
     <div class="flex items-center gap-2">
-      <h2 class="font-medium">Do Not Disturb</h2>
+      <h2 class="font-medium">{{ "settings-dnd-heading"|t }}</h2>
       {% if dnd_active %}
-      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">Active now</span>
+      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">{{ "settings-dnd-active"|t }}</span>
       {% endif %}
     </div>
-    <p class="text-xs text-slate-500">During Do Not Disturb, push notifications are suppressed and the email digest holds your missed mentions for the next send. In-app activity is still recorded. Others see a "do not disturb" badge on your avatar.</p>
+    <p class="text-xs text-slate-500">{{ "settings-dnd-explain"|t }}</p>
 
     <div class="space-y-2">
-      <h3 class="text-sm font-medium">Pause notifications</h3>
+      <h3 class="text-sm font-medium">{{ "settings-dnd-pause-heading"|t }}</h3>
       {% if dnd_paused_until != "" %}
-      <p class="text-xs text-slate-600">Paused until <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> (UTC).</p>
+      <p class="text-xs text-slate-600">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
       <form method="post" action="/settings/dnd/resume">
-        <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">Resume now</button>
+        <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-resume"|t }}</button>
       </form>
       {% else %}
       <div class="flex flex-wrap gap-2">
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">30 minutes</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">2 hours</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">8 hours</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-30-minutes"|t }}</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-2-hours"|t }}</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-8-hours"|t }}</button></form>
         <form method="post" action="/settings/dnd/pause" class="flex items-center gap-1">
-          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-slate-300 px-2 py-1 text-sm" aria-label="Pause minutes">
-          <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">min</button>
+          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-slate-300 px-2 py-1 text-sm" aria-label="{{ "settings-dnd-pause-minutes"|t }}">
+          <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-min"|t }}</button>
         </form>
       </div>
       {% endif %}
     </div>
 
     <form method="post" action="/settings/dnd" class="space-y-3">
-      <h3 class="text-sm font-medium">Quiet hours schedule</h3>
+      <h3 class="text-sm font-medium">{{ "settings-dnd-schedule-heading"|t }}</h3>
       <label class="block text-sm">
-        <span class="block text-xs text-slate-600">Timezone (leave as Off to disable the schedule)</span>
+        <span class="block text-xs text-slate-600">{{ "settings-dnd-timezone"|t }}</span>
         <select name="timezone" class="mt-1 w-full max-w-xs rounded border border-slate-300 px-2 py-1 text-sm">
-          <option value="" {% if dnd_timezone == "" %}selected{% endif %}>Off</option>
+          <option value="" {% if dnd_timezone == "" %}selected{% endif %}>{{ "settings-dnd-off"|t }}</option>
           {% for tz in timezones %}
           <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
           {% endfor %}
@@ -212,57 +212,57 @@
       </label>
       <div class="grid grid-cols-2 gap-3 max-w-md">
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">Weekdays start</span>
+          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekday-start"|t }}</span>
           <input type="time" name="weekday_start" value="{{ dnd_weekday_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">Weekdays end</span>
+          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekday-end"|t }}</span>
           <input type="time" name="weekday_end" value="{{ dnd_weekday_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">Weekend start</span>
+          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekend-start"|t }}</span>
           <input type="time" name="weekend_start" value="{{ dnd_weekend_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">Weekend end</span>
+          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekend-end"|t }}</span>
           <input type="time" name="weekend_end" value="{{ dnd_weekend_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
         </label>
       </div>
-      <p class="text-xs text-slate-500">Leave a start/end pair blank to skip that group. A window whose end is earlier than its start spans midnight (e.g. 22:00 to 07:00).</p>
-      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save schedule</button>
+      <p class="text-xs text-slate-500">{{ "settings-dnd-schedule-help"|t }}</p>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-dnd-save-schedule"|t }}</button>
     </form>
   </section>
 
   {% if password_change_available %}
   <form method="post" action="/settings/password" class="space-y-4">
-    <h2 class="font-medium">Change password</h2>
+    <h2 class="font-medium">{{ "settings-change-password"|t }}</h2>
     {% if password_changed %}
-    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Password updated.</div>
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-password-updated"|t }}</div>
     {% endif %}
     {% if let Some(err) = password_error %}
     <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ err }}</div>
     {% endif %}
     <label class="block text-sm">
-      <span class="text-slate-600">Current password</span>
+      <span class="text-slate-600">{{ "settings-current-password"|t }}</span>
       <input type="password" name="current_password" required class="mt-1 block w-full border rounded px-2 py-1" autocomplete="current-password">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">New password</span>
+      <span class="text-slate-600">{{ "settings-new-password"|t }}</span>
       <input type="password" name="new_password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">Confirm new password</span>
+      <span class="text-slate-600">{{ "settings-confirm-new-password"|t }}</span>
       <input type="password" name="new_password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
     </label>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Update password</button>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-update-password"|t }}</button>
   </form>
   {% endif %}
 
   <div class="space-y-3">
-    <h2 class="font-medium">Active sessions</h2>
-    <p class="text-sm text-slate-600">Every device signed in to this account. Revoke any session you do not recognize. Logging out ends the current one.</p>
+    <h2 class="font-medium">{{ "settings-active-sessions"|t }}</h2>
+    <p class="text-sm text-slate-600">{{ "settings-sessions-help"|t }}</p>
     {% if session_revoked %}
-    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Session revoked.</div>
+    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-session-revoked"|t }}</div>
     {% endif %}
     <ul class="divide-y border rounded">
       {% for s in sessions %}
@@ -271,19 +271,19 @@
           <div class="flex items-center gap-2">
             <span class="font-medium">{{ s.label }}</span>
             {% if s.is_current %}
-            <span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">This device</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">{{ "settings-this-device"|t }}</span>
             {% endif %}
           </div>
           <div class="text-xs text-slate-500 mt-0.5">
-            Last seen {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} from {{ ip }}{% endif %}
+            {{ "settings-last-seen"|t }} {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} {{ "settings-from"|t }} {{ ip }}{% endif %}
           </div>
-          <div class="text-xs text-slate-400">Signed in {{ s.created }} UTC</div>
+          <div class="text-xs text-slate-400">{{ "settings-signed-in"|t }} {{ s.created }} UTC</div>
         </div>
         {% if s.is_current %}
-        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-slate-400 cursor-not-allowed">Revoke</button>
+        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-slate-400 cursor-not-allowed">{{ "action-revoke"|t }}</button>
         {% else %}
         <form method="post" action="/settings/sessions/{{ s.id }}/revoke">
-          <button type="submit" class="px-2 py-1 text-xs border rounded text-red-700 border-red-300 hover:bg-red-50">Revoke</button>
+          <button type="submit" class="px-2 py-1 text-xs border rounded text-red-700 border-red-300 hover:bg-red-50">{{ "action-revoke"|t }}</button>
         </form>
         {% endif %}
       </li>
@@ -292,68 +292,68 @@
   </div>
 
   <div>
-    <h2 class="font-medium mb-2">Privacy</h2>
+    <h2 class="font-medium mb-2">{{ "settings-privacy"|t }}</h2>
     <p class="text-sm text-slate-600">
-      <a href="/settings/blocked" class="text-blue-600 hover:underline">Manage blocked users</a>
+      <a href="/settings/blocked" class="text-blue-600 hover:underline">{{ "settings-manage-blocked"|t }}</a>
     </p>
   </div>
 
   <div>
-    <h2 class="font-medium mb-2">API tokens</h2>
+    <h2 class="font-medium mb-2">{{ "settings-api-tokens-heading"|t }}</h2>
     <p class="text-sm text-slate-600">
-      <a href="/settings/api-tokens" class="text-blue-600 hover:underline">Manage API tokens</a>
-      for the HTTP API (bots, scripts, integrations).
+      <a href="/settings/api-tokens" class="text-blue-600 hover:underline">{{ "settings-manage-api-tokens"|t }}</a>
+      {{ "settings-api-tokens-help"|t }}
     </p>
   </div>
 
   <div>
-    <h2 class="font-medium mb-2">Storage usage</h2>
+    <h2 class="font-medium mb-2">{{ "settings-storage-heading"|t }}</h2>
     <p class="text-sm text-slate-600">
       {% if let Some(q) = storage_quota_display %}
-      You are using <span class="font-mono">{{ storage_usage_display }}</span> of your <span class="font-mono">{{ q }}</span> upload quota.
+      {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-of-quota"|t }} <span class="font-mono">{{ q }}</span> {{ "settings-storage-quota-suffix"|t }}
       {% else %}
-      You are using <span class="font-mono">{{ storage_usage_display }}</span> of uploads. No quota is currently set on your account.
+      {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-no-quota"|t }}
       {% endif %}
     </p>
   </div>
 
   <div>
-    <h2 class="font-medium mb-2">Your data</h2>
+    <h2 class="font-medium mb-2">{{ "settings-your-data-heading"|t }}</h2>
     <p class="text-sm text-slate-600">
-      Download a JSON file containing your profile, messages, reactions, bookmarks, sessions, blocks, room and enclave memberships, mentions, file-upload metadata, and notification preferences.
+      {{ "settings-your-data-help"|t }}
     </p>
     <p class="mt-2">
-      <a href="/settings/export-data" class="inline-block bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Download my data</a>
+      <a href="/settings/export-data" class="inline-block bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-download-data"|t }}</a>
     </p>
   </div>
 
   <div class="rounded border border-red-300 bg-red-50 p-4 space-y-3">
-    <h2 class="font-medium text-red-800">Delete account</h2>
+    <h2 class="font-medium text-red-800">{{ "settings-delete-account-heading"|t }}</h2>
     <p class="text-sm text-red-800">
-      Permanently remove your account, profile, messages, reactions, bookmarks, mentions, file uploads, blocks, sessions and push subscriptions. This cannot be undone. If you own an enclave with other members, transfer ownership or delete the enclave first.
+      {{ "settings-delete-account-explain"|t }}
     </p>
     <form method="post" action="/settings/delete-account" class="space-y-3">
       {% if password_change_available %}
       <label class="block text-sm">
-        <span class="text-red-800">Current password</span>
+        <span class="text-red-800">{{ "settings-current-password"|t }}</span>
         <input type="password" name="password" required class="mt-1 block w-full border border-red-300 rounded px-2 py-1" autocomplete="current-password">
       </label>
       {% endif %}
       <label class="block text-sm">
-        <span class="text-red-800">Type <code class="font-mono">delete my account</code> to confirm</span>
+        <span class="text-red-800">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
         <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-red-300 rounded px-2 py-1">
       </label>
-      <button type="submit" class="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700" onclick="return confirm('Delete your account? This cannot be undone.');">Delete my account</button>
+      <button type="submit" class="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');">{{ "settings-delete-account-button"|t }}</button>
     </form>
   </div>
 
   <div>
-    <h2 class="font-medium mb-2">About</h2>
+    <h2 class="font-medium mb-2">{{ "settings-about-heading"|t }}</h2>
     <dl class="text-sm text-slate-700 space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Version</dt><dd>{{ app_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Release</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Commit</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">Built</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-version"|t }}</dt><dd>{{ app_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-release"|t }}</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
     </dl>
   </div>
 </section>

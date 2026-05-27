@@ -10,7 +10,9 @@
 //! templates into a single `EmailMessage`. Nothing in this file talks to
 //! the database; it is pure presentation.
 
-use askama::Template;
+#[allow(unused_imports)]
+use crate::i18n::filters;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 /// Top-level data for the HTML half of the digest.
 #[derive(Template)]
