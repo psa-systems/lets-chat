@@ -12,6 +12,18 @@
   <div class="p-2 bg-green-100 text-green-800 text-sm rounded">Saved.</div>
   {% endif %}
 
+  {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
+  <form method="post" action="/settings/language" class="space-y-2">
+    <h2 class="font-medium">{{ "settings-language"|t }}</h2>
+    <p class="text-sm text-slate-500">{{ "settings-language-help"|t }}</p>
+    <select name="locale" class="block w-full max-w-xs border border-slate-300 rounded px-2 py-1 text-sm">
+      {% for l in locales %}
+      <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "settings-language-save"|t }}</button>
+  </form>
+
   <div>
     <h2 class="font-medium mb-2">Account</h2>
     <dl class="text-sm text-slate-700 space-y-1">
