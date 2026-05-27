@@ -57,6 +57,22 @@ pub struct RawMessage {
     /// LC-77: `Some(N)` for messages posted by email-ingress inbox `N`.
     /// Parallel to `webhook_id`; same `user_id = ''` synthetic-actor shape.
     pub email_inbox_id: Option<i64>,
+    /// LC-78: `Some(N)` for messages posted by protocol-bridge `N`. Unlike
+    /// `webhook_id` and `email_inbox_id`, the actor identity is NOT
+    /// resolved by joining to the bridge row at render time (the foreign
+    /// actor set is open-ended). Instead, `bridge_foreign_name` and
+    /// `bridge_kind` carry the per-message snapshot; this id is kept so
+    /// the outgoing-webhook loop-break filter can identify "messages I
+    /// myself produced." `None` for all non-bridge messages.
+    pub bridge_id: Option<i64>,
+    /// LC-78: snapshotted foreign display name for a bridge-posted message
+    /// (e.g. Matrix `alice:server.org`). `Some` iff `bridge_id` is `Some`.
+    /// Snapshotted (not joined) so the render survives bridge-row removal
+    /// under stop-new lifecycle.
+    pub bridge_foreign_name: Option<String>,
+    /// LC-78: snapshotted protocol kind for a bridge-posted message
+    /// (`matrix` / `irc` / `xmpp`). `Some` iff `bridge_id` is `Some`.
+    pub bridge_kind: Option<String>,
 }
 
 /// One archived prior version of a message. Inserted by `update_message_body`
@@ -134,7 +150,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -159,6 +175,9 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         is_system: row.get("is_system"),
         webhook_id: row.get("webhook_id"),
         email_inbox_id: row.get("email_inbox_id"),
+        bridge_id: row.get("bridge_id"),
+        bridge_foreign_name: row.get("bridge_foreign_name"),
+        bridge_kind: row.get("bridge_kind"),
     }
 }
 
@@ -171,7 +190,7 @@ pub async fn list_recent_messages(
     limit: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT ?",
@@ -191,7 +210,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
@@ -263,7 +282,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -285,7 +304,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -304,7 +323,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)
@@ -442,6 +461,39 @@ pub async fn insert_email_inbox_message(
     )
     .bind(room_id)
     .bind(email_inbox_id)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// LC-78: insert a message authored by a protocol bridge. Unlike
+/// `insert_webhook_message` / `insert_email_inbox_message`, the foreign
+/// actor identity (display name + protocol kind) is SNAPSHOTTED onto
+/// the row at post time, because the set of foreign actors is open-ended
+/// and there is no per-channel row to join back to at render time. The
+/// bridge daemon's role / room access has already been verified by the
+/// caller. `foreign_avatar` is reserved nullable for the LC-78-AVATAR-PROXY
+/// follow-up; v1 always passes `None` (the endpoint 400s any non-null
+/// foreign avatar URL).
+pub async fn insert_bridge_message(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    bridge_id: i64,
+    foreign_name: &str,
+    foreign_avatar: Option<&str>,
+    kind: &str,
+    body: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, bridge_id, bridge_foreign_name, bridge_foreign_avatar, bridge_kind, body) \
+         VALUES (?, '', ?, ?, ?, ?, ?)",
+    )
+    .bind(room_id)
+    .bind(bridge_id)
+    .bind(foreign_name)
+    .bind(foreign_avatar)
+    .bind(kind)
     .bind(body)
     .execute(pool)
     .await?;

@@ -1617,6 +1617,9 @@ pub async fn post_quarantine_approve(
                 is_system: raw.is_system,
                 webhook_id: raw.webhook_id,
                 email_inbox_id: raw.email_inbox_id,
+                bridge_id: raw.bridge_id,
+                bridge_foreign_name: raw.bridge_foreign_name,
+                bridge_kind: raw.bridge_kind,
             };
             let event = ChatEvent::NewMessage {
                 message,

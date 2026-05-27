@@ -136,19 +136,28 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
 }
 
 /// Resolve the author identity for a message that may be authored by a real
-/// user, an incoming webhook (LC-74), or an email-ingress inbox (LC-77).
-/// Synthetic-actor messages (`webhook_id = Some` or `email_inbox_id = Some`)
-/// render with the actor's configured name + avatar and no DM link.
+/// user, an incoming webhook (LC-74), an email-ingress inbox (LC-77), or a
+/// protocol bridge (LC-78). Synthetic-actor messages (any of `webhook_id`,
+/// `email_inbox_id`, `bridge_id` set) render with the actor's name + avatar
+/// and no DM link.
 ///
-/// At most one of `webhook_id` and `email_inbox_id` is `Some` for any given
-/// message; if both are unexpectedly set, webhook wins (this is the older
-/// surface and we prefer not to silently flip rendering identity when a
-/// future migration accidentally double-tags a row).
+/// At most one of `webhook_id`, `email_inbox_id`, `bridge_id` is `Some` for
+/// any given message; if multiple are set, the older surfaces win in source
+/// order (webhook > email > bridge), so a future migration that accidentally
+/// double-tags a row does not silently flip rendering identity.
+///
+/// `bridge_foreign_name` / `bridge_kind` carry the bridge snapshot (LC-78);
+/// they are read directly from `RawMessage`, never joined back to the bridges
+/// row, because the foreign actor set is open-ended and the snapshot must
+/// survive bridge-row removal under stop-new lifecycle.
 pub(crate) async fn resolve_msg_author(
     state: &AppState,
     user_id: &str,
     webhook_id: Option<i64>,
     email_inbox_id: Option<i64>,
+    bridge_id: Option<i64>,
+    bridge_foreign_name: Option<&str>,
+    bridge_kind: Option<&str>,
     viewer_id: &str,
 ) -> Result<AuthorMeta, AppError> {
     if let Some(wid) = webhook_id {
@@ -179,6 +188,26 @@ pub(crate) async fn resolve_msg_author(
             custom_status: None,
             is_bot: false,
             actor: MessageActor::EmailInbox(avatar_url),
+        });
+    }
+    if bridge_id.is_some() {
+        // Snapshot read from the message row. `bridge_id` is the marker that
+        // a row IS a bridge message; name + kind are populated by the
+        // bridge endpoint at INSERT time and snapshotted on the row, so the
+        // render does not depend on the bridges row still existing.
+        let name = bridge_foreign_name.unwrap_or("bridge").to_string();
+        let kind = bridge_kind.unwrap_or("bridge").to_string();
+        return Ok(AuthorMeta {
+            username: name,
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+            is_bot: false,
+            actor: MessageActor::Bridge(crate::views::message_actor::BridgeActorMeta {
+                kind,
+                avatar_url: None,
+            }),
         });
     }
     load_author_meta(state, user_id, viewer_id).await
@@ -224,6 +253,9 @@ pub(crate) async fn load_message_view_for_viewer(
         &m.user_id,
         m.webhook_id,
         m.email_inbox_id,
+        m.bridge_id,
+        m.bridge_foreign_name.as_deref(),
+        m.bridge_kind.as_deref(),
         &viewer.id,
     )
     .await?;

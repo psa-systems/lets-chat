@@ -195,6 +195,9 @@ pub async fn get_dm(
                 &m.user_id,
                 m.webhook_id,
                 m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+                m.bridge_kind.as_deref(),
                 &user.id,
             )
             .await?;

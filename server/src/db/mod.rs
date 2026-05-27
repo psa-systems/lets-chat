@@ -6,6 +6,7 @@ pub mod apns_subscriptions;
 pub mod auth;
 pub mod bookmarks;
 pub mod branding;
+pub mod bridges;
 pub mod chat;
 pub mod custom_emojis;
 pub mod drafts;
