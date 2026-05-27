@@ -10,10 +10,10 @@
 //!
 //! Scope reference lives in `docs/api.md`.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::auth::ApiAuth;
@@ -128,22 +128,77 @@ async fn require_room_access(
     Ok(room)
 }
 
+/// LC-78: default page size for the paginated read. Matches the size most
+/// daemons (Matrix appservice initial-sync) request without an explicit
+/// limit; tuned to one screen of history.
+const PAGINATED_DEFAULT_LIMIT: i64 = 50;
+/// LC-78: hard cap on a single page so a caller cannot turn the bounded
+/// read back into the previous "fetch every message in the room" shape.
+const PAGINATED_MAX_LIMIT: i64 = 200;
+
+#[derive(Deserialize)]
+struct GetMessagesQuery {
+    /// Cursor for the next page: results are strictly older than this id.
+    /// Omit to start at the most recent message.
+    #[serde(default)]
+    before_id: Option<i64>,
+    /// Page size. Clamped to `[1, PAGINATED_MAX_LIMIT]`; default
+    /// `PAGINATED_DEFAULT_LIMIT`.
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ApiMessagePage {
+    messages: Vec<ApiMessage>,
+    /// Cursor to feed back as `before_id` on the next request. `None` when
+    /// the page returned fewer than `limit` rows (history exhausted) or
+    /// the room is empty.
+    next_cursor: Option<i64>,
+}
+
 /// GET /api/v1/rooms/{id}/messages - top-level messages in a room. Scope:
 /// `messages:read`.
+///
+/// LC-78: paginated. Returns up to `limit` rows in `id DESC` order with a
+/// `next_cursor` to walk older history. The bounded shape was added so the
+/// LC-78 Matrix-bridge daemon's initial-sync has a deterministic paging
+/// contract; this endpoint is the only API-side reader, so the change is
+/// breaking only for API callers (the web/HTMX room render still uses the
+/// unbounded `list_messages` directly, untouched).
 async fn get_messages(
     State(state): State<AppState>,
     auth: ApiAuth,
     Path(room_id): Path<i64>,
-) -> Result<Json<Vec<ApiMessage>>, AppError> {
+    Query(q): Query<GetMessagesQuery>,
+) -> Result<Json<ApiMessagePage>, AppError> {
     auth.require(SCOPE_MESSAGES_READ)?;
     require_room_access(&state, &auth, room_id).await?;
-    let raw = db::chat::list_messages(&state.chat, room_id).await?;
+    let limit = q
+        .limit
+        .unwrap_or(PAGINATED_DEFAULT_LIMIT)
+        .clamp(1, PAGINATED_MAX_LIMIT);
+    let raw = db::chat::list_messages_paginated(&state.chat, room_id, q.before_id, limit).await?;
+
+    // `next_cursor` is None when fewer than `limit` rows returned (exhaust)
+    // or the result set is empty. Otherwise it is the smallest id returned,
+    // which the caller feeds back as `before_id` on the next request.
+    let next_cursor = if (raw.len() as i64) < limit {
+        None
+    } else {
+        raw.last().map(|m| m.id)
+    };
 
     // Resolve author display labels once per distinct author.
     let mut names: HashMap<String, String> = HashMap::new();
-    let mut out = Vec::with_capacity(raw.len());
+    let mut messages = Vec::with_capacity(raw.len());
     for m in raw {
-        let author = if let Some(n) = names.get(&m.user_id) {
+        // Bridge messages snapshot their own author label on the row; we
+        // surface that as the JSON `author` so a daemon's read-side matches
+        // its post-side without joining to the bridges table.
+        let author = if let Some(name) = m.bridge_foreign_name.clone() {
+            name
+        } else if let Some(n) = names.get(&m.user_id) {
             n.clone()
         } else {
             let label = db::auth::find_user_by_id(&state.auth, &m.user_id)
@@ -153,7 +208,7 @@ async fn get_messages(
             names.insert(m.user_id.clone(), label.clone());
             label
         };
-        out.push(ApiMessage {
+        messages.push(ApiMessage {
             id: m.id,
             room_id: m.room_id,
             user_id: m.user_id,
@@ -162,7 +217,10 @@ async fn get_messages(
             created_at: m.created_at,
         });
     }
-    Ok(Json(out))
+    Ok(Json(ApiMessagePage {
+        messages,
+        next_cursor,
+    }))
 }
 
 #[derive(serde::Deserialize)]

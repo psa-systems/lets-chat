@@ -162,6 +162,53 @@ pub async fn list_messages(
     Ok(rows.into_iter().map(row_to_raw).collect())
 }
 
+/// LC-78: cursor-paginated read of top-level messages in a room. Forked
+/// from `list_messages` (which the web/HTMX room render still uses,
+/// unbounded + ascending) so the API can return bounded pages without
+/// touching the page-render's shape.
+///
+/// `before_id`: optional cursor; results are strictly older than this id.
+/// `limit`: capped to `MAX_PAGINATED_LIMIT` by the caller. Returned in
+/// `id DESC` order so the API caller can walk backwards through history
+/// by feeding the oldest returned `id` back as `before_id` on the next
+/// request. Same visibility filter as `list_messages`.
+pub async fn list_messages_paginated(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    before_id: Option<i64>,
+    limit: i64,
+) -> Result<Vec<RawMessage>, sqlx::Error> {
+    // Two branches because sqlx's `bind` is positional; threading an
+    // `Option<i64>` through the same query string would still need the
+    // placeholder, and `WHERE ? IS NULL OR id < ?` defeats the index.
+    let rows = if let Some(cursor) = before_id {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+             FROM messages \
+             WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(room_id)
+        .bind(cursor)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+             FROM messages \
+             WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(room_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    };
+
+    Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
 fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
     RawMessage {
         id: row.get("id"),

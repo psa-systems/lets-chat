@@ -190,13 +190,15 @@ pub(crate) async fn resolve_msg_author(
             actor: MessageActor::EmailInbox(avatar_url),
         });
     }
-    if bridge_id.is_some() {
-        // Snapshot read from the message row. `bridge_id` is the marker that
-        // a row IS a bridge message; name + kind are populated by the
-        // bridge endpoint at INSERT time and snapshotted on the row, so the
-        // render does not depend on the bridges row still existing.
-        let name = bridge_foreign_name.unwrap_or("bridge").to_string();
+    // Gate on the snapshot NAME, not bridge_id: under stop-new removal,
+    // `ON DELETE SET NULL` clears bridge_id while the snapshot strings
+    // persist, and the render still needs to show "alice (via matrix)" for
+    // those historical messages. If foreign_name is set and bridge_id is
+    // NULL, the message came from a removed bridge; it stays a bridge actor.
+    if let Some(name) = bridge_foreign_name {
+        let _ = bridge_id; // intentionally not gated on
         let kind = bridge_kind.unwrap_or("bridge").to_string();
+        let name = name.to_string();
         return Ok(AuthorMeta {
             username: name,
             display_name: None,
