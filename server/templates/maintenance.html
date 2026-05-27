@@ -6,14 +6,14 @@
   <title>{{ "maintenance-page-title"|t }} - lets-chat</title>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex items-center justify-center p-6">
+<body class="bg-surface text-content min-h-screen flex items-center justify-center p-6">
   <section class="max-w-md w-full text-center">
     <h1 class="text-2xl font-semibold mb-3">{{ "maintenance-heading"|t }}</h1>
-    <p class="text-slate-600 mb-4">{{ "maintenance-body"|t }}</p>
+    <p class="text-content-muted mb-4">{{ "maintenance-body"|t }}</p>
     {% if !message.is_empty() %}
-    <div class="rounded border border-slate-200 bg-white p-4 text-left text-sm whitespace-pre-wrap">{{ message }}</div>
+    <div class="rounded border border-border bg-surface-elevated p-4 text-left text-sm whitespace-pre-wrap">{{ message }}</div>
     {% endif %}
-    <p class="mt-6 text-xs text-slate-400">{{ "maintenance-retry"|t }}</p>
+    <p class="mt-6 text-xs text-content-subtle">{{ "maintenance-retry"|t }}</p>
   </section>
 </body>
 </html>

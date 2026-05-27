@@ -11,13 +11,13 @@
   </div>
   {% endif %}
   <h1 class="text-2xl font-semibold">{{ "home-welcome"|t }} {{ user.display_label() }}</h1>
-  <p class="mt-2 text-slate-600">
+  <p class="mt-2 text-content-muted">
     {{ "home-pick-dm-prefix"|t }}
-    <a href="/enclaves/discover" class="text-blue-600 hover:underline">{{ "home-create-join-link"|t }}</a>
+    <a href="/enclaves/discover" class="text-accent hover:underline">{{ "home-create-join-link"|t }}</a>
     {{ "home-pick-dm-suffix"|t }}
   </p>
-  <p class="mt-2 text-slate-600">
-    {{ "home-pending-invitations-prefix"|t }} <a href="/invitations" class="text-blue-600 hover:underline">{{ "home-pending-invitations-link"|t }}</a>{{ "home-pending-invitations-suffix"|t }}
+  <p class="mt-2 text-content-muted">
+    {{ "home-pending-invitations-prefix"|t }} <a href="/invitations" class="text-accent hover:underline">{{ "home-pending-invitations-link"|t }}</a>{{ "home-pending-invitations-suffix"|t }}
   </p>
 </section>
 </div>

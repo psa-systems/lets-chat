@@ -1,16 +1,16 @@
-<tr id="room-{{ r.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="border-t border-slate-200 align-top">
+<tr id="room-{{ r.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="border-t border-border align-top">
   <td class="py-2">
     <details>
-      <summary class="cursor-pointer">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-slate-400 text-xs">{{ topic }}</span>{% endif %}</summary>
+      <summary class="cursor-pointer">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-content-subtle text-xs">{{ topic }}</span>{% endif %}</summary>
       <form hx-post="/admin/rooms/{{ r.id }}/edit" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex flex-col gap-1">
         <input name="name" value="{{ r.name }}" required maxlength="64" class="border rounded px-2 py-1 text-xs">
         <input name="topic" value="{% if let Some(topic) = r.topic.as_ref() %}{{ topic }}{% endif %}" maxlength="200" placeholder="{{ "admin-roomrow-topic-placeholder"|t }}" class="border rounded px-2 py-1 text-xs">
-        <button type="submit" class="text-blue-600 hover:underline text-xs self-start">{{ "admin-roomrow-save"|t }}</button>
+        <button type="submit" class="text-accent hover:underline text-xs self-start">{{ "admin-roomrow-save"|t }}</button>
       </form>
       {% if r.room_type == "private" %}
       <form hx-post="/admin/rooms/{{ r.id }}/invite" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex gap-1">
         <input name="username" required placeholder="{{ "admin-roomrow-username-placeholder"|t }}" class="border rounded px-2 py-1 text-xs">
-        <button type="submit" class="text-blue-600 hover:underline text-xs">{{ "admin-roomrow-invite"|t }}</button>
+        <button type="submit" class="text-accent hover:underline text-xs">{{ "admin-roomrow-invite"|t }}</button>
       </form>
       {% endif %}
     </details>
@@ -20,12 +20,12 @@
   <td class="py-2 text-xs">
     {% if let Some(code) = r.invite_code.as_ref() %}
     <span class="font-mono">/invite/{{ code }}</span>
-    <button hx-post="/admin/rooms/{{ r.id }}/regenerate" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline ml-1">{{ "admin-roomrow-regen"|t }}</button>
+    <button hx-post="/admin/rooms/{{ r.id }}/regenerate" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="text-accent hover:underline ml-1">{{ "admin-roomrow-regen"|t }}</button>
     {% else %}
-    <span class="text-slate-400">-</span>
+    <span class="text-content-subtle">-</span>
     {% endif %}
   </td>
   <td class="py-2 text-right text-xs whitespace-nowrap">
-    <button hx-post="/admin/rooms/{{ r.id }}/archive" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-roomrow-delete-confirm-prefix"|t }} {{ r.name }}? {{ "admin-roomrow-delete-confirm-suffix"|t }}" class="text-red-600 hover:underline">{{ "admin-roomrow-delete"|t }}</button>
+    <button hx-post="/admin/rooms/{{ r.id }}/archive" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-roomrow-delete-confirm-prefix"|t }} {{ r.name }}? {{ "admin-roomrow-delete-confirm-suffix"|t }}" class="text-danger hover:underline">{{ "admin-roomrow-delete"|t }}</button>
   </td>
 </tr>

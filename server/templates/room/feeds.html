@@ -7,45 +7,45 @@
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
     <h1 class="text-2xl font-semibold">{{ "room-feeds-heading"|t }}</h1>
-    <span class="text-sm text-slate-500">#{{ room.name }}</span>
+    <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
-  <p class="text-sm text-slate-600">
+  <p class="text-sm text-content-muted">
     {{ "room-feeds-intro-1"|t }} <strong>RSS</strong> {{ "room-feeds-intro-2"|t }} <strong>iCal</strong>
     {{ "room-feeds-intro-3"|t }}
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  <div class="p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
   {% endif %}
 
   {% if let Some(url) = new_url %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">{{ "room-feeds-created"|t }}</p>
-    <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
+    <p class="font-medium text-success">{{ "room-feeds-created"|t }}</p>
+    <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
+  <div class="p-3 rounded bg-amber-50 text-warning text-sm">
     {{ "room-feeds-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
     {{ "room-feeds-unavailable-2"|t }}
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/feeds" class="flex flex-wrap items-end gap-3 border rounded p-4">
     <label class="block text-sm">
-      <span class="text-slate-700">{{ "room-feeds-type-label"|t }}</span>
-      <select name="kind" class="mt-1 block border border-slate-300 rounded px-2 py-1 text-sm">
+      <span class="text-content-muted">{{ "room-feeds-type-label"|t }}</span>
+      <select name="kind" class="mt-1 block border border-border-strong rounded px-2 py-1 text-sm">
         <option value="rss">{{ "room-feeds-type-rss"|t }}</option>
         <option value="ical">{{ "room-feeds-type-ical"|t }}</option>
       </select>
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "room-feeds-create-button"|t }}</button>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "room-feeds-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <table class="w-full text-sm">
     <thead>
-      <tr class="text-left text-slate-500 border-b border-slate-200">
+      <tr class="text-left text-content-muted border-b border-border">
         <th class="py-2">{{ "room-feeds-table-type"|t }}</th>
         <th class="py-2">{{ "room-table-created"|t }}</th>
         <th class="py-2">{{ "room-feeds-table-last-fetched"|t }}</th>
@@ -55,22 +55,22 @@
     </thead>
     <tbody>
       {% for f in feeds %}
-      <tr class="border-t border-slate-200">
+      <tr class="border-t border-border">
         <td class="py-1 uppercase text-xs">{{ f.kind }}</td>
-        <td class="py-1 text-xs text-slate-500">{{ f.created_at }}</td>
-        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
-        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-red-600">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
+        <td class="py-1 text-xs text-content-muted">{{ f.created_at }}</td>
+        <td class="py-1 text-xs text-content-muted">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
         <td class="py-1 text-right">
           {% if !f.revoked %}
           <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
-            <button type="submit" class="text-red-600 hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
+            <button type="submit" class="text-danger hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if feeds.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "room-feeds-empty"|t }}</td></tr>
+      <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "room-feeds-empty"|t }}</td></tr>
       {% endif %}
     </tbody>
   </table>

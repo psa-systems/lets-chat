@@ -2,7 +2,7 @@
   {% if avatar_ext.is_some() %}
   <img src="/avatars/{{ avatar_user_id }}" alt="" class="{{ avatar_size }} rounded-full object-cover">
   {% else %}
-  <div class="{{ avatar_size }} rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-semibold">{% if let Some(c) = avatar_username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+  <div class="{{ avatar_size }} rounded-full bg-surface-sunken text-content flex items-center justify-center font-semibold">{% if let Some(c) = avatar_username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
   {% endif %}
   <span data-user-status="{{ avatar_user_id }}" aria-label="{% if avatar_status == "dnd" %}{{ "partials-status-dnd"|t }}{% else if avatar_status == "idle" || avatar_status == "away" %}{{ "partials-status-away"|t }}{% else if avatar_status == "offline" %}{{ "partials-status-offline"|t }}{% else %}{{ "partials-status-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white {% if avatar_status == "dnd" %}bg-red-500{% else if avatar_status == "idle" || avatar_status == "away" %}bg-yellow-400{% else if avatar_status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
 </span>

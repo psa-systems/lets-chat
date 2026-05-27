@@ -12,7 +12,7 @@
   <main id="main" class="flex-1 flex flex-col overflow-hidden min-h-0">
     <button type="button" id="lc-nav-toggle" aria-label="{{ "layout-toggle-nav"|t }}"
       aria-expanded="false" aria-controls="lc-nav-panel"
-      class="md:hidden inline-flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-slate-600 hover:text-slate-900"
+      class="md:hidden inline-flex items-center gap-2 border-b border-border px-3 py-2 text-content-muted hover:text-content"
       onclick="lcOpenNav()">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
@@ -113,7 +113,7 @@
        service worker's queue state (offline notice, queued count, and
        retry/discard for messages that failed on replay). -->
   <div id="lc-outbox" role="status" aria-live="polite"
-       class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-slate-200 bg-white shadow-lg"></div>
+       class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-border bg-surface-elevated shadow-lg"></div>
   <!-- LC-63: singleton slot for the "Remind me" picker / confirmation. Lives
        in the persistent shell so the message hover-menu can target it across
        in-place swaps. -->
@@ -188,7 +188,7 @@
     var el = document.getElementById('mention-room-' + roomId);
     if (!el) return;
     el.outerHTML = n > 0
-      ? '<span id="mention-room-' + roomId + '" class="ml-1 text-[10px] font-bold uppercase bg-red-600 text-white rounded px-1.5">@' + n + '</span>'
+      ? '<span id="mention-room-' + roomId + '" class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@' + n + '</span>'
       : '<span id="mention-room-' + roomId + '"></span>';
   }
   // Browser Notification API: lazy-prompt for permission on the first qualifying event.

@@ -2,11 +2,11 @@
   {% for e in switcher %}
   <a href="{% if let Some(id) = e.id %}/enclave/{{ id }}{% else %}/?home=1{% endif %}"
      class="relative w-10 h-10 rounded-lg flex items-center justify-center
-            {% if e.active %}bg-blue-600{% else %}bg-slate-700 hover:bg-slate-600{% endif %}"
+            {% if e.active %}bg-accent{% else %}bg-slate-700 hover:bg-slate-600{% endif %}"
      title="{{ e.label }}">
     {% if let Some(logo) = e.logo_url %}
     <img src="{{ logo }}" alt="{{ e.label }}"
-         class="w-8 h-8 rounded object-contain bg-white p-0.5">
+         class="w-8 h-8 rounded object-contain bg-surface-elevated p-0.5">
     {% else %}
     <span class="font-bold">{{ e.initial }}</span>
     {% endif %}

@@ -319,14 +319,15 @@ async fn sidebar_renders_muted_room_with_greyed_class() {
         body2.contains(&format!("/room/{other_id}")),
         "second room link missing: {body2}"
     );
-    // Find the anchor for the muted room and verify it carries text-slate-400.
+    // Find the anchor for the muted room and verify it carries the greyed
+    // token class (LC-193: text-slate-400 -> text-content-subtle).
     let anchor_marker = format!(r#"href="/room/{other_id}""#);
     let idx = body2.find(&anchor_marker).expect("muted room anchor");
     let rest = &body2[idx..];
     let close = rest.find('>').expect("anchor close");
     let opening = &rest[..close];
     assert!(
-        opening.contains("text-slate-400"),
+        opening.contains("text-content-subtle"),
         "expected greyed class on muted room anchor: {opening}"
     );
 }
@@ -411,7 +412,7 @@ async fn mention_badge_still_renders_in_except_mentions_mode() {
     assert_eq!(status, StatusCode::OK);
     assert!(
         body.contains(&format!(
-            r#"<span id="mention-room-{other_id}" class="ml-1 text-[10px] font-bold uppercase bg-red-600 text-white rounded px-1.5">@1</span>"#
+            r#"<span id="mention-room-{other_id}" class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@1</span>"#
         )),
         "expected mention badge for except_mentions room, got body: {body}"
     );

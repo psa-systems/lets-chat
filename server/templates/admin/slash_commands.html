@@ -4,58 +4,58 @@
 
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-slash-heading"|t }}</h1>
-<p class="text-sm text-slate-600 mb-4">
+<p class="text-sm text-content-muted mb-4">
   {{ "admin-slash-intro-1"|t }}
   <code>static_text</code> {{ "admin-slash-intro-2"|t }} <code>{args}</code> {{ "admin-slash-intro-3"|t }}
   <code>webhook_post</code> {{ "admin-slash-intro-4"|t }}
 </p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
 {% endif %}
 
-<h2 class="text-sm font-semibold text-slate-700 mb-1">{{ "admin-slash-builtin-heading"|t }}</h2>
+<h2 class="text-sm font-semibold text-content-muted mb-1">{{ "admin-slash-builtin-heading"|t }}</h2>
 <ul class="text-xs mb-6 space-y-0.5">
   {% for b in builtins %}
-  <li><span class="font-mono text-slate-800">{{ b.usage }}</span> - {{ b.description }}</li>
+  <li><span class="font-mono text-content">{{ b.usage }}</span> - {{ b.description }}</li>
   {% endfor %}
 </ul>
 
-<h2 class="text-sm font-semibold text-slate-700 mb-2">{{ "admin-slash-custom-heading"|t }}</h2>
+<h2 class="text-sm font-semibold text-content-muted mb-2">{{ "admin-slash-custom-heading"|t }}</h2>
 <form method="post" action="/admin/slash-commands" class="grid grid-cols-2 gap-3 mb-6 max-w-2xl">
   <div>
-    <label class="block text-xs text-slate-500 mb-1" for="name">{{ "admin-slash-name-label"|t }}</label>
+    <label class="block text-xs text-content-muted mb-1" for="name">{{ "admin-slash-name-label"|t }}</label>
     <input id="name" name="name" type="text" required placeholder="standup"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-xs text-slate-500 mb-1" for="kind">{{ "admin-slash-kind-label"|t }}</label>
-    <select id="kind" name="kind" class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+    <label class="block text-xs text-content-muted mb-1" for="kind">{{ "admin-slash-kind-label"|t }}</label>
+    <select id="kind" name="kind" class="w-full border border-border-strong rounded px-2 py-1 text-sm">
       <option value="static_text">static_text</option>
       <option value="webhook_post">webhook_post</option>
     </select>
   </div>
   <div class="col-span-2">
-    <label class="block text-xs text-slate-500 mb-1" for="description">{{ "admin-slash-description-label"|t }}</label>
+    <label class="block text-xs text-content-muted mb-1" for="description">{{ "admin-slash-description-label"|t }}</label>
     <input id="description" name="description" type="text" placeholder="{{ "admin-slash-description-placeholder"|t }}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div class="col-span-2">
-    <label class="block text-xs text-slate-500 mb-1" for="target">{{ "admin-slash-target-label"|t }}</label>
+    <label class="block text-xs text-content-muted mb-1" for="target">{{ "admin-slash-target-label"|t }}</label>
     <input id="target" name="target" type="text" required placeholder="Standup for {args}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <label class="col-span-2 flex items-center gap-2 text-sm">
     <input type="checkbox" name="admin_only"> {{ "admin-slash-admin-only"|t }}
   </label>
   <div class="col-span-2">
-    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-slash-add-command"|t }}</button>
+    <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-slash-add-command"|t }}</button>
   </div>
 </form>
 
 <table class="w-full text-sm">
   <thead>
-    <tr class="text-left text-slate-500 border-b border-slate-200">
+    <tr class="text-left text-content-muted border-b border-border">
       <th class="py-2">{{ "admin-slash-th-command"|t }}</th>
       <th class="py-2">{{ "admin-slash-th-kind"|t }}</th>
       <th class="py-2">{{ "admin-slash-th-target"|t }}</th>
@@ -65,20 +65,20 @@
   </thead>
   <tbody>
     {% for c in commands %}
-    <tr class="border-t border-slate-200">
+    <tr class="border-t border-border">
       <td class="py-1 font-mono text-xs">/{{ c.name }}</td>
       <td class="py-1 text-xs">{{ c.kind }}</td>
       <td class="py-1 text-xs font-mono truncate max-w-xs">{{ c.target }}</td>
       <td class="py-1 text-xs">{% if c.admin_only %}{{ "admin-slash-yes"|t }}{% else %}{{ "admin-slash-no"|t }}{% endif %}</td>
       <td class="py-1 text-right">
         <form method="post" action="/admin/slash-commands/{{ c.id }}/delete" class="inline">
-          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-slash-delete"|t }}</button>
+          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-slash-delete"|t }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
     {% if commands.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "admin-slash-empty"|t }}</td></tr>
+    <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "admin-slash-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

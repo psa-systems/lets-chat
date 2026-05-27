@@ -1,5 +1,5 @@
 {# Single thread reply row. Avatar, header, body, reactions only. #}
-<div id="msg-{{ message.id }}" class="px-3 py-1.5 hover:bg-slate-100 group">
+<div id="msg-{{ message.id }}" class="px-3 py-1.5 hover:bg-surface-sunken group">
   <div class="flex items-center gap-2">
     {% let avatar_user_id = message.user_id.clone() %}
     {% let avatar_username = message.username.clone() %}
@@ -9,13 +9,13 @@
     {% let avatar_size = "h-5 w-5 text-xs" %}
     {% include "partials/avatar.html" %}
     <span class="font-medium text-sm">{{ message.label() }}</span>
-    <span class="text-xs text-slate-500">{{ message.created_at }}</span>
+    <span class="text-xs text-content-muted">{{ message.created_at }}</span>
     {% if message.edited_at.is_some() %}
     <button
       hx-get="/messages/{{ message.id }}/history"
       hx-target="#history-panel"
       hx-swap="outerHTML"
-      class="text-xs text-slate-400 hover:text-slate-600 hover:underline"
+      class="text-xs text-content-subtle hover:text-content-muted hover:underline"
       aria-label="{{ "room-msg-view-history"|t }}"
     >{{ "room-msg-edited"|t }}</button>
     {% endif %}

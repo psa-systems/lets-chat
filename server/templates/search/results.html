@@ -1,12 +1,12 @@
 {% if results.is_empty() %}
-<div class="bg-white border border-slate-300 rounded shadow-lg p-3">
-  <p class="text-sm text-slate-500">{{ "search-no-results"|t }}</p>
+<div class="bg-surface-elevated border border-border-strong rounded shadow-lg p-3">
+  <p class="text-sm text-content-muted">{{ "search-no-results"|t }}</p>
 </div>
 {% else %}
-<div role="listbox" class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">
+<div role="listbox" class="bg-surface-elevated border border-border-strong rounded shadow-lg max-h-80 overflow-y-auto">
   {% for r in results %}
-  <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="block px-3 py-2 hover:bg-slate-100 border-b border-slate-100 last:border-b-0">
-    <div class="text-xs text-slate-500">{{ r.context_label }} - {{ r.created_at }}</div>
+  <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="block px-3 py-2 hover:bg-surface-sunken border-b border-border last:border-b-0">
+    <div class="text-xs text-content-muted">{{ r.context_label }} - {{ r.created_at }}</div>
     <div class="text-sm truncate">{{ r.snippet }}</div>
   </a>
   {% endfor %}

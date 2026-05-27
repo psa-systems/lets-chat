@@ -4,7 +4,7 @@
 
 {% block admin_main %}
 {% if maintenance_enabled %}
-<div class="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+<div class="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-warning text-sm">
   <strong>{{ "admin-settings-maintenance-on-title"|t }}</strong> {{ "admin-settings-maintenance-on-body"|t }}
 </div>
 {% endif %}
@@ -16,7 +16,7 @@
       {% if maintenance_enabled %}checked{% endif %}>
     <span>
       {{ "admin-settings-maintenance-enable"|t }}
-      <span class="block text-xs text-slate-500 mt-1">
+      <span class="block text-xs text-content-muted mt-1">
         {{ "admin-settings-maintenance-enable-note"|t }}
       </span>
     </span>
@@ -24,15 +24,15 @@
   <div>
     <label class="block text-sm font-medium mb-1" for="maintenance_message">{{ "admin-settings-maintenance-message-label"|t }}</label>
     <textarea id="maintenance_message" name="message" rows="3"
-      class="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      class="w-full border border-border-strong rounded px-2 py-1 text-sm"
       placeholder="{{ "admin-settings-maintenance-message-placeholder"|t }}">{{ maintenance_message }}</textarea>
   </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-maintenance-save"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-maintenance-save"|t }}</button>
 </form>
 
 <h1 class="text-lg font-semibold mb-4">{{ "admin-settings-smtp-heading"|t }}</h1>
-<div class="max-w-lg p-3 rounded bg-slate-50 border border-slate-200 text-sm space-y-2">
-  <p class="text-slate-700">
+<div class="max-w-lg p-3 rounded bg-surface border border-border text-sm space-y-2">
+  <p class="text-content-muted">
     {{ "admin-settings-smtp-note-1"|t }}
     <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_TLS</code>
     (<code>tls</code> / <code>starttls</code> / <code>none</code>),
@@ -40,7 +40,7 @@
     <code>SMTP_USERNAME</code> / <code>SMTP_PASSWORD</code> {{ "admin-settings-smtp-note-3"|t }}
     <code>README.md</code> {{ "admin-settings-smtp-note-4"|t }}
   </p>
-  <p class="text-slate-500 text-xs">
+  <p class="text-content-muted text-xs">
     {{ "admin-settings-smtp-note-5"|t }}
     <code>settings.db</code> {{ "admin-settings-smtp-note-6"|t }}
   </p>
@@ -48,12 +48,12 @@
 
 <h1 class="text-lg font-semibold mt-8 mb-4">{{ "admin-settings-imap-heading"|t }}</h1>
 {% if imap_saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-imap-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-imap-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = imap_error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
 {% endif %}
-<p class="text-sm text-slate-600 max-w-lg mb-3">
+<p class="text-sm text-content-muted max-w-lg mb-3">
   {{ "admin-settings-imap-intro-1"|t }}
   <code>&lt;token&gt;@&lt;ingress domain&gt;</code> {{ "admin-settings-imap-intro-2"|t }}
   <code>LETS_CHAT_SECRET_KEY</code>. {{ "admin-settings-imap-intro-3"|t }}
@@ -63,13 +63,13 @@
     <label class="block text-sm font-medium mb-1" for="imap_host">{{ "admin-settings-imap-host"|t }}</label>
     <input id="imap_host" name="imap_host" type="text" value="{{ imap_host }}"
            placeholder="imap.example.com"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_port">{{ "admin-settings-imap-port"|t }}</label>
     <input id="imap_port" name="imap_port" type="text" value="{{ imap_port }}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-port-note"|t }}</p>
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
+    <p class="text-xs text-content-muted mt-1">{{ "admin-settings-imap-port-note"|t }}</p>
   </div>
   <div>
     <label class="flex items-start gap-2 text-sm cursor-pointer">
@@ -81,32 +81,32 @@
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_username">{{ "admin-settings-imap-username"|t }}</label>
     <input id="imap_username" name="imap_username" type="text" value="{{ imap_username }}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_password">{{ "admin-settings-imap-password"|t }}</label>
     <input id="imap_password" name="imap_password" type="password" value=""
            placeholder="{% if imap_password_configured %}{{ "admin-settings-imap-password-keep"|t }}{% else %}{{ "admin-settings-imap-password-unset"|t }}{% endif %}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_folder">{{ "admin-settings-imap-folder"|t }}</label>
     <input id="imap_folder" name="imap_folder" type="text" value="{{ imap_folder }}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
   </div>
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_ingress_domain">{{ "admin-settings-imap-ingress-domain"|t }}</label>
     <input id="imap_ingress_domain" name="imap_ingress_domain" type="text" value="{{ imap_ingress_domain }}"
            placeholder="mail.example.com"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-ingress-domain-note-1"|t }} <code>@&lt;domain&gt;</code> {{ "admin-settings-imap-ingress-domain-note-2"|t }} <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
+    <p class="text-xs text-content-muted mt-1">{{ "admin-settings-imap-ingress-domain-note-1"|t }} <code>@&lt;domain&gt;</code> {{ "admin-settings-imap-ingress-domain-note-2"|t }} <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
   </div>
   <div>
     <label class="block text-sm font-medium mb-1" for="imap_dead_letter_folder">{{ "admin-settings-imap-dead-letter"|t }}</label>
     <input id="imap_dead_letter_folder" name="imap_dead_letter_folder" type="text" value="{{ imap_dead_letter_folder }}"
            placeholder="INBOX/lets-chat-rejected"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-dead-letter-note-1"|t }} <code>\Seen</code> {{ "admin-settings-imap-dead-letter-note-2"|t }}</p>
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
+    <p class="text-xs text-content-muted mt-1">{{ "admin-settings-imap-dead-letter-note-1"|t }} <code>\Seen</code> {{ "admin-settings-imap-dead-letter-note-2"|t }}</p>
   </div>
   <div>
     <label class="flex items-start gap-2 text-sm cursor-pointer">
@@ -114,21 +114,21 @@
         {% if imap_enabled %}checked{% endif %}>
       <span>
         {{ "admin-settings-imap-enable"|t }}
-        <span class="block text-xs text-slate-500 mt-1">
+        <span class="block text-xs text-content-muted mt-1">
           {{ "admin-settings-imap-enable-note"|t }}
         </span>
       </span>
     </label>
   </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-imap-save"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-imap-save"|t }}</button>
 </form>
 
 <h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-uploads-heading"|t }}</h2>
 {% if let Some(n) = regenerated %}
-<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
+<div class="mb-3 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
 {% endif %}
 {% if let Some(n) = purged %}
-<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
+<div class="mb-3 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
 {% endif %}
 <div class="max-w-lg space-y-2 text-sm">
   <div class="flex justify-between">
@@ -142,9 +142,9 @@
   <div class="pt-2 space-y-3">
     <div>
       <form method="post" action="/admin/uploads/regenerate-thumbnails" class="inline">
-        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-uploads-regenerate"|t }}</button>
+        <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-uploads-regenerate"|t }}</button>
       </form>
-      <p class="mt-1 text-xs text-slate-500">{{ "admin-settings-uploads-regenerate-note"|t }}</p>
+      <p class="mt-1 text-xs text-content-muted">{{ "admin-settings-uploads-regenerate-note"|t }}</p>
     </div>
     <div>
       <form method="post" action="/admin/uploads/purge-orphans" class="inline">
@@ -161,11 +161,11 @@
       {% if default_notify_email_digest %}checked{% endif %}>
     <span>
       {{ "admin-settings-defaults-digest"|t }}
-      <span class="block text-xs text-slate-500 mt-1">
+      <span class="block text-xs text-content-muted mt-1">
         {{ "admin-settings-defaults-digest-note"|t }}
       </span>
     </span>
   </label>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-defaults-save"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-defaults-save"|t }}</button>
 </form>
 {% endblock %}

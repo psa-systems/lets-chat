@@ -7,7 +7,7 @@
    fields + `user` from whichever parent includes it. #}
     {% if !sidebar_starred_rooms.is_empty() || !sidebar_starred_peers.is_empty() %}
     <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">&#9733; {{ "sidebar-section-starred"|t }}</h2>
+      <h2 class="text-xs uppercase text-content-muted px-2">&#9733; {{ "sidebar-section-starred"|t }}</h2>
       <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
         {% for room in sidebar_starred_rooms %}
         <li data-room-id="{{ room.id }}" draggable="true">
@@ -38,26 +38,26 @@
           {% else %}
           <input type="hidden" name="collapsed" value="1">
           {% endif %}
-          <button type="submit" class="w-full text-left text-xs uppercase text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
-            <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-slate-400 normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
+          <button type="submit" class="w-full text-left text-xs uppercase text-content-muted hover:text-content focus:outline-none focus:ring-2 focus:ring-blue-500 rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
+            <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
-            <span class="text-xs bg-blue-600 text-white rounded px-2 normal-case">{{ category.unread_total }}</span>
+            <span class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
             {% endif %}
             {% if category.collapsed && category.mention_total > 0 %}
-            <span class="text-[10px] font-bold uppercase bg-red-600 text-white rounded px-1.5">@{{ category.mention_total }}</span>
+            <span class="text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ category.mention_total }}</span>
             {% endif %}
           </button>
         </form>
         {% if can_manage_sidebar_categories %}
         <details class="relative">
-          <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1" title="{{ "sidebar-category-actions"|t }}">&#8230;</summary>
-          <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-sm w-56 p-2 space-y-2">
+          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1" title="{{ "sidebar-category-actions"|t }}">&#8230;</summary>
+          <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2 space-y-2">
             <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1">
               <input type="text" name="name" value="{{ category.name }}" maxlength="50" required class="flex-1 border rounded px-1 py-0.5 text-xs">
-              <button type="submit" class="px-2 text-xs bg-blue-600 text-white rounded">{{ "sidebar-category-rename"|t }}</button>
+              <button type="submit" class="px-2 text-xs bg-accent text-accent-content rounded">{{ "sidebar-category-rename"|t }}</button>
             </form>
             <form hx-delete="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="{{ "sidebar-category-delete-confirm"|t }}" class="text-right">
-              <button type="submit" class="text-xs text-red-600 hover:underline">{{ "sidebar-category-delete"|t }}</button>
+              <button type="submit" class="text-xs text-danger hover:underline">{{ "sidebar-category-delete"|t }}</button>
             </form>
           </div>
         </details>
@@ -80,7 +80,7 @@
     {% endif %}
     {% if !sidebar_rooms.is_empty() %}
     <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
+      <h2 class="text-xs uppercase text-content-muted px-2">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
         {% for room in sidebar_rooms %}
         <li{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
@@ -94,7 +94,7 @@
     {% endif %}
     {% if !sidebar_peers.is_empty() %}
     <section>
-      <h2 class="text-xs uppercase text-slate-500 px-2">{{ "sidebar-section-direct-messages"|t }}</h2>
+      <h2 class="text-xs uppercase text-content-muted px-2">{{ "sidebar-section-direct-messages"|t }}</h2>
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
         <li>
@@ -106,8 +106,8 @@
     </section>
     {% endif %}
     {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
-    <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-slate-200">
+    <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-border">
       <input type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required class="flex-1 border rounded px-2 py-1 text-xs">
-      <button type="submit" class="px-2 text-xs bg-slate-200 hover:bg-slate-300 rounded">+ {{ "sidebar-category-add"|t }}</button>
+      <button type="submit" class="px-2 text-xs bg-surface-sunken hover:bg-surface-sunken rounded">+ {{ "sidebar-category-add"|t }}</button>
     </form>
     {% endif %}{% endif %}

@@ -6,12 +6,12 @@
 <h1 class="text-lg font-semibold mb-4">{{ "admin-invites-heading"|t }}</h1>
 
 <form method="post" action="/admin/invites" class="mb-6 flex gap-2">
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-invites-create"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-invites-create"|t }}</button>
 </form>
 
 <table class="w-full text-sm">
   <thead>
-    <tr class="text-left text-slate-500 border-b border-slate-200">
+    <tr class="text-left text-content-muted border-b border-border">
       <th class="py-2">{{ "admin-invites-th-code"|t }}</th>
       <th class="py-2">{{ "admin-invites-th-created-by"|t }}</th>
       <th class="py-2">{{ "admin-invites-th-created-at"|t }}</th>
@@ -21,16 +21,16 @@
   </thead>
   <tbody>
     {% for inv in invites %}
-    <tr id="invite-{{ inv.id }}" class="border-t border-slate-200">
+    <tr id="invite-{{ inv.id }}" class="border-t border-border">
       <td class="py-1 font-mono">{{ inv.code }}</td>
       <td class="py-1">{{ inv.created_by_username }}</td>
       <td class="py-1">{{ inv.created_at }}</td>
       <td class="py-1">{% if let Some(name) = inv.used_by_username.as_ref() %}{{ name }}{% else %}-{% endif %}</td>
       <td class="py-1 text-right">
         {% if inv.used_by_username.is_none() %}
-        <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">{{ "admin-invites-revoke"|t }}</button>
+        <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" class="text-danger hover:underline">{{ "admin-invites-revoke"|t }}</button>
         {% else %}
-        <span class="text-slate-400">-</span>
+        <span class="text-content-subtle">-</span>
         {% endif %}
       </td>
     </tr>

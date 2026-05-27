@@ -3,7 +3,7 @@
 {% block title %}{{ "settings-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
-<header class="border-b border-slate-200 px-4 py-2">
+<header class="border-b border-border px-4 py-2">
   <h1 class="font-semibold">{{ "settings-heading"|t }}</h1>
 </header>
 <div class="flex-1 overflow-y-auto">
@@ -15,13 +15,13 @@
   {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
   <form method="post" action="/settings/language" class="space-y-2">
     <h2 class="font-medium">{{ "settings-language"|t }}</h2>
-    <p class="text-sm text-slate-500">{{ "settings-language-help"|t }}</p>
-    <select name="locale" class="block w-full max-w-xs border border-slate-300 rounded px-2 py-1 text-sm">
+    <p class="text-sm text-content-muted">{{ "settings-language-help"|t }}</p>
+    <select name="locale" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
       {% for l in locales %}
       <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
       {% endfor %}
     </select>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "settings-language-save"|t }}</button>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-language-save"|t }}</button>
   </form>
 
   {# LC-191: theme picker. The inline onchange applies instantly via
@@ -29,23 +29,23 @@
      form POST persists server-side and the locale middleware syncs the cookie. #}
   <form method="post" action="/settings/appearance" class="space-y-2">
     <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
-    <p class="text-sm text-slate-500">{{ "settings-appearance-help"|t }}</p>
+    <p class="text-sm text-content-muted">{{ "settings-appearance-help"|t }}</p>
     <select name="theme" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
-            class="block w-full max-w-xs border border-slate-300 rounded px-2 py-1 text-sm">
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
       <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
       <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
       <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
       <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
       <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
     </select>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "settings-appearance-save"|t }}</button>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
   </form>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
-    <dl class="text-sm text-slate-700 space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-username"|t }}</dt><dd>{{ user.username }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-role"|t }}</dt><dd>{{ user.role }}</dd></div>
+    <dl class="text-sm text-content-muted space-y-1">
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-username"|t }}</dt><dd>{{ user.username }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-role"|t }}</dt><dd>{{ user.role }}</dd></div>
     </dl>
   </div>
 
@@ -55,52 +55,52 @@
       <div class="shrink-0">
         <span class="relative inline-block"{% if let Some(t) = user.custom_status.as_ref() %} title="{{ t }}"{% endif %}>
           {% if user.avatar_ext.is_some() %}
-          <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-slate-200">
+          <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-border">
           {% else %}
-          <div class="h-16 w-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+          <div class="h-16 w-16 rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
           {% endif %}
           <span data-user-status="{{ user.id }}" aria-label="{% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else if user.status == "offline" %}{{ "settings-presence-offline"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-4 w-4 rounded-full ring-2 ring-white {% if user.status == "dnd" %}bg-red-500{% else if user.status == "idle" || user.status == "away" %}bg-yellow-400{% else if user.status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
         </span>
-        <div class="text-xs text-slate-500 mt-1">{{ "settings-status-label"|t }} {% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
+        <div class="text-xs text-content-muted mt-1">{{ "settings-status-label"|t }} {% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
       </div>
       <div class="flex-1 space-y-2">
         <label class="block text-sm">
-          <span class="text-slate-600">{{ "settings-profile-picture"|t }}</span>
+          <span class="text-content-muted">{{ "settings-profile-picture"|t }}</span>
           <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block mt-1 text-sm">
-          <span class="text-xs text-slate-500">{{ "settings-avatar-formats"|t }}</span>
+          <span class="text-xs text-content-muted">{{ "settings-avatar-formats"|t }}</span>
         </label>
       </div>
     </div>
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-display-name"|t }}</span>
+      <span class="text-content-muted">{{ "settings-display-name"|t }}</span>
       <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-email"|t }}</span>
+      <span class="text-content-muted">{{ "settings-email"|t }}</span>
       <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
-      <span class="text-xs text-slate-500">{{ "settings-email-help"|t }}</span>
+      <span class="text-xs text-content-muted">{{ "settings-email-help"|t }}</span>
       {% if email_verification_available && email.is_some() %}
       <div class="mt-1 flex items-center gap-2 text-xs">
         {% if email_verified %}
         <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">{{ "settings-email-verified"|t }}</span>
         {% else %}
         <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">{{ "settings-email-unverified"|t }}</span>
-        <button type="submit" form="email-verify-resend" class="text-blue-600 hover:underline">{{ "settings-email-resend"|t }}</button>
+        <button type="submit" form="email-verify-resend" class="text-accent hover:underline">{{ "settings-email-resend"|t }}</button>
         {% endif %}
       </div>
       {% if email_verify_sent %}
-      <p class="text-xs text-green-700 mt-1">{{ "settings-email-verify-sent"|t }}</p>
+      <p class="text-xs text-success mt-1">{{ "settings-email-verify-sent"|t }}</p>
       {% endif %}
       {% endif %}
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-bio"|t }}</span>
+      <span class="text-content-muted">{{ "settings-bio"|t }}</span>
       <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
     </label>
     <div class="flex items-center gap-2">
-      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-save-profile"|t }}</button>
+      <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-save-profile"|t }}</button>
       {% if user.avatar_ext.is_some() %}
-      <button type="submit" form="avatar-delete-form" class="text-sm text-red-600 hover:underline">{{ "settings-remove-avatar"|t }}</button>
+      <button type="submit" form="avatar-delete-form" class="text-sm text-danger hover:underline">{{ "settings-remove-avatar"|t }}</button>
       {% endif %}
     </div>
   </form>
@@ -121,7 +121,7 @@
       <input type="checkbox" name="is_profile_public" value="1" class="mt-0.5" {% if user.is_profile_public %}checked{% endif %}>
       <span>
         {{ "settings-pref-public-profile"|t }}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-public-profile-help"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-public-profile-help"|t }}</span>
       </span>
     </label>
     <label class="flex items-center gap-2 cursor-pointer">
@@ -139,9 +139,9 @@
       <span>
         {{ "settings-pref-push"|t }}
         {% if !push_available %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-push-available"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-push-available"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -152,9 +152,9 @@
       <span>
         {{ "settings-pref-email-digest"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-email-digest-help"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-email-digest-help"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -165,9 +165,9 @@
       <span>
         {{ "settings-pref-login-alerts"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-login-alerts-help"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-login-alerts-help"|t }}</span>
         {% endif %}
       </span>
     </label>
@@ -178,39 +178,39 @@
       <span>
         {{ "settings-pref-email-activity"|t }}
         {% if !email_available %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-email-unavailable"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
         {% else %}
-        <span class="block text-xs text-slate-500">{{ "settings-pref-email-activity-help"|t }}</span>
+        <span class="block text-xs text-content-muted">{{ "settings-pref-email-activity-help"|t }}</span>
         {% endif %}
       </span>
     </label>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-save-preferences"|t }}</button>
+    <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-save-preferences"|t }}</button>
   </form>
 
-  <section class="space-y-4 border-t border-slate-200 pt-6">
+  <section class="space-y-4 border-t border-border pt-6">
     <div class="flex items-center gap-2">
       <h2 class="font-medium">{{ "settings-dnd-heading"|t }}</h2>
       {% if dnd_active %}
-      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">{{ "settings-dnd-active"|t }}</span>
+      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-danger">{{ "settings-dnd-active"|t }}</span>
       {% endif %}
     </div>
-    <p class="text-xs text-slate-500">{{ "settings-dnd-explain"|t }}</p>
+    <p class="text-xs text-content-muted">{{ "settings-dnd-explain"|t }}</p>
 
     <div class="space-y-2">
       <h3 class="text-sm font-medium">{{ "settings-dnd-pause-heading"|t }}</h3>
       {% if dnd_paused_until != "" %}
-      <p class="text-xs text-slate-600">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
+      <p class="text-xs text-content-muted">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
       <form method="post" action="/settings/dnd/resume">
-        <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-resume"|t }}</button>
+        <button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-resume"|t }}</button>
       </form>
       {% else %}
       <div class="flex flex-wrap gap-2">
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-30-minutes"|t }}</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-2-hours"|t }}</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-8-hours"|t }}</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-30-minutes"|t }}</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-2-hours"|t }}</button></form>
+        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-8-hours"|t }}</button></form>
         <form method="post" action="/settings/dnd/pause" class="flex items-center gap-1">
-          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-slate-300 px-2 py-1 text-sm" aria-label="{{ "settings-dnd-pause-minutes"|t }}">
-          <button type="submit" class="rounded bg-slate-200 px-3 py-1.5 text-sm hover:bg-slate-300">{{ "settings-dnd-min"|t }}</button>
+          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-border-strong px-2 py-1 text-sm" aria-label="{{ "settings-dnd-pause-minutes"|t }}">
+          <button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-min"|t }}</button>
         </form>
       </div>
       {% endif %}
@@ -219,8 +219,8 @@
     <form method="post" action="/settings/dnd" class="space-y-3">
       <h3 class="text-sm font-medium">{{ "settings-dnd-schedule-heading"|t }}</h3>
       <label class="block text-sm">
-        <span class="block text-xs text-slate-600">{{ "settings-dnd-timezone"|t }}</span>
-        <select name="timezone" class="mt-1 w-full max-w-xs rounded border border-slate-300 px-2 py-1 text-sm">
+        <span class="block text-xs text-content-muted">{{ "settings-dnd-timezone"|t }}</span>
+        <select name="timezone" class="mt-1 w-full max-w-xs rounded border border-border-strong px-2 py-1 text-sm">
           <option value="" {% if dnd_timezone == "" %}selected{% endif %}>{{ "settings-dnd-off"|t }}</option>
           {% for tz in timezones %}
           <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
@@ -229,24 +229,24 @@
       </label>
       <div class="grid grid-cols-2 gap-3 max-w-md">
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekday-start"|t }}</span>
-          <input type="time" name="weekday_start" value="{{ dnd_weekday_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekday-start"|t }}</span>
+          <input type="time" name="weekday_start" value="{{ dnd_weekday_start }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekday-end"|t }}</span>
-          <input type="time" name="weekday_end" value="{{ dnd_weekday_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekday-end"|t }}</span>
+          <input type="time" name="weekday_end" value="{{ dnd_weekday_end }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekend-start"|t }}</span>
-          <input type="time" name="weekend_start" value="{{ dnd_weekend_start }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekend-start"|t }}</span>
+          <input type="time" name="weekend_start" value="{{ dnd_weekend_start }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
         </label>
         <label class="block text-sm">
-          <span class="block text-xs text-slate-600">{{ "settings-dnd-weekend-end"|t }}</span>
-          <input type="time" name="weekend_end" value="{{ dnd_weekend_end }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekend-end"|t }}</span>
+          <input type="time" name="weekend_end" value="{{ dnd_weekend_end }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
         </label>
       </div>
-      <p class="text-xs text-slate-500">{{ "settings-dnd-schedule-help"|t }}</p>
-      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-dnd-save-schedule"|t }}</button>
+      <p class="text-xs text-content-muted">{{ "settings-dnd-schedule-help"|t }}</p>
+      <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-dnd-save-schedule"|t }}</button>
     </form>
   </section>
 
@@ -260,24 +260,24 @@
     <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ err }}</div>
     {% endif %}
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-current-password"|t }}</span>
+      <span class="text-content-muted">{{ "settings-current-password"|t }}</span>
       <input type="password" name="current_password" required class="mt-1 block w-full border rounded px-2 py-1" autocomplete="current-password">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-new-password"|t }}</span>
+      <span class="text-content-muted">{{ "settings-new-password"|t }}</span>
       <input type="password" name="new_password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-600">{{ "settings-confirm-new-password"|t }}</span>
+      <span class="text-content-muted">{{ "settings-confirm-new-password"|t }}</span>
       <input type="password" name="new_password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
     </label>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-update-password"|t }}</button>
+    <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-update-password"|t }}</button>
   </form>
   {% endif %}
 
   <div class="space-y-3">
     <h2 class="font-medium">{{ "settings-active-sessions"|t }}</h2>
-    <p class="text-sm text-slate-600">{{ "settings-sessions-help"|t }}</p>
+    <p class="text-sm text-content-muted">{{ "settings-sessions-help"|t }}</p>
     {% if session_revoked %}
     <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-session-revoked"|t }}</div>
     {% endif %}
@@ -291,16 +291,16 @@
             <span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">{{ "settings-this-device"|t }}</span>
             {% endif %}
           </div>
-          <div class="text-xs text-slate-500 mt-0.5">
+          <div class="text-xs text-content-muted mt-0.5">
             {{ "settings-last-seen"|t }} {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} {{ "settings-from"|t }} {{ ip }}{% endif %}
           </div>
-          <div class="text-xs text-slate-400">{{ "settings-signed-in"|t }} {{ s.created }} UTC</div>
+          <div class="text-xs text-content-subtle">{{ "settings-signed-in"|t }} {{ s.created }} UTC</div>
         </div>
         {% if s.is_current %}
-        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-slate-400 cursor-not-allowed">{{ "action-revoke"|t }}</button>
+        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-content-subtle cursor-not-allowed">{{ "action-revoke"|t }}</button>
         {% else %}
         <form method="post" action="/settings/sessions/{{ s.id }}/revoke">
-          <button type="submit" class="px-2 py-1 text-xs border rounded text-red-700 border-red-300 hover:bg-red-50">{{ "action-revoke"|t }}</button>
+          <button type="submit" class="px-2 py-1 text-xs border rounded text-danger border-red-300 hover:bg-red-50">{{ "action-revoke"|t }}</button>
         </form>
         {% endif %}
       </li>
@@ -310,22 +310,22 @@
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-privacy"|t }}</h2>
-    <p class="text-sm text-slate-600">
-      <a href="/settings/blocked" class="text-blue-600 hover:underline">{{ "settings-manage-blocked"|t }}</a>
+    <p class="text-sm text-content-muted">
+      <a href="/settings/blocked" class="text-accent hover:underline">{{ "settings-manage-blocked"|t }}</a>
     </p>
   </div>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-api-tokens-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
-      <a href="/settings/api-tokens" class="text-blue-600 hover:underline">{{ "settings-manage-api-tokens"|t }}</a>
+    <p class="text-sm text-content-muted">
+      <a href="/settings/api-tokens" class="text-accent hover:underline">{{ "settings-manage-api-tokens"|t }}</a>
       {{ "settings-api-tokens-help"|t }}
     </p>
   </div>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-storage-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
+    <p class="text-sm text-content-muted">
       {% if let Some(q) = storage_quota_display %}
       {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-of-quota"|t }} <span class="font-mono">{{ q }}</span> {{ "settings-storage-quota-suffix"|t }}
       {% else %}
@@ -336,11 +336,11 @@
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-your-data-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
+    <p class="text-sm text-content-muted">
       {{ "settings-your-data-help"|t }}
     </p>
     <p class="mt-2">
-      <a href="/settings/export-data" class="inline-block bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">{{ "settings-download-data"|t }}</a>
+      <a href="/settings/export-data" class="inline-block bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-download-data"|t }}</a>
     </p>
   </div>
 
@@ -360,17 +360,17 @@
         <span class="text-red-800">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
         <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-red-300 rounded px-2 py-1">
       </label>
-      <button type="submit" class="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');">{{ "settings-delete-account-button"|t }}</button>
+      <button type="submit" class="bg-danger text-danger-content px-4 py-1.5 rounded text-sm hover:bg-danger" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');">{{ "settings-delete-account-button"|t }}</button>
     </form>
   </div>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-about-heading"|t }}</h2>
-    <dl class="text-sm text-slate-700 space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-version"|t }}</dt><dd>{{ app_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-release"|t }}</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-slate-500">{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
+    <dl class="text-sm text-content-muted space-y-1">
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-version"|t }}</dt><dd>{{ app_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-release"|t }}</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
+      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
     </dl>
   </div>
 </section>

@@ -9,32 +9,32 @@
     <div class="flex items-center gap-3">
       <nav class="flex gap-1 text-sm" aria-label="{{ "admin-analytics-date-range"|t }}">
         <a href="/admin/analytics?days=7"
-           class="px-2 py-1 rounded {% if range_days == 7 %}bg-blue-600 text-white{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %}">7d</a>
+           class="px-2 py-1 rounded {% if range_days == 7 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">7d</a>
         <a href="/admin/analytics?days=30"
-           class="px-2 py-1 rounded {% if range_days == 30 %}bg-blue-600 text-white{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %}">30d</a>
+           class="px-2 py-1 rounded {% if range_days == 30 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">30d</a>
         <a href="/admin/analytics?days=90"
-           class="px-2 py-1 rounded {% if range_days == 90 %}bg-blue-600 text-white{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %}">90d</a>
+           class="px-2 py-1 rounded {% if range_days == 90 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">90d</a>
       </nav>
       <form method="post" action="/admin/analytics/recompute">
         <input type="hidden" name="days" value="{{ range_days }}">
         <button type="submit"
-                class="text-sm bg-slate-200 hover:bg-slate-300 rounded px-3 py-1"
+                class="text-sm bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1"
                 title="{{ "admin-analytics-recompute-title-prefix"|t }} ({{ today }})">{{ "admin-analytics-recompute"|t }}</button>
       </form>
     </div>
   </div>
 
-  <p class="text-xs text-slate-500">{{ "admin-analytics-counts-note"|t }}</p>
+  <p class="text-xs text-content-muted">{{ "admin-analytics-counts-note"|t }}</p>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     {% for c in cards %}
     <section class="border rounded-lg p-4 space-y-2">
       <div class="flex items-baseline justify-between">
-        <h2 class="text-sm font-medium text-slate-600">{{ c.label }}</h2>
+        <h2 class="text-sm font-medium text-content-muted">{{ c.label }}</h2>
         <div class="text-right">
           <span class="text-2xl font-semibold tabular-nums">{{ c.latest }}</span>
           {% if !c.is_snapshot %}
-          <span class="block text-xs text-slate-400">{{ c.total }} {{ "admin-analytics-over"|t }} {{ range_days }}d</span>
+          <span class="block text-xs text-content-subtle">{{ c.total }} {{ "admin-analytics-over"|t }} {{ range_days }}d</span>
           {% endif %}
         </div>
       </div>
@@ -45,14 +45,14 @@
 
   <section class="border rounded-lg p-4 space-y-3">
     <h2 class="font-semibold">{{ "admin-analytics-retention-heading"|t }}</h2>
-    <p class="text-xs text-slate-500">{{ "admin-analytics-retention-note"|t }}</p>
+    <p class="text-xs text-content-muted">{{ "admin-analytics-retention-note"|t }}</p>
     {% if retention.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "admin-analytics-no-cohorts"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "admin-analytics-no-cohorts"|t }}</p>
     {% else %}
     <div class="overflow-x-auto">
       <table class="text-xs border-collapse">
         <thead>
-          <tr class="text-slate-500">
+          <tr class="text-content-muted">
             <th class="text-left font-medium px-2 py-1">{{ "admin-analytics-th-cohort"|t }}</th>
             <th class="text-right font-medium px-2 py-1">{{ "admin-analytics-th-users"|t }}</th>
             {% for h in retention_headers %}
@@ -67,9 +67,9 @@
             <td class="px-2 py-1 text-right tabular-nums">{{ cohort.size }}</td>
             {% for cell in cohort.retained %}
             {% if let Some(pct) = cell %}
-            <td class="px-2 py-1 text-right tabular-nums text-slate-700">{{ pct }}%</td>
+            <td class="px-2 py-1 text-right tabular-nums text-content-muted">{{ pct }}%</td>
             {% else %}
-            <td class="px-2 py-1 text-right text-slate-300">-</td>
+            <td class="px-2 py-1 text-right text-content-subtle">-</td>
             {% endif %}
             {% endfor %}
           </tr>
