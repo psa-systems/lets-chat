@@ -28,12 +28,19 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 
 - 1:1 audio and video calls over WebRTC, with mic/camera/speaker selection
 - Multi-party enclave voice channels
+- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time)
 
 ### Spaces and organization
 
 - Enclaves: grouped rooms/workspaces, each with a default room and settings gear
 - Room and DM mute, sidebar categories, starred rooms, and user groups
 - Custom user status
+
+### Personalization
+
+- Light, dark, and high-contrast (WCAG AA/AAA) themes, plus a "follow system" option; saved per user at `/settings`
+- Comfortable or compact display density
+- Localized UI with an in-app language picker (English and Spanish), falling back to the browser language (see [`docs/i18n.md`](docs/i18n.md))
 
 ### Notifications
 
@@ -47,6 +54,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 - First-class bot identities
 - Incoming webhooks (post via secret URL) and outgoing webhooks (signed event subscriptions)
 - Email ingress: per-room IMAP-poll inboxes that turn an `<token>@<ingress-domain>` address into chat posts (see [`docs/email-ingress.md`](docs/email-ingress.md))
+- Per-room Atom and iCal feeds, each served from a revocable secret-token URL
 
 ### Administration
 
@@ -103,6 +111,7 @@ Run `just --list` to see all available recipes.
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
 | `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_FROM` / `SMTP_USERNAME` / `SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
+| `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room message `retention_days`. Read once at startup; flipping it requires a restart. |
 
 ### `LETS_CHAT_SECRET_KEY`
 
@@ -180,5 +189,6 @@ Users with no email address on file are skipped by the digest tick regardless of
 - **Backend**: [Axum](https://github.com/tokio-rs/axum) 0.8
 - **Database**: SQLite via SQLx (three separate pools: auth, chat, settings)
 - **Real-time**: WebSocket hub broadcasting pre-rendered HTML fragments via `hx-swap-oob`
-- **Styles**: Tailwind CSS (compiled via Bun)
+- **Styles**: Tailwind CSS (compiled via Bun), with semantic design tokens driving light/dark/high-contrast themes
+- **i18n**: [Project Fluent](https://projectfluent.org/) catalogs embedded at compile time (see [`docs/i18n.md`](docs/i18n.md))
 - **Desktop**: Optional Tao + Wry native webview wrapper in `desktop/`
