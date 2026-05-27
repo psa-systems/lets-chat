@@ -580,8 +580,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // remote-control session this user left open (call end, crash, network
         // loss). The injector's own channel-drop/heartbeat release (LC-185)
         // still handles the OS side; this only finalizes the audit row.
-        let _ = db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect")
-            .await;
+        let _ =
+            db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect").await;
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
             status: "offline".to_string(),
@@ -1501,17 +1501,13 @@ async fn relay_control_signal(
     // room. Best-effort - an audit write failure must not block the relay.
     match kind {
         "grant" => {
-            let _ = db::remote_control_audit::start_session(
-                &state.chat,
-                room_id,
-                &peer_id,
-                &user.id,
-            )
-            .await;
+            let _ =
+                db::remote_control_audit::start_session(&state.chat, room_id, &peer_id, &user.id)
+                    .await;
         }
         "revoke" => {
-            let _ =
-                db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked").await;
+            let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked")
+                .await;
         }
         _ => {}
     }
