@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* LC-195: shared component vocabulary, defined once on the LC-190 tokens so
+   buttons / inputs / cards / modals / toasts stop being per-template class
+   soup. Buttons compose a base `.btn` with a `.btn-*` color modifier in the
+   class list, e.g. `class="btn btn-primary"`. All colors are tokens, so the
+   components recolor with the theme automatically. */
+@layer components {
+  /* Buttons: `btn` (base) + one color modifier; optional `btn-sm`. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5
+           text-sm font-medium transition-colors
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
+  .btn-primary {
+    @apply bg-accent text-accent-content hover:bg-accent-hover;
+  }
+  .btn-secondary {
+    @apply border border-border bg-surface-elevated text-content hover:bg-surface-sunken;
+  }
+  .btn-ghost {
+    @apply text-content-muted hover:bg-surface-sunken hover:text-content;
+  }
+  .btn-danger {
+    @apply bg-danger text-danger-content hover:opacity-90;
+  }
+
+  /* Form controls. Works for input / select / textarea; add `input-error`
+     for the invalid state. */
+  .input {
+    @apply block w-full rounded-md border border-border bg-surface-elevated
+           px-2 py-1.5 text-sm text-content placeholder:text-content-subtle;
+  }
+  .input-error {
+    @apply border-danger;
+  }
+
+  /* Elevated surfaces. */
+  .card {
+    @apply rounded-lg border border-border bg-surface-elevated shadow-sm;
+  }
+
+  /* Modal/dialog shell: a centered panel over a scrim. Markup keeps its own
+     `hidden` toggle + role/aria; `modal-backdrop` is the outer, `modal-panel`
+     the inner. */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4;
+  }
+  .modal-panel {
+    @apply w-full max-w-md rounded-lg bg-surface-elevated p-5 shadow-xl;
+  }
+
+  /* Toast / flash notification. */
+  .toast {
+    @apply rounded-md border border-border bg-surface-elevated px-3 py-2
+           text-sm text-content shadow-lg;
+  }
+}
