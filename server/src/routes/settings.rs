@@ -437,7 +437,7 @@ pub async fn post_appearance(
     axum::Form(form): axum::Form<AppearanceForm>,
 ) -> Result<Redirect, AppError> {
     let theme = match form.theme.trim() {
-        t @ ("light" | "dark" | "system") => t,
+        t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
         _ => "system",
     };
     db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;

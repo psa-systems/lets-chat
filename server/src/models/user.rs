@@ -104,7 +104,7 @@ impl User {
     /// Used by the Settings appearance picker to mark the selected option.
     pub fn theme_or_system(&self) -> &str {
         match self.theme.as_deref() {
-            Some(t @ ("light" | "dark" | "system")) => t,
+            Some(t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system")) => t,
             _ => "system",
         }
     }

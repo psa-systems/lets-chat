@@ -153,8 +153,10 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     let mut resp = crate::i18n::CURRENT_LOCALE.scope(lang, next.run(req)).await;
 
     if let Some(theme) = user_theme {
-        if matches!(theme.as_str(), "light" | "dark" | "system")
-            && existing_theme.as_deref() != Some(theme.as_str())
+        if matches!(
+            theme.as_str(),
+            "light" | "dark" | "hc-light" | "hc-dark" | "system"
+        ) && existing_theme.as_deref() != Some(theme.as_str())
         {
             if let Ok(v) = axum::http::HeaderValue::from_str(&format!(
                 "lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax"
