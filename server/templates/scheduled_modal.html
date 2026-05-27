@@ -16,13 +16,13 @@
    shows the dialog and installs the focus trap.
 #}
 <div data-lc-scheduled-modal
-     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     class="hidden modal-backdrop"
      role="dialog"
      aria-modal="true"
      aria-labelledby="lc-scheduled-modal-title"
      aria-hidden="true">
   <div data-lc-scheduled-modal-panel
-       class="w-96 rounded-lg bg-surface-elevated p-5 shadow-xl">
+       class="modal-panel">
     <div class="flex items-center justify-between gap-2 mb-3">
       <h2 id="lc-scheduled-modal-title" class="text-lg font-semibold">{{ "scheduled-modal-title"|t }}</h2>
       <button type="button" data-lc-scheduled-modal-close
