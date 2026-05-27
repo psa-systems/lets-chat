@@ -113,6 +113,8 @@ fn every_referenced_key_exists_in_english() {
 #[test]
 fn locales_have_full_coverage_against_english() {
     let en = locale_keys("en");
+    // Grows as locales are added (LC-188); a single entry today is fine.
+    #[allow(clippy::single_element_loop)]
     for locale in ["es"] {
         let other = locale_keys(locale);
         let missing: Vec<&String> = en.difference(&other).collect();
