@@ -67,6 +67,10 @@ pub enum RateLimitKind {
     /// dispatcher returns SkippedRateLimit. A future
     /// LC-77-REPLY-COALESCE follow-up may replace this with a debounce.
     EmailMentionNotification,
+    /// LC-186: per-requester cap on remote-control `request` signals. Keyed by
+    /// the requesting user_id. Blunts request spam / re-request harassment;
+    /// over-limit requests drop silently in `relay_control_signal`.
+    RemoteControlRequest,
 }
 
 impl RateLimitKind {
@@ -79,6 +83,7 @@ impl RateLimitKind {
             RateLimitKind::Webhook => "whk",
             RateLimitKind::EmailInbox => "eml",
             RateLimitKind::EmailMentionNotification => "emn",
+            RateLimitKind::RemoteControlRequest => "rcr",
         }
     }
 }

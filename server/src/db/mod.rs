@@ -27,6 +27,7 @@ pub mod polls;
 pub mod push_subscriptions;
 pub mod quota;
 pub mod reminders;
+pub mod remote_control_audit;
 pub mod reply_tokens;
 pub mod room_rbac;
 pub mod scheduled;
