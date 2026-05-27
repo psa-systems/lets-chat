@@ -9,20 +9,20 @@
   {% for m in members %}
   <li class="flex items-center justify-between gap-2">
     <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
-    <span class="text-xs uppercase text-slate-500 mr-auto">{{ m.role.as_str() }}</span>
+    <span class="text-xs uppercase text-content-muted mr-auto">{{ m.role.as_str() }}</span>
     {% if can_delete && m.role.as_str() != "owner" %}
     <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role" class="inline">
       <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}"
-              type="submit" class="text-xs bg-slate-200 rounded px-2 py-0.5">
+              type="submit" class="text-xs bg-surface-sunken rounded px-2 py-0.5">
         {% if m.role.as_str() == "admin" %}{{ "enclave-settings-member-demote"|t }}{% else %}{{ "enclave-settings-member-promote"|t }}{% endif %}
       </button>
     </form>
     <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick" class="inline">
-      <button type="submit" class="text-xs text-red-600">{{ "enclave-settings-member-kick"|t }}</button>
+      <button type="submit" class="text-xs text-danger">{{ "enclave-settings-member-kick"|t }}</button>
     </form>
     <form method="post" action="/enclave/{{ enclave.id }}/transfer" class="inline">
       <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
-      <button type="submit" class="text-xs text-blue-600"
+      <button type="submit" class="text-xs text-accent"
               onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
     </form>
     {% endif %}

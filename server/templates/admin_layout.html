@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block main %}
-<nav class="border-b border-slate-200 px-4 py-2 flex gap-4 text-sm items-center">
+<nav class="border-b border-border px-4 py-2 flex gap-4 text-sm items-center">
   <a href="/admin" class="{% if section == "settings" %}font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
   <a href="/admin/users" class="{% if section == "users" %}font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
   <a href="/admin/invites" class="{% if section == "invites" %}font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
@@ -17,7 +17,7 @@
   <a href="/admin/slash-commands" class="{% if section == "slash_commands" %}font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
   <a href="/admin/bots" class="{% if section == "bots" %}font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
   <a href="/admin/outgoing-webhooks" class="{% if section == "outgoing_webhooks" %}font-semibold{% endif %}">{{ "admin-nav-webhooks"|t }}</a>
-  <span class="ml-auto text-xs text-slate-400 font-mono" title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
+  <span class="ml-auto text-xs text-content-subtle font-mono" title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
 </nav>
 {# LC-175: subscribe admin pages to the `admin` topic so moderation actions
    (ban / mute / role / quota / delete) refresh the user list live across all

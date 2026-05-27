@@ -8,12 +8,12 @@
 <ul class="mt-2 space-y-1">
   {% for r in rooms %}
   <li class="flex items-center justify-between">
-    <a href="/room/{{ r.id }}" class="text-blue-600 hover:underline">
-      {% if r.is_voice %}&#128266; {% else if r.room_type == "private" %}&#128274; {% else %}# {% endif %}{{ r.name }}{% if r.is_voice && r.room_type == "private" %} <span class="text-xs text-slate-400">{{ "enclave-room-private-tag"|t }}</span>{% endif %}
+    <a href="/room/{{ r.id }}" class="text-accent hover:underline">
+      {% if r.is_voice %}&#128266; {% else if r.room_type == "private" %}&#128274; {% else %}# {% endif %}{{ r.name }}{% if r.is_voice && r.room_type == "private" %} <span class="text-xs text-content-subtle">{{ "enclave-room-private-tag"|t }}</span>{% endif %}
     </a>
     {% if can_manage %}
     <form method="post" action="/enclave/{{ enclave.id }}/rooms/{{ r.id }}/delete" class="inline">
-      <button type="submit" class="text-xs text-red-600">{{ "enclave-room-remove"|t }}</button>
+      <button type="submit" class="text-xs text-danger">{{ "enclave-room-remove"|t }}</button>
     </form>
     {% endif %}
   </li>

@@ -7,7 +7,7 @@
   {% for m in members %}
   <li class="flex items-center justify-between gap-2">
     <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
-    <span class="text-xs uppercase text-slate-500">{{ m.role.as_str() }}</span>
+    <span class="text-xs uppercase text-content-muted">{{ m.role.as_str() }}</span>
   </li>
   {% endfor %}
 </ul>

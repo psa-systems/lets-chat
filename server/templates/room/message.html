@@ -1,17 +1,17 @@
 {% if message.show_unread_divider %}
-<div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-red-600">
-  <span class="h-px flex-1 bg-red-300"></span>
+<div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-danger">
+  <span class="h-px flex-1 bg-danger"></span>
   <span>{{ "room-msg-unread-divider"|t }}</span>
-  <span class="h-px flex-1 bg-red-300"></span>
+  <span class="h-px flex-1 bg-danger"></span>
 </div>
 {% endif %}
 {% if message.is_system %}
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="px-4 py-1 text-center text-xs text-slate-500">
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="px-4 py-1 text-center text-xs text-content-muted">
   <span class="font-medium">{{ message.label() }}</span> {{ message.body }}
-  <span class="ml-1 text-slate-400">{{ message.created_at }}</span>
+  <span class="ml-1 text-content-subtle">{{ message.created_at }}</span>
 </div>
 {% else %}
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-slate-100 group">
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
     {% match message.actor %}
@@ -20,7 +20,7 @@
     {% if let Some(url) = webhook_avatar_url %}
     <img src="{{ url }}" alt="" class="h-6 w-6 rounded-full object-cover">
     {% else %}
-    <div class="h-6 w-6 text-xs rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
@@ -29,7 +29,7 @@
     {% if let Some(url) = email_avatar_url %}
     <img src="{{ url }}" alt="" class="h-6 w-6 rounded-full object-cover">
     {% else %}
-    <div class="h-6 w-6 text-xs rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
@@ -42,7 +42,7 @@
     {% let avatar_size = "h-6 w-6 text-xs" %}
     {% include "partials/avatar.html" %}
     {% if message.user_id != message.viewer_id %}
-    <a href="/dm/{{ message.user_id }}" class="font-medium text-blue-700 hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
+    <a href="/dm/{{ message.user_id }}" class="font-medium text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
     {% else %}
     <span class="font-medium">{{ message.label() }}</span>
     {% endif %}
@@ -50,27 +50,27 @@
     <span class="text-[10px] font-bold uppercase tracking-wide bg-indigo-100 text-indigo-700 rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
     {% endif %}
     {% endmatch %}
-    <span class="text-xs text-slate-500">{{ message.created_at }}</span>
+    <span class="text-xs text-content-muted">{{ message.created_at }}</span>
     {% if message.edited_at.is_some() %}
     <button
       hx-get="/messages/{{ message.id }}/history"
       hx-target="#history-panel"
       hx-swap="outerHTML"
-      class="text-xs text-slate-400 hover:text-slate-600 hover:underline"
+      class="text-xs text-content-subtle hover:text-content-muted hover:underline"
       aria-label="{{ "room-msg-view-history"|t }}"
     >{{ "room-msg-edited"|t }}</button>
     {% endif %}
   </div>
   {% endif %}
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
+  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-surface-sunken px-1 rounded">
     {% if message.parent_id.is_none() %}
-    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-slate-600 hover:underline">{{ "room-msg-reply"|t }}</button>
+    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-reply"|t }}</button>
     {% endif %}
-    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">{{ "room-msg-thread"|t }}</button>
+    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-thread"|t }}</button>
     {% if message.is_pinned %}
-    <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-amber-700 hover:underline">{{ "room-msg-unpin"|t }}</button>
+    <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-unpin"|t }}</button>
     {% else %}
-    <button hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-amber-700 hover:underline">{{ "room-msg-pin"|t }}</button>
+    <button hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-pin"|t }}</button>
     {% endif %}
     {% if message.is_bookmarked %}
     <button hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">{{ "room-msg-unsave"|t }}</button>
@@ -79,10 +79,10 @@
     {% endif %}
     <button hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">{{ "room-msg-remind"|t }}</button>
     {% if message.can_edit %}
-    <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-blue-600 hover:underline">{{ "room-msg-edit"|t }}</button>
+    <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-accent hover:underline">{{ "room-msg-edit"|t }}</button>
     {% endif %}
     {% if message.can_delete %}
-    <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="text-red-600 hover:underline">{{ "room-msg-delete"|t }}</button>
+    <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="text-danger hover:underline">{{ "room-msg-delete"|t }}</button>
     {% endif %}
   </span>
   {% if let Some(qp) = message.quote_preview.as_ref() %}
@@ -127,7 +127,7 @@
   {% if message.user_id == message.viewer_id %}
   <div id="seen-{{ message.id }}">
     {% if let Some(t) = message.seen_caption.as_ref() %}
-    <div class="text-xs text-slate-400">{{ "room-msg-seen"|t }} {{ t }}</div>
+    <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} {{ t }}</div>
     {% endif %}
   </div>
   {% endif %}

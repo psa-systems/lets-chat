@@ -11,13 +11,13 @@
 <div class="mt-1">
   <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">
     <img src="{{ a.url }}?size=preview" alt="{{ a.filename }}"
-         class="max-w-sm max-h-96 rounded border border-slate-200">
+         class="max-w-sm max-h-96 rounded border border-border">
   </a>
 </div>
 {% else %}
-<div class="mt-1 inline-flex items-center gap-2 border border-slate-200 rounded px-3 py-2 bg-white text-sm">
-  <span class="font-mono text-xs text-slate-500">{{ a.mime_type }}</span>
-  <a href="{{ a.url }}" class="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{{ a.filename }}</a>
-  <span class="text-xs text-slate-400">({{ a.size_bytes }} B)</span>
+<div class="mt-1 inline-flex items-center gap-2 border border-border rounded px-3 py-2 bg-surface-elevated text-sm">
+  <span class="font-mono text-xs text-content-muted">{{ a.mime_type }}</span>
+  <a href="{{ a.url }}" class="text-accent hover:underline" target="_blank" rel="noopener noreferrer">{{ a.filename }}</a>
+  <span class="text-xs text-content-subtle">({{ a.size_bytes }} B)</span>
 </div>
 {% endif %}

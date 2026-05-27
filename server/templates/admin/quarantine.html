@@ -4,13 +4,13 @@
 
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-quarantine-heading"|t }}</h1>
-<p class="text-sm text-slate-600 mb-4">
+<p class="text-sm text-content-muted mb-4">
   {{ "admin-quarantine-intro"|t }}
 </p>
 
 <table class="w-full text-sm">
   <thead>
-    <tr class="text-left text-slate-500 border-b border-slate-200">
+    <tr class="text-left text-content-muted border-b border-border">
       <th class="py-2">{{ "admin-quarantine-th-author"|t }}</th>
       <th class="py-2">{{ "admin-quarantine-th-room"|t }}</th>
       <th class="py-2">{{ "admin-quarantine-th-body"|t }}</th>
@@ -21,29 +21,29 @@
   </thead>
   <tbody>
     {% for e in entries %}
-    <tr id="q-{{ e.message_id }}" class="border-t border-slate-200 align-top">
+    <tr id="q-{{ e.message_id }}" class="border-t border-border align-top">
       <td class="py-2 font-mono text-xs">{{ e.author_id }}</td>
       <td class="py-2 text-xs">
-        <a href="/room/{{ e.room_id }}" class="text-blue-600 hover:underline">#{{ e.room_id }}</a>
+        <a href="/room/{{ e.room_id }}" class="text-accent hover:underline">#{{ e.room_id }}</a>
       </td>
       <td class="py-2 text-xs whitespace-pre-wrap break-words max-w-md">{{ e.body }}</td>
       <td class="py-2 text-xs">
         <div class="font-mono">{{ e.matched_pattern }}</div>
-        <div class="text-slate-500 break-all">{{ e.matched_url }}</div>
+        <div class="text-content-muted break-all">{{ e.matched_url }}</div>
       </td>
-      <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
+      <td class="py-2 text-xs text-content-muted">{{ e.created_at }}</td>
       <td class="py-2 text-right whitespace-nowrap">
         <form method="post" action="/admin/quarantine/{{ e.message_id }}/approve" class="inline">
-          <button type="submit" class="text-blue-600 hover:underline text-xs">{{ "admin-quarantine-approve"|t }}</button>
+          <button type="submit" class="text-accent hover:underline text-xs">{{ "admin-quarantine-approve"|t }}</button>
         </form>
         <form method="post" action="/admin/quarantine/{{ e.message_id }}/reject" class="inline ml-2">
-          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-quarantine-reject"|t }}</button>
+          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-quarantine-reject"|t }}</button>
         </form>
       </td>
     </tr>
     {% endfor %}
     {% if entries.is_empty() %}
-    <tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">{{ "admin-quarantine-empty"|t }}</td></tr>
+    <tr><td colspan="6" class="py-6 text-center text-content-subtle text-xs">{{ "admin-quarantine-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

@@ -340,7 +340,8 @@ async fn sidebar_renders_muted_dm_with_greyed_class() {
     let close = rest.find('>').expect("anchor close");
     let opening = &rest[..close];
     assert!(
-        opening.contains("text-slate-400"),
+        // LC-193: text-slate-400 -> text-content-subtle.
+        opening.contains("text-content-subtle"),
         "expected greyed class on muted DM anchor: {opening}"
     );
 }

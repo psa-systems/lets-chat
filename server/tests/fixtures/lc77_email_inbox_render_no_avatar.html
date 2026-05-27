@@ -2,28 +2,28 @@
   
   
 
-<div id="msg-1" class="relative px-4 py-2 hover:bg-slate-100 group">
+<div id="msg-1" class="relative px-4 py-2 hover:bg-surface-sunken group">
   
   <div class="flex items-center gap-2">
     
     
     
-    <div class="h-6 w-6 text-xs rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold">T</div>
+    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">T</div>
     
     <span class="font-medium">Test Inbox</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 rounded px-1 py-0.5" title="Posted via email ingress">email</span>
     
-    <span class="text-xs text-slate-500">2026-01-01T00:00:00Z</span>
+    <span class="text-xs text-content-muted">2026-01-01T00:00:00Z</span>
     
   </div>
   
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-slate-100 px-1 rounded">
+  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-surface-sunken px-1 rounded">
     
-    <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-slate-600 hover:underline">Reply</button>
+    <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">Reply</button>
     
-    <button hx-get="/room/1/thread/1" hx-target="#thread-panel" hx-swap="outerHTML" class="text-slate-600 hover:underline">Thread</button>
+    <button hx-get="/room/1/thread/1" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">Thread</button>
     
-    <button hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="text-amber-700 hover:underline">Pin</button>
+    <button hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="text-warning hover:underline">Pin</button>
     
     
     <button hx-post="/messages/1/bookmark" hx-target="#msg-1" hx-swap="outerHTML" class="text-emerald-700 hover:underline">Save</button>
@@ -52,7 +52,7 @@
     hx-target="this"
     hx-swap="outerHTML"
     aria-label="Add reaction"
-    class="text-xs text-slate-500 hover:text-slate-700"
+    class="text-xs text-content-muted hover:text-content"
   >+</button>
 </div>
   </div>

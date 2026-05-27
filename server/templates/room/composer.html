@@ -29,14 +29,14 @@
     }
     ta.focus();
   "
-  class="border-t border-slate-200 p-2"
+  class="border-t border-border p-2"
 >
-  <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-slate-500"></div>
+  <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-content-muted"></div>
   <!-- LC-98: offline-outbox status, toggled by /assets/outbox.js. -->
-  <div id="lc-composer-net" class="hidden mb-1 text-xs text-amber-600"></div>
-  <div id="lc-broadcast-count" class="mb-1 text-xs text-slate-500 px-1 min-h-[1rem]"></div>
+  <div id="lc-composer-net" class="hidden mb-1 text-xs text-warning"></div>
+  <div id="lc-broadcast-count" class="mb-1 text-xs text-content-muted px-1 min-h-[1rem]"></div>
   <div id="composer-quote-bar"></div>
-  <div id="lc-upload-error" role="alert" class="mb-1 text-xs text-red-600"></div>
+  <div id="lc-upload-error" role="alert" class="mb-1 text-xs text-danger"></div>
   <!-- data-lc-skip-focus opts this slot out of the global afterSwap focus
        handler in layout.html. The combobox pattern keeps focus in the
        textarea while the listbox refreshes; aria-activedescendant points
@@ -45,7 +45,7 @@
   <!-- LC-76: slash-command autocomplete + ephemeral command result. -->
   <div id="lc-slash-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
-  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600" role="alert">
+  <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
     <span>{{ "room-composer-send-failed"|t }}</span>
     <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
   </div>
@@ -61,10 +61,10 @@
        text AND inserts. One guard, both comboboxes (no slash/mention divergence). -->
   <div class="flex items-end gap-2">
     <button type="button" title="{{ "room-composer-attach-file"|t }}" aria-label="{{ "room-composer-attach-file"|t }}"
-      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      class="px-2 py-2 text-content-muted hover:text-content"
       onclick="document.getElementById('lc-file').click()">+</button>
     <button type="button" id="lc-record" title="{{ "room-composer-record-voice"|t }}"
-      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      class="px-2 py-2 text-content-muted hover:text-content"
       aria-label="{{ "room-composer-record-voice"|t }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path d="M10 2a3 3 0 00-3 3v5a3 3 0 006 0V5a3 3 0 00-3-3z"/>
@@ -111,7 +111,7 @@
       title="{{ "room-composer-create-poll"|t }}"
       aria-label="{{ "room-composer-create-poll"|t }}"
       aria-haspopup="dialog"
-      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      class="px-2 py-2 text-content-muted hover:text-content"
       onclick="window.__lcOpenPollModal && window.__lcOpenPollModal()"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -123,7 +123,7 @@
       title="{{ "room-composer-schedule-title"|t }}"
       aria-label="{{ "room-composer-schedule-aria"|t }}"
       aria-haspopup="dialog"
-      class="px-2 py-2 text-slate-500 hover:text-slate-800"
+      class="px-2 py-2 text-content-muted hover:text-content"
       onclick="window.__lcOpenScheduledModal && window.__lcOpenScheduledModal()"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -134,7 +134,7 @@
       id="composer-send"
       type="submit"
       disabled
-      class="rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      class="rounded bg-accent px-3 py-2 text-accent-content hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       aria-label="{{ "room-composer-send-message"|t }}"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -144,7 +144,7 @@
   </div>
 </form>
 <div id="lc-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-blue-900/40">
-  <div class="rounded-lg bg-white px-6 py-4 text-lg font-semibold text-slate-800 shadow-lg">{{ "room-composer-drop-file"|t }}</div>
+  <div class="rounded-lg bg-surface-elevated px-6 py-4 text-lg font-semibold text-content shadow-lg">{{ "room-composer-drop-file"|t }}</div>
 </div>
 <script>
 (function(){
@@ -379,7 +379,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' + preview +
           '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
-          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
       document.getElementById('composer-send').disabled = false;
     } catch (e) {
@@ -491,7 +491,7 @@
 
   function resetUi(){
     recording = false;
-    recordBtn.classList.remove('text-red-600');
+    recordBtn.classList.remove('text-danger');
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
     if (capTimer) { clearTimeout(capTimer); capTimer = null; }
   }
@@ -537,10 +537,10 @@
   function showRecording(){
     staged.innerHTML =
       '<span class="inline-flex items-center gap-2">' +
-        '<span class="text-red-600">● Recording</span>' +
+        '<span class="text-danger">● Recording</span>' +
         '<span id="lc-record-time">0:00</span>' +
         '<button type="button" id="lc-record-stop" class="underline">Stop</button>' +
-        '<button type="button" id="lc-record-cancel" class="text-red-500">Cancel</button>' +
+        '<button type="button" id="lc-record-cancel" class="text-danger">Cancel</button>' +
       '</span>';
     document.getElementById('lc-record-stop').addEventListener('click', function(){ stop(false); });
     document.getElementById('lc-record-cancel').addEventListener('click', function(){ stop(true); });
@@ -585,7 +585,7 @@
     mediaRecorder.start();
     recording = true;
     startedAt = Date.now();
-    recordBtn.classList.add('text-red-600');
+    recordBtn.classList.add('text-danger');
     showRecording();
     tickTimer = setInterval(tick, 250);
     capTimer = setTimeout(function(){ stop(false); }, MAX_SECONDS * 1000);
@@ -635,7 +635,7 @@
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' +
           '<span>Voice message attached</span>' +
-          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-red-500">x</button>' +
+          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
       if (sendBtn) sendBtn.disabled = false;
     } catch (e) {
