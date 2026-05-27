@@ -697,6 +697,7 @@ pub(crate) async fn finalize_message_send(
     super::broadcast_room_message(state, room, &event).await?;
 
     // LC-75: publish to outgoing webhooks (best-effort, never blocks the post).
+    // LC-78: include the `actor` block so bridge daemons can self-filter.
     crate::outgoing::enqueue(
         &state.chat,
         "message.posted",
@@ -706,6 +707,7 @@ pub(crate) async fn finalize_message_send(
             "user_id": message.user_id,
             "author": message.author_name,
             "body": message.body,
+            "actor": super::outgoing_actor(&message.user_id, None, None, None, None),
         }),
     )
     .await;
@@ -960,6 +962,8 @@ pub(crate) async fn finalize_webhook_message_send(
     super::broadcast_room_message(state, room, &event).await?;
 
     // LC-75: outgoing webhooks see incoming-webhook posts too.
+    // LC-78: include the `actor` block (kind: "webhook", webhook_id) for
+    // daemon self-filter symmetry.
     crate::outgoing::enqueue(
         &state.chat,
         "message.posted",
@@ -969,6 +973,7 @@ pub(crate) async fn finalize_webhook_message_send(
             "webhook_id": webhook_id,
             "author": webhook_name,
             "body": body,
+            "actor": super::outgoing_actor("", Some(webhook_id), None, None, None),
         }),
     )
     .await;
@@ -1064,10 +1069,7 @@ pub(crate) async fn finalize_bridge_message_send(
             "bridge_id": bridge_id,
             "author": foreign_name,
             "body": body,
-            "actor": {
-                "kind": "bridge",
-                "bridge_id": bridge_id,
-            },
+            "actor": super::outgoing_actor("", None, None, Some(bridge_id), Some(foreign_name)),
         }),
     )
     .await;
@@ -1441,11 +1443,23 @@ pub async fn patch_message(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // LC-75: outgoing webhooks.
+    // LC-78: actor describes the message AUTHOR (not the editor) so a bridge
+    // daemon can self-filter edits to messages it produced.
     crate::outgoing::enqueue(
         &state.chat,
         "message.edited",
         m.room_id,
-        serde_json::json!({ "message_id": message_id, "body": body }),
+        serde_json::json!({
+            "message_id": message_id,
+            "body": body,
+            "actor": super::outgoing_actor(
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+            ),
+        }),
     )
     .await;
 
@@ -1993,11 +2007,22 @@ pub async fn delete_message(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // LC-75: outgoing webhooks.
+    // LC-78: actor describes the message AUTHOR so a bridge daemon can
+    // self-filter deletions of messages it produced.
     crate::outgoing::enqueue(
         &state.chat,
         "message.deleted",
         m.room_id,
-        serde_json::json!({ "message_id": message_id }),
+        serde_json::json!({
+            "message_id": message_id,
+            "actor": super::outgoing_actor(
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+            ),
+        }),
     )
     .await;
     // Return the deleted-fragment HTML directly so the requesting tab also updates.
