@@ -1,16 +1,16 @@
 {% extends "layout.html" %}
 
-{% block title %}Activity - lets-chat{% endblock %}
+{% block title %}{{ "activity-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
-    <h1 class="font-semibold truncate">Activity</h1>
+    <h1 class="font-semibold truncate">{{ "activity-heading"|t }}</h1>
     <nav class="flex gap-1 text-xs">
-      <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">All</a>
-      <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Mentions</a>
-      <a href="/activity?tab=reply" class="px-2 py-1 rounded{% if active_tab == "reply" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Replies</a>
-      <a href="/activity?tab=reaction" class="px-2 py-1 rounded{% if active_tab == "reaction" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">Reactions</a>
+      <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-all"|t }}</a>
+      <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-mentions"|t }}</a>
+      <a href="/activity?tab=reply" class="px-2 py-1 rounded{% if active_tab == "reply" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-replies"|t }}</a>
+      <a href="/activity?tab=reaction" class="px-2 py-1 rounded{% if active_tab == "reaction" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-reactions"|t }}</a>
     </nav>
   </header>
   <div class="flex-1 overflow-y-auto">
@@ -20,10 +20,10 @@
        the tab-filtered list server-side (the WS cannot know the active tab). #}
     <button id="lc-activity-refresh" type="button" hidden onclick="location.reload()"
             class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
-      &uarr; New activity - click to refresh
+      {{ "activity-new"|t }}
     </button>
     {% if items.is_empty() %}
-    <p class="p-8 text-center text-sm text-slate-500">Nothing to see here. New mentions, replies, and reactions will show up as they happen.</p>
+    <p class="p-8 text-center text-sm text-slate-500">{{ "activity-empty"|t }}</p>
     {% else %}
     <ul class="divide-y divide-slate-200">
       {% for item in items %}
@@ -35,11 +35,11 @@
           </div>
           <div class="text-sm mt-1 text-slate-700">
             {% if item.kind == "reaction" %}
-            <span class="font-medium">{{ item.actor_label }}</span> reacted {{ item.emoji }} to your message
+            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-reacted-prefix"|t }} {{ item.emoji }} {{ "activity-reacted-suffix"|t }}
             {% else if item.kind == "reply" %}
-            <span class="font-medium">{{ item.actor_label }}</span> replied to your message
+            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-replied"|t }}
             {% else %}
-            <span class="font-medium">{{ item.actor_label }}</span> mentioned you
+            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-mentioned"|t }}
             {% endif %}
           </div>
         </a>

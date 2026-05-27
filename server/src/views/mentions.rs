@@ -1,4 +1,6 @@
-use askama::Template;
+#[allow(unused_imports)]
+use crate::i18n::filters;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 /// One row in the autocomplete dropdown rendered by
 /// `partials/mention_popover.html`. The `kind` discriminator drives the

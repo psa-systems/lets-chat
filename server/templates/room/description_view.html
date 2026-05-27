@@ -1,5 +1,5 @@
 {% if html.is_empty() %}
-<p class="text-sm text-slate-500 italic">No description set.</p>
+<p class="text-sm text-slate-500 italic">{{ "room-description-empty"|t }}</p>
 {% else %}
 <div class="prose prose-slate max-w-none text-sm">{{ html|safe }}</div>
 {% endif %}
@@ -8,5 +8,5 @@
         hx-get="/room/{{ room_id }}/description/edit"
         hx-target="#description-content"
         hx-swap="innerHTML"
-        class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1 mt-2">{% if html.is_empty() %}Set description{% else %}Edit description{% endif %}</button>
+        class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1 mt-2">{% if html.is_empty() %}{{ "room-description-set"|t }}{% else %}{{ "room-description-edit"|t }}{% endif %}</button>
 {% endif %}

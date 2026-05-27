@@ -1,23 +1,22 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Rooms - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-rooms-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Rooms</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-rooms-heading"|t }}</h1>
 
 <p class="text-sm text-slate-600 mb-6">
-  Create rooms inside an enclave via the per-enclave landing page. This view is
-  read-only and intended for global moderation.
+  {{ "admin-rooms-intro"|t }}
 </p>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Name</th>
-      <th class="py-2">Type</th>
-      <th class="py-2">Members</th>
-      <th class="py-2">Invite</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-rooms-th-name"|t }}</th>
+      <th class="py-2">{{ "admin-rooms-th-type"|t }}</th>
+      <th class="py-2">{{ "admin-rooms-th-members"|t }}</th>
+      <th class="py-2">{{ "admin-rooms-th-invite"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-rooms-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>

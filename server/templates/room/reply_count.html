@@ -7,7 +7,7 @@
     class="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
   >
     <span>&#128172;</span>
-    <span>{{ reply_count }} {% if reply_count == 1 %}reply{% else %}replies{% endif %}</span>
+    <span>{{ reply_count }} {% if reply_count == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
   </button>
   {% endif %}
 </div>

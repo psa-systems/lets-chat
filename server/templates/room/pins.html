@@ -1,16 +1,16 @@
 {% extends "layout.html" %}
 
-{% block title %}Pinned in {{ room_label }} - lets-chat{% endblock %}
+{% block title %}{{ "room-pins-title-prefix"|t }} {{ room_label }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
-    <h1 class="font-semibold truncate">Pinned in {{ room_label }}</h1>
-    <a href="{{ back_path }}" class="text-sm text-blue-700 hover:underline">Back</a>
+    <h1 class="font-semibold truncate">{{ "room-pins-title-prefix"|t }} {{ room_label }}</h1>
+    <a href="{{ back_path }}" class="text-sm text-blue-700 hover:underline">{{ "room-pins-back"|t }}</a>
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if pins.is_empty() %}
-    <p class="p-4 text-sm text-slate-500">No pinned messages yet.</p>
+    <p class="p-4 text-sm text-slate-500">{{ "room-info-pinned-empty"|t }}</p>
     {% else %}
     <ul class="divide-y divide-slate-200">
       {% for p in pins %}
@@ -18,12 +18,12 @@
         <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
           <span>
             <span class="font-medium text-slate-700">{{ p.author_label }}</span>
-            &middot; pinned by {{ p.pinner_label }} {{ p.pinned_at }}
+            &middot; {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} {{ p.pinned_at }}
           </span>
           <button hx-delete="/messages/{{ p.message_id }}/pin"
                   hx-target="#pin-row-{{ p.message_id }}"
                   hx-swap="outerHTML"
-                  class="text-red-700 hover:underline">Unpin</button>
+                  class="text-red-700 hover:underline">{{ "room-msg-unpin"|t }}</button>
         </div>
         <div class="mt-1 whitespace-pre-wrap text-sm text-slate-800">{{ p.body }}</div>
       </li>

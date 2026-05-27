@@ -18,6 +18,6 @@
     {% include "partials/unread_badge.html" %}
   </a>
   <form hx-post="/rooms/{{ peer.dm_room_id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
-    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-slate-300 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}Unstar{% else %}Star{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
+    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-slate-300 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
   </form>
 </div>

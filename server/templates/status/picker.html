@@ -1,26 +1,26 @@
 <div id="status-picker-inner" class="border border-slate-300 rounded p-2 bg-white text-sm space-y-2 shadow" tabindex="-1">
   <form hx-post="/status" hx-target="#status-picker" hx-swap="innerHTML" class="space-y-2">
     <fieldset class="flex flex-col gap-1">
-      <legend class="sr-only">Presence</legend>
+      <legend class="sr-only">{{ "status-presence-legend"|t }}</legend>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="active"{% if current_status == "active" || current_status == "idle" %} checked{% endif %}>
         <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
-        <span>Online</span>
+        <span>{{ "status-online"|t }}</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="away"{% if current_status == "away" %} checked{% endif %}>
         <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-yellow-400"></span>
-        <span>Away</span>
+        <span>{{ "status-away"|t }}</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="dnd"{% if current_status == "dnd" %} checked{% endif %}>
         <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
-        <span>Do not disturb</span>
+        <span>{{ "status-dnd"|t }}</span>
       </label>
     </fieldset>
     <label class="block">
       <span class="flex justify-between text-xs text-slate-500">
-        <span>Custom status (optional)</span>
+        <span>{{ "status-custom"|t }}</span>
         <span id="status-counter">{% if let Some(t) = current_custom %}{{ t.chars().count() }}{% else %}0{% endif %} / 50</span>
       </span>
       <div class="relative mt-1">
@@ -42,7 +42,7 @@
         <button
           id="status-clear-custom"
           type="button"
-          aria-label="Clear custom status"
+          aria-label="{{ "status-clear-custom"|t }}"
           class="absolute inset-y-0 right-1 flex items-center text-slate-400 hover:text-slate-700{% if current_custom.is_none() %} hidden{% endif %}"
           onclick="
             var i = document.getElementById('status-custom-input');
@@ -54,8 +54,8 @@
       </div>
     </label>
     <div class="flex gap-2">
-      <button type="submit" class="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">Save</button>
-      <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-slate-500 hover:text-slate-700">Close</button>
+      <button type="submit" class="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">{{ "action-save"|t }}</button>
+      <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-slate-500 hover:text-slate-700">{{ "reminders-close"|t }}</button>
     </div>
   </form>
 </div>

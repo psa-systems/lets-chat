@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Register - lets-chat{% endblock %}
+{% block title %}{{ "register-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
@@ -13,25 +13,25 @@
     hx-swap="innerHTML"
     class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
   >
-    <h1 class="text-xl font-semibold">Register</h1>
+    <h1 class="text-xl font-semibold">{{ "register-title"|t }}</h1>
     <div id="form-errors">
       {% include "auth/form_errors.html" %}
     </div>
     <label class="block">
-      <span class="text-sm">Username</span>
+      <span class="text-sm">{{ "register-username"|t }}</span>
       <input name="username" required minlength="3" maxlength="32" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block">
-      <span class="text-sm">Email <span class="text-slate-400">(optional)</span></span>
+      <span class="text-sm">{{ "register-email"|t }} <span class="text-slate-400">{{ "register-email-optional"|t }}</span></span>
       <input type="email" name="email" maxlength="254" class="mt-1 block w-full border rounded px-2 py-1">
-      <span class="text-xs text-slate-500">Used only for password reset. Set later in Settings if you skip it now.</span>
+      <span class="text-xs text-slate-500">{{ "register-email-help"|t }}</span>
     </label>
     <label class="block">
-      <span class="text-sm">Password</span>
+      <span class="text-sm">{{ "register-password"|t }}</span>
       <input type="password" name="password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block">
-      <span class="text-sm">Confirm password</span>
+      <span class="text-sm">{{ "register-confirm-password"|t }}</span>
       <input type="password" name="password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     {# LC-94 honeypot: off-screen + autocomplete-off so legit users
@@ -39,12 +39,12 @@
        input populate it and trip the server-side check. aria-hidden
        and tabindex=-1 keep it out of accessible focus order. #}
     <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
-      <label>Leave this field empty
+      <label>{{ "register-honeypot-label"|t }}
         <input type="text" name="website" tabindex="-1" autocomplete="off">
       </label>
     </div>
-    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Create account</button>
-    <p class="text-sm text-center">Have an account? <a href="/login" class="text-blue-600 hover:underline">Sign in</a>.</p>
+    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{{ "register-submit"|t }}</button>
+    <p class="text-sm text-center">{{ "register-have-account"|t }} <a href="/login" class="text-blue-600 hover:underline">{{ "register-signin-link"|t }}</a>.</p>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>

@@ -1,26 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Set up two-factor authentication - lets-chat{% endblock %}
+{% block title %}{{ "twofactor-setup-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="h-screen overflow-y-auto p-6">
   <div class="min-h-full flex items-center justify-center">
   <div class="w-full max-w-md space-y-4 bg-white p-6 rounded shadow">
-    <h1 class="text-xl font-semibold">Set up two-factor authentication</h1>
+    <h1 class="text-xl font-semibold">{{ "twofactor-setup-title"|t }}</h1>
     <p class="text-sm text-slate-600">
-      Two-factor authentication is required for every account. Scan the QR code below with an
-      authenticator app (1Password, Authy, Google Authenticator) and enter the 6-digit code to
-      finish enrollment.
+      {{ "twofactor-setup-help"|t }}
     </p>
 
     <div class="flex justify-center">
-      <img src="data:image/png;base64,{{ qr_base64 }}" alt="TOTP QR Code" width="220" height="220">
+      <img src="data:image/png;base64,{{ qr_base64 }}" alt="{{ "twofactor-qr-alt"|t }}" width="220" height="220">
     </div>
 
     <details class="text-xs text-slate-500">
-      <summary class="cursor-pointer">Can't scan? Use this secret instead</summary>
+      <summary class="cursor-pointer">{{ "twofactor-cant-scan"|t }}</summary>
       <div class="mt-1 font-mono break-all bg-slate-100 p-2 rounded">{{ secret_b32 }}</div>
-      <p class="mt-1">Account: {{ username }} - Issuer: lets-chat - Algorithm: SHA1, 6 digits, 30s</p>
+      <p class="mt-1">{{ "twofactor-secret-account"|t }}: {{ username }} - {{ "twofactor-secret-issuer"|t }}: lets-chat - {{ "twofactor-secret-algorithm"|t }}: SHA1, 6 {{ "twofactor-secret-digits"|t }}, 30s</p>
     </details>
 
     <form method="post" action="/settings/2fa/setup" class="space-y-3">
@@ -28,19 +26,19 @@
       <p class="text-red-600 text-sm">{{ error }}</p>
       {% endif %}
       <label class="block">
-        <span class="text-sm">6-digit code</span>
+        <span class="text-sm">{{ "twofactor-code-label"|t }}</span>
         <input name="code" required inputmode="numeric" autocomplete="one-time-code"
                pattern="[0-9]{6}" maxlength="6" autofocus
                oninput="if (this.value.length === 6) this.form.requestSubmit();"
                class="mt-1 block w-full border rounded px-2 py-1 font-mono tracking-widest text-center">
       </label>
       <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
-        Verify and enable
+        {{ "twofactor-setup-submit"|t }}
       </button>
     </form>
 
     <p class="text-xs text-slate-500">
-      <a href="/logout" class="text-blue-600 hover:underline">Sign out</a>
+      <a href="/logout" class="text-blue-600 hover:underline">{{ "twofactor-setup-signout"|t }}</a>
     </p>
   </div>
   </div>

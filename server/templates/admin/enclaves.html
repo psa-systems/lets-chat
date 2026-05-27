@@ -1,25 +1,24 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Enclaves - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-enclaves-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Enclaves</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-enclaves-heading"|t }}</h1>
 
 <p class="text-sm text-slate-600 mb-6">
-  Every enclave on this server, regardless of your membership. Use the manage
-  link to enter the enclave (site-admin god-mode bypasses the membership check).
+  {{ "admin-enclaves-intro"|t }}
 </p>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Name</th>
-      <th class="py-2">Visibility</th>
-      <th class="py-2">Owner</th>
-      <th class="py-2">Members</th>
-      <th class="py-2">Storage (used / quota MiB)</th>
-      <th class="py-2">Created</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-enclaves-th-name"|t }}</th>
+      <th class="py-2">{{ "admin-enclaves-th-visibility"|t }}</th>
+      <th class="py-2">{{ "admin-enclaves-th-owner"|t }}</th>
+      <th class="py-2">{{ "admin-enclaves-th-members"|t }}</th>
+      <th class="py-2">{{ "admin-enclaves-th-storage"|t }}</th>
+      <th class="py-2">{{ "admin-enclaves-th-created"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-enclaves-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -30,25 +29,25 @@
         {% if let Some(d) = e.description %}<div class="text-xs text-slate-500">{{ d }}</div>{% endif %}
       </td>
       <td class="py-2">
-        {% if e.is_public %}<span class="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">Public</span>
-        {% else %}<span class="text-xs bg-slate-100 text-slate-700 rounded px-2 py-0.5">Private</span>{% endif %}
+        {% if e.is_public %}<span class="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">{{ "admin-enclaves-public"|t }}</span>
+        {% else %}<span class="text-xs bg-slate-100 text-slate-700 rounded px-2 py-0.5">{{ "admin-enclaves-private"|t }}</span>{% endif %}
       </td>
       <td class="py-2 font-mono text-xs">
-        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-slate-400">none</span>{% endif %}
+        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-slate-400">{{ "admin-enclaves-none"|t }}</span>{% endif %}
       </td>
       <td class="py-2">{{ e.member_count }}</td>
       <td class="py-2 text-xs">
         <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
           <span class="font-mono text-slate-500">{{ e.usage_display }}</span>
           <span>/</span>
-          <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="unlimited" class="border rounded text-xs px-1 py-0.5 w-20">
-          <button type="submit" class="text-blue-600 hover:underline">Save</button>
+          <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
+          <button type="submit" class="text-blue-600 hover:underline">{{ "admin-enclaves-save"|t }}</button>
         </form>
       </td>
       <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
       <td class="py-2 text-right">
-        <a href="/enclave/{{ e.id }}" class="text-blue-600 hover:underline">Open</a>
-        <a href="/enclave/{{ e.id }}/settings" class="text-blue-600 hover:underline ml-2">Manage</a>
+        <a href="/enclave/{{ e.id }}" class="text-blue-600 hover:underline">{{ "admin-enclaves-open"|t }}</a>
+        <a href="/enclave/{{ e.id }}/settings" class="text-blue-600 hover:underline ml-2">{{ "admin-enclaves-manage"|t }}</a>
       </td>
     </tr>
     {% endfor %}

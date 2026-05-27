@@ -9,7 +9,7 @@
     <form class="relative" autocomplete="off">
       <input
         name="q"
-        placeholder="Search messages..."
+        placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
         hx-get="/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#search-msg-results"
@@ -26,7 +26,7 @@
     <form class="relative" autocomplete="off">
       <input
         name="q"
-        placeholder="Search people..."
+        placeholder="{{ "sidebar-search-people-placeholder"|t }}"
         hx-get="/users/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#search-people-results"
@@ -49,13 +49,13 @@
   </nav>
   <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
     {% if user.role == "admin" || user.role == "moderator" %}
-    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}Admin{% else %}Moderate{% endif %}</a>
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}{{ "sidebar-link-admin"|t }}{% else %}{{ "sidebar-link-moderate"|t }}{% endif %}</a>
     {% endif %}
-    <a href="/inbox" class="text-slate-600 hover:underline">Inbox</a>
-    <a href="/activity" class="text-slate-600 hover:underline">Activity</a>
-    <a href="/saved" class="text-slate-600 hover:underline">Saved</a>
-    <a href="/scheduled" class="text-slate-600 hover:underline">Scheduled</a>
-    <a href="/settings" class="text-slate-600 hover:underline">Settings</a>
-    <a href="/logout" class="text-slate-600 hover:underline">Sign out</a>
+    <a href="/inbox" class="text-slate-600 hover:underline">{{ "sidebar-link-inbox"|t }}</a>
+    <a href="/activity" class="text-slate-600 hover:underline">{{ "sidebar-link-activity"|t }}</a>
+    <a href="/saved" class="text-slate-600 hover:underline">{{ "sidebar-link-saved"|t }}</a>
+    <a href="/scheduled" class="text-slate-600 hover:underline">{{ "sidebar-link-scheduled"|t }}</a>
+    <a href="/settings" class="text-slate-600 hover:underline">{{ "sidebar-link-settings"|t }}</a>
+    <a href="/logout" class="text-slate-600 hover:underline">{{ "sidebar-link-sign-out"|t }}</a>
   </div>
 </aside>

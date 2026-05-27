@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Home - lets-chat{% endblock %}
+{% block title %}{{ "home-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
@@ -10,14 +10,14 @@
     {{ msg }}
   </div>
   {% endif %}
-  <h1 class="text-2xl font-semibold">Welcome, {{ user.display_label() }}</h1>
+  <h1 class="text-2xl font-semibold">{{ "home-welcome"|t }} {{ user.display_label() }}</h1>
   <p class="mt-2 text-slate-600">
-    Pick a DM from the sidebar, or
-    <a href="/enclaves/discover" class="text-blue-600 hover:underline">create or join an enclave</a>
-    to chat in rooms.
+    {{ "home-pick-dm-prefix"|t }}
+    <a href="/enclaves/discover" class="text-blue-600 hover:underline">{{ "home-create-join-link"|t }}</a>
+    {{ "home-pick-dm-suffix"|t }}
   </p>
   <p class="mt-2 text-slate-600">
-    Pending invitations: <a href="/invitations" class="text-blue-600 hover:underline">view</a>.
+    {{ "home-pending-invitations-prefix"|t }} <a href="/invitations" class="text-blue-600 hover:underline">{{ "home-pending-invitations-link"|t }}</a>{{ "home-pending-invitations-suffix"|t }}
   </p>
 </section>
 </div>

@@ -3,7 +3,9 @@
 //! same logical content from one set of fields; the dispatcher
 //! constructs the same struct shape for both renderers.
 
-use askama::Template;
+#[allow(unused_imports)]
+use crate::i18n::filters;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 #[derive(Template)]
 #[template(path = "email/notification.html")]

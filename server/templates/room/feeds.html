@@ -1,20 +1,17 @@
 {% extends "layout.html" %}
 
-{% block title %}Feeds - #{{ room.name }} - lets-chat{% endblock %}
+{% block title %}{{ "room-feeds-title"|t }} - #{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">Feeds</h1>
+    <h1 class="text-2xl font-semibold">{{ "room-feeds-heading"|t }}</h1>
     <span class="text-sm text-slate-500">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-slate-600">
-    A read-only feed lets an external reader follow this room without logging
-    in. <strong>RSS</strong> is an Atom feed of recent messages; <strong>iCal</strong>
-    is a calendar of scheduled polls. The URL is the credential - keep it secret;
-    it is shown only once. A feed stops working (returns 410) if it is revoked or
-    if the person who created it loses access to the room.
+    {{ "room-feeds-intro-1"|t }} <strong>RSS</strong> {{ "room-feeds-intro-2"|t }} <strong>iCal</strong>
+    {{ "room-feeds-intro-3"|t }}
   </p>
 
   {% if let Some(err) = error %}
@@ -23,37 +20,37 @@
 
   {% if let Some(url) = new_url %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">Feed created. Copy its URL now - it won't be shown again.</p>
+    <p class="font-medium text-green-800">{{ "room-feeds-created"|t }}</p>
     <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
   <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
-    Feeds require a server secret key (<code>LETS_CHAT_SECRET_KEY</code>).
-    Set it and restart to create feeds.
+    {{ "room-feeds-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
+    {{ "room-feeds-unavailable-2"|t }}
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/feeds" class="flex flex-wrap items-end gap-3 border rounded p-4">
     <label class="block text-sm">
-      <span class="text-slate-700">Feed type</span>
+      <span class="text-slate-700">{{ "room-feeds-type-label"|t }}</span>
       <select name="kind" class="mt-1 block border border-slate-300 rounded px-2 py-1 text-sm">
-        <option value="rss">RSS / Atom (messages)</option>
-        <option value="ical">iCal (scheduled polls)</option>
+        <option value="rss">{{ "room-feeds-type-rss"|t }}</option>
+        <option value="ical">{{ "room-feeds-type-ical"|t }}</option>
       </select>
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create feed</button>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "room-feeds-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <table class="w-full text-sm">
     <thead>
       <tr class="text-left text-slate-500 border-b border-slate-200">
-        <th class="py-2">Type</th>
-        <th class="py-2">Created</th>
-        <th class="py-2">Last fetched</th>
-        <th class="py-2">Status</th>
-        <th class="py-2 text-right">Actions</th>
+        <th class="py-2">{{ "room-feeds-table-type"|t }}</th>
+        <th class="py-2">{{ "room-table-created"|t }}</th>
+        <th class="py-2">{{ "room-feeds-table-last-fetched"|t }}</th>
+        <th class="py-2">{{ "room-table-status"|t }}</th>
+        <th class="py-2 text-right">{{ "room-table-actions"|t }}</th>
       </tr>
     </thead>
     <tbody>
@@ -61,19 +58,19 @@
       <tr class="border-t border-slate-200">
         <td class="py-1 uppercase text-xs">{{ f.kind }}</td>
         <td class="py-1 text-xs text-slate-500">{{ f.created_at }}</td>
-        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}never{% endif %}</td>
-        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-red-600">revoked</span>{% else %}active{% endif %}</td>
+        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-red-600">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
         <td class="py-1 text-right">
           {% if !f.revoked %}
           <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
-            <button type="submit" class="text-red-600 hover:underline text-xs">Revoke</button>
+            <button type="submit" class="text-red-600 hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if feeds.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No feeds yet.</td></tr>
+      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "room-feeds-empty"|t }}</td></tr>
       {% endif %}
     </tbody>
   </table>

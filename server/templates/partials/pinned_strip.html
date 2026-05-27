@@ -17,7 +17,7 @@
     {% endfor %}
     {% if has_more %}
     <li>
-      <a href="{{ pin_path }}" class="text-xs text-blue-700 hover:underline">See all ({{ total_count }}) pinned</a>
+      <a href="{{ pin_path }}" class="text-xs text-blue-700 hover:underline">{{ "partials-pinned-see-all-prefix"|t }} ({{ total_count }}) {{ "partials-pinned-see-all-suffix"|t }}</a>
     </li>
     {% endif %}
   </ul>

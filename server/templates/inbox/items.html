@@ -17,6 +17,6 @@
     hx-get="/inbox?before={{ cursor }}&fragment=1"
     hx-trigger="revealed"
     hx-swap="outerHTML">
-  Loading more&hellip;
+  {{ "inbox-loading-more"|t }}
 </li>
 {% endif %}

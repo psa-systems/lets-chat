@@ -1,17 +1,17 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Users - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-users-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Users</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-users-heading"|t }}</h1>
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Username</th>
-      <th class="py-2">Role</th>
-      <th class="py-2">Status</th>
-      <th class="py-2">Storage (used / quota MiB)</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-users-th-username"|t }}</th>
+      <th class="py-2">{{ "admin-users-th-role"|t }}</th>
+      <th class="py-2">{{ "admin-users-th-status"|t }}</th>
+      <th class="py-2">{{ "admin-users-th-storage"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-users-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
