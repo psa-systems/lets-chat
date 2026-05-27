@@ -18,6 +18,48 @@ html, body {
 .brand-text        { color: var(--brand-primary); }
 .brand-border      { border-color: var(--brand-primary); }
 
+/* LC-190: semantic design tokens (theming foundation for LC-189).
+ *
+ * These layer ABOVE the LC-96 brand vars and are the single source of truth
+ * for surface / text / border / state colors. Tailwind maps utilities onto
+ * them (see tailwind.config.js theme.extend.colors), so `bg-surface`,
+ * `text-content`, `border-border`, `bg-accent`, etc. recolor automatically
+ * when `<html data-theme>` changes.
+ *
+ * The `:root` (light) values are the slate/white palette the templates
+ * already hardcode, so introducing the tokens is visually a no-op; LC-193
+ * migrates templates onto them, and LC-191/LC-192 add the
+ * `[data-theme="dark"]` / high-contrast palettes here. */
+:root {
+    /* Surfaces */
+    --surface:          #f8fafc; /* app background (was slate-50) */
+    --surface-elevated: #ffffff; /* cards, panels, dialogs (was white) */
+    --surface-sunken:   #f1f5f9; /* inputs, code, inset rows (was slate-100) */
+    /* Text */
+    --content:          #0f172a; /* primary text (was slate-900) */
+    --content-muted:    #64748b; /* secondary text (was slate-500) */
+    --content-subtle:   #94a3b8; /* tertiary / placeholder (was slate-400) */
+    /* Lines */
+    --border:           #e2e8f0; /* default borders (was slate-200) */
+    --border-strong:    #cbd5e1; /* emphasized borders (was slate-300) */
+    /* Accent (chases the operator brand color) */
+    --accent:           var(--brand-primary);
+    --accent-hover:     var(--brand-accent);
+    --accent-content:   #ffffff; /* text/icon on an accent fill */
+    /* Semantic state colors (each with a readable foreground) */
+    --success:          #16a34a;
+    --success-content:  #ffffff;
+    --warning:          #d97706;
+    --warning-content:  #ffffff;
+    --danger:           #dc2626;
+    --danger-content:   #ffffff;
+    /* Keyboard-focus ring */
+    --ring:             var(--brand-primary);
+}
+
+/* LC-191 will define [data-theme="dark"] here; LC-192 the high-contrast
+   variants. Until then the app is light-only and `data-theme` is unset. */
+
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
    focus but NOT on plain mouse clicks (`:focus-visible` heuristic). Pinned
    to blue-600 so it matches the per-component `focus:ring-blue-500` already
