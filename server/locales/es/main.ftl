@@ -22,6 +22,9 @@ theme-light = Claro
 theme-dark = Oscuro
 theme-hc-light = Alto contraste (claro)
 theme-hc-dark = Alto contraste (oscuro)
+settings-density = Densidad
+density-comfortable = Cómoda
+density-compact = Compacta
 
 ## Login
 login-title = Iniciar sesión

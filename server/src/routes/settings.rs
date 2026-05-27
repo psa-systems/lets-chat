@@ -423,14 +423,17 @@ pub async fn post_language(
 
 #[derive(serde::Deserialize)]
 pub struct AppearanceForm {
-    /// "system" / "light" / "dark".
+    /// "system" / "light" / "dark" / "hc-light" / "hc-dark".
     #[serde(default)]
     pub theme: String,
+    /// LC-194: "comfortable" / "compact".
+    #[serde(default)]
+    pub density: String,
 }
 
-/// POST /settings/appearance - save the UI theme preference. The locale
-/// middleware syncs the `lc-theme` cookie from this, so the no-flash bootstrap
-/// picks it up on the redirect.
+/// POST /settings/appearance - save the UI theme + density preferences. The
+/// locale middleware syncs the lc-theme / lc-density cookies from these, so the
+/// no-flash bootstrap picks them up on the redirect.
 pub async fn post_appearance(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -440,7 +443,12 @@ pub async fn post_appearance(
         t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
         _ => "system",
     };
+    let density = match form.density.trim() {
+        d @ ("comfortable" | "compact") => d,
+        _ => "comfortable",
+    };
     db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    db::auth::set_user_density(&state.auth, &user.id, Some(density)).await?;
     Ok(Redirect::to("/settings?saved=1"))
 }
 

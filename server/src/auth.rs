@@ -126,7 +126,7 @@ pub async fn inject_user(
 /// Must be layered INSIDE `inject_user` so the signed-in `User` (carrying the
 /// saved `locale` preference) is already in the request extensions.
 pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response {
-    use axum::http::header::{ACCEPT_LANGUAGE, COOKIE, SET_COOKIE};
+    use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE};
     let user = req.extensions().get::<User>();
     let user_locale = user.and_then(|u| u.locale.clone());
     // LC-191: keep the `lc-theme` cookie (which the no-flash bootstrap reads
@@ -134,16 +134,10 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     // the preference cross-device: a fresh device has no cookie, so the first
     // authed response stamps it from the server pref.
     let user_theme = user.and_then(|u| u.theme.clone());
-    let existing_theme = req
-        .headers()
-        .get(COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| {
-            s.split(';')
-                .map(str::trim)
-                .find_map(|p| p.strip_prefix("lc-theme="))
-        })
-        .map(str::to_owned);
+    // LC-194: density rides the same cross-device mechanism as theme.
+    let user_density = user.and_then(|u| u.density.clone());
+    let existing_theme = read_cookie(req.headers(), "lc-theme");
+    let existing_density = read_cookie(req.headers(), "lc-density");
     let accept = req
         .headers()
         .get(ACCEPT_LANGUAGE)
@@ -152,20 +146,48 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     let lang = crate::i18n::resolve(user_locale.as_deref(), accept.as_deref());
     let mut resp = crate::i18n::CURRENT_LOCALE.scope(lang, next.run(req)).await;
 
-    if let Some(theme) = user_theme {
-        if matches!(
-            theme.as_str(),
-            "light" | "dark" | "hc-light" | "hc-dark" | "system"
-        ) && existing_theme.as_deref() != Some(theme.as_str())
-        {
-            if let Ok(v) = axum::http::HeaderValue::from_str(&format!(
-                "lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax"
-            )) {
-                resp.headers_mut().append(SET_COOKIE, v);
+    // Stamp `name=value` (1-year, Lax) when a valid server pref drifts from the
+    // request cookie. Non-HttpOnly so the no-flash bootstrap can read it; the
+    // values are non-sensitive UI prefs.
+    let mut sync =
+        |name: &str, pref: &Option<String>, existing: &Option<String>, valid: &[&str]| {
+            if let Some(v) = pref {
+                if valid.contains(&v.as_str()) && existing.as_deref() != Some(v.as_str()) {
+                    if let Ok(h) = axum::http::HeaderValue::from_str(&format!(
+                        "{name}={v}; Path=/; Max-Age=31536000; SameSite=Lax"
+                    )) {
+                        resp.headers_mut().append(SET_COOKIE, h);
+                    }
+                }
             }
-        }
-    }
+        };
+    sync(
+        "lc-theme",
+        &user_theme,
+        &existing_theme,
+        &["light", "dark", "hc-light", "hc-dark", "system"],
+    );
+    sync(
+        "lc-density",
+        &user_density,
+        &existing_density,
+        &["comfortable", "compact"],
+    );
     resp
+}
+
+/// Read a cookie value by name from a request header map.
+fn read_cookie(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+    let prefix = format!("{name}=");
+    headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| {
+            s.split(';')
+                .map(str::trim)
+                .find_map(|p| p.strip_prefix(&prefix))
+        })
+        .map(str::to_owned)
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
