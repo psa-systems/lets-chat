@@ -7,21 +7,21 @@
 <section class="p-6 max-w-3xl space-y-6">
   <div class="flex items-baseline justify-between gap-2">
     <h1 class="text-2xl font-semibold">{{ "api-tokens-heading"|t }}</h1>
-    <a href="/settings" class="text-sm text-blue-600 hover:underline">{{ "api-tokens-back"|t }}</a>
+    <a href="/settings" class="text-sm text-accent hover:underline">{{ "api-tokens-back"|t }}</a>
   </div>
-  <p class="text-sm text-slate-600">
+  <p class="text-sm text-content-muted">
     {{ "api-tokens-intro-prefix"|t }}
     <code>Authorization: Bearer &lt;token&gt;</code>{{ "api-tokens-intro-suffix"|t }}
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  <div class="p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
   {% endif %}
 
   {% if let Some(tok) = new_token %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
     <p class="font-medium text-green-800">{{ "api-tokens-created-note"|t }}</p>
-    <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
+    <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
   </div>
   {% endif %}
 
@@ -34,46 +34,46 @@
   <form method="post" action="/settings/api-tokens" class="space-y-3 border rounded-lg p-4">
     <h2 class="font-semibold">{{ "api-tokens-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-slate-700">{{ "api-tokens-name"|t }}</span>
+      <span class="text-content-muted">{{ "api-tokens-name"|t }}</span>
       <input name="name" type="text" required maxlength="80" placeholder="ci-bot"
-             class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
+             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
     </label>
     <fieldset class="text-sm">
-      <legend class="text-slate-700 mb-1">{{ "api-tokens-scopes"|t }}</legend>
+      <legend class="text-content-muted mb-1">{{ "api-tokens-scopes"|t }}</legend>
       <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_read"> <code>messages:read</code></label>
       <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_write"> <code>messages:write</code></label>
       <label class="flex items-center gap-2"><input type="checkbox" name="s_rooms_read"> <code>rooms:read</code></label>
     </fieldset>
     <label class="block text-sm">
-      <span class="text-slate-700">{{ "api-tokens-expires"|t }}</span>
+      <span class="text-content-muted">{{ "api-tokens-expires"|t }}</span>
       <input name="expires_days" type="number" min="0" step="1" placeholder="0"
-             class="mt-1 w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+             class="mt-1 w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "api-tokens-create-button"|t }}</button>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "api-tokens-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <section class="space-y-2">
     <h2 class="font-semibold">{{ "api-tokens-your-tokens"|t }}</h2>
     {% if tokens.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "api-tokens-none"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "api-tokens-none"|t }}</p>
     {% else %}
     <ul class="divide-y border rounded">
       {% for t in tokens %}
       <li class="p-3 text-sm flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <div class="font-medium {% if t.revoked %}text-slate-400 line-through{% endif %}">{{ t.name }}</div>
-          <div class="text-xs text-slate-500 font-mono break-all">{{ t.scopes }}</div>
-          <div class="text-xs text-slate-400">
+          <div class="font-medium {% if t.revoked %}text-content-subtle line-through{% endif %}">{{ t.name }}</div>
+          <div class="text-xs text-content-muted font-mono break-all">{{ t.scopes }}</div>
+          <div class="text-xs text-content-subtle">
             {{ "api-tokens-created-at"|t }} {{ t.created_at }}
             {% if let Some(at) = t.last_used_at %} &middot; {{ "api-tokens-last-used"|t }} {{ at }}{% else %} &middot; {{ "api-tokens-never-used"|t }}{% endif %}
             {% if let Some(at) = t.expires_at %} &middot; {{ "api-tokens-expires-at"|t }} {{ at }}{% endif %}
-            {% if t.revoked %} &middot; <span class="text-red-600">{{ "api-tokens-revoked"|t }}</span>{% endif %}
+            {% if t.revoked %} &middot; <span class="text-danger">{{ "api-tokens-revoked"|t }}</span>{% endif %}
           </div>
         </div>
         {% if !t.revoked %}
         <form method="post" action="/settings/api-tokens/{{ t.id }}/revoke">
-          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "action-revoke"|t }}</button>
+          <button type="submit" class="text-danger hover:underline text-xs">{{ "action-revoke"|t }}</button>
         </form>
         {% endif %}
       </li>

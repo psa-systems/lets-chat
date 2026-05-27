@@ -8,11 +8,11 @@
     {% include "partials/room_header.html" %}
     {{ pinned_strip_html|safe }}
     {% include "room/messages.html" %}
-    <div id="typing" class="px-4 text-xs text-slate-500"></div>
+    <div id="typing" class="px-4 text-xs text-content-muted"></div>
     {% if can_post %}
     {% include "room/composer.html" %}
     {% else %}
-    <div class="border-t border-slate-200 px-4 py-3 text-center text-sm text-slate-500" role="status">
+    <div class="border-t border-border px-4 py-3 text-center text-sm text-content-muted" role="status">
       {{ posting_locked_reason }}
     </div>
     {% endif %}

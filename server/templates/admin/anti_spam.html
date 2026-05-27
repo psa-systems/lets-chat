@@ -5,33 +5,33 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-antispam-heading"|t }}</h1>
 {% if saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-antispam-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-antispam-saved"|t }}</div>
 {% endif %}
 
 <form method="post" action="/admin/anti-spam" class="max-w-lg space-y-6">
   <section class="space-y-3">
     <h2 class="text-base font-semibold">{{ "admin-antispam-rate-limits-heading"|t }}</h2>
-    <p class="text-xs text-slate-500">{{ "admin-antispam-rate-limits-note-1"|t }} <code>0</code> {{ "admin-antispam-rate-limits-note-2"|t }} <code>X-Forwarded-For</code>.</p>
+    <p class="text-xs text-content-muted">{{ "admin-antispam-rate-limits-note-1"|t }} <code>0</code> {{ "admin-antispam-rate-limits-note-2"|t }} <code>X-Forwarded-For</code>.</p>
     <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_messages">{{ "admin-antispam-messages-per-user"|t }}</label>
       <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" value="{{ rate_limit_messages }}"
-             class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </div>
     <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_registrations">{{ "admin-antispam-registrations-per-ip"|t }}</label>
       <input id="rate_limit_registrations" name="rate_limit_registrations" type="number" min="0" value="{{ rate_limit_registrations }}"
-             class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </div>
     <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_logins">{{ "admin-antispam-login-attempts-per-ip"|t }}</label>
       <input id="rate_limit_logins" name="rate_limit_logins" type="number" min="0" value="{{ rate_limit_logins }}"
-             class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
-      <p class="text-xs text-slate-500 mt-1">{{ "admin-antispam-login-attempts-note"|t }}</p>
+             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
+      <p class="text-xs text-content-muted mt-1">{{ "admin-antispam-login-attempts-note"|t }}</p>
     </div>
     <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_password_resets">{{ "admin-antispam-password-resets-per-ip"|t }}</label>
       <input id="rate_limit_password_resets" name="rate_limit_password_resets" type="number" min="0" value="{{ rate_limit_password_resets }}"
-             class="w-32 border border-slate-300 rounded px-2 py-1 text-sm">
+             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </div>
   </section>
 
@@ -42,8 +42,8 @@
         {% if link_filter_enabled %}checked{% endif %}>
       <span>
         {{ "admin-antispam-link-filter"|t }}
-        <span class="block text-xs text-slate-500 mt-1">
-          {{ "admin-antispam-link-filter-note-1"|t }} <a href="/admin/link-filter" class="text-blue-600 hover:underline">/admin/link-filter</a>. {{ "admin-antispam-link-filter-note-2"|t }}
+        <span class="block text-xs text-content-muted mt-1">
+          {{ "admin-antispam-link-filter-note-1"|t }} <a href="/admin/link-filter" class="text-accent hover:underline">/admin/link-filter</a>. {{ "admin-antispam-link-filter-note-2"|t }}
         </span>
       </span>
     </label>
@@ -52,13 +52,13 @@
         {% if honeypot_enabled %}checked{% endif %}>
       <span>
         {{ "admin-antispam-honeypot"|t }}
-        <span class="block text-xs text-slate-500 mt-1">
+        <span class="block text-xs text-content-muted mt-1">
           {{ "admin-antispam-honeypot-note"|t }}
         </span>
       </span>
     </label>
   </section>
 
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-antispam-save"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-antispam-save"|t }}</button>
 </form>
 {% endblock %}

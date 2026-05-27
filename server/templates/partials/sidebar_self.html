@@ -15,6 +15,6 @@
 </button>
 <div class="min-w-0">
   <div class="font-semibold truncate">{{ user.display_label() }}</div>
-  <div class="text-xs text-slate-500 truncate">@{{ user.username }}</div>
-  <div data-user-custom="{{ user.id }}" class="text-xs italic text-slate-500 truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+  <div class="text-xs text-content-muted truncate">@{{ user.username }}</div>
+  <div data-user-custom="{{ user.id }}" class="text-xs italic text-content-muted truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
 </div>

@@ -6,7 +6,7 @@
 <h1 class="text-lg font-semibold mb-4">{{ "admin-backup-heading"|t }}</h1>
 
 {% if restore_pending %}
-<div class="mb-6 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+<div class="mb-6 p-3 rounded border border-amber-300 bg-amber-50 text-warning text-sm">
   <strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
   <code>.replaced-{timestamp}</code>{{ "admin-backup-staged-2"|t }}
   <code>.restore-pending</code> {{ "admin-backup-staged-3"|t }}
@@ -14,7 +14,7 @@
 </div>
 {% endif %}
 
-<div class="mb-6 p-3 rounded bg-slate-50 text-slate-700 text-xs border border-slate-200 max-w-2xl">
+<div class="mb-6 p-3 rounded bg-surface text-content-muted text-xs border border-border max-w-2xl">
   <strong>{{ "admin-backup-headsup-title"|t }}</strong> {{ "admin-backup-headsup-1"|t }}
   <code>{data_dir}.replaced-{timestamp}</code>{{ "admin-backup-headsup-2"|t }}
   <code>.replaced-*</code> {{ "admin-backup-headsup-3"|t }}
@@ -23,30 +23,30 @@
 
 <section class="mb-8 max-w-2xl">
   <h2 class="text-base font-semibold mb-2">{{ "admin-backup-create-heading"|t }}</h2>
-  <p class="text-sm text-slate-600 mb-3">
+  <p class="text-sm text-content-muted mb-3">
     {{ "admin-backup-create-1"|t }} <code>.zip</code> {{ "admin-backup-create-2"|t }}
     <code>VACUUM INTO</code>{{ "admin-backup-create-3"|t }}
     <code>uploads/</code> {{ "admin-backup-create-4"|t }} <code>avatars/</code> {{ "admin-backup-create-5"|t }}
     <code>manifest.json</code> {{ "admin-backup-create-6"|t }}
   </p>
   <form method="post" action="/admin/backup">
-    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-backup-download"|t }}</button>
+    <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-backup-download"|t }}</button>
   </form>
 </section>
 
 <section class="max-w-2xl">
   <h2 class="text-base font-semibold mb-2">{{ "admin-backup-restore-heading"|t }}</h2>
-  <p class="text-sm text-slate-600 mb-3">
+  <p class="text-sm text-content-muted mb-3">
     {{ "admin-backup-restore-note"|t }}
   </p>
   {% if let Some(err) = error %}
-  <div class="mb-3 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  <div class="mb-3 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
   {% endif %}
   <form method="post" action="/admin/restore" enctype="multipart/form-data" class="space-y-3">
     <input type="file" name="archive" required accept=".zip,application/zip" class="block text-sm">
-    <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+    <button type="submit" class="px-3 py-1 bg-danger text-danger-content rounded hover:bg-danger text-sm"
       onclick="return confirm('{{ "admin-backup-stage-confirm"|t }}')">{{ "admin-backup-stage"|t }}</button>
-    <p class="text-xs text-slate-500">{{ "admin-backup-stage-note"|t }}</p>
+    <p class="text-xs text-content-muted">{{ "admin-backup-stage-note"|t }}</p>
   </form>
 </section>
 {% endblock %}

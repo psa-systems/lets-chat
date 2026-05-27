@@ -4,7 +4,7 @@
     hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
     hx-target="#reactions-{{ message_id }}"
     hx-swap="outerHTML"
-    class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-blue-200{% else %}bg-slate-200 hover:bg-slate-300{% endif %}"
+    class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-blue-200{% else %}bg-surface-sunken hover:bg-surface-sunken{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}
   <button
@@ -12,6 +12,6 @@
     hx-target="this"
     hx-swap="outerHTML"
     aria-label="{{ "partials-reaction-add"|t }}"
-    class="text-xs text-slate-500 hover:text-slate-700"
+    class="text-xs text-content-muted hover:text-content"
   >+</button>
 </div>

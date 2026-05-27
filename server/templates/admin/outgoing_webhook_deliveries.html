@@ -5,13 +5,13 @@
 {% block admin_main %}
 <div class="flex items-baseline gap-2 mb-4">
   <h1 class="text-lg font-semibold">{{ "admin-deliveries-heading"|t }}</h1>
-  <span class="text-sm text-slate-500">{{ "admin-deliveries-webhook"|t }} #{{ webhook_id }}</span>
-  <a href="/admin/outgoing-webhooks" class="ml-auto text-sm text-blue-600 hover:underline">{{ "admin-deliveries-back"|t }}</a>
+  <span class="text-sm text-content-muted">{{ "admin-deliveries-webhook"|t }} #{{ webhook_id }}</span>
+  <a href="/admin/outgoing-webhooks" class="ml-auto text-sm text-accent hover:underline">{{ "admin-deliveries-back"|t }}</a>
 </div>
 
 <table class="w-full text-sm">
   <thead>
-    <tr class="text-left text-slate-500 border-b border-slate-200">
+    <tr class="text-left text-content-muted border-b border-border">
       <th class="py-2">{{ "admin-deliveries-th-event"|t }}</th>
       <th class="py-2">{{ "admin-deliveries-th-attempt"|t }}</th>
       <th class="py-2">{{ "admin-deliveries-th-status"|t }}</th>
@@ -21,21 +21,21 @@
   </thead>
   <tbody>
     {% for d in deliveries %}
-    <tr class="border-t border-slate-200">
+    <tr class="border-t border-border">
       <td class="py-1 text-xs font-mono">{{ d.event }}</td>
       <td class="py-1 text-xs">{{ d.attempt }}</td>
       <td class="py-1 text-xs">
-        {% if d.status_kind() == "ok" %}<span class="text-green-700">{{ d.status_display() }}</span>
-        {% else if d.status_kind() == "neterr" %}<span class="text-red-600">{{ d.status_display() }}</span>
-        {% else if d.status_kind() == "warn" %}<span class="text-amber-700">{{ d.status_display() }}</span>
-        {% else %}<span class="text-slate-400">{{ "admin-deliveries-pending"|t }}</span>{% endif %}
+        {% if d.status_kind() == "ok" %}<span class="text-success">{{ d.status_display() }}</span>
+        {% else if d.status_kind() == "neterr" %}<span class="text-danger">{{ d.status_display() }}</span>
+        {% else if d.status_kind() == "warn" %}<span class="text-warning">{{ d.status_display() }}</span>
+        {% else %}<span class="text-content-subtle">{{ "admin-deliveries-pending"|t }}</span>{% endif %}
       </td>
-      <td class="py-1 text-xs text-slate-500">{{ d.scheduled_at }}</td>
-      <td class="py-1 text-xs text-slate-500">{% if let Some(at) = d.delivered_at %}{{ at }}{% else %}-{% endif %}</td>
+      <td class="py-1 text-xs text-content-muted">{{ d.scheduled_at }}</td>
+      <td class="py-1 text-xs text-content-muted">{% if let Some(at) = d.delivered_at %}{{ at }}{% else %}-{% endif %}</td>
     </tr>
     {% endfor %}
     {% if deliveries.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "admin-deliveries-empty"|t }}</td></tr>
+    <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "admin-deliveries-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

@@ -1,5 +1,5 @@
-<aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-slate-100 border-r border-slate-200 flex flex-col">
-  <div class="p-4 border-b border-slate-200">
+<aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 bg-surface-sunken border-r border-border flex flex-col">
+  <div class="p-4 border-b border-border">
     <div id="sidebar-self" class="flex items-center gap-2">
       {% include "partials/sidebar_self.html" %}
     </div>
@@ -47,15 +47,15 @@
   <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" class="flex-1 overflow-y-auto p-2 space-y-4">
     {% include "partials/sidebar_nav.html" %}
   </nav>
-  <div class="p-2 border-t border-slate-200 text-sm flex flex-col gap-1">
+  <div class="p-2 border-t border-border text-sm flex flex-col gap-1">
     {% if user.role == "admin" || user.role == "moderator" %}
     <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}{{ "sidebar-link-admin"|t }}{% else %}{{ "sidebar-link-moderate"|t }}{% endif %}</a>
     {% endif %}
-    <a href="/inbox" class="text-slate-600 hover:underline">{{ "sidebar-link-inbox"|t }}</a>
-    <a href="/activity" class="text-slate-600 hover:underline">{{ "sidebar-link-activity"|t }}</a>
-    <a href="/saved" class="text-slate-600 hover:underline">{{ "sidebar-link-saved"|t }}</a>
-    <a href="/scheduled" class="text-slate-600 hover:underline">{{ "sidebar-link-scheduled"|t }}</a>
-    <a href="/settings" class="text-slate-600 hover:underline">{{ "sidebar-link-settings"|t }}</a>
-    <a href="/logout" class="text-slate-600 hover:underline">{{ "sidebar-link-sign-out"|t }}</a>
+    <a href="/inbox" class="text-content-muted hover:underline">{{ "sidebar-link-inbox"|t }}</a>
+    <a href="/activity" class="text-content-muted hover:underline">{{ "sidebar-link-activity"|t }}</a>
+    <a href="/saved" class="text-content-muted hover:underline">{{ "sidebar-link-saved"|t }}</a>
+    <a href="/scheduled" class="text-content-muted hover:underline">{{ "sidebar-link-scheduled"|t }}</a>
+    <a href="/settings" class="text-content-muted hover:underline">{{ "sidebar-link-settings"|t }}</a>
+    <a href="/logout" class="text-content-muted hover:underline">{{ "sidebar-link-sign-out"|t }}</a>
   </div>
 </aside>

@@ -1,5 +1,5 @@
 <div class="flex items-center group">
-  <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex-1 flex items-center px-2 py-1 rounded hover:bg-slate-200 focus:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-slate-400{% endif %}">
+  <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} class="flex-1 flex items-center px-2 py-1 rounded hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-blue-500{% if room.active %} bg-blue-100 font-semibold text-blue-900{% else if room.mute_mode != "none" %} text-content-subtle{% endif %}">
     {% if room.is_voice %}
     <span>&#128266; {{ room.name }}</span>
     {% else %}
@@ -14,20 +14,20 @@
     {% endif %}
   </a>
   <form hx-post="/rooms/{{ room.id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
-    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-slate-300 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
+    <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
   </form>
   {% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}
   <details class="relative">
-    <summary class="list-none cursor-pointer text-slate-400 hover:text-slate-700 px-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100" title="{{ "sidebar-move-to-category"|t }}">&#9776;</summary>
-    <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded shadow text-xs w-48 py-1">
+    <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100" title="{{ "sidebar-move-to-category"|t }}">&#9776;</summary>
+    <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-xs w-48 py-1">
       {% for category in sidebar_categories %}
       <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML">
-        <button type="submit" class="w-full text-left px-3 py-1 hover:bg-slate-100">{{ category.name }}</button>
+        <button type="submit" class="w-full text-left px-3 py-1 hover:bg-surface-sunken">{{ category.name }}</button>
       </form>
       {% endfor %}
       {% if let Some(eid) = sidebar_current_enclave %}
-      <form hx-delete="/enclave/{{ eid }}/sidebar/categories/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="border-t border-slate-200 mt-1 pt-1">
-        <button type="submit" class="w-full text-left px-3 py-1 text-slate-500 hover:bg-slate-100">{{ "sidebar-remove-from-category"|t }}</button>
+      <form hx-delete="/enclave/{{ eid }}/sidebar/categories/rooms/{{ room.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="border-t border-border mt-1 pt-1">
+        <button type="submit" class="w-full text-left px-3 py-1 text-content-muted hover:bg-surface-sunken">{{ "sidebar-remove-from-category"|t }}</button>
       </form>
       {% endif %}
     </div>

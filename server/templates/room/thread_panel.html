@@ -1,15 +1,15 @@
-<aside id="thread-panel" class="w-96 border-l border-slate-200 flex flex-col bg-white">
-  <header class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+  <header class="flex items-center justify-between border-b border-border px-3 py-2">
     <div class="font-semibold">{{ "room-thread-heading"|t }}</div>
     <button
       hx-delete="/thread-panel"
       hx-target="#thread-panel"
       hx-swap="outerHTML"
-      class="text-slate-400 hover:text-slate-700"
+      class="text-content-subtle hover:text-content-muted"
       aria-label="{{ "room-thread-close"|t }}"
     >&#10005;</button>
   </header>
-  <div class="border-b border-slate-200 px-3 py-2 bg-slate-50">
+  <div class="border-b border-border px-3 py-2 bg-surface">
     {% let parent_message = parent %}
     {% let message = parent_message %}
     {% include "room/thread_reply_inner.html" %}
@@ -20,7 +20,7 @@
     {% include "room/thread_reply_inner.html" %}
     {% endfor %}
   </div>
-  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-slate-500"></div>
+  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-content-muted"></div>
   <form
     id="thread-composer-{{ parent.id }}"
     hx-post="/room/{{ room.id }}/thread/{{ parent.id }}/messages"
@@ -40,9 +40,9 @@
       }
       ta.focus();
     "
-    class="border-t border-slate-200 p-2"
+    class="border-t border-border p-2"
   >
-    <div class="thread-error hidden mb-1 flex items-center gap-2 text-xs text-red-600">
+    <div class="thread-error hidden mb-1 flex items-center gap-2 text-xs text-danger">
       <span>{{ "room-composer-send-failed"|t }}</span>
       <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
     </div>
@@ -75,7 +75,7 @@
       <button
         type="submit"
         disabled
-        class="thread-send rounded bg-blue-600 px-2 py-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        class="thread-send rounded bg-accent px-2 py-1.5 text-accent-content hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="{{ "room-thread-send-reply"|t }}"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">

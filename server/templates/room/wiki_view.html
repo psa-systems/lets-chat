@@ -1,8 +1,8 @@
 {% if html.is_empty() %}
-<p class="text-sm text-slate-500 italic">{{ "room-info-wiki-empty"|t }}</p>
+<p class="text-sm text-content-muted italic">{{ "room-info-wiki-empty"|t }}</p>
 {% else %}
 <div class="prose prose-slate max-w-none text-sm">{{ html|safe }}</div>
-<p class="text-xs text-slate-500">
+<p class="text-xs text-content-muted">
   {{ "room-info-wiki-last-edited"|t }}
   {% if let Some(at) = updated_at %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}
   {% if let Some(by) = updated_by_label %}{{ "room-info-wiki-by"|t }} {{ by }}{% endif %}.
@@ -13,5 +13,5 @@
         hx-get="/room/{{ room_id }}/wiki/edit"
         hx-target="#wiki-content"
         hx-swap="innerHTML"
-        class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{% if html.is_empty() %}{{ "room-info-wiki-create"|t }}{% else %}{{ "room-info-wiki-edit"|t }}{% endif %}</button>
+        class="text-xs bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1">{% if html.is_empty() %}{{ "room-info-wiki-create"|t }}{% else %}{{ "room-info-wiki-edit"|t }}{% endif %}</button>
 {% endif %}

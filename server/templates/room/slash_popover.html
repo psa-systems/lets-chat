@@ -3,14 +3,14 @@
    command name into the composer via __lcInsertSlash. #}
 {% if !commands.is_empty() %}
 <ul id="lc-slash-list" role="listbox" aria-label="{{ "room-slash-help-heading"|t }}"
-    class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg z-20">
+    class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-border bg-surface-elevated shadow-lg z-20">
   {% for c in commands %}
   <li role="option" data-slash-name="{{ c.name }}"
       id="lc-slash-option-{{ loop.index0 }}" aria-selected="false"
-      class="px-3 py-1.5 text-sm hover:bg-slate-100 cursor-pointer"
+      class="px-3 py-1.5 text-sm hover:bg-surface-sunken cursor-pointer"
       onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
-    <span class="font-mono text-slate-800">{{ c.usage }}</span>
-    <span class="block text-xs text-slate-500 truncate">{{ c.description }}</span>
+    <span class="font-mono text-content">{{ c.usage }}</span>
+    <span class="block text-xs text-content-muted truncate">{{ c.description }}</span>
   </li>
   {% endfor %}
 </ul>

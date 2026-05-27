@@ -1,4 +1,4 @@
-<div id="status-picker-inner" class="border border-slate-300 rounded p-2 bg-white text-sm space-y-2 shadow" tabindex="-1">
+<div id="status-picker-inner" class="border border-border-strong rounded p-2 bg-surface-elevated text-sm space-y-2 shadow" tabindex="-1">
   <form hx-post="/status" hx-target="#status-picker" hx-swap="innerHTML" class="space-y-2">
     <fieldset class="flex flex-col gap-1">
       <legend class="sr-only">{{ "status-presence-legend"|t }}</legend>
@@ -19,7 +19,7 @@
       </label>
     </fieldset>
     <label class="block">
-      <span class="flex justify-between text-xs text-slate-500">
+      <span class="flex justify-between text-xs text-content-muted">
         <span>{{ "status-custom"|t }}</span>
         <span id="status-counter">{% if let Some(t) = current_custom %}{{ t.chars().count() }}{% else %}0{% endif %} / 50</span>
       </span>
@@ -43,7 +43,7 @@
           id="status-clear-custom"
           type="button"
           aria-label="{{ "status-clear-custom"|t }}"
-          class="absolute inset-y-0 right-1 flex items-center text-slate-400 hover:text-slate-700{% if current_custom.is_none() %} hidden{% endif %}"
+          class="absolute inset-y-0 right-1 flex items-center text-content-subtle hover:text-content-muted{% if current_custom.is_none() %} hidden{% endif %}"
           onclick="
             var i = document.getElementById('status-custom-input');
             i.value = '';
@@ -54,8 +54,8 @@
       </div>
     </label>
     <div class="flex gap-2">
-      <button type="submit" class="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">{{ "action-save"|t }}</button>
-      <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-slate-500 hover:text-slate-700">{{ "reminders-close"|t }}</button>
+      <button type="submit" class="rounded bg-accent px-3 py-1 text-xs text-accent-content hover:bg-accent-hover">{{ "action-save"|t }}</button>
+      <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-content-muted hover:text-content">{{ "reminders-close"|t }}</button>
     </div>
   </form>
 </div>

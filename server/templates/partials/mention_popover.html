@@ -1,23 +1,23 @@
 {% if results.is_empty() %}
 <ul id="lc-mention-list" class="hidden"></ul>
 {% else %}
-<ul id="lc-mention-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg" role="listbox">
+<ul id="lc-mention-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-border bg-surface-elevated shadow-lg" role="listbox">
   {% for s in results %}
   <li role="option" id="lc-mention-option-{{ loop.index0 }}" aria-selected="false">
     <button type="button"
-      class="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
+      class="w-full text-left px-2 py-1 hover:bg-surface-sunken flex items-center gap-2"
       data-username="{{ s.username }}">
       {% if s.kind == "broadcast" %}
       <span class="h-5 w-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold" aria-hidden="true">@</span>
       <span class="font-semibold">@{{ s.username }}</span>
       {% if let Some(sub) = s.subtitle %}
-      <span class="text-xs text-slate-500 truncate">{{ sub }}</span>
+      <span class="text-xs text-content-muted truncate">{{ sub }}</span>
       {% endif %}
       {% else if s.kind == "group" %}
       <span class="h-5 w-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold" aria-hidden="true">#</span>
       <span class="font-semibold">@{{ s.username }}</span>
       {% if let Some(label) = s.display_name.as_ref() %}
-      <span class="text-xs text-slate-500 truncate">{{ label }}</span>
+      <span class="text-xs text-content-muted truncate">{{ label }}</span>
       {% endif %}
       {% else %}
       {# LC-169: one avatar renderer. Bind the loop row's fields to the
@@ -32,7 +32,7 @@
       {% include "partials/avatar.html" %}
       <span class="font-medium">{{ s.username }}</span>
       {% if let Some(dn) = s.display_name.as_ref() %}
-      <span class="text-xs text-slate-500 truncate">{{ dn }}</span>
+      <span class="text-xs text-content-muted truncate">{{ dn }}</span>
       {% endif %}
       {% endif %}
     </button>

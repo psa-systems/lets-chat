@@ -5,15 +5,15 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-branding-heading"|t }}</h1>
 {% if saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-branding-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-branding-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
 {% endif %}
 
-<p class="text-sm text-slate-600 mb-6 max-w-2xl">
+<p class="text-sm text-content-muted mb-6 max-w-2xl">
   {{ "admin-branding-intro-1"|t }}
-  <a href="/branding/logo" target="_blank" class="text-blue-600 hover:underline"><code>/branding/logo</code></a>.
+  <a href="/branding/logo" target="_blank" class="text-accent hover:underline"><code>/branding/logo</code></a>.
   {{ "admin-branding-intro-2"|t }}
 </p>
 
@@ -23,18 +23,18 @@
       <label class="block text-sm font-medium mb-1" for="primary_color">{{ "admin-branding-primary-color"|t }}</label>
       <div class="flex gap-2 items-center">
         <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}"
-               class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
+               class="h-9 w-12 border border-border-strong rounded cursor-pointer">
         <input name="primary_color_text" type="text" value="{{ primary_color }}" readonly
-               class="font-mono text-xs flex-1 border border-slate-200 rounded px-2 py-1 bg-slate-50">
+               class="font-mono text-xs flex-1 border border-border rounded px-2 py-1 bg-surface">
       </div>
     </div>
     <div>
       <label class="block text-sm font-medium mb-1" for="accent_color">{{ "admin-branding-accent-color"|t }}</label>
       <div class="flex gap-2 items-center">
         <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}"
-               class="h-9 w-12 border border-slate-300 rounded cursor-pointer">
+               class="h-9 w-12 border border-border-strong rounded cursor-pointer">
         <input name="accent_color_text" type="text" value="{{ accent_color }}" readonly
-               class="font-mono text-xs flex-1 border border-slate-200 rounded px-2 py-1 bg-slate-50">
+               class="font-mono text-xs flex-1 border border-border rounded px-2 py-1 bg-surface">
       </div>
     </div>
   </div>
@@ -44,13 +44,13 @@
     {% if has_logo %}
     <div class="mb-2 flex items-center gap-3">
       <img src="/branding/logo?v={{ asset_version }}" alt="{{ "admin-branding-current-logo-alt"|t }}"
-           class="max-h-12 max-w-32 object-contain border border-slate-200 rounded p-1 bg-white">
-      <span class="text-xs text-slate-500">{{ "admin-branding-current-logo"|t }}</span>
+           class="max-h-12 max-w-32 object-contain border border-border rounded p-1 bg-surface-elevated">
+      <span class="text-xs text-content-muted">{{ "admin-branding-current-logo"|t }}</span>
     </div>
     {% endif %}
     <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
            class="block text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-logo-help"|t }}</p>
+    <p class="text-xs text-content-muted mt-1">{{ "admin-branding-logo-help"|t }}</p>
   </div>
 
   <div>
@@ -58,29 +58,29 @@
     {% if has_favicon %}
     <div class="mb-2 flex items-center gap-3">
       <img src="/branding/favicon?v={{ asset_version }}" alt="{{ "admin-branding-current-favicon-alt"|t }}"
-           class="h-8 w-8 object-contain border border-slate-200 rounded p-1 bg-white">
-      <span class="text-xs text-slate-500">{{ "admin-branding-current-favicon"|t }}</span>
+           class="h-8 w-8 object-contain border border-border rounded p-1 bg-surface-elevated">
+      <span class="text-xs text-content-muted">{{ "admin-branding-current-favicon"|t }}</span>
     </div>
     {% endif %}
     <input id="favicon" name="favicon" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg"
            class="block text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-favicon-help"|t }}</p>
+    <p class="text-xs text-content-muted mt-1">{{ "admin-branding-favicon-help"|t }}</p>
   </div>
 
   <div>
     <label class="block text-sm font-medium mb-1" for="login_heading">{{ "admin-branding-login-heading"|t }}</label>
     <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}"
-           class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-login-heading-help"|t }}</p>
+           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
+    <p class="text-xs text-content-muted mt-1">{{ "admin-branding-login-heading-help"|t }}</p>
   </div>
 
   <div>
     <label class="block text-sm font-medium mb-1" for="login_body">{{ "admin-branding-login-body"|t }}</label>
     <textarea id="login_body" name="login_body" rows="6" maxlength="2000"
-              class="w-full border border-slate-300 rounded px-2 py-1 text-sm font-mono">{{ login_body }}</textarea>
-    <p class="text-xs text-slate-500 mt-1">{{ "admin-branding-login-body-help"|t }}</p>
+              class="w-full border border-border-strong rounded px-2 py-1 text-sm font-mono">{{ login_body }}</textarea>
+    <p class="text-xs text-content-muted mt-1">{{ "admin-branding-login-body-help"|t }}</p>
   </div>
 
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-branding-save"|t }}</button>
+  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-branding-save"|t }}</button>
 </form>
 {% endblock %}
