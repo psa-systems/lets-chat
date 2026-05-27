@@ -39,6 +39,30 @@
   var screenTrack = null;
   var restoreCameraAfterShare = false;
 
+  // ---- remote control (LC-184) -------------------------------------
+  // Controller side: capture pointer/keyboard on the remote-video element
+  // while control is ACTIVE and ship a compact event stream over a dedicated
+  // WebRTC data channel (peer-to-peer, off the signaling WS). The controlled
+  // (desktop) side injects those events into its OS (LC-185); web peers just
+  // receive them and re-broadcast as a DOM event for any native bridge to
+  // consume. Consent (request/grant/deny/revoke) rides the WS via
+  // #lc-control-bus; the actual input never touches the server.
+  //
+  // controlChannel is a *negotiated* channel (both peers create it with the
+  // same id at createPc time, before the first offer) so opening it never
+  // triggers an onnegotiationneeded renegotiation mid-call.
+  var controlChannel = null;
+  // Controller-side state: 'none' (not controlling) | 'requesting' (asked, no
+  // answer yet) | 'controlling' (capturing + sending).
+  var controlPhase = 'none';
+  var controlRequestTimer = null;   // reverts a request that gets no answer
+  // Controlled-side flag: true once we granted a peer control of our screen.
+  var controlGranted = false;
+  // rAF coalescing for pointer-move (clicks/keys send immediately).
+  var pendingMove = null;
+  var moveRaf = 0;
+  var CONTROL_REQUEST_TIMEOUT_MS = 12000;
+
   // ---- websocket signaling -----------------------------------------
   function signal(kind, payload) {
     var ws = window.__lcWS;
@@ -51,6 +75,21 @@
         payload: payload || null,
       }));
     } catch (e) { /* socket mid-reconnect; the call will time out */ }
+  }
+
+  // Consent signaling for remote control (request/grant/deny/revoke). The
+  // server gates this on both peers being email-verified and not blocked
+  // (LC-183); a forged or ungated kind is dropped server-side.
+  function controlSignal(kind) {
+    var ws = window.__lcWS;
+    if (!ws || roomId == null) return;
+    try {
+      ws.send(JSON.stringify({
+        type: 'remote_control_signal',
+        room_id: roomId,
+        kind: kind,
+      }));
+    } catch (e) { /* socket mid-reconnect */ }
   }
 
   // ---- dom helpers --------------------------------------------------
@@ -137,6 +176,10 @@
     }));
     if (rv) rv.style.display = on ? '' : 'none';
     if (av) av.style.display = on ? 'none' : '';
+    // The "Request control" affordance tracks the live remote video. If the
+    // peer's video drops while we are controlling, end the session.
+    if (!on && controlPhase === 'controlling') stopControlling(true);
+    setRequestBtn();
   }
   function setCameraBtn() {
     var btn = q('[data-lc-call-camera]');
@@ -181,7 +224,15 @@
     restoreCameraAfterShare = false;
   }
   function teardown() {
+    // Remote control rides the pc; ending the call ends any control session.
+    // Detach capture and disarm the injector before the pc (and its channel)
+    // go away, so no held key/button is left dangling.
+    stopControlling(false);
+    endGrant();
+    hideControlPrompt();
+    controlGranted = false;
     closePc();
+    controlChannel = null;
     stopScreen();
     stopLocal();
     pendingCandidates = [];
@@ -207,6 +258,7 @@
     }
     var ss = q('[data-lc-call-screen]');
     if (ss) { ss.textContent = 'Share screen'; ss.setAttribute('aria-pressed', 'false'); }
+    setRequestBtn();  // phase is now idle -> hides the control affordance
     disposeDialogTrap();
   }
 
@@ -253,6 +305,7 @@
 
   function createPc() {
     pc = new RTCPeerConnection({ iceServers: iceServers || [] });
+    openControlChannel();
 
     pc.onicecandidate = function (ev) {
       if (ev.candidate) signal('ice', JSON.stringify(ev.candidate));
@@ -623,6 +676,277 @@
     });
   }
 
+  // ---- remote control: data channel --------------------------------
+  // Open the negotiated control channel on the live pc. Both peers call this
+  // from createPc with the same id, so neither side needs an ondatachannel
+  // handshake and the channel rides the initial SDP (no mid-call renegotiation).
+  function openControlChannel() {
+    if (!pc || controlChannel) return;
+    try {
+      controlChannel = pc.createDataChannel('lc-control', { negotiated: true, id: 0 });
+    } catch (e) { controlChannel = null; return; }
+    // Inbound input frames (we are the controlled side). LC-184 does not inject
+    // anything itself; it surfaces each frame as a DOM event so the desktop
+    // native bridge (LC-185) can pick it up. Web peers have no injector, so the
+    // event is simply unobserved.
+    controlChannel.onmessage = function (ev) {
+      if (!controlGranted) return;  // ignore stray frames outside an active grant
+      try {
+        document.dispatchEvent(new CustomEvent('lc:control-input', { detail: ev.data }));
+      } catch (e) {}
+    };
+    // An abrupt channel drop (network failure, peer pc.close) must end any
+    // session on BOTH roles: detach the controller's capture, and tell the
+    // controlled side's injector (LC-185) to disarm + release held keys via
+    // lc:control-end. LC-185/186 still keep their own independent heartbeat
+    // timeout (design "stuck-key prevention"); this is the fast path.
+    controlChannel.onclose = controlChannel.onerror = function () {
+      if (controlPhase !== 'none') stopControlling(false);
+      endGrant();
+    };
+  }
+
+  function sendInput(obj) {
+    if (controlPhase !== 'controlling') return;
+    if (!controlChannel || controlChannel.readyState !== 'open') return;
+    try { controlChannel.send(JSON.stringify(obj)); } catch (e) {}
+  }
+
+  // ---- remote control: coordinate mapping --------------------------
+  // Map a viewport point on the letterboxed remote <video> (object-contain) to
+  // normalized [0,1] surface coordinates. Returns null for points outside the
+  // actual video content (the letterbox bars) so we never send a bogus coord.
+  // The controlled side maps [0,1] back to absolute screen pixels using its own
+  // monitor geometry + DPI, keeping the protocol resolution-independent.
+  function normCoords(video, clientX, clientY) {
+    if (!video) return null;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    var rect = video.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    var scale = Math.min(rect.width / vw, rect.height / vh);
+    var dispW = vw * scale, dispH = vh * scale;
+    var offX = (rect.width - dispW) / 2, offY = (rect.height - dispH) / 2;
+    var x = (clientX - rect.left - offX) / dispW;
+    var y = (clientY - rect.top - offY) / dispH;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x: x, y: y };
+  }
+
+  // Modifier bitmask: ctrl=1, shift=2, alt=4, meta=8.
+  function modMask(e) {
+    return (e.ctrlKey ? 1 : 0) | (e.shiftKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
+  }
+
+  // ---- remote control: input capture (controller side) -------------
+  function flushMove() {
+    moveRaf = 0;
+    if (pendingMove) { sendInput(pendingMove); pendingMove = null; }
+  }
+  function onPointerMove(e) {
+    var rv = q('[data-lc-remote-video]');
+    var c = normCoords(rv, e.clientX, e.clientY);
+    if (!c) return;
+    pendingMove = { t: 'm', x: c.x, y: c.y };
+    if (!moveRaf) moveRaf = requestAnimationFrame(flushMove);
+  }
+  function onPointerDown(e) {
+    var rv = q('[data-lc-remote-video]');
+    var c = normCoords(rv, e.clientX, e.clientY);
+    if (!c) return;
+    e.preventDefault();
+    sendInput({ t: 'd', x: c.x, y: c.y, b: e.button });
+  }
+  function onPointerUp(e) {
+    var rv = q('[data-lc-remote-video]');
+    var c = normCoords(rv, e.clientX, e.clientY);
+    if (!c) return;
+    e.preventDefault();
+    sendInput({ t: 'u', x: c.x, y: c.y, b: e.button });
+  }
+  function onWheel(e) {
+    var rv = q('[data-lc-remote-video]');
+    var c = normCoords(rv, e.clientX, e.clientY);
+    if (!c) return;
+    e.preventDefault();
+    sendInput({ t: 'w', x: c.x, y: c.y, dx: e.deltaX, dy: e.deltaY });
+  }
+  function onContextMenu(e) { e.preventDefault(); }  // right-click drives the peer, not our menu
+  // Keys are captured at the window during a session and suppressed locally so
+  // browser shortcuts (Ctrl+W, etc.) do not fire on the controller's machine.
+  // KeyboardEvent.code is physical-key (layout-independent), the closest web
+  // analogue to a scan code, so the controlled side can map by position.
+  function onKeyDown(e) {
+    sendInput({ t: 'k', c: e.code, m: modMask(e) });
+    e.preventDefault();
+  }
+  function onKeyUp(e) {
+    sendInput({ t: 'K', c: e.code, m: modMask(e) });
+    e.preventDefault();
+  }
+
+  function bindCapture(on) {
+    var rv = q('[data-lc-remote-video]');
+    var method = on ? 'addEventListener' : 'removeEventListener';
+    if (rv) {
+      rv[method]('pointermove', onPointerMove);
+      rv[method]('pointerdown', onPointerDown);
+      rv[method]('pointerup', onPointerUp);
+      rv[method]('wheel', onWheel, on ? { passive: false } : false);
+      rv[method]('contextmenu', onContextMenu);
+      rv.style.cursor = on ? 'crosshair' : '';
+      rv.style.touchAction = on ? 'none' : '';
+    }
+    window[method]('keydown', onKeyDown, true);
+    window[method]('keyup', onKeyUp, true);
+  }
+
+  // ---- remote control: state machine -------------------------------
+  function setRequestBtn() {
+    var btn = q('[data-lc-control-request]');
+    if (!btn) return;
+    // Visible only while a live remote video is on screen and we are in a call.
+    var rv = q('[data-lc-remote-video]');
+    var stream = rv && rv.srcObject;
+    var remoteVideoOn = !!(stream && stream.getVideoTracks().some(function (t) {
+      return t.readyState === 'live' && !t.muted;
+    }));
+    if (phase === 'idle' || !remoteVideoOn) { hide(btn); return; }
+    show(btn);
+    if (controlPhase === 'controlling') {
+      btn.textContent = 'Stop controlling';
+      btn.setAttribute('aria-pressed', 'true');
+    } else if (controlPhase === 'requesting') {
+      btn.textContent = 'Requesting...';
+      btn.setAttribute('aria-pressed', 'false');
+    } else {
+      btn.textContent = 'Request control';
+      btn.setAttribute('aria-pressed', 'false');
+    }
+  }
+
+  function clearRequestTimer() {
+    if (controlRequestTimer) { clearTimeout(controlRequestTimer); controlRequestTimer = null; }
+  }
+
+  // Controller clicks "Request control" / "Stop controlling".
+  function toggleControlRequest() {
+    if (phase === 'idle') return;
+    if (controlPhase === 'controlling') { stopControlling(true); return; }
+    if (controlPhase === 'requesting') return;  // already waiting
+    controlPhase = 'requesting';
+    controlSignal('request');
+    clearRequestTimer();
+    controlRequestTimer = setTimeout(function () {
+      if (controlPhase === 'requesting') {
+        controlPhase = 'none';
+        setStatus('Control request not answered');
+        setRequestBtn();
+      }
+    }, CONTROL_REQUEST_TIMEOUT_MS);
+    setRequestBtn();
+  }
+
+  // Controller transitions requesting -> controlling on a grant.
+  function startControlling() {
+    clearRequestTimer();
+    controlPhase = 'controlling';
+    bindCapture(true);
+    setRequestBtn();
+  }
+
+  // Controller stops: detach capture, optionally tell the peer (revoke). Called
+  // on the toggle button, on an inbound revoke, on a deny, and on teardown.
+  function stopControlling(notifyPeer) {
+    var wasActive = controlPhase === 'controlling';
+    clearRequestTimer();
+    if (wasActive) bindCapture(false);
+    pendingMove = null;
+    if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
+    if (notifyPeer && (wasActive || controlPhase === 'requesting')) controlSignal('revoke');
+    controlPhase = 'none';
+    setRequestBtn();
+  }
+
+  // ---- remote control: controlled (sharer) side -------------------
+  function showControlPrompt(name) {
+    var nm = q('[data-lc-control-prompt-name]');
+    if (nm) nm.textContent = name || 'A contact';
+    show(q('[data-lc-control-prompt]'));
+  }
+  function hideControlPrompt() { hide(q('[data-lc-control-prompt]')); }
+
+  function grantControl() {
+    hideControlPrompt();
+    controlGranted = true;
+    controlSignal('grant');
+    // Arm any native injector (LC-185); web has none and ignores this.
+    try { document.dispatchEvent(new CustomEvent('lc:control-start')); } catch (e) {}
+  }
+  function denyControl() {
+    hideControlPrompt();
+    controlSignal('deny');
+  }
+  // End an active grant from the controlled side (inbound revoke, or teardown).
+  // Tells the injector to disarm + release any keys/buttons it is holding.
+  function endGrant() {
+    if (!controlGranted) return;
+    controlGranted = false;
+    try { document.dispatchEvent(new CustomEvent('lc:control-end')); } catch (e) {}
+  }
+
+  // ---- remote control: inbound consent dispatch --------------------
+  function handleControl(node) {
+    var msgRoomId = parseInt(node.getAttribute('data-room-id'), 10);
+    var fromId = node.getAttribute('data-from-id');
+    var fromName = node.getAttribute('data-from-name') || 'A contact';
+    var kind = node.getAttribute('data-kind');
+    if (fromId === selfId) return;  // server relays peer-only, but be defensive
+    // Only act on signals for the DM whose call we are in.
+    if (roomId == null || msgRoomId !== roomId) return;
+    switch (kind) {
+      case 'request':
+        // Peer asks to control our shared screen -> consent prompt.
+        showControlPrompt(fromName);
+        break;
+      case 'grant':
+        if (controlPhase === 'requesting') startControlling();
+        break;
+      case 'deny':
+        if (controlPhase === 'requesting') {
+          stopControlling(false);
+          setStatus('Control request denied');
+        }
+        break;
+      case 'revoke':
+        // Either direction: the peer revoked our control, or revoked the grant
+        // they gave us. Stop both roles defensively.
+        hideControlPrompt();
+        if (controlPhase !== 'none') stopControlling(false);
+        endGrant();
+        break;
+    }
+  }
+
+  function watchControlBus() {
+    var bus = document.getElementById('lc-control-bus');
+    if (!bus) return;
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        Array.prototype.forEach.call(m.addedNodes, function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.hasAttribute('data-lc-control-event')) {
+            handleControl(n);
+          } else if (n.querySelector) {
+            var c = n.querySelector('[data-lc-control-event]');
+            if (c) handleControl(c);
+          }
+        });
+      });
+      bus.replaceChildren();
+    }).observe(bus, { childList: true });
+  }
+
   // ---- inbound signal dispatch -------------------------------------
   function handleSignal(node) {
     var msgRoomId = parseInt(node.getAttribute('data-room-id'), 10);
@@ -750,6 +1074,9 @@
     if (t.closest('[data-lc-call-mute]')) { toggleMute(); return; }
     if (t.closest('[data-lc-call-camera]')) { toggleCamera(); return; }
     if (t.closest('[data-lc-call-screen]')) { toggleScreen(); return; }
+    if (t.closest('[data-lc-control-request]')) { toggleControlRequest(); return; }
+    if (t.closest('[data-lc-control-grant]')) { grantControl(); return; }
+    if (t.closest('[data-lc-control-deny]')) { denyControl(); return; }
   });
 
   function onReady(fn) {
@@ -759,6 +1086,7 @@
   onReady(function () {
     readSelfId();
     watchBus();
+    watchControlBus();
   });
 
   // LC-144: re-route the live remote audio when the speaker is changed
