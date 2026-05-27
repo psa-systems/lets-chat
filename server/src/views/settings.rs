@@ -1,5 +1,7 @@
 use askama::Template;
 
+#[allow(unused_imports)]
+use crate::i18n::filters; // LC-100: in-scope for the `| t` filter in templates.
 use crate::models::User;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
@@ -78,6 +80,17 @@ pub struct UserSettingsPage<'a> {
     pub dnd_weekend_start: String,
     pub dnd_weekend_end: String,
     pub timezones: Vec<TzOption>,
+    /// LC-100: available UI locales for the language picker, plus a synthetic
+    /// "system" option (empty code) for the Accept-Language fallback.
+    pub locales: Vec<LocaleOption>,
+}
+
+/// One entry in the language picker. `selected` is precomputed; an empty
+/// `code` is the "use browser language" (clear preference) option.
+pub struct LocaleOption {
+    pub code: String,
+    pub name: String,
+    pub selected: bool,
 }
 
 /// One entry in the DND timezone picker. `selected` is precomputed so the

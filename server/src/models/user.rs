@@ -52,6 +52,9 @@ pub struct UserRecord {
     /// LC-73: true for machine (bot) identities. Bots authenticate only via
     /// API tokens; the cookie login path rejects them.
     pub is_bot: bool,
+    /// LC-100: preferred UI locale code (e.g. "en", "es"), or NULL to fall
+    /// back to the request's Accept-Language.
+    pub locale: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -84,6 +87,8 @@ pub struct User {
     pub totp_enabled: bool,
     /// LC-73: true for bot identities. Drives the "bot" badge in chat.
     pub is_bot: bool,
+    /// LC-100: preferred UI locale code, or None for Accept-Language fallback.
+    pub locale: Option<String>,
     /// LC-88: true when Do Not Disturb is currently active (manual pause or a
     /// schedule window). Computed at projection time from the record's DND
     /// columns against the wall clock; surfaces the "do not disturb" badge.
@@ -143,6 +148,7 @@ impl From<UserRecord> for User {
             notify_email_activity_enabled: r.notify_email_activity_enabled,
             totp_enabled: r.totp_enabled,
             is_bot: r.is_bot,
+            locale: r.locale,
             dnd_active,
         }
     }

@@ -32,6 +32,7 @@ async fn setup_auth_pool() -> SqlitePool {
         include_str!("../migrations/auth/0021_user_dnd.sql"),
         include_str!("../migrations/auth/0022_mobile_push.sql"),
         include_str!("../migrations/auth/0023_notify_email_activity.sql"),
+        include_str!("../migrations/auth/0024_user_locale.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

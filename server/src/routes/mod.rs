@@ -1018,6 +1018,7 @@ pub fn build_router(state: AppState) -> Router {
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
         )
+        .route("/settings/language", post(settings::post_language))
         .route("/settings/dnd", post(settings::post_dnd_schedule))
         .route("/settings/dnd/pause", post(settings::post_dnd_pause))
         .route("/settings/dnd/resume", post(settings::post_dnd_resume))
@@ -1129,6 +1130,9 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             branding::inject_branding_css,
         ))
+        // LC-100: resolve the UI locale into a task-local for template `| t`
+        // filters. Inner of `inject_user` so the user's saved locale is known.
+        .layer(middleware::from_fn(crate::auth::resolve_locale))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         // LC-72: the JSON API authenticates via bearer tokens (ApiAuth), not
         // the session cookie. Merge it AFTER the cookie / 2FA / maintenance /
