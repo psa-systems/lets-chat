@@ -16,6 +16,12 @@ settings-language = Language
 settings-language-help = Choose the language for the interface.
 settings-language-system = Use browser language
 settings-language-save = Save language
+settings-appearance = Appearance
+settings-appearance-help = Choose how the interface looks.
+settings-appearance-save = Save appearance
+theme-system = Use system setting
+theme-light = Light
+theme-dark = Dark
 
 ## Login
 login-title = Sign in

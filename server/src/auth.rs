@@ -126,17 +126,44 @@ pub async fn inject_user(
 /// Must be layered INSIDE `inject_user` so the signed-in `User` (carrying the
 /// saved `locale` preference) is already in the request extensions.
 pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response {
-    let user_locale = req
-        .extensions()
-        .get::<User>()
-        .and_then(|u| u.locale.clone());
+    use axum::http::header::{ACCEPT_LANGUAGE, COOKIE, SET_COOKIE};
+    let user = req.extensions().get::<User>();
+    let user_locale = user.and_then(|u| u.locale.clone());
+    // LC-191: keep the `lc-theme` cookie (which the no-flash bootstrap reads
+    // before paint) in sync with the saved `users.theme`. This is what carries
+    // the preference cross-device: a fresh device has no cookie, so the first
+    // authed response stamps it from the server pref.
+    let user_theme = user.and_then(|u| u.theme.clone());
+    let existing_theme = req
+        .headers()
+        .get(COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| {
+            s.split(';')
+                .map(str::trim)
+                .find_map(|p| p.strip_prefix("lc-theme="))
+        })
+        .map(str::to_owned);
     let accept = req
         .headers()
-        .get(axum::http::header::ACCEPT_LANGUAGE)
+        .get(ACCEPT_LANGUAGE)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
     let lang = crate::i18n::resolve(user_locale.as_deref(), accept.as_deref());
-    crate::i18n::CURRENT_LOCALE.scope(lang, next.run(req)).await
+    let mut resp = crate::i18n::CURRENT_LOCALE.scope(lang, next.run(req)).await;
+
+    if let Some(theme) = user_theme {
+        if matches!(theme.as_str(), "light" | "dark" | "system")
+            && existing_theme.as_deref() != Some(theme.as_str())
+        {
+            if let Ok(v) = axum::http::HeaderValue::from_str(&format!(
+                "lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax"
+            )) {
+                resp.headers_mut().append(SET_COOKIE, v);
+            }
+        }
+    }
+    resp
 }
 
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {

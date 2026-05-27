@@ -11,6 +11,47 @@
   <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
   <meta name="theme-color" content="#2563eb">
   <link rel="apple-touch-icon" href="/assets/icon-192.png">
+  {# LC-191: no-flash theme bootstrap. Synchronous + BEFORE the stylesheets so
+     `data-theme` is set before CSS loads (no flash-of-wrong-theme). Source
+     order: the `lc-theme` cookie (kept in sync with users.theme by the locale
+     middleware), else localStorage (set by the picker), else the OS via
+     prefers-color-scheme. Also keeps <meta theme-color> in step and follows OS
+     changes while on system. #}
+  <script>
+    (function () {
+      var d = document.documentElement;
+      function cookie(n) {
+        var m = document.cookie.match("(?:^|; )" + n + "=([^;]*)");
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+      function pref() {
+        var p = cookie("lc-theme");
+        if (!p) { try { p = localStorage.getItem("lc-theme"); } catch (e) {} }
+        return p;
+      }
+      function apply(p) {
+        var t = (p === "light" || p === "dark")
+          ? p
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        d.setAttribute("data-theme", t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", t === "dark" ? "#0f172a" : "#f8fafc");
+      }
+      apply(pref());
+      try {
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+          var p = pref();
+          if (p !== "light" && p !== "dark") apply(p);
+        });
+      } catch (e) {}
+      // Used by the Settings appearance picker to apply instantly + remember
+      // the choice on this device (the form POST persists it server-side).
+      window.__lcSetTheme = function (p) {
+        try { if (p) localStorage.setItem("lc-theme", p); else localStorage.removeItem("lc-theme"); } catch (e) {}
+        apply(p);
+      };
+    })();
+  </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
   <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>

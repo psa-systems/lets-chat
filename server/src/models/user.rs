@@ -55,6 +55,8 @@ pub struct UserRecord {
     /// LC-100: preferred UI locale code (e.g. "en", "es"), or NULL to fall
     /// back to the request's Accept-Language.
     pub locale: Option<String>,
+    /// LC-191: preferred UI theme ("light"/"dark"/"system"), or NULL = system.
+    pub theme: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -89,6 +91,8 @@ pub struct User {
     pub is_bot: bool,
     /// LC-100: preferred UI locale code, or None for Accept-Language fallback.
     pub locale: Option<String>,
+    /// LC-191: preferred UI theme ("light"/"dark"/"system"), or None = system.
+    pub theme: Option<String>,
     /// LC-88: true when Do Not Disturb is currently active (manual pause or a
     /// schedule window). Computed at projection time from the record's DND
     /// columns against the wall clock; surfaces the "do not disturb" badge.
@@ -96,6 +100,15 @@ pub struct User {
 }
 
 impl User {
+    /// LC-191: saved theme preference, defaulting to "system" when unset.
+    /// Used by the Settings appearance picker to mark the selected option.
+    pub fn theme_or_system(&self) -> &str {
+        match self.theme.as_deref() {
+            Some(t @ ("light" | "dark" | "system")) => t,
+            _ => "system",
+        }
+    }
+
     /// Trimmed display_name when set and non-empty, otherwise the username.
     pub fn display_label(&self) -> &str {
         match self.display_name.as_deref() {
@@ -149,6 +162,7 @@ impl From<UserRecord> for User {
             totp_enabled: r.totp_enabled,
             is_bot: r.is_bot,
             locale: r.locale,
+            theme: r.theme,
             dnd_active,
         }
     }

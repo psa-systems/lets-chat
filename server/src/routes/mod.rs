@@ -1019,6 +1019,7 @@ pub fn build_router(state: AppState) -> Router {
             get(settings::get_settings).post(settings::post_settings),
         )
         .route("/settings/language", post(settings::post_language))
+        .route("/settings/appearance", post(settings::post_appearance))
         .route("/settings/dnd", post(settings::post_dnd_schedule))
         .route("/settings/dnd/pause", post(settings::post_dnd_pause))
         .route("/settings/dnd/resume", post(settings::post_dnd_resume))
