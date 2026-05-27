@@ -421,6 +421,29 @@ pub async fn post_language(
     Ok(Redirect::to("/settings?saved=1"))
 }
 
+#[derive(serde::Deserialize)]
+pub struct AppearanceForm {
+    /// "system" / "light" / "dark".
+    #[serde(default)]
+    pub theme: String,
+}
+
+/// POST /settings/appearance - save the UI theme preference. The locale
+/// middleware syncs the `lc-theme` cookie from this, so the no-flash bootstrap
+/// picks it up on the redirect.
+pub async fn post_appearance(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<AppearanceForm>,
+) -> Result<Redirect, AppError> {
+    let theme = match form.theme.trim() {
+        t @ ("light" | "dark" | "system") => t,
+        _ => "system",
+    };
+    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    Ok(Redirect::to("/settings?saved=1"))
+}
+
 pub async fn post_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,

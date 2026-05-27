@@ -57,8 +57,31 @@ html, body {
     --ring:             var(--brand-primary);
 }
 
-/* LC-191 will define [data-theme="dark"] here; LC-192 the high-contrast
-   variants. Until then the app is light-only and `data-theme` is unset. */
+/* LC-191: dark palette. Same token contract as :root, slate-based dark.
+   Applies app-wide once LC-193 migrates templates onto the tokens; until then
+   only token-using surfaces (body, and anything already migrated) recolor.
+   LC-192 adds the high-contrast variants. */
+[data-theme="dark"] {
+    --surface:          #0f172a; /* slate-900 */
+    --surface-elevated: #1e293b; /* slate-800 */
+    --surface-sunken:   #020617; /* slate-950 */
+    --content:          #e2e8f0; /* slate-200 */
+    --content-muted:    #94a3b8; /* slate-400 */
+    --content-subtle:   #64748b; /* slate-500 */
+    --border:           #334155; /* slate-700 */
+    --border-strong:    #475569; /* slate-600 */
+    --accent:           var(--brand-primary);
+    --accent-hover:     var(--brand-accent);
+    --accent-content:   #ffffff;
+    --success:          #22c55e;
+    --success-content:  #052e16;
+    --warning:          #f59e0b;
+    --warning-content:  #451a03;
+    --danger:           #ef4444;
+    --danger-content:   #450a0a;
+    --ring:             #60a5fa; /* lighter ring for contrast on dark */
+    color-scheme: dark; /* native form controls + scrollbars go dark */
+}
 
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
    focus but NOT on plain mouse clicks (`:focus-visible` heuristic). Pinned

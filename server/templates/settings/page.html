@@ -24,6 +24,21 @@
     <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "settings-language-save"|t }}</button>
   </form>
 
+  {# LC-191: theme picker. The inline onchange applies instantly via
+     window.__lcSetTheme (base.html bootstrap) + remembers on this device; the
+     form POST persists server-side and the locale middleware syncs the cookie. #}
+  <form method="post" action="/settings/appearance" class="space-y-2">
+    <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
+    <p class="text-sm text-slate-500">{{ "settings-appearance-help"|t }}</p>
+    <select name="theme" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
+            class="block w-full max-w-xs border border-slate-300 rounded px-2 py-1 text-sm">
+      <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
+      <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
+      <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
+    </select>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "settings-appearance-save"|t }}</button>
+  </form>
+
   <div>
     <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
     <dl class="text-sm text-slate-700 space-y-1">
