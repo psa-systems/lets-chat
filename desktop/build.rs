@@ -32,7 +32,22 @@ fn main() {
     // Tauri 2 build step: generates the embedded ACL/capability bundle that
     // `tauri::generate_context!()` consumes at compile time. Must run after
     // our env-var injection so cargo sees a single build script success.
-    tauri_build::build();
+    //
+    // Declaring the app commands generates `allow-<command>` permissions for
+    // each (e.g. `allow-rc-input`). This is required so the remote-control
+    // commands can be granted to the configured server origin by the runtime
+    // remote capability in main.rs - app commands have no permission, and
+    // therefore cannot be reached from a remote origin, unless declared here.
+    // Declaring an app manifest also makes app-command access ACL-checked for
+    // LOCAL pages, which is why `set_server_url` is listed (and granted in
+    // capabilities/default.json) even though it is only ever called locally.
+    let attrs =
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "set_server_url",
+            "rc_session",
+            "rc_input",
+        ]));
+    tauri_build::try_build(attrs).expect("tauri_build failed");
 }
 
 fn resolve(env_key: &str, git_args: &[&str]) -> String {

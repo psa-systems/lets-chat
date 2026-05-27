@@ -60,4 +60,7 @@ webkit2gtk = "2"
 # the event (= silent deny) unless the host sets state to Allow.
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = "0.38"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com"] }
+# Win32_UI_Input_KeyboardAndMouse: SendInput + INPUT/MOUSEINPUT/KEYBDINPUT and
+# the MOUSEEVENTF_*/KEYEVENTF_* flags used by the remote-control injector
+# (src/inject.rs, LC-185).
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }

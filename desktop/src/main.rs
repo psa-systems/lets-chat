@@ -1,4 +1,5 @@
 mod config;
+mod inject;
 mod update;
 mod welcome;
 
@@ -97,6 +98,7 @@ fn main() {
     let probe_ok = probe.is_ok();
 
     let url_for_window = url.clone();
+    let url_for_cap = url.clone();
     let title_for_window = title.clone();
 
     tauri::Builder::default()
@@ -110,7 +112,12 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![set_server_url])
+        .manage(inject::ControlState::default())
+        .invoke_handler(tauri::generate_handler![
+            set_server_url,
+            inject::rc_session,
+            inject::rc_input
+        ])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
             tauri::http::Response::builder()
@@ -127,13 +134,61 @@ fn main() {
             let window = WebviewWindowBuilder::new(app, "main", webview_url)
                 .title(&title_for_window)
                 .inner_size(1100.0, 750.0)
+                // LC-185: bridge the remote-control DOM events into the native
+                // injector. Runs at document start, before the server's page
+                // scripts, so the listeners are attached before call.js fires.
+                .initialization_script(inject::BRIDGE_JS)
                 .build()?;
             install_media_permission_handler(&window)?;
+            grant_remote_control_ipc(app, &url_for_cap);
             build_tray_icon(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");
+}
+
+// LC-185: grant the configured server origin (and only it) access to the
+// remote-control IPC commands. App commands are unreachable from a remote
+// (non-`tauri://`) origin unless a capability with a matching `remote.urls`
+// entry allows them; we add that capability at runtime, scoped to exactly the
+// configured server URL, because the URL is user-configurable and cannot be
+// baked into a static capability file. The injector still gates every event
+// on an active grant (inject.rs), so enabling the IPC path is no weaker than
+// the trust the app already places in `LETS_CHAT_SERVER_URL`.
+fn grant_remote_control_ipc(app: &tauri::App, server_url: &str) {
+    use tauri::{ipc::CapabilityBuilder, Manager};
+    let Some(pattern) = remote_url_pattern(server_url) else {
+        eprintln!("lets-chat-desktop: remote-control IPC disabled (unparseable server URL)");
+        return;
+    };
+    let cap = CapabilityBuilder::new("remote-control")
+        .window("main")
+        // Remote-only: the local welcome page never calls these commands.
+        .local(false)
+        .remote(pattern)
+        .permission("allow-rc-session")
+        .permission("allow-rc-input");
+    if let Err(e) = app.add_capability(cap) {
+        eprintln!("lets-chat-desktop: remote-control capability not added: {e}");
+    }
+}
+
+// Build an origin URL-pattern (`scheme://host[:port]/*`) from the configured
+// server URL for the remote capability. Strips path/query/fragment and any
+// userinfo so the pattern matches every page under the origin. Returns None
+// for anything that is not an http(s) URL.
+fn remote_url_pattern(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    if scheme != "http" && scheme != "https" {
+        return None;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    if host.is_empty() {
+        return None;
+    }
+    Some(format!("{scheme}://{host}/*"))
 }
 
 // Build a system-tray icon with Show / Quit menu items. Left-click focuses
