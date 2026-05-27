@@ -64,6 +64,10 @@ struct Inner {
 pub fn rc_session(active: bool, state: State<'_, ControlState>) {
     let mut inner = state.0.lock().unwrap();
     if active {
+        // Start clean: drop any held state left over from a prior session that
+        // never received a disarm (e.g. a missed lc:control-end). Stale entries
+        // would otherwise only be flushed on the next disarm.
+        release_all(&mut inner);
         inner.active = true;
     } else {
         release_all(&mut inner);
