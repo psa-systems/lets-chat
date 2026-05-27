@@ -24,9 +24,25 @@ use crate::state::AppState;
 pub const SCOPE_MESSAGES_READ: &str = "messages:read";
 pub const SCOPE_MESSAGES_WRITE: &str = "messages:write";
 pub const SCOPE_ROOMS_READ: &str = "rooms:read";
+/// LC-78: scope for `POST /api/v1/bridges/{id}/messages`. Strictly more
+/// powerful than `messages:write` because it lets the caller post under an
+/// arbitrary foreign display name; a `messages:write`-only token cannot
+/// reach the bridge endpoint, and the bridge endpoint rejects calls that
+/// hold `messages:write` but lack this scope.
+pub const SCOPE_BRIDGE_POST: &str = "bridge:post";
+/// LC-78: scope for `POST /api/v1/bridges/{id}/heartbeat`. Separated from
+/// `bridge:post` so a daemon's read/heartbeat token can be split off from
+/// its write token if an operator wants narrower scopes.
+pub const SCOPE_BRIDGE_HEARTBEAT: &str = "bridge:heartbeat";
 
 /// Every scope a token may hold, for the management UI's checkboxes.
-pub const ALL_SCOPES: &[&str] = &[SCOPE_MESSAGES_READ, SCOPE_MESSAGES_WRITE, SCOPE_ROOMS_READ];
+pub const ALL_SCOPES: &[&str] = &[
+    SCOPE_MESSAGES_READ,
+    SCOPE_MESSAGES_WRITE,
+    SCOPE_ROOMS_READ,
+    SCOPE_BRIDGE_POST,
+    SCOPE_BRIDGE_HEARTBEAT,
+];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,6 +51,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/rooms/{room_id}/messages",
             get(get_messages).post(post_message),
+        )
+        .route(
+            "/api/v1/bridges/{bridge_id}/messages",
+            axum::routing::post(post_bridge_message),
         )
 }
 
@@ -181,5 +201,125 @@ async fn post_message(
         author: message.author_name,
         body: message.body,
         created_at: message.created_at,
+    }))
+}
+
+/// LC-78: per-bridge cap on the `bridge-messages` endpoint. Higher than the
+/// human MESSAGE_RATE_PER_MIN because federated Matrix rooms can be bursty,
+/// but still bounds what one compromised daemon can flood into a room.
+const BRIDGE_MESSAGE_RATE_PER_MIN: u32 = 600;
+
+#[derive(serde::Deserialize)]
+struct PostBridgeMessageBody {
+    body: String,
+    foreign_name: String,
+    /// LC-78 v1: must be absent or null. The endpoint 400s any non-null
+    /// value to avoid per-render fetches from arbitrary federated
+    /// homeservers leaking viewer IPs (see LC-78-AVATAR-PROXY follow-up
+    /// for the proxy-cache design that would close this).
+    #[serde(default)]
+    foreign_avatar: Option<String>,
+}
+
+/// LC-78: POST /api/v1/bridges/{bridge_id}/messages - post a foreign-protocol
+/// message as a per-message synthetic actor. Scope: `bridge:post` (strictly
+/// more powerful than `messages:write` because the caller chooses the
+/// rendered display name; isolated to its own endpoint so a
+/// `messages:write`-only token cannot reach the override).
+///
+/// The bridge daemon (LC-72 / LC-73) authenticates as the bot user that
+/// owns the bridge row; the room is derived from the bridge, the kind is
+/// snapshotted from the bridge row, and the foreign name + body are
+/// snapshotted onto the message row so the render survives bridge-row
+/// removal under stop-new lifecycle.
+async fn post_bridge_message(
+    State(state): State<AppState>,
+    auth: ApiAuth,
+    Path(bridge_id): Path<i64>,
+    Json(payload): Json<PostBridgeMessageBody>,
+) -> Result<Json<ApiMessage>, AppError> {
+    auth.require(SCOPE_BRIDGE_POST)?;
+    if auth.user.is_banned || auth.user.is_muted {
+        return Err(AppError::Forbidden);
+    }
+    if payload.foreign_avatar.is_some() {
+        // Fail loud (not silent drop) so a misconfigured daemon surfaces the
+        // policy and can be redirected to the proxy-cache follow-up when
+        // LC-78-AVATAR-PROXY lands.
+        return Err(AppError::BadRequest(
+            "foreign_avatar is not accepted in v1; see LC-78-AVATAR-PROXY".into(),
+        ));
+    }
+    let bridge = db::bridges::find_by_id(&state.chat, bridge_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // Ownership: the authenticated bot must be the bridge's registered bot.
+    // A token from a different bot cannot post to this bridge even if it
+    // somehow holds `bridge:post`.
+    if bridge.bot_user_id != auth.user.id {
+        return Err(AppError::Forbidden);
+    }
+    let body = payload.body.trim();
+    let foreign_name = payload.foreign_name.trim();
+    if body.is_empty() {
+        return Err(AppError::BadRequest("message body cannot be empty".into()));
+    }
+    if foreign_name.is_empty() {
+        return Err(AppError::BadRequest("foreign_name cannot be empty".into()));
+    }
+    super::room::check_message_length(body)?;
+    // Bound foreign_name to a reasonable display-label length. The render
+    // path treats it as text-only (escaped), but a multi-kilobyte name still
+    // bloats the message row and the LC-75 outgoing-webhook payload.
+    if foreign_name.len() > 256 {
+        return Err(AppError::BadRequest("foreign_name too long".into()));
+    }
+    // Per-bridge rate limit, keyed by bridge id (NOT bot user id) so two
+    // bridges owned by the same bot have independent buckets.
+    if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check(
+        crate::rate_limit::RateLimitKind::BridgeMessage,
+        &bridge_id.to_string(),
+        BRIDGE_MESSAGE_RATE_PER_MIN,
+    ) {
+        return Err(AppError::TooManyRequests(
+            "bridge message rate limit exceeded".into(),
+            retry_after,
+        ));
+    }
+    let room = db::chat::get_room(&state.chat, bridge.room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let new_id = db::chat::insert_bridge_message(
+        &state.chat,
+        bridge.room_id,
+        bridge.id,
+        foreign_name,
+        None,
+        &bridge.kind,
+        body,
+    )
+    .await?;
+    super::room::finalize_bridge_message_send(
+        &state,
+        &room,
+        bridge.id,
+        foreign_name,
+        &bridge.kind,
+        new_id,
+        body,
+    )
+    .await?;
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted bridge message vanished".into(),
+        ))?;
+    Ok(Json(ApiMessage {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: String::new(),
+        author: foreign_name.to_string(),
+        body: raw.body,
+        created_at: raw.created_at,
     }))
 }
