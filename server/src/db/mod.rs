@@ -29,6 +29,7 @@ pub mod quota;
 pub mod reminders;
 pub mod remote_control_audit;
 pub mod reply_tokens;
+pub mod room_feeds;
 pub mod room_rbac;
 pub mod scheduled;
 pub mod settings;
