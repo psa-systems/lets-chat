@@ -58,6 +58,9 @@
   var controlRequestTimer = null;   // reverts a request that gets no answer
   // Controlled-side flag: true once we granted a peer control of our screen.
   var controlGranted = false;
+  // Display name of the peer who requested / is exercising control, for the
+  // consent prompt and the active-control banner (LC-186).
+  var controlPeerName = '';
   // rAF coalescing for pointer-move (clicks/keys send immediately).
   var pendingMove = null;
   var moveRaf = 0;
@@ -226,9 +229,11 @@
   function teardown() {
     // Remote control rides the pc; ending the call ends any control session.
     // Detach capture and disarm the injector before the pc (and its channel)
-    // go away, so no held key/button is left dangling.
+    // go away, so no held key/button is left dangling. As the sharer, signal
+    // revoke first (auto-revoke on call end) while the WS is still up, so the
+    // controller stops capturing and the audit row closes promptly.
     stopControlling(false);
-    endGrant();
+    revokeAsSharer();
     hideControlPrompt();
     controlGranted = false;
     closePc();
@@ -567,6 +572,9 @@
   // sharing" widget (track.onended), and teardown indirectly via stopScreen.
   function endScreenShare() {
     if (!isSharingScreen()) return;
+    // Auto-revoke (LC-186): there is nothing to control once the shared surface
+    // is gone, so end any active grant before tearing the screen track down.
+    revokeAsSharer();
     var sender = pc ? pc.getSenders().find(function (s) { return s.track === screenTrack; }) : null;
     var wantCamera = restoreCameraAfterShare;
     stopScreen();
@@ -702,7 +710,9 @@
     // timeout (design "stuck-key prevention"); this is the fast path.
     controlChannel.onclose = controlChannel.onerror = function () {
       if (controlPhase !== 'none') stopControlling(false);
-      endGrant();
+      // Controlled side: signal revoke (closes the audit row, tells the
+      // controller to stop) and disarm. No-op if we were not the sharer.
+      revokeAsSharer();
     };
   }
 
@@ -811,7 +821,8 @@
     var remoteVideoOn = !!(stream && stream.getVideoTracks().some(function (t) {
       return t.readyState === 'live' && !t.muted;
     }));
-    if (phase === 'idle' || !remoteVideoOn) { hide(btn); return; }
+    var uipi = q('[data-lc-control-uipi]');
+    if (phase === 'idle' || !remoteVideoOn) { hide(btn); if (uipi) hide(uipi); return; }
     show(btn);
     if (controlPhase === 'controlling') {
       btn.textContent = 'Stop controlling';
@@ -823,6 +834,9 @@
       btn.textContent = 'Request control';
       btn.setAttribute('aria-pressed', 'false');
     }
+    // UIPI hint (LC-186): surface that some windows can't be driven so the
+    // controller is not silently no-op'd over an elevated/admin window.
+    if (uipi) { if (controlPhase === 'controlling') show(uipi); else hide(uipi); }
   }
 
   function clearRequestTimer() {
@@ -876,10 +890,20 @@
   }
   function hideControlPrompt() { hide(q('[data-lc-control-prompt]')); }
 
+  // The persistent active-control banner (LC-186): impossible-to-miss, with the
+  // kill-switch button. Shown for the whole duration a peer holds control.
+  function showControlBanner() {
+    var nm = q('[data-lc-control-banner-name]');
+    if (nm) nm.textContent = controlPeerName || 'A contact';
+    show(q('[data-lc-control-banner]'));
+  }
+  function hideControlBanner() { hide(q('[data-lc-control-banner]')); }
+
   function grantControl() {
     hideControlPrompt();
     controlGranted = true;
     controlSignal('grant');
+    showControlBanner();
     // Arm any native injector (LC-185); web has none and ignores this.
     try { document.dispatchEvent(new CustomEvent('lc:control-start')); } catch (e) {}
   }
@@ -887,12 +911,25 @@
     hideControlPrompt();
     controlSignal('deny');
   }
-  // End an active grant from the controlled side (inbound revoke, or teardown).
-  // Tells the injector to disarm + release any keys/buttons it is holding.
+  // End an active grant from the controlled side. Tells the injector to disarm
+  // + release any keys/buttons (lc:control-end) and drops the banner. Used by
+  // the inbound-revoke path and teardown; does NOT signal the peer (the caller
+  // decides - see revokeAsSharer for the kill paths that must notify).
   function endGrant() {
     if (!controlGranted) return;
     controlGranted = false;
+    hideControlBanner();
     try { document.dispatchEvent(new CustomEvent('lc:control-end')); } catch (e) {}
+  }
+  // Kill-switch + auto-revoke for the sharer: tell the controller to stop
+  // (so it stops capturing) AND tear down locally. Drives the banner button,
+  // the global-hotkey (lc:control-kill from the native side, LC-186), the
+  // screen-share-stop auto-revoke, and the data-channel-drop path. The revoke
+  // signal also closes the server-side audit row (LC-186).
+  function revokeAsSharer() {
+    if (!controlGranted) return;
+    controlSignal('revoke');
+    endGrant();
   }
 
   // ---- remote control: inbound consent dispatch --------------------
@@ -907,6 +944,7 @@
     switch (kind) {
       case 'request':
         // Peer asks to control our shared screen -> consent prompt.
+        controlPeerName = fromName;
         showControlPrompt(fromName);
         break;
       case 'grant':
@@ -1077,6 +1115,7 @@
     if (t.closest('[data-lc-control-request]')) { toggleControlRequest(); return; }
     if (t.closest('[data-lc-control-grant]')) { grantControl(); return; }
     if (t.closest('[data-lc-control-deny]')) { denyControl(); return; }
+    if (t.closest('[data-lc-control-stop]')) { revokeAsSharer(); return; }
   });
 
   function onReady(fn) {
@@ -1088,6 +1127,11 @@
     watchBus();
     watchControlBus();
   });
+
+  // LC-186: the desktop global kill-switch hotkey fires this DOM event (the
+  // native side has already disarmed its injector); the page side signals the
+  // peer to stop and drops the banner. Harmless in a browser (never fires).
+  document.addEventListener('lc:control-kill', function () { revokeAsSharer(); });
 
   // LC-144: re-route the live remote audio when the speaker is changed
   // mid-call from the device picker.

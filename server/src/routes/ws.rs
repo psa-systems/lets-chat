@@ -86,6 +86,9 @@ const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
 /// LC-183: recognized `kind`s for the remote-control consent handshake.
 const REMOTE_CONTROL_KINDS: &[&str] = &["request", "grant", "deny", "revoke"];
 
+/// LC-186: per-requester cap on remote-control `request` signals per minute.
+const REMOTE_CONTROL_REQUEST_CAP: u32 = 10;
+
 /// Upper bound on a relayed signaling payload. An SDP blob is a few KiB;
 /// 64 KiB leaves generous headroom while bounding what one peer can push
 /// through the relay in a single frame.
@@ -573,6 +576,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
 
     handle_voice_leave(&state, conn_id);
     if let Some(uid) = state.hub.disconnect(conn_id) {
+        // LC-186 backstop: a hard WS drop never sends a `revoke`, so close any
+        // remote-control session this user left open (call end, crash, network
+        // loss). The injector's own channel-drop/heartbeat release (LC-185)
+        // still handles the OS side; this only finalizes the audit row.
+        let _ = db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect")
+            .await;
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
             status: "offline".to_string(),
@@ -1453,6 +1462,21 @@ async fn relay_control_signal(
     if !REMOTE_CONTROL_KINDS.contains(&kind) {
         return;
     }
+    // LC-186: blunt request spam / re-request harassment. Only `request` is
+    // capped (grant/deny/revoke are responses, not initiations); an over-limit
+    // request drops silently, the same posture as the verified/block gate below.
+    if kind == "request"
+        && matches!(
+            state.rate_limits.check(
+                crate::rate_limit::RateLimitKind::RemoteControlRequest,
+                &user.id,
+                REMOTE_CONTROL_REQUEST_CAP,
+            ),
+            crate::rate_limit::Outcome::Deny { .. }
+        )
+    {
+        return;
+    }
     // Remote control is a DM-call feature only (mirrors relay_call_signal's
     // dm-room gate). Confirm the room is a DM; the row itself is unused.
     match db::chat::get_room(&state.chat, room_id).await {
@@ -1471,6 +1495,25 @@ async fn relay_control_signal(
     };
     if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
         return;
+    }
+    // LC-186 audit: a grant opens a session row (controller = the recipient of
+    // the grant, sharer = the granter); a revoke closes the open row for the
+    // room. Best-effort - an audit write failure must not block the relay.
+    match kind {
+        "grant" => {
+            let _ = db::remote_control_audit::start_session(
+                &state.chat,
+                room_id,
+                &peer_id,
+                &user.id,
+            )
+            .await;
+        }
+        "revoke" => {
+            let _ =
+                db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked").await;
+        }
+        _ => {}
     }
     let event = ChatEvent::RemoteControlSignal {
         room_id,

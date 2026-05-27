@@ -27,6 +27,10 @@ tauri-plugin-single-instance = "2"
 # server-side integration lands; the plugin and capability are wired
 # here so the desktop binary is ready ahead of that work.
 tauri-plugin-notification = "2"
+# LC-186: OS-level kill-switch for remote control. A global shortcut severs an
+# active control session even when the controlling peer holds the input focus
+# (the on-banner button can be hard to click while a remote cursor is moving).
+tauri-plugin-global-shortcut = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Default features ("tls") give us rustls + webpki-roots so HTTPS works on
