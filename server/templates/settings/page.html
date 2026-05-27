@@ -38,6 +38,12 @@
       <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
       <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
     </select>
+    <label class="block text-sm text-content-muted">{{ "settings-density"|t }}</label>
+    <select name="density" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
+      <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
+    </select>
     <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
   </form>
 

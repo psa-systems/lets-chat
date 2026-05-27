@@ -57,6 +57,8 @@ pub struct UserRecord {
     pub locale: Option<String>,
     /// LC-191: preferred UI theme ("light"/"dark"/"system"), or NULL = system.
     pub theme: Option<String>,
+    /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
+    pub density: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -93,6 +95,8 @@ pub struct User {
     pub locale: Option<String>,
     /// LC-191: preferred UI theme ("light"/"dark"/"system"), or None = system.
     pub theme: Option<String>,
+    /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
+    pub density: Option<String>,
     /// LC-88: true when Do Not Disturb is currently active (manual pause or a
     /// schedule window). Computed at projection time from the record's DND
     /// columns against the wall clock; surfaces the "do not disturb" badge.
@@ -106,6 +110,14 @@ impl User {
         match self.theme.as_deref() {
             Some(t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system")) => t,
             _ => "system",
+        }
+    }
+
+    /// LC-194: saved density preference, defaulting to "comfortable" when unset.
+    pub fn density_or_default(&self) -> &str {
+        match self.density.as_deref() {
+            Some(d @ ("comfortable" | "compact")) => d,
+            _ => "comfortable",
         }
     }
 
@@ -163,6 +175,7 @@ impl From<UserRecord> for User {
             is_bot: r.is_bot,
             locale: r.locale,
             theme: r.theme,
+            density: r.density,
             dnd_active,
         }
     }
