@@ -106,6 +106,35 @@ pub async fn poll_message_ids(
         .collect())
 }
 
+/// LC-102: scheduled polls in a room - poll messages that carry a `closes_at`,
+/// joined to their (non-deleted) message. Drives the iCal feed's VEVENT-per-
+/// poll heuristic. Returns `(message_id, question, closes_at)` ordered by the
+/// close time.
+pub async fn scheduled_for_room(
+    pool: &SqlitePool,
+    room_id: i64,
+) -> sqlx::Result<Vec<(i64, String, String)>> {
+    let rows = sqlx::query(
+        "SELECT p.message_id AS mid, p.question AS q, p.closes_at AS ca \
+         FROM polls p JOIN messages m ON m.id = p.message_id \
+         WHERE m.room_id = ? AND m.deleted_at IS NULL AND p.closes_at IS NOT NULL \
+         ORDER BY p.closes_at ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.get::<i64, _>("mid"),
+                r.get::<String, _>("q"),
+                r.get::<String, _>("ca"),
+            )
+        })
+        .collect())
+}
+
 pub async fn get(pool: &SqlitePool, message_id: i64) -> sqlx::Result<Option<Poll>> {
     let row = sqlx::query(
         "SELECT message_id, question, allows_multi, anonymous, closes_at, closed_at \

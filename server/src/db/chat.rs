@@ -162,6 +162,28 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
     }
 }
 
+/// LC-102: the most recent top-level messages in a room, newest first, capped
+/// at `limit`. Same visibility filter as `list_messages` (no deleted /
+/// quarantined / thread replies). Used to build the room's RSS/Atom feed.
+pub async fn list_recent_messages(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    limit: i64,
+) -> Result<Vec<RawMessage>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+         FROM messages \
+         WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
+         ORDER BY id DESC LIMIT ?",
+    )
+    .bind(room_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
 /// Replies in a thread, ordered chronologically. Excludes soft-deleted rows.
 /// Caller must verify access to the parent's room before calling.
 pub async fn list_thread_replies(

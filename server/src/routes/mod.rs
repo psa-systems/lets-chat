@@ -43,6 +43,7 @@ mod email_inboxes;
 pub(crate) mod email_verification;
 mod enclave;
 mod export;
+mod feeds;
 mod home;
 mod inbox;
 pub(crate) mod login_alerts;
@@ -902,6 +903,14 @@ pub fn build_router(state: AppState) -> Router {
             post(webhooks::post_revoke),
         )
         .route(
+            "/room/{room_id}/feeds",
+            get(feeds::get_feeds).post(feeds::post_feeds),
+        )
+        .route(
+            "/room/{room_id}/feeds/{fid}/revoke",
+            post(feeds::post_revoke),
+        )
+        .route(
             "/room/{room_id}/email-inboxes",
             get(email_inboxes::get_email_inboxes).post(email_inboxes::post_email_inboxes),
         )
@@ -1131,6 +1140,7 @@ pub fn build_router(state: AppState) -> Router {
         // Merge it AFTER TraceLayer so the secret is never written to request
         // logs (only the webhook id is logged, from the handler).
         .merge(webhooks::public_router())
+        .merge(feeds::public_router())
         .with_state(state)
 }
 
