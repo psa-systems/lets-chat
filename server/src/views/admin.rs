@@ -494,6 +494,50 @@ pub struct BotRowView {
     pub created_at: String,
 }
 
+/// LC-78: one bridge row on the admin bridges page.
+pub struct BridgeRowView {
+    pub id: i64,
+    pub room_id: i64,
+    pub room_name: String,
+    pub kind: String,
+    pub bot_username: String,
+    /// Derived from `last_heartbeat_at` age + DB status. One of
+    /// `pending` / `healthy` / `stale` / `errored`.
+    pub status: &'static str,
+    pub last_heartbeat_at: Option<String>,
+    pub last_error: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/bridges.html")]
+pub struct BridgesPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    /// True when LETS_CHAT_SECRET_KEY is set: bridges store sealed config
+    /// and mint API tokens, both of which require the key.
+    pub available: bool,
+    pub bridges: &'a [BridgeRowView],
+    pub rooms: &'a [AdminRoomView],
+    /// Plaintext token for a just-created bridge bot, shown exactly once.
+    pub new_token: Option<String>,
+    pub new_bot_name: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Template)]
 #[template(path = "admin/bots.html")]
 pub struct BotsPage<'a> {

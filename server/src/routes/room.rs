@@ -231,6 +231,9 @@ pub async fn get_room(
                 &m.user_id,
                 m.webhook_id,
                 m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+                m.bridge_kind.as_deref(),
                 &user.id,
             )
             .await?;
@@ -681,6 +684,9 @@ pub(crate) async fn finalize_message_send(
         is_system: raw.is_system,
         webhook_id: raw.webhook_id,
         email_inbox_id: raw.email_inbox_id,
+        bridge_id: raw.bridge_id,
+        bridge_foreign_name: raw.bridge_foreign_name,
+        bridge_kind: raw.bridge_kind,
     };
 
     let event = ChatEvent::NewMessage {
@@ -691,6 +697,7 @@ pub(crate) async fn finalize_message_send(
     super::broadcast_room_message(state, room, &event).await?;
 
     // LC-75: publish to outgoing webhooks (best-effort, never blocks the post).
+    // LC-78: include the `actor` block so bridge daemons can self-filter.
     crate::outgoing::enqueue(
         &state.chat,
         "message.posted",
@@ -700,6 +707,7 @@ pub(crate) async fn finalize_message_send(
             "user_id": message.user_id,
             "author": message.author_name,
             "body": message.body,
+            "actor": super::outgoing_actor(&message.user_id, None, None, None, None),
         }),
     )
     .await;
@@ -841,6 +849,9 @@ pub(crate) async fn finalize_email_inbox_message_send(
         is_system: raw.is_system,
         webhook_id: None,
         email_inbox_id: Some(email_inbox_id),
+        bridge_id: None,
+        bridge_foreign_name: None,
+        bridge_kind: None,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -940,6 +951,9 @@ pub(crate) async fn finalize_webhook_message_send(
         is_system: raw.is_system,
         webhook_id: Some(webhook_id),
         email_inbox_id: None,
+        bridge_id: None,
+        bridge_foreign_name: None,
+        bridge_kind: None,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -948,6 +962,8 @@ pub(crate) async fn finalize_webhook_message_send(
     super::broadcast_room_message(state, room, &event).await?;
 
     // LC-75: outgoing webhooks see incoming-webhook posts too.
+    // LC-78: include the `actor` block (kind: "webhook", webhook_id) for
+    // daemon self-filter symmetry.
     crate::outgoing::enqueue(
         &state.chat,
         "message.posted",
@@ -957,6 +973,7 @@ pub(crate) async fn finalize_webhook_message_send(
             "webhook_id": webhook_id,
             "author": webhook_name,
             "body": body,
+            "actor": super::outgoing_actor("", Some(webhook_id), None, None, None),
         }),
     )
     .await;
@@ -984,6 +1001,101 @@ pub(crate) async fn finalize_webhook_message_send(
                             message_id: new_id,
                             mentioned_user_id: t.user_id.clone(),
                             author_label: webhook_name.to_string(),
+                            snippet: snippet.clone(),
+                            target_path: format!("/room/{}", room.id),
+                        },
+                    )
+                })
+                .collect();
+            fanout_mention_events(state, room, events).await;
+        }
+    }
+    Ok(())
+}
+
+/// LC-78: broadcast + fan out a message authored by a protocol bridge.
+/// Mirrors `finalize_webhook_message_send` but the synthetic-actor identity
+/// is per-MESSAGE (snapshotted from the endpoint POST body onto the row),
+/// not per-channel. The bridge's room access has already been verified by
+/// the caller. `foreign_name` is the snapshotted actor label used as the
+/// rendered author + the mention author label.
+pub(crate) async fn finalize_bridge_message_send(
+    state: &AppState,
+    room: &crate::models::Room,
+    bridge_id: i64,
+    foreign_name: &str,
+    kind: &str,
+    new_id: i64,
+    body: &str,
+) -> Result<(), AppError> {
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted bridge message vanished".into(),
+        ))?;
+    let message = Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: String::new(),
+        author_name: foreign_name.to_string(),
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
+        is_system: raw.is_system,
+        webhook_id: None,
+        email_inbox_id: None,
+        bridge_id: Some(bridge_id),
+        bridge_foreign_name: Some(foreign_name.to_string()),
+        bridge_kind: Some(kind.to_string()),
+    };
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: false,
+    };
+    super::broadcast_room_message(state, room, &event).await?;
+
+    // LC-75: outgoing-webhook fan-out. The actor block lets a daemon
+    // self-filter its own bridge's traffic (LC-78 loop-break). bridge_id
+    // is the persistent bridges.id, stable across daemon restart, so a
+    // daemon that filters on it does not reopen the loop on restart.
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.posted",
+        room.id,
+        serde_json::json!({
+            "message_id": new_id,
+            "bridge_id": bridge_id,
+            "author": foreign_name,
+            "body": body,
+            "actor": super::outgoing_actor("", None, None, Some(bridge_id), Some(foreign_name)),
+        }),
+    )
+    .await;
+
+    // Mentions: a bridge message can @mention people, same as a webhook.
+    if room.room_type != "dm" {
+        let tokens = db::mentions::parse_mention_tokens(body);
+        if !tokens.is_empty() {
+            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+            let (added, _removed) =
+                db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
+                    .await?;
+            let snippet = build_snippet(body);
+            let events: Vec<(String, ChatEvent)> = added
+                .iter()
+                .map(|t| {
+                    (
+                        t.user_id.clone(),
+                        ChatEvent::Mentioned {
+                            kind: "mention".into(),
+                            room_id: room.id,
+                            room_type: room.room_type.clone(),
+                            room_label: format!("#{}", room.name),
+                            message_id: new_id,
+                            mentioned_user_id: t.user_id.clone(),
+                            author_label: foreign_name.to_string(),
                             snippet: snippet.clone(),
                             target_path: format!("/room/{}", room.id),
                         },
@@ -1331,11 +1443,23 @@ pub async fn patch_message(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // LC-75: outgoing webhooks.
+    // LC-78: actor describes the message AUTHOR (not the editor) so a bridge
+    // daemon can self-filter edits to messages it produced.
     crate::outgoing::enqueue(
         &state.chat,
         "message.edited",
         m.room_id,
-        serde_json::json!({ "message_id": message_id, "body": body }),
+        serde_json::json!({
+            "message_id": message_id,
+            "body": body,
+            "actor": super::outgoing_actor(
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+            ),
+        }),
     )
     .await;
 
@@ -1396,7 +1520,16 @@ pub async fn patch_message(
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
     let meta =
-        super::resolve_msg_author(&state, &m.user_id, m.webhook_id, m.email_inbox_id, &user.id)
+        super::resolve_msg_author(
+            &state,
+            &m.user_id,
+            m.webhook_id,
+            m.email_inbox_id,
+            m.bridge_id,
+            m.bridge_foreign_name.as_deref(),
+            m.bridge_kind.as_deref(),
+            &user.id,
+        )
             .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
@@ -1506,6 +1639,9 @@ pub async fn get_thread_panel(
         &parent.user_id,
         parent.webhook_id,
         parent.email_inbox_id,
+        parent.bridge_id,
+        parent.bridge_foreign_name.as_deref(),
+        parent.bridge_kind.as_deref(),
         &user.id,
     )
     .await?;
@@ -1580,6 +1716,9 @@ pub async fn get_thread_panel(
                 &r.user_id,
                 r.webhook_id,
                 r.email_inbox_id,
+                r.bridge_id,
+                r.bridge_foreign_name.as_deref(),
+                r.bridge_kind.as_deref(),
                 &user.id,
             )
             .await?;
@@ -1708,6 +1847,9 @@ pub async fn post_thread_reply(
         is_system: raw.is_system,
         webhook_id: raw.webhook_id,
         email_inbox_id: raw.email_inbox_id,
+        bridge_id: raw.bridge_id,
+        bridge_foreign_name: raw.bridge_foreign_name,
+        bridge_kind: raw.bridge_kind,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);
@@ -1865,11 +2007,22 @@ pub async fn delete_message(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // LC-75: outgoing webhooks.
+    // LC-78: actor describes the message AUTHOR so a bridge daemon can
+    // self-filter deletions of messages it produced.
     crate::outgoing::enqueue(
         &state.chat,
         "message.deleted",
         m.room_id,
-        serde_json::json!({ "message_id": message_id }),
+        serde_json::json!({
+            "message_id": message_id,
+            "actor": super::outgoing_actor(
+                &m.user_id,
+                m.webhook_id,
+                m.email_inbox_id,
+                m.bridge_id,
+                m.bridge_foreign_name.as_deref(),
+            ),
+        }),
     )
     .await;
     // Return the deleted-fragment HTML directly so the requesting tab also updates.

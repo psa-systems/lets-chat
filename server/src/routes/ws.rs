@@ -879,6 +879,9 @@ async fn render_new_message(
         &message.user_id,
         message.webhook_id,
         message.email_inbox_id,
+        message.bridge_id,
+        message.bridge_foreign_name.as_deref(),
+        message.bridge_kind.as_deref(),
         &viewer.id,
     )
     .await
@@ -977,6 +980,9 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         &m.user_id,
         m.webhook_id,
         m.email_inbox_id,
+        m.bridge_id,
+        m.bridge_foreign_name.as_deref(),
+        m.bridge_kind.as_deref(),
         &viewer.id,
     )
     .await
@@ -1093,6 +1099,9 @@ async fn render_thread_reply(
         &message.user_id,
         message.webhook_id,
         message.email_inbox_id,
+        message.bridge_id,
+        message.bridge_foreign_name.as_deref(),
+        message.bridge_kind.as_deref(),
         &viewer.id,
     )
     .await
@@ -1400,6 +1409,9 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
         is_system: raw.is_system,
         webhook_id: raw.webhook_id,
         email_inbox_id: raw.email_inbox_id,
+        bridge_id: raw.bridge_id,
+        bridge_foreign_name: raw.bridge_foreign_name,
+        bridge_kind: raw.bridge_kind,
     };
     let event = ChatEvent::NewMessage {
         message,

@@ -82,6 +82,29 @@ admin-bots-status-active = active
 admin-bots-disable = Disable
 admin-bots-empty = No bots yet.
 
+admin-bridges-title = Bridges
+admin-bridges-heading = Bridges
+admin-bridges-intro = Protocol bridges run OUT OF PROCESS as separate daemons (matrix-appservice-bridge or similar) and post foreign-protocol messages into a lets-chat room via the API. Registering a bridge here creates the bot user, mints its bridge-scoped API token, and stores its sealed daemon config. The daemon authenticates with the token; lets-chat tracks heartbeats but does not run the daemon. Removing a bridge stops new traffic but leaves historical bridged messages renderable.
+admin-bridges-no-secret = Bridges need a server secret key to seal daemon configuration.
+admin-bridges-created-prefix = Bridge bot
+admin-bridges-created-suffix = created. Copy its API token now - it will not be shown again.
+admin-bridges-token-scopes-note = Token scopes: bridge:post + bridge:heartbeat.
+admin-bridges-create-heading = Register a bridge
+admin-bridges-room = Room
+admin-bridges-bot-username = Bot username
+admin-bridges-kind = Protocol kind
+admin-bridges-kind-note = IRC and XMPP daemons share this surface; v1 ships Matrix only.
+admin-bridges-config = Daemon config (opaque to the server, sealed at rest)
+admin-bridges-config-note = Stored encrypted under LETS_CHAT_SECRET_KEY. The shape is daemon-specific (typically JSON with homeserver URL and shared secret).
+admin-bridges-create-button = Register bridge
+admin-bridges-th-room = Room
+admin-bridges-th-kind = Kind
+admin-bridges-th-bot = Bot
+admin-bridges-th-status = Status
+admin-bridges-th-last-heartbeat = Last heartbeat
+admin-bridges-remove = Remove
+admin-bridges-empty = No bridges registered.
+
 ## Branding
 admin-branding-title = Branding
 admin-branding-heading = Branding
