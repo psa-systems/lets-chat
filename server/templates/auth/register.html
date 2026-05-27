@@ -11,7 +11,7 @@
     hx-target="#form-errors"
     hx-target-4*="#form-errors"
     hx-swap="innerHTML"
-    class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
+    class="w-full max-w-sm space-y-4 bg-surface-elevated p-6 rounded shadow"
   >
     <h1 class="text-xl font-semibold">{{ "register-title"|t }}</h1>
     <div id="form-errors">
@@ -22,9 +22,9 @@
       <input name="username" required minlength="3" maxlength="32" class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block">
-      <span class="text-sm">{{ "register-email"|t }} <span class="text-slate-400">{{ "register-email-optional"|t }}</span></span>
+      <span class="text-sm">{{ "register-email"|t }} <span class="text-content-subtle">{{ "register-email-optional"|t }}</span></span>
       <input type="email" name="email" maxlength="254" class="mt-1 block w-full border rounded px-2 py-1">
-      <span class="text-xs text-slate-500">{{ "register-email-help"|t }}</span>
+      <span class="text-xs text-content-muted">{{ "register-email-help"|t }}</span>
     </label>
     <label class="block">
       <span class="text-sm">{{ "register-password"|t }}</span>
@@ -43,9 +43,9 @@
         <input type="text" name="website" tabindex="-1" autocomplete="off">
       </label>
     </div>
-    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{{ "register-submit"|t }}</button>
-    <p class="text-sm text-center">{{ "register-have-account"|t }} <a href="/login" class="text-blue-600 hover:underline">{{ "register-signin-link"|t }}</a>.</p>
-    <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
+    <button class="w-full bg-accent text-accent-content py-2 rounded hover:bg-accent-hover">{{ "register-submit"|t }}</button>
+    <p class="text-sm text-center">{{ "register-have-account"|t }} <a href="/login" class="text-accent hover:underline">{{ "register-signin-link"|t }}</a>.</p>
+    <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>
 {% endblock %}

@@ -5,15 +5,15 @@
 {% block main %}
 <section class="p-6 max-w-2xl">
   <h1 class="text-2xl font-semibold">{{ "not-found-heading"|t }}</h1>
-  <p class="mt-2 text-slate-600">
+  <p class="mt-2 text-content-muted">
     {% if let Some(p) = path.as_ref() %}
-    {{ "not-found-exists-prefix"|t }} <code class="rounded bg-slate-100 px-1 py-0.5">{{ p }}</code>{{ "not-found-exists-suffix"|t }}
+    {{ "not-found-exists-prefix"|t }} <code class="rounded bg-surface-sunken px-1 py-0.5">{{ p }}</code>{{ "not-found-exists-suffix"|t }}
     {% else %}
     {{ "not-found-generic"|t }}
     {% endif %}
   </p>
   <p class="mt-4">
-    <a href="/" class="text-blue-600 hover:underline">{{ "not-found-back-home"|t }}</a>
+    <a href="/" class="text-accent hover:underline">{{ "not-found-back-home"|t }}</a>
   </p>
 </section>
 {% endblock %}

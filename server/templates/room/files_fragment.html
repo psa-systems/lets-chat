@@ -13,7 +13,7 @@ HTMX swaps via the originating `hx-target="#files-load-more"`.
 {% let card_room_id = room_id %}
 {% if !append %}
   {% if files.is_empty() %}
-  <p class="text-sm text-slate-500 italic">{{ "room-files-empty"|t }}</p>
+  <p class="text-sm text-content-muted italic">{{ "room-files-empty"|t }}</p>
   {% else %}
   <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
     {% for f in files %}
@@ -26,7 +26,7 @@ HTMX swaps via the originating `hx-target="#files-load-more"`.
             hx-get="/room/{{ room_id }}/files?kind={{ kind }}&amp;before={{ cur }}&amp;append=true"
             hx-target="#files-load-more"
             hx-swap="outerHTML"
-            class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{{ "room-files-load-more"|t }}</button>
+            class="text-xs bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1">{{ "room-files-load-more"|t }}</button>
     {% endif %}
   </div>
   {% endif %}
@@ -42,7 +42,7 @@ HTMX swaps via the originating `hx-target="#files-load-more"`.
             hx-get="/room/{{ room_id }}/files?kind={{ kind }}&amp;before={{ cur }}&amp;append=true"
             hx-target="#files-load-more"
             hx-swap="outerHTML"
-            class="text-xs bg-slate-200 hover:bg-slate-300 rounded px-3 py-1">{{ "room-files-load-more"|t }}</button>
+            class="text-xs bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1">{{ "room-files-load-more"|t }}</button>
     {% endif %}
   </div>
 {% endif %}

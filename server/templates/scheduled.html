@@ -4,17 +4,17 @@
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
-  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
     <h1 class="font-semibold truncate">{{ "scheduled-heading"|t }}</h1>
-    <span class="text-xs text-slate-500">{{ "scheduled-delivery-note"|t }}</span>
+    <span class="text-xs text-content-muted">{{ "scheduled-delivery-note"|t }}</span>
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if pending.is_empty() %}
-    <p class="p-4 text-sm text-slate-500">
+    <p class="p-4 text-sm text-content-muted">
       {{ "scheduled-empty"|t }}
     </p>
     {% else %}
-    <ul id="scheduled-pending" class="divide-y divide-slate-200">
+    <ul id="scheduled-pending" class="divide-y divide-border">
       {% for row in pending %}
         {% include "scheduled_row.html" %}
       {% endfor %}
@@ -22,20 +22,20 @@
     {% endif %}
 
     {% if !dropped.is_empty() %}
-    <section class="border-t border-slate-200 mt-4">
-      <h2 class="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-50">{{ "scheduled-dropped-heading"|t }}</h2>
-      <ul class="divide-y divide-slate-200">
+    <section class="border-t border-border mt-4">
+      <h2 class="px-4 py-2 text-sm font-semibold text-content-muted bg-surface">{{ "scheduled-dropped-heading"|t }}</h2>
+      <ul class="divide-y divide-border">
         {% for d in dropped %}
         <li class="px-4 py-3">
-          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+          <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
             <span>
-              {{ "scheduled-for-prefix"|t }} <a href="{{ d.room_label }}" class="text-blue-700 hover:underline">{{ d.room_label }}</a>
+              {{ "scheduled-for-prefix"|t }} <a href="{{ d.room_label }}" class="text-accent hover:underline">{{ d.room_label }}</a>
               &middot; {{ "scheduled-scheduled-for"|t }} {{ d.scheduled_for }} UTC
               &middot; {{ "scheduled-dropped-at"|t }} {{ d.delivered_at }} UTC
             </span>
           </div>
-          <div class="mt-1 text-sm text-red-700">{{ "scheduled-dropped-label"|t }} {{ d.failed_reason }}</div>
-          <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-slate-800">{{ d.body_html|safe }}</div>
+          <div class="mt-1 text-sm text-danger">{{ "scheduled-dropped-label"|t }} {{ d.failed_reason }}</div>
+          <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-content">{{ d.body_html|safe }}</div>
         </li>
         {% endfor %}
       </ul>

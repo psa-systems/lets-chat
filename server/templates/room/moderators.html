@@ -7,22 +7,22 @@
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
     <h1 class="text-2xl font-semibold">{{ "room-mods-heading"|t }}</h1>
-    <span class="text-sm text-slate-500">#{{ room.name }}</span>
+    <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
   <p class="text-sm">
-    <a href="/room/{{ room.id }}/webhooks" class="text-blue-600 hover:underline">{{ "room-mods-manage-webhooks"|t }}</a>
-    <span class="text-slate-400 mx-1">·</span>
-    <a href="/room/{{ room.id }}/email-inboxes" class="text-blue-600 hover:underline">{{ "room-mods-manage-inboxes"|t }}</a>
-    <span class="text-slate-400 mx-1">·</span>
-    <a href="/room/{{ room.id }}/feeds" class="text-blue-600 hover:underline">{{ "room-mods-manage-feeds"|t }}</a>
+    <a href="/room/{{ room.id }}/webhooks" class="text-accent hover:underline">{{ "room-mods-manage-webhooks"|t }}</a>
+    <span class="text-content-subtle mx-1">·</span>
+    <a href="/room/{{ room.id }}/email-inboxes" class="text-accent hover:underline">{{ "room-mods-manage-inboxes"|t }}</a>
+    <span class="text-content-subtle mx-1">·</span>
+    <a href="/room/{{ room.id }}/feeds" class="text-accent hover:underline">{{ "room-mods-manage-feeds"|t }}</a>
   </p>
-  <p class="text-sm text-slate-600">
+  <p class="text-sm text-content-muted">
     {{ "room-mods-intro"|t }}
   </p>
 
   <section class="space-y-3 border rounded p-3">
     <h2 class="font-semibold">{{ "room-mods-policy-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
+    <p class="text-sm text-content-muted">
       {{ "room-mods-policy-intro"|t }}
     </p>
     <form method="post" action="/room/{{ room.id }}/posting-policy" class="flex gap-2 items-end">
@@ -34,23 +34,23 @@
           <option value="admins_only" {% if posting_policy == "admins_only" %}selected{% endif %}>{{ "room-mods-policy-admins"|t }}</option>
         </select>
       </label>
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">{{ "room-save"|t }}</button>
+      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1 text-sm">{{ "room-save"|t }}</button>
     </form>
   </section>
 
   {% if room.room_type != "dm" %}
-  <section class="space-y-3 border rounded p-3 border-red-200">
-    <h2 class="font-semibold text-red-800">{{ "room-retention-heading"|t }}</h2>
-    <p class="text-sm text-slate-700">
+  <section class="space-y-3 border rounded p-3 border-danger">
+    <h2 class="font-semibold text-danger">{{ "room-retention-heading"|t }}</h2>
+    <p class="text-sm text-content-muted">
       {{ "room-retention-intro-1"|t }} <strong>{{ "room-retention-cannot-undo"|t }}</strong>
       {{ "room-retention-intro-2"|t }}
-      <a href="/room/{{ room.id }}/info?tab=docs" class="text-blue-600 hover:underline">{{ "room-retention-wiki-link"|t }}</a>
+      <a href="/room/{{ room.id }}/info?tab=docs" class="text-accent hover:underline">{{ "room-retention-wiki-link"|t }}</a>
       {{ "room-retention-intro-3"|t }}
     </p>
     <p class="text-sm">
       {% match retention_days %}
         {% when Some with (d) %}
-          <span>{{ "room-retention-enabled-1"|t }} <strong class="text-red-700">{{ "room-retention-enabled-word"|t }}</strong>{{ "room-retention-enabled-2"|t }} <strong>{{ d }} {{ "room-retention-days"|t }}</strong> {{ "room-retention-enabled-3"|t }}</span>
+          <span>{{ "room-retention-enabled-1"|t }} <strong class="text-danger">{{ "room-retention-enabled-word"|t }}</strong>{{ "room-retention-enabled-2"|t }} <strong>{{ d }} {{ "room-retention-days"|t }}</strong> {{ "room-retention-enabled-3"|t }}</span>
         {% when None %}
           <span>{{ "room-retention-disabled-1"|t }} <strong>{{ "room-retention-disabled-word"|t }}</strong>.</span>
       {% endmatch %}
@@ -78,14 +78,14 @@
   <section class="space-y-3">
     <h2 class="font-semibold">{{ "room-mods-overrides-heading"|t }}</h2>
     {% if overrides.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "room-mods-overrides-empty"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "room-mods-overrides-empty"|t }}</p>
     {% else %}
     <ul class="divide-y border rounded">
       {% for o in overrides %}
       <li class="p-3 flex items-center justify-between gap-2">
         <div>
           <div class="text-sm font-medium">{{ o.user_label }}</div>
-          <div class="text-xs text-slate-500">
+          <div class="text-xs text-content-muted">
             {{ o.role }} - {{ "room-mods-granted-by"|t }} {{ o.assigned_by_label }} {{ "room-mods-granted-on"|t }} {{ o.assigned_at }}
           </div>
         </div>
@@ -93,7 +93,7 @@
                 hx-delete="/room/{{ room.id }}/moderators/{{ o.user_id }}"
                 hx-confirm="{{ "room-mods-revoke-confirm-1"|t }} {{ o.role }} {{ "room-mods-revoke-confirm-2"|t }} {{ o.user_label }}?"
                 hx-on::after-request="window.location.reload()"
-                class="text-xs text-red-600 hover:underline">{{ "room-table-revoke"|t }}</button>
+                class="text-xs text-danger hover:underline">{{ "room-table-revoke"|t }}</button>
       </li>
       {% endfor %}
     </ul>
@@ -103,7 +103,7 @@
   <section class="space-y-3 border-t pt-4">
     <h2 class="font-semibold">{{ "room-mods-grant-heading"|t }}</h2>
     {% if candidates.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "room-mods-grant-all-have"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "room-mods-grant-all-have"|t }}</p>
     {% else %}
     <form method="post" action="/room/{{ room.id }}/moderators" class="space-y-2">
       <label class="block">
@@ -121,12 +121,12 @@
           <option value="admin">{{ "room-mods-role-admin"|t }}</option>
         </select>
       </label>
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">{{ "room-mods-grant-button"|t }}</button>
+      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1 text-sm">{{ "room-mods-grant-button"|t }}</button>
     </form>
     {% endif %}
   </section>
 
-  <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline inline-block">{{ "room-mods-back-to"|t }} #{{ room.name }}</a>
+  <a href="/room/{{ room.id }}" class="text-sm text-accent hover:underline inline-block">{{ "room-mods-back-to"|t }} #{{ room.name }}</a>
 </section>
 </div>
 {% endblock %}

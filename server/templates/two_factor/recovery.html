@@ -8,21 +8,21 @@
   <form
     method="post"
     action="/login/recovery"
-    class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow"
+    class="w-full max-w-sm space-y-4 bg-surface-elevated p-6 rounded shadow"
   >
     <h1 class="text-xl font-semibold">{{ "twofactor-recovery-title"|t }}</h1>
-    <p class="text-sm text-slate-600">{{ "twofactor-recovery-help"|t }}</p>
+    <p class="text-sm text-content-muted">{{ "twofactor-recovery-help"|t }}</p>
     {% if let Some(error) = error %}
-    <p class="text-red-600 text-sm">{{ error }}</p>
+    <p class="text-danger text-sm">{{ error }}</p>
     {% endif %}
     <label class="block">
       <span class="text-sm">{{ "twofactor-recovery-code-label"|t }}</span>
       <input name="code" required maxlength="9"
              class="mt-1 block w-full border rounded px-2 py-1 font-mono tracking-widest text-center uppercase">
     </label>
-    <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{{ "twofactor-recovery-verify"|t }}</button>
+    <button class="w-full bg-accent text-accent-content py-2 rounded hover:bg-accent-hover">{{ "twofactor-recovery-verify"|t }}</button>
     <p class="text-sm text-center">
-      <a href="/login/2fa" class="text-blue-600 hover:underline">{{ "twofactor-recovery-back-link"|t }}</a>
+      <a href="/login/2fa" class="text-accent hover:underline">{{ "twofactor-recovery-back-link"|t }}</a>
     </p>
   </form>
   </div>

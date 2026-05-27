@@ -7,27 +7,27 @@
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
     <h1 class="text-2xl font-semibold">{{ "room-webhooks-heading"|t }}</h1>
-    <span class="text-sm text-slate-500">#{{ room.name }}</span>
+    <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
-  <p class="text-sm text-slate-600">
+  <p class="text-sm text-content-muted">
     {{ "room-webhooks-intro-1"|t }}
     <code>{"text": "...", "markdown": true}</code> {{ "room-webhooks-intro-2"|t }}
     <code>POST &lt;url&gt;</code>. {{ "room-webhooks-intro-3"|t }}
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  <div class="p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
   {% endif %}
 
   {% if let Some(url) = new_url %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">{{ "room-webhooks-created"|t }}</p>
-    <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
+    <p class="font-medium text-success">{{ "room-webhooks-created"|t }}</p>
+    <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
+  <div class="p-3 rounded bg-amber-50 text-warning text-sm">
     {{ "room-webhooks-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
     {{ "room-webhooks-unavailable-2"|t }}
   </div>
@@ -35,22 +35,22 @@
   <form method="post" action="/room/{{ room.id }}/webhooks" class="space-y-3 border rounded p-4">
     <h2 class="font-semibold">{{ "room-webhooks-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-slate-700">{{ "room-inboxes-display-name"|t }}</span>
+      <span class="text-content-muted">{{ "room-inboxes-display-name"|t }}</span>
       <input name="name" type="text" required maxlength="80" placeholder="{{ "room-webhooks-name-placeholder"|t }}"
-             class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
+             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-700">{{ "room-inboxes-avatar-url"|t }}</span>
+      <span class="text-content-muted">{{ "room-inboxes-avatar-url"|t }}</span>
       <input name="avatar_url" type="url" placeholder="https://example.com/icon.png"
-             class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
+             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "room-webhooks-create-button"|t }}</button>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "room-webhooks-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <table class="w-full text-sm">
     <thead>
-      <tr class="text-left text-slate-500 border-b border-slate-200">
+      <tr class="text-left text-content-muted border-b border-border">
         <th class="py-2">{{ "room-table-name"|t }}</th>
         <th class="py-2">{{ "room-table-created"|t }}</th>
         <th class="py-2">{{ "room-table-last-used"|t }}</th>
@@ -60,22 +60,22 @@
     </thead>
     <tbody>
       {% for w in webhooks %}
-      <tr class="border-t border-slate-200">
+      <tr class="border-t border-border">
         <td class="py-1">{{ w.name }}</td>
-        <td class="py-1 text-xs text-slate-500">{{ w.created_at }}</td>
-        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = w.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
-        <td class="py-1 text-xs">{% if w.revoked %}<span class="text-red-600">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
+        <td class="py-1 text-xs text-content-muted">{{ w.created_at }}</td>
+        <td class="py-1 text-xs text-content-muted">{% if let Some(at) = w.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+        <td class="py-1 text-xs">{% if w.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
         <td class="py-1 text-right">
           {% if !w.revoked %}
           <form method="post" action="/room/{{ room.id }}/webhooks/{{ w.id }}/revoke" class="inline">
-            <button type="submit" class="text-red-600 hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
+            <button type="submit" class="text-danger hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if webhooks.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "room-webhooks-empty"|t }}</td></tr>
+      <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "room-webhooks-empty"|t }}</td></tr>
       {% endif %}
     </tbody>
   </table>

@@ -5,13 +5,13 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-enclaves-heading"|t }}</h1>
 
-<p class="text-sm text-slate-600 mb-6">
+<p class="text-sm text-content-muted mb-6">
   {{ "admin-enclaves-intro"|t }}
 </p>
 
 <table class="w-full text-sm">
   <thead>
-    <tr class="text-left text-slate-500 border-b border-slate-200">
+    <tr class="text-left text-content-muted border-b border-border">
       <th class="py-2">{{ "admin-enclaves-th-name"|t }}</th>
       <th class="py-2">{{ "admin-enclaves-th-visibility"|t }}</th>
       <th class="py-2">{{ "admin-enclaves-th-owner"|t }}</th>
@@ -23,31 +23,31 @@
   </thead>
   <tbody>
     {% for e in enclaves %}
-    <tr class="border-b border-slate-100">
+    <tr class="border-b border-border">
       <td class="py-2">
         <div class="font-medium">{{ e.name }}</div>
-        {% if let Some(d) = e.description %}<div class="text-xs text-slate-500">{{ d }}</div>{% endif %}
+        {% if let Some(d) = e.description %}<div class="text-xs text-content-muted">{{ d }}</div>{% endif %}
       </td>
       <td class="py-2">
         {% if e.is_public %}<span class="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">{{ "admin-enclaves-public"|t }}</span>
-        {% else %}<span class="text-xs bg-slate-100 text-slate-700 rounded px-2 py-0.5">{{ "admin-enclaves-private"|t }}</span>{% endif %}
+        {% else %}<span class="text-xs bg-surface-sunken text-content-muted rounded px-2 py-0.5">{{ "admin-enclaves-private"|t }}</span>{% endif %}
       </td>
       <td class="py-2 font-mono text-xs">
-        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-slate-400">{{ "admin-enclaves-none"|t }}</span>{% endif %}
+        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-content-subtle">{{ "admin-enclaves-none"|t }}</span>{% endif %}
       </td>
       <td class="py-2">{{ e.member_count }}</td>
       <td class="py-2 text-xs">
         <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
-          <span class="font-mono text-slate-500">{{ e.usage_display }}</span>
+          <span class="font-mono text-content-muted">{{ e.usage_display }}</span>
           <span>/</span>
           <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
-          <button type="submit" class="text-blue-600 hover:underline">{{ "admin-enclaves-save"|t }}</button>
+          <button type="submit" class="text-accent hover:underline">{{ "admin-enclaves-save"|t }}</button>
         </form>
       </td>
-      <td class="py-2 text-xs text-slate-500">{{ e.created_at }}</td>
+      <td class="py-2 text-xs text-content-muted">{{ e.created_at }}</td>
       <td class="py-2 text-right">
-        <a href="/enclave/{{ e.id }}" class="text-blue-600 hover:underline">{{ "admin-enclaves-open"|t }}</a>
-        <a href="/enclave/{{ e.id }}/settings" class="text-blue-600 hover:underline ml-2">{{ "admin-enclaves-manage"|t }}</a>
+        <a href="/enclave/{{ e.id }}" class="text-accent hover:underline">{{ "admin-enclaves-open"|t }}</a>
+        <a href="/enclave/{{ e.id }}/settings" class="text-accent hover:underline ml-2">{{ "admin-enclaves-manage"|t }}</a>
       </td>
     </tr>
     {% endfor %}

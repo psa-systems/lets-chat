@@ -5,20 +5,20 @@
 {% block body %}
 <main class="h-screen overflow-y-auto p-6">
   <div class="min-h-full flex items-center justify-center">
-  <div class="w-full max-w-md space-y-4 bg-white p-6 rounded shadow">
+  <div class="w-full max-w-md space-y-4 bg-surface-elevated p-6 rounded shadow">
     <h1 class="text-xl font-semibold">{{ "twofactor-confirm-title"|t }}</h1>
-    <p class="text-sm text-slate-600">
+    <p class="text-sm text-content-muted">
       {{ "twofactor-confirm-help"|t }}
     </p>
-    <ul class="grid grid-cols-2 gap-2 font-mono text-sm bg-slate-100 p-4 rounded">
+    <ul class="grid grid-cols-2 gap-2 font-mono text-sm bg-surface-sunken p-4 rounded">
       {% for c in codes %}
       <li class="text-center">{{ c }}</li>
       {% endfor %}
     </ul>
-    <p class="text-xs text-red-600">
+    <p class="text-xs text-danger">
       {{ "twofactor-confirm-warning"|t }}
     </p>
-    <a href="/" class="block w-full text-center bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+    <a href="/" class="block w-full text-center bg-accent text-accent-content py-2 rounded hover:bg-accent-hover">
       {{ "twofactor-confirm-continue"|t }}
     </a>
   </div>

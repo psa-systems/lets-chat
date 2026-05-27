@@ -25,16 +25,16 @@
       <span class="text-sm">{{ "enclave-settings-description"|t }}</span>
       <input name="description" value="{% if let Some(d) = enclave.description %}{{ d }}{% endif %}" class="w-full border rounded px-2 py-1">
     </label>
-    <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1">{{ "enclave-settings-save"|t }}</button>
+    <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-settings-save"|t }}</button>
   </form>
 
   <section>
     <h2 class="font-semibold">{{ "enclave-settings-visibility-heading"|t }}</h2>
-    <p class="text-sm text-slate-600 mb-2">
+    <p class="text-sm text-content-muted mb-2">
       {% if enclave.is_public %}{{ "enclave-settings-visibility-public"|t }}{% else %}{{ "enclave-settings-visibility-private"|t }}{% endif %}
     </p>
     <form method="post" action="/enclave/{{ enclave.id }}/visibility" class="inline">
-      <button name="is_public" value="{% if enclave.is_public %}0{% else %}1{% endif %}" type="submit" class="bg-slate-200 rounded px-3 py-1">
+      <button name="is_public" value="{% if enclave.is_public %}0{% else %}1{% endif %}" type="submit" class="bg-surface-sunken rounded px-3 py-1">
         {% if enclave.is_public %}{{ "enclave-settings-make-private"|t }}{% else %}{{ "enclave-settings-make-public"|t }}{% endif %}
       </button>
     </form>
@@ -43,12 +43,12 @@
   <section class="space-y-2">
     <h2 class="font-semibold">{{ "enclave-settings-invite-code-heading"|t }}</h2>
     {% if let Some(c) = enclave.invite_code %}
-    <p class="font-mono text-sm bg-slate-100 rounded p-2 select-all">{{ c }}</p>
+    <p class="font-mono text-sm bg-surface-sunken rounded p-2 select-all">{{ c }}</p>
     {% else %}
-    <p class="text-sm text-slate-600">{{ "enclave-settings-no-invite-code"|t }}</p>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-no-invite-code"|t }}</p>
     {% endif %}
     <form method="post" action="/enclave/{{ enclave.id }}/invite-code">
-      <button type="submit" class="bg-slate-200 rounded px-3 py-1">{% if enclave.invite_code.is_some() %}{{ "enclave-settings-rotate"|t }}{% else %}{{ "enclave-settings-generate"|t }}{% endif %}</button>
+      <button type="submit" class="bg-surface-sunken rounded px-3 py-1">{% if enclave.invite_code.is_some() %}{{ "enclave-settings-rotate"|t }}{% else %}{{ "enclave-settings-generate"|t }}{% endif %}</button>
     </form>
   </section>
 
@@ -60,10 +60,10 @@
 
   <section class="space-y-3">
     <h2 class="font-semibold">{{ "enclave-settings-emojis-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
-      {{ "enclave-settings-emojis-help-1"|t }} <code class="font-mono bg-slate-100 px-1 rounded">:shortcode:</code> {{ "enclave-settings-emojis-help-2"|t }}
+    <p class="text-sm text-content-muted">
+      {{ "enclave-settings-emojis-help-1"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">:shortcode:</code> {{ "enclave-settings-emojis-help-2"|t }}
     </p>
-    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-slate-50">
+    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
       <div class="text-sm">
         {% if enclave.share_emojis_globally %}
         <strong>{{ "enclave-settings-emojis-shared-label"|t }}</strong> {{ "enclave-settings-emojis-shared-text"|t }}
@@ -73,13 +73,13 @@
       </div>
       <form method="post" action="/enclave/{{ enclave.id }}/share-emojis">
         <button name="share" value="{% if enclave.share_emojis_globally %}0{% else %}1{% endif %}"
-                type="submit" class="text-sm bg-slate-200 rounded px-3 py-1">
+                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
           {% if enclave.share_emojis_globally %}{{ "enclave-settings-emojis-stop-sharing"|t }}{% else %}{{ "enclave-settings-emojis-share-globally"|t }}{% endif %}
         </button>
       </form>
     </div>
     {% if emojis.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "enclave-settings-emojis-empty"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "enclave-settings-emojis-empty"|t }}</p>
     {% else %}
     <ul class="grid grid-cols-2 gap-2">
       {% for e in emojis %}
@@ -87,7 +87,7 @@
         <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
         <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
         <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="inline">
-          <button type="submit" class="text-xs text-red-600 hover:underline"
+          <button type="submit" class="text-xs text-danger hover:underline"
                   onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')">{{ "enclave-settings-emoji-delete"|t }}</button>
         </form>
       </li>
@@ -103,15 +103,15 @@
         <span class="text-sm">{{ "enclave-settings-emoji-image-label"|t }}</span>
         <input type="file" name="file" accept="image/png,image/gif,image/webp" required class="block text-sm">
       </label>
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1">{{ "enclave-settings-add-emoji"|t }}</button>
+      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-settings-add-emoji"|t }}</button>
     </form>
   </section>
 
   <section class="space-y-3 border-t pt-4">
     <h2 class="font-semibold">{{ "enclave-settings-groups-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">{{ "enclave-settings-groups-help-1"|t }} <code>@group-name</code> {{ "enclave-settings-groups-help-2"|t }}</p>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-groups-help-1"|t }} <code>@group-name</code> {{ "enclave-settings-groups-help-2"|t }}</p>
     {% if groups.is_empty() %}
-    <p class="text-sm text-slate-500 italic">{{ "enclave-settings-groups-empty"|t }}</p>
+    <p class="text-sm text-content-muted italic">{{ "enclave-settings-groups-empty"|t }}</p>
     {% else %}
     <ul class="divide-y border rounded">
       {% for g in groups %}
@@ -119,23 +119,23 @@
         <div class="flex items-center justify-between gap-2">
           <div>
             <span class="font-mono text-sm">@{{ g.name }}</span>
-            <span class="text-xs text-slate-500">({{ g.member_count }} {% if g.member_count == 1 %}{{ "enclave-settings-group-member-singular"|t }}{% else %}{{ "enclave-settings-group-member-plural"|t }}{% endif %})</span>
+            <span class="text-xs text-content-muted">({{ g.member_count }} {% if g.member_count == 1 %}{{ "enclave-settings-group-member-singular"|t }}{% else %}{{ "enclave-settings-group-member-plural"|t }}{% endif %})</span>
           </div>
           <button type="button"
                   hx-delete="/enclave/{{ enclave.id }}/groups/{{ g.id }}"
                   hx-confirm="{{ "enclave-settings-group-delete-confirm-prefix"|t }}{{ g.name }}{{ "enclave-settings-group-delete-confirm-suffix"|t }}"
                   hx-on::after-request="window.location.reload()"
-                  class="text-xs text-red-600 hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
+                  class="text-xs text-danger hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
         </div>
         {% if !g.member_labels.is_empty() %}
-        <div class="text-xs text-slate-500 flex flex-wrap gap-1">
+        <div class="text-xs text-content-muted flex flex-wrap gap-1">
           {% for label in g.member_labels %}
           <span class="border rounded px-2 py-0.5">{{ label }}</span>
           {% endfor %}
         </div>
         {% endif %}
         <details class="text-xs">
-          <summary class="cursor-pointer text-slate-500 hover:text-slate-700">{{ "enclave-settings-group-add-member"|t }}</summary>
+          <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
           <div class="relative mt-2" autocomplete="off">
             <input
               name="q"
@@ -162,14 +162,14 @@
     <form method="post" action="/enclave/{{ enclave.id }}/groups" class="flex gap-2 border-t pt-3">
       <input type="text" name="name" placeholder="{{ "enclave-settings-create-group-placeholder"|t }}" pattern="[A-Za-z0-9_-]{1,40}" required
              class="flex-1 border rounded px-2 py-1 text-sm">
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">{{ "enclave-settings-create-group"|t }}</button>
+      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1 text-sm">{{ "enclave-settings-create-group"|t }}</button>
     </form>
   </section>
 
   <section class="space-y-2 border-t pt-4">
     <h2 class="font-semibold">{{ "enclave-settings-branding-heading"|t }}</h2>
-    <p class="text-sm text-slate-600">
-      <a href="/enclave/{{ enclave.id }}/branding" class="text-blue-600 hover:underline">{{ "enclave-settings-branding-link"|t }}</a>
+    <p class="text-sm text-content-muted">
+      <a href="/enclave/{{ enclave.id }}/branding" class="text-accent hover:underline">{{ "enclave-settings-branding-link"|t }}</a>
       {{ "enclave-settings-branding-text-1"|t }}
       <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-settings-branding-text-2"|t }}
     </p>
@@ -177,7 +177,7 @@
 
   {% if can_delete %}
   <form method="post" action="/enclave/{{ enclave.id }}/delete" class="pt-6 border-t">
-    <button type="submit" class="text-red-600"
+    <button type="submit" class="text-danger"
             onclick="return confirm('{{ "enclave-settings-delete-confirm"|t }}')">{{ "enclave-settings-delete"|t }}</button>
   </form>
   {% endif %}

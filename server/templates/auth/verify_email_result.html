@@ -4,18 +4,18 @@
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
-  <section class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow">
+  <section class="w-full max-w-sm space-y-4 bg-surface-elevated p-6 rounded shadow">
     <h1 class="text-xl font-semibold">{{ "verify-email-title"|t }}</h1>
     {% if let Some(notice) = notice %}
-    <p class="text-green-700 text-sm">{{ notice }}</p>
+    <p class="text-success text-sm">{{ notice }}</p>
     {% endif %}
     {% include "auth/form_errors.html" %}
     <p class="text-sm text-center">
-      <a href="/" class="text-blue-600 hover:underline">{{ "verify-email-open-link"|t }}</a>
-      <span class="text-slate-400 mx-1">·</span>
-      <a href="/login" class="text-blue-600 hover:underline">{{ "verify-email-signin-link"|t }}</a>
+      <a href="/" class="text-accent hover:underline">{{ "verify-email-open-link"|t }}</a>
+      <span class="text-content-subtle mx-1">·</span>
+      <a href="/login" class="text-accent hover:underline">{{ "verify-email-signin-link"|t }}</a>
     </p>
-    <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
+    <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </section>
 </main>
 {% endblock %}

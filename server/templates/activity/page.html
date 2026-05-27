@@ -4,13 +4,13 @@
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
-  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
     <h1 class="font-semibold truncate">{{ "activity-heading"|t }}</h1>
     <nav class="flex gap-1 text-xs">
-      <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-all"|t }}</a>
-      <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-mentions"|t }}</a>
-      <a href="/activity?tab=reply" class="px-2 py-1 rounded{% if active_tab == "reply" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-replies"|t }}</a>
-      <a href="/activity?tab=reaction" class="px-2 py-1 rounded{% if active_tab == "reaction" %} bg-slate-200 font-semibold{% else %} text-slate-500 hover:text-slate-700{% endif %}">{{ "activity-tab-reactions"|t }}</a>
+      <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-all"|t }}</a>
+      <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-mentions"|t }}</a>
+      <a href="/activity?tab=reply" class="px-2 py-1 rounded{% if active_tab == "reply" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-replies"|t }}</a>
+      <a href="/activity?tab=reaction" class="px-2 py-1 rounded{% if active_tab == "reaction" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-reactions"|t }}</a>
     </nav>
   </header>
   <div class="flex-1 overflow-y-auto">
@@ -19,21 +19,21 @@
        reloads the current URL, preserving the active tab. Avoids re-rendering
        the tab-filtered list server-side (the WS cannot know the active tab). #}
     <button id="lc-activity-refresh" type="button" hidden onclick="location.reload()"
-            class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
+            class="sticky top-0 z-10 w-full bg-accent text-accent-content text-xs py-1.5 hover:bg-accent-hover">
       {{ "activity-new"|t }}
     </button>
     {% if items.is_empty() %}
-    <p class="p-8 text-center text-sm text-slate-500">{{ "activity-empty"|t }}</p>
+    <p class="p-8 text-center text-sm text-content-muted">{{ "activity-empty"|t }}</p>
     {% else %}
-    <ul class="divide-y divide-slate-200">
+    <ul class="divide-y divide-border">
       {% for item in items %}
-      <li class="px-4 py-3 hover:bg-slate-50">
+      <li class="px-4 py-3 hover:bg-surface">
         <a href="{{ item.target_path }}" class="block">
-          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
-            <span class="font-semibold text-slate-700">{{ item.kind_label }} - {{ item.room_label }}</span>
+          <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
+            <span class="font-semibold text-content-muted">{{ item.kind_label }} - {{ item.room_label }}</span>
             <span>{{ item.created_at }}</span>
           </div>
-          <div class="text-sm mt-1 text-slate-700">
+          <div class="text-sm mt-1 text-content-muted">
             {% if item.kind == "reaction" %}
             <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-reacted-prefix"|t }} {{ item.emoji }} {{ "activity-reacted-suffix"|t }}
             {% else if item.kind == "reply" %}

@@ -4,9 +4,9 @@
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
-  <header class="border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
     <h1 class="font-semibold truncate">{{ "inbox-heading"|t }}</h1>
-    <button type="button" data-lc-jump-unread class="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 border rounded">{{ "inbox-jump-unread"|t }}</button>
+    <button type="button" data-lc-jump-unread class="text-xs text-content-muted hover:text-content px-2 py-1 border rounded">{{ "inbox-jump-unread"|t }}</button>
   </header>
   <div class="flex-1 overflow-y-auto" id="lc-inbox-list">
     {# LC-179: hidden until a new unread arrives over the WS, when the send
@@ -14,13 +14,13 @@
        reloads the current page (preserving nothing view-specific is needed -
        inbox has a single ordering). Avoids clobbering infinite-scroll. #}
     <button id="lc-inbox-refresh" type="button" hidden onclick="location.reload()"
-            class="sticky top-0 z-10 w-full bg-blue-600 text-white text-xs py-1.5 hover:bg-blue-700">
+            class="sticky top-0 z-10 w-full bg-accent text-accent-content text-xs py-1.5 hover:bg-accent-hover">
       {{ "inbox-new-unread"|t }}
     </button>
     {% if items.is_empty() %}
-    <p class="p-8 text-center text-sm text-slate-500">{{ "inbox-all-caught-up"|t }}</p>
+    <p class="p-8 text-center text-sm text-content-muted">{{ "inbox-all-caught-up"|t }}</p>
     {% else %}
-    <ul class="divide-y divide-slate-200">
+    <ul class="divide-y divide-border">
       {% include "inbox/items.html" %}
     </ul>
     {% endif %}
