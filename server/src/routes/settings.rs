@@ -9,7 +9,9 @@ use crate::dnd;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
-use crate::views::settings::{BlockedListPage, BlockedUserView, SessionView, UserSettingsPage};
+use crate::views::settings::{
+    BlockedListPage, BlockedUserView, LocaleOption, SessionView, UserSettingsPage,
+};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -30,6 +32,9 @@ pub struct SettingsQuery {
     pub verify_sent: Option<String>,
     #[serde(default)]
     pub session_revoked: Option<String>,
+    /// LC-100: set by the language-save redirect to flash "Saved.".
+    #[serde(default)]
+    pub saved: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +145,29 @@ pub async fn get_settings(
         None => DndView::default(),
     };
     let timezones = timezone_options(&dnd.timezone);
+    // LC-100: language picker options. The empty-code entry is "use browser
+    // language" (clears the saved preference).
+    let mut locales = vec![LocaleOption {
+        code: String::new(),
+        name: crate::i18n::translate_current("settings-language-system"),
+        selected: user.locale.is_none(),
+    }];
+    for l in crate::i18n::available() {
+        let code = l.to_string();
+        let native = crate::i18n::native_name(&code);
+        let name = if native.is_empty() {
+            code.clone()
+        } else {
+            native.to_string()
+        };
+        let selected = user.locale.as_deref() == Some(code.as_str());
+        locales.push(LocaleOption {
+            code,
+            name,
+            selected,
+        });
+    }
+
     let page = UserSettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -151,7 +179,7 @@ pub async fn get_settings(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
-        saved: false,
+        saved: q.saved.is_some(),
         push_available: state.push_available(),
         email,
         email_verified,
@@ -177,6 +205,7 @@ pub async fn get_settings(
         dnd_weekend_start: dnd.weekend_start,
         dnd_weekend_end: dnd.weekend_end,
         timezones,
+        locales,
     };
     html(&page)
 }
@@ -366,6 +395,30 @@ fn password_error_message(code: &str) -> Option<&'static str> {
         "same" => Some("New password must differ from the current password"),
         _ => None,
     }
+}
+
+#[derive(serde::Deserialize)]
+pub struct LanguageForm {
+    /// Locale code, or empty for "use browser language" (clears the setting).
+    #[serde(default)]
+    pub locale: String,
+}
+
+/// POST /settings/language - save the UI locale preference. An empty or
+/// unsupported value clears the preference (falls back to Accept-Language).
+pub async fn post_language(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<LanguageForm>,
+) -> Result<Redirect, AppError> {
+    let code = form.locale.trim();
+    let to_set = if !code.is_empty() && crate::i18n::is_supported(code) {
+        Some(code)
+    } else {
+        None
+    };
+    db::auth::set_user_locale(&state.auth, &user.id, to_set).await?;
+    Ok(Redirect::to("/settings?saved=1"))
 }
 
 pub async fn post_settings(

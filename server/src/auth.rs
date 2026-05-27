@@ -121,6 +121,24 @@ pub async fn inject_user(
     next.run(req).await
 }
 
+/// LC-100: resolve the request's UI locale and run the rest of the request
+/// inside the `CURRENT_LOCALE` task-local so template `| t` filters localize.
+/// Must be layered INSIDE `inject_user` so the signed-in `User` (carrying the
+/// saved `locale` preference) is already in the request extensions.
+pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response {
+    let user_locale = req
+        .extensions()
+        .get::<User>()
+        .and_then(|u| u.locale.clone());
+    let accept = req
+        .headers()
+        .get(axum::http::header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let lang = crate::i18n::resolve(user_locale.as_deref(), accept.as_deref());
+    crate::i18n::CURRENT_LOCALE.scope(lang, next.run(req)).await
+}
+
 fn should_touch_last_seen(ledger: &LastSeenLedger, session_id: &str) -> bool {
     let now = Instant::now();
     // CRITICAL: drop the Ref from `get` BEFORE calling `insert`. DashMap's

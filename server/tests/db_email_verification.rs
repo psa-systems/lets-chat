@@ -25,6 +25,7 @@ async fn setup_pool() -> SqlitePool {
         include_str!("../migrations/auth/0021_user_dnd.sql"),
         include_str!("../migrations/auth/0022_mobile_push.sql"),
         include_str!("../migrations/auth/0023_notify_email_activity.sql"),
+        include_str!("../migrations/auth/0024_user_locale.sql"),
         include_str!("../migrations/auth/0010_password_reset.sql"),
         include_str!("../migrations/auth/0011_email_verification.sql"),
     ] {
