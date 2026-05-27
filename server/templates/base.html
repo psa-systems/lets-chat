@@ -61,6 +61,22 @@
         try { if (p) localStorage.setItem("lc-theme", p); else localStorage.removeItem("lc-theme"); } catch (e) {}
         apply(p);
       };
+
+      // LC-194: density (comfortable/compact). Same cookie/localStorage source
+      // as theme; defaults to comfortable. No system mode.
+      function applyDensity(v) {
+        d.setAttribute("data-density", v === "compact" ? "compact" : "comfortable");
+      }
+      var den = cookie("lc-density");
+      if (!den) { try { den = localStorage.getItem("lc-density"); } catch (e) {} }
+      applyDensity(den);
+      window.__lcSetDensity = function (v) {
+        try {
+          if (v === "compact" || v === "comfortable") localStorage.setItem("lc-density", v);
+          else localStorage.removeItem("lc-density");
+        } catch (e) {}
+        applyDensity(v);
+      };
     })();
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">

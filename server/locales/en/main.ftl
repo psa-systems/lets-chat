@@ -24,6 +24,9 @@ theme-light = Light
 theme-dark = Dark
 theme-hc-light = High contrast (light)
 theme-hc-dark = High contrast (dark)
+settings-density = Density
+density-comfortable = Comfortable
+density-compact = Compact
 
 ## Login
 login-title = Sign in

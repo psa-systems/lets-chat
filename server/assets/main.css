@@ -4,6 +4,28 @@ html, body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* LC-194: readability baseline. A comfortable body line-height + antialiasing
+   applied app-wide (Tailwind's preflight leaves line-height to per-element
+   utilities; this sets a sane default for prose-y blocks that don't pin one). */
+body {
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* LC-194: compact density. Tightens non-follow-up message rows (the `py-2`
+   rows; follow-ups are already `py-0` and excluded via :not) and the spacing
+   between markdown blocks inside a message. The data-density attribute is set
+   no-flash by the base.html bootstrap from the lc-density cookie/localStorage. */
+[data-density="compact"] [id^="msg-"]:not([class*="py-0"]) {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+}
+[data-density="compact"] .lc-md > p + p,
+[data-density="compact"] .lc-md > * + * {
+    margin-top: 0.3rem;
+}
+
 /* LC-96 branding hooks. Default values mirror the project's existing
    blue-600 / blue-700 pair so a deployment with no operator-set
    branding looks identical to the pre-LC-96 build. Layout templates
