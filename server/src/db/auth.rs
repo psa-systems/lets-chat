@@ -165,6 +165,15 @@ pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_IDLE: &str = "idle";
 pub const STATUS_AWAY: &str = "away";
 pub const STATUS_DND: &str = "dnd";
+
+/// LC-78: role tier for a protocol-bridge bot user. Strictly narrower than
+/// `user`: handlers outside the /api/v1/bridges/* surface use
+/// `ApiAuth::require_not_bridge` to reject this role, so the daemon's
+/// blast radius is exactly bridge-post + heartbeat even if an operator
+/// mistakenly grants it `messages:write` / `messages:read` / `rooms:read`.
+/// The role gate is defense in depth on top of scope gating + the LC-73
+/// cookie-login-rejects-bots posture.
+pub const ROLE_BRIDGE: &str = "bridge";
 pub const MAX_CUSTOM_STATUS_CHARS: usize = 50;
 
 pub fn is_valid_status(s: &str) -> bool {

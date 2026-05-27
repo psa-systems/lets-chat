@@ -403,6 +403,20 @@ impl ApiAuth {
             Err(AppError::Forbidden)
         }
     }
+
+    /// LC-78: refuse (403) when the authenticated user is a bridge-role
+    /// bot. Apply at the top of every endpoint OUTSIDE
+    /// `/api/v1/bridges/*` so a bridge bot's blast radius is exactly
+    /// bridge-post + heartbeat. Belt-and-braces on top of scope gating:
+    /// even if an operator mistakenly grants `messages:write` to a
+    /// bridge-role token, this check denies the call.
+    pub fn require_not_bridge(&self) -> Result<(), AppError> {
+        if self.user.role == crate::db::auth::ROLE_BRIDGE {
+            Err(AppError::Forbidden)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl FromRequestParts<AppState> for ApiAuth {

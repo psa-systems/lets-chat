@@ -92,6 +92,7 @@ async fn get_rooms(
     State(state): State<AppState>,
     auth: ApiAuth,
 ) -> Result<Json<Vec<ApiRoom>>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_ROOMS_READ)?;
     let is_admin = auth.user.role == "admin";
     let rooms = db::chat::list_rooms(&state.chat, &auth.user.id, is_admin).await?;
@@ -176,6 +177,7 @@ async fn get_messages(
     Path(room_id): Path<i64>,
     Query(q): Query<GetMessagesQuery>,
 ) -> Result<Json<ApiMessagePage>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_MESSAGES_READ)?;
     require_room_access(&state, &auth, room_id).await?;
     let limit = q
@@ -241,6 +243,7 @@ async fn post_message(
     Path(room_id): Path<i64>,
     Json(payload): Json<PostMessageBody>,
 ) -> Result<Json<ApiMessage>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_MESSAGES_WRITE)?;
     if auth.user.is_banned || auth.user.is_muted {
         return Err(AppError::Forbidden);
