@@ -55,6 +55,18 @@ struct Inner {
     held_buttons: HashSet<i64>,
 }
 
+impl ControlState {
+    /// Hard kill (LC-186 kill-switch): disarm + release everything held,
+    /// independent of the webview. Called from the global-shortcut handler so
+    /// a session is severed at the OS level even if the controlling peer holds
+    /// the input focus or the page is unresponsive. Idempotent.
+    pub fn kill(&self) {
+        let mut inner = self.0.lock().unwrap();
+        release_all(&mut inner);
+        inner.active = false;
+    }
+}
+
 /// Arm / disarm the injector. Called from the bridge on `lc:control-start`
 /// (active=true, after the local user granted) and `lc:control-end`
 /// (active=false: a clean revoke, a call teardown, or an abrupt channel drop).

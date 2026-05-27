@@ -112,6 +112,18 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_notification::init())
+        // LC-186: global kill-switch for remote control. The handler fires on
+        // ANY registered shortcut press; we register only the kill hotkey
+        // below, so no shortcut match is needed.
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        kill_remote_control(app);
+                    }
+                })
+                .build(),
+        )
         .manage(inject::ControlState::default())
         .invoke_handler(tauri::generate_handler![
             set_server_url,
@@ -141,11 +153,41 @@ fn main() {
                 .build()?;
             install_media_permission_handler(&window)?;
             grant_remote_control_ipc(app, &url_for_cap);
+            // LC-186: register the kill-switch hotkey. Non-fatal if the combo
+            // is already taken by another app - the on-banner button remains.
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                if let Err(e) = app.global_shortcut().register(REMOTE_CONTROL_KILL_HOTKEY) {
+                    eprintln!(
+                        "lets-chat-desktop: could not register kill-switch hotkey \
+                         {REMOTE_CONTROL_KILL_HOTKEY}: {e}"
+                    );
+                }
+            }
             build_tray_icon(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");
+}
+
+// LC-186: kill-switch hotkey. Chosen to be unlikely to collide with common
+// app/OS shortcuts; surfaced in the active-control banner so the sharer knows
+// it. (Ctrl+Shift+Esc is OS-reserved on Windows, so it is deliberately avoided.)
+const REMOTE_CONTROL_KILL_HOTKEY: &str = "CommandOrControl+Alt+F9";
+
+// LC-186: sever any live remote-control session immediately. Flips the native
+// injector off + releases held input (does not depend on the webview), then
+// nudges the page to send the peer a `revoke` and drop its banner. Driven by
+// the global kill-switch hotkey.
+fn kill_remote_control(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(state) = app.try_state::<inject::ControlState>() {
+        state.kill();
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval("document.dispatchEvent(new CustomEvent('lc:control-kill'))");
+    }
 }
 
 // LC-185: grant the configured server origin (and only it) access to the
