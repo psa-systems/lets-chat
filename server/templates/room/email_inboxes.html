@@ -1,19 +1,16 @@
 {% extends "layout.html" %}
 
-{% block title %}Email inboxes - #{{ room.name }} - lets-chat{% endblock %}
+{% block title %}{{ "room-inboxes-title"|t }} - #{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">Email inboxes</h1>
+    <h1 class="text-2xl font-semibold">{{ "room-inboxes-heading"|t }}</h1>
     <span class="text-sm text-slate-500">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-slate-600">
-    An email inbox lets an external sender mail this room. Each inbox has a
-    secret address; mail addressed to that address posts to this room as an
-    "email" actor. The address is the credential - keep it secret; it is
-    shown only once.
+    {{ "room-inboxes-intro"|t }}
   </p>
 
   {% if let Some(err) = error %}
@@ -22,44 +19,44 @@
 
   {% if let Some(addr) = new_address %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">Inbox created. Copy its address now - it won't be shown again.</p>
+    <p class="font-medium text-green-800">{{ "room-inboxes-created"|t }}</p>
     <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ addr }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
   <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
-    Email inboxes are not configurable yet on this deployment.
+    {{ "room-inboxes-unavailable"|t }}
     {% if let Some(missing) = missing_setting %}
-    Missing: <code>{{ missing }}</code>.
+    {{ "room-inboxes-missing"|t }} <code>{{ missing }}</code>.
     {% endif %}
-    Once set, restart the server to enable email ingress.
+    {{ "room-inboxes-restart"|t }}
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/email-inboxes" class="space-y-3 border rounded p-4">
-    <h2 class="font-semibold">Create an email inbox</h2>
+    <h2 class="font-semibold">{{ "room-inboxes-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-slate-700">Display name</span>
-      <input name="name" type="text" required maxlength="80" placeholder="Pager"
+      <span class="text-slate-700">{{ "room-inboxes-display-name"|t }}</span>
+      <input name="name" type="text" required maxlength="80" placeholder="{{ "room-inboxes-name-placeholder"|t }}"
              class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-700">Avatar URL (optional)</span>
+      <span class="text-slate-700">{{ "room-inboxes-avatar-url"|t }}</span>
       <input name="avatar_url" type="url" placeholder="https://example.com/icon.png"
              class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create inbox</button>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "room-inboxes-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <table class="w-full text-sm">
     <thead>
       <tr class="text-left text-slate-500 border-b border-slate-200">
-        <th class="py-2">Name</th>
-        <th class="py-2">Created</th>
-        <th class="py-2">Last used</th>
-        <th class="py-2">Status</th>
-        <th class="py-2 text-right">Actions</th>
+        <th class="py-2">{{ "room-table-name"|t }}</th>
+        <th class="py-2">{{ "room-table-created"|t }}</th>
+        <th class="py-2">{{ "room-table-last-used"|t }}</th>
+        <th class="py-2">{{ "room-table-status"|t }}</th>
+        <th class="py-2 text-right">{{ "room-table-actions"|t }}</th>
       </tr>
     </thead>
     <tbody>
@@ -67,19 +64,19 @@
       <tr class="border-t border-slate-200">
         <td class="py-1">{{ i.name }}</td>
         <td class="py-1 text-xs text-slate-500">{{ i.created_at }}</td>
-        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = i.last_used_at %}{{ at }}{% else %}never{% endif %}</td>
-        <td class="py-1 text-xs">{% if i.revoked %}<span class="text-red-600">revoked</span>{% else %}active{% endif %}</td>
+        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = i.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+        <td class="py-1 text-xs">{% if i.revoked %}<span class="text-red-600">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
         <td class="py-1 text-right">
           {% if !i.revoked %}
           <form method="post" action="/room/{{ room.id }}/email-inboxes/{{ i.id }}/revoke" class="inline">
-            <button type="submit" class="text-red-600 hover:underline text-xs">Revoke</button>
+            <button type="submit" class="text-red-600 hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if inboxes.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No email inboxes yet.</td></tr>
+      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "room-inboxes-empty"|t }}</td></tr>
       {% endif %}
     </tbody>
   </table>

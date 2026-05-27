@@ -1,175 +1,171 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Settings - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-settings-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
 {% if maintenance_enabled %}
 <div class="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
-  <strong>Maintenance mode is ON.</strong> Non-admin users see a 503 maintenance page. Toggle off below to restore access.
+  <strong>{{ "admin-settings-maintenance-on-title"|t }}</strong> {{ "admin-settings-maintenance-on-body"|t }}
 </div>
 {% endif %}
 
-<h2 class="text-base font-semibold mb-3">Maintenance mode</h2>
+<h2 class="text-base font-semibold mb-3">{{ "admin-settings-maintenance-heading"|t }}</h2>
 <form method="post" action="/admin/maintenance" class="max-w-lg space-y-3 mb-8">
   <label class="flex items-start gap-2 cursor-pointer">
     <input type="checkbox" name="enabled" value="1" class="mt-0.5"
       {% if maintenance_enabled %}checked{% endif %}>
     <span>
-      Enable maintenance mode
+      {{ "admin-settings-maintenance-enable"|t }}
       <span class="block text-xs text-slate-500 mt-1">
-        Non-admins see a 503 page; admins keep full access so you can flip this back off when done.
+        {{ "admin-settings-maintenance-enable-note"|t }}
       </span>
     </span>
   </label>
   <div>
-    <label class="block text-sm font-medium mb-1" for="maintenance_message">Message shown to users</label>
+    <label class="block text-sm font-medium mb-1" for="maintenance_message">{{ "admin-settings-maintenance-message-label"|t }}</label>
     <textarea id="maintenance_message" name="message" rows="3"
       class="w-full border border-slate-300 rounded px-2 py-1 text-sm"
-      placeholder="Back at 17:00 UTC; upgrading the database.">{{ maintenance_message }}</textarea>
+      placeholder="{{ "admin-settings-maintenance-message-placeholder"|t }}">{{ maintenance_message }}</textarea>
   </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save maintenance mode</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-maintenance-save"|t }}</button>
 </form>
 
-<h1 class="text-lg font-semibold mb-4">SMTP (outbound mail)</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-settings-smtp-heading"|t }}</h1>
 <div class="max-w-lg p-3 rounded bg-slate-50 border border-slate-200 text-sm space-y-2">
   <p class="text-slate-700">
-    SMTP is configured via environment variables, not the admin UI. Set
+    {{ "admin-settings-smtp-note-1"|t }}
     <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_TLS</code>
     (<code>tls</code> / <code>starttls</code> / <code>none</code>),
-    <code>SMTP_FROM</code>, and the optional
-    <code>SMTP_USERNAME</code> / <code>SMTP_PASSWORD</code> pair, then
-    restart the server. See <code>README.md</code> for the full list.
+    <code>SMTP_FROM</code>, {{ "admin-settings-smtp-note-2"|t }}
+    <code>SMTP_USERNAME</code> / <code>SMTP_PASSWORD</code> {{ "admin-settings-smtp-note-3"|t }}
+    <code>README.md</code> {{ "admin-settings-smtp-note-4"|t }}
   </p>
   <p class="text-slate-500 text-xs">
-    Earlier builds rendered an SMTP form here that wrote to
-    <code>settings.db</code> but was never read by the mailer; the form has
-    been removed and any stale rows are cleared by the next migration.
+    {{ "admin-settings-smtp-note-5"|t }}
+    <code>settings.db</code> {{ "admin-settings-smtp-note-6"|t }}
   </p>
 </div>
 
-<h1 class="text-lg font-semibold mt-8 mb-4">Email ingress (IMAP poll)</h1>
+<h1 class="text-lg font-semibold mt-8 mb-4">{{ "admin-settings-imap-heading"|t }}</h1>
 {% if imap_saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">IMAP settings saved. Restart the server to pick up the new configuration.</div>
+<div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-imap-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = imap_error %}
 <div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
 {% endif %}
 <p class="text-sm text-slate-600 max-w-lg mb-3">
-  Lets-chat polls this mailbox every 5 minutes; messages addressed to
-  <code>&lt;token&gt;@&lt;ingress domain&gt;</code> post to their target room as the synthetic
-  email actor. Set up a dedicated mailbox at your provider and point this form
-  at it. The password is encrypted at rest under <code>LETS_CHAT_SECRET_KEY</code>.
-  After saving, restart the server: the spawn gate reads this row at startup,
-  not per tick.
+  {{ "admin-settings-imap-intro-1"|t }}
+  <code>&lt;token&gt;@&lt;ingress domain&gt;</code> {{ "admin-settings-imap-intro-2"|t }}
+  <code>LETS_CHAT_SECRET_KEY</code>. {{ "admin-settings-imap-intro-3"|t }}
 </p>
 <form method="post" action="/admin/settings/imap" class="max-w-lg space-y-4">
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_host">IMAP host</label>
+    <label class="block text-sm font-medium mb-1" for="imap_host">{{ "admin-settings-imap-host"|t }}</label>
     <input id="imap_host" name="imap_host" type="text" value="{{ imap_host }}"
            placeholder="imap.example.com"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_port">IMAP port</label>
+    <label class="block text-sm font-medium mb-1" for="imap_port">{{ "admin-settings-imap-port"|t }}</label>
     <input id="imap_port" name="imap_port" type="text" value="{{ imap_port }}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">993 for IMAPS (recommended). The TLS toggle below should match.</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-port-note"|t }}</p>
   </div>
   <div>
     <label class="flex items-start gap-2 text-sm cursor-pointer">
       <input id="imap_tls" name="imap_tls" type="checkbox" value="1" class="mt-0.5"
         {% if imap_tls %}checked{% endif %}>
-      <span>Use TLS (port 993)</span>
+      <span>{{ "admin-settings-imap-use-tls"|t }}</span>
     </label>
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_username">IMAP username</label>
+    <label class="block text-sm font-medium mb-1" for="imap_username">{{ "admin-settings-imap-username"|t }}</label>
     <input id="imap_username" name="imap_username" type="text" value="{{ imap_username }}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_password">IMAP password (write-only)</label>
+    <label class="block text-sm font-medium mb-1" for="imap_password">{{ "admin-settings-imap-password"|t }}</label>
     <input id="imap_password" name="imap_password" type="password" value=""
-           placeholder="{% if imap_password_configured %}leave blank to keep existing{% else %}not configured yet{% endif %}"
+           placeholder="{% if imap_password_configured %}{{ "admin-settings-imap-password-keep"|t }}{% else %}{{ "admin-settings-imap-password-unset"|t }}{% endif %}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_folder">Folder to poll</label>
+    <label class="block text-sm font-medium mb-1" for="imap_folder">{{ "admin-settings-imap-folder"|t }}</label>
     <input id="imap_folder" name="imap_folder" type="text" value="{{ imap_folder }}"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_ingress_domain">Ingress domain</label>
+    <label class="block text-sm font-medium mb-1" for="imap_ingress_domain">{{ "admin-settings-imap-ingress-domain"|t }}</label>
     <input id="imap_ingress_domain" name="imap_ingress_domain" type="text" value="{{ imap_ingress_domain }}"
            placeholder="mail.example.com"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">The <code>@&lt;domain&gt;</code> half of the address an external sender mails. Per-room inbox addresses become <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-ingress-domain-note-1"|t }} <code>@&lt;domain&gt;</code> {{ "admin-settings-imap-ingress-domain-note-2"|t }} <code>&lt;token&gt;@&lt;this domain&gt;</code>.</p>
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1" for="imap_dead_letter_folder">Dead-letter folder (optional)</label>
+    <label class="block text-sm font-medium mb-1" for="imap_dead_letter_folder">{{ "admin-settings-imap-dead-letter"|t }}</label>
     <input id="imap_dead_letter_folder" name="imap_dead_letter_folder" type="text" value="{{ imap_dead_letter_folder }}"
            placeholder="INBOX/lets-chat-rejected"
            class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
-    <p class="text-xs text-slate-500 mt-1">When set, dropped messages are UID-COPYd into this IMAP folder before being marked <code>\Seen</code> on the source. You must create the folder at your IMAP provider; lets-chat does not auto-create it. Empty = off (drops are diagnosed by log only).</p>
+    <p class="text-xs text-slate-500 mt-1">{{ "admin-settings-imap-dead-letter-note-1"|t }} <code>\Seen</code> {{ "admin-settings-imap-dead-letter-note-2"|t }}</p>
   </div>
   <div>
     <label class="flex items-start gap-2 text-sm cursor-pointer">
       <input id="imap_enabled" name="imap_enabled" type="checkbox" value="1" class="mt-0.5"
         {% if imap_enabled %}checked{% endif %}>
       <span>
-        Enable IMAP poll
+        {{ "admin-settings-imap-enable"|t }}
         <span class="block text-xs text-slate-500 mt-1">
-          Off until you have verified the configuration. The poll loop refuses to spawn on missing fields; check server logs after restart.
+          {{ "admin-settings-imap-enable-note"|t }}
         </span>
       </span>
     </label>
   </div>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save IMAP settings</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-imap-save"|t }}</button>
 </form>
 
-<h2 class="text-base font-semibold mt-8 mb-3">Uploads</h2>
+<h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-uploads-heading"|t }}</h2>
 {% if let Some(n) = regenerated %}
-<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">Generated {{ n }} preview(s).</div>
+<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
 {% endif %}
 {% if let Some(n) = purged %}
-<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">Purged {{ n }} orphan upload(s).</div>
+<div class="mb-3 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
 {% endif %}
 <div class="max-w-lg space-y-2 text-sm">
   <div class="flex justify-between">
-    <span>On-disk size</span>
+    <span>{{ "admin-settings-uploads-disk-size"|t }}</span>
     <span class="font-mono">{{ uploads_total_display }}</span>
   </div>
   <div class="flex justify-between">
-    <span>Orphan rows (uploads not attached to a message)</span>
+    <span>{{ "admin-settings-uploads-orphan-rows"|t }}</span>
     <span class="font-mono">{{ uploads_orphan_count }}</span>
   </div>
   <div class="pt-2 space-y-3">
     <div>
       <form method="post" action="/admin/uploads/regenerate-thumbnails" class="inline">
-        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Regenerate thumbnails</button>
+        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-uploads-regenerate"|t }}</button>
       </form>
-      <p class="mt-1 text-xs text-slate-500">May take several minutes on large deployments. Wait for the page to reload; do not click again.</p>
+      <p class="mt-1 text-xs text-slate-500">{{ "admin-settings-uploads-regenerate-note"|t }}</p>
     </div>
     <div>
       <form method="post" action="/admin/uploads/purge-orphans" class="inline">
-        <button type="submit" class="px-3 py-1 bg-slate-600 text-white rounded hover:bg-slate-700 text-sm">Purge orphans now</button>
+        <button type="submit" class="px-3 py-1 bg-slate-600 text-white rounded hover:bg-slate-700 text-sm">{{ "admin-settings-uploads-purge"|t }}</button>
       </form>
     </div>
   </div>
 </div>
 
-<h2 class="text-base font-semibold mt-8 mb-3">Defaults for new users</h2>
+<h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-defaults-heading"|t }}</h2>
 <form method="post" action="/admin/settings/email-digest-default" class="max-w-lg space-y-2">
   <label class="flex items-start gap-2 cursor-pointer">
     <input type="checkbox" name="default_notify_email_digest" value="1" class="mt-0.5"
       {% if default_notify_email_digest %}checked{% endif %}>
     <span>
-      New users start with email digest enabled
+      {{ "admin-settings-defaults-digest"|t }}
       <span class="block text-xs text-slate-500 mt-1">
-        Off by default for privacy. Only affects future registrations; existing users are not changed. Email digest also requires SMTP configured via environment variables.
+        {{ "admin-settings-defaults-digest-note"|t }}
       </span>
     </span>
   </label>
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Save default</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-settings-defaults-save"|t }}</button>
 </form>
 {% endblock %}

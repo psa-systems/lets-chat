@@ -3,8 +3,8 @@
 <div id="lc-command-result" hx-swap-oob="innerHTML">
   <div class="mb-1 rounded border border-slate-200 bg-slate-50 p-2 text-xs">
     <div class="flex items-center justify-between">
-      <span class="font-semibold text-slate-700">Slash commands</span>
-      <button type="button" aria-label="Dismiss"
+      <span class="font-semibold text-slate-700">{{ "room-slash-help-heading"|t }}</span>
+      <button type="button" aria-label="{{ "room-slash-dismiss"|t }}"
               onclick="var s=document.getElementById('lc-command-result'); if(s)s.innerHTML='';"
               class="text-slate-400 hover:text-slate-700 leading-none">&times;</button>
     </div>

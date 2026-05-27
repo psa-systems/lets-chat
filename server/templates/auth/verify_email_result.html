@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Email verification - lets-chat{% endblock %}
+{% block title %}{{ "verify-email-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
   <section class="w-full max-w-sm space-y-4 bg-white p-6 rounded shadow">
-    <h1 class="text-xl font-semibold">Email verification</h1>
+    <h1 class="text-xl font-semibold">{{ "verify-email-title"|t }}</h1>
     {% if let Some(notice) = notice %}
     <p class="text-green-700 text-sm">{{ notice }}</p>
     {% endif %}
     {% include "auth/form_errors.html" %}
     <p class="text-sm text-center">
-      <a href="/" class="text-blue-600 hover:underline">Open lets-chat</a>
+      <a href="/" class="text-blue-600 hover:underline">{{ "verify-email-open-link"|t }}</a>
       <span class="text-slate-400 mx-1">·</span>
-      <a href="/login" class="text-blue-600 hover:underline">Sign in</a>
+      <a href="/login" class="text-blue-600 hover:underline">{{ "verify-email-signin-link"|t }}</a>
     </p>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </section>

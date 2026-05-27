@@ -15,11 +15,13 @@ use crate::auth::AuthUser;
 use crate::commands;
 use crate::db;
 use crate::error::AppError;
+#[allow(unused_imports)]
+use crate::i18n::filters;
 use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::views::room::ComposerFragment;
 use crate::views::{html, Html};
-use askama::Template;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 /// Cap on a webhook command's response body, so a misbehaving endpoint
 /// cannot post a wall of text.

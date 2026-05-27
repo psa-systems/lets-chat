@@ -1,6 +1,6 @@
 {% if a.is_audio() %}
 <div class="lc-voice mt-1" data-lc-voice data-src="{{ a.url }}" data-waveform="{{ a.waveform_csv() }}" data-duration="{{ a.duration_attr() }}">
-  <button type="button" class="lc-voice-play" aria-label="Play voice message">
+  <button type="button" class="lc-voice-play" aria-label="{{ "partials-voice-play"|t }}">
     <svg class="lc-voice-icon-play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.8a1 1 0 011.04-.06l9 5.2a1 1 0 010 1.73l-9 5.2A1 1 0 016 14V3.66a1 1 0 01.3-.86z"/></svg>
     <svg class="lc-voice-icon-pause" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M5.75 3A1.75 1.75 0 004 4.75v10.5c0 .97.78 1.75 1.75 1.75h1.5A1.75 1.75 0 009 15.25V4.75A1.75 1.75 0 007.25 3h-1.5zM12.75 3A1.75 1.75 0 0011 4.75v10.5c0 .97.78 1.75 1.75 1.75h1.5A1.75 1.75 0 0016 15.25V4.75A1.75 1.75 0 0014.25 3h-1.5z"/></svg>
   </button>

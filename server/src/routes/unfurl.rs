@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::i18n::filters; // LC-188: in-scope for the |t/|tn template filters.
 use askama::Template;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;

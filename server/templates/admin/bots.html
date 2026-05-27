@@ -1,13 +1,11 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Bots - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-bots-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Bots</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-bots-heading"|t }}</h1>
 <p class="text-sm text-slate-600 mb-4">
-  Bot accounts are machine identities. They authenticate only via their API
-  token (the cookie login refuses them), post with a "bot" badge, and never
-  receive notifications. Disabling a bot bans it and revokes all its tokens.
+  {{ "admin-bots-intro"|t }}
 </p>
 
 {% if let Some(err) = error %}
@@ -17,7 +15,7 @@
 {% if let Some(tok) = new_token %}
 <div class="mb-4 p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
   <p class="font-medium text-green-800">
-    Bot{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} created. Copy its API token now - it won't be shown again.
+    {{ "admin-bots-created-prefix"|t }}{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} {{ "admin-bots-created-suffix"|t }}
   </p>
   <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
 </div>
@@ -25,34 +23,33 @@
 
 {% if !available %}
 <div class="mb-4 p-3 rounded bg-amber-50 text-amber-800 text-sm">
-  Bots require a server secret key (<code>LETS_CHAT_SECRET_KEY</code>) to mint
-  their API token. Set it and restart to create bots.
+  {{ "admin-bots-no-secret-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>) {{ "admin-bots-no-secret-2"|t }}
 </div>
 {% else %}
 <form method="post" action="/admin/bots" class="space-y-3 border rounded-lg p-4 mb-6 max-w-2xl">
-  <h2 class="font-semibold">Create a bot</h2>
+  <h2 class="font-semibold">{{ "admin-bots-create-heading"|t }}</h2>
   <label class="block text-sm">
-    <span class="text-slate-700">Username</span>
+    <span class="text-slate-700">{{ "admin-bots-username"|t }}</span>
     <input name="username" type="text" required maxlength="32" placeholder="standup-bot"
            class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
   </label>
   <fieldset class="text-sm">
-    <legend class="text-slate-700 mb-1">API token scopes</legend>
+    <legend class="text-slate-700 mb-1">{{ "admin-bots-token-scopes"|t }}</legend>
     <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_read"> <code>messages:read</code></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_write" checked> <code>messages:write</code></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="s_rooms_read"> <code>rooms:read</code></label>
   </fieldset>
-  <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create bot</button>
+  <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "admin-bots-create-button"|t }}</button>
 </form>
 {% endif %}
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Bot</th>
-      <th class="py-2">Created</th>
-      <th class="py-2">Status</th>
-      <th class="py-2 text-right">Actions</th>
+      <th class="py-2">{{ "admin-bots-th-bot"|t }}</th>
+      <th class="py-2">{{ "admin-bots-th-created"|t }}</th>
+      <th class="py-2">{{ "admin-bots-th-status"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-bots-th-actions"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -60,18 +57,18 @@
     <tr class="border-t border-slate-200">
       <td class="py-1 font-mono text-xs">{{ b.username }}</td>
       <td class="py-1 text-xs text-slate-500">{{ b.created_at }}</td>
-      <td class="py-1 text-xs">{% if b.disabled %}<span class="text-red-600">disabled</span>{% else %}active{% endif %}</td>
+      <td class="py-1 text-xs">{% if b.disabled %}<span class="text-red-600">{{ "admin-bots-status-disabled"|t }}</span>{% else %}{{ "admin-bots-status-active"|t }}{% endif %}</td>
       <td class="py-1 text-right">
         {% if !b.disabled %}
         <form method="post" action="/admin/bots/{{ b.id }}/disable" class="inline">
-          <button type="submit" class="text-red-600 hover:underline text-xs">Disable</button>
+          <button type="submit" class="text-red-600 hover:underline text-xs">{{ "admin-bots-disable"|t }}</button>
         </form>
         {% endif %}
       </td>
     </tr>
     {% endfor %}
     {% if bots.is_empty() %}
-    <tr><td colspan="4" class="py-4 text-center text-slate-400 text-xs">No bots yet.</td></tr>
+    <tr><td colspan="4" class="py-4 text-center text-slate-400 text-xs">{{ "admin-bots-empty"|t }}</td></tr>
     {% endif %}
   </tbody>
 </table>

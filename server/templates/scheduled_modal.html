@@ -24,14 +24,14 @@
   <div data-lc-scheduled-modal-panel
        class="w-96 rounded-lg bg-white p-5 shadow-xl">
     <div class="flex items-center justify-between gap-2 mb-3">
-      <h2 id="lc-scheduled-modal-title" class="text-lg font-semibold">Schedule message</h2>
+      <h2 id="lc-scheduled-modal-title" class="text-lg font-semibold">{{ "scheduled-modal-title"|t }}</h2>
       <button type="button" data-lc-scheduled-modal-close
-              aria-label="Close dialog"
+              aria-label="{{ "poll-close-dialog"|t }}"
               class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
     </div>
     <form data-lc-scheduled-modal-form class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-slate-700">Deliver at (your local time)</span>
+        <span class="text-slate-700">{{ "scheduled-modal-deliver-at"|t }}</span>
         <input type="datetime-local"
                name="scheduled_for_local"
                required
@@ -42,9 +42,9 @@
            role="alert"></div>
       <div class="flex justify-end gap-2 mt-1">
         <button type="button" data-lc-scheduled-modal-cancel
-                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+                class="rounded px-3 py-1 text-sm text-slate-600 hover:bg-slate-100">{{ "action-cancel"|t }}</button>
         <button type="submit"
-                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">Schedule</button>
+                class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700">{{ "scheduled-modal-submit"|t }}</button>
       </div>
     </form>
   </div>

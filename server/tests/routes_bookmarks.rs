@@ -336,8 +336,11 @@ async fn saved_page_empty_when_no_bookmarks() {
     let t = app_with_two_users().await;
     let (status, body) = send(&t.app, &t.viewer_session, Method::GET, "/saved").await;
     assert_eq!(status, StatusCode::OK);
+    // LC-188: the empty-state string is now i18n-externalized; Askama
+    // HTML-escapes the `t` filter output, so an apostrophe renders as an
+    // entity. Match an escaping-stable substring instead of "haven't".
     assert!(
-        body.contains("haven't saved any messages"),
+        body.contains("saved any messages"),
         "empty-state missing: {body}"
     );
 }

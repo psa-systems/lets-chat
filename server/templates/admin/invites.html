@@ -1,22 +1,22 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Invites - Admin - lets-chat{% endblock %}
+{% block title %}{{ "admin-invites-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">Invite codes</h1>
+<h1 class="text-lg font-semibold mb-4">{{ "admin-invites-heading"|t }}</h1>
 
 <form method="post" action="/admin/invites" class="mb-6 flex gap-2">
-  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Create invite</button>
+  <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">{{ "admin-invites-create"|t }}</button>
 </form>
 
 <table class="w-full text-sm">
   <thead>
     <tr class="text-left text-slate-500 border-b border-slate-200">
-      <th class="py-2">Code</th>
-      <th class="py-2">Created by</th>
-      <th class="py-2">Created at</th>
-      <th class="py-2">Used by</th>
-      <th class="py-2 text-right">Action</th>
+      <th class="py-2">{{ "admin-invites-th-code"|t }}</th>
+      <th class="py-2">{{ "admin-invites-th-created-by"|t }}</th>
+      <th class="py-2">{{ "admin-invites-th-created-at"|t }}</th>
+      <th class="py-2">{{ "admin-invites-th-used-by"|t }}</th>
+      <th class="py-2 text-right">{{ "admin-invites-th-action"|t }}</th>
     </tr>
   </thead>
   <tbody>
@@ -28,7 +28,7 @@
       <td class="py-1">{% if let Some(name) = inv.used_by_username.as_ref() %}{{ name }}{% else %}-{% endif %}</td>
       <td class="py-1 text-right">
         {% if inv.used_by_username.is_none() %}
-        <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">Revoke</button>
+        <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" class="text-red-600 hover:underline">{{ "admin-invites-revoke"|t }}</button>
         {% else %}
         <span class="text-slate-400">-</span>
         {% endif %}

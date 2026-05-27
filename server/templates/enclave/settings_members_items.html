@@ -4,7 +4,7 @@
    whichever parent struct includes it. Unlike the read-only landing list, this
    one carries the role-toggle / kick / transfer controls, gated on can_delete
    (owner or site admin), so it is rendered per recipient. #}
-<h2 class="font-semibold">Members</h2>
+<h2 class="font-semibold">{{ "enclave-members-settings-heading"|t }}</h2>
 <ul class="mt-2 space-y-1">
   {% for m in members %}
   <li class="flex items-center justify-between gap-2">
@@ -14,16 +14,16 @@
     <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role" class="inline">
       <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}"
               type="submit" class="text-xs bg-slate-200 rounded px-2 py-0.5">
-        {% if m.role.as_str() == "admin" %}Demote{% else %}Promote{% endif %}
+        {% if m.role.as_str() == "admin" %}{{ "enclave-settings-member-demote"|t }}{% else %}{{ "enclave-settings-member-promote"|t }}{% endif %}
       </button>
     </form>
     <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick" class="inline">
-      <button type="submit" class="text-xs text-red-600">Kick</button>
+      <button type="submit" class="text-xs text-red-600">{{ "enclave-settings-member-kick"|t }}</button>
     </form>
     <form method="post" action="/enclave/{{ enclave.id }}/transfer" class="inline">
       <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
       <button type="submit" class="text-xs text-blue-600"
-              onclick="return confirm('Transfer ownership to {{ m.label }}?')">Transfer</button>
+              onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
     </form>
     {% endif %}
   </li>

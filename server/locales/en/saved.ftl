@@ -1,0 +1,9 @@
+# LC-188: Saved messages page chrome. Keep in sync with es/saved.ftl.
+
+## Saved messages
+saved-page-title = Saved
+saved-heading = Saved messages
+saved-empty = You haven't saved any messages yet. Hover over a message and click "Save" to add it here.
+saved-in = in
+saved-saved-at = saved
+saved-unsave = Unsave
