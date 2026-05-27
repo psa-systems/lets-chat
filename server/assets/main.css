@@ -83,6 +83,55 @@ html, body {
     color-scheme: dark; /* native form controls + scrollbars go dark */
 }
 
+/* LC-192: high-contrast palettes. Maximal text/surface contrast (AAA for body
+   text), pure-black/white borders (always visible, no low-contrast greys), and
+   a thicker focus ring (see the [data-theme^="hc-"] :focus-visible rule below).
+   State colors use the darker/lighter 700-ish shades so they pass AA against
+   the surface. Auto-selected on `prefers-contrast: more` when theme = System
+   (resolved in the base.html bootstrap). */
+[data-theme="hc-light"] {
+    --surface:          #ffffff;
+    --surface-elevated: #ffffff;
+    --surface-sunken:   #f5f5f5;
+    --content:          #000000;
+    --content-muted:    #1f2937; /* gray-800: AAA on white, not a faint grey */
+    --content-subtle:   #374151; /* gray-700 */
+    --border:           #000000;
+    --border-strong:    #000000;
+    --accent:           #1d4ed8; /* blue-700: >=AA on white as text/fill */
+    --accent-hover:     #1e40af; /* blue-800 */
+    --accent-content:   #ffffff;
+    --success:          #15803d; /* green-700 */
+    --success-content:  #ffffff;
+    --warning:          #b45309; /* amber-700 */
+    --warning-content:  #ffffff;
+    --danger:           #b91c1c; /* red-700 */
+    --danger-content:   #ffffff;
+    --ring:             #000000;
+    color-scheme: light;
+}
+[data-theme="hc-dark"] {
+    --surface:          #000000;
+    --surface-elevated: #0a0a0a;
+    --surface-sunken:   #000000;
+    --content:          #ffffff;
+    --content-muted:    #e5e7eb; /* gray-200 */
+    --content-subtle:   #d1d5db; /* gray-300 */
+    --border:           #ffffff;
+    --border-strong:    #ffffff;
+    --accent:           #93c5fd; /* blue-300: high contrast on black */
+    --accent-hover:     #bfdbfe; /* blue-200 */
+    --accent-content:   #000000;
+    --success:          #4ade80; /* green-400 */
+    --success-content:  #000000;
+    --warning:          #fbbf24; /* amber-400 */
+    --warning-content:  #000000;
+    --danger:           #f87171; /* red-400 */
+    --danger-content:   #000000;
+    --ring:             #ffffff;
+    color-scheme: dark;
+}
+
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
    focus but NOT on plain mouse clicks (`:focus-visible` heuristic). Pinned
    to blue-600 so it matches the per-component `focus:ring-blue-500` already
@@ -90,9 +139,15 @@ html, body {
    Those three elements keep their custom ring: their `focus:outline-none`
    utility has higher specificity than this selector and wins. */
 :focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--ring, #2563eb);
     outline-offset: 2px;
     border-radius: 2px;
+}
+/* LC-192: thicker, offset focus ring in high-contrast themes. */
+[data-theme="hc-light"] :focus-visible,
+[data-theme="hc-dark"] :focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
 }
 
 #main {
