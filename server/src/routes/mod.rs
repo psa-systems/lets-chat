@@ -215,6 +215,43 @@ pub(crate) async fn resolve_msg_author(
     load_author_meta(state, user_id, viewer_id).await
 }
 
+/// LC-78: synthesize the `actor` block for the LC-75 outgoing-webhook
+/// payload. Describes the ORIGINAL author of the message, not whoever
+/// triggered the current event (a `message.edited` event still names the
+/// message's author here, not the editor). That matches the bridge
+/// daemon's loop-back concern: the daemon needs to ignore events for
+/// messages it itself produced.
+///
+/// **Operator-visible contract.** A daemon MUST self-filter
+/// `actor.kind == "<its own kind>" && actor.<its own id field> == <its id>`
+/// on every outgoing-webhook event or it creates an infinite cross-network
+/// amplification loop. The server provides the field; loop-break is the
+/// daemon's responsibility (see docs/protocol-bridges.md).
+///
+/// The bridge arm is gated on `bridge_foreign_name.is_some()`, NOT on
+/// `bridge_id.is_some()`, mirroring the render resolver. Under stop-new
+/// removal `bridge_id` is nulled while the snapshot strings persist; the
+/// resolver and the loop-break payload must stay consistent so removed-
+/// bridge messages do not silently flip kind from `bridge` to `user`
+/// in mid-life.
+pub(crate) fn outgoing_actor(
+    user_id: &str,
+    webhook_id: Option<i64>,
+    email_inbox_id: Option<i64>,
+    bridge_id: Option<i64>,
+    bridge_foreign_name: Option<&str>,
+) -> serde_json::Value {
+    if let Some(wid) = webhook_id {
+        serde_json::json!({ "kind": "webhook", "webhook_id": wid })
+    } else if let Some(eid) = email_inbox_id {
+        serde_json::json!({ "kind": "email_inbox", "email_inbox_id": eid })
+    } else if bridge_foreign_name.is_some() {
+        serde_json::json!({ "kind": "bridge", "bridge_id": bridge_id })
+    } else {
+        serde_json::json!({ "kind": "user", "user_id": user_id })
+    }
+}
+
 pub(crate) async fn load_author_meta(
     state: &AppState,
     user_id: &str,
