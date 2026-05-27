@@ -23,7 +23,7 @@
     </div>
     {% endif %}
     <h1 class="text-xl font-semibold text-center">
-      {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}Sign in{% endif %}
+      {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}{{ "login-title"|t }}{% endif %}
     </h1>
     {% if !brand_body_html.is_empty() %}
     <div class="text-sm text-slate-600 prose prose-sm max-w-none">{{ brand_body_html|safe }}</div>
@@ -32,14 +32,14 @@
       {% include "auth/form_errors.html" %}
     </div>
     <label class="block">
-      <span class="text-sm">Username</span>
+      <span class="text-sm">{{ "login-username"|t }}</span>
       <input name="username" required class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <label class="block">
-      <span class="text-sm">Password</span>
+      <span class="text-sm">{{ "login-password"|t }}</span>
       <input type="password" name="password" required class="mt-1 block w-full border rounded px-2 py-1">
     </label>
-    <button class="w-full brand-bg text-white py-2 rounded">Sign in</button>
+    <button class="w-full brand-bg text-white py-2 rounded">{{ "login-submit"|t }}</button>
     <p class="text-sm text-center"><a href="/forgot" class="text-blue-600 hover:underline">Forgot password?</a></p>
     <p class="text-sm text-center">No account? <a href="/register" class="text-blue-600 hover:underline">Register</a>.</p>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>

@@ -39,6 +39,10 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
 http = "1"
 askama = "0.12"
+# LC-100: i18n. fluent-templates embeds server/locales/**/*.ftl at compile time
+# (single-binary) and resolves Fluent messages incl. plural selectors.
+fluent-templates = "0.9"
+unic-langid = { version = "0.9", features = ["macros"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
 argon2 = "0.5"
 rand = "0.8"

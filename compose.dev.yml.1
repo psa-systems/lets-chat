@@ -1,0 +1,60 @@
+---
+# Developer Docker Compose: builds via the same multi-stage Dockerfile as
+# production, then attaches the running container to the shared Traefik
+# network so it is reachable at https://${USER}-chat.a8n.run.
+name: chat-${USER}
+
+services:
+
+  dev-lets-chat-app:
+    build:
+      context: .
+      dockerfile: ci-build/Dockerfile.web
+      args:
+        BUILD_MODE: ${BUILD_MODE:-standalone}
+        GIT_HASH: ${GIT_HASH:-unknown}
+        GIT_VERSION: ${GIT_VERSION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    container_name: dev-lets-chat-app-${USER}
+    restart: unless-stopped
+    environment:
+      RUST_LOG: lets_chat=debug
+      LETS_CHAT_DATA_DIR: /data
+      LETS_CHAT_SECRET_KEY: sghsgG8vVnvr9gddWwrL03
+      BIND_ADDR: 0.0.0.0:8080
+      # SMTP relay (kept out of git via skip-worktree on compose.dev.yml).
+      # See .env.standalone for variable documentation.
+      LETS_CHAT_BASE_URL: "https://${USER}-chat.a8n.run"
+      SMTP_HOST: "mail.a8n.run"
+      SMTP_PORT: "465"
+      SMTP_TLS: "implicit"
+      SMTP_USERNAME: "nate@a8n.run"
+      SMTP_PASSWORD: "aksre znav bqmq siye ivr"
+      SMTP_FROM: "Let's Chat <nate@a8n.run>"
+    volumes:
+      - dev-lets-chat-data:/data
+    networks:
+      - dev-lets-chat-private
+      - network-traefik-public
+    # Sequence form (not mapping) so Compose interpolates ${USER} in the
+    # router/service name segments. Compose v2 does NOT substitute variables
+    # inside YAML mapping keys, only in values; sequence items are values
+    # end-to-end, so the whole "key=value" string gets interpolated.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=network-traefik-public"
+      - "traefik.http.routers.chat-${USER}.rule=Host(`${USER}-chat.a8n.run`)"
+      - "traefik.http.routers.chat-${USER}.service=chat-${USER}@docker"
+      - "traefik.http.routers.chat-${USER}.entrypoints=web-secure"
+      - "traefik.http.routers.chat-${USER}.tls.certresolver=cert-cloudflare"
+      - "traefik.http.services.chat-${USER}.loadbalancer.server.port=8080"
+
+volumes:
+  dev-lets-chat-data:
+    name: dev-lets-chat-data-${USER}
+
+networks:
+  dev-lets-chat-private:
+    name: dev-lets-chat-private-${USER}
+  network-traefik-public:
+    external: true

@@ -1,5 +1,10 @@
 use askama::Template;
 
+// LC-100: the `| t` / `| tn` i18n filters resolve to `filters::t(..)` in the
+// generated template code, so bring the filter module into scope.
+#[allow(unused_imports)]
+use crate::i18n::filters;
+
 #[derive(Template)]
 #[template(path = "auth/login.html")]
 pub struct LoginPage<'a> {
