@@ -36,7 +36,11 @@ pub async fn start_session(
 
 /// Close the open session for a room (kill-switch / revoke / auto-revoke).
 /// No-op if none is open.
-pub async fn end_session_by_room(pool: &SqlitePool, room_id: i64, reason: &str) -> sqlx::Result<()> {
+pub async fn end_session_by_room(
+    pool: &SqlitePool,
+    room_id: i64,
+    reason: &str,
+) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE remote_control_sessions
          SET ended_at = datetime('now'), end_reason = ?2
