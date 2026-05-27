@@ -51,7 +51,7 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme \
          FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
     )
     .fetch_all(pool)
@@ -74,7 +74,7 @@ pub async fn find_user_by_username(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -99,7 +99,7 @@ pub async fn find_user_by_id(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -148,6 +148,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         totp_recovery_hashes: r.get("totp_recovery_hashes"),
         is_bot: r.get::<i64, _>("is_bot") != 0,
         locale: r.get("locale"),
+        theme: r.get("theme"),
     }
 }
 
@@ -520,7 +521,7 @@ pub async fn get_user_by_session(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -540,6 +541,20 @@ pub async fn set_user_locale(
 ) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE users SET locale = ? WHERE id = ?")
         .bind(locale)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-191: set (or clear, with `None`) a user's preferred UI theme.
+pub async fn set_user_theme(
+    pool: &SqlitePool,
+    user_id: &str,
+    theme: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET theme = ? WHERE id = ?")
+        .bind(theme)
         .bind(user_id)
         .execute(pool)
         .await?;
@@ -574,7 +589,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -1008,7 +1023,7 @@ pub async fn search_users(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme \
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
@@ -1262,7 +1277,7 @@ pub async fn list_blocked_users(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
          WHERE b.blocker_id = ? \

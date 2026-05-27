@@ -14,6 +14,12 @@ settings-language = Idioma
 settings-language-help = Elige el idioma de la interfaz.
 settings-language-system = Usar el idioma del navegador
 settings-language-save = Guardar idioma
+settings-appearance = Apariencia
+settings-appearance-help = Elige cómo se ve la interfaz.
+settings-appearance-save = Guardar apariencia
+theme-system = Usar la configuración del sistema
+theme-light = Claro
+theme-dark = Oscuro
 
 ## Login
 login-title = Iniciar sesión
