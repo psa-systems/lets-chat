@@ -25,6 +25,9 @@
   <div id="lc-notify-bus" class="sr-only" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
   <div id="lc-call-bus" class="hidden"></div>
   <div id="lc-voice-bus" class="hidden"></div>
+  {# LC-183/184: remote-control consent signals (request/grant/deny/revoke) are
+     rendered here as data-lc-control-event nodes; call.js consumes + drains. #}
+  <div id="lc-control-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
     <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
          role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
@@ -50,11 +53,30 @@
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
         <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
+        {# LC-184: remote-control grant/deny prompt. Shown to the screen-sharer
+           when a verified peer requests control. Non-modal (the active-call
+           focus trap stays owned by the dialog) but visually prominent. #}
+        <div data-lc-control-prompt role="alertdialog" aria-modal="false" aria-hidden="true"
+             class="hidden absolute left-1/2 top-20 -translate-x-1/2 z-10 w-80 rounded-lg bg-white p-5 text-center shadow-xl">
+          <div class="text-sm text-slate-500">Remote control request</div>
+          <div data-lc-control-prompt-name class="mt-1 text-base font-semibold text-slate-900"></div>
+          <p class="mt-1 text-xs text-slate-500">They will be able to move your mouse and type on your keyboard.</p>
+          <div class="mt-4 flex justify-center gap-3">
+            <button type="button" data-lc-control-grant class="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Grant control</button>
+            <button type="button" data-lc-control-deny class="rounded bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300">Deny</button>
+          </div>
+        </div>
       </div>
       <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
         <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Mute</button>
         <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">Start video</button>
         <button type="button" data-lc-call-screen aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">Share screen</button>
+        {# LC-184: controller-side "Request control" affordance. Hidden until the
+           peer's video is live; toggles to "Stop controlling" while active.
+           Server enforces the verified-email + block gate at the relay, so a
+           dropped request never produces a grant (the requesting state times
+           out client-side). #}
+        <button type="button" data-lc-control-request aria-pressed="false" class="hidden rounded-full bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500">Request control</button>
         <button type="button" data-lc-open-devices title="Call devices" aria-label="Choose call devices" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
             <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
