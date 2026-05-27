@@ -82,6 +82,29 @@ admin-bots-status-active = activo
 admin-bots-disable = Desactivar
 admin-bots-empty = Aun no hay bots.
 
+admin-bridges-title = Puentes
+admin-bridges-heading = Puentes
+admin-bridges-intro = Los puentes de protocolo se ejecutan FUERA DEL PROCESO como demonios separados y publican mensajes de protocolos externos en una sala de lets-chat mediante la API. Registrar un puente aqui crea el usuario bot, emite su token API con alcance de puente, y guarda su configuracion de demonio sellada. El demonio se autentica con el token; lets-chat hace seguimiento de los latidos pero no ejecuta el demonio. Eliminar un puente detiene el trafico nuevo pero deja los mensajes historicos renderizables.
+admin-bridges-no-secret = Los puentes necesitan una clave secreta del servidor para sellar la configuracion del demonio.
+admin-bridges-created-prefix = Bot de puente
+admin-bridges-created-suffix = creado. Copia su token API ahora - no se mostrara de nuevo.
+admin-bridges-token-scopes-note = Alcances del token: bridge:post + bridge:heartbeat.
+admin-bridges-create-heading = Registrar un puente
+admin-bridges-room = Sala
+admin-bridges-bot-username = Nombre de usuario del bot
+admin-bridges-kind = Tipo de protocolo
+admin-bridges-kind-note = Los demonios de IRC y XMPP comparten esta superficie; v1 incluye solo Matrix.
+admin-bridges-config = Configuracion del demonio (opaca para el servidor, sellada en reposo)
+admin-bridges-config-note = Almacenada cifrada bajo LETS_CHAT_SECRET_KEY. La forma es especifica del demonio (tipicamente JSON con URL del homeserver y secreto compartido).
+admin-bridges-create-button = Registrar puente
+admin-bridges-th-room = Sala
+admin-bridges-th-kind = Tipo
+admin-bridges-th-bot = Bot
+admin-bridges-th-status = Estado
+admin-bridges-th-last-heartbeat = Ultimo latido
+admin-bridges-remove = Eliminar
+admin-bridges-empty = No hay puentes registrados.
+
 ## Branding
 admin-branding-title = Marca
 admin-branding-heading = Marca

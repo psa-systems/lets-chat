@@ -12,11 +12,12 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
-    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BuiltinCommandRowView, DeliveryRowView,
-    EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard, ModLogPage,
-    OutgoingWebhookDeliveriesPage, OutgoingWebhookRowView, OutgoingWebhooksPage,
-    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
-    SlashCommandRowView, SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
+    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BridgeRowView, BridgesPage,
+    BuiltinCommandRowView, DeliveryRowView, EnclavesPage, InvitesPage, LinkFilterPage,
+    LinkFilterRuleView, MetricCard, ModLogPage, OutgoingWebhookDeliveriesPage,
+    OutgoingWebhookRowView, OutgoingWebhooksPage, QuarantineEntryView, QuarantinePage,
+    RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView, SlashCommandsPage,
+    UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
 use crate::views::charts;
 use crate::views::{html, Html};
@@ -86,6 +87,8 @@ pub fn router() -> Router<AppState> {
         .route("/admin/modlog", get(get_modlog))
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
+        .route("/admin/bridges", get(get_bridges).post(post_bridges))
+        .route("/admin/bridges/{id}/remove", post(post_bridge_remove))
         .route(
             "/admin/outgoing-webhooks",
             get(get_outgoing_webhooks).post(post_outgoing_webhooks),
@@ -2497,6 +2500,300 @@ pub async fn post_bot_disable(
         .await?;
     }
     Ok(Redirect::to("/admin/bots"))
+}
+
+// LC-78: bridges -----------------------------------------------------------
+
+/// A bridge is considered `stale` when no heartbeat has been recorded for
+/// this many seconds. Set to 3x the typical 30s daemon heartbeat interval.
+/// The daemon's actual heartbeat cadence is up to the operator; this is the
+/// admin UI's threshold for surfacing "the daemon may have died."
+const BRIDGE_HEARTBEAT_STALE_SECS: i64 = 90;
+
+/// Derive the display status from the stored row. The daemon writes
+/// `healthy` / `errored` via the heartbeat endpoint; `pending` and `stale`
+/// are computed here so the DB schema does not need a polling sweeper.
+fn derive_bridge_status(b: &crate::models::Bridge) -> &'static str {
+    let Some(ts) = b.last_heartbeat_at.as_deref() else {
+        return "pending";
+    };
+    // SQLite's datetime('now') format: "YYYY-MM-DD HH:MM:SS" (UTC, no TZ).
+    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
+        .map(|dt| dt.and_utc());
+    let stale = match parsed {
+        Ok(dt) => (chrono::Utc::now() - dt).num_seconds() > BRIDGE_HEARTBEAT_STALE_SECS,
+        Err(_) => false,
+    };
+    if b.status == "errored" {
+        "errored"
+    } else if stale {
+        "stale"
+    } else {
+        "healthy"
+    }
+}
+
+#[derive(Deserialize)]
+pub struct BridgeCreateForm {
+    pub room_id: i64,
+    pub bot_username: String,
+    pub kind: String,
+    pub config: String,
+}
+
+async fn render_bridges_page(
+    state: &AppState,
+    user: &crate::models::User,
+    new_token: Option<String>,
+    new_bot_name: Option<String>,
+    error: Option<String>,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(state, user, None).await?;
+    let raw = db::bridges::list_all(&state.chat).await?;
+    // Resolve room name + bot username for each bridge. Joins span two DBs
+    // (rooms live in chat.db; users live in auth.db), so we run lookups per
+    // row. The admin bridges list is expected to stay small.
+    let mut bridges: Vec<BridgeRowView> = Vec::with_capacity(raw.len());
+    for b in &raw {
+        let room_name = db::chat::get_room(&state.chat, b.room_id)
+            .await?
+            .map(|r| r.name)
+            .unwrap_or_else(|| format!("#{}", b.room_id));
+        let bot_username = db::auth::find_user_by_id(&state.auth, &b.bot_user_id)
+            .await?
+            .map(|u| u.username)
+            .unwrap_or_else(|| "(unknown)".to_string());
+        bridges.push(BridgeRowView {
+            id: b.id,
+            room_id: b.room_id,
+            room_name,
+            kind: b.kind.clone(),
+            bot_username,
+            status: derive_bridge_status(b),
+            last_heartbeat_at: b.last_heartbeat_at.clone(),
+            last_error: b.last_error.clone(),
+            created_at: b.created_at.clone(),
+        });
+    }
+    // Room list for the create-form drop-down. Same admin-sees-all view as
+    // the rooms page; excludes DMs (a bridge to a 1:1 room doesn't make sense).
+    let admin_rooms_raw = db::chat::list_rooms(&state.chat, &user.id, true).await?;
+    let rooms: Vec<AdminRoomView> = admin_rooms_raw
+        .into_iter()
+        .map(|r| AdminRoomView {
+            id: r.id,
+            name: r.name,
+            topic: r.topic,
+            room_type: r.room_type,
+            invite_code: r.invite_code,
+            members: 0,
+            created_at: r.created_at,
+        })
+        .collect();
+    let page = BridgesPage {
+        user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "bridges",
+        available: state.secret_key.is_some(),
+        bridges: &bridges,
+        rooms: &rooms,
+        new_token,
+        new_bot_name,
+        error,
+    };
+    html(&page)
+}
+
+pub async fn get_bridges(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    render_bridges_page(&state, &user, None, None, None).await
+}
+
+/// POST /admin/bridges - create a bridge in one shot: mints the bot, sets
+/// its role tier, mints the bridge-scoped API token, seals the daemon
+/// config under LETS_CHAT_SECRET_KEY, and inserts the bridges row. The
+/// bot is committed only if every step succeeds; the bot is rolled back
+/// on partial failure so the admin can retry the same username.
+pub async fn post_bridges(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Form(form): Form<BridgeCreateForm>,
+) -> Result<Response, AppError> {
+    let Some(secret) = state.secret_key.as_ref() else {
+        return Ok(render_bridges_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Bridges need a server secret key (LETS_CHAT_SECRET_KEY).".into()),
+        )
+        .await?
+        .into_response());
+    };
+    let bot_username = form.bot_username.trim();
+    let kind = form.kind.trim();
+    let config = form.config.trim();
+    if bot_username.is_empty() {
+        return Ok(render_bridges_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Bot username is required.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    // v1 ships Matrix only. The schema accepts any kind (TEXT, no CHECK), so
+    // adding IRC/XMPP later is a code-level loosening; the gate is here.
+    if kind != "matrix" {
+        return Ok(render_bridges_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Only the 'matrix' kind is supported in v1.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    if config.is_empty() {
+        return Ok(render_bridges_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Daemon config is required.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    // 1. Mint bot user.
+    let bot_id = match db::auth::create_bot(&state.auth, bot_username).await {
+        Ok(id) => id,
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            return Ok(render_bridges_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("That bot username is already taken.".into()),
+            )
+            .await?
+            .into_response());
+        }
+        Err(e) => return Err(AppError::from(e)),
+    };
+    // 2. Assign the narrow `bridge` role tier (chunk 5 / require_not_bridge).
+    if let Err(e) = db::auth::set_user_role(&state.auth, &bot_id, db::auth::ROLE_BRIDGE).await {
+        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        return Err(AppError::from(e));
+    }
+    // 3. Mint the API token with exactly the two bridge scopes. No
+    // messages:write etc. so even without the role gate a leaked token
+    // could only post bridge messages + heartbeat to owned bridges.
+    let plaintext = crate::auth::generate_api_token();
+    let hash = crate::auth::hash_api_token(secret, &plaintext);
+    let scopes = format!(
+        "{} {}",
+        super::api::SCOPE_BRIDGE_POST,
+        super::api::SCOPE_BRIDGE_HEARTBEAT
+    );
+    if let Err(e) =
+        db::api_tokens::insert(&state.auth, &bot_id, "bridge token", &hash, &scopes, None).await
+    {
+        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        return Err(AppError::from(e));
+    }
+    // 4. Seal the daemon config and insert the bridges row.
+    if let Err(e) = db::bridges::insert(
+        &state.chat,
+        secret,
+        form.room_id,
+        kind,
+        config.as_bytes(),
+        &bot_id,
+        &actor.id,
+    )
+    .await
+    {
+        // Roll back the bot + its token so the admin can retry without a
+        // stuck-bot ghost row.
+        let _ = db::api_tokens::revoke_all_for_user(&state.auth, &bot_id).await;
+        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        return Err(AppError::Internal(format!("bridge insert failed: {e}")));
+    }
+    db::moderation::log_mod_action(
+        &state.chat,
+        "bridge_create",
+        &bot_id,
+        &actor.id,
+        Some(bot_username),
+        None,
+        Some(kind),
+    )
+    .await?;
+    Ok(render_bridges_page(
+        &state,
+        &actor,
+        Some(plaintext),
+        Some(bot_username.to_string()),
+        None,
+    )
+    .await?
+    .into_response())
+}
+
+/// POST /admin/bridges/{id}/remove - stop-new lifecycle removal. Deletes
+/// the bridges row, which triggers ON DELETE SET NULL on
+/// `messages.bridge_id`; the snapshotted `bridge_foreign_name` +
+/// `bridge_kind` columns persist so historical bridged messages still
+/// render as "alice (via matrix)". Does NOT ban the bot or revoke its
+/// token: the token's scopes are bridge:post + bridge:heartbeat, which
+/// have nothing to act on once the bridge is gone. The admin can disable
+/// the orphan bot via /admin/bots if they want.
+pub async fn post_bridge_remove(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    let removed = db::bridges::remove(&state.chat, id).await?;
+    if removed {
+        db::moderation::log_mod_action(
+            &state.chat,
+            "bridge_remove",
+            &id.to_string(),
+            &actor.id,
+            None,
+            None,
+            None,
+        )
+        .await?;
+    }
+    Ok(Redirect::to("/admin/bridges"))
 }
 
 // LC-75: outgoing webhooks ------------------------------------------------
