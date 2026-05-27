@@ -8,7 +8,7 @@
   <div class="relative overflow-hidden rounded border border-slate-200 px-3 py-2 text-sm">
     <div class="absolute inset-y-0 left-0 bg-slate-100" style="width: {{ opt.pct }}%;"></div>
     <div class="relative flex justify-between gap-2">
-      <span>{% if opt.voted_by_me %}<span aria-label="your vote">&#10003;</span> {% endif %}{{ opt.text }}</span>
+      <span>{% if opt.voted_by_me %}<span aria-label="{{ "partials-poll-your-vote"|t }}">&#10003;</span> {% endif %}{{ opt.text }}</span>
       <span class="tabular-nums text-slate-500">{{ opt.count }} &middot; {{ opt.pct }}%</span>
     </div>
     {% if !poll.anonymous && !opt.voters.is_empty() %}
@@ -35,9 +35,9 @@
   {% endif %}
   {% endfor %}
   <div class="text-xs text-slate-400 flex gap-2">
-    <span>{{ poll.total_voters }} voted</span>
-    {% if poll.allows_multi %}<span>&middot; multiple choice</span>{% endif %}
-    {% if poll.anonymous %}<span>&middot; anonymous</span>{% endif %}
-    {% if poll.closed %}<span>&middot; closed</span>{% else if let Some(at) = poll.closes_at.as_ref() %}<span>&middot; closes {{ at }} UTC</span>{% endif %}
+    <span>{{ poll.total_voters }} {{ "partials-poll-voted"|t }}</span>
+    {% if poll.allows_multi %}<span>&middot; {{ "partials-poll-multiple-choice"|t }}</span>{% endif %}
+    {% if poll.anonymous %}<span>&middot; {{ "partials-poll-anonymous"|t }}</span>{% endif %}
+    {% if poll.closed %}<span>&middot; {{ "partials-poll-closed"|t }}</span>{% else if let Some(at) = poll.closes_at.as_ref() %}<span>&middot; {{ "partials-poll-closes"|t }} {{ at }} UTC</span>{% endif %}
   </div>
 </div>

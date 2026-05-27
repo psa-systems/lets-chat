@@ -2,7 +2,7 @@
    live OOB fragment (ws/enclave_members_live.html) so both render identically.
    References `members` from whichever parent struct includes it. Read-only
    (label + role); the invite box and settings link stay in the page. #}
-<h2 class="font-semibold">Members ({{ members.len() }})</h2>
+<h2 class="font-semibold">{{ "enclave-members-heading"|t }} ({{ members.len() }})</h2>
 <ul class="mt-2 space-y-1">
   {% for m in members %}
   <li class="flex items-center justify-between gap-2">

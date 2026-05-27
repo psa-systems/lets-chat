@@ -46,8 +46,8 @@
   <div id="lc-slash-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-red-600" role="alert">
-    <span>Could not send.</span>
-    <button type="submit" class="underline hover:no-underline">Retry</button>
+    <span>{{ "room-composer-send-failed"|t }}</span>
+    <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
   </div>
   <input type="hidden" name="file_id">
   <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
@@ -60,12 +60,12 @@
        option exists in either popover, so Enter never both submits the partial
        text AND inserts. One guard, both comboboxes (no slash/mention divergence). -->
   <div class="flex items-end gap-2">
-    <button type="button" title="Attach file" aria-label="Attach file"
+    <button type="button" title="{{ "room-composer-attach-file"|t }}" aria-label="{{ "room-composer-attach-file"|t }}"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="document.getElementById('lc-file').click()">+</button>
-    <button type="button" id="lc-record" title="Record voice message"
+    <button type="button" id="lc-record" title="{{ "room-composer-record-voice"|t }}"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
-      aria-label="Record voice message">
+      aria-label="{{ "room-composer-record-voice"|t }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path d="M10 2a3 3 0 00-3 3v5a3 3 0 006 0V5a3 3 0 00-3-3z"/>
         <path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 005.25 5.954V17.5H7.75a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H10.75v-2.046A6 6 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-9 0z"/>
@@ -76,7 +76,7 @@
       rows="1"
       autocomplete="off"
       autofocus
-      placeholder="Message #{{ room.name }}"
+      placeholder="{{ "room-composer-message-placeholder"|t }} #{{ room.name }}"
       role="combobox"
       aria-autocomplete="list"
       aria-expanded="false"
@@ -108,8 +108,8 @@
     >{{ initial_draft }}</textarea>
     <button
       type="button"
-      title="Create poll"
-      aria-label="Create poll"
+      title="{{ "room-composer-create-poll"|t }}"
+      aria-label="{{ "room-composer-create-poll"|t }}"
       aria-haspopup="dialog"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="window.__lcOpenPollModal && window.__lcOpenPollModal()"
@@ -120,8 +120,8 @@
     </button>
     <button
       type="button"
-      title="Schedule for later"
-      aria-label="Schedule message for later"
+      title="{{ "room-composer-schedule-title"|t }}"
+      aria-label="{{ "room-composer-schedule-aria"|t }}"
       aria-haspopup="dialog"
       class="px-2 py-2 text-slate-500 hover:text-slate-800"
       onclick="window.__lcOpenScheduledModal && window.__lcOpenScheduledModal()"
@@ -135,7 +135,7 @@
       type="submit"
       disabled
       class="rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      aria-label="Send message"
+      aria-label="{{ "room-composer-send-message"|t }}"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.604.534l7.443.972c.336.044.336.526 0 .57l-7.443.972a.75.75 0 00-.604.534l-1.414 4.949a.75.75 0 00.826.95 28.74 28.74 0 0015.585-7.122.75.75 0 000-1.054A28.74 28.74 0 003.105 2.289z" />
@@ -144,7 +144,7 @@
   </div>
 </form>
 <div id="lc-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-blue-900/40">
-  <div class="rounded-lg bg-white px-6 py-4 text-lg font-semibold text-slate-800 shadow-lg">Drop file to attach</div>
+  <div class="rounded-lg bg-white px-6 py-4 text-lg font-semibold text-slate-800 shadow-lg">{{ "room-composer-drop-file"|t }}</div>
 </div>
 <script>
 (function(){

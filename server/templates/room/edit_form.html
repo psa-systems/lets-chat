@@ -7,7 +7,7 @@
 >
   <input name="body" value="{{ current_body }}" class="w-full border rounded px-2 py-1">
   <div class="text-xs mt-1 flex gap-2">
-    <button class="text-blue-600 hover:underline">Save</button>
-    <button type="button" hx-get="/messages/{{ message_id }}" hx-target="#msg-{{ message_id }}" hx-swap="outerHTML" class="text-slate-600 hover:underline">Cancel</button>
+    <button class="text-blue-600 hover:underline">{{ "room-save"|t }}</button>
+    <button type="button" hx-get="/messages/{{ message_id }}" hx-target="#msg-{{ message_id }}" hx-swap="outerHTML" class="text-slate-600 hover:underline">{{ "room-cancel"|t }}</button>
   </div>
 </form>

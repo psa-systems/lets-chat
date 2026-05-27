@@ -2,7 +2,7 @@
    #lc-slash-popover. Empty render hides the popover. Click inserts the
    command name into the composer via __lcInsertSlash. #}
 {% if !commands.is_empty() %}
-<ul id="lc-slash-list" role="listbox" aria-label="Slash commands"
+<ul id="lc-slash-list" role="listbox" aria-label="{{ "room-slash-help-heading"|t }}"
     class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg z-20">
   {% for c in commands %}
   <li role="option" data-slash-name="{{ c.name }}"

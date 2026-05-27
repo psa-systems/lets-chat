@@ -17,7 +17,7 @@
   <header class="mb-4">
     <h1 class="text-2xl font-semibold">{{ enclave.name }}</h1>
     {% if let Some(d) = enclave.description %}<p class="text-slate-600 mt-1">{{ d }}</p>{% endif %}
-    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">Public</span>{% endif %}
+    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
   </header>
 
   <div class="grid grid-cols-2 gap-6">
@@ -27,16 +27,16 @@
       </div>
       {% if can_manage %}
       <form method="post" action="/enclave/{{ enclave.id }}/rooms" class="mt-3 flex flex-wrap gap-2 items-center">
-        <input name="name" placeholder="new-room" class="border rounded px-2 py-1 text-sm" required>
+        <input name="name" placeholder="{{ "enclave-new-room-placeholder"|t }}" class="border rounded px-2 py-1 text-sm" required>
         <select name="kind" class="border rounded px-2 py-1 text-sm">
-          <option value="text">text</option>
-          <option value="voice">voice</option>
+          <option value="text">{{ "enclave-room-kind-text"|t }}</option>
+          <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
         </select>
         <select name="room_type" class="border rounded px-2 py-1 text-sm">
-          <option value="public">public</option>
-          <option value="private">private</option>
+          <option value="public">{{ "enclave-room-type-public"|t }}</option>
+          <option value="private">{{ "enclave-room-type-private"|t }}</option>
         </select>
-        <button type="submit" class="text-sm bg-blue-600 text-white rounded px-2 py-1">Add room</button>
+        <button type="submit" class="text-sm bg-blue-600 text-white rounded px-2 py-1">{{ "enclave-add-room"|t }}</button>
       </form>
       {% endif %}
     </section>
@@ -49,7 +49,7 @@
       <div class="relative mt-3" autocomplete="off">
         <input
           name="q"
-          placeholder="Invite by username..."
+          placeholder="{{ "enclave-invite-placeholder"|t }}"
           hx-get="/enclave/{{ enclave.id }}/invite/search"
           hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
           hx-target="#enclave-invite-results"
@@ -64,7 +64,7 @@
           class="w-full border rounded px-2 py-1 text-sm">
         <div id="enclave-invite-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
       </div>
-      <a href="/enclave/{{ enclave.id }}/settings" class="text-sm text-blue-600 hover:underline mt-3 inline-block">Enclave settings</a>
+      <a href="/enclave/{{ enclave.id }}/settings" class="text-sm text-blue-600 hover:underline mt-3 inline-block">{{ "enclave-settings-link"|t }}</a>
       {% endif %}
     </section>
   </div>

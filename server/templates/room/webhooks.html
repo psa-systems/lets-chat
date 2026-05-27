@@ -1,20 +1,18 @@
 {% extends "layout.html" %}
 
-{% block title %}Webhooks - #{{ room.name }} - lets-chat{% endblock %}
+{% block title %}{{ "room-webhooks-title"|t }} - #{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">Incoming webhooks</h1>
+    <h1 class="text-2xl font-semibold">{{ "room-webhooks-heading"|t }}</h1>
     <span class="text-sm text-slate-500">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-slate-600">
-    An incoming webhook lets an external system POST a JSON body to a secret
-    URL and have it appear in this room. Send
-    <code>{"text": "...", "markdown": true}</code> to
-    <code>POST &lt;url&gt;</code>. The URL is the credential - keep it secret;
-    it is shown only once.
+    {{ "room-webhooks-intro-1"|t }}
+    <code>{"text": "...", "markdown": true}</code> {{ "room-webhooks-intro-2"|t }}
+    <code>POST &lt;url&gt;</code>. {{ "room-webhooks-intro-3"|t }}
   </p>
 
   {% if let Some(err) = error %}
@@ -23,41 +21,41 @@
 
   {% if let Some(url) = new_url %}
   <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">Webhook created. Copy its URL now - it won't be shown again.</p>
+    <p class="font-medium text-green-800">{{ "room-webhooks-created"|t }}</p>
     <code class="block break-all bg-white border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
   <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
-    Webhooks require a server secret key (<code>LETS_CHAT_SECRET_KEY</code>).
-    Set it and restart to create webhooks.
+    {{ "room-webhooks-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
+    {{ "room-webhooks-unavailable-2"|t }}
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/webhooks" class="space-y-3 border rounded p-4">
-    <h2 class="font-semibold">Create a webhook</h2>
+    <h2 class="font-semibold">{{ "room-webhooks-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-slate-700">Display name</span>
-      <input name="name" type="text" required maxlength="80" placeholder="Grafana"
+      <span class="text-slate-700">{{ "room-inboxes-display-name"|t }}</span>
+      <input name="name" type="text" required maxlength="80" placeholder="{{ "room-webhooks-name-placeholder"|t }}"
              class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </label>
     <label class="block text-sm">
-      <span class="text-slate-700">Avatar URL (optional)</span>
+      <span class="text-slate-700">{{ "room-inboxes-avatar-url"|t }}</span>
       <input name="avatar_url" type="url" placeholder="https://example.com/icon.png"
              class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-sm">
     </label>
-    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">Create webhook</button>
+    <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700">{{ "room-webhooks-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <table class="w-full text-sm">
     <thead>
       <tr class="text-left text-slate-500 border-b border-slate-200">
-        <th class="py-2">Name</th>
-        <th class="py-2">Created</th>
-        <th class="py-2">Last used</th>
-        <th class="py-2">Status</th>
-        <th class="py-2 text-right">Actions</th>
+        <th class="py-2">{{ "room-table-name"|t }}</th>
+        <th class="py-2">{{ "room-table-created"|t }}</th>
+        <th class="py-2">{{ "room-table-last-used"|t }}</th>
+        <th class="py-2">{{ "room-table-status"|t }}</th>
+        <th class="py-2 text-right">{{ "room-table-actions"|t }}</th>
       </tr>
     </thead>
     <tbody>
@@ -65,19 +63,19 @@
       <tr class="border-t border-slate-200">
         <td class="py-1">{{ w.name }}</td>
         <td class="py-1 text-xs text-slate-500">{{ w.created_at }}</td>
-        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = w.last_used_at %}{{ at }}{% else %}never{% endif %}</td>
-        <td class="py-1 text-xs">{% if w.revoked %}<span class="text-red-600">revoked</span>{% else %}active{% endif %}</td>
+        <td class="py-1 text-xs text-slate-500">{% if let Some(at) = w.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+        <td class="py-1 text-xs">{% if w.revoked %}<span class="text-red-600">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
         <td class="py-1 text-right">
           {% if !w.revoked %}
           <form method="post" action="/room/{{ room.id }}/webhooks/{{ w.id }}/revoke" class="inline">
-            <button type="submit" class="text-red-600 hover:underline text-xs">Revoke</button>
+            <button type="submit" class="text-red-600 hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if webhooks.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No webhooks yet.</td></tr>
+      <tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">{{ "room-webhooks-empty"|t }}</td></tr>
       {% endif %}
     </tbody>
   </table>

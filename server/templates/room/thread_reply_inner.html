@@ -16,8 +16,8 @@
       hx-target="#history-panel"
       hx-swap="outerHTML"
       class="text-xs text-slate-400 hover:text-slate-600 hover:underline"
-      aria-label="View edit history"
-    >(edited)</button>
+      aria-label="{{ "room-msg-view-history"|t }}"
+    >{{ "room-msg-edited"|t }}</button>
     {% endif %}
   </div>
   <div class="lc-md leading-snug text-sm pl-7">{{ message.body_html()|safe }}</div>

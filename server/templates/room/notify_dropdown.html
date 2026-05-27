@@ -5,9 +5,9 @@
     aria-haspopup="menu"
     aria-expanded="false"
     aria-controls="lc-notify-menu-{{ room.id }}">
-    {% if mute_mode == "none" %}Unmuted
-    {% else if mute_mode == "except_mentions" %}Muted (mentions on)
-    {% else %}Muted{% endif %}
+    {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}
+    {% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}
+    {% else %}{{ "room-notify-muted"|t }}{% endif %}
   </button>
   <div id="lc-notify-menu-{{ room.id }}"
     role="menu"
@@ -21,15 +21,15 @@
           class="space-y-1">
       <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
         <input type="radio" name="mute_mode" value="none" {% if mute_mode == "none" %}checked{% endif %} class="mt-1">
-        <span><span class="font-medium">Unmuted</span><br><span class="text-xs text-slate-500">All notifications.</span></span>
+        <span><span class="font-medium">{{ "room-notify-unmuted"|t }}</span><br><span class="text-xs text-slate-500">{{ "room-notify-unmuted-desc"|t }}</span></span>
       </label>
       <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
         <input type="radio" name="mute_mode" value="except_mentions" {% if mute_mode == "except_mentions" %}checked{% endif %} class="mt-1">
-        <span><span class="font-medium">Muted (mentions on)</span><br><span class="text-xs text-slate-500">Only @-mentions notify.</span></span>
+        <span><span class="font-medium">{{ "room-notify-muted-mentions"|t }}</span><br><span class="text-xs text-slate-500">{{ "room-notify-muted-mentions-desc"|t }}</span></span>
       </label>
       <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
         <input type="radio" name="mute_mode" value="all" {% if mute_mode == "all" %}checked{% endif %} class="mt-1">
-        <span><span class="font-medium">Muted</span><br><span class="text-xs text-slate-500">No notifications, even mentions.</span></span>
+        <span><span class="font-medium">{{ "room-notify-muted"|t }}</span><br><span class="text-xs text-slate-500">{{ "room-notify-muted-desc"|t }}</span></span>
       </label>
     </form>
   </div>

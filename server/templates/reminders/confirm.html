@@ -4,14 +4,14 @@
      onmousedown="if(event.target===this)this.parentElement.innerHTML='';">
   <div class="w-80 rounded-lg bg-white p-5 shadow-xl text-center">
     <div class="text-2xl mb-2" aria-hidden="true">⏰</div>
-    <p class="text-sm text-slate-700">Reminder set for</p>
+    <p class="text-sm text-slate-700">{{ "reminders-set-for"|t }}</p>
     <p class="font-semibold">{{ remind_at }} UTC</p>
     <p class="mt-2 text-xs text-slate-500">
-      Manage it on the <a href="/reminders" class="text-blue-700 hover:underline">Reminders</a> page.
+      {{ "reminders-manage-prefix"|t }} <a href="/reminders" class="text-blue-700 hover:underline">{{ "reminders-manage-link"|t }}</a> {{ "reminders-manage-suffix"|t }}
     </p>
     <button type="button"
             class="mt-4 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
-            onclick="document.getElementById('lc-reminder-modal').innerHTML='';">Done</button>
+            onclick="document.getElementById('lc-reminder-modal').innerHTML='';">{{ "reminders-done"|t }}</button>
   </div>
 </div>
 <script>

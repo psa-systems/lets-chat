@@ -2,22 +2,22 @@
 
 {% block main %}
 <nav class="border-b border-slate-200 px-4 py-2 flex gap-4 text-sm items-center">
-  <a href="/admin" class="{% if section == "settings" %}font-semibold{% endif %}">Settings</a>
-  <a href="/admin/users" class="{% if section == "users" %}font-semibold{% endif %}">Users</a>
-  <a href="/admin/invites" class="{% if section == "invites" %}font-semibold{% endif %}">Invites</a>
-  <a href="/admin/rooms" class="{% if section == "rooms" %}font-semibold{% endif %}">Rooms</a>
-  <a href="/admin/enclaves" class="{% if section == "enclaves" %}font-semibold{% endif %}">Enclaves</a>
-  <a href="/admin/anti-spam" class="{% if section == "anti_spam" %}font-semibold{% endif %}">Anti-spam</a>
-  <a href="/admin/link-filter" class="{% if section == "link_filter" %}font-semibold{% endif %}">Link filter</a>
-  <a href="/admin/quarantine" class="{% if section == "quarantine" %}font-semibold{% endif %}">Quarantine</a>
-  <a href="/admin/branding" class="{% if section == "branding" %}font-semibold{% endif %}">Branding</a>
-  <a href="/admin/backup-restore" class="{% if section == "backup" %}font-semibold{% endif %}">Backup</a>
-  <a href="/admin/modlog" class="{% if section == "modlog" %}font-semibold{% endif %}">Mod log</a>
-  <a href="/admin/analytics" class="{% if section == "analytics" %}font-semibold{% endif %}">Analytics</a>
-  <a href="/admin/slash-commands" class="{% if section == "slash_commands" %}font-semibold{% endif %}">Commands</a>
-  <a href="/admin/bots" class="{% if section == "bots" %}font-semibold{% endif %}">Bots</a>
-  <a href="/admin/outgoing-webhooks" class="{% if section == "outgoing_webhooks" %}font-semibold{% endif %}">Webhooks</a>
-  <span class="ml-auto text-xs text-slate-400 font-mono" title="Release {{ git_version }} - built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
+  <a href="/admin" class="{% if section == "settings" %}font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
+  <a href="/admin/users" class="{% if section == "users" %}font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
+  <a href="/admin/invites" class="{% if section == "invites" %}font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
+  <a href="/admin/rooms" class="{% if section == "rooms" %}font-semibold{% endif %}">{{ "admin-nav-rooms"|t }}</a>
+  <a href="/admin/enclaves" class="{% if section == "enclaves" %}font-semibold{% endif %}">{{ "admin-nav-enclaves"|t }}</a>
+  <a href="/admin/anti-spam" class="{% if section == "anti_spam" %}font-semibold{% endif %}">{{ "admin-nav-anti-spam"|t }}</a>
+  <a href="/admin/link-filter" class="{% if section == "link_filter" %}font-semibold{% endif %}">{{ "admin-nav-link-filter"|t }}</a>
+  <a href="/admin/quarantine" class="{% if section == "quarantine" %}font-semibold{% endif %}">{{ "admin-nav-quarantine"|t }}</a>
+  <a href="/admin/branding" class="{% if section == "branding" %}font-semibold{% endif %}">{{ "admin-nav-branding"|t }}</a>
+  <a href="/admin/backup-restore" class="{% if section == "backup" %}font-semibold{% endif %}">{{ "admin-nav-backup"|t }}</a>
+  <a href="/admin/modlog" class="{% if section == "modlog" %}font-semibold{% endif %}">{{ "admin-nav-modlog"|t }}</a>
+  <a href="/admin/analytics" class="{% if section == "analytics" %}font-semibold{% endif %}">{{ "admin-nav-analytics"|t }}</a>
+  <a href="/admin/slash-commands" class="{% if section == "slash_commands" %}font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
+  <a href="/admin/bots" class="{% if section == "bots" %}font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
+  <a href="/admin/outgoing-webhooks" class="{% if section == "outgoing_webhooks" %}font-semibold{% endif %}">{{ "admin-nav-webhooks"|t }}</a>
+  <span class="ml-auto text-xs text-slate-400 font-mono" title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
 </nav>
 {# LC-175: subscribe admin pages to the `admin` topic so moderation actions
    (ban / mute / role / quota / delete) refresh the user list live across all

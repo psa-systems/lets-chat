@@ -1,60 +1,58 @@
 {% extends "layout.html" %}
 
-{% block title %}Moderators - #{{ room.name }} - lets-chat{% endblock %}
+{% block title %}{{ "room-mods-title"|t }} - #{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">Moderators</h1>
+    <h1 class="text-2xl font-semibold">{{ "room-mods-heading"|t }}</h1>
     <span class="text-sm text-slate-500">#{{ room.name }}</span>
   </div>
   <p class="text-sm">
-    <a href="/room/{{ room.id }}/webhooks" class="text-blue-600 hover:underline">Manage incoming webhooks</a>
+    <a href="/room/{{ room.id }}/webhooks" class="text-blue-600 hover:underline">{{ "room-mods-manage-webhooks"|t }}</a>
     <span class="text-slate-400 mx-1">·</span>
-    <a href="/room/{{ room.id }}/email-inboxes" class="text-blue-600 hover:underline">Manage email inboxes</a>
+    <a href="/room/{{ room.id }}/email-inboxes" class="text-blue-600 hover:underline">{{ "room-mods-manage-inboxes"|t }}</a>
     <span class="text-slate-400 mx-1">·</span>
-    <a href="/room/{{ room.id }}/feeds" class="text-blue-600 hover:underline">Manage feeds</a>
+    <a href="/room/{{ room.id }}/feeds" class="text-blue-600 hover:underline">{{ "room-mods-manage-feeds"|t }}</a>
   </p>
   <p class="text-sm text-slate-600">
-    Grant a room-scoped Moderator or Admin role. Overrides only elevate; removing one returns the user to their org-wide role inside this room.
+    {{ "room-mods-intro"|t }}
   </p>
 
   <section class="space-y-3 border rounded p-3">
-    <h2 class="font-semibold">Posting policy</h2>
+    <h2 class="font-semibold">{{ "room-mods-policy-heading"|t }}</h2>
     <p class="text-sm text-slate-600">
-      Controls who can post messages in this room. Reactions, pins, and edits of own messages are unaffected.
+      {{ "room-mods-policy-intro"|t }}
     </p>
     <form method="post" action="/room/{{ room.id }}/posting-policy" class="flex gap-2 items-end">
       <label class="flex-1">
-        <span class="text-sm">Who can post</span>
+        <span class="text-sm">{{ "room-mods-who-can-post"|t }}</span>
         <select name="policy" class="w-full border rounded px-2 py-1 text-sm">
-          <option value="all" {% if posting_policy == "all" %}selected{% endif %}>Everyone (default)</option>
-          <option value="moderators_only" {% if posting_policy == "moderators_only" %}selected{% endif %}>Moderators only</option>
-          <option value="admins_only" {% if posting_policy == "admins_only" %}selected{% endif %}>Admins only</option>
+          <option value="all" {% if posting_policy == "all" %}selected{% endif %}>{{ "room-mods-policy-all"|t }}</option>
+          <option value="moderators_only" {% if posting_policy == "moderators_only" %}selected{% endif %}>{{ "room-mods-policy-mods"|t }}</option>
+          <option value="admins_only" {% if posting_policy == "admins_only" %}selected{% endif %}>{{ "room-mods-policy-admins"|t }}</option>
         </select>
       </label>
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">Save</button>
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">{{ "room-save"|t }}</button>
     </form>
   </section>
 
   {% if room.room_type != "dm" %}
   <section class="space-y-3 border rounded p-3 border-red-200">
-    <h2 class="font-semibold text-red-800">Message retention</h2>
+    <h2 class="font-semibold text-red-800">{{ "room-retention-heading"|t }}</h2>
     <p class="text-sm text-slate-700">
-      Permanently delete messages older than N days. <strong>This cannot be undone.</strong>
-      Disabling retention later does not restore previously-deleted messages.
-      Pinned messages are not exempt; copy important content to the
-      <a href="/room/{{ room.id }}/info?tab=docs" class="text-blue-600 hover:underline">room wiki</a>
-      to preserve it.
-      Messages in threads with replies newer than the cutoff are preserved as a unit (active threads survive).
+      {{ "room-retention-intro-1"|t }} <strong>{{ "room-retention-cannot-undo"|t }}</strong>
+      {{ "room-retention-intro-2"|t }}
+      <a href="/room/{{ room.id }}/info?tab=docs" class="text-blue-600 hover:underline">{{ "room-retention-wiki-link"|t }}</a>
+      {{ "room-retention-intro-3"|t }}
     </p>
     <p class="text-sm">
       {% match retention_days %}
         {% when Some with (d) %}
-          <span>Currently <strong class="text-red-700">enabled</strong>: messages older than <strong>{{ d }} days</strong> are deleted.</span>
+          <span>{{ "room-retention-enabled-1"|t }} <strong class="text-red-700">{{ "room-retention-enabled-word"|t }}</strong>{{ "room-retention-enabled-2"|t }} <strong>{{ d }} {{ "room-retention-days"|t }}</strong> {{ "room-retention-enabled-3"|t }}</span>
         {% when None %}
-          <span>Currently <strong>disabled</strong>.</span>
+          <span>{{ "room-retention-disabled-1"|t }} <strong>{{ "room-retention-disabled-word"|t }}</strong>.</span>
       {% endmatch %}
     </p>
     <form hx-get="/room/{{ room.id }}/retention/preview"
@@ -62,25 +60,25 @@
           hx-swap="outerHTML"
           class="flex gap-2 items-end">
       <label class="flex-1">
-        <span class="text-sm">Retention (days, blank to disable)</span>
+        <span class="text-sm">{{ "room-retention-input-label"|t }}</span>
         <input type="number"
                name="days"
                min="1"
                step="1"
                value="{% match retention_days %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %}"
-               placeholder="Off"
+               placeholder="{{ "room-retention-off"|t }}"
                class="w-full border rounded px-2 py-1 text-sm" />
       </label>
-      <button type="submit" class="bg-slate-600 text-white rounded px-3 py-1 text-sm">Preview</button>
+      <button type="submit" class="bg-slate-600 text-white rounded px-3 py-1 text-sm">{{ "room-retention-preview"|t }}</button>
     </form>
     <div id="retention-preview"></div>
   </section>
   {% endif %}
 
   <section class="space-y-3">
-    <h2 class="font-semibold">Current overrides</h2>
+    <h2 class="font-semibold">{{ "room-mods-overrides-heading"|t }}</h2>
     {% if overrides.is_empty() %}
-    <p class="text-sm text-slate-500 italic">No overrides yet.</p>
+    <p class="text-sm text-slate-500 italic">{{ "room-mods-overrides-empty"|t }}</p>
     {% else %}
     <ul class="divide-y border rounded">
       {% for o in overrides %}
@@ -88,14 +86,14 @@
         <div>
           <div class="text-sm font-medium">{{ o.user_label }}</div>
           <div class="text-xs text-slate-500">
-            {{ o.role }} - granted by {{ o.assigned_by_label }} on {{ o.assigned_at }}
+            {{ o.role }} - {{ "room-mods-granted-by"|t }} {{ o.assigned_by_label }} {{ "room-mods-granted-on"|t }} {{ o.assigned_at }}
           </div>
         </div>
         <button type="button"
                 hx-delete="/room/{{ room.id }}/moderators/{{ o.user_id }}"
-                hx-confirm="Revoke {{ o.role }} for {{ o.user_label }}?"
+                hx-confirm="{{ "room-mods-revoke-confirm-1"|t }} {{ o.role }} {{ "room-mods-revoke-confirm-2"|t }} {{ o.user_label }}?"
                 hx-on::after-request="window.location.reload()"
-                class="text-xs text-red-600 hover:underline">Revoke</button>
+                class="text-xs text-red-600 hover:underline">{{ "room-table-revoke"|t }}</button>
       </li>
       {% endfor %}
     </ul>
@@ -103,13 +101,13 @@
   </section>
 
   <section class="space-y-3 border-t pt-4">
-    <h2 class="font-semibold">Grant override</h2>
+    <h2 class="font-semibold">{{ "room-mods-grant-heading"|t }}</h2>
     {% if candidates.is_empty() %}
-    <p class="text-sm text-slate-500 italic">Every enclave member already has an override.</p>
+    <p class="text-sm text-slate-500 italic">{{ "room-mods-grant-all-have"|t }}</p>
     {% else %}
     <form method="post" action="/room/{{ room.id }}/moderators" class="space-y-2">
       <label class="block">
-        <span class="text-sm">Member</span>
+        <span class="text-sm">{{ "room-mods-member"|t }}</span>
         <select name="user_id" required class="w-full border rounded px-2 py-1 text-sm">
           {% for c in candidates %}
           <option value="{{ c.user_id }}">{{ c.label }}</option>
@@ -117,18 +115,18 @@
         </select>
       </label>
       <label class="block">
-        <span class="text-sm">Role</span>
+        <span class="text-sm">{{ "room-mods-role"|t }}</span>
         <select name="role" required class="w-full border rounded px-2 py-1 text-sm">
-          <option value="moderator">Moderator (delete others' messages in this room)</option>
-          <option value="admin">Admin (Moderator + room settings, in this room)</option>
+          <option value="moderator">{{ "room-mods-role-moderator"|t }}</option>
+          <option value="admin">{{ "room-mods-role-admin"|t }}</option>
         </select>
       </label>
-      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">Grant</button>
+      <button type="submit" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">{{ "room-mods-grant-button"|t }}</button>
     </form>
     {% endif %}
   </section>
 
-  <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline inline-block">Back to #{{ room.name }}</a>
+  <a href="/room/{{ room.id }}" class="text-sm text-blue-600 hover:underline inline-block">{{ "room-mods-back-to"|t }} #{{ room.name }}</a>
 </section>
 </div>
 {% endblock %}

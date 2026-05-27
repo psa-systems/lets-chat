@@ -1,7 +1,9 @@
 //! LC-62: view structs for the `/scheduled` management page and its
 //! row-level HTMX fragments.
 
-use askama::Template;
+#[allow(unused_imports)]
+use crate::i18n::filters;
+use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 use crate::models::User;
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};

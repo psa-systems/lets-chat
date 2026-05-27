@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sign in - lets-chat{% endblock %}
+{% block title %}{{ "login-page-title"|t }} - lets-chat{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
@@ -40,8 +40,8 @@
       <input type="password" name="password" required class="mt-1 block w-full border rounded px-2 py-1">
     </label>
     <button class="w-full brand-bg text-white py-2 rounded">{{ "login-submit"|t }}</button>
-    <p class="text-sm text-center"><a href="/forgot" class="text-blue-600 hover:underline">Forgot password?</a></p>
-    <p class="text-sm text-center">No account? <a href="/register" class="text-blue-600 hover:underline">Register</a>.</p>
+    <p class="text-sm text-center"><a href="/forgot" class="text-blue-600 hover:underline">{{ "login-forgot-link"|t }}</a></p>
+    <p class="text-sm text-center">{{ "login-no-account"|t }} <a href="/register" class="text-blue-600 hover:underline">{{ "login-register-link"|t }}</a>.</p>
     <p class="text-xs text-center text-slate-400" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>

@@ -1,6 +1,6 @@
 {% if results.is_empty() %}
 <div class="bg-white border border-slate-300 rounded shadow-lg p-3">
-  <p class="text-sm text-slate-500">No matching people.</p>
+  <p class="text-sm text-slate-500">{{ "enclave-search-no-matches"|t }}</p>
 </div>
 {% else %}
 <div role="listbox" class="bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto">
@@ -26,14 +26,14 @@
           class="inline">
       <input type="hidden" name="user_id" value="{{ r.id }}">
       <button type="submit"
-              class="text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">Invite</button>
+              class="text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">{{ "enclave-search-invite"|t }}</button>
     </form>
     {% else if r.is_member() %}
-    <span class="text-xs text-slate-400">Member</span>
+    <span class="text-xs text-slate-400">{{ "enclave-search-member"|t }}</span>
     {% else if r.is_invited() %}
-    <span class="text-xs text-slate-400">Invited</span>
+    <span class="text-xs text-slate-400">{{ "enclave-search-invited"|t }}</span>
     {% else if r.is_self() %}
-    <span class="text-xs text-slate-400">(you)</span>
+    <span class="text-xs text-slate-400">{{ "enclave-search-you"|t }}</span>
     {% endif %}
   </div>
   {% endfor %}

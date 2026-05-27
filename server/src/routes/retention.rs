@@ -19,6 +19,8 @@
 //! already excludes DMs at the SQL level, this gate keeps the UI
 //! coherent).
 
+#[allow(unused_imports)]
+use crate::i18n::filters; // LC-188: in-scope for the |t/|tn template filters.
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},

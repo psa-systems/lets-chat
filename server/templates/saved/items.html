@@ -4,7 +4,7 @@
    includes it. #}
 {% if entries.is_empty() %}
 <p class="p-4 text-sm text-slate-500">
-  You haven't saved any messages yet. Hover over a message and click "Save" to add it here.
+  {{ "saved-empty"|t }}
 </p>
 {% else %}
 <ul class="divide-y divide-slate-200">
@@ -13,14 +13,14 @@
     <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
       <span>
         <span class="font-medium text-slate-700">{{ e.author_label }}</span>
-        &middot; in
+        &middot; {{ "saved-in"|t }}
         <a href="{{ e.context_path }}" class="text-blue-700 hover:underline">{{ e.context_label }}</a>
-        &middot; saved {{ e.saved_at }}
+        &middot; {{ "saved-saved-at"|t }} {{ e.saved_at }}
       </span>
       <button hx-delete="/messages/{{ e.message_id }}/bookmark"
               hx-target="#saved-row-{{ e.message_id }}"
               hx-swap="delete"
-              class="text-red-700 hover:underline">Unsave</button>
+              class="text-red-700 hover:underline">{{ "saved-unsave"|t }}</button>
     </div>
     <div class="mt-1 whitespace-pre-wrap text-sm text-slate-800">{{ e.body }}</div>
   </li>
