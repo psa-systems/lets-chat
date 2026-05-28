@@ -11,7 +11,7 @@
     <span class="font-bold">{{ e.initial }}</span>
     {% endif %}
     {% if e.unread + e.pending_invites > 0 %}
-    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1">
+    <span class="absolute -top-1 -right-1 bg-danger text-danger-content text-xs rounded-full px-1">
       {{ e.unread + e.pending_invites }}
     </span>
     {% endif %}
