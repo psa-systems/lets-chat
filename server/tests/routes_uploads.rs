@@ -173,6 +173,7 @@ async fn open_pool(name: &str) -> SqlitePool {
             include_str!("../migrations/chat/0053_room_feeds.sql"),
             include_str!("../migrations/chat/0054_bridges.sql"),
             include_str!("../migrations/chat/0055_messages_bridge_actor.sql"),
+            include_str!("../migrations/chat/0056_bridge_avatar_proxies.sql"),
         ],
         "settings" => vec![
             include_str!("../migrations/settings/0001_create_tables.sql"),

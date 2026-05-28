@@ -419,6 +419,22 @@ fn spawn_orphan_sweeper(state: AppState) {
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "email-ingress dedup sweep failed"),
             }
+            // LC-78-AVATAR-PROXY: drop unreferenced bridge-avatar cache
+            // entries older than 30 days, and recover any pending-fetch
+            // rows orphaned by a process restart (older than 10 minutes).
+            let avatar_stats = lets_chat::bridge_avatar::sweep_tick(&state.chat, 30, 600).await;
+            if avatar_stats.rows_deleted > 0
+                || avatar_stats.pending_marked_failed > 0
+                || avatar_stats.errors > 0
+            {
+                tracing::info!(
+                    rows = avatar_stats.rows_deleted,
+                    files = avatar_stats.files_deleted,
+                    pending_failed = avatar_stats.pending_marked_failed,
+                    errors = avatar_stats.errors,
+                    "bridge avatar sweep complete",
+                );
+            }
         }
     });
 }
