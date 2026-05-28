@@ -24,14 +24,20 @@ LC-78 lets an out-of-process daemon translate between lets-chat and a foreign pr
 
 **Isn't**: a sidekick lets-chat ships. v1 does not include a Matrix daemon binary or compose service. The operator runs a community daemon (`matrix-appservice-bridge`, `mx-puppet-discord`, or anything that can call this API) on their own infrastructure.
 
-## v1 scope (what works, what does not)
+## v2 release-notes header: foreign-avatar proxy is ON by default
 
-| Capability | v1 | Notes |
+> **Behavior change on upgrade.** LC-78-AVATAR-PROXY ships with foreign-avatar fetching **enabled by default**. The v1 reject-non-null behavior is preserved behind the `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` env var; set this BEFORE upgrading if you want v1's posture back. Daemons that observed v1's 400 may now start submitting `foreign_avatar` URLs (some daemon configs disabled the field client-side based on the v1 reject; if you bumped your daemon's config to omit the field, upgrading the server alone is sufficient).
+>
+> The proxy fetches each foreign avatar exactly once, caches the bytes server-side, and serves them from a same-origin URL (`/media/bridge-avatar-proxy/{hash}`). Viewers' browsers never hit the foreign homeserver. The structural side-channel closure: the foreign URL never appears in rendered HTML, only the opaque sha256 hash does. Reading the HTML reveals nothing about which homeservers the room bridges with.
+
+## v1 + v2 scope (what works, what does not)
+
+| Capability | Status | Notes |
 |---|---|---|
-| Matrix → lets-chat new messages | yes | Daemon POSTs `/api/v1/bridges/{id}/messages` with `body` + `foreign_name`. |
-| lets-chat → Matrix new messages | yes | Daemon subscribes to LC-75 `message.posted` and translates. |
-| Matrix per-user actor identity in lets-chat | yes | `foreign_name` snapshots on the row; "alice (via matrix)" renders. |
-| Foreign avatars | **rejected (400)** | Per-render fetch from arbitrary federated homeservers leaks viewer IPs. Defer to LC-78-AVATAR-PROXY, which would proxy-cache. v1 displays initials. |
+| Matrix → lets-chat new messages | yes (v1) | Daemon POSTs `/api/v1/bridges/{id}/messages` with `body` + `foreign_name`. |
+| lets-chat → Matrix new messages | yes (v1) | Daemon subscribes to LC-75 `message.posted` and translates. |
+| Matrix per-user actor identity in lets-chat | yes (v1) | `foreign_name` snapshots on the row; "alice (via matrix)" renders. |
+| Foreign avatars | **proxied (v2)** | Server fetches once via `bridge_avatar::fetch_and_cache`, magic-byte-sniffs, re-encodes through the uploads pipeline (EXIF / XMP / IPTC strip), stores on disk, serves from `/media/bridge-avatar-proxy/{hash}`. Pending fetch and failed fetch both 404 from the proxy endpoint; the `<img onerror>` falls back to initials. v1's reject behavior is restored by `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false`. |
 | Edits / deletes (either direction) | **deferred** | LC-75 fires `message.edited` and `message.deleted` with the `actor` block, so the daemon CAN see them; v1 daemons are expected to ignore. Pushing Matrix `m.replace` events to lets-chat needs an `/api/v1/bridges/{id}/messages/{mid}/edit` endpoint that v1 does not ship. |
 | Reactions | **deferred** | LC-75 fires `reaction.added`; v1 daemon ignores. Matrix reaction model differs from lets-chat's. |
 | Threads | **deferred** | Matrix threading model differs. |

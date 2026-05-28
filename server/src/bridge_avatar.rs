@@ -225,6 +225,77 @@ pub fn proxy_enabled() -> bool {
     }
 }
 
+/// LC-78-AVATAR-PROXY GC sweep. Piggybacks on the hourly orphan tick.
+/// Two passes:
+///
+/// 1. **Unreferenced retention.** Rows whose `last_seen_at` is older than
+///    `older_than_days` AND that no live `messages.bridge_foreign_avatar`
+///    row references are deleted, along with their on-disk file. `last_seen_at`
+///    is bumped on every bridge-message POST that mentions the hash, so an
+///    actively-bridged avatar stays cached forever.
+///
+/// 2. **Pending orphans.** Rows stuck in `pending` longer than
+///    `pending_older_than_secs` are marked `failed` ("orphaned pending fetch").
+///    The fetch task should complete within seconds; a row sitting in pending
+///    for minutes means the task crashed or the process restarted before it
+///    finished. Marking failed lets the render fall back to initials via
+///    `<img onerror>` rather than rendering a permanently-pending state.
+///
+/// Returns counts for logging. Errors are returned so the caller can log,
+/// not propagated up so a partial sweep is still useful.
+pub async fn sweep_tick(
+    chat: &SqlitePool,
+    older_than_days: i64,
+    pending_older_than_secs: i64,
+) -> SweepStats {
+    let mut stats = SweepStats::default();
+    match crate::db::bridge_avatar_proxies::sweep_unreferenced(chat, older_than_days).await {
+        Ok(hashes) => {
+            for hash in hashes {
+                let path = crate::db::bridge_avatars_dir().join(&hash);
+                match tokio::fs::remove_file(&path).await {
+                    Ok(_) => stats.files_deleted += 1,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        tracing::warn!(error = %e, %hash, "bridge avatar file unlink failed");
+                        stats.errors += 1;
+                    }
+                }
+                match crate::db::bridge_avatar_proxies::delete_by_hash(chat, &hash).await {
+                    Ok(true) => stats.rows_deleted += 1,
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::warn!(error = %e, %hash, "bridge avatar row delete failed");
+                        stats.errors += 1;
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "bridge avatar unreferenced sweep failed");
+            stats.errors += 1;
+        }
+    }
+    match crate::db::bridge_avatar_proxies::sweep_pending_orphans(chat, pending_older_than_secs)
+        .await
+    {
+        Ok(n) => stats.pending_marked_failed = n,
+        Err(e) => {
+            tracing::warn!(error = %e, "bridge avatar pending-orphan sweep failed");
+            stats.errors += 1;
+        }
+    }
+    stats
+}
+
+#[derive(Debug, Default)]
+pub struct SweepStats {
+    pub rows_deleted: usize,
+    pub files_deleted: usize,
+    pub pending_marked_failed: u64,
+    pub errors: usize,
+}
+
 /// Compute the cache key for a foreign avatar URL. Canonicalization:
 /// lowercase scheme + host, strip default ports, strip fragment. Path
 /// stays as-is (Matrix media URLs are case-sensitive).
