@@ -3,9 +3,9 @@
    window.__lcOpenPollModal(); reads the current composer's data-room-id at
    open time. Submits to POST /room/{id}/poll and closes on 2xx. #}
 <div data-lc-poll-modal
-     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     class="hidden modal-backdrop"
      role="dialog" aria-modal="true" aria-labelledby="lc-poll-modal-title" aria-hidden="true">
-  <div class="w-96 rounded-lg bg-surface-elevated p-5 shadow-xl">
+  <div class="modal-panel">
     <div class="flex items-center justify-between gap-2 mb-3">
       <h2 id="lc-poll-modal-title" class="text-lg font-semibold">{{ "poll-create-title"|t }}</h2>
       <button type="button" data-lc-poll-close aria-label="{{ "poll-close-dialog"|t }}"

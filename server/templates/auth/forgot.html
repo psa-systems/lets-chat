@@ -11,7 +11,7 @@
     hx-target="#form-errors"
     hx-target-4*="#form-errors"
     hx-swap="innerHTML"
-    class="w-full max-w-sm space-y-4 bg-surface-elevated p-6 rounded shadow"
+    class="card w-full max-w-sm space-y-4 p-6"
   >
     <h1 class="text-xl font-semibold">{{ "forgot-title"|t }}</h1>
     <p class="text-sm text-content-muted">
@@ -25,9 +25,9 @@
     </div>
     <label class="block">
       <span class="text-sm">{{ "forgot-email"|t }}</span>
-      <input type="email" name="email" required class="mt-1 block w-full border rounded px-2 py-1">
+      <input type="email" name="email" required class="input mt-1">
     </label>
-    <button class="w-full bg-accent text-accent-content py-2 rounded hover:bg-accent-hover">{{ "forgot-submit"|t }}</button>
+    <button class="btn btn-primary w-full">{{ "forgot-submit"|t }}</button>
     <p class="text-sm text-center">
       {{ "forgot-remembered"|t }} <a href="/login" class="text-accent hover:underline">{{ "forgot-signin-link"|t }}</a>.
     </p>
