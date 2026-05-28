@@ -25,7 +25,14 @@
 
 use std::path::{Path, PathBuf};
 
-const ALLOWED_FILE_BASENAMES: &[&str] = &["http_client.rs"];
+/// Exception list — **full paths relative to the server crate root**, not
+/// basenames. A basename match would silently exempt any future file
+/// named `http_client.rs` anywhere under `src/` (e.g.,
+/// `src/foo/http_client.rs`), inheriting the raw-construction allowance
+/// and reopening the bypass. Full-path match means exactly ONE file is
+/// exempted, and the exception list cannot be widened by adding files
+/// with the same basename.
+const ALLOWED_FILE_PATHS: &[&str] = &["src/http_client.rs"];
 
 const FORBIDDEN: &[(&str, &str)] = &[
     ("reqwest::Client::new", "raw reqwest::Client::new()"),
@@ -60,13 +67,10 @@ fn no_raw_reqwest_or_unchecked_in_src() {
         "no .rs files found under src/ — test must run from the server crate root"
     );
 
+    let allowed: Vec<PathBuf> = ALLOWED_FILE_PATHS.iter().map(PathBuf::from).collect();
     let mut violations: Vec<String> = Vec::new();
     for file in &files {
-        let basename = file
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        if ALLOWED_FILE_BASENAMES.contains(&basename) {
+        if allowed.iter().any(|p| file == p) {
             continue;
         }
         let body = std::fs::read_to_string(file).expect("read file");
@@ -111,17 +115,28 @@ fn no_raw_reqwest_or_unchecked_in_src() {
     }
 }
 
-/// Sanity test for the test itself: the allowed file (http_client.rs) DOES
-/// contain forbidden patterns (it's the only place they're allowed). If
-/// this test ever fails it means the allow-list is broken or the file moved.
+/// Sanity test for the test itself. Two things this proves:
+/// 1. Every entry in `ALLOWED_FILE_PATHS` exists on disk at that exact
+///    relative path. Catches a file move that would otherwise silently
+///    DEFANG the exception list (no file matches the entry, the ban
+///    still runs across every file in `src/`, the test still passes
+///    because nothing was wrongly exempted — but the EXCEPTION is dead
+///    code, which would surface as a confusing compile error the next
+///    time `http_client.rs` legitimately needs to use a forbidden
+///    pattern). Better to fail loudly on a moved file.
+/// 2. The allowed file ACTUALLY contains at least one forbidden pattern.
+///    If it doesn't, either the file was gutted (the helper isn't doing
+///    its job) or the `FORBIDDEN` list is stale.
 #[test]
 fn allow_list_actually_finds_the_allowed_file() {
-    let body = std::fs::read_to_string("src/http_client.rs")
-        .expect("http_client.rs must exist; if it moved, update the ban's allow list");
-    let has_raw = FORBIDDEN.iter().any(|(pat, _)| body.contains(pat));
-    assert!(
-        has_raw,
-        "http_client.rs does not contain any forbidden patterns; either \
-         it has been gutted (bug), or the FORBIDDEN list is stale (refresh it)"
-    );
+    for path in ALLOWED_FILE_PATHS {
+        let body = std::fs::read_to_string(path)
+            .unwrap_or_else(|_| panic!("ALLOWED_FILE_PATHS entry {path:?} not found on disk; if the file moved, update the ban"));
+        let has_raw = FORBIDDEN.iter().any(|(pat, _)| body.contains(pat));
+        assert!(
+            has_raw,
+            "{path:?} does not contain any forbidden patterns; either it has \
+             been gutted (bug) or the FORBIDDEN list is stale (refresh it)"
+        );
+    }
 }
