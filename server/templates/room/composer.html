@@ -29,7 +29,9 @@
     }
     ta.focus();
   "
-  class="border-t border-border p-2"
+  {# LC-199: lc-pb-safe pushes the form's bottom padding down by the iOS
+     home-indicator inset on mobile (no-op on desktop / non-cutout devices). #}
+  class="border-t border-border px-2 pt-2 lc-pb-safe"
 >
   <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-content-muted"></div>
   <!-- LC-98: offline-outbox status, toggled by /assets/outbox.js. -->
