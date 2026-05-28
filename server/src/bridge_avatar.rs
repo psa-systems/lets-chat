@@ -207,6 +207,24 @@ async fn mark(chat: &SqlitePool, hash: &str, reason: &str) {
     let _ = bridge_avatar_proxies::mark_failed(chat, hash, reason).await;
 }
 
+/// LC-78-AVATAR-PROXY operator gate. Default ON in v2: the foreign-avatar
+/// proxy is enabled and the bridge endpoint accepts `foreign_avatar` URLs.
+/// Set `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` (or `0`) to restore
+/// the v1 reject-non-null behavior; the POST endpoint then 400s any
+/// non-null `foreign_avatar` exactly as it did in v1, and the proxy GET
+/// endpoint returns 404 for every hash. Read per-request so flipping the
+/// flag does not require a restart, but the env::var lookup is microseconds
+/// and not on a hot loop.
+pub fn proxy_enabled() -> bool {
+    match std::env::var("LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED") {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            !(v == "false" || v == "0" || v == "no" || v == "off")
+        }
+        Err(_) => true,
+    }
+}
+
 /// Compute the cache key for a foreign avatar URL. Canonicalization:
 /// lowercase scheme + host, strip default ports, strip fragment. Path
 /// stays as-is (Matrix media URLs are case-sensitive).
