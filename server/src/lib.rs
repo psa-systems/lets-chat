@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod backup;
 pub mod bg;
+pub mod bridge_avatar;
 pub mod commands;
 pub mod crypto;
 pub mod db;

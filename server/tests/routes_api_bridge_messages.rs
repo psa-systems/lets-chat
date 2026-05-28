@@ -188,22 +188,81 @@ async fn bridge_post_from_wrong_bot_is_403() {
 }
 
 #[tokio::test]
-async fn bridge_post_with_foreign_avatar_is_400_in_v1() {
-    // LC-78 v1 rejects foreign avatar URLs: per-render fetches from arbitrary
-    // federated homeservers would leak viewer IPs. The proxy-cache that
-    // closes this lands in LC-78-AVATAR-PROXY. Fail loud (not silent drop) so
-    // the operator sees the policy.
+async fn bridge_post_with_invalid_foreign_avatar_url_is_400() {
+    // LC-78-AVATAR-PROXY (v2): foreign_avatar is now accepted when the
+    // operator gate is on (default), but invalid URLs / non-http(s) schemes
+    // / private-resolving hosts are still rejected with 400.
     let t = app().await;
-    mint(&t, &t.bot_id, "lc_br_av", "bridge:post").await;
+    mint(&t, &t.bot_id, "lc_br_av_bad", "bridge:post").await;
     let (status, body) = post(
         &t.app,
-        "lc_br_av",
+        "lc_br_av_bad",
         &format!("/api/v1/bridges/{}/messages", t.bridge_id),
-        r#"{"body":"x","foreign_name":"alice","foreign_avatar":"https://matrix.org/_matrix/media/v1/foo"}"#,
+        r#"{"body":"x","foreign_name":"alice","foreign_avatar":"not-a-url"}"#,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body.contains("LC-78-AVATAR-PROXY"));
+    assert!(body.to_lowercase().contains("url"), "expected URL-shape error; got {body}");
+}
+
+#[tokio::test]
+async fn bridge_post_with_private_resolving_foreign_avatar_is_400() {
+    // SSRF re-resolve at submit time rejects loopback (`localhost` resolves
+    // to 127.0.0.1). The fetch task does its own re-resolve too (LC-152
+    // shape), but failing at submit time means the row never lands in the
+    // proxy cache for a private target.
+    let t = app().await;
+    mint(&t, &t.bot_id, "lc_br_av_loop", "bridge:post").await;
+    let (status, body) = post(
+        &t.app,
+        "lc_br_av_loop",
+        &format!("/api/v1/bridges/{}/messages", t.bridge_id),
+        r#"{"body":"x","foreign_name":"alice","foreign_avatar":"http://localhost/avatar.png"}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body.contains("public"),
+        "expected SSRF rejection; got {body}"
+    );
+}
+
+#[tokio::test]
+async fn bridge_post_with_foreign_avatar_stores_hash_v2() {
+    // LC-78-AVATAR-PROXY (v2) happy path: accepts a valid public URL, stores
+    // the sha256 hash on the message row, upserts a `pending` row in
+    // bridge_avatar_proxies. The fetch task is fire-and-forget; this test
+    // does NOT wait for it to complete (would require a local HTTP receiver
+    // and async timing), only that the wiring is right.
+    let t = app().await;
+    mint(&t, &t.bot_id, "lc_br_av_ok", "bridge:post").await;
+    let (status, _) = post(
+        &t.app,
+        "lc_br_av_ok",
+        &format!("/api/v1/bridges/{}/messages", t.bridge_id),
+        r#"{"body":"hi","foreign_name":"alice","foreign_avatar":"https://example.com/avatar.png"}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // Hash stored on message row.
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT bridge_foreign_avatar FROM messages WHERE body = 'hi'",
+    )
+    .fetch_one(&t.chat)
+    .await
+    .unwrap();
+    assert!(
+        stored.as_deref().map(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit())).unwrap_or(false),
+        "expected 64-char hex hash on message row; got {stored:?}",
+    );
+    // Cache row created (pending or ok; the fetch is async so we don't pin status).
+    let row_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bridge_avatar_proxies WHERE foreign_url = 'https://example.com/avatar.png'",
+    )
+    .fetch_one(&t.chat)
+    .await
+    .unwrap();
+    assert_eq!(row_count, 1);
 }
 
 #[tokio::test]

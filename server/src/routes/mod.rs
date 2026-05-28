@@ -33,6 +33,7 @@ mod auth;
 mod avatar;
 mod bookmarks;
 mod branding;
+mod bridge_avatar_media;
 mod call;
 mod custom_emojis;
 mod dm;
@@ -158,6 +159,7 @@ pub(crate) async fn resolve_msg_author(
     bridge_id: Option<i64>,
     bridge_foreign_name: Option<&str>,
     bridge_kind: Option<&str>,
+    bridge_foreign_avatar: Option<&str>,
     viewer_id: &str,
 ) -> Result<AuthorMeta, AppError> {
     if let Some(wid) = webhook_id {
@@ -199,6 +201,12 @@ pub(crate) async fn resolve_msg_author(
         let _ = bridge_id; // intentionally not gated on
         let kind = bridge_kind.unwrap_or("bridge").to_string();
         let name = name.to_string();
+        // LC-78-AVATAR-PROXY: pass the cache key through to the template
+        // so it renders <img src=/media/bridge-avatar-proxy/{hash}>. The
+        // proxy endpoint 404s when fetch is still pending / failed; the
+        // template's onerror falls back to initials. None when the message
+        // had no foreign avatar OR the proxy gate was off at submit time.
+        let avatar_url = bridge_foreign_avatar.map(str::to_string);
         return Ok(AuthorMeta {
             username: name,
             display_name: None,
@@ -208,7 +216,7 @@ pub(crate) async fn resolve_msg_author(
             is_bot: false,
             actor: MessageActor::Bridge(crate::views::message_actor::BridgeActorMeta {
                 kind,
-                avatar_url: None,
+                avatar_url,
             }),
         });
     }
@@ -295,6 +303,7 @@ pub(crate) async fn load_message_view_for_viewer(
         m.bridge_id,
         m.bridge_foreign_name.as_deref(),
         m.bridge_kind.as_deref(),
+        m.bridge_foreign_avatar.as_deref(),
         &viewer.id,
     )
     .await?;
@@ -1138,6 +1147,10 @@ pub fn build_router(state: AppState) -> Router {
             post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/files/{id}", get(uploads::get_file))
+        .route(
+            "/media/bridge-avatar-proxy/{hash}",
+            get(bridge_avatar_media::get_bridge_avatar),
+        )
         .route("/api/emojis/{id}", get(custom_emojis::get_emoji))
         .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
