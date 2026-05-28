@@ -173,7 +173,14 @@ body {
 }
 
 #main {
+    /* LC-199: with the LC-199 viewport-fit=cover meta in base.html, plain
+     * 100vh on iOS Safari includes the URL bar / dynamic-toolbar area, so
+     * content extends behind the chrome and scrolls under it. `100dvh`
+     * (dynamic viewport height) excludes the URL bar - it shrinks/grows as
+     * the toolbar shows/hides. Falls back to `100vh` on browsers that don't
+     * yet understand `dvh` (Safari < 15.4, Firefox < 110). */
     height: 100vh;
+    height: 100dvh;
 }
 
 ::-webkit-scrollbar {
