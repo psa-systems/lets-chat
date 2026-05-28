@@ -351,28 +351,16 @@ async fn post_bridge_message(
             if inserted {
                 // Fire-and-forget. Errors land in the row's `failure_reason`;
                 // the render falls back to initials via <img onerror>.
+                // LC-152: shared outbound client (resolver does the public-IP
+                // filter inline, closes the TOCTOU). The fetch module's own
+                // submit-time SSRF pre-check above is the UX gate; this is
+                // the security gate.
                 let chat = state.chat.clone();
                 let url = parsed.to_string();
                 let hash_owned = hash.clone();
                 tokio::spawn(async move {
-                    let client = match reqwest::Client::builder()
-                        .user_agent("lets-chat-bridge-avatar/1")
-                        .redirect(reqwest::redirect::Policy::none())
-                        .build()
-                    {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::warn!(error = %e, "bridge-avatar reqwest client build failed");
-                            let _ = db::bridge_avatar_proxies::mark_failed(
-                                &chat,
-                                &hash_owned,
-                                "client build failed",
-                            )
-                            .await;
-                            return;
-                        }
-                    };
-                    crate::bridge_avatar::fetch_and_cache(&chat, &client, &hash_owned, &url).await;
+                    let client = crate::http_client::outbound_no_redirects();
+                    crate::bridge_avatar::fetch_and_cache(&chat, client, &hash_owned, &url).await;
                 });
             }
             Some(hash)

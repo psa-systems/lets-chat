@@ -74,20 +74,18 @@ pub async fn get_unfurl(
         }
     }
 
-    // Build a one-shot reqwest client per request so timeouts are scoped.
-    // Redirects are followed MANUALLY (Policy::none) so every hop is
-    // re-validated: reqwest's own redirect follower would connect to the
-    // redirect target without re-running the SSRF host check, letting an
-    // attacker-controlled page 302 us to 169.254.169.254 / 127.0.0.1 and
-    // defeat the pre-flight entirely (LC-150 / audit S4).
-    let Ok(client) = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-    else {
-        return Ok(empty_preview());
-    };
+    // LC-152: use the shared outbound client. Its custom DNS resolver
+    // filters every connection to publicly-routable IPs inside reqwest's
+    // own resolution path, closing the prior check-then-reqwest-reresolves
+    // TOCTOU. The manual redirect loop below (LC-150) stays — the per-hop
+    // host_resolves_public pre-check is the UX gate (empty_preview()
+    // fallback on rejection); the resolver is the security gate at
+    // fetch-time. Both running is correct: a redirect to an internal host
+    // is rejected by the resolver even if a future code change drops the
+    // pre-check.
+    let client = crate::http_client::outbound_no_redirects();
+    // Per-request timeout overrides the helper's default.
+    let request_timeout = Duration::from_secs(FETCH_TIMEOUT_SECS);
 
     let mut current = parsed.clone();
     let mut redirects = 0usize;
@@ -103,7 +101,13 @@ pub async fn get_unfurl(
         if !crate::ssrf::host_resolves_public(&current).await {
             return Ok(empty_preview());
         }
-        let r = match client.get(current.as_str()).send().await {
+        let r = match client
+            .get(current.as_str())
+            .timeout(request_timeout)
+            .header(reqwest::header::USER_AGENT, USER_AGENT)
+            .send()
+            .await
+        {
             Ok(r) => r,
             Err(_) => return Ok(empty_preview()),
         };
