@@ -65,17 +65,9 @@ async fn app() -> TestApp {
     let room = db::chat::create_room(&chat, "bridged", None, "public", None, Some(eid))
         .await
         .unwrap();
-    let bridge_id = db::bridges::insert(
-        &chat,
-        &SECRET,
-        room,
-        "matrix",
-        b"{}",
-        &bot_id,
-        &admin,
-    )
-    .await
-    .unwrap();
+    let bridge_id = db::bridges::insert(&chat, &SECRET, room, "matrix", b"{}", &bot_id, &admin)
+        .await
+        .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth: auth.clone(),

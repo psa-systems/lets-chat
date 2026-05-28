@@ -110,11 +110,7 @@ pub async fn mark_ok(
 /// Mark a previously-pending row as failed. Stores the short failure reason
 /// (kept under 256 chars by the caller). `failed` is terminal in v2; render
 /// falls back to initials via the `<img onerror>` path.
-pub async fn mark_failed(
-    pool: &SqlitePool,
-    hash: &str,
-    reason: &str,
-) -> Result<bool, sqlx::Error> {
+pub async fn mark_failed(pool: &SqlitePool, hash: &str, reason: &str) -> Result<bool, sqlx::Error> {
     let reason = if reason.len() > 256 {
         &reason[..256]
     } else {

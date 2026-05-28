@@ -135,10 +135,9 @@ impl Resolve for PublicOnlyResolver {
                     // Error message names "non-public" without naming the
                     // specific address so the failure doesn't enumerate
                     // internal topology in logs.
-                    return Err(format!(
-                        "host {host} resolves to a non-public address; refusing"
-                    )
-                    .into());
+                    return Err(
+                        format!("host {host} resolves to a non-public address; refusing").into(),
+                    );
                 }
             }
             Ok(Box::new(resolved.into_iter()) as Addrs)
@@ -186,7 +185,9 @@ fn client_following_redirects() -> &'static reqwest::Client {
 async fn validate_url(url: &str) -> Result<url::Url, OutboundError> {
     let parsed = url::Url::parse(url)?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(OutboundError::UnsupportedScheme(parsed.scheme().to_string()));
+        return Err(OutboundError::UnsupportedScheme(
+            parsed.scheme().to_string(),
+        ));
     }
     if !crate::ssrf::host_resolves_public(&parsed).await {
         return Err(OutboundError::HostNotPublic);

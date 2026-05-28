@@ -38,7 +38,11 @@ fn try_decode(bytes: &[u8]) -> Result<bool, ()> {
 
 #[test]
 fn empty_bytes_does_not_panic() {
-    assert_eq!(try_decode(&[]), Ok(false), "empty input should be Err, not panic");
+    assert_eq!(
+        try_decode(&[]),
+        Ok(false),
+        "empty input should be Err, not panic"
+    );
 }
 
 #[test]
@@ -50,21 +54,33 @@ fn random_bytes_does_not_panic() {
         x = x.wrapping_mul(1664525).wrapping_add(1013904223);
         buf.push((x >> 16) as u8);
     }
-    assert_eq!(try_decode(&buf), Ok(false), "random bytes should be Err, not panic");
+    assert_eq!(
+        try_decode(&buf),
+        Ok(false),
+        "random bytes should be Err, not panic"
+    );
 }
 
 #[test]
 fn png_signature_alone_does_not_panic() {
     // Just the 8-byte PNG signature, no IHDR. Decoder should reject cleanly.
     let bytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    assert_eq!(try_decode(&bytes), Ok(false), "PNG sig only should be Err, not panic");
+    assert_eq!(
+        try_decode(&bytes),
+        Ok(false),
+        "PNG sig only should be Err, not panic"
+    );
 }
 
 #[test]
 fn png_signature_plus_garbage_does_not_panic() {
     let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     bytes.extend(std::iter::repeat(0xAAu8).take(1024));
-    assert_eq!(try_decode(&bytes), Ok(false), "PNG sig + garbage should be Err, not panic");
+    assert_eq!(
+        try_decode(&bytes),
+        Ok(false),
+        "PNG sig + garbage should be Err, not panic"
+    );
 }
 
 #[test]
@@ -107,7 +123,7 @@ fn truncated_after_dimensions_does_not_panic() {
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]); // height
     bytes.extend_from_slice(&[0x08, 0x02, 0x00, 0x00, 0x00]);
     bytes.extend_from_slice(&[0x90, 0x77, 0x53, 0xDE]); // CRC (may be wrong; decoder should handle)
-    // No IDAT, no IEND.
+                                                        // No IDAT, no IEND.
     assert_eq!(try_decode(&bytes), Ok(false));
 }
 
@@ -126,16 +142,20 @@ fn pixel_bomb_dimension_overflow_does_not_panic() {
     bytes.extend_from_slice(&[0x00, 0x00, 0xFF, 0xFF]); // height 65535
     bytes.extend_from_slice(&[0x08, 0x02, 0x00, 0x00, 0x00]); // 8-bit RGB
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CRC placeholder
-    // Minimal IDAT to make image-rs attempt decode.
+                                                        // Minimal IDAT to make image-rs attempt decode.
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x02]); // length 2
     bytes.extend_from_slice(b"IDAT");
     bytes.extend_from_slice(&[0x78, 0x01]); // zlib header, no data
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CRC placeholder
-    // IEND.
+                                                        // IEND.
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
     bytes.extend_from_slice(b"IEND");
     bytes.extend_from_slice(&[0xAE, 0x42, 0x60, 0x82]);
-    assert_eq!(try_decode(&bytes), Ok(false), "pixel-bomb must Err, not panic");
+    assert_eq!(
+        try_decode(&bytes),
+        Ok(false),
+        "pixel-bomb must Err, not panic"
+    );
 }
 
 #[test]
