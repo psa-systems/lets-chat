@@ -438,3 +438,109 @@ math {
 [role="option"][aria-selected="true"] {
     background-color: rgb(241 245 249); /* slate-100 */
 }
+
+/* LC-196: motion & micro-interactions.
+ *
+ * Default posture is opt-in: classes are available but only the global
+ * preflight transitions (Tailwind's `transition-colors` on .btn etc., from
+ * LC-195) actually run on every element. The classes below are applied where
+ * we want a visible enter / loading affordance.
+ *
+ * All animation is killed under `prefers-reduced-motion: reduce` via the
+ * universal reset at the bottom of this block (transitions/animations cut to
+ * ~0 duration so JS callbacks bound to `transitionend` / `animationend` still
+ * fire). Pattern follows the a11y-project recommendation:
+ *   https://www.a11yproject.com/posts/understanding-vestibular-disorders/ */
+
+@keyframes lc-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes lc-scale-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes lc-slide-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lc-shimmer {
+    from { background-position: -200% 0; }
+    to   { background-position: 200% 0; }
+}
+@keyframes lc-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Opt-in fade for htmx-swapped-in content: add `lc-anim-swap` to any element
+   that should fade in after replacement.
+ *
+ * htmx applies `.htmx-added` to swapped-in content during the settle phase
+ * and removes it after `config.defaultSettleDelay` (default 20ms). We use a
+ * *transition* (not an animation): the swapped-in element starts at
+ * `opacity: 0` while `.htmx-added` matches, then transitions to `opacity: 1`
+ * once it's removed. A keyframe animation bound to `.htmx-added` would be
+ * cancelled at 20ms before the fade could finish; this is the canonical
+ * htmx fade-in pattern (see htmx docs section "Animations"). */
+.lc-anim-swap {
+    opacity: 1;
+    transition: opacity 180ms ease-out;
+}
+.lc-anim-swap.htmx-added {
+    opacity: 0;
+}
+
+/* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
+   while content streams in. */
+.lc-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--surface-sunken) 0%,
+        var(--border) 50%,
+        var(--surface-sunken) 100%
+    );
+    background-size: 200% 100%;
+    animation: lc-shimmer 1.4s linear infinite;
+    border-radius: 0.25rem;
+    color: transparent;
+}
+
+/* `hx-indicator` partner: an inline spinner that becomes visible while the
+   bound request is in flight. Wired via htmx's built-in `.htmx-indicator`
+   class: hidden by default, opacity:1 once the parent gains `.htmx-request`.
+   Pair with the component variant `.lc-spinner` for the rotating glyph. */
+.lc-spinner {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 9999px;
+    animation: lc-spin 0.7s linear infinite;
+    vertical-align: -0.125em;
+}
+
+/* Toast / modal entry. The component classes in tailwind.css apply these by
+   default; reduced-motion strips them via the block below. */
+.toast {
+    animation: lc-slide-up 180ms ease-out;
+}
+.modal-panel {
+    animation: lc-scale-in 140ms ease-out;
+}
+.modal-backdrop {
+    animation: lc-fade-in 120ms ease-out;
+}
+
+/* Universal reduced-motion kill switch. Sets transition + animation duration
+   to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
+   never fires in some browsers), keeps scroll behaviour instant. Tailwind's
+   `motion-safe:` / `motion-reduce:` variants still work on top of this. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
