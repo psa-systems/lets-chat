@@ -33,6 +33,7 @@ mod auth;
 mod avatar;
 mod bookmarks;
 mod branding;
+mod bridge_avatar_media;
 mod call;
 mod custom_emojis;
 mod dm;
@@ -1146,6 +1147,10 @@ pub fn build_router(state: AppState) -> Router {
             post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/files/{id}", get(uploads::get_file))
+        .route(
+            "/media/bridge-avatar-proxy/{hash}",
+            get(bridge_avatar_media::get_bridge_avatar),
+        )
         .route("/api/emojis/{id}", get(custom_emojis::get_emoji))
         .route("/api/unfurl", get(unfurl::get_unfurl))
         .route("/status", post(status::post_status))
