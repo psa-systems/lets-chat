@@ -125,7 +125,7 @@ The dispatcher short-circuits on first miss in this order:
 
 ### Outbound headers
 
-- `From`: the operator's `SMTP_FROM`.
+- `From`: the operator's `LETS_CHAT_SMTP_FROM`.
 - `To`: the recipient's verified email.
 - `Subject`: `[lets-chat] {sender} mentioned you in #{room}` or `[lets-chat] {sender} sent you a direct message`.
 - `Reply-To`: `reply-<token>@<ingress-domain>` when email-ingress is configured; omitted otherwise.
