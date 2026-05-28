@@ -185,7 +185,7 @@ pub async fn get_enclaves(
 // _user, _pass, _from) and got persisted to `settings.db` by `post_settings`.
 // They were write-only - no code read them back, because
 // `mail::Mailer::from_env` is the actual SMTP loader and reads exclusively
-// from the `SMTP_*` env vars. The admin form was misleading UX scaffolding;
+// from the `LETS_CHAT_SMTP_*` env vars. The admin form was misleading UX scaffolding;
 // the password sitting in `settings.db` plaintext was the only real
 // consequence. The form is gone; SMTP is documented as env-var-only in
 // `README.md`. Existing settings.db rows are dropped by migration
@@ -460,7 +460,7 @@ pub async fn post_purge_orphans(
 
 /// LC-77-SMTP-SEAL: previously wrote the SMTP form into `settings.db`
 /// (host/port/user/from plain, password plain), but `mail::Mailer::from_env`
-/// is the actual SMTP loader and reads exclusively from `SMTP_*` env vars,
+/// is the actual SMTP loader and reads exclusively from `LETS_CHAT_SMTP_*` env vars,
 /// so the writes were dead storage. The form is gone; this handler is
 /// retained as an empty no-op redirect so a future non-SMTP settings field
 /// has somewhere to land without re-wiring the route. The route itself

@@ -75,16 +75,16 @@ async fn setup(with_mailer: bool, verified: bool, opted_in: bool) -> Fixture {
         // Standalone test: we don't actually send mail. Build a Mailer
         // pointing at an unreachable host so any actual `send` would fail,
         // but the gating tests never reach that path.
-        std::env::set_var("SMTP_HOST", "127.0.0.1");
-        std::env::set_var("SMTP_PORT", "1");
-        std::env::set_var("SMTP_TLS", "none");
-        std::env::set_var("SMTP_FROM", "noreply@example.test");
+        std::env::set_var("LETS_CHAT_SMTP_HOST", "127.0.0.1");
+        std::env::set_var("LETS_CHAT_SMTP_PORT", "1");
+        std::env::set_var("LETS_CHAT_SMTP_TLS", "none");
+        std::env::set_var("LETS_CHAT_SMTP_FROM", "noreply@example.test");
         let m = lets_chat::mail::Mailer::from_env();
         // Don't leave globals set for sibling tests.
-        std::env::remove_var("SMTP_HOST");
-        std::env::remove_var("SMTP_PORT");
-        std::env::remove_var("SMTP_TLS");
-        std::env::remove_var("SMTP_FROM");
+        std::env::remove_var("LETS_CHAT_SMTP_HOST");
+        std::env::remove_var("LETS_CHAT_SMTP_PORT");
+        std::env::remove_var("LETS_CHAT_SMTP_TLS");
+        std::env::remove_var("LETS_CHAT_SMTP_FROM");
         m
     } else {
         None

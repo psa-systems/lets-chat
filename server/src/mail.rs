@@ -6,15 +6,16 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 /// Mailer configured from a flat set of environment variables:
-/// - `SMTP_HOST` (required) - relay hostname
-/// - `SMTP_PORT` (required) - relay port as a decimal integer
-/// - `SMTP_TLS` (required) - one of `tls` / `starttls` / `none`. Boolean
-///   aliases (`true`/`yes`/`1` -> `tls`, `false`/`no`/`0` -> `none`) are
-///   accepted so deployments that already model TLS as a flag don't have to
-///   add a third state on day one.
-/// - `SMTP_USERNAME`, `SMTP_PASSWORD` (optional, paired) - credentials.
-///   When both are unset the transport opens unauthenticated.
-/// - `SMTP_FROM` (required) - From address attached to outbound mail.
+/// - `LETS_CHAT_SMTP_HOST` (required) - relay hostname
+/// - `LETS_CHAT_SMTP_PORT` (required) - relay port as a decimal integer
+/// - `LETS_CHAT_SMTP_TLS` (required) - one of `tls` / `starttls` / `none`.
+///   Boolean aliases (`true`/`yes`/`1` -> `tls`, `false`/`no`/`0` -> `none`)
+///   are accepted so deployments that already model TLS as a flag don't have
+///   to add a third state on day one.
+/// - `LETS_CHAT_SMTP_USERNAME`, `LETS_CHAT_SMTP_PASSWORD` (optional, paired)
+///   - credentials. When both are unset the transport opens unauthenticated.
+/// - `LETS_CHAT_SMTP_FROM` (required) - From address attached to outbound
+///   mail.
 ///
 /// Any required var missing or empty disables outbound mail entirely; the
 /// `Option<Mailer>` returned here is the same signal the `/forgot` and
@@ -27,36 +28,36 @@ pub struct Mailer {
 
 impl Mailer {
     pub fn from_env() -> Option<Self> {
-        let host = env_nonempty("SMTP_HOST")?;
-        let port_str = env_nonempty("SMTP_PORT")?;
+        let host = env_nonempty("LETS_CHAT_SMTP_HOST")?;
+        let port_str = env_nonempty("LETS_CHAT_SMTP_PORT")?;
         let port: u16 = match port_str.parse() {
             Ok(p) => p,
             Err(_) => {
-                tracing::warn!(port = %port_str, "SMTP_PORT is not a valid u16; mail disabled");
+                tracing::warn!(port = %port_str, "LETS_CHAT_SMTP_PORT is not a valid u16; mail disabled");
                 return None;
             }
         };
-        let tls_raw = env_nonempty("SMTP_TLS")?;
+        let tls_raw = env_nonempty("LETS_CHAT_SMTP_TLS")?;
         let tls_mode = match parse_tls_mode(&tls_raw) {
             Some(m) => m,
             None => {
-                tracing::warn!(value = %tls_raw, "SMTP_TLS must be tls/starttls/none; mail disabled");
+                tracing::warn!(value = %tls_raw, "LETS_CHAT_SMTP_TLS must be tls/starttls/none; mail disabled");
                 return None;
             }
         };
-        let from = env_nonempty("SMTP_FROM")?;
+        let from = env_nonempty("LETS_CHAT_SMTP_FROM")?;
 
         // Username/password are optional but must agree: setting one without
         // the other is almost always a deployment mistake, so refuse rather
         // than silently send unauthenticated mail.
-        let username = env_nonempty("SMTP_USERNAME");
-        let password = env_nonempty("SMTP_PASSWORD");
+        let username = env_nonempty("LETS_CHAT_SMTP_USERNAME");
+        let password = env_nonempty("LETS_CHAT_SMTP_PASSWORD");
         let creds = match (username, password) {
             (Some(u), Some(p)) => Some(Credentials::new(u, p)),
             (None, None) => None,
             _ => {
                 tracing::warn!(
-                    "SMTP_USERNAME and SMTP_PASSWORD must be set together; mail disabled"
+                    "LETS_CHAT_SMTP_USERNAME and LETS_CHAT_SMTP_PASSWORD must be set together; mail disabled"
                 );
                 return None;
             }
