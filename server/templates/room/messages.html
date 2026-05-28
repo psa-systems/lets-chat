@@ -1,4 +1,9 @@
-<div id="messages" class="flex-1 overflow-y-auto">
+<div id="messages"
+     role="log"
+     aria-live="polite"
+     aria-relevant="additions"
+     aria-label="{{ "a11y-messages-region-label"|t }}"
+     class="flex-1 overflow-y-auto">
   {% let oob = false %}
   {% for message in messages %}
   {% include "room/message.html" %}
