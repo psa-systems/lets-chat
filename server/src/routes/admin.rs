@@ -2519,8 +2519,8 @@ fn derive_bridge_status(b: &crate::models::Bridge) -> &'static str {
         return "pending";
     };
     // SQLite's datetime('now') format: "YYYY-MM-DD HH:MM:SS" (UTC, no TZ).
-    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
-        .map(|dt| dt.and_utc());
+    let parsed =
+        chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S").map(|dt| dt.and_utc());
     let stale = match parsed {
         Ok(dt) => (chrono::Utc::now() - dt).num_seconds() > BRIDGE_HEARTBEAT_STALE_SECS,
         Err(_) => false,

@@ -1528,19 +1528,18 @@ pub async fn patch_message(
 
     // Render the updated message as a single-message fragment so the sender's
     // edit form is replaced inline.
-    let meta =
-        super::resolve_msg_author(
-            &state,
-            &m.user_id,
-            m.webhook_id,
-            m.email_inbox_id,
-            m.bridge_id,
-            m.bridge_foreign_name.as_deref(),
-            m.bridge_kind.as_deref(),
-            m.bridge_foreign_avatar.as_deref(),
-            &user.id,
-        )
-            .await?;
+    let meta = super::resolve_msg_author(
+        &state,
+        &m.user_id,
+        m.webhook_id,
+        m.email_inbox_id,
+        m.bridge_id,
+        m.bridge_foreign_name.as_deref(),
+        m.bridge_kind.as_deref(),
+        m.bridge_foreign_avatar.as_deref(),
+        &user.id,
+    )
+    .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
         .await?
