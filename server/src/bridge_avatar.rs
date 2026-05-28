@@ -42,34 +42,31 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// hostile input.
 const ALLOWED_MIME: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-pub async fn fetch_and_cache(
-    chat: &SqlitePool,
-    client: &reqwest::Client,
-    hash: &str,
-    foreign_url: &str,
-) {
-    let parsed = match Url::parse(foreign_url) {
-        Ok(u) => u,
-        Err(_) => {
+pub async fn fetch_and_cache(chat: &SqlitePool, hash: &str, foreign_url: &str) {
+    // LC-152: all URL validation (parse + scheme + host_resolves_public)
+    // happens inside `http_client::outbound_get`. Literal-IP URLs are
+    // caught here (the resolver never sees them); hostname URLs are also
+    // caught here AND again by the resolver inside reqwest's resolution
+    // path, two layers covering two distinct attack classes.
+    let req = match crate::http_client::outbound_get(foreign_url).await {
+        Ok(r) => r,
+        Err(crate::http_client::OutboundError::HostNotPublic) => {
+            mark(chat, hash, "blocked: non-public foreign host").await;
+            return;
+        }
+        Err(crate::http_client::OutboundError::UnsupportedScheme(s)) => {
+            mark(chat, hash, &format!("non-http(s) scheme: {s}")).await;
+            return;
+        }
+        Err(crate::http_client::OutboundError::InvalidUrl(_)) => {
             mark(chat, hash, "invalid foreign url").await;
             return;
         }
     };
-    if !matches!(parsed.scheme(), "http" | "https") {
-        mark(chat, hash, "non-http(s) scheme").await;
-        return;
-    }
-    // LC-152: re-resolve at fetch time, not just string-validate. There is
-    // a residual TOCTOU window between this and reqwest's own DNS call
-    // shared with the LC-75 outgoing-webhook delivery path.
-    if !crate::ssrf::host_resolves_public(&parsed).await {
-        mark(chat, hash, "blocked: non-public foreign host").await;
-        return;
-    }
-    fetch_and_cache_inner(chat, client, hash, &parsed).await;
+    fetch_and_cache_inner(chat, req, hash).await;
 }
 
-/// Test seam: skip the SSRF re-resolve so a test can target a loopback
+/// Test seam: skip the SSRF guard so a test can target a loopback
 /// receiver. Production callers go through `fetch_and_cache`. Mirrors the
 /// LC-75 `run_delivery_tick_unchecked` shape.
 #[doc(hidden)]
@@ -79,23 +76,16 @@ pub async fn fetch_and_cache_unchecked(
     hash: &str,
     foreign_url: &str,
 ) {
-    let parsed = match Url::parse(foreign_url) {
-        Ok(u) => u,
-        Err(_) => {
-            mark(chat, hash, "invalid foreign url").await;
-            return;
-        }
-    };
-    fetch_and_cache_inner(chat, client, hash, &parsed).await;
+    let req = client.get(foreign_url);
+    fetch_and_cache_inner(chat, req, hash).await;
 }
 
 async fn fetch_and_cache_inner(
     chat: &SqlitePool,
-    client: &reqwest::Client,
+    req: reqwest::RequestBuilder,
     hash: &str,
-    url: &Url,
 ) {
-    let bytes = match client.get(url.as_str()).timeout(FETCH_TIMEOUT).send().await {
+    let bytes = match req.timeout(FETCH_TIMEOUT).send().await {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
             mark(chat, hash, &format!("http {}", r.status().as_u16())).await;

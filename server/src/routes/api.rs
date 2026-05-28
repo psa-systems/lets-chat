@@ -350,29 +350,15 @@ async fn post_bridge_message(
             .await?;
             if inserted {
                 // Fire-and-forget. Errors land in the row's `failure_reason`;
-                // the render falls back to initials via <img onerror>.
+                // the render falls back to initials via <img onerror>. LC-152:
+                // `fetch_and_cache` internally routes through
+                // `http_client::outbound_get`, which applies the two-layer
+                // SSRF guard. The submit-time pre-check above is the UX gate.
                 let chat = state.chat.clone();
                 let url = parsed.to_string();
                 let hash_owned = hash.clone();
                 tokio::spawn(async move {
-                    let client = match reqwest::Client::builder()
-                        .user_agent("lets-chat-bridge-avatar/1")
-                        .redirect(reqwest::redirect::Policy::none())
-                        .build()
-                    {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::warn!(error = %e, "bridge-avatar reqwest client build failed");
-                            let _ = db::bridge_avatar_proxies::mark_failed(
-                                &chat,
-                                &hash_owned,
-                                "client build failed",
-                            )
-                            .await;
-                            return;
-                        }
-                    };
-                    crate::bridge_avatar::fetch_and_cache(&chat, &client, &hash_owned, &url).await;
+                    crate::bridge_avatar::fetch_and_cache(&chat, &hash_owned, &url).await;
                 });
             }
             Some(hash)
