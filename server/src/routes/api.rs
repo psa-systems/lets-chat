@@ -10,10 +10,10 @@
 //!
 //! Scope reference lives in `docs/api.md`.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::auth::ApiAuth;
@@ -24,9 +24,25 @@ use crate::state::AppState;
 pub const SCOPE_MESSAGES_READ: &str = "messages:read";
 pub const SCOPE_MESSAGES_WRITE: &str = "messages:write";
 pub const SCOPE_ROOMS_READ: &str = "rooms:read";
+/// LC-78: scope for `POST /api/v1/bridges/{id}/messages`. Strictly more
+/// powerful than `messages:write` because it lets the caller post under an
+/// arbitrary foreign display name; a `messages:write`-only token cannot
+/// reach the bridge endpoint, and the bridge endpoint rejects calls that
+/// hold `messages:write` but lack this scope.
+pub const SCOPE_BRIDGE_POST: &str = "bridge:post";
+/// LC-78: scope for `POST /api/v1/bridges/{id}/heartbeat`. Separated from
+/// `bridge:post` so a daemon's read/heartbeat token can be split off from
+/// its write token if an operator wants narrower scopes.
+pub const SCOPE_BRIDGE_HEARTBEAT: &str = "bridge:heartbeat";
 
 /// Every scope a token may hold, for the management UI's checkboxes.
-pub const ALL_SCOPES: &[&str] = &[SCOPE_MESSAGES_READ, SCOPE_MESSAGES_WRITE, SCOPE_ROOMS_READ];
+pub const ALL_SCOPES: &[&str] = &[
+    SCOPE_MESSAGES_READ,
+    SCOPE_MESSAGES_WRITE,
+    SCOPE_ROOMS_READ,
+    SCOPE_BRIDGE_POST,
+    SCOPE_BRIDGE_HEARTBEAT,
+];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,6 +51,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/rooms/{room_id}/messages",
             get(get_messages).post(post_message),
+        )
+        .route(
+            "/api/v1/bridges/{bridge_id}/messages",
+            axum::routing::post(post_bridge_message),
+        )
+        .route(
+            "/api/v1/bridges/{bridge_id}/heartbeat",
+            axum::routing::post(post_bridge_heartbeat),
         )
 }
 
@@ -68,6 +92,7 @@ async fn get_rooms(
     State(state): State<AppState>,
     auth: ApiAuth,
 ) -> Result<Json<Vec<ApiRoom>>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_ROOMS_READ)?;
     let is_admin = auth.user.role == "admin";
     let rooms = db::chat::list_rooms(&state.chat, &auth.user.id, is_admin).await?;
@@ -108,22 +133,78 @@ async fn require_room_access(
     Ok(room)
 }
 
+/// LC-78: default page size for the paginated read. Matches the size most
+/// daemons (Matrix appservice initial-sync) request without an explicit
+/// limit; tuned to one screen of history.
+const PAGINATED_DEFAULT_LIMIT: i64 = 50;
+/// LC-78: hard cap on a single page so a caller cannot turn the bounded
+/// read back into the previous "fetch every message in the room" shape.
+const PAGINATED_MAX_LIMIT: i64 = 200;
+
+#[derive(Deserialize)]
+struct GetMessagesQuery {
+    /// Cursor for the next page: results are strictly older than this id.
+    /// Omit to start at the most recent message.
+    #[serde(default)]
+    before_id: Option<i64>,
+    /// Page size. Clamped to `[1, PAGINATED_MAX_LIMIT]`; default
+    /// `PAGINATED_DEFAULT_LIMIT`.
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ApiMessagePage {
+    messages: Vec<ApiMessage>,
+    /// Cursor to feed back as `before_id` on the next request. `None` when
+    /// the page returned fewer than `limit` rows (history exhausted) or
+    /// the room is empty.
+    next_cursor: Option<i64>,
+}
+
 /// GET /api/v1/rooms/{id}/messages - top-level messages in a room. Scope:
 /// `messages:read`.
+///
+/// LC-78: paginated. Returns up to `limit` rows in `id DESC` order with a
+/// `next_cursor` to walk older history. The bounded shape was added so the
+/// LC-78 Matrix-bridge daemon's initial-sync has a deterministic paging
+/// contract; this endpoint is the only API-side reader, so the change is
+/// breaking only for API callers (the web/HTMX room render still uses the
+/// unbounded `list_messages` directly, untouched).
 async fn get_messages(
     State(state): State<AppState>,
     auth: ApiAuth,
     Path(room_id): Path<i64>,
-) -> Result<Json<Vec<ApiMessage>>, AppError> {
+    Query(q): Query<GetMessagesQuery>,
+) -> Result<Json<ApiMessagePage>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_MESSAGES_READ)?;
     require_room_access(&state, &auth, room_id).await?;
-    let raw = db::chat::list_messages(&state.chat, room_id).await?;
+    let limit = q
+        .limit
+        .unwrap_or(PAGINATED_DEFAULT_LIMIT)
+        .clamp(1, PAGINATED_MAX_LIMIT);
+    let raw = db::chat::list_messages_paginated(&state.chat, room_id, q.before_id, limit).await?;
+
+    // `next_cursor` is None when fewer than `limit` rows returned (exhaust)
+    // or the result set is empty. Otherwise it is the smallest id returned,
+    // which the caller feeds back as `before_id` on the next request.
+    let next_cursor = if (raw.len() as i64) < limit {
+        None
+    } else {
+        raw.last().map(|m| m.id)
+    };
 
     // Resolve author display labels once per distinct author.
     let mut names: HashMap<String, String> = HashMap::new();
-    let mut out = Vec::with_capacity(raw.len());
+    let mut messages = Vec::with_capacity(raw.len());
     for m in raw {
-        let author = if let Some(n) = names.get(&m.user_id) {
+        // Bridge messages snapshot their own author label on the row; we
+        // surface that as the JSON `author` so a daemon's read-side matches
+        // its post-side without joining to the bridges table.
+        let author = if let Some(name) = m.bridge_foreign_name.clone() {
+            name
+        } else if let Some(n) = names.get(&m.user_id) {
             n.clone()
         } else {
             let label = db::auth::find_user_by_id(&state.auth, &m.user_id)
@@ -133,7 +214,7 @@ async fn get_messages(
             names.insert(m.user_id.clone(), label.clone());
             label
         };
-        out.push(ApiMessage {
+        messages.push(ApiMessage {
             id: m.id,
             room_id: m.room_id,
             user_id: m.user_id,
@@ -142,7 +223,10 @@ async fn get_messages(
             created_at: m.created_at,
         });
     }
-    Ok(Json(out))
+    Ok(Json(ApiMessagePage {
+        messages,
+        next_cursor,
+    }))
 }
 
 #[derive(serde::Deserialize)]
@@ -159,6 +243,7 @@ async fn post_message(
     Path(room_id): Path<i64>,
     Json(payload): Json<PostMessageBody>,
 ) -> Result<Json<ApiMessage>, AppError> {
+    auth.require_not_bridge()?;
     auth.require(SCOPE_MESSAGES_WRITE)?;
     if auth.user.is_banned || auth.user.is_muted {
         return Err(AppError::Forbidden);
@@ -181,5 +266,186 @@ async fn post_message(
         author: message.author_name,
         body: message.body,
         created_at: message.created_at,
+    }))
+}
+
+/// LC-78: per-bridge cap on the `bridge-messages` endpoint. Higher than the
+/// human MESSAGE_RATE_PER_MIN because federated Matrix rooms can be bursty,
+/// but still bounds what one compromised daemon can flood into a room.
+const BRIDGE_MESSAGE_RATE_PER_MIN: u32 = 600;
+
+#[derive(serde::Deserialize)]
+struct PostBridgeMessageBody {
+    body: String,
+    foreign_name: String,
+    /// LC-78 v1: must be absent or null. The endpoint 400s any non-null
+    /// value to avoid per-render fetches from arbitrary federated
+    /// homeservers leaking viewer IPs (see LC-78-AVATAR-PROXY follow-up
+    /// for the proxy-cache design that would close this).
+    #[serde(default)]
+    foreign_avatar: Option<String>,
+}
+
+/// LC-78: POST /api/v1/bridges/{bridge_id}/messages - post a foreign-protocol
+/// message as a per-message synthetic actor. Scope: `bridge:post` (strictly
+/// more powerful than `messages:write` because the caller chooses the
+/// rendered display name; isolated to its own endpoint so a
+/// `messages:write`-only token cannot reach the override).
+///
+/// The bridge daemon (LC-72 / LC-73) authenticates as the bot user that
+/// owns the bridge row; the room is derived from the bridge, the kind is
+/// snapshotted from the bridge row, and the foreign name + body are
+/// snapshotted onto the message row so the render survives bridge-row
+/// removal under stop-new lifecycle.
+async fn post_bridge_message(
+    State(state): State<AppState>,
+    auth: ApiAuth,
+    Path(bridge_id): Path<i64>,
+    Json(payload): Json<PostBridgeMessageBody>,
+) -> Result<Json<ApiMessage>, AppError> {
+    auth.require(SCOPE_BRIDGE_POST)?;
+    if auth.user.is_banned || auth.user.is_muted {
+        return Err(AppError::Forbidden);
+    }
+    if payload.foreign_avatar.is_some() {
+        // Fail loud (not silent drop) so a misconfigured daemon surfaces the
+        // policy and can be redirected to the proxy-cache follow-up when
+        // LC-78-AVATAR-PROXY lands.
+        return Err(AppError::BadRequest(
+            "foreign_avatar is not accepted in v1; see LC-78-AVATAR-PROXY".into(),
+        ));
+    }
+    let bridge = db::bridges::find_by_id(&state.chat, bridge_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // Ownership: the authenticated bot must be the bridge's registered bot.
+    // A token from a different bot cannot post to this bridge even if it
+    // somehow holds `bridge:post`.
+    if bridge.bot_user_id != auth.user.id {
+        return Err(AppError::Forbidden);
+    }
+    let body = payload.body.trim();
+    let foreign_name = payload.foreign_name.trim();
+    if body.is_empty() {
+        return Err(AppError::BadRequest("message body cannot be empty".into()));
+    }
+    if foreign_name.is_empty() {
+        return Err(AppError::BadRequest("foreign_name cannot be empty".into()));
+    }
+    super::room::check_message_length(body)?;
+    // Bound foreign_name to a reasonable display-label length. The render
+    // path treats it as text-only (escaped), but a multi-kilobyte name still
+    // bloats the message row and the LC-75 outgoing-webhook payload.
+    if foreign_name.len() > 256 {
+        return Err(AppError::BadRequest("foreign_name too long".into()));
+    }
+    // Per-bridge rate limit, keyed by bridge id (NOT bot user id) so two
+    // bridges owned by the same bot have independent buckets.
+    if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check(
+        crate::rate_limit::RateLimitKind::BridgeMessage,
+        &bridge_id.to_string(),
+        BRIDGE_MESSAGE_RATE_PER_MIN,
+    ) {
+        return Err(AppError::TooManyRequests(
+            "bridge message rate limit exceeded".into(),
+            retry_after,
+        ));
+    }
+    let room = db::chat::get_room(&state.chat, bridge.room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let new_id = db::chat::insert_bridge_message(
+        &state.chat,
+        bridge.room_id,
+        bridge.id,
+        foreign_name,
+        None,
+        &bridge.kind,
+        body,
+    )
+    .await?;
+    super::room::finalize_bridge_message_send(
+        &state,
+        &room,
+        bridge.id,
+        foreign_name,
+        &bridge.kind,
+        new_id,
+        body,
+    )
+    .await?;
+    let raw = db::chat::get_message(&state.chat, new_id)
+        .await?
+        .ok_or(AppError::Internal(
+            "freshly inserted bridge message vanished".into(),
+        ))?;
+    Ok(Json(ApiMessage {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: String::new(),
+        author: foreign_name.to_string(),
+        body: raw.body,
+        created_at: raw.created_at,
+    }))
+}
+
+#[derive(Deserialize, Default)]
+struct HeartbeatBody {
+    /// Optional daemon-reported error string. `None` = healthy; `Some` puts
+    /// the bridge in `errored` status and stores the message for the admin
+    /// UI. Cap the length so a daemon cannot bloat the row.
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct HeartbeatAck {
+    ok: bool,
+    status: &'static str,
+}
+
+/// Maximum length of a daemon-reported error string. Bounds row growth + UI
+/// rendering; longer messages are truncated rather than rejected (the
+/// daemon should not refuse to heartbeat just because its error message
+/// is verbose).
+const HEARTBEAT_ERROR_MAX_BYTES: usize = 4096;
+
+/// LC-78: POST /api/v1/bridges/{bridge_id}/heartbeat - record a daemon
+/// liveness ping. Scope: `bridge:heartbeat`. The bridge daemon SHOULD POST
+/// this on its own interval (typical: 30s); the admin UI surfaces `stale`
+/// when the most-recent heartbeat is older than 3x interval (chunk 7).
+/// Owner-gated: the authenticated bot must be the bridge's registered bot.
+async fn post_bridge_heartbeat(
+    State(state): State<AppState>,
+    auth: ApiAuth,
+    Path(bridge_id): Path<i64>,
+    payload: Option<Json<HeartbeatBody>>,
+) -> Result<Json<HeartbeatAck>, AppError> {
+    auth.require(SCOPE_BRIDGE_HEARTBEAT)?;
+    let bridge = db::bridges::find_by_id(&state.chat, bridge_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if bridge.bot_user_id != auth.user.id {
+        return Err(AppError::Forbidden);
+    }
+    let mut error_owned;
+    let error_ref: Option<&str> = match payload.and_then(|Json(p)| p.error) {
+        Some(e) if !e.trim().is_empty() => {
+            error_owned = e;
+            if error_owned.len() > HEARTBEAT_ERROR_MAX_BYTES {
+                error_owned.truncate(HEARTBEAT_ERROR_MAX_BYTES);
+            }
+            Some(error_owned.as_str())
+        }
+        _ => None,
+    };
+    db::bridges::record_heartbeat(&state.chat, bridge_id, error_ref).await?;
+    Ok(Json(HeartbeatAck {
+        ok: true,
+        status: if error_ref.is_some() {
+            "errored"
+        } else {
+            "healthy"
+        },
     }))
 }

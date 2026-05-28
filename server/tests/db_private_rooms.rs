@@ -169,6 +169,26 @@ async fn setup_pool() -> SqlitePool {
     .execute(&pool)
     .await
     .expect("migration 50");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0052_remote_control_sessions.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 51");
+    sqlx::raw_sql(include_str!("../migrations/chat/0053_room_feeds.sql"))
+        .execute(&pool)
+        .await
+        .expect("migration 52");
+    sqlx::raw_sql(include_str!("../migrations/chat/0054_bridges.sql"))
+        .execute(&pool)
+        .await
+        .expect("migration 53");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0055_messages_bridge_actor.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 54");
 
     pool
 }

@@ -136,19 +136,28 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
 }
 
 /// Resolve the author identity for a message that may be authored by a real
-/// user, an incoming webhook (LC-74), or an email-ingress inbox (LC-77).
-/// Synthetic-actor messages (`webhook_id = Some` or `email_inbox_id = Some`)
-/// render with the actor's configured name + avatar and no DM link.
+/// user, an incoming webhook (LC-74), an email-ingress inbox (LC-77), or a
+/// protocol bridge (LC-78). Synthetic-actor messages (any of `webhook_id`,
+/// `email_inbox_id`, `bridge_id` set) render with the actor's name + avatar
+/// and no DM link.
 ///
-/// At most one of `webhook_id` and `email_inbox_id` is `Some` for any given
-/// message; if both are unexpectedly set, webhook wins (this is the older
-/// surface and we prefer not to silently flip rendering identity when a
-/// future migration accidentally double-tags a row).
+/// At most one of `webhook_id`, `email_inbox_id`, `bridge_id` is `Some` for
+/// any given message; if multiple are set, the older surfaces win in source
+/// order (webhook > email > bridge), so a future migration that accidentally
+/// double-tags a row does not silently flip rendering identity.
+///
+/// `bridge_foreign_name` / `bridge_kind` carry the bridge snapshot (LC-78);
+/// they are read directly from `RawMessage`, never joined back to the bridges
+/// row, because the foreign actor set is open-ended and the snapshot must
+/// survive bridge-row removal under stop-new lifecycle.
 pub(crate) async fn resolve_msg_author(
     state: &AppState,
     user_id: &str,
     webhook_id: Option<i64>,
     email_inbox_id: Option<i64>,
+    bridge_id: Option<i64>,
+    bridge_foreign_name: Option<&str>,
+    bridge_kind: Option<&str>,
     viewer_id: &str,
 ) -> Result<AuthorMeta, AppError> {
     if let Some(wid) = webhook_id {
@@ -181,7 +190,66 @@ pub(crate) async fn resolve_msg_author(
             actor: MessageActor::EmailInbox(avatar_url),
         });
     }
+    // Gate on the snapshot NAME, not bridge_id: under stop-new removal,
+    // `ON DELETE SET NULL` clears bridge_id while the snapshot strings
+    // persist, and the render still needs to show "alice (via matrix)" for
+    // those historical messages. If foreign_name is set and bridge_id is
+    // NULL, the message came from a removed bridge; it stays a bridge actor.
+    if let Some(name) = bridge_foreign_name {
+        let _ = bridge_id; // intentionally not gated on
+        let kind = bridge_kind.unwrap_or("bridge").to_string();
+        let name = name.to_string();
+        return Ok(AuthorMeta {
+            username: name,
+            display_name: None,
+            avatar_ext: None,
+            status: db::auth::STATUS_ACTIVE.to_string(),
+            custom_status: None,
+            is_bot: false,
+            actor: MessageActor::Bridge(crate::views::message_actor::BridgeActorMeta {
+                kind,
+                avatar_url: None,
+            }),
+        });
+    }
     load_author_meta(state, user_id, viewer_id).await
+}
+
+/// LC-78: synthesize the `actor` block for the LC-75 outgoing-webhook
+/// payload. Describes the ORIGINAL author of the message, not whoever
+/// triggered the current event (a `message.edited` event still names the
+/// message's author here, not the editor). That matches the bridge
+/// daemon's loop-back concern: the daemon needs to ignore events for
+/// messages it itself produced.
+///
+/// **Operator-visible contract.** A daemon MUST self-filter
+/// `actor.kind == "<its own kind>" && actor.<its own id field> == <its id>`
+/// on every outgoing-webhook event or it creates an infinite cross-network
+/// amplification loop. The server provides the field; loop-break is the
+/// daemon's responsibility (see docs/protocol-bridges.md).
+///
+/// The bridge arm is gated on `bridge_foreign_name.is_some()`, NOT on
+/// `bridge_id.is_some()`, mirroring the render resolver. Under stop-new
+/// removal `bridge_id` is nulled while the snapshot strings persist; the
+/// resolver and the loop-break payload must stay consistent so removed-
+/// bridge messages do not silently flip kind from `bridge` to `user`
+/// in mid-life.
+pub(crate) fn outgoing_actor(
+    user_id: &str,
+    webhook_id: Option<i64>,
+    email_inbox_id: Option<i64>,
+    bridge_id: Option<i64>,
+    bridge_foreign_name: Option<&str>,
+) -> serde_json::Value {
+    if let Some(wid) = webhook_id {
+        serde_json::json!({ "kind": "webhook", "webhook_id": wid })
+    } else if let Some(eid) = email_inbox_id {
+        serde_json::json!({ "kind": "email_inbox", "email_inbox_id": eid })
+    } else if bridge_foreign_name.is_some() {
+        serde_json::json!({ "kind": "bridge", "bridge_id": bridge_id })
+    } else {
+        serde_json::json!({ "kind": "user", "user_id": user_id })
+    }
 }
 
 pub(crate) async fn load_author_meta(
@@ -224,6 +292,9 @@ pub(crate) async fn load_message_view_for_viewer(
         &m.user_id,
         m.webhook_id,
         m.email_inbox_id,
+        m.bridge_id,
+        m.bridge_foreign_name.as_deref(),
+        m.bridge_kind.as_deref(),
         &viewer.id,
     )
     .await?;
