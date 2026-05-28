@@ -10,6 +10,7 @@ pub mod dnd;
 pub mod email;
 pub mod email_ingress;
 pub mod error;
+pub mod http_client;
 pub mod i18n;
 pub mod last_visited;
 pub mod links;

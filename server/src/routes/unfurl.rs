@@ -74,36 +74,36 @@ pub async fn get_unfurl(
         }
     }
 
-    // Build a one-shot reqwest client per request so timeouts are scoped.
-    // Redirects are followed MANUALLY (Policy::none) so every hop is
-    // re-validated: reqwest's own redirect follower would connect to the
-    // redirect target without re-running the SSRF host check, letting an
-    // attacker-controlled page 302 us to 169.254.169.254 / 127.0.0.1 and
-    // defeat the pre-flight entirely (LC-150 / audit S4).
-    let Ok(client) = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-    else {
-        return Ok(empty_preview());
-    };
+    // LC-152: every hop's URL goes through `http_client::outbound_get`, which
+    // applies the two-layer SSRF guard:
+    //
+    //   - **URL-input validation**: parses, rejects non-`http(s)` schemes,
+    //     and calls `ssrf::host_resolves_public` to filter literal IPs and
+    //     hostname-resolves-private. This catches the literal-IP bypass
+    //     (e.g. a 302 to `http://127.0.0.1/`) that reqwest's custom resolver
+    //     would NOT see (literal-IP URLs skip `dns::Resolve` entirely).
+    //   - **`PublicOnlyResolver`** inside reqwest's resolution path catches
+    //     the hostname use-time TOCTOU. Each redirect connection re-invokes
+    //     the resolver, so the per-hop guarantee applies per connection.
+    //
+    // The manual redirect loop (LC-150) stays because the unfurl path
+    // needs the empty_preview() control-flow fallback on rejection; using
+    // reqwest's redirect-following would lose that.
+    let request_timeout = Duration::from_secs(FETCH_TIMEOUT_SECS);
 
     let mut current = parsed.clone();
     let mut redirects = 0usize;
     let resp = loop {
-        // Re-check on EVERY hop, not just the first: scheme (a redirect can
-        // jump to file:// / gopher://) and the host's resolved IPs (reject any
-        // non-globally-routable address before we connect). DNS rebinding
-        // across the resolve-then-connect gap remains a small residual risk,
-        // mitigated by the 5s timeout and 1 MiB body cap.
-        if !matches!(current.scheme(), "http" | "https") {
-            return Ok(empty_preview());
-        }
-        if !crate::ssrf::host_resolves_public(&current).await {
-            return Ok(empty_preview());
-        }
-        let r = match client.get(current.as_str()).send().await {
+        let req = match crate::http_client::outbound_get(current.as_str()).await {
+            Ok(r) => r,
+            Err(_) => return Ok(empty_preview()),
+        };
+        let r = match req
+            .timeout(request_timeout)
+            .header(reqwest::header::USER_AGENT, USER_AGENT)
+            .send()
+            .await
+        {
             Ok(r) => r,
             Err(_) => return Ok(empty_preview()),
         };
