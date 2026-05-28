@@ -57,7 +57,7 @@
     <span class="font-medium">{{ message.label() }}</span>
     {% endif %}
     {% if message.author_is_bot %}
-    <span class="text-[10px] font-bold uppercase tracking-wide bg-surface-sunken text-content-muted rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide border border-border bg-surface-elevated text-content-muted rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
     {% endif %}
     {% endmatch %}
     <span class="text-xs text-content-muted">{{ message.created_at }}</span>
