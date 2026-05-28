@@ -5,10 +5,10 @@
    LC-158: brought to modal-a11y parity with the poll/scheduled modals -
    focus trap (window.__lcDialogTrap), Escape to close, and focus restored
    to the opener on cancel. #}
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+<div class="modal-backdrop"
      role="dialog" aria-modal="true" aria-label="{{ "reminders-picker-label"|t }}"
      data-lc-reminder-dialog>
-  <div class="w-80 rounded-lg bg-surface-elevated p-5 shadow-xl">
+  <div class="modal-panel max-w-sm">
     <div class="flex items-center justify-between gap-2 mb-3">
       <h2 class="text-lg font-semibold">{{ "reminders-picker-title"|t }}</h2>
       <button type="button" aria-label="{{ "reminders-close"|t }}" data-lc-reminder-close

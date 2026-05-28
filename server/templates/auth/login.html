@@ -11,7 +11,7 @@
     hx-target="#form-errors"
     hx-target-4*="#form-errors"
     hx-swap="innerHTML"
-    class="w-full max-w-sm space-y-4 bg-surface-elevated p-6 rounded shadow"
+    class="card w-full max-w-sm space-y-4 p-6"
   >
     {# LC-96 brand block: logo (if set) + operator heading + body.
        Each section is independently optional so a deployment can
@@ -33,13 +33,13 @@
     </div>
     <label class="block">
       <span class="text-sm">{{ "login-username"|t }}</span>
-      <input name="username" required class="mt-1 block w-full border rounded px-2 py-1">
+      <input name="username" required class="input mt-1">
     </label>
     <label class="block">
       <span class="text-sm">{{ "login-password"|t }}</span>
-      <input type="password" name="password" required class="mt-1 block w-full border rounded px-2 py-1">
+      <input type="password" name="password" required class="input mt-1">
     </label>
-    <button class="w-full brand-bg text-white py-2 rounded">{{ "login-submit"|t }}</button>
+    <button class="btn btn-primary w-full">{{ "login-submit"|t }}</button>
     <p class="text-sm text-center"><a href="/forgot" class="text-accent hover:underline">{{ "login-forgot-link"|t }}</a></p>
     <p class="text-sm text-center">{{ "login-no-account"|t }} <a href="/register" class="text-accent hover:underline">{{ "login-register-link"|t }}</a>.</p>
     <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
