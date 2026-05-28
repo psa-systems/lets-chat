@@ -6,6 +6,7 @@ pub mod apns_subscriptions;
 pub mod auth;
 pub mod bookmarks;
 pub mod branding;
+pub mod bridge_avatar_proxies;
 pub mod bridges;
 pub mod chat;
 pub mod custom_emojis;
@@ -90,6 +91,18 @@ pub fn uploads_dir() -> PathBuf {
     let p = PathBuf::from(data_dir()).join("uploads");
     if let Err(e) = std::fs::create_dir_all(&p) {
         tracing::warn!(error = %e, path = %p.display(), "failed to create uploads dir");
+    }
+    p
+}
+
+/// LC-78-AVATAR-PROXY: directory where bridge-avatar cache files live,
+/// named `{hash}` (no extension; content type comes from
+/// `bridge_avatar_proxies.content_type`). One file per row in the cache
+/// table; the GC sweep deletes both together.
+pub fn bridge_avatars_dir() -> PathBuf {
+    let p = PathBuf::from(data_dir()).join("bridge-avatars");
+    if let Err(e) = std::fs::create_dir_all(&p) {
+        tracing::warn!(error = %e, path = %p.display(), "failed to create bridge-avatars dir");
     }
     p
 }
