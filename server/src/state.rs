@@ -44,7 +44,8 @@ pub struct AppState {
     pub apns_client: Option<Arc<dyn ApnsClient>>,
     /// LC-91: FCM (Android) sender. `None` until configured; see `apns_client`.
     pub fcm_client: Option<Arc<dyn FcmClient>>,
-    /// `Some` when `LETS_CHAT_SMTP_URL` + `LETS_CHAT_SMTP_FROM` are set.
+    /// `Some` when `LETS_CHAT_SMTP_HOST` / `LETS_CHAT_SMTP_PORT` /
+    /// `LETS_CHAT_SMTP_TLS` / `LETS_CHAT_SMTP_FROM` are set.
     /// `None` disables outbound mail; password reset routes return 404
     /// and the digest tick short-circuits.
     pub mailer: Option<Mailer>,
