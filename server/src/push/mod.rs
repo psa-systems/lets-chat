@@ -42,9 +42,9 @@ pub trait PushClient: Send + Sync {
 }
 
 /// Production `PushClient`: builds an encrypted, VAPID-signed Web Push
-/// request via `web-push-native` and sends it with the LC-152 shared
-/// outbound client. Holds the decrypted VAPID keypair and the `mailto:`
-/// contact for the JWT `sub` claim.
+/// request via `web-push-native` and sends it through the LC-152 shared
+/// outbound helper (`http_client::outbound_post`). Holds the decrypted
+/// VAPID keypair and the `mailto:` contact for the JWT `sub` claim.
 ///
 /// **LC-152 security fix.** This path previously constructed a raw
 /// `reqwest::Client::new()` with no SSRF guard. The destination is a
@@ -52,23 +52,26 @@ pub trait PushClient: Send + Sync {
 /// registered when subscribing); a malicious user could register a
 /// subscription pointing at e.g. `http://169.254.169.254/latest/...` (AWS
 /// metadata) or an internal admin port, and lets-chat would POST
-/// notifications there on every mention. Routing through the shared
-/// outbound client puts the public-IP DNS filter on this path inline
-/// with reqwest's own resolution. Public push gateways (Firefox / Chrome
-/// / Safari) resolve public and pass through unaffected.
+/// notifications there on every mention. Routing every request through
+/// `outbound_post` puts the two-layer SSRF guard (URL-input filter for
+/// literal IPs + `PublicOnlyResolver` for hostname TOCTOU) on this path
+/// by construction. Public push gateways (Firefox / Chrome / Safari)
+/// resolve public and pass through unaffected.
+///
+/// Does NOT hold a `reqwest::Client` field by design: the only way to
+/// reach a client is through the helper's URL-validating `outbound_*`
+/// entry points, so each `.send()` re-routes through the guard. If a
+/// future requirement legitimately needs per-instance client tuning, the
+/// answer is more `outbound_*` variants in `http_client`, NOT a
+/// constructor parameter here.
 pub struct ReqwestPushClient {
-    http: &'static reqwest::Client,
     vapid: Arc<VapidKeypair>,
     contact: String,
 }
 
 impl ReqwestPushClient {
     pub fn new(vapid: Arc<VapidKeypair>, contact: String) -> Self {
-        Self {
-            http: crate::http_client::outbound_no_redirects(),
-            vapid,
-            contact,
-        }
+        Self { vapid, contact }
     }
 }
 
@@ -105,7 +108,16 @@ impl PushClient for ReqwestPushClient {
             .map_err(|e| PushError::Encrypt(format!("encrypt: {e}")))?;
 
         let (parts, body) = request.into_parts();
-        let mut req = self.http.post(parts.uri.to_string()).body(body);
+        // LC-152: every Web Push delivery routes through
+        // `http_client::outbound_post`, which applies the two-layer SSRF
+        // guard. A user-controlled `sub.endpoint` pointing at e.g.
+        // `http://169.254.169.254/...` (AWS metadata) is refused by the
+        // URL-input filter before any TCP connect.
+        let url_string = parts.uri.to_string();
+        let mut req = crate::http_client::outbound_post(&url_string)
+            .await
+            .map_err(|e| PushError::Transport(format!("ssrf-rejected: {e}")))?
+            .body(body);
         for (name, value) in parts.headers.iter() {
             if let Ok(v) = value.to_str() {
                 req = req.header(name.as_str(), v);
