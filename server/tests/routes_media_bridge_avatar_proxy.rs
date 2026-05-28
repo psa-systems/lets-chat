@@ -164,11 +164,9 @@ async fn ok_row_serves_bytes_with_cache_headers() {
         .await
         .unwrap();
     let sess = db::auth::create_session(&auth_pool, &user).await.unwrap();
-    let png_bytes: &[u8] = &[
-        // The handler does not decode; it serves bytes verbatim with the
-        // Content-Type from the row.
-        b'P', b'N', b'G', b'B', b'Y', b'T', b'E', b'S',
-    ];
+    // The handler does not decode; it serves bytes verbatim with the
+    // Content-Type from the row.
+    let png_bytes: &[u8] = b"PNGBYTES";
     let path = std::path::PathBuf::from(&dir)
         .join("bridge-avatars")
         .join(HASH64);

@@ -151,6 +151,12 @@ impl From<crate::models::user::UserRecord> for AuthorMeta {
 /// they are read directly from `RawMessage`, never joined back to the bridges
 /// row, because the foreign actor set is open-ended and the snapshot must
 /// survive bridge-row removal under stop-new lifecycle.
+///
+/// The arg count exceeds clippy's default (9 vs 7) because each `Option<i64>`
+/// / `Option<&str>` is read straight off a `RawMessage` row and grouping them
+/// into a synthetic-actor struct would force every callsite to build that
+/// struct from the same six fields. Suppress here rather than refactor.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn resolve_msg_author(
     state: &AppState,
     user_id: &str,
