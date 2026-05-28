@@ -49,26 +49,26 @@ pub async fn upsert_pending(
     hash: &str,
     foreign_url: &str,
 ) -> Result<bool, sqlx::Error> {
+    // INSERT OR IGNORE distinguishes new-row (rows_affected = 1) from
+    // existing-row (rows_affected = 0). SQLite's ON CONFLICT DO UPDATE
+    // reports rows_affected = 1 in both cases, which is ambiguous.
     let result = sqlx::query(
-        "INSERT INTO bridge_avatar_proxies (hash, foreign_url) VALUES (?, ?) \
-         ON CONFLICT(hash) DO UPDATE SET last_seen_at = datetime('now')",
+        "INSERT OR IGNORE INTO bridge_avatar_proxies (hash, foreign_url) VALUES (?, ?)",
     )
     .bind(hash)
     .bind(foreign_url)
     .execute(pool)
     .await?;
-    // rows_affected is 1 for both INSERT and ON CONFLICT UPDATE. Detect new
-    // vs. existing via SELECT round-trip; cheap and unambiguous.
-    let inserted: i64 = sqlx::query_scalar(
-        "SELECT CASE WHEN fetch_status = 'pending' AND fetched_at IS NULL AND failure_reason IS NULL \
-                     AND content_type IS NULL THEN 1 ELSE 0 END \
-         FROM bridge_avatar_proxies WHERE hash = ?",
-    )
-    .bind(hash)
-    .fetch_one(pool)
-    .await?;
-    let _ = result;
-    Ok(inserted == 1)
+    if result.rows_affected() == 1 {
+        // Brand new row; last_seen_at defaults to datetime('now').
+        return Ok(true);
+    }
+    // Existing row: bump last_seen_at so the GC sweep keeps it alive.
+    sqlx::query("UPDATE bridge_avatar_proxies SET last_seen_at = datetime('now') WHERE hash = ?")
+        .bind(hash)
+        .execute(pool)
+        .await?;
+    Ok(false)
 }
 
 pub async fn find_by_hash(
