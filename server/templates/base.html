@@ -95,6 +95,16 @@
   <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-ext="response-targets" class="h-screen overflow-hidden bg-surface text-content">
+  {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
+     (Tab from address bar lands here first), then becomes a positioned
+     button that jumps focus to #main. Pages that don't have #main (login,
+     register, error pages) simply scroll-jump and don't lose anything; the
+     link still satisfies the WCAG 2.4.1 bypass-blocks requirement on every
+     page that does have a main landmark. #}
+  <a href="#main"
+     class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-3 focus:py-2 focus:rounded-md focus:bg-accent focus:text-accent-content focus:shadow-lg">
+    {{ "a11y-skip-to-content"|t }}
+  </a>
   {% block body %}{% endblock %}
 </body>
 </html>

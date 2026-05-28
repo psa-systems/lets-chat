@@ -1,4 +1,8 @@
-<div id="status-picker-inner" class="border border-border-strong rounded p-2 bg-surface-elevated text-sm space-y-2 shadow" tabindex="-1">
+<div id="status-picker-inner"
+     role="dialog"
+     aria-label="{{ "a11y-status-picker-dialog-label"|t }}"
+     class="border border-border-strong rounded p-2 bg-surface-elevated text-sm space-y-2 shadow"
+     tabindex="-1">
   <form hx-post="/status" hx-target="#status-picker" hx-swap="innerHTML" class="space-y-2">
     <fieldset class="flex flex-col gap-1">
       <legend class="sr-only">{{ "status-presence-legend"|t }}</legend>
