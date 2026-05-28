@@ -57,6 +57,22 @@ pub struct RawMessage {
     /// LC-77: `Some(N)` for messages posted by email-ingress inbox `N`.
     /// Parallel to `webhook_id`; same `user_id = ''` synthetic-actor shape.
     pub email_inbox_id: Option<i64>,
+    /// LC-78: `Some(N)` for messages posted by protocol-bridge `N`. Unlike
+    /// `webhook_id` and `email_inbox_id`, the actor identity is NOT
+    /// resolved by joining to the bridge row at render time (the foreign
+    /// actor set is open-ended). Instead, `bridge_foreign_name` and
+    /// `bridge_kind` carry the per-message snapshot; this id is kept so
+    /// the outgoing-webhook loop-break filter can identify "messages I
+    /// myself produced." `None` for all non-bridge messages.
+    pub bridge_id: Option<i64>,
+    /// LC-78: snapshotted foreign display name for a bridge-posted message
+    /// (e.g. Matrix `alice:server.org`). `Some` iff `bridge_id` is `Some`.
+    /// Snapshotted (not joined) so the render survives bridge-row removal
+    /// under stop-new lifecycle.
+    pub bridge_foreign_name: Option<String>,
+    /// LC-78: snapshotted protocol kind for a bridge-posted message
+    /// (`matrix` / `irc` / `xmpp`). `Some` iff `bridge_id` is `Some`.
+    pub bridge_kind: Option<String>,
 }
 
 /// One archived prior version of a message. Inserted by `update_message_body`
@@ -134,7 +150,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -142,6 +158,53 @@ pub async fn list_messages(
     .bind(room_id)
     .fetch_all(pool)
     .await?;
+
+    Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
+/// LC-78: cursor-paginated read of top-level messages in a room. Forked
+/// from `list_messages` (which the web/HTMX room render still uses,
+/// unbounded + ascending) so the API can return bounded pages without
+/// touching the page-render's shape.
+///
+/// `before_id`: optional cursor; results are strictly older than this id.
+/// `limit`: capped to `MAX_PAGINATED_LIMIT` by the caller. Returned in
+/// `id DESC` order so the API caller can walk backwards through history
+/// by feeding the oldest returned `id` back as `before_id` on the next
+/// request. Same visibility filter as `list_messages`.
+pub async fn list_messages_paginated(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    before_id: Option<i64>,
+    limit: i64,
+) -> Result<Vec<RawMessage>, sqlx::Error> {
+    // Two branches because sqlx's `bind` is positional; threading an
+    // `Option<i64>` through the same query string would still need the
+    // placeholder, and `WHERE ? IS NULL OR id < ?` defeats the index.
+    let rows = if let Some(cursor) = before_id {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+             FROM messages \
+             WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(room_id)
+        .bind(cursor)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+             FROM messages \
+             WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(room_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    };
 
     Ok(rows.into_iter().map(row_to_raw).collect())
 }
@@ -159,6 +222,9 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         is_system: row.get("is_system"),
         webhook_id: row.get("webhook_id"),
         email_inbox_id: row.get("email_inbox_id"),
+        bridge_id: row.get("bridge_id"),
+        bridge_foreign_name: row.get("bridge_foreign_name"),
+        bridge_kind: row.get("bridge_kind"),
     }
 }
 
@@ -171,7 +237,7 @@ pub async fn list_recent_messages(
     limit: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT ?",
@@ -191,7 +257,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
@@ -263,7 +329,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -285,7 +351,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -304,7 +370,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
          FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)
@@ -442,6 +508,39 @@ pub async fn insert_email_inbox_message(
     )
     .bind(room_id)
     .bind(email_inbox_id)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// LC-78: insert a message authored by a protocol bridge. Unlike
+/// `insert_webhook_message` / `insert_email_inbox_message`, the foreign
+/// actor identity (display name + protocol kind) is SNAPSHOTTED onto
+/// the row at post time, because the set of foreign actors is open-ended
+/// and there is no per-channel row to join back to at render time. The
+/// bridge daemon's role / room access has already been verified by the
+/// caller. `foreign_avatar` is reserved nullable for the LC-78-AVATAR-PROXY
+/// follow-up; v1 always passes `None` (the endpoint 400s any non-null
+/// foreign avatar URL).
+pub async fn insert_bridge_message(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    bridge_id: i64,
+    foreign_name: &str,
+    foreign_avatar: Option<&str>,
+    kind: &str,
+    body: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, bridge_id, bridge_foreign_name, bridge_foreign_avatar, bridge_kind, body) \
+         VALUES (?, '', ?, ?, ?, ?, ?)",
+    )
+    .bind(room_id)
+    .bind(bridge_id)
+    .bind(foreign_name)
+    .bind(foreign_avatar)
+    .bind(kind)
     .bind(body)
     .execute(pool)
     .await?;

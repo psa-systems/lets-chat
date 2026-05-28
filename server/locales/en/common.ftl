@@ -21,6 +21,7 @@ admin-nav-analytics = Analytics
 admin-nav-commands = Commands
 admin-nav-bots = Bots
 admin-nav-webhooks = Webhooks
+admin-nav-bridges = Bridges
 admin-nav-version-release = Release
 admin-nav-version-built = built
 

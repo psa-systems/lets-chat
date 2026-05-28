@@ -71,12 +71,21 @@ pub async fn toggle_reaction(
     state.hub.broadcast_to_room(m.room_id, &event);
 
     // LC-75: publish reaction.added to outgoing webhooks (additions only).
+    // LC-78: actor describes the REACTOR (not the message author). v1 only
+    // allows real users to react, so this is always kind="user"; the field
+    // is included for symmetry with message.* events and so a future
+    // bridge-reactions endpoint can swap it without changing the schema.
     if added {
         crate::outgoing::enqueue(
             &state.chat,
             "reaction.added",
             m.room_id,
-            serde_json::json!({ "message_id": message_id, "emoji": emoji, "user_id": user.id }),
+            serde_json::json!({
+                "message_id": message_id,
+                "emoji": emoji,
+                "user_id": user.id,
+                "actor": super::outgoing_actor(&user.id, None, None, None, None),
+            }),
         )
         .await;
     }
