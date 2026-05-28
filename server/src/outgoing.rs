@@ -85,30 +85,29 @@ pub struct DeliveryStats {
     pub failed: usize,
 }
 
-/// Attempt all due deliveries once. Driven by the background loop. Enforces the
-/// LC-152 delivery-time SSRF guard on every target URL.
-pub async fn run_delivery_tick(
-    chat: &SqlitePool,
-    client: &reqwest::Client,
-) -> sqlx::Result<DeliveryStats> {
-    deliver_due(chat, client, true).await
+/// Attempt all due deliveries once. Driven by the background loop. LC-152:
+/// every outbound POST goes through `http_client::outbound_post`, which
+/// runs the two-layer SSRF guard (URL-input filter catches literal IPs;
+/// `PublicOnlyResolver` inside reqwest's resolution path catches the
+/// hostname use-time TOCTOU).
+pub async fn run_delivery_tick(chat: &SqlitePool) -> sqlx::Result<DeliveryStats> {
+    deliver_due(chat, None).await
 }
 
-/// Test seam: a delivery tick with the SSRF guard disabled, so the delivery-path
-/// tests can target a loopback receiver (which the guard would otherwise, and in
-/// production correctly does, reject). Production always uses `run_delivery_tick`.
+/// Test seam: a delivery tick that uses the caller's `reqwest::Client`
+/// directly, bypassing the SSRF guard, so the delivery-path tests can
+/// target a loopback receiver. Production always uses `run_delivery_tick`.
 #[doc(hidden)]
 pub async fn run_delivery_tick_unchecked(
     chat: &SqlitePool,
     client: &reqwest::Client,
 ) -> sqlx::Result<DeliveryStats> {
-    deliver_due(chat, client, false).await
+    deliver_due(chat, Some(client)).await
 }
 
 async fn deliver_due(
     chat: &SqlitePool,
-    client: &reqwest::Client,
-    check_ssrf: bool,
+    test_client: Option<&reqwest::Client>,
 ) -> sqlx::Result<DeliveryStats> {
     let due = db::outgoing_webhooks::due_deliveries(chat, BATCH).await?;
     let mut stats = DeliveryStats::default();
@@ -123,34 +122,36 @@ async fn deliver_due(
             continue;
         }
 
-        // LC-152: re-validate the destination at delivery time. Creation only
-        // does a string check that lets any hostname through, so a URL whose
-        // host resolves to an internal / cloud-metadata address would be
-        // fetched here with signed payloads. Resolve and reject non-public
-        // targets (and non-http(s) schemes) before connecting. Terminal, not
-        // retried: a blocked URL will not become public on a later tick.
-        let url_ok = !check_ssrf
-            || match url::Url::parse(&t.url) {
-                Ok(u) => {
-                    matches!(u.scheme(), "http" | "https")
-                        && crate::ssrf::host_resolves_public(&u).await
-                }
-                Err(_) => false,
-            };
-        if !url_ok {
-            db::outgoing_webhooks::mark_failed(chat, d.id, 0, Some("blocked: non-public URL"))
-                .await?;
-            stats.failed += 1;
-            continue;
-        }
-
         // Sign `timestamp.body` (not the body alone) so a captured delivery
         // cannot be replayed indefinitely: the signature is bound to the
         // timestamp the receiver also checks.
         let timestamp = chrono::Utc::now().timestamp();
         let signature = sign(&t.signing_secret, &format!("{timestamp}.{}", d.payload));
-        let resp = client
-            .post(&t.url)
+
+        // LC-152: build the request via the helper unless the test seam
+        // injected a raw client. The helper's two-layer guard (URL-input
+        // filter for literal IPs + PublicOnlyResolver for hostname TOCTOU)
+        // is the security boundary. The "blocked: non-public URL"
+        // `mark_failed` message is the operator-visible workflow at
+        // `/admin/outgoing-webhooks/deliveries`.
+        let req = match test_client {
+            Some(c) => c.post(&t.url),
+            None => match crate::http_client::outbound_post(&t.url).await {
+                Ok(req) => req,
+                Err(_) => {
+                    db::outgoing_webhooks::mark_failed(
+                        chat,
+                        d.id,
+                        0,
+                        Some("blocked: non-public URL"),
+                    )
+                    .await?;
+                    stats.failed += 1;
+                    continue;
+                }
+            },
+        };
+        let resp = req
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header("X-LetsChat-Event", &d.event)
             .header("X-LetsChat-Timestamp", timestamp.to_string())

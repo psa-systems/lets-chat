@@ -320,16 +320,17 @@ fn spawn_reminders_dispatcher(state: AppState) {
 fn spawn_outgoing_webhook_dispatcher(state: AppState) {
     const TICK_SECS: u64 = 10;
     tokio::spawn(async move {
-        // LC-152: shared outbound client with the public-IP DNS filter in
-        // reqwest's own resolution path. Closes the prior check-then-
-        // reqwest-reresolves TOCTOU + makes the no-redirect policy
-        // structural rather than per-callsite.
-        let client = lets_chat::http_client::outbound_no_redirects();
+        // LC-152: each delivery's reqwest::Client is reached via
+        // `http_client::outbound_post`, which applies the two-layer SSRF
+        // guard (URL-input check for literal IPs + PublicOnlyResolver for
+        // hostname TOCTOU). No client construction at the call site; no
+        // client construction is reachable from `server/src/` outside the
+        // helper, by structural design + the grep-ban test.
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
         tick.tick().await;
         loop {
             tick.tick().await;
-            match lets_chat::outgoing::run_delivery_tick(&state.chat, client).await {
+            match lets_chat::outgoing::run_delivery_tick(&state.chat).await {
                 Ok(stats) if stats.delivered + stats.retried + stats.failed > 0 => {
                     tracing::info!(
                         delivered = stats.delivered,
