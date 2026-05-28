@@ -882,6 +882,7 @@ async fn render_new_message(
         message.bridge_id,
         message.bridge_foreign_name.as_deref(),
         message.bridge_kind.as_deref(),
+        message.bridge_foreign_avatar.as_deref(),
         &viewer.id,
     )
     .await
@@ -983,6 +984,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         m.bridge_id,
         m.bridge_foreign_name.as_deref(),
         m.bridge_kind.as_deref(),
+        m.bridge_foreign_avatar.as_deref(),
         &viewer.id,
     )
     .await
@@ -1102,6 +1104,7 @@ async fn render_thread_reply(
         message.bridge_id,
         message.bridge_foreign_name.as_deref(),
         message.bridge_kind.as_deref(),
+        message.bridge_foreign_avatar.as_deref(),
         &viewer.id,
     )
     .await
@@ -1412,6 +1415,7 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
         bridge_id: raw.bridge_id,
         bridge_foreign_name: raw.bridge_foreign_name,
         bridge_kind: raw.bridge_kind,
+        bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
     let event = ChatEvent::NewMessage {
         message,

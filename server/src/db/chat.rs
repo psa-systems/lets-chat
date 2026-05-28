@@ -73,6 +73,14 @@ pub struct RawMessage {
     /// LC-78: snapshotted protocol kind for a bridge-posted message
     /// (`matrix` / `irc` / `xmpp`). `Some` iff `bridge_id` is `Some`.
     pub bridge_kind: Option<String>,
+    /// LC-78-AVATAR-PROXY: the cache key (sha256 of the canonical foreign
+    /// avatar URL) snapshotted onto the row at POST time. `Some` when the
+    /// daemon submitted `foreign_avatar` AND the proxy was enabled at
+    /// submit time; otherwise `None` (render falls back to initials).
+    /// Stored as a hash, not the URL, so the foreign URL never appears in
+    /// rendered HTML (the structural side-channel closure that motivated
+    /// schema-C in the design plan).
+    pub bridge_foreign_avatar: Option<String>,
 }
 
 /// One archived prior version of a message. Inserted by `update_message_body`
@@ -150,7 +158,7 @@ pub async fn list_messages(
     room_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC",
@@ -183,7 +191,7 @@ pub async fn list_messages_paginated(
     // placeholder, and `WHERE ? IS NULL OR id < ?` defeats the index.
     let rows = if let Some(cursor) = before_id {
         sqlx::query(
-            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
              FROM messages \
              WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
              ORDER BY id DESC LIMIT ?",
@@ -195,7 +203,7 @@ pub async fn list_messages_paginated(
         .await?
     } else {
         sqlx::query(
-            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
              FROM messages \
              WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
              ORDER BY id DESC LIMIT ?",
@@ -225,6 +233,7 @@ fn row_to_raw(row: sqlx::sqlite::SqliteRow) -> RawMessage {
         bridge_id: row.get("bridge_id"),
         bridge_foreign_name: row.get("bridge_foreign_name"),
         bridge_kind: row.get("bridge_kind"),
+        bridge_foreign_avatar: row.get("bridge_foreign_avatar"),
     }
 }
 
@@ -237,7 +246,7 @@ pub async fn list_recent_messages(
     limit: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages \
          WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT ?",
@@ -257,7 +266,7 @@ pub async fn list_thread_replies(
     parent_id: i64,
 ) -> Result<Vec<RawMessage>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages \
          WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
          ORDER BY id ASC",
@@ -329,7 +338,7 @@ pub async fn prior_message_in_room(
     before_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages \
          WHERE room_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id DESC LIMIT 1",
@@ -351,7 +360,7 @@ pub async fn next_message_in_room(
     after_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages \
          WHERE room_id = ? AND id > ? AND deleted_at IS NULL AND quarantined = 0 AND parent_id IS NULL \
          ORDER BY id ASC LIMIT 1",
@@ -370,7 +379,7 @@ pub async fn get_message(
     message_id: i64,
 ) -> Result<Option<RawMessage>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind \
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
          FROM messages WHERE id = ? AND deleted_at IS NULL AND quarantined = 0",
     )
     .bind(message_id)

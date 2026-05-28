@@ -38,4 +38,10 @@ pub struct Message {
     /// LC-78: snapshotted protocol kind (`matrix` / `irc` / `xmpp`). `Some`
     /// iff `bridge_id` is `Some`.
     pub bridge_kind: Option<String>,
+    /// LC-78-AVATAR-PROXY: the cache key for the message's foreign avatar.
+    /// `Some` when the daemon submitted a foreign avatar URL and the proxy
+    /// gate was enabled at submit time. Carried on the broadcast Message so
+    /// the WS render reaches the resolver without a re-query, matching the
+    /// pass-through shape of `bridge_foreign_name` and `bridge_kind`.
+    pub bridge_foreign_avatar: Option<String>,
 }

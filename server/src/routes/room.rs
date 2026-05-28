@@ -234,6 +234,7 @@ pub async fn get_room(
                 m.bridge_id,
                 m.bridge_foreign_name.as_deref(),
                 m.bridge_kind.as_deref(),
+                m.bridge_foreign_avatar.as_deref(),
                 &user.id,
             )
             .await?;
@@ -687,6 +688,7 @@ pub(crate) async fn finalize_message_send(
         bridge_id: raw.bridge_id,
         bridge_foreign_name: raw.bridge_foreign_name,
         bridge_kind: raw.bridge_kind,
+        bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
 
     let event = ChatEvent::NewMessage {
@@ -852,6 +854,7 @@ pub(crate) async fn finalize_email_inbox_message_send(
         bridge_id: None,
         bridge_foreign_name: None,
         bridge_kind: None,
+        bridge_foreign_avatar: None,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -954,6 +957,7 @@ pub(crate) async fn finalize_webhook_message_send(
         bridge_id: None,
         bridge_foreign_name: None,
         bridge_kind: None,
+        bridge_foreign_avatar: None,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -1049,6 +1053,11 @@ pub(crate) async fn finalize_bridge_message_send(
         bridge_id: Some(bridge_id),
         bridge_foreign_name: Some(foreign_name.to_string()),
         bridge_kind: Some(kind.to_string()),
+        // Snapshot read back from the row the endpoint inserted: the
+        // endpoint computed the hash + upserted the proxy row + bound the
+        // hash on `insert_bridge_message`, so by the time finalize runs the
+        // hash is on the row. None when the daemon submitted no avatar.
+        bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
     let event = ChatEvent::NewMessage {
         message,
@@ -1528,6 +1537,7 @@ pub async fn patch_message(
             m.bridge_id,
             m.bridge_foreign_name.as_deref(),
             m.bridge_kind.as_deref(),
+            m.bridge_foreign_avatar.as_deref(),
             &user.id,
         )
             .await?;
@@ -1642,6 +1652,7 @@ pub async fn get_thread_panel(
         parent.bridge_id,
         parent.bridge_foreign_name.as_deref(),
         parent.bridge_kind.as_deref(),
+        parent.bridge_foreign_avatar.as_deref(),
         &user.id,
     )
     .await?;
@@ -1719,6 +1730,7 @@ pub async fn get_thread_panel(
                 r.bridge_id,
                 r.bridge_foreign_name.as_deref(),
                 r.bridge_kind.as_deref(),
+                r.bridge_foreign_avatar.as_deref(),
                 &user.id,
             )
             .await?;
@@ -1850,6 +1862,7 @@ pub async fn post_thread_reply(
         bridge_id: raw.bridge_id,
         bridge_foreign_name: raw.bridge_foreign_name,
         bridge_kind: raw.bridge_kind,
+        bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
     let event = ChatEvent::ThreadReply { parent_id, message };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);
