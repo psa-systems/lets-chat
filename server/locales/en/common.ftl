@@ -5,6 +5,14 @@
 # (CI checks coverage). Core action keys (action-save/cancel/...) live in
 # main.ftl and are reused here.
 
+## A11y (LC-197): screen-reader / keyboard helpers used by base.html, the
+## room message list, the composer, and the status picker. These are
+## label strings - keep them short, no punctuation that an SR will read aloud.
+a11y-skip-to-content = Skip to main content
+a11y-messages-region-label = Chat messages
+a11y-composer-message-input = Type a message
+a11y-status-picker-dialog-label = Set status
+
 ## Admin nav
 admin-nav-settings = Settings
 admin-nav-users = Users

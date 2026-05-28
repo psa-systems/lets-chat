@@ -2,6 +2,12 @@
 # Configuración. Debe definir los mismos ids de mensaje que en/common.ftl
 # (CI comprueba la cobertura).
 
+## A11y (LC-197): textos para lectores de pantalla / navegación por teclado.
+a11y-skip-to-content = Saltar al contenido principal
+a11y-messages-region-label = Mensajes del chat
+a11y-composer-message-input = Escribir un mensaje
+a11y-status-picker-dialog-label = Establecer estado
+
 ## Admin nav
 admin-nav-settings = Configuración
 admin-nav-users = Usuarios
