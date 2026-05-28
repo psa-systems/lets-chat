@@ -4,17 +4,18 @@
       var uid = {{ user_id_json|safe }};
       var status = {{ status_json|safe }};
       var custom = {{ custom_status_json|safe }};
-      var colorClass = status === 'dnd' ? 'bg-red-500'
-        : (status === 'idle' || status === 'away') ? 'bg-yellow-400'
-        : status === 'offline' ? 'bg-slate-400'
-        : 'bg-green-500';
+      // LC-198: token-mapped colors. Keep in sync with partials/avatar.html.
+      var colorClass = status === 'dnd' ? 'bg-danger'
+        : (status === 'idle' || status === 'away') ? 'bg-warning'
+        : status === 'offline' ? 'bg-content-subtle'
+        : 'bg-success';
       var label = status === 'dnd' ? 'Do not disturb'
         : (status === 'idle' || status === 'away') ? 'Away'
         : status === 'offline' ? 'Offline'
         : 'Online';
       var safeUid = uid.replace(/"/g, '\\"');
       document.querySelectorAll('[data-user-status="' + safeUid + '"]').forEach(function(dot){
-        dot.classList.remove('bg-red-500','bg-yellow-400','bg-slate-400','bg-green-500');
+        dot.classList.remove('bg-danger','bg-warning','bg-content-subtle','bg-success');
         dot.classList.add(colorClass);
         dot.setAttribute('aria-label', label);
         var wrapper = dot.parentElement;

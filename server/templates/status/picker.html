@@ -8,17 +8,17 @@
       <legend class="sr-only">{{ "status-presence-legend"|t }}</legend>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="active"{% if current_status == "active" || current_status == "idle" %} checked{% endif %}>
-        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-success"></span>
         <span>{{ "status-online"|t }}</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="away"{% if current_status == "away" %} checked{% endif %}>
-        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-yellow-400"></span>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-warning"></span>
         <span>{{ "status-away"|t }}</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="status" value="dnd"{% if current_status == "dnd" %} checked{% endif %}>
-        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
+        <span aria-hidden="true" class="inline-block h-2.5 w-2.5 rounded-full bg-danger"></span>
         <span>{{ "status-dnd"|t }}</span>
       </label>
     </fieldset>
