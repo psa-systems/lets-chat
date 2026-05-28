@@ -173,7 +173,14 @@ body {
 }
 
 #main {
+    /* LC-199: with the LC-199 viewport-fit=cover meta in base.html, plain
+     * 100vh on iOS Safari includes the URL bar / dynamic-toolbar area, so
+     * content extends behind the chrome and scrolls under it. `100dvh`
+     * (dynamic viewport height) excludes the URL bar - it shrinks/grows as
+     * the toolbar shows/hides. Falls back to `100vh` on browsers that don't
+     * yet understand `dvh` (Safari < 15.4, Firefox < 110). */
     height: 100vh;
+    height: 100dvh;
 }
 
 ::-webkit-scrollbar {
@@ -530,6 +537,45 @@ math {
 }
 .modal-backdrop {
     animation: lc-fade-in 120ms ease-out;
+}
+
+/* LC-199: iOS safe-area helpers. With the LC-199 `viewport-fit=cover` meta,
+ * fixed bars + the composer extend behind the notch / home indicator; these
+ * classes restore the gap. `max(...)` keeps the existing visual padding when
+ * the inset is 0 (desktop / non-cutout devices). */
+.lc-pb-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.lc-px-safe {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+}
+/* For a `bottom: 0`-anchored bar (toast / outbox / call dock) push it up by
+ * the inset instead of relying on inner padding. */
+.lc-bottom-safe {
+    bottom: max(0.75rem, calc(0.75rem + env(safe-area-inset-bottom)));
+}
+
+/* LC-199: nav drawer transition. The desktop layout is `md:static md:flex`
+ * (no transform), so this rule applies only at mobile widths. The JS toggles
+ * the `hidden` class as before; we also key off a `data-open` attribute so
+ * the drawer slides in/out instead of snapping. Falling back to the binary
+ * `hidden` toggle if JS doesn't set data-open keeps the worst case correct. */
+@media (max-width: 767px) {
+    #lc-nav-panel {
+        transform: translateX(-100%);
+        transition: transform 200ms ease-out;
+    }
+    #lc-nav-panel[data-open="true"] {
+        transform: translateX(0);
+    }
+    #lc-nav-backdrop {
+        opacity: 0;
+        transition: opacity 200ms ease-out;
+    }
+    #lc-nav-backdrop[data-open="true"] {
+        opacity: 1;
+    }
 }
 
 /* Universal reduced-motion kill switch. Sets transition + animation duration
