@@ -198,6 +198,7 @@ pub async fn get_dm(
                 m.bridge_id,
                 m.bridge_foreign_name.as_deref(),
                 m.bridge_kind.as_deref(),
+                m.bridge_foreign_avatar.as_deref(),
                 &user.id,
             )
             .await?;

@@ -1623,6 +1623,7 @@ pub async fn post_quarantine_approve(
                 bridge_id: raw.bridge_id,
                 bridge_foreign_name: raw.bridge_foreign_name,
                 bridge_kind: raw.bridge_kind,
+                bridge_foreign_avatar: raw.bridge_foreign_avatar,
             };
             let event = ChatEvent::NewMessage {
                 message,

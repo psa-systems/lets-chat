@@ -278,10 +278,12 @@ const BRIDGE_MESSAGE_RATE_PER_MIN: u32 = 600;
 struct PostBridgeMessageBody {
     body: String,
     foreign_name: String,
-    /// LC-78 v1: must be absent or null. The endpoint 400s any non-null
-    /// value to avoid per-render fetches from arbitrary federated
-    /// homeservers leaking viewer IPs (see LC-78-AVATAR-PROXY follow-up
-    /// for the proxy-cache design that would close this).
+    /// LC-78-AVATAR-PROXY (v2): an absolute http(s) URL the server fetches
+    /// once and caches; viewers' browsers only ever hit the same-origin
+    /// proxy URL. Validated at submit time (URL shape + SSRF re-resolve),
+    /// rejected with 400 on failure. Set
+    /// `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` to restore v1's
+    /// reject-non-null behavior (this field then must be absent or null).
     #[serde(default)]
     foreign_avatar: Option<String>,
 }
@@ -307,14 +309,75 @@ async fn post_bridge_message(
     if auth.user.is_banned || auth.user.is_muted {
         return Err(AppError::Forbidden);
     }
-    if payload.foreign_avatar.is_some() {
-        // Fail loud (not silent drop) so a misconfigured daemon surfaces the
-        // policy and can be redirected to the proxy-cache follow-up when
-        // LC-78-AVATAR-PROXY lands.
-        return Err(AppError::BadRequest(
-            "foreign_avatar is not accepted in v1; see LC-78-AVATAR-PROXY".into(),
-        ));
-    }
+    // LC-78-AVATAR-PROXY: validate + hash the foreign avatar URL up-front.
+    // SSRF re-resolve happens here (submit time) AND in the fetch task
+    // (fetch time per LC-152's pattern). Failure is fail-loud 400, mirroring
+    // the v1 reject posture; operators flipping the gate off get the v1
+    // policy back without changing the endpoint shape.
+    let foreign_avatar_hash: Option<String> = match payload.foreign_avatar.as_deref() {
+        None => None,
+        Some(s) if s.trim().is_empty() => None,
+        Some(s) => {
+            if !crate::bridge_avatar::proxy_enabled() {
+                return Err(AppError::BadRequest(
+                    "foreign_avatar rejected by operator (LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false)".into(),
+                ));
+            }
+            let trimmed = s.trim();
+            if trimmed.len() > 2048 {
+                return Err(AppError::BadRequest("foreign_avatar URL too long".into()));
+            }
+            let parsed = url::Url::parse(trimmed).map_err(|_| {
+                AppError::BadRequest("foreign_avatar must be a valid URL".into())
+            })?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return Err(AppError::BadRequest(
+                    "foreign_avatar must be an http(s) URL".into(),
+                ));
+            }
+            if !crate::ssrf::host_resolves_public(&parsed).await {
+                return Err(AppError::BadRequest(
+                    "foreign_avatar host does not resolve public".into(),
+                ));
+            }
+            let hash = crate::bridge_avatar::canonical_hash(trimmed)
+                .ok_or_else(|| AppError::BadRequest("foreign_avatar URL invalid".into()))?;
+            let inserted = db::bridge_avatar_proxies::upsert_pending(
+                &state.chat,
+                &hash,
+                parsed.as_str(),
+            )
+            .await?;
+            if inserted {
+                // Fire-and-forget. Errors land in the row's `failure_reason`;
+                // the render falls back to initials via <img onerror>.
+                let chat = state.chat.clone();
+                let url = parsed.to_string();
+                let hash_owned = hash.clone();
+                tokio::spawn(async move {
+                    let client = match reqwest::Client::builder()
+                        .user_agent("lets-chat-bridge-avatar/1")
+                        .redirect(reqwest::redirect::Policy::none())
+                        .build()
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "bridge-avatar reqwest client build failed");
+                            let _ = db::bridge_avatar_proxies::mark_failed(
+                                &chat,
+                                &hash_owned,
+                                "client build failed",
+                            )
+                            .await;
+                            return;
+                        }
+                    };
+                    crate::bridge_avatar::fetch_and_cache(&chat, &client, &hash_owned, &url).await;
+                });
+            }
+            Some(hash)
+        }
+    };
     let bridge = db::bridges::find_by_id(&state.chat, bridge_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -359,7 +422,7 @@ async fn post_bridge_message(
         bridge.room_id,
         bridge.id,
         foreign_name,
-        None,
+        foreign_avatar_hash.as_deref(),
         &bridge.kind,
         body,
     )
