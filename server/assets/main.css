@@ -473,11 +473,21 @@ math {
 }
 
 /* Opt-in fade for htmx-swapped-in content: add `lc-anim-swap` to any element
-   that should fade in after replacement. htmx adds `.htmx-added` during the
-   settle phase and removes it after settle delay, so the transition runs once
-   without the element flickering on every re-render. */
+   that should fade in after replacement.
+ *
+ * htmx applies `.htmx-added` to swapped-in content during the settle phase
+ * and removes it after `config.defaultSettleDelay` (default 20ms). We use a
+ * *transition* (not an animation): the swapped-in element starts at
+ * `opacity: 0` while `.htmx-added` matches, then transitions to `opacity: 1`
+ * once it's removed. A keyframe animation bound to `.htmx-added` would be
+ * cancelled at 20ms before the fade could finish; this is the canonical
+ * htmx fade-in pattern (see htmx docs section "Animations"). */
+.lc-anim-swap {
+    opacity: 1;
+    transition: opacity 180ms ease-out;
+}
 .lc-anim-swap.htmx-added {
-    animation: lc-fade-in 180ms ease-out;
+    opacity: 0;
 }
 
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
