@@ -75,7 +75,7 @@ fn png_signature_alone_does_not_panic() {
 #[test]
 fn png_signature_plus_garbage_does_not_panic() {
     let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    bytes.extend(std::iter::repeat(0xAAu8).take(1024));
+    bytes.extend(std::iter::repeat_n(0xAAu8, 1024));
     assert_eq!(
         try_decode(&bytes),
         Ok(false),
@@ -93,7 +93,7 @@ fn jpeg_soi_alone_does_not_panic() {
 #[test]
 fn jpeg_soi_plus_garbage_does_not_panic() {
     let mut bytes = vec![0xFF, 0xD8];
-    bytes.extend(std::iter::repeat(0xFFu8).take(4096));
+    bytes.extend(std::iter::repeat_n(0xFFu8, 4096));
     assert_eq!(try_decode(&bytes), Ok(false));
 }
 
