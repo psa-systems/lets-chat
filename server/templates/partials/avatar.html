@@ -4,5 +4,9 @@
   {% else %}
   <div class="{{ avatar_size }} rounded-full bg-surface-sunken text-content flex items-center justify-center font-semibold">{% if let Some(c) = avatar_username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
   {% endif %}
-  <span data-user-status="{{ avatar_user_id }}" aria-label="{% if avatar_status == "dnd" %}{{ "partials-status-dnd"|t }}{% else if avatar_status == "idle" || avatar_status == "away" %}{{ "partials-status-away"|t }}{% else if avatar_status == "offline" %}{{ "partials-status-offline"|t }}{% else %}{{ "partials-status-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white {% if avatar_status == "dnd" %}bg-red-500{% else if avatar_status == "idle" || avatar_status == "away" %}bg-yellow-400{% else if avatar_status == "offline" %}bg-slate-400{% else %}bg-green-500{% endif %}"></span>
+  {# LC-198: presence dot uses semantic state tokens (recolor per theme) and
+     rings the elevated surface so the dot reads correctly on both light and
+     dark backgrounds. The JS in ws/user_status_update.html toggles the same
+     four classes; keep them in sync. #}
+  <span data-user-status="{{ avatar_user_id }}" aria-label="{% if avatar_status == "dnd" %}{{ "partials-status-dnd"|t }}{% else if avatar_status == "idle" || avatar_status == "away" %}{{ "partials-status-away"|t }}{% else if avatar_status == "offline" %}{{ "partials-status-offline"|t }}{% else %}{{ "partials-status-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-surface-elevated {% if avatar_status == "dnd" %}bg-danger{% else if avatar_status == "idle" || avatar_status == "away" %}bg-warning{% else if avatar_status == "offline" %}bg-content-subtle{% else %}bg-success{% endif %}"></span>
 </span>
