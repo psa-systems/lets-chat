@@ -22,15 +22,21 @@ services:
       LETS_CHAT_DATA_DIR: /data
       LETS_CHAT_SECRET_KEY: sghsgG8vVnvr9gddWwrL03
       BIND_ADDR: 0.0.0.0:8080
-      # SMTP relay (kept out of git via skip-worktree on compose.dev.yml).
-      # See .env.standalone for variable documentation.
-      LETS_CHAT_BASE_URL: "https://${USER}-chat.a8n.run"
-      LETS_CHAT_SMTP_HOST: "mail.a8n.run"
-      LETS_CHAT_SMTP_PORT: "465"
-      LETS_CHAT_SMTP_TLS: "tls"
-      LETS_CHAT_SMTP_USERNAME: "nate@a8n.run"
-      LETS_CHAT_SMTP_PASSWORD: "aksre znav bqmq siye ivr"
-      LETS_CHAT_SMTP_FROM: "Let's Chat <nate@a8n.run>"
+      # SMTP relay. This file is the committed TEMPLATE; the real config
+      # lives in compose.dev.yml (kept out of git via skip-worktree).
+      # Copy this file to compose.dev.yml, then uncomment + fill in all
+      # six LETS_CHAT_SMTP_* variables plus LETS_CHAT_BASE_URL with your
+      # relay credentials. Leaving any blank disables outbound mail and
+      # the /forgot + /reset routes return 404. See .env.standalone for
+      # variable documentation. LETS_CHAT_SMTP_TLS must be one of
+      # "tls" / "starttls" / "none"; port 465 implicit TLS uses "tls".
+      # LETS_CHAT_BASE_URL: "https://${USER}-chat.a8n.run"
+      # LETS_CHAT_SMTP_HOST: ""
+      # LETS_CHAT_SMTP_PORT: ""
+      # LETS_CHAT_SMTP_TLS: ""
+      # LETS_CHAT_SMTP_USERNAME: ""
+      # LETS_CHAT_SMTP_PASSWORD: ""
+      # LETS_CHAT_SMTP_FROM: ""
     volumes:
       - dev-lets-chat-data:/data
     networks:
