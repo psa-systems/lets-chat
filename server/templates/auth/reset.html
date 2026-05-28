@@ -25,7 +25,7 @@
       <span class="text-sm">{{ "reset-confirm-password"|t }}</span>
       <input type="password" name="password_confirm" required minlength="8" class="input mt-1">
     </label>
-    <button class="btn btn-primary w-full">{{ "reset-submit"|t }}</button>
+    <button class="btn btn-primary w-full"><span class="htmx-indicator lc-spinner" aria-hidden="true"></span>{{ "reset-submit"|t }}</button>
     <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
 </main>
