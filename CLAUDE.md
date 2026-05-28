@@ -108,6 +108,12 @@ A new page should be live "by construction." The conventions that make that work
 
 Each database has its own SQLx pool and is initialized independently at startup. The three pools are carried in `AppState` (`server/src/state.rs`) and shared with handlers via Axum's state extractor. Cross-domain lookups (e.g., fetching a `User` when rendering messages) require querying multiple pools.
 
+### Migration files are immutable once shipped (LC-212)
+
+Once a `.sql` file under `server/migrations/{auth,chat,settings}/` lands on `main`, never edit it. Comments count. The `sqlx::migrate!` macro records a BLAKE3 checksum of each file's full content into `_sqlx_migrations` on first apply, and on every subsequent start it recomputes that checksum and compares. Any difference - including a comment swap - panics startup with `migration N was previously applied but has been modified` and the container restart-loops until the file is reverted or the operator hand-edits `_sqlx_migrations`. LC-212 was exactly this: a one-line comment update inside a shipped migration broke deploy on every operator whose database had already recorded the old hash.
+
+If a migration needs new behaviour, add a new `.sql` file with the next index. If documentation drifts after the fact (e.g., an env-var rename like LC-201 invalidating prose in an older migration's comments), update the doc comment in the code that reads the env (`Mailer::from_env`, `Config::from_env`, etc.) or add a forward-pointing note in a new migration's comment block. Do not retouch the historic file. This is a one-way ratchet and it applies to every migrator that hashes files (refinery, golang-migrate, alembic, flyway), not only sqlx; treat the rule as universal.
+
 ## Environment Variables
 
 | Variable | Default | Purpose |
