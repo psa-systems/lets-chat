@@ -320,19 +320,16 @@ fn spawn_reminders_dispatcher(state: AppState) {
 fn spawn_outgoing_webhook_dispatcher(state: AppState) {
     const TICK_SECS: u64 = 10;
     tokio::spawn(async move {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .user_agent("lets-chat-webhook/1")
-            // LC-152: do not follow redirects; a 3xx to an internal host would
-            // bypass the delivery-time SSRF check in run_delivery_tick.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .unwrap_or_default();
+        // LC-152: shared outbound client with the public-IP DNS filter in
+        // reqwest's own resolution path. Closes the prior check-then-
+        // reqwest-reresolves TOCTOU + makes the no-redirect policy
+        // structural rather than per-callsite.
+        let client = lets_chat::http_client::outbound_no_redirects();
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
         tick.tick().await;
         loop {
             tick.tick().await;
-            match lets_chat::outgoing::run_delivery_tick(&state.chat, &client).await {
+            match lets_chat::outgoing::run_delivery_tick(&state.chat, client).await {
                 Ok(stats) if stats.delivered + stats.retried + stats.failed > 0 => {
                     tracing::info!(
                         delivered = stats.delivered,

@@ -42,11 +42,22 @@ pub trait PushClient: Send + Sync {
 }
 
 /// Production `PushClient`: builds an encrypted, VAPID-signed Web Push
-/// request via `web-push-native` and sends it with the project's
-/// existing `reqwest` (rustls) client. Holds the decrypted VAPID
-/// keypair and the `mailto:` contact for the JWT `sub` claim.
+/// request via `web-push-native` and sends it with the LC-152 shared
+/// outbound client. Holds the decrypted VAPID keypair and the `mailto:`
+/// contact for the JWT `sub` claim.
+///
+/// **LC-152 security fix.** This path previously constructed a raw
+/// `reqwest::Client::new()` with no SSRF guard. The destination is a
+/// user-supplied `PushSubscription.endpoint` (whatever URL the browser
+/// registered when subscribing); a malicious user could register a
+/// subscription pointing at e.g. `http://169.254.169.254/latest/...` (AWS
+/// metadata) or an internal admin port, and lets-chat would POST
+/// notifications there on every mention. Routing through the shared
+/// outbound client puts the public-IP DNS filter on this path inline
+/// with reqwest's own resolution. Public push gateways (Firefox / Chrome
+/// / Safari) resolve public and pass through unaffected.
 pub struct ReqwestPushClient {
-    http: reqwest::Client,
+    http: &'static reqwest::Client,
     vapid: Arc<VapidKeypair>,
     contact: String,
 }
@@ -54,7 +65,7 @@ pub struct ReqwestPushClient {
 impl ReqwestPushClient {
     pub fn new(vapid: Arc<VapidKeypair>, contact: String) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: crate::http_client::outbound_no_redirects(),
             vapid,
             contact,
         }

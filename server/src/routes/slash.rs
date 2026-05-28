@@ -300,24 +300,24 @@ async fn run_webhook(url: &str, args: &str) -> Result<String, AppError> {
     // (a hostname pointing at internal services / cloud metadata).
     let parsed = url::Url::parse(url)
         .map_err(|_| AppError::BadRequest("custom command webhook URL is invalid".into()))?;
+    // Submit-time pre-check: gives a clean 400 with a UX-friendly message
+    // (the resolver below produces a less specific error). The fetch-time
+    // filter still runs inline in the resolver — both checks are correct.
     if !crate::ssrf::host_resolves_public(&parsed).await {
         return Err(AppError::BadRequest(
             "custom command webhook URL is not allowed".into(),
         ));
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(WEBHOOK_TIMEOUT_SECS))
-        // LC-152: no redirect-following; a 3xx to an internal host would
-        // bypass the resolve check above.
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| AppError::Internal(format!("http client: {e}")))?;
+    // LC-152: shared outbound client. Resolver does the public-IP filter
+    // inline (TOCTOU closed); no-redirects policy is structural.
+    let client = crate::http_client::outbound_no_redirects();
     // reqwest's `json` feature is not enabled in this build; serialize the
     // body by hand and set the content type.
     let payload =
         serde_json::to_string(&serde_json::json!({ "args": args })).unwrap_or_else(|_| "{}".into());
     let resp = client
         .post(url)
+        .timeout(std::time::Duration::from_secs(WEBHOOK_TIMEOUT_SECS))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(payload)
         .send()
