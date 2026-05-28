@@ -113,7 +113,9 @@
        service worker's queue state (offline notice, queued count, and
        retry/discard for messages that failed on replay). -->
   <div id="lc-outbox" role="status" aria-live="polite"
-       class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-border bg-surface-elevated shadow-lg"></div>
+       {# LC-199: lc-bottom-safe pushes the banner up by the safe-area inset
+          on iOS so it clears the home indicator. #}
+       class="hidden fixed lc-bottom-safe left-1/2 -translate-x-1/2 z-50 w-[min(28rem,92vw)] rounded-lg border border-border bg-surface-elevated shadow-lg"></div>
   <!-- LC-63: singleton slot for the "Remind me" picker / confirmation. Lives
        in the persistent shell so the message hover-menu can target it across
        in-place swaps. -->
@@ -322,10 +324,20 @@
 // Persistent-shell script: same lifetime rationale as the notification-bus
 // IIFE above. The document.body click listener is intentionally permanent.
 function lcOpenNav(){
+  // LC-199: drop `hidden`, set `data-open=true`. CSS at mobile widths animates
+  // a translateX/opacity transition keyed off the attribute; the lc-anim-swap
+  // / prefers-reduced-motion guard from LC-196 still applies app-wide.
   var p = document.getElementById('lc-nav-panel');
   p.classList.remove('hidden');
   p.classList.add('flex');
-  document.getElementById('lc-nav-backdrop').classList.remove('hidden');
+  // Force a reflow so the next attribute mutation kicks off a transition
+  // rather than landing in the same frame as `display: flex`.
+  void p.offsetWidth;
+  p.setAttribute('data-open', 'true');
+  var b = document.getElementById('lc-nav-backdrop');
+  b.classList.remove('hidden');
+  void b.offsetWidth;
+  b.setAttribute('data-open', 'true');
   var t = document.getElementById('lc-nav-toggle');
   if (t) t.setAttribute('aria-expanded', 'true');
 }
@@ -335,9 +347,18 @@ function lcCloseNav(){
   // on desktop, so its state is moot).
   if (window.matchMedia('(min-width: 768px)').matches) return;
   var p = document.getElementById('lc-nav-panel');
-  p.classList.add('hidden');
-  p.classList.remove('flex');
-  document.getElementById('lc-nav-backdrop').classList.add('hidden');
+  var b = document.getElementById('lc-nav-backdrop');
+  p.setAttribute('data-open', 'false');
+  b.setAttribute('data-open', 'false');
+  // Wait the CSS transition out before re-applying `hidden`, so the slide-out
+  // actually plays. 220ms covers the 200ms transition + a small margin.
+  setTimeout(function(){
+    if (p.getAttribute('data-open') === 'false') {
+      p.classList.add('hidden');
+      p.classList.remove('flex');
+      b.classList.add('hidden');
+    }
+  }, 220);
   var t = document.getElementById('lc-nav-toggle');
   if (t) t.setAttribute('aria-expanded', 'false');
 }
