@@ -65,17 +65,9 @@ async fn app() -> TestApp {
     let room = db::chat::create_room(&chat, "bridged", None, "public", None, Some(eid))
         .await
         .unwrap();
-    let bridge_id = db::bridges::insert(
-        &chat,
-        &SECRET,
-        room,
-        "matrix",
-        b"{}",
-        &bot_id,
-        &user_id,
-    )
-    .await
-    .unwrap();
+    let bridge_id = db::bridges::insert(&chat, &SECRET, room, "matrix", b"{}", &bot_id, &user_id)
+        .await
+        .unwrap();
     // Global outgoing webhook subscribed to every message/reaction event so
     // enqueue() actually writes a delivery row to inspect.
     db::outgoing_webhooks::insert(
@@ -194,16 +186,9 @@ async fn webhook_post_produces_actor_kind_webhook() {
     // Create an incoming webhook and post via /webhook/{secret}.
     let secret = lets_chat::auth::generate_api_token();
     let hash = lets_chat::auth::hash_api_token(&SECRET, &secret);
-    let webhook_id = db::webhooks::insert(
-        &t.chat,
-        t.room,
-        "alertbot",
-        None,
-        &hash,
-        &t.user_id,
-    )
-    .await
-    .unwrap();
+    let webhook_id = db::webhooks::insert(&t.chat, t.room, "alertbot", None, &hash, &t.user_id)
+        .await
+        .unwrap();
     let req = Request::builder()
         .method(Method::POST)
         .uri(format!("/webhook/{}", secret))
@@ -244,6 +229,9 @@ async fn bridge_id_in_actor_block_is_stable_across_calls() {
     )
     .await;
     let p2 = latest_payload(&t.chat).await;
-    assert_eq!(p1["data"]["actor"]["bridge_id"], p2["data"]["actor"]["bridge_id"]);
+    assert_eq!(
+        p1["data"]["actor"]["bridge_id"],
+        p2["data"]["actor"]["bridge_id"]
+    );
     assert_eq!(p1["data"]["actor"]["bridge_id"], t.bridge_id);
 }

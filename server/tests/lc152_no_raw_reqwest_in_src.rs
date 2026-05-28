@@ -39,7 +39,10 @@ const FORBIDDEN: &[(&str, &str)] = &[
     ("reqwest::Client::builder", "raw reqwest::Client::builder()"),
     ("reqwest::ClientBuilder", "raw reqwest::ClientBuilder"),
     ("reqwest::get(", "reqwest::get() shortcut"),
-    ("reqwest::blocking::", "reqwest::blocking::* (same SSRF posture)"),
+    (
+        "reqwest::blocking::",
+        "reqwest::blocking::* (same SSRF posture)",
+    ),
     (
         "outbound_unchecked",
         "outbound_unchecked() test-seam in src/ (unfiltered client escape hatch)",

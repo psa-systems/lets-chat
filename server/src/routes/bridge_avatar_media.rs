@@ -79,7 +79,9 @@ pub async fn get_bridge_avatar(
 }
 
 fn is_valid_hash(s: &str) -> bool {
-    s.len() == MAX_HASH_LEN && s.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    s.len() == MAX_HASH_LEN
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 /// Test seam: confirm hash validation is strict. Belt-and-braces on top of

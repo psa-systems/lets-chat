@@ -81,5 +81,9 @@ async fn gate_off_returns_404_for_every_hash() {
     let status = res.status();
     let _ = to_bytes(res.into_body(), 1 << 20).await.unwrap();
     std::env::remove_var("LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED");
-    assert_eq!(status, StatusCode::NOT_FOUND, "gate-off must 404 even on a row that would normally serve");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "gate-off must 404 even on a row that would normally serve"
+    );
 }

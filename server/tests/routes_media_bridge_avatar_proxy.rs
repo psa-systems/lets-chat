@@ -74,7 +74,11 @@ async fn get(app: &Router, sess: Option<&str>, uri: &str) -> (StatusCode, Vec<u8
     if let Some(s) = sess {
         b = b.header(header::COOKIE, format!("session={s}"));
     }
-    let res = app.clone().oneshot(b.body(Body::empty()).unwrap()).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(b.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
     let status = res.status();
     let ctype = res
         .headers()
@@ -165,7 +169,9 @@ async fn ok_row_serves_bytes_with_cache_headers() {
         // Content-Type from the row.
         b'P', b'N', b'G', b'B', b'Y', b'T', b'E', b'S',
     ];
-    let path = std::path::PathBuf::from(&dir).join("bridge-avatars").join(HASH64);
+    let path = std::path::PathBuf::from(&dir)
+        .join("bridge-avatars")
+        .join(HASH64);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, png_bytes).unwrap();
     db::bridge_avatar_proxies::upsert_pending(&chat, HASH64, "https://x.test/ok")
@@ -196,12 +202,10 @@ async fn ok_row_serves_bytes_with_cache_headers() {
     };
     let app = routes::build_router(state);
     // Sanity: confirm the row is visible from a fresh handle on the same pool.
-    assert!(
-        db::bridge_avatar_proxies::find_by_hash(&chat, HASH64)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(db::bridge_avatar_proxies::find_by_hash(&chat, HASH64)
+        .await
+        .unwrap()
+        .is_some());
     let uri = format!("/media/bridge-avatar-proxy/{HASH64}");
     let req = Request::builder()
         .method(Method::GET)
