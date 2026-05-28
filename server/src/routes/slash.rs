@@ -295,28 +295,17 @@ async fn run_webhook(url: &str, args: &str) -> Result<String, AppError> {
             "custom command webhook URL is not allowed".into(),
         ));
     }
-    // LC-152: the string check above only stops IP-literal internal URLs.
-    // Resolve the host here and reject any that maps to a non-public address
-    // (a hostname pointing at internal services / cloud metadata).
-    let parsed = url::Url::parse(url)
-        .map_err(|_| AppError::BadRequest("custom command webhook URL is invalid".into()))?;
-    // Submit-time pre-check: gives a clean 400 with a UX-friendly message
-    // (the resolver below produces a less specific error). The fetch-time
-    // filter still runs inline in the resolver — both checks are correct.
-    if !crate::ssrf::host_resolves_public(&parsed).await {
-        return Err(AppError::BadRequest(
-            "custom command webhook URL is not allowed".into(),
-        ));
-    }
-    // LC-152: shared outbound client. Resolver does the public-IP filter
-    // inline (TOCTOU closed); no-redirects policy is structural.
-    let client = crate::http_client::outbound_no_redirects();
-    // reqwest's `json` feature is not enabled in this build; serialize the
-    // body by hand and set the content type.
+    // LC-152: URL validation (parse + scheme + host_resolves_public)
+    // happens inside `http_client::outbound_post`. The `webhook_url_ok`
+    // string check above stays as an explicit IP-literal pre-gate against
+    // operator-misconfigured URLs (extra defense in depth + better-
+    // matched error message at config time).
     let payload =
         serde_json::to_string(&serde_json::json!({ "args": args })).unwrap_or_else(|_| "{}".into());
-    let resp = client
-        .post(url)
+    let req = crate::http_client::outbound_post(url)
+        .await
+        .map_err(|_| AppError::BadRequest("custom command webhook URL is not allowed".into()))?;
+    let resp = req
         .timeout(std::time::Duration::from_secs(WEBHOOK_TIMEOUT_SECS))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(payload)
