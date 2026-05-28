@@ -110,7 +110,7 @@ Run `just --list` to see all available recipes.
 | `LETS_CHAT_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID contact address sent with Web Push delivery requests. |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
 | `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_FROM` / `SMTP_USERNAME` / `SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
+| `LETS_CHAT_SMTP_HOST` / `LETS_CHAT_SMTP_PORT` / `LETS_CHAT_SMTP_TLS` / `LETS_CHAT_SMTP_FROM` / `LETS_CHAT_SMTP_USERNAME` / `LETS_CHAT_SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
 | `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room message `retention_days`. Read once at startup; flipping it requires a restart. |
 
 ### `LETS_CHAT_SECRET_KEY`
@@ -154,11 +154,11 @@ Sends each opted-in user one email summarising mentions and DMs they missed whil
 Three things must be configured for the feature to be fully functional.
 
 1. **SMTP environment variables**. The same set used by password reset and email verification. All required to enable outbound mail:
-   - `SMTP_HOST`
-   - `SMTP_PORT`
-   - `SMTP_TLS` (one of `tls` / `starttls` / `none`)
-   - `SMTP_FROM`
-   - `SMTP_USERNAME` and `SMTP_PASSWORD` together (optional pair; both unset means the relay is opened unauthenticated)
+   - `LETS_CHAT_SMTP_HOST`
+   - `LETS_CHAT_SMTP_PORT`
+   - `LETS_CHAT_SMTP_TLS` (one of `tls` / `starttls` / `none`)
+   - `LETS_CHAT_SMTP_FROM`
+   - `LETS_CHAT_SMTP_USERNAME` and `LETS_CHAT_SMTP_PASSWORD` together (optional pair; both unset means the relay is opened unauthenticated)
 2. **`LETS_CHAT_BASE_URL`** in the environment, e.g. `https://chat.example.com`. Used to construct clickable deep links in the email body. Defaults to `http://localhost:8080` if unset; the digest still sends with that URL but the links will only work for local development.
 3. **(Optional) "New users start with email digest enabled"** at `/admin/settings`. Off by default. Flipping it on only affects users who register after the flip; existing users are unchanged. Users can override their own preference at `/settings`.
 
