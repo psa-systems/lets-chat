@@ -39,7 +39,7 @@
       <span class="text-sm">{{ "login-password"|t }}</span>
       <input type="password" name="password" required class="input mt-1">
     </label>
-    <button class="btn btn-primary w-full">{{ "login-submit"|t }}</button>
+    <button class="btn btn-primary w-full"><span class="htmx-indicator lc-spinner" aria-hidden="true"></span>{{ "login-submit"|t }}</button>
     <p class="text-sm text-center"><a href="/forgot" class="text-accent hover:underline">{{ "login-forgot-link"|t }}</a></p>
     <p class="text-sm text-center">{{ "login-no-account"|t }} <a href="/register" class="text-accent hover:underline">{{ "login-register-link"|t }}</a>.</p>
     <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>

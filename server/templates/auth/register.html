@@ -43,7 +43,7 @@
         <input type="text" name="website" tabindex="-1" autocomplete="off">
       </label>
     </div>
-    <button class="btn btn-primary w-full">{{ "register-submit"|t }}</button>
+    <button class="btn btn-primary w-full"><span class="htmx-indicator lc-spinner" aria-hidden="true"></span>{{ "register-submit"|t }}</button>
     <p class="text-sm text-center">{{ "register-have-account"|t }} <a href="/login" class="text-accent hover:underline">{{ "register-signin-link"|t }}</a>.</p>
     <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>
