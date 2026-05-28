@@ -47,7 +47,10 @@ async fn lc75_delivery_marks_blocked_url_failed_terminal_not_retried() {
     lets_chat::outgoing::enqueue(&chat, "message.posted", 1, serde_json::json!({})).await;
 
     let stats = lets_chat::outgoing::run_delivery_tick(&chat).await.unwrap();
-    assert_eq!(stats.failed, 1, "private-resolving URL must be marked failed");
+    assert_eq!(
+        stats.failed, 1,
+        "private-resolving URL must be marked failed"
+    );
     assert_eq!(stats.delivered, 0);
     assert_eq!(stats.retried, 0, "blocked URL is terminal, not retried");
 
@@ -90,12 +93,7 @@ async fn bridge_avatar_fetch_marks_private_url_failed_without_panic() {
     // The fetch goes through `outbound_get`, which rejects the literal
     // private IP. The function must mark the row failed and return WITHOUT
     // panicking (the render-fallback to initials depends on this).
-    lets_chat::bridge_avatar::fetch_and_cache(
-        &chat,
-        &hash,
-        "http://192.168.1.1/avatar.png",
-    )
-    .await;
+    lets_chat::bridge_avatar::fetch_and_cache(&chat, &hash, "http://192.168.1.1/avatar.png").await;
 
     let row = lets_chat::db::bridge_avatar_proxies::find_by_hash(&chat, &hash)
         .await
@@ -120,13 +118,9 @@ async fn bridge_avatar_fetch_marks_unsupported_scheme_failed() {
     // surprising URL shapes.
     let chat = common::pool("chat").await;
     let hash = "11".repeat(32);
-    lets_chat::db::bridge_avatar_proxies::upsert_pending(
-        &chat,
-        &hash,
-        "file:///etc/passwd",
-    )
-    .await
-    .unwrap();
+    lets_chat::db::bridge_avatar_proxies::upsert_pending(&chat, &hash, "file:///etc/passwd")
+        .await
+        .unwrap();
 
     lets_chat::bridge_avatar::fetch_and_cache(&chat, &hash, "file:///etc/passwd").await;
 
@@ -154,8 +148,8 @@ async fn bridge_avatar_fetch_marks_unsupported_scheme_failed() {
 
 #[tokio::test]
 async fn web_push_send_to_private_endpoint_returns_err_not_panic() {
-    use lets_chat::push::{PushClient, ReqwestPushClient};
     use lets_chat::db::push_subscriptions::PushSubscription;
+    use lets_chat::push::{PushClient, ReqwestPushClient};
     use std::sync::Arc;
 
     // Dummy VAPID keypair: the test's load-bearing assertion is that

@@ -80,11 +80,7 @@ pub async fn fetch_and_cache_unchecked(
     fetch_and_cache_inner(chat, req, hash).await;
 }
 
-async fn fetch_and_cache_inner(
-    chat: &SqlitePool,
-    req: reqwest::RequestBuilder,
-    hash: &str,
-) {
+async fn fetch_and_cache_inner(chat: &SqlitePool, req: reqwest::RequestBuilder, hash: &str) {
     let bytes = match req.timeout(FETCH_TIMEOUT).send().await {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
@@ -186,7 +182,10 @@ async fn write_atomic(final_path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         .ok_or_else(|| std::io::Error::other("no parent dir"))?;
     let staging = parent.join(format!(
         ".rename-{}",
-        final_path.file_name().and_then(|s| s.to_str()).unwrap_or("x")
+        final_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("x")
     ));
     tokio::fs::write(&staging, bytes).await?;
     tokio::fs::rename(&staging, final_path).await

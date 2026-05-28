@@ -202,7 +202,10 @@ async fn bridge_post_with_invalid_foreign_avatar_url_is_400() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body.to_lowercase().contains("url"), "expected URL-shape error; got {body}");
+    assert!(
+        body.to_lowercase().contains("url"),
+        "expected URL-shape error; got {body}"
+    );
 }
 
 #[tokio::test]
@@ -245,14 +248,16 @@ async fn bridge_post_with_foreign_avatar_stores_hash_v2() {
     .await;
     assert_eq!(status, StatusCode::OK);
     // Hash stored on message row.
-    let stored: Option<String> = sqlx::query_scalar(
-        "SELECT bridge_foreign_avatar FROM messages WHERE body = 'hi'",
-    )
-    .fetch_one(&t.chat)
-    .await
-    .unwrap();
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT bridge_foreign_avatar FROM messages WHERE body = 'hi'")
+            .fetch_one(&t.chat)
+            .await
+            .unwrap();
     assert!(
-        stored.as_deref().map(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit())).unwrap_or(false),
+        stored
+            .as_deref()
+            .map(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()))
+            .unwrap_or(false),
         "expected 64-char hex hash on message row; got {stored:?}",
     );
     // Cache row created (pending or ok; the fetch is async so we don't pin status).

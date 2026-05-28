@@ -136,13 +136,15 @@ async fn create_bridge_creates_bot_token_sealed_config_row() {
     let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     // One-time token is shown in the response.
-    assert!(body.contains("lc_"), "expected a one-time token in response");
+    assert!(
+        body.contains("lc_"),
+        "expected a one-time token in response"
+    );
     // Bot row exists with the bridge role tier.
-    let role: String =
-        sqlx::query_scalar("SELECT role FROM users WHERE username = 'matrixbridge'")
-            .fetch_one(&t.auth)
-            .await
-            .unwrap();
+    let role: String = sqlx::query_scalar("SELECT role FROM users WHERE username = 'matrixbridge'")
+        .fetch_one(&t.auth)
+        .await
+        .unwrap();
     assert_eq!(role, "bridge");
     // Token minted with exactly the two bridge scopes.
     let scopes: String = sqlx::query_scalar(
@@ -190,11 +192,10 @@ async fn create_bridge_with_unsupported_kind_is_rejected() {
         &body[..body.len().min(500)]
     );
     // No bot, no bridge, no token created (rollback verified by absence).
-    let bot_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE username = 'ircbot'")
-            .fetch_one(&t.auth)
-            .await
-            .unwrap();
+    let bot_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE username = 'ircbot'")
+        .fetch_one(&t.auth)
+        .await
+        .unwrap();
     assert_eq!(bot_count, 0);
 }
 
@@ -253,7 +254,7 @@ async fn remove_bridge_preserves_historical_message_snapshot_via_admin_route() {
     )
     .await;
     assert_eq!(status, StatusCode::SEE_OTHER); // Redirect after remove.
-    // Bridge row gone; snapshot strings persist; bridge_id NULL on the row.
+                                               // Bridge row gone; snapshot strings persist; bridge_id NULL on the row.
     let bridge_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bridges")
         .fetch_one(&t.chat)
         .await
@@ -304,7 +305,10 @@ async fn list_bridges_shows_healthy_after_recent_heartbeat() {
         .await
         .unwrap();
     let (_, body) = get(&t.app, &t.admin_session, "/admin/bridges").await;
-    assert!(body.contains("healthy"), "expected healthy status after heartbeat");
+    assert!(
+        body.contains("healthy"),
+        "expected healthy status after heartbeat"
+    );
 }
 
 #[tokio::test]

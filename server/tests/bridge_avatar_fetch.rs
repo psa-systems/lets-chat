@@ -99,7 +99,11 @@ async fn fetch_round_trip_writes_bytes_and_marks_ok() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(row.fetch_status, "ok", "failure_reason: {:?}", row.failure_reason);
+    assert_eq!(
+        row.fetch_status, "ok",
+        "failure_reason: {:?}",
+        row.failure_reason
+    );
     assert_eq!(row.content_type.as_deref(), Some("image/png"));
     assert!(row.byte_size.unwrap_or(0) > 0);
     let path = db::bridge_avatars_dir().join(&hash);
@@ -158,8 +162,17 @@ async fn non_image_bytes_marks_failed_via_magic_byte_sniff() {
         .unwrap();
     assert_eq!(row.fetch_status, "failed");
     assert!(
-        row.failure_reason.as_deref().unwrap_or("").to_lowercase().contains("mime")
-            || row.failure_reason.as_deref().unwrap_or("").to_lowercase().contains("sniff")
+        row.failure_reason
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("mime")
+            || row
+                .failure_reason
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase()
+                .contains("sniff")
     );
 }
 

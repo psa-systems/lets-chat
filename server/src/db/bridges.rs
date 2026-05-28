@@ -109,11 +109,10 @@ pub async fn read_config(
     secret_key: &[u8; 32],
     id: i64,
 ) -> Result<Option<Vec<u8>>, BridgeConfigError> {
-    let row =
-        sqlx::query("SELECT config_encrypted, config_nonce FROM bridges WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
+    let row = sqlx::query("SELECT config_encrypted, config_nonce FROM bridges WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     let Some(r) = row else { return Ok(None) };
     let encrypted: Vec<u8> = r.get("config_encrypted");
     let nonce: Vec<u8> = r.get("config_nonce");

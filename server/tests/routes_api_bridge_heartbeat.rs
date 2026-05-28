@@ -133,7 +133,10 @@ async fn config_seal_roundtrip_under_secret_key() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(plaintext, br#"{"homeserver":"https://matrix.org","secret":"abc"}"#);
+    assert_eq!(
+        plaintext,
+        br#"{"homeserver":"https://matrix.org","secret":"abc"}"#
+    );
     // Different key cannot decrypt.
     let wrong_key = [0u8; 32];
     let res = db::bridges::read_config(&t.chat, &wrong_key, t.bridge_id).await;
@@ -247,13 +250,7 @@ async fn heartbeat_from_wrong_bot_is_403() {
 async fn heartbeat_for_nonexistent_bridge_is_404() {
     let t = app().await;
     mint(&t, &t.bot_id, "lc_hb_404", "bridge:heartbeat").await;
-    let (status, _) = post(
-        &t.app,
-        "lc_hb_404",
-        "/api/v1/bridges/99999/heartbeat",
-        "{}",
-    )
-    .await;
+    let (status, _) = post(&t.app, "lc_hb_404", "/api/v1/bridges/99999/heartbeat", "{}").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -298,7 +295,11 @@ async fn remove_bridge_preserves_historical_message_snapshot() {
     .await
     .unwrap();
     assert!(post.0.is_none(), "bridge_id nulled on removal");
-    assert_eq!(post.1.as_deref(), Some("alice:matrix.org"), "snapshot name kept");
+    assert_eq!(
+        post.1.as_deref(),
+        Some("alice:matrix.org"),
+        "snapshot name kept"
+    );
     assert_eq!(post.2.as_deref(), Some("matrix"), "snapshot kind kept");
     // Also keeps the row reachable to admin promotion as the bridge author
     // (admin_id is the creator; this just confirms the row still exists).

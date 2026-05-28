@@ -327,9 +327,8 @@ async fn post_bridge_message(
             if trimmed.len() > 2048 {
                 return Err(AppError::BadRequest("foreign_avatar URL too long".into()));
             }
-            let parsed = url::Url::parse(trimmed).map_err(|_| {
-                AppError::BadRequest("foreign_avatar must be a valid URL".into())
-            })?;
+            let parsed = url::Url::parse(trimmed)
+                .map_err(|_| AppError::BadRequest("foreign_avatar must be a valid URL".into()))?;
             if !matches!(parsed.scheme(), "http" | "https") {
                 return Err(AppError::BadRequest(
                     "foreign_avatar must be an http(s) URL".into(),
@@ -342,12 +341,9 @@ async fn post_bridge_message(
             }
             let hash = crate::bridge_avatar::canonical_hash(trimmed)
                 .ok_or_else(|| AppError::BadRequest("foreign_avatar URL invalid".into()))?;
-            let inserted = db::bridge_avatar_proxies::upsert_pending(
-                &state.chat,
-                &hash,
-                parsed.as_str(),
-            )
-            .await?;
+            let inserted =
+                db::bridge_avatar_proxies::upsert_pending(&state.chat, &hash, parsed.as_str())
+                    .await?;
             if inserted {
                 // Fire-and-forget. Errors land in the row's `failure_reason`;
                 // the render falls back to initials via <img onerror>. LC-152:

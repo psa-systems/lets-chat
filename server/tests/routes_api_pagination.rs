@@ -123,11 +123,7 @@ async fn seed(t: &TestApp, n: usize) -> Vec<i64> {
 async fn default_limit_caps_at_50_and_returns_cursor() {
     let t = app().await;
     let ids = seed(&t, 60).await;
-    let (status, body) = get(
-        &t.app,
-        &format!("/api/v1/rooms/{}/messages", t.room),
-    )
-    .await;
+    let (status, body) = get(&t.app, &format!("/api/v1/rooms/{}/messages", t.room)).await;
     assert_eq!(status, StatusCode::OK);
     let messages = body.get("messages").unwrap().as_array().unwrap();
     assert_eq!(messages.len(), 50, "default limit is 50");
@@ -155,7 +151,10 @@ async fn cursor_walks_to_history() {
     let cursor = first.get("next_cursor").unwrap().as_i64().unwrap();
     let (_, second) = get(
         &t.app,
-        &format!("/api/v1/rooms/{}/messages?limit=3&before_id={cursor}", t.room),
+        &format!(
+            "/api/v1/rooms/{}/messages?limit=3&before_id={cursor}",
+            t.room
+        ),
     )
     .await;
     let second_msgs = second.get("messages").unwrap().as_array().unwrap();
@@ -190,18 +189,9 @@ async fn exhaust_returns_null_cursor() {
 #[tokio::test]
 async fn empty_room_returns_empty_page_null_cursor() {
     let t = app().await;
-    let (status, body) = get(
-        &t.app,
-        &format!("/api/v1/rooms/{}/messages", t.room),
-    )
-    .await;
+    let (status, body) = get(&t.app, &format!("/api/v1/rooms/{}/messages", t.room)).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body
-        .get("messages")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(body.get("messages").unwrap().as_array().unwrap().is_empty());
     assert!(body.get("next_cursor").unwrap().is_null());
 }
 
@@ -237,11 +227,7 @@ async fn bridge_message_uses_snapshot_author_after_removal() {
     .execute(&t.chat)
     .await
     .unwrap();
-    let (status, body) = get(
-        &t.app,
-        &format!("/api/v1/rooms/{}/messages", t.room),
-    )
-    .await;
+    let (status, body) = get(&t.app, &format!("/api/v1/rooms/{}/messages", t.room)).await;
     assert_eq!(status, StatusCode::OK);
     let messages = body.get("messages").unwrap().as_array().unwrap();
     assert_eq!(messages.len(), 1);
