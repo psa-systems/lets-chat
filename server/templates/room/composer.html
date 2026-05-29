@@ -298,6 +298,9 @@
   function teardown() {
     document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
     if (bcastTimer) { clearTimeout(bcastTimer); bcastTimer = null; }
+    // LC-216: cancel a pending failure-banner reveal so it cannot fire on a
+    // detached .composer-error after the form is swapped out.
+    if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
