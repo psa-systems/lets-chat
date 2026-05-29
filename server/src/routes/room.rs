@@ -887,6 +887,25 @@ pub(crate) async fn finalize_email_inbox_message_send(
     };
     super::broadcast_room_message(state, room, &event).await?;
 
+    // LC-205: email-ingress posts must reach LC-75 outgoing-webhook
+    // subscribers too (bridge daemons, etc.). Mirrors
+    // finalize_webhook_message_send; routes through the email_inbox arm of
+    // outgoing_actor. Before LC-205 this enqueue was missing, so every
+    // outgoing-webhook subscriber silently never saw email-ingress messages.
+    crate::outgoing::enqueue(
+        &state.chat,
+        "message.posted",
+        room.id,
+        serde_json::json!({
+            "message_id": new_id,
+            "email_inbox_id": email_inbox_id,
+            "author": inbox_name,
+            "body": body,
+            "actor": super::outgoing_actor("", None, Some(email_inbox_id), None, None),
+        }),
+    )
+    .await;
+
     // Mentions: an email-ingress sender can @mention people. No author to
     // exclude (empty author id excludes nobody). DM rooms are not a target
     // for email ingress (an inbox is per-room, and DMs have no per-room
