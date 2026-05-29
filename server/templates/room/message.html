@@ -23,7 +23,7 @@
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
-    <span class="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide bg-webhook-surface text-webhook-content rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = email_avatar_url %}
@@ -32,7 +32,7 @@
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
-    <span class="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide bg-email-surface text-email-content rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::Bridge with (bridge_meta) %}
     {# LC-78: protocol-bridge author - no user to DM. The kind is shown in the badge so a viewer can see which network the foreign actor came from. #}
     {# LC-78-AVATAR-PROXY: when avatar_url (the proxy cache key) is Some, render <img> pointing at our same-origin proxy endpoint. onerror falls back to initials so a pending / failed fetch degrades gracefully without a page refresh. Falls back to initials immediately when the daemon submitted no foreign_avatar. #}
@@ -42,7 +42,7 @@
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
-    <span class="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded px-1 py-0.5" title="{{ "room-msg-bridge-title"|t }}">{{ "room-msg-bridge-badge"|t }} {{ bridge_meta.kind }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide bg-bridge-surface text-bridge-content rounded px-1 py-0.5" title="{{ "room-msg-bridge-title"|t }}">{{ "room-msg-bridge-badge"|t }} {{ bridge_meta.kind }}</span>
     {% when crate::views::message_actor::MessageActor::User %}
     {% let avatar_user_id = message.user_id.clone() %}
     {% let avatar_username = message.username.clone() %}

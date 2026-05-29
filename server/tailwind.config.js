@@ -69,6 +69,22 @@ module.exports = {
           surface: "var(--danger-surface)",
           border: "var(--danger-border)",
         },
+        // LC-225: message-actor badges (webhook / email / bridge). Each
+        // kind has a soft surface + matching content text color so the
+        // three badges dim together in dark themes instead of staying
+        // bright. Per-hue identity preserved.
+        webhook: {
+          surface: "var(--webhook-surface)",
+          content: "var(--webhook-content)",
+        },
+        email: {
+          surface: "var(--email-surface)",
+          content: "var(--email-content)",
+        },
+        bridge: {
+          surface: "var(--bridge-surface)",
+          content: "var(--bridge-content)",
+        },
       },
       ringColor: {
         DEFAULT: "var(--ring)",
