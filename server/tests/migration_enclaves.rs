@@ -1,3 +1,17 @@
+// LC-204: this file DELIBERATELY keeps a hand-rolled migration list and is
+// the sole entry on the `lc204_no_handrolled_migrations` grep-ban allow-list.
+//
+// Unlike the 34 files converted to `common::chat_pool()`, this is a
+// MIGRATION-BEHAVIOR test, not a schema-consumer test: it asserts the EFFECT
+// of the 0009 enclaves data-migration (the `General` enclave is created,
+// non-DM rooms are moved into it, membership backfill is a separate step,
+// the partial-unique-owner index is enforced). Converting it to the full
+// `sqlx::migrate!` set via `common::chat_pool()` would silently re-point its
+// assertions from "0009 produced exactly this state" to "the full-migration
+// end-state happens to have these properties" — a different test that could
+// pass while no longer catching a regression in 0009's data migration. The
+// explicit list is part of the test's contract; it documents which migrations
+// the asserted enclave behavior depends on. Keep it hand-rolled.
 use sqlx::{Row, SqlitePool};
 
 async fn fresh_pool() -> SqlitePool {
