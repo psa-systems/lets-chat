@@ -34,7 +34,11 @@ module.exports = {
           // LC-222: tinted accent surface. `bg-accent-surface` for active
           // sidebar rows, mention popover avatar, voted poll bar, settings
           // device chip, reply-count chip. Soft fill that themes per palette.
+          // `text-accent-surface-content` is the matching foreground (light
+          // themes: --accent for blue affordance; dark themes: --content for
+          // readability against the dim blue-900 surface).
           surface: "var(--accent-surface)",
+          "surface-content": "var(--accent-surface-content)",
         },
         success: {
           DEFAULT: "var(--success)",
@@ -56,6 +60,11 @@ module.exports = {
       },
       ringColor: {
         DEFAULT: "var(--ring)",
+        // LC-222: explicit `ring-ring` / `focus:ring-ring` named alias.
+        // Tailwind's `ring-DEFAULT` resolves only when the class is
+        // literally `ring` (no suffix); to use it inside an explicit
+        // `ring-{size}` pair the color needs its own named key.
+        ring: "var(--ring)",
       },
     },
   },
