@@ -1,17 +1,9 @@
 use sqlx::SqlitePool;
 
+mod common;
+
 async fn setup_pool() -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:")
-        .await
-        .expect("Failed to create in-memory pool");
-
-    let migration = include_str!("../migrations/settings/0001_create_tables.sql");
-    sqlx::raw_sql(migration)
-        .execute(&pool)
-        .await
-        .expect("Failed to run migration");
-
-    pool
+    common::settings_pool().await
 }
 
 #[tokio::test]

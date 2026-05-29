@@ -2,20 +2,10 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use lets_chat::db::vapid;
 use sqlx::SqlitePool;
 
+mod common;
+
 async fn setup_settings_pool() -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-    for sql in [
-        include_str!("../migrations/settings/0001_create_tables.sql"),
-        include_str!("../migrations/settings/0002_uploads.sql"),
-        include_str!("../migrations/settings/0003_vapid_keypair.sql"),
-        include_str!("../migrations/settings/0004_anti_spam.sql"),
-        include_str!("../migrations/settings/0005_imap_inbox_config.sql"),
-        include_str!("../migrations/settings/0006_drop_smtp_settings.sql"),
-        include_str!("../migrations/settings/0007_imap_dead_letter_folder.sql"),
-    ] {
-        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
-    }
-    pool
+    common::settings_pool().await
 }
 
 fn test_secret_key() -> [u8; 32] {

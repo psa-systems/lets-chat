@@ -1,39 +1,10 @@
 use lets_chat::db::push_subscriptions::{self, delete_by_endpoint, for_user, insert_or_replace};
 use sqlx::SqlitePool;
 
+mod common;
+
 async fn setup_auth_pool() -> SqlitePool {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-    for sql in [
-        include_str!("../migrations/auth/0001_create_tables.sql"),
-        include_str!("../migrations/auth/0002_read_receipts.sql"),
-        include_str!("../migrations/auth/0003_profile_fields.sql"),
-        include_str!("../migrations/auth/0004_user_status.sql"),
-        include_str!("../migrations/auth/0005_profile_visibility.sql"),
-        include_str!("../migrations/auth/0006_user_blocks.sql"),
-        include_str!("../migrations/auth/0007_notification_settings.sql"),
-        include_str!("../migrations/auth/0008_two_factor.sql"),
-        include_str!("../migrations/auth/0009_push_subscriptions.sql"),
-        include_str!("../migrations/auth/0010_password_reset.sql"),
-        include_str!("../migrations/auth/0011_email_verification.sql"),
-        include_str!("../migrations/auth/0012_session_metadata.sql"),
-        include_str!("../migrations/auth/0013_digest_columns.sql"),
-        include_str!("../migrations/auth/0014_login_alerts.sql"),
-        include_str!("../migrations/auth/0015_pending_registrations.sql"),
-        include_str!("../migrations/auth/0016_sidebar_categories.sql"),
-        include_str!("../migrations/auth/0017_drop_sidebar_categories_add_collapsed.sql"),
-        include_str!("../migrations/auth/0018_starred_rooms.sql"),
-        include_str!("../migrations/auth/0019_api_tokens.sql"),
-        include_str!("../migrations/auth/0020_bots.sql"),
-        include_str!("../migrations/auth/0021_user_dnd.sql"),
-        include_str!("../migrations/auth/0022_mobile_push.sql"),
-        include_str!("../migrations/auth/0023_notify_email_activity.sql"),
-        include_str!("../migrations/auth/0024_user_locale.sql"),
-        include_str!("../migrations/auth/0025_user_theme.sql"),
-        include_str!("../migrations/auth/0026_user_density.sql"),
-    ] {
-        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
-    }
-    pool
+    common::auth_pool().await
 }
 
 #[tokio::test]
