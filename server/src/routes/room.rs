@@ -468,6 +468,31 @@ pub async fn post_message(
         .await?
         .ok_or(AppError::NotFound)?;
 
+    // LC-217: per-enclave message rate-limit override. Layered AFTER the
+    // global check so a non-zero per-enclave burst tightens the cap for
+    // posts inside this enclave without relaxing the global. Separate
+    // counter key (`enc:{eid}` prefix) so in-enclave activity is tracked
+    // independently of the global counter; the user's global counter was
+    // already incremented by the call above. DMs (enclave_id None) and
+    // rooms whose enclave has the override at 0 fall through.
+    let (enclave_id_opt, enclave_burst) =
+        db::enclave::get_msg_rate_limit_burst_for_room(&state.chat, room_id).await?;
+    if let Some(eid) = enclave_id_opt {
+        if enclave_burst > 0 {
+            let key = format!("enc:{eid}:{}", user.id);
+            if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check(
+                crate::rate_limit::RateLimitKind::Message,
+                &key,
+                enclave_burst,
+            ) {
+                return Err(AppError::TooManyRequests(
+                    format!("you are sending messages too quickly in this enclave; retry in {retry_after} seconds"),
+                    retry_after,
+                ));
+            }
+        }
+    }
+
     // Posting follows the same access predicate as reading. Site admins can
     // post in any non-DM room; DMs require explicit room membership for both
     // read and write. Enclave membership is required for non-DM rooms.
