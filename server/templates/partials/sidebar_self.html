@@ -4,7 +4,7 @@
    it. The #status-picker slot and the rest of the sidebar are NOT part of this
    block, so swapping it leaves an open status picker and the room/peer lists
    untouched. #}
-<button id="own-avatar-wrapper" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" title="{{ "sidebar-set-status"|t }}" aria-label="{{ "sidebar-set-status"|t }}">
+<button id="own-avatar-wrapper" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-ring" title="{{ "sidebar-set-status"|t }}" aria-label="{{ "sidebar-set-status"|t }}">
   {% let avatar_user_id = user.id.clone() %}
   {% let avatar_username = user.username.clone() %}
   {% let avatar_ext = user.avatar_ext.clone() %}

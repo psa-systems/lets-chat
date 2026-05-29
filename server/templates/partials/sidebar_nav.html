@@ -38,7 +38,7 @@
           {% else %}
           <input type="hidden" name="collapsed" value="1">
           {% endif %}
-          <button type="submit" class="w-full text-left text-xs uppercase text-content-muted hover:text-content focus:outline-none focus:ring-2 focus:ring-blue-500 rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
+          <button type="submit" class="w-full text-left text-xs uppercase text-content-muted hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
             <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
             <span class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
