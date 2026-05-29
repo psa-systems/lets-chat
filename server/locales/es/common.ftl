@@ -68,6 +68,20 @@ not-found-exists-suffix = .
 not-found-generic = La página que buscabas no existe.
 not-found-back-home = Volver al inicio
 
+## LC-220: standalone error page (themed, no sidebar chrome). The router-
+## level 404 still uses not_found.html with sidebar context; these strings
+## cover the handler-returned AppError variants.
+error-status-not-found = No encontrado
+error-status-forbidden = Prohibido
+error-status-unauthorized = No autorizado
+error-status-conflict = Conflicto
+error-status-bad-request = Solicitud incorrecta
+error-status-payload-too-large = Carga demasiado grande
+error-status-too-many-requests = Demasiadas solicitudes
+error-status-internal = Error del servidor
+## (La etiqueta "Volver al inicio" se comparte con el 404 de nivel de router
+## a través de la clave existente `not-found-back-home`; LC-220 no la duplica.)
+
 ## Poll modal
 poll-create-title = Crear encuesta
 poll-close-dialog = Cerrar diálogo

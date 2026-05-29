@@ -1,7 +1,7 @@
 {% if html.is_empty() %}
 <p class="text-sm text-content-muted italic">{{ "room-description-empty"|t }}</p>
 {% else %}
-<div class="prose prose-slate max-w-none text-sm">{{ html|safe }}</div>
+<div class="lc-md text-sm">{{ html|safe }}</div>
 {% endif %}
 {% if can_edit_description %}
 <button type="button"
