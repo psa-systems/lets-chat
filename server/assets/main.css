@@ -108,9 +108,11 @@ body {
     --danger:           #ef4444;
     --danger-content:   #450a0a;
     /* LC-215: dim red-tinted panel that recedes against slate-900 surface
-       but reads as danger zone. red-950 surface + red-900 border keeps
-       the panel visibly bounded without competing with the danger button. */
-    --danger-surface:   #450a0a; /* red-950 */
+       but reads as danger zone. Surface sits just darker than the
+       red-950 used by `--danger-content` so the two never compose
+       silently invisible if anyone writes `bg-danger-surface
+       text-danger-content` by accident. */
+    --danger-surface:   #3a0808;
     --danger-border:    #7f1d1d; /* red-900 */
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     color-scheme: dark; /* native form controls + scrollbars go dark */
@@ -168,8 +170,11 @@ body {
     --danger-content:   #000000;
     /* LC-215: hc-dark keeps the panel surface near-black with a maximal-
        contrast red-200 outline; the border does the visual heavy lifting
-       on pure-black ground. */
-    --danger-surface:   #0a0000;
+       on pure-black ground. Surface uses the same near-black as
+       `--surface-elevated` (#0a0a0a) for parity with other hc-dark
+       elevated panels; the previous #0a0000 was indistinguishable from
+       pure black on most displays. */
+    --danger-surface:   #0a0a0a;
     --danger-border:    #fecaca; /* red-200 */
     --ring:             #ffffff;
     color-scheme: dark;

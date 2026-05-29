@@ -39,7 +39,7 @@
             var n = this.value.length;
             var c = document.getElementById('status-counter');
             c.textContent = n + ' / 50';
-            c.classList.toggle('text-red-600', n >= 45);
+            c.classList.toggle('text-danger', n >= 45);
             document.getElementById('status-clear-custom').classList.toggle('hidden', n === 0);
           "
         >

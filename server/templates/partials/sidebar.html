@@ -49,7 +49,7 @@
   </nav>
   <div class="p-2 border-t border-border text-sm flex flex-col gap-1">
     {% if user.role == "admin" || user.role == "moderator" %}
-    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-red-600 hover:underline">{% if user.role == "admin" %}{{ "sidebar-link-admin"|t }}{% else %}{{ "sidebar-link-moderate"|t }}{% endif %}</a>
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" class="text-danger hover:underline">{% if user.role == "admin" %}{{ "sidebar-link-admin"|t }}{% else %}{{ "sidebar-link-moderate"|t }}{% endif %}</a>
     {% endif %}
     <a href="/inbox" class="text-content-muted hover:underline">{{ "sidebar-link-inbox"|t }}</a>
     <a href="/activity" class="text-content-muted hover:underline">{{ "sidebar-link-activity"|t }}</a>
