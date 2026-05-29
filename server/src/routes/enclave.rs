@@ -101,6 +101,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclaves/join", post(post_join_by_code))
         .route("/enclave/{id}/visibility", post(post_visibility))
         .route("/enclave/{id}/share-emojis", post(post_share_emojis))
+        .route("/enclave/{id}/rate-limit", post(post_msg_rate_limit))
         .route(
             "/enclave/{id}/invite-code",
             post(post_invite_code).delete(delete_invite_code),
@@ -332,6 +333,36 @@ pub async fn post_share_emojis(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_share_emojis_globally(&state.chat, id, form.share == "1").await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+/// LC-217: form for `POST /enclave/{id}/rate-limit`. `burst` is a per-minute
+/// burst counter. `0` clears the override (use the global cap). Upper
+/// bound 10_000 is generous and only there to keep an accidental gigantic
+/// value from being silently accepted; the HTML `<input>` matches with
+/// `max="10000"`, so the bound here is defense in depth against forged
+/// POSTs.
+#[derive(Deserialize)]
+pub struct MsgRateLimitForm {
+    pub burst: String,
+}
+
+pub async fn post_msg_rate_limit(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<MsgRateLimitForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let burst: u32 = form
+        .burst
+        .trim()
+        .parse()
+        .map_err(|_| AppError::BadRequest("burst must be a non-negative integer".into()))?;
+    if burst > 10_000 {
+        return Err(AppError::BadRequest("burst exceeds 10000".into()));
+    }
+    db::enclave::set_msg_rate_limit_burst(&state.chat, id, burst).await?;
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 

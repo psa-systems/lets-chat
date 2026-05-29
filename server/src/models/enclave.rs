@@ -44,6 +44,12 @@ pub struct Enclave {
     /// (other enclaves and DMs). A room's own emojis still win on shortcode
     /// collisions; sharing only expands the universe of resolvable tokens.
     pub share_emojis_globally: bool,
+    /// LC-217: per-enclave message send rate limit (burst per minute,
+    /// shared 60 s window with the global limit). `0` means "use the
+    /// global `rate_limit_messages` setting". A non-zero value chains
+    /// IN ADDITION to the global cap; the per-enclave cap never relaxes
+    /// the global, only tightens it for posts inside this enclave.
+    pub msg_rate_limit_burst: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]

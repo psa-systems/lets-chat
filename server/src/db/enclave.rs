@@ -20,6 +20,7 @@ fn map_enclave(row: &sqlx::sqlite::SqliteRow) -> Enclave {
         created_by: row.get("created_by"),
         created_at: row.get("created_at"),
         share_emojis_globally: row.get::<i64, _>("share_emojis_globally") != 0,
+        msg_rate_limit_burst: row.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
     }
 }
 
@@ -48,7 +49,7 @@ pub async fn create_enclave(
 
 pub async fn get_enclave(pool: &SqlitePool, id: i64) -> Result<Option<Enclave>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
          FROM enclaves WHERE id=?",
     )
     .bind(id)
@@ -62,7 +63,7 @@ pub async fn get_enclave_by_invite_code(
     code: &str,
 ) -> Result<Option<Enclave>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
          FROM enclaves WHERE invite_code = ?",
     )
     .bind(code)
@@ -226,6 +227,51 @@ pub async fn set_share_emojis_globally(
     Ok(())
 }
 
+/// LC-217: set the per-enclave message send rate-limit burst (per minute).
+/// `0` clears the override and falls back to the global cap.
+pub async fn set_msg_rate_limit_burst(
+    pool: &SqlitePool,
+    id: i64,
+    burst: u32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET msg_rate_limit_burst=? WHERE id=?")
+        .bind(burst as i64)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-217: cheap helper for `post_message`'s rate-limit gate. JOINs
+/// `rooms` -> `enclaves` so the caller does not need a separate
+/// "what enclave is this room in" query. Returns `0` when the room is a
+/// DM (`rooms.enclave_id IS NULL`), the row is missing, or the column is
+/// 0; all three mean "use the global cap, no per-enclave override".
+/// Also returns the enclave id (for the rate-limit composite key) so the
+/// caller can scope the counter properly. `None` for the id when the
+/// room has no enclave.
+pub async fn get_msg_rate_limit_burst_for_room(
+    pool: &SqlitePool,
+    room_id: i64,
+) -> Result<(Option<i64>, u32), sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT r.enclave_id AS eid, COALESCE(e.msg_rate_limit_burst, 0) AS burst \
+         FROM rooms r \
+         LEFT JOIN enclaves e ON e.id = r.enclave_id \
+         WHERE r.id = ?",
+    )
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row
+        .map(|r| {
+            let eid: Option<i64> = r.get("eid");
+            let burst = r.get::<i64, _>("burst").max(0) as u32;
+            (eid, burst)
+        })
+        .unwrap_or((None, 0)))
+}
+
 pub async fn regenerate_invite_code(
     pool: &SqlitePool,
     id: i64,
@@ -292,7 +338,7 @@ pub async fn list_invitations_for_user(
 ) -> Result<Vec<(EnclaveInvitation, Enclave)>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT i.id, i.enclave_id, i.invitee_id, i.invited_by, i.created_at, \
-                e.id AS e_id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at AS e_created_at, e.share_emojis_globally \
+                e.id AS e_id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at AS e_created_at, e.share_emojis_globally, e.msg_rate_limit_burst \
          FROM enclave_invitations i \
          JOIN enclaves e ON e.id = i.enclave_id \
          WHERE i.invitee_id = ? \
@@ -320,6 +366,7 @@ pub async fn list_invitations_for_user(
                 created_by: r.get("created_by"),
                 created_at: r.get("e_created_at"),
                 share_emojis_globally: r.get::<i64, _>("share_emojis_globally") != 0,
+                msg_rate_limit_burst: r.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
             };
             (inv, enc)
         })
@@ -409,7 +456,7 @@ pub async fn list_enclaves_for_user(
     user_id: &str,
 ) -> Result<Vec<Enclave>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally \
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst \
          FROM enclaves e \
          JOIN enclave_members m ON m.enclave_id = e.id AND m.user_id = ? \
          ORDER BY e.name COLLATE NOCASE",
@@ -424,7 +471,7 @@ pub async fn list_all_enclaves_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<(Enclave, i64, Option<String>)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, \
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, \
                 (SELECT COUNT(*) FROM enclave_members m WHERE m.enclave_id = e.id) AS member_count, \
                 (SELECT user_id FROM enclave_members m WHERE m.enclave_id = e.id AND m.role = 'owner' LIMIT 1) AS owner_id \
          FROM enclaves e ORDER BY e.name COLLATE NOCASE",
@@ -443,6 +490,7 @@ pub async fn list_all_enclaves_with_counts(
                 created_by: r.get("created_by"),
                 created_at: r.get("created_at"),
                 share_emojis_globally: r.get::<i64, _>("share_emojis_globally") != 0,
+                msg_rate_limit_burst: r.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
             };
             let count: i64 = r.get("member_count");
             let owner: Option<String> = r.get("owner_id");
@@ -453,7 +501,7 @@ pub async fn list_all_enclaves_with_counts(
 
 pub async fn list_public_enclaves(pool: &SqlitePool) -> Result<Vec<Enclave>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
          FROM enclaves WHERE is_public = 1 ORDER BY name COLLATE NOCASE",
     )
     .fetch_all(pool)

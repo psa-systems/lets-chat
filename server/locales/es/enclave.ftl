@@ -74,6 +74,13 @@ enclave-settings-invite-code-heading = Codigo de invitacion
 enclave-settings-no-invite-code = No se ha generado ningun codigo de invitacion.
 enclave-settings-rotate = Rotar
 enclave-settings-generate = Generar
+enclave-settings-rate-limit-heading = Anti-spam (mensajes por minuto)
+enclave-settings-rate-limit-help = Maximo de mensajes que un miembro puede publicar por minuto en este enclave. 0 = usar el valor predeterminado del sitio. Se aplica ADEMAS del limite global del sitio; nunca lo relaja.
+enclave-settings-rate-limit-burst = Rafaga (por minuto)
+enclave-settings-rate-limit-save = Guardar
+enclave-settings-rate-limit-status-global = Usando valor predeterminado del sitio
+enclave-settings-rate-limit-status-active-prefix = Limite:
+enclave-settings-rate-limit-status-active-suffix = por minuto
 enclave-settings-emojis-heading = Emojis personalizados
 enclave-settings-emojis-help-1 = Escribe
 enclave-settings-emojis-help-2 = en cualquier mensaje o reaccion. Visible para todos los miembros de este enclave.
