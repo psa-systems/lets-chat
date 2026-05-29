@@ -13,13 +13,32 @@ body {
     text-rendering: optimizeLegibility;
 }
 
-/* LC-194: compact density. Tightens non-follow-up message rows (the `py-2`
-   rows; follow-ups are already `py-0` and excluded via :not) and the spacing
-   between markdown blocks inside a message. The data-density attribute is set
-   no-flash by the base.html bootstrap from the lc-density cookie/localStorage. */
-[data-density="compact"] [id^="msg-"]:not([class*="py-0"]) {
+/* LC-194 / LC-218: compact density. Templates opt in with
+   `data-lc-density-tight="row|header|composer"` on the small set of stable
+   container hooks that should respond. Attribute-driven (not class-string-
+   coupled) so future utility-class swaps in templates do not silently
+   un-compact a surface. The `data-density` attribute is set no-flash by the
+   base.html bootstrap from the lc-density cookie/localStorage.
+
+   - `row`     halves the row's vertical padding. Used by non-follow-up message
+                rows, sidebar room/peer rows, and similar list items.
+   - `header`  shrinks header padding + drops base font ~0.9em. Used by the
+                room topbar and sidebar category headers.
+   - `composer` halves the composer's TOP padding only (preserves the iOS
+                safe-area bottom inset from LC-199's `lc-pb-safe`).
+
+   Markdown paragraph spacing inside a message also tightens. */
+[data-density="compact"] [data-lc-density-tight="row"] {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+}
+[data-density="compact"] [data-lc-density-tight="header"] {
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
+    font-size: 0.9em;
+}
+[data-density="compact"] [data-lc-density-tight="composer"] {
+    padding-top: 0.25rem;
 }
 [data-density="compact"] .lc-md > p + p,
 [data-density="compact"] .lc-md > * + * {

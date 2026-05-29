@@ -1,5 +1,5 @@
 <div class="flex items-center group">
-  <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} class="flex-1 flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-content-subtle{% endif %}">
+  <a href="/dm/{{ peer.id }}"{% if peer.active %} aria-current="page"{% endif %} data-lc-density-tight="row" class="flex-1 flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-blue-500{% if peer.active %} bg-blue-100 font-semibold text-blue-900{% else if peer.mute_mode != "none" %} text-content-subtle{% endif %}">
     {% let avatar_user_id = peer.id.clone() %}
     {% let avatar_username = peer.username.clone() %}
     {% let avatar_ext = peer.avatar_ext.clone() %}
