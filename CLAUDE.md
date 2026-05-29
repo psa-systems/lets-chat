@@ -150,9 +150,9 @@ Optional `imap_inbox_config.dead_letter_folder` column. When set, `poll_once` is
 Two layered knobs gate `POST /room/{id}/messages`:
 
 1. **Site-wide cap** (`rate_limit_messages` in `settings.db`). Per-user, per-minute. `0` (default) = off. Read by `routes::room::post_message` via `rate_limit::read_u32_setting`; check key is `user.id`.
-2. **Per-enclave override** (LC-217) at `enclaves.msg_rate_limit_burst`. Per-user, per-minute, applied IN ADDITION to the site-wide cap when posting in a room inside the enclave. `0` (default) = use only the site-wide cap. Enclave admins set it at `/enclave/{id}/settings`; check key is `enc:{eid}:{user.id}`.
+2. **Per-enclave override** (LC-217) at `enclaves.msg_rate_limit_burst`. Per-user, per-minute, applied in addition to the site-wide cap when posting in a room inside the enclave. `0` (default) = use only the site-wide cap. Enclave admins view + edit at `GET /enclave/{id}/settings`, mutate via `POST /enclave/{id}/rate-limit` (`require_manage`-gated, form field `burst`); check key is `enc:{eid}:{user.id}`.
 
-Both checks share the 60 s window. The per-enclave cap NEVER relaxes the site cap; it can only tighten it for posts inside that enclave. DMs (rooms with no enclave) skip the per-enclave check.
+Both checks share the 60 s window. The per-enclave cap never relaxes the site cap; it can only tighten it for posts inside that enclave. DMs (rooms with no enclave) skip the per-enclave check.
 
 ## Workspace Layout
 
