@@ -92,7 +92,20 @@ jobs:
           # nproc/2 cap on cargo workers. See the matching block in
           # build-desktop-linux.yml for rationale.
           let jobs = ((sys cpu | length) / 2 | into int)
+          # LC-214: inject build provenance. The Dockerfile ARG defaults are
+          # `unknown`; without these --build-args the compiled binary would
+          # bake "unknown" into version::banner and the admin nav badge.
+          # `.dockerignore` excludes `.git/`, so build.rs's fallback to
+          # invoking `git` inside the container cannot recover the values.
+          # BUILD_DATE captured once here so all images in this build share
+          # the same wall-clock anchor.
+          let git_hash = (^git rev-parse --short=12 HEAD | str trim)
+          let git_version = (^git describe --tags --always --dirty | str trim)
+          let build_date = (date now | format date "%Y-%m-%dT%H:%M:%SZ")
           print $"CARGO_BUILD_JOBS=($jobs)"
+          print $"GIT_HASH=($git_hash)"
+          print $"GIT_VERSION=($git_version)"
+          print $"BUILD_DATE=($build_date)"
           print $"Building and pushing ($image) with tags: ($tags_str)"
           (
             ^docker buildx build
@@ -100,6 +113,9 @@ jobs:
               --cache-from $cache_from
               --cache-to $cache_to
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              --build-arg $"GIT_HASH=($git_hash)"
+              --build-arg $"GIT_VERSION=($git_version)"
+              --build-arg $"BUILD_DATE=($build_date)"
               ...$tag_args
               -f ci-build/Dockerfile.web
               .
