@@ -145,6 +145,15 @@ Stage 2 (reply ingress): the IMAP poll loop's namespace-forked resolver (`email_
 
 Optional `imap_inbox_config.dead_letter_folder` column. When set, `poll_once` issues `UID COPY <uid> <folder>` for every dropped UID (including FETCH-fail and oversize-payload pre-process drops) before marking `\Seen` on the source. COPY failures are logged INFO under `target=email_ingress::dead_letter` and never block the `\Seen` STORE so a misconfigured folder cannot stop the queue. The operator must pre-create the folder at the IMAP provider; lets-chat does not auto-create it. Empty field = feature off (v1 always-`\Seen` posture; structured drop log is the only diagnostic).
 
+## Anti-spam: message send rate limits
+
+Two layered knobs gate `POST /room/{id}/messages`:
+
+1. **Site-wide cap** (`rate_limit_messages` in `settings.db`). Per-user, per-minute. `0` (default) = off. Read by `routes::room::post_message` via `rate_limit::read_u32_setting`; check key is `user.id`.
+2. **Per-enclave override** (LC-217) at `enclaves.msg_rate_limit_burst`. Per-user, per-minute, applied IN ADDITION to the site-wide cap when posting in a room inside the enclave. `0` (default) = use only the site-wide cap. Enclave admins set it at `/enclave/{id}/settings`; check key is `enc:{eid}:{user.id}`.
+
+Both checks share the 60 s window. The per-enclave cap NEVER relaxes the site cap; it can only tighten it for posts inside that enclave. DMs (rooms with no enclave) skip the per-enclave check.
+
 ## Workspace Layout
 
 `Cargo.toml` at the repo root defines a Cargo workspace with two members:
