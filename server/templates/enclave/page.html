@@ -17,7 +17,7 @@
   <header class="mb-4">
     <h1 class="text-2xl font-semibold">{{ enclave.name }}</h1>
     {% if let Some(d) = enclave.description %}<p class="text-content-muted mt-1">{{ d }}</p>{% endif %}
-    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
+    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
   </header>
 
   <div class="grid grid-cols-2 gap-6">

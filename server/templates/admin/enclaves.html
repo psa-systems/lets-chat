@@ -29,7 +29,7 @@
         {% if let Some(d) = e.description %}<div class="text-xs text-content-muted">{{ d }}</div>{% endif %}
       </td>
       <td class="py-2">
-        {% if e.is_public %}<span class="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5">{{ "admin-enclaves-public"|t }}</span>
+        {% if e.is_public %}<span class="text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "admin-enclaves-public"|t }}</span>
         {% else %}<span class="text-xs bg-surface-sunken text-content-muted rounded px-2 py-0.5">{{ "admin-enclaves-private"|t }}</span>{% endif %}
       </td>
       <td class="py-2 font-mono text-xs">

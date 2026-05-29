@@ -16,9 +16,9 @@
 {% endif %}
 
 {% if let Some(rev) = revealed %}
-<div class="mb-4 p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
+<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
   <p class="font-medium text-success">{{ "admin-webhooks-secret-prefix"|t }} #{{ rev.0 }} {{ "admin-webhooks-secret-suffix"|t }}</p>
-  <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ rev.1 }}</code>
+  <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ rev.1 }}</code>
 </div>
 {% endif %}
 

@@ -4,7 +4,7 @@
 
 {% block admin_main %}
 {% if maintenance_enabled %}
-<div class="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-warning text-sm">
+<div class="mb-4 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
   <strong>{{ "admin-settings-maintenance-on-title"|t }}</strong> {{ "admin-settings-maintenance-on-body"|t }}
 </div>
 {% endif %}
@@ -48,7 +48,7 @@
 
 <h1 class="text-lg font-semibold mt-8 mb-4">{{ "admin-settings-imap-heading"|t }}</h1>
 {% if imap_saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-imap-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-settings-imap-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = imap_error %}
 <div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
@@ -125,10 +125,10 @@
 
 <h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-uploads-heading"|t }}</h2>
 {% if let Some(n) = regenerated %}
-<div class="mb-3 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
+<div class="mb-3 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
 {% endif %}
 {% if let Some(n) = purged %}
-<div class="mb-3 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
+<div class="mb-3 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
 {% endif %}
 <div class="max-w-lg space-y-2 text-sm">
   <div class="flex justify-between">
