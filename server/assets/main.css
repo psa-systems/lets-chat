@@ -14,21 +14,31 @@ body {
 }
 
 /* LC-194 / LC-218: compact density. Templates opt in with
-   `data-lc-density-tight="row|header|composer"` on the small set of stable
-   container hooks that should respond. Attribute-driven (not class-string-
-   coupled) so future utility-class swaps in templates do not silently
-   un-compact a surface. The `data-density` attribute is set no-flash by the
-   base.html bootstrap from the lc-density cookie/localStorage.
+   `data-lc-density-tight="row|row-dense|header|composer"` on the small
+   set of stable container hooks that should respond. Attribute-driven
+   (not class-string-coupled) so future utility-class swaps in templates
+   do not silently un-compact a surface. The `data-density` attribute
+   is set no-flash by the base.html bootstrap from the lc-density
+   cookie/localStorage.
 
-   - `row`     halves the row's vertical padding. Used by non-follow-up message
-                rows, sidebar room/peer rows, and similar list items.
-   - `header`  shrinks header padding + drops base font ~0.9em. Used by the
-                room topbar and sidebar category headers.
-   - `composer` halves the composer's TOP padding only (preserves the iOS
-                safe-area bottom inset from LC-199's `lc-pb-safe`).
+   - `row`       halves a tall row's vertical padding. Used by non-follow-up
+                  message rows (comfortable `py-2` = 0.5 rem -> compact
+                  0.25 rem, the LC-194 chosen ratio).
+   - `row-dense` halves a short row's vertical padding. Used by sidebar
+                  room/peer rows (comfortable `py-1` = 0.25 rem -> compact
+                  0.125 rem so the change is visible at all on rows that
+                  were already tight).
+   - `header`    shrinks header padding + drops base font ~0.9em. Used by
+                  the room topbar.
+   - `composer`  halves the composer's TOP padding only (preserves the
+                  iOS safe-area bottom inset from LC-199's `lc-pb-safe`).
 
    Markdown paragraph spacing inside a message also tightens. */
 [data-density="compact"] [data-lc-density-tight="row"] {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+}
+[data-density="compact"] [data-lc-density-tight="row-dense"] {
     padding-top: 0.125rem;
     padding-bottom: 0.125rem;
 }
