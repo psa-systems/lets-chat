@@ -97,6 +97,10 @@ body {
     --accent:           var(--brand-primary);
     --accent-hover:     var(--brand-accent);
     --accent-content:   #ffffff; /* text/icon on an accent fill */
+    /* LC-222: soft-accent callout. Mirrors LC-215's --danger-surface for
+       the "tinted accent" surfaces (active sidebar row, mention popover
+       avatar, voted poll bar, settings device chip, reply-count chip). */
+    --accent-surface:   #dbeafe; /* blue-100 */
     /* Semantic state colors (each with a readable foreground) */
     --success:          #16a34a;
     --success-content:  #ffffff;
@@ -143,6 +147,10 @@ body {
        text-danger-content` by accident. */
     --danger-surface:   #3a0808;
     --danger-border:    #7f1d1d; /* red-900 */
+    /* LC-222: dim brand-tinted panel that sits visibly against slate-900
+       surface; mirrors LC-215's --danger-surface dim shade for dark
+       theme. */
+    --accent-surface:   #1e3a8a; /* blue-900 */
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     color-scheme: dark; /* native form controls + scrollbars go dark */
 }
@@ -176,6 +184,9 @@ body {
        posture. */
     --danger-surface:   #fee2e2; /* red-100 */
     --danger-border:    #991b1b; /* red-800 */
+    /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
+       maximal-contrast on top via --accent (blue-700). */
+    --accent-surface:   #dbeafe; /* blue-100 */
     --ring:             #000000;
     color-scheme: light;
 }
@@ -205,6 +216,10 @@ body {
        pure black on most displays. */
     --danger-surface:   #0a0a0a;
     --danger-border:    #fecaca; /* red-200 */
+    /* LC-222: hc-dark accent surface uses the same near-black as
+       --surface-elevated for parity; --accent text (blue-300) carries the
+       affordance on the maximal-contrast ground. */
+    --accent-surface:   #0a0a0a;
     --ring:             #ffffff;
     color-scheme: dark;
 }
