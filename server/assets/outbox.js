@@ -122,7 +122,7 @@
         var f = failed[i];
         html +=
           '<li class="px-3 py-2 text-xs flex items-center gap-2">' +
-          '<span class="text-red-600">Failed (' + escapeHtml(f.status) + '):</span> ' +
+          '<span class="text-danger">Failed (' + escapeHtml(f.status) + '):</span> ' +
           '<span class="flex-1 truncate text-slate-700">' + escapeHtml(f.label) + '</span>' +
           '<button data-lc-outbox-retry="' + escapeHtml(f.id) + '" class="underline hover:no-underline">Retry</button>' +
           '<button data-lc-outbox-discard="' + escapeHtml(f.id) + '" class="underline hover:no-underline text-slate-500">Discard</button>' +
