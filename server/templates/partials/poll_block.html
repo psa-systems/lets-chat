@@ -22,8 +22,8 @@
           hx-target="#poll-{{ poll.message_id }}"
           hx-swap="innerHTML"
           aria-pressed="{% if opt.voted_by_me %}true{% else %}false{% endif %}"
-          class="relative w-full overflow-hidden rounded border px-3 py-2 text-left text-sm hover:bg-surface {% if opt.voted_by_me %}border-blue-500 ring-1 ring-blue-500{% else %}border-border{% endif %}">
-    <div class="absolute inset-y-0 left-0 {% if opt.voted_by_me %}bg-blue-100{% else %}bg-surface-sunken{% endif %}" style="width: {{ opt.pct }}%;"></div>
+          class="relative w-full overflow-hidden rounded border px-3 py-2 text-left text-sm hover:bg-surface {% if opt.voted_by_me %}border-accent ring-1 ring-ring{% else %}border-border{% endif %}">
+    <div class="absolute inset-y-0 left-0 {% if opt.voted_by_me %}bg-accent-surface{% else %}bg-surface-sunken{% endif %}" style="width: {{ opt.pct }}%;"></div>
     <div class="relative flex justify-between gap-2">
       <span>{% if opt.voted_by_me %}<span aria-hidden="true">&#10003;</span> {% endif %}{{ opt.text }}</span>
       <span class="tabular-nums text-content-muted">{{ opt.count }} &middot; {{ opt.pct }}%</span>
