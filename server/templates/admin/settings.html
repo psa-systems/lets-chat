@@ -51,7 +51,7 @@
 <div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-settings-imap-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = imap_error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
 {% endif %}
 <p class="text-sm text-content-muted max-w-lg mb-3">
   {{ "admin-settings-imap-intro-1"|t }}

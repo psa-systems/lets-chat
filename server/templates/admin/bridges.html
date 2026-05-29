@@ -9,7 +9,7 @@
 </p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
 {% endif %}
 
 {% if let Some(tok) = new_token %}
@@ -81,7 +81,7 @@
         {% if b.status == "healthy" %}
         <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-green-100 text-emerald-700">{{ b.status }}</span>
         {% else if b.status == "errored" %}
-        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-red-100 text-danger">{{ b.status }}</span>
+        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-danger-surface text-danger">{{ b.status }}</span>
         {% else if b.status == "stale" %}
         <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-warning">{{ b.status }}</span>
         {% else %}

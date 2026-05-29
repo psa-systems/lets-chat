@@ -12,7 +12,7 @@
 </p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-red-50 text-danger text-sm">{{ err }}</div>
+<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
 {% endif %}
 
 {% if let Some(rev) = revealed %}

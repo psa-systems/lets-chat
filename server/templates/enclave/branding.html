@@ -13,7 +13,7 @@
   <div class="mb-4 p-3 rounded bg-green-50 text-green-700 text-sm">{{ "enclave-branding-saved"|t }}</div>
   {% endif %}
   {% if let Some(err) = error %}
-  <div class="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{{ err }}</div>
+  <div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
   {% endif %}
   <p class="text-sm text-content-muted mb-6 max-w-2xl">
     {{ "enclave-branding-intro-1"|t }} <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-branding-intro-2"|t }} <code>/admin/branding</code> {{ "enclave-branding-intro-3"|t }}

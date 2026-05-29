@@ -75,6 +75,12 @@ body {
     --warning-content:  #ffffff;
     --danger:           #dc2626;
     --danger-content:   #ffffff;
+    /* LC-215: soft-danger callout panel (delete-account, error banners).
+       Surface + border that sit visibly against the page bg as "warning
+       zone" without the loud full-fill of `--danger`. Heading + body copy
+       on these panels use `--danger` as text color. */
+    --danger-surface:   #fef2f2; /* red-50 */
+    --danger-border:    #fca5a5; /* red-300 */
     /* Keyboard-focus ring */
     --ring:             var(--brand-primary);
 }
@@ -101,6 +107,13 @@ body {
     --warning-content:  #451a03;
     --danger:           #ef4444;
     --danger-content:   #450a0a;
+    /* LC-215: dim red-tinted panel that recedes against slate-900 surface
+       but reads as danger zone. Surface sits just darker than the
+       red-950 used by `--danger-content` so the two never compose
+       silently invisible if anyone writes `bg-danger-surface
+       text-danger-content` by accident. */
+    --danger-surface:   #3a0808;
+    --danger-border:    #7f1d1d; /* red-900 */
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     color-scheme: dark; /* native form controls + scrollbars go dark */
 }
@@ -129,6 +142,11 @@ body {
     --warning-content:  #ffffff;
     --danger:           #b91c1c; /* red-700 */
     --danger-content:   #ffffff;
+    /* LC-215: hc-light keeps panel surface bright (red-100) with a strong
+       red-800 outline; matches the "everything has a hard outline" hc
+       posture. */
+    --danger-surface:   #fee2e2; /* red-100 */
+    --danger-border:    #991b1b; /* red-800 */
     --ring:             #000000;
     color-scheme: light;
 }
@@ -150,6 +168,14 @@ body {
     --warning-content:  #000000;
     --danger:           #f87171; /* red-400 */
     --danger-content:   #000000;
+    /* LC-215: hc-dark keeps the panel surface near-black with a maximal-
+       contrast red-200 outline; the border does the visual heavy lifting
+       on pure-black ground. Surface uses the same near-black as
+       `--surface-elevated` (#0a0a0a) for parity with other hc-dark
+       elevated panels; the previous #0a0000 was indistinguishable from
+       pure black on most displays. */
+    --danger-surface:   #0a0a0a;
+    --danger-border:    #fecaca; /* red-200 */
     --ring:             #ffffff;
     color-scheme: dark;
 }
