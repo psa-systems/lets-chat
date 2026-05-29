@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}{{ status }} {{ status_heading }} - lets-chat{% endblock %}
+
+{% block body %}
+{# LC-220: themed standalone error page. Extends base.html (NOT layout.html)
+   so the body gets the no-flash theme bootstrap + branding without needing
+   to load the sidebar chrome (which requires DB queries the IntoResponse
+   path does not have access to). User can still navigate via the prominent
+   "Back to home" link, or via the global page chrome if their device has
+   the LC-199 mobile drawer open. #}
+<main class="min-h-screen flex items-center justify-center p-6 bg-surface text-content">
+  <section class="card max-w-lg w-full p-8 space-y-4 text-center">
+    <p class="font-mono text-sm text-content-muted">{{ status }}</p>
+    <h1 class="text-2xl font-semibold text-danger">{{ status_heading }}</h1>
+    {% if let Some(m) = message.as_ref() %}
+    <p class="text-content-muted">{{ m }}</p>
+    {% endif %}
+    <p>
+      <a href="{{ back_url }}" class="inline-block bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ back_label }}</a>
+    </p>
+  </section>
+</main>
+{% endblock %}
