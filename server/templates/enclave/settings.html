@@ -58,6 +58,26 @@
     </div>
   </section>
 
+  {# LC-217: per-enclave message send rate limit. Manage-gated form. #}
+  <section class="space-y-3">
+    <h2 class="font-semibold">{{ "enclave-settings-rate-limit-heading"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-rate-limit-help"|t }}</p>
+    <form method="post" action="/enclave/{{ enclave.id }}/rate-limit" class="flex items-end gap-3">
+      <label class="text-sm">
+        <span class="text-content-muted">{{ "enclave-settings-rate-limit-burst"|t }}</span>
+        <input type="number" name="burst" min="0" max="10000" step="1"
+               value="{{ enclave.msg_rate_limit_burst }}"
+               class="mt-1 block w-32 border border-border-strong rounded px-2 py-1 text-sm">
+      </label>
+      <button type="submit" class="rounded bg-accent text-accent-content px-3 py-1.5 text-sm hover:bg-accent-hover">
+        {{ "enclave-settings-rate-limit-save"|t }}
+      </button>
+      <p class="text-xs text-content-muted ml-auto">
+        {% if enclave.msg_rate_limit_burst == 0 %}{{ "enclave-settings-rate-limit-status-global"|t }}{% else %}{{ "enclave-settings-rate-limit-status-active-prefix"|t }} {{ enclave.msg_rate_limit_burst }} {{ "enclave-settings-rate-limit-status-active-suffix"|t }}{% endif %}
+      </p>
+    </form>
+  </section>
+
   <section class="space-y-3">
     <h2 class="font-semibold">{{ "enclave-settings-emojis-heading"|t }}</h2>
     <p class="text-sm text-content-muted">
