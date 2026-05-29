@@ -360,10 +360,10 @@ body {
 .lc-md ol { list-style: decimal; }
 .lc-md li { margin: 0.125rem 0; }
 .lc-md blockquote {
-    border-left: 3px solid #cbd5e1;
+    border-left: 3px solid var(--border-strong);
     padding: 0.125rem 0.75rem;
     margin: 0.25rem 0;
-    color: #475569;
+    color: var(--content-muted);
 }
 .lc-md h1, .lc-md h2, .lc-md h3, .lc-md h4, .lc-md h5, .lc-md h6 {
     font-weight: 700;
@@ -376,27 +376,27 @@ body {
 .lc-md h4, .lc-md h5, .lc-md h6 { font-size: 1rem; }
 .lc-md table { border-collapse: collapse; margin: 0.25rem 0; }
 .lc-md th, .lc-md td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border);
     padding: 0.25rem 0.5rem;
 }
-.lc-md th { background: #f1f5f9; font-weight: 600; }
+.lc-md th { background: var(--surface-sunken); font-weight: 600; }
 .lc-md hr {
     border: none;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid var(--border);
     margin: 0.5rem 0;
 }
 .lc-md-code,
 .lc-md code:not(pre code) {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: var(--surface-sunken);
+    color: var(--content);
     padding: 0.05rem 0.3rem;
     border-radius: 0.25rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.9em;
 }
 .lc-md pre {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
     border-radius: 0.375rem;
     padding: 0.5rem 0.75rem;
     margin: 0.25rem 0;
@@ -406,7 +406,7 @@ body {
     line-height: 1.4;
     /* syntect emits inline `background-color` on the <pre>; override so the
        app's neutral surface wins. The token colours inside still apply. */
-    background-color: #f8fafc !important;
+    background-color: var(--surface-elevated) !important;
 }
 .lc-md pre code { background: transparent; padding: 0; }
 
@@ -423,24 +423,24 @@ body {
     gap: 0.5rem;
     margin-bottom: 0.25rem;
     padding: 0.25rem 0.5rem;
-    border-left: 3px solid #cbd5e1;
-    background: #f8fafc;
+    border-left: 3px solid var(--border-strong);
+    background: var(--surface);
     border-radius: 0.25rem;
     font-size: 0.85em;
-    color: #475569;
+    color: var(--content-muted);
     text-decoration: none;
     max-width: 100%;
 }
 .lc-quote-chip:hover {
-    background: #f1f5f9;
+    background: var(--surface-sunken);
 }
 .lc-quote-author {
     font-weight: 600;
-    color: #1e293b;
+    color: var(--content);
     white-space: nowrap;
 }
 .lc-quote-excerpt {
-    color: #475569;
+    color: var(--content-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -448,7 +448,7 @@ body {
 }
 .lc-quote-deleted {
     font-style: italic;
-    color: #94a3b8;
+    color: var(--content-subtle);
 }
 
 .lc-quote-bar {
@@ -457,11 +457,11 @@ body {
     gap: 0.5rem;
     margin-bottom: 0.25rem;
     padding: 0.25rem 0.5rem;
-    border-left: 3px solid #2563eb;
-    background: #eff6ff;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-surface);
     border-radius: 0.25rem;
     font-size: 0.8em;
-    color: #1e293b;
+    color: var(--accent-surface-content);
 }
 .lc-quote-bar-inner {
     display: flex;
@@ -472,25 +472,25 @@ body {
     flex: 1;
 }
 .lc-quote-bar-label {
-    color: #64748b;
+    color: var(--content-muted);
 }
 .lc-quote-bar-author {
     font-weight: 600;
     white-space: nowrap;
 }
 .lc-quote-bar-excerpt {
-    color: #475569;
+    color: var(--content-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 .lc-quote-bar-clear {
-    color: #64748b;
+    color: var(--content-muted);
     padding: 0 0.25rem;
     line-height: 1;
 }
 .lc-quote-bar-clear:hover {
-    color: #1e293b;
+    color: var(--content);
 }
 
 /* Voice-message player (partials/attachment.html). Wired by the voice IIFE
