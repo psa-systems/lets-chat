@@ -197,7 +197,7 @@
     <div class="flex items-center gap-2">
       <h2 class="font-medium">{{ "settings-dnd-heading"|t }}</h2>
       {% if dnd_active %}
-      <span class="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-danger">{{ "settings-dnd-active"|t }}</span>
+      <span class="rounded bg-danger-surface border border-danger-border px-1.5 py-0.5 text-xs font-medium text-danger">{{ "settings-dnd-active"|t }}</span>
       {% endif %}
     </div>
     <p class="text-xs text-content-muted">{{ "settings-dnd-explain"|t }}</p>
@@ -263,7 +263,7 @@
     <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-password-updated"|t }}</div>
     {% endif %}
     {% if let Some(err) = password_error %}
-    <div class="p-2 bg-red-100 text-red-800 text-sm rounded">{{ err }}</div>
+    <div class="p-2 bg-danger-surface border border-danger-border text-danger text-sm rounded">{{ err }}</div>
     {% endif %}
     <label class="block text-sm">
       <span class="text-content-muted">{{ "settings-current-password"|t }}</span>
@@ -306,7 +306,7 @@
         <button type="button" disabled class="px-2 py-1 text-xs border rounded text-content-subtle cursor-not-allowed">{{ "action-revoke"|t }}</button>
         {% else %}
         <form method="post" action="/settings/sessions/{{ s.id }}/revoke">
-          <button type="submit" class="px-2 py-1 text-xs border rounded text-danger border-red-300 hover:bg-red-50">{{ "action-revoke"|t }}</button>
+          <button type="submit" class="px-2 py-1 text-xs border rounded text-danger border-danger-border hover:bg-danger-surface">{{ "action-revoke"|t }}</button>
         </form>
         {% endif %}
       </li>
@@ -350,21 +350,21 @@
     </p>
   </div>
 
-  <div class="rounded border border-red-300 bg-red-50 p-4 space-y-3">
-    <h2 class="font-medium text-red-800">{{ "settings-delete-account-heading"|t }}</h2>
-    <p class="text-sm text-red-800">
+  <div class="rounded border border-danger-border bg-danger-surface p-4 space-y-3">
+    <h2 class="font-medium text-danger">{{ "settings-delete-account-heading"|t }}</h2>
+    <p class="text-sm text-danger">
       {{ "settings-delete-account-explain"|t }}
     </p>
     <form method="post" action="/settings/delete-account" class="space-y-3">
       {% if password_change_available %}
       <label class="block text-sm">
-        <span class="text-red-800">{{ "settings-current-password"|t }}</span>
-        <input type="password" name="password" required class="mt-1 block w-full border border-red-300 rounded px-2 py-1" autocomplete="current-password">
+        <span class="text-danger">{{ "settings-current-password"|t }}</span>
+        <input type="password" name="password" required class="mt-1 block w-full border border-danger-border rounded px-2 py-1" autocomplete="current-password">
       </label>
       {% endif %}
       <label class="block text-sm">
-        <span class="text-red-800">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
-        <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-red-300 rounded px-2 py-1">
+        <span class="text-danger">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
+        <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-danger-border rounded px-2 py-1">
       </label>
       <button type="submit" class="bg-danger text-danger-content px-4 py-1.5 rounded text-sm hover:bg-danger" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');">{{ "settings-delete-account-button"|t }}</button>
     </form>
