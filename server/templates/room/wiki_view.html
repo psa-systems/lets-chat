@@ -1,7 +1,7 @@
 {% if html.is_empty() %}
 <p class="text-sm text-content-muted italic">{{ "room-info-wiki-empty"|t }}</p>
 {% else %}
-<div class="prose prose-slate max-w-none text-sm">{{ html|safe }}</div>
+<div class="lc-md text-sm">{{ html|safe }}</div>
 <p class="text-xs text-content-muted">
   {{ "room-info-wiki-last-edited"|t }}
   {% if let Some(at) = updated_at %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}

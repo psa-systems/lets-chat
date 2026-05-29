@@ -272,9 +272,13 @@ body {
 }
 .lc-md strong { font-weight: 600; }
 .lc-md em { font-style: italic; }
-.lc-md del { text-decoration: line-through; color: #64748b; }
-.lc-md a { color: #2563eb; }
-.lc-md a:hover { text-decoration: underline; }
+/* LC-221: tokenized so strike + link recolor with the active theme and
+   follow the operator's branded accent. Pre-LC-221 used hardcoded
+   `#64748b` (slate-500) and `#2563eb` (blue-600) which stayed constant
+   across all four themes. */
+.lc-md del { text-decoration: line-through; color: var(--content-muted); }
+.lc-md a { color: var(--accent); }
+.lc-md a:hover { color: var(--accent-hover); text-decoration: underline; }
 .lc-md ul, .lc-md ol { padding-left: 1.5rem; margin: 0.25rem 0; }
 .lc-md ul { list-style: disc; }
 .lc-md ol { list-style: decimal; }
