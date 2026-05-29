@@ -29,6 +29,11 @@
       var ta = this.querySelector('textarea[name=body]');
       var send = this.querySelector('.thread-send');
       var err = this.querySelector('.thread-error');
+      /* LC-216: debounce. Distinct timer key from the main composer so the
+         two banners do not fight when both are active (the thread panel can
+         resolve a successful post while the main composer's failure timer
+         is still pending). */
+      if (window.__lcThreadErrTimer) { clearTimeout(window.__lcThreadErrTimer); window.__lcThreadErrTimer = null; }
       if (event.detail.successful) {
         ta.value = '';
         ta.style.height = 'auto';
@@ -36,7 +41,10 @@
         err.classList.add('hidden');
         window.__lcLastThreadTyping = 0;
       } else {
-        err.classList.remove('hidden');
+        window.__lcThreadErrTimer = setTimeout(function(){
+          err.classList.remove('hidden');
+          window.__lcThreadErrTimer = null;
+        }, 2000);
       }
       ta.focus();
     "
