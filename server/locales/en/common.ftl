@@ -84,7 +84,8 @@ error-status-bad-request = Bad request
 error-status-payload-too-large = Payload too large
 error-status-too-many-requests = Too many requests
 error-status-internal = Server error
-error-back-home = Back to home
+## (Back-to-home label is shared with the router-level 404 via the
+## existing `not-found-back-home` key; LC-220 does not duplicate it.)
 
 ## Poll modal
 poll-create-title = Create poll
