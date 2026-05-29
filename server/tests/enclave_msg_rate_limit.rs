@@ -162,10 +162,7 @@ async fn limits_are_per_enclave() {
     // Enclave B has its own counter; 5 more should succeed.
     for i in 0..5 {
         let s = post_msg(&t.app, &t.session, room_b, &format!("b-{i}")).await;
-        assert!(
-            s == StatusCode::SEE_OTHER || s == StatusCode::OK,
-            "B post {i} expected 2xx/3xx, got {s}"
-        );
+        assert_eq!(s, StatusCode::OK, "B post {i} expected 200, got {s}");
     }
     // 6th in B hits its cap.
     let s = post_msg(&t.app, &t.session, room_b, "b-6").await;
