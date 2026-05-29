@@ -27,6 +27,7 @@ admin-nav-webhooks = Webhooks
 admin-nav-bridges = Puentes
 admin-nav-version-release = Versión
 admin-nav-version-built = compilado
+admin-nav-label = Navegación de administración
 
 ## Layout shell
 layout-menu = Menú
