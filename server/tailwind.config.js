@@ -43,6 +43,11 @@ module.exports = {
         danger: {
           DEFAULT: "var(--danger)",
           content: "var(--danger-content)",
+          // LC-215: soft-danger callout. `bg-danger-surface` for the
+          // panel bg, `border-danger-border` for the outline. Heading +
+          // body copy on these panels use `text-danger`.
+          surface: "var(--danger-surface)",
+          border: "var(--danger-border)",
         },
       },
       ringColor: {
