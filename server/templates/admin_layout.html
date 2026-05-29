@@ -1,25 +1,39 @@
 {% extends "layout.html" %}
 
 {% block main %}
-<nav class="border-b border-border px-4 py-2 flex gap-4 text-sm items-center">
-  <a href="/admin" class="{% if section == "settings" %}font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
-  <a href="/admin/users" class="{% if section == "users" %}font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
-  <a href="/admin/invites" class="{% if section == "invites" %}font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
-  <a href="/admin/rooms" class="{% if section == "rooms" %}font-semibold{% endif %}">{{ "admin-nav-rooms"|t }}</a>
-  <a href="/admin/enclaves" class="{% if section == "enclaves" %}font-semibold{% endif %}">{{ "admin-nav-enclaves"|t }}</a>
-  <a href="/admin/anti-spam" class="{% if section == "anti_spam" %}font-semibold{% endif %}">{{ "admin-nav-anti-spam"|t }}</a>
-  <a href="/admin/link-filter" class="{% if section == "link_filter" %}font-semibold{% endif %}">{{ "admin-nav-link-filter"|t }}</a>
-  <a href="/admin/quarantine" class="{% if section == "quarantine" %}font-semibold{% endif %}">{{ "admin-nav-quarantine"|t }}</a>
-  <a href="/admin/branding" class="{% if section == "branding" %}font-semibold{% endif %}">{{ "admin-nav-branding"|t }}</a>
-  <a href="/admin/backup-restore" class="{% if section == "backup" %}font-semibold{% endif %}">{{ "admin-nav-backup"|t }}</a>
-  <a href="/admin/modlog" class="{% if section == "modlog" %}font-semibold{% endif %}">{{ "admin-nav-modlog"|t }}</a>
-  <a href="/admin/analytics" class="{% if section == "analytics" %}font-semibold{% endif %}">{{ "admin-nav-analytics"|t }}</a>
-  <a href="/admin/slash-commands" class="{% if section == "slash_commands" %}font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
-  <a href="/admin/bots" class="{% if section == "bots" %}font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
-  <a href="/admin/outgoing-webhooks" class="{% if section == "outgoing_webhooks" %}font-semibold{% endif %}">{{ "admin-nav-webhooks"|t }}</a>
-  <a href="/admin/bridges" class="{% if section == "bridges" %}font-semibold{% endif %}">{{ "admin-nav-bridges"|t }}</a>
-  <span class="ml-auto text-xs text-content-subtle font-mono" title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
-</nav>
+{# LC-219: nav scrolls horizontally instead of wrapping. `flex-nowrap` forces
+   a single row; `overflow-x-auto` reveals a scrollbar / lets touch + Shift-
+   wheel scroll the strip when total link width exceeds the viewport. Each
+   link carries `whitespace-nowrap shrink-0` so multi-word labels (Outgoing
+   webhooks, Anti-spam, Link filter, Backup & restore) never break mid-anchor
+   and the labels do not compress. The version chip is moved OUTSIDE the
+   scroll container and absolute-pinned to the right edge so it stays visible
+   while the strip is scrolled; `bg-surface` masks underlying link text that
+   would otherwise show through when the strip is scrolled all the way right.
+   `aria-label` names the landmark; `aria-current="page"` adds proper SR
+   active-section semantics alongside the existing `font-semibold` affordance. #}
+<div class="relative border-b border-border">
+  <nav aria-label="{{ "admin-nav-label"|t }}" class="px-4 py-2 flex flex-nowrap gap-4 overflow-x-auto text-sm items-center">
+    <a href="/admin"{% if section == "settings" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "settings" %} font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
+    <a href="/admin/users"{% if section == "users" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "users" %} font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
+    <a href="/admin/invites"{% if section == "invites" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "invites" %} font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
+    <a href="/admin/rooms"{% if section == "rooms" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "rooms" %} font-semibold{% endif %}">{{ "admin-nav-rooms"|t }}</a>
+    <a href="/admin/enclaves"{% if section == "enclaves" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "enclaves" %} font-semibold{% endif %}">{{ "admin-nav-enclaves"|t }}</a>
+    <a href="/admin/anti-spam"{% if section == "anti_spam" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "anti_spam" %} font-semibold{% endif %}">{{ "admin-nav-anti-spam"|t }}</a>
+    <a href="/admin/link-filter"{% if section == "link_filter" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "link_filter" %} font-semibold{% endif %}">{{ "admin-nav-link-filter"|t }}</a>
+    <a href="/admin/quarantine"{% if section == "quarantine" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "quarantine" %} font-semibold{% endif %}">{{ "admin-nav-quarantine"|t }}</a>
+    <a href="/admin/branding"{% if section == "branding" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "branding" %} font-semibold{% endif %}">{{ "admin-nav-branding"|t }}</a>
+    <a href="/admin/backup-restore"{% if section == "backup" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "backup" %} font-semibold{% endif %}">{{ "admin-nav-backup"|t }}</a>
+    <a href="/admin/modlog"{% if section == "modlog" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "modlog" %} font-semibold{% endif %}">{{ "admin-nav-modlog"|t }}</a>
+    <a href="/admin/analytics"{% if section == "analytics" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "analytics" %} font-semibold{% endif %}">{{ "admin-nav-analytics"|t }}</a>
+    <a href="/admin/slash-commands"{% if section == "slash_commands" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "slash_commands" %} font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
+    <a href="/admin/bots"{% if section == "bots" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "bots" %} font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
+    <a href="/admin/outgoing-webhooks"{% if section == "outgoing_webhooks" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "outgoing_webhooks" %} font-semibold{% endif %}">{{ "admin-nav-webhooks"|t }}</a>
+    <a href="/admin/bridges"{% if section == "bridges" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "bridges" %} font-semibold{% endif %}">{{ "admin-nav-bridges"|t }}</a>
+  </nav>
+  <span class="hidden md:inline-block absolute right-2 top-1/2 -translate-y-1/2 bg-surface px-2 text-xs text-content-subtle font-mono pointer-events-none"
+        title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
+</div>
 {# LC-175: subscribe admin pages to the `admin` topic so moderation actions
    (ban / mute / role / quota / delete) refresh the user list live across all
    admins. topic_subscribe_allowed gates this on the admin role; admin pages
