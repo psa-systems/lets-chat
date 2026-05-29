@@ -120,6 +120,18 @@ body {
        on these panels use `--danger` as text color. */
     --danger-surface:   #fef2f2; /* red-50 */
     --danger-border:    #fca5a5; /* red-300 */
+    /* LC-224: soft-success + soft-warning callouts (parallel to
+       --danger-surface). `*-surface-content` is the foreground text color
+       paired with the soft surface; light themes use the saturated text
+       color for affordance, dark themes flip to `--content` to keep text
+       readable against the dim surface (same posture as LC-222 fixed
+       the accent contrast issue). */
+    --success-surface:          #f0fdf4; /* green-50 */
+    --success-border:           #86efac; /* green-300 */
+    --success-surface-content:  #047857; /* emerald-700 - matches existing chip text */
+    --warning-surface:          #fffbeb; /* amber-50 */
+    --warning-border:           #fcd34d; /* amber-300 */
+    --warning-surface-content:  var(--warning);
     /* Keyboard-focus ring */
     --ring:             var(--brand-primary);
 }
@@ -153,6 +165,15 @@ body {
        text-danger-content` by accident. */
     --danger-surface:   #3a0808;
     --danger-border:    #7f1d1d; /* red-900 */
+    /* LC-224: dim green / amber tinted panels for soft-success / soft-warning
+       on dark surface. Foreground flips to `--content` so text reads on the
+       dim surface (saturated success/warning text color would fail AA). */
+    --success-surface:          #052e16; /* green-950 */
+    --success-border:           #14532d; /* green-900 */
+    --success-surface-content:  var(--content);
+    --warning-surface:          #451a03; /* amber-950 */
+    --warning-border:           #78350f; /* amber-900 */
+    --warning-surface-content:  var(--content);
     /* LC-222: dim brand-tinted panel that sits visibly against slate-900
        surface; mirrors LC-215's --danger-surface dim shade for dark
        theme. `--accent-surface-content` flips to `--content` (slate-200)
@@ -193,6 +214,15 @@ body {
        posture. */
     --danger-surface:   #fee2e2; /* red-100 */
     --danger-border:    #991b1b; /* red-800 */
+    /* LC-224: hc-light keeps bright success / warning surfaces with
+       strong outlines; success-700 / amber-700 text reads on green-100 /
+       amber-100 at ~6:1 contrast. */
+    --success-surface:          #dcfce7; /* green-100 */
+    --success-border:           #15803d; /* green-700 */
+    --success-surface-content:  var(--success);
+    --warning-surface:          #fef3c7; /* amber-100 */
+    --warning-border:           #b45309; /* amber-700 */
+    --warning-surface-content:  var(--warning);
     /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
        maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
     --accent-surface:           #dbeafe; /* blue-100 */
@@ -226,6 +256,15 @@ body {
        pure black on most displays. */
     --danger-surface:   #0a0a0a;
     --danger-border:    #fecaca; /* red-200 */
+    /* LC-224: hc-dark near-black surface + maximal-contrast green-200 /
+       amber-200 borders. --success (green-400) / --warning (amber-400)
+       text reads on near-black at ~9:1 contrast. */
+    --success-surface:          #0a0a0a;
+    --success-border:           #bbf7d0; /* green-200 */
+    --success-surface-content:  var(--success);
+    --warning-surface:          #0a0a0a;
+    --warning-border:           #fde68a; /* amber-200 */
+    --warning-surface-content:  var(--warning);
     /* LC-222: hc-dark accent surface uses the same near-black as
        --surface-elevated for parity; --accent (blue-300) on it gives
        ~9.5:1 contrast. */

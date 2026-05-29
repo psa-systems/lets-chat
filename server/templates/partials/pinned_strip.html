@@ -1,4 +1,4 @@
-<div id="lc-pinned-strip-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-border bg-amber-50{% endif %}">
+<div id="lc-pinned-strip-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-warning-border bg-warning-surface{% endif %}">
   {% if total_count > 0 %}
   <ul class="px-4 py-2 space-y-1 text-sm">
     {% for p in top_pins %}

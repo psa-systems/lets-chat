@@ -23,7 +23,7 @@
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
     <span class="font-medium">{{ message.label() }}</span>
-    <span class="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wide bg-success-surface text-success-surface-content rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = email_avatar_url %}
@@ -83,9 +83,9 @@
     <button hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-pin"|t }}</button>
     {% endif %}
     {% if message.is_bookmarked %}
-    <button hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">{{ "room-msg-unsave"|t }}</button>
+    <button hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-success-surface-content hover:underline">{{ "room-msg-unsave"|t }}</button>
     {% else %}
-    <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-emerald-700 hover:underline">{{ "room-msg-save"|t }}</button>
+    <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-success-surface-content hover:underline">{{ "room-msg-save"|t }}</button>
     {% endif %}
     <button hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">{{ "room-msg-remind"|t }}</button>
     {% if message.can_edit %}

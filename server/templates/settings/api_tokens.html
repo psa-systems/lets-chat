@@ -19,14 +19,14 @@
   {% endif %}
 
   {% if let Some(tok) = new_token %}
-  <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
-    <p class="font-medium text-green-800">{{ "api-tokens-created-note"|t }}</p>
-    <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
+  <div class="p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
+    <p class="font-medium">{{ "api-tokens-created-note"|t }}</p>
+    <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-amber-50 text-amber-800 text-sm">
+  <div class="p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
     {{ "api-tokens-disabled-prefix"|t }}
     (<code>LETS_CHAT_SECRET_KEY</code>){{ "api-tokens-disabled-suffix"|t }}
   </div>

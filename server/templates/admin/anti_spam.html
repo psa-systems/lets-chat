@@ -5,7 +5,7 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-antispam-heading"|t }}</h1>
 {% if saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-antispam-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-antispam-saved"|t }}</div>
 {% endif %}
 
 <form method="post" action="/admin/anti-spam" class="max-w-lg space-y-6">

@@ -43,10 +43,22 @@ module.exports = {
         success: {
           DEFAULT: "var(--success)",
           content: "var(--success-content)",
+          // LC-224: soft-success callout (saved banners, healthy bridge
+          // chip, created-token blocks, public-enclave badge). Foreground
+          // pair `text-success-surface-content` themes per palette.
+          surface: "var(--success-surface)",
+          border: "var(--success-border)",
+          "surface-content": "var(--success-surface-content)",
         },
         warning: {
           DEFAULT: "var(--warning)",
           content: "var(--warning-content)",
+          // LC-224: soft-warning callout (missing-secret banners, pinned
+          // strip, stale bridge chip, unverified-email chip). Foreground
+          // pair `text-warning-surface-content` themes per palette.
+          surface: "var(--warning-surface)",
+          border: "var(--warning-border)",
+          "surface-content": "var(--warning-surface-content)",
         },
         danger: {
           DEFAULT: "var(--danger)",
