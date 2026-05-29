@@ -130,7 +130,7 @@ Shapes:
 
 - User-authored: `"actor": {"kind": "user", "user_id": "..."}`.
 - Webhook-authored (LC-74): `"actor": {"kind": "webhook", "webhook_id": N}`.
-- Email-ingress-authored (LC-77): `"actor": {"kind": "email_inbox", "email_inbox_id": N}` (when the email path's LC-75 wiring lands; see "Known gaps" below).
+- Email-ingress-authored (LC-77): `"actor": {"kind": "email_inbox", "email_inbox_id": N}`.
 - Bridge-authored (LC-78): `"actor": {"kind": "bridge", "bridge_id": N}`. Same shape on `message.edited` and `message.deleted` events for messages the bridge originally posted (the actor describes the ORIGINAL author, not the editor/deleter).
 
 ## Operator workflow
@@ -161,8 +161,6 @@ Removing a bridge from `/admin/bridges`:
 This is the LC-78 v1 design: stop-new, not delete-history. The principle: the wrong choice made in code (stop-new flipped to delete-history later) is reversible via an additive admin branch; the wrong choice made in data (history hard-deleted on every removal) is permanent. If your deployment ever needs strict delete-history semantics, it's an additive follow-up, not a destructive change to v1.
 
 ## Known gaps
-
-- **Email-ingress (LC-77) does not fire LC-75 outgoing webhooks.** The `finalize_email_inbox_message_send` helper broadcasts to WS and fans mentions but does not enqueue a `message.posted` event. This is a pre-existing LC-75 coverage gap that pre-dates LC-78; a bridge daemon will not see email-ingress messages on the outgoing-webhook stream. Tracked separately.
 
 - **`message.edited` / `message.deleted` propagation is daemon-ignore in v1.** lets-chat fires the event with the bridge actor block, but a v1 daemon has no API to push edits/deletes back. Ignore the events or surface them as informational; don't act on them.
 
