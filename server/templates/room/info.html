@@ -32,7 +32,7 @@
       {% if description_html.is_empty() %}
       <p class="text-sm text-content-muted italic">{{ "room-description-empty"|t }}</p>
       {% else %}
-      <div class="prose prose-slate max-w-none text-sm">{{ description_html|safe }}</div>
+      <div class="lc-md text-sm">{{ description_html|safe }}</div>
       {% endif %}
       {% if can_manage_overrides %}
       <button type="button"
@@ -50,7 +50,7 @@
       {% if wiki_html.is_empty() %}
       <p class="text-sm text-content-muted italic">{{ "room-info-wiki-empty"|t }}</p>
       {% else %}
-      <div class="prose prose-slate max-w-none text-sm">{{ wiki_html|safe }}</div>
+      <div class="lc-md text-sm">{{ wiki_html|safe }}</div>
       <p class="text-xs text-content-muted">
         {{ "room-info-wiki-last-edited"|t }}
         {% if let Some(at) = room.wiki_updated_at.as_ref() %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}
