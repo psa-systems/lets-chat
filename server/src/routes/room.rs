@@ -477,14 +477,14 @@ pub async fn post_message(
     // rooms whose enclave has the override at 0 fall through.
     let (enclave_id_opt, enclave_burst) =
         db::enclave::get_msg_rate_limit_burst_for_room(&state.chat, room_id).await?;
-    if let (Some(eid), burst) = (enclave_id_opt, enclave_burst) {
-        if burst > 0 {
+    if let Some(eid) = enclave_id_opt {
+        if enclave_burst > 0 {
             let key = format!("enc:{eid}:{}", user.id);
-            if let crate::rate_limit::Outcome::Deny { retry_after } =
-                state
-                    .rate_limits
-                    .check(crate::rate_limit::RateLimitKind::Message, &key, burst)
-            {
+            if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check(
+                crate::rate_limit::RateLimitKind::Message,
+                &key,
+                enclave_burst,
+            ) {
                 return Err(AppError::TooManyRequests(
                     format!("you are sending messages too quickly in this enclave; retry in {retry_after} seconds"),
                     retry_after,

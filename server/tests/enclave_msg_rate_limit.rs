@@ -111,10 +111,7 @@ async fn zero_override_falls_through_to_global() {
     // Global is 0 (unset) -> no limit applies. 10 fast posts all succeed.
     for i in 0..10 {
         let s = post_msg(&t.app, &t.session, room_id, &format!("hi-{i}")).await;
-        assert!(
-            s == StatusCode::SEE_OTHER || s == StatusCode::OK,
-            "post {i} expected 2xx/3xx, got {s}"
-        );
+        assert_eq!(s, StatusCode::OK, "post {i} expected 200, got {s}");
     }
 }
 
@@ -128,10 +125,7 @@ async fn nonzero_override_blocks_at_threshold() {
     // First 3 succeed.
     for i in 0..3 {
         let s = post_msg(&t.app, &t.session, room_id, &format!("ok-{i}")).await;
-        assert!(
-            s == StatusCode::SEE_OTHER || s == StatusCode::OK,
-            "post {i} expected 2xx/3xx, got {s}"
-        );
+        assert_eq!(s, StatusCode::OK, "post {i} expected 200, got {s}");
     }
     // Fourth hits the 429 from the per-enclave cap.
     let s = post_msg(&t.app, &t.session, room_id, "blocked").await;
@@ -150,18 +144,21 @@ async fn limits_are_per_enclave() {
         .await
         .unwrap();
     // Burn enclave A to its cap.
-    let s1 = post_msg(&t.app, &t.session, room_a, "a1").await;
-    assert!(
-        s1 == StatusCode::SEE_OTHER || s1 == StatusCode::OK,
-        "A1 expected 2xx/3xx, got {s1}"
+    assert_eq!(
+        post_msg(&t.app, &t.session, room_a, "a1").await,
+        StatusCode::OK,
+        "A1 expected 200"
     );
-    let s2 = post_msg(&t.app, &t.session, room_a, "a2").await;
-    assert!(
-        s2 == StatusCode::SEE_OTHER || s2 == StatusCode::OK,
-        "A2 expected 2xx/3xx, got {s2}"
+    assert_eq!(
+        post_msg(&t.app, &t.session, room_a, "a2").await,
+        StatusCode::OK,
+        "A2 expected 200"
     );
-    let s3 = post_msg(&t.app, &t.session, room_a, "a3").await;
-    assert_eq!(s3, StatusCode::TOO_MANY_REQUESTS, "A 3rd should 429");
+    assert_eq!(
+        post_msg(&t.app, &t.session, room_a, "a3").await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "A 3rd should 429"
+    );
     // Enclave B has its own counter; 5 more should succeed.
     for i in 0..5 {
         let s = post_msg(&t.app, &t.session, room_b, &format!("b-{i}")).await;

@@ -339,7 +339,9 @@ pub async fn post_share_emojis(
 /// LC-217: form for `POST /enclave/{id}/rate-limit`. `burst` is a per-minute
 /// burst counter. `0` clears the override (use the global cap). Upper
 /// bound 10_000 is generous and only there to keep an accidental gigantic
-/// value from being silently accepted; well-formed UI input maxes at 600.
+/// value from being silently accepted; the HTML `<input>` matches with
+/// `max="10000"`, so the bound here is defense in depth against forged
+/// POSTs.
 #[derive(Deserialize)]
 pub struct MsgRateLimitForm {
     pub burst: String,
