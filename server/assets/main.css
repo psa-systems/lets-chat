@@ -138,6 +138,18 @@ body {
     --warning-surface:          #fffbeb; /* amber-50 */
     --warning-border:           #fcd34d; /* amber-300 */
     --warning-surface-content:  #b45309; /* amber-700 */
+    /* LC-225: message-actor badges. Three soft-surface families so the
+       webhook / email-ingress / protocol-bridge badges dim together in
+       dark and hc-dark instead of staying bright. Per-kind hue preserves
+       the visual identity ("this is from a webhook" vs "from a bridge");
+       all three follow the LC-224 darker-text posture so contrast on the
+       soft surface passes WCAG AA. */
+    --webhook-surface:          #d1fae5; /* emerald-100 */
+    --webhook-content:          #047857; /* emerald-700 */
+    --email-surface:            #e0f2fe; /* sky-100 */
+    --email-content:            #0369a1; /* sky-700 */
+    --bridge-surface:           #ede9fe; /* violet-100 */
+    --bridge-content:           #6d28d9; /* violet-700 */
     /* Keyboard-focus ring */
     --ring:             var(--brand-primary);
 }
@@ -192,6 +204,15 @@ body {
        (blue-600) here would be ~1.9:1 contrast and fail WCAG AA. */
     --accent-surface:           #1e3a8a; /* blue-900 */
     --accent-surface-content:   var(--content);
+    /* LC-225: dim emerald / sky / violet tinted badges for the webhook /
+       email / bridge actor chips. Content flips to `--content` so text
+       reads on the dim per-hue surface. */
+    --webhook-surface:          #022c1b;
+    --webhook-content:          var(--content);
+    --email-surface:            #082f49; /* sky-950 */
+    --email-content:            var(--content);
+    --bridge-surface:           #2e1065; /* violet-950 */
+    --bridge-content:           var(--content);
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     color-scheme: dark; /* native form controls + scrollbars go dark */
 }
@@ -238,6 +259,14 @@ body {
        maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
     --accent-surface:           #dbeafe; /* blue-100 */
     --accent-surface-content:   var(--accent);
+    /* LC-225: hc-light keeps bright actor-badge surfaces with darker
+       content text for AA contrast. */
+    --webhook-surface:          #d1fae5; /* emerald-100 */
+    --webhook-content:          #047857; /* emerald-700 */
+    --email-surface:            #e0f2fe; /* sky-100 */
+    --email-content:            #0369a1; /* sky-700 */
+    --bridge-surface:           #ede9fe; /* violet-100 */
+    --bridge-content:           #6d28d9; /* violet-700 */
     --ring:             #000000;
     color-scheme: light;
 }
@@ -281,6 +310,14 @@ body {
        ~9.5:1 contrast. */
     --accent-surface:           #0a0a0a;
     --accent-surface-content:   var(--accent);
+    /* LC-225: hc-dark uses near-black surfaces with bright per-kind text
+       colors (emerald-400 / sky-300 / violet-400) for ~9:1 contrast. */
+    --webhook-surface:          #0a0a0a;
+    --webhook-content:          #34d399; /* emerald-400 */
+    --email-surface:            #0a0a0a;
+    --email-content:            #7dd3fc; /* sky-300 */
+    --bridge-surface:           #0a0a0a;
+    --bridge-content:           #c4b5fd; /* violet-300 */
     --ring:             #ffffff;
     color-scheme: dark;
 }
