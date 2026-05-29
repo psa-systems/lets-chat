@@ -226,13 +226,22 @@
     ta.setAttribute('aria-expanded', 'false');
     ta.removeAttribute('aria-activedescendant');
   }
+  // LC-227: 200ms debounce. Pre-LC-227 fired one htmx.ajax per keystroke; on
+  // a 100ms-latency network, typing `@alice` stacked 6 in-flight requests
+  // and the popover flickered as each landed. Stash the timer handle so the
+  // teardown() at form swap can cancel a stray fire on a detached slot.
+  var mentionTimer = null;
   function refresh() {
-    current = activeToken();
-    if (!current) return close();
-    var url = '/users/mentions?room_id=' + roomId + '&q=' + encodeURIComponent(current.prefix);
-    if (window.htmx) {
-      htmx.ajax('GET', url, { target: '#lc-mention-popover', swap: 'innerHTML' });
-    }
+    if (mentionTimer) clearTimeout(mentionTimer);
+    mentionTimer = setTimeout(function () {
+      mentionTimer = null;
+      current = activeToken();
+      if (!current) return close();
+      var url = '/users/mentions?room_id=' + roomId + '&q=' + encodeURIComponent(current.prefix);
+      if (window.htmx) {
+        htmx.ajax('GET', url, { target: '#lc-mention-popover', swap: 'innerHTML' });
+      }
+    }, 200);
   }
   // items() returns the role="option" <li>s; aria-selected lives on the LI
   // per WAI-ARIA pattern. The inner <button data-username> remains as the
@@ -302,6 +311,9 @@
   function teardown() {
     document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
     if (bcastTimer) { clearTimeout(bcastTimer); bcastTimer = null; }
+    // LC-227: cancel a pending mention-popover refresh so it cannot fire
+    // an htmx.ajax targeting a detached #lc-mention-popover slot.
+    if (mentionTimer) { clearTimeout(mentionTimer); mentionTimer = null; }
     // LC-216: cancel a pending failure-banner reveal so it cannot fire on a
     // detached .composer-error after the form is swapped out.
     if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
