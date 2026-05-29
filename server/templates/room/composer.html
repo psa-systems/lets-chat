@@ -15,6 +15,14 @@
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
     var qbar = document.getElementById('composer-quote-bar');
+    /* LC-216: debounce the failure banner. Rapid successive submits can
+       cause an in-flight htmx request to be cancelled by the next submit
+       (or to land slowly), firing afterRequest with successful=false even
+       though the message ultimately posts. Stash a setTimeout handle on
+       window and clear it on the next success/failure so a follow-up
+       success within 2s suppresses the flash. A real failure leaves the
+       timer to fire and the banner reveals on schedule. */
+    if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
     if (event.detail.successful) {
       ta.value = '';
       ta.style.height = 'auto';
@@ -25,7 +33,10 @@
       if (bcast) bcast.innerHTML = '';
       if (qbar) qbar.innerHTML = '';
     } else {
-      err.classList.remove('hidden');
+      window.__lcComposerErrTimer = setTimeout(function(){
+        err.classList.remove('hidden');
+        window.__lcComposerErrTimer = null;
+      }, 2000);
     }
     ta.focus();
   "
