@@ -5,7 +5,7 @@
 {% block admin_main %}
 <h1 class="text-lg font-semibold mb-4">{{ "admin-branding-heading"|t }}</h1>
 {% if saved %}
-<div class="mb-4 p-3 rounded bg-green-50 text-success text-sm">{{ "admin-branding-saved"|t }}</div>
+<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-branding-saved"|t }}</div>
 {% endif %}
 {% if let Some(err) = error %}
 <div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>

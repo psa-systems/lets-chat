@@ -6,7 +6,7 @@
 <h1 class="text-lg font-semibold mb-4">{{ "admin-backup-heading"|t }}</h1>
 
 {% if restore_pending %}
-<div class="mb-6 p-3 rounded border border-amber-300 bg-amber-50 text-warning text-sm">
+<div class="mb-6 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
   <strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
   <code>.replaced-{timestamp}</code>{{ "admin-backup-staged-2"|t }}
   <code>.restore-pending</code> {{ "admin-backup-staged-3"|t }}

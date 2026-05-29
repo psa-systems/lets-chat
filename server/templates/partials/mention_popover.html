@@ -14,7 +14,7 @@
       <span class="text-xs text-content-muted truncate">{{ sub }}</span>
       {% endif %}
       {% else if s.kind == "group" %}
-      <span class="h-5 w-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold" aria-hidden="true">#</span>
+      <span class="h-5 w-5 rounded-full bg-success-surface text-success-surface-content flex items-center justify-center text-[10px] font-bold" aria-hidden="true">#</span>
       <span class="font-semibold">@{{ s.username }}</span>
       {% if let Some(label) = s.display_name.as_ref() %}
       <span class="text-xs text-content-muted truncate">{{ label }}</span>
