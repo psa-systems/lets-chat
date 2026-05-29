@@ -31,6 +31,10 @@ module.exports = {
           DEFAULT: "var(--accent)",
           hover: "var(--accent-hover)",
           content: "var(--accent-content)",
+          // LC-222: tinted accent surface. `bg-accent-surface` for active
+          // sidebar rows, mention popover avatar, voted poll bar, settings
+          // device chip, reply-count chip. Soft fill that themes per palette.
+          surface: "var(--accent-surface)",
         },
         success: {
           DEFAULT: "var(--success)",
