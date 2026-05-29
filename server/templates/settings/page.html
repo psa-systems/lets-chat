@@ -9,7 +9,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-xl space-y-8">
   {% if saved %}
-  <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-saved"|t }}</div>
+  <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-saved"|t }}</div>
   {% endif %}
 
   {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
@@ -88,9 +88,9 @@
       {% if email_verification_available && email.is_some() %}
       <div class="mt-1 flex items-center gap-2 text-xs">
         {% if email_verified %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800">{{ "settings-email-verified"|t }}</span>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-success-surface border border-success-border text-success-surface-content">{{ "settings-email-verified"|t }}</span>
         {% else %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">{{ "settings-email-unverified"|t }}</span>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-warning-surface border border-warning-border text-warning-surface-content">{{ "settings-email-unverified"|t }}</span>
         <button type="submit" form="email-verify-resend" class="text-accent hover:underline">{{ "settings-email-resend"|t }}</button>
         {% endif %}
       </div>
@@ -260,7 +260,7 @@
   <form method="post" action="/settings/password" class="space-y-4">
     <h2 class="font-medium">{{ "settings-change-password"|t }}</h2>
     {% if password_changed %}
-    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-password-updated"|t }}</div>
+    <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-password-updated"|t }}</div>
     {% endif %}
     {% if let Some(err) = password_error %}
     <div class="p-2 bg-danger-surface border border-danger-border text-danger text-sm rounded">{{ err }}</div>
@@ -285,7 +285,7 @@
     <h2 class="font-medium">{{ "settings-active-sessions"|t }}</h2>
     <p class="text-sm text-content-muted">{{ "settings-sessions-help"|t }}</p>
     {% if session_revoked %}
-    <div class="p-2 bg-green-100 text-green-800 text-sm rounded">{{ "settings-session-revoked"|t }}</div>
+    <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-session-revoked"|t }}</div>
     {% endif %}
     <ul class="divide-y border rounded">
       {% for s in sessions %}

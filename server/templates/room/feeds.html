@@ -19,14 +19,14 @@
   {% endif %}
 
   {% if let Some(url) = new_url %}
-  <div class="p-3 rounded bg-green-50 border border-green-200 text-sm space-y-1">
+  <div class="p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
     <p class="font-medium text-success">{{ "room-feeds-created"|t }}</p>
-    <code class="block break-all bg-surface-elevated border border-green-200 rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
+    <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
   </div>
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-amber-50 text-warning text-sm">
+  <div class="p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
     {{ "room-feeds-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
     {{ "room-feeds-unavailable-2"|t }}
   </div>
