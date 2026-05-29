@@ -1,19 +1,26 @@
 {% extends "layout.html" %}
 
 {% block main %}
-{# LC-219: nav scrolls horizontally instead of wrapping. `flex-nowrap` forces
-   a single row; `overflow-x-auto` reveals a scrollbar / lets touch + Shift-
-   wheel scroll the strip when total link width exceeds the viewport. Each
-   link carries `whitespace-nowrap shrink-0` so multi-word labels (Outgoing
-   webhooks, Anti-spam, Link filter, Backup & restore) never break mid-anchor
-   and the labels do not compress. The version chip is moved OUTSIDE the
-   scroll container and absolute-pinned to the right edge so it stays visible
-   while the strip is scrolled; `bg-surface` masks underlying link text that
-   would otherwise show through when the strip is scrolled all the way right.
+{# LC-219: nav scrolls horizontally instead of wrapping. The actual fix is
+   `whitespace-nowrap` on each `<a>` so multi-word labels (Outgoing webhooks,
+   Anti-spam, Link filter, Backup & restore) never break mid-anchor;
+   `shrink-0` keeps each link at its natural width; `overflow-x-auto` reveals
+   a scrollbar / lets touch + Shift-wheel scroll the strip when total link
+   width exceeds the viewport. (Flex default is nowrap; the pre-LC-219 bug was
+   text wrapping inside each anchor, not flex item wrapping.)
+
+   The version chip is moved OUTSIDE the scroll container and absolute-pinned
+   to the right edge so it stays visible while the strip is scrolled.
+   `bg-surface` masks underlying link text that would otherwise show through
+   when the strip is scrolled all the way right; `md:pr-48` on the `<nav>`
+   reserves chip-width worth of right padding so the last link never scrolls
+   BENEATH the chip (the chip's mask would otherwise visually hide the link's
+   label even though `pointer-events-none` lets the click pass through).
+
    `aria-label` names the landmark; `aria-current="page"` adds proper SR
    active-section semantics alongside the existing `font-semibold` affordance. #}
 <div class="relative border-b border-border">
-  <nav aria-label="{{ "admin-nav-label"|t }}" class="px-4 py-2 flex flex-nowrap gap-4 overflow-x-auto text-sm items-center">
+  <nav aria-label="{{ "admin-nav-label"|t }}" class="px-4 py-2 md:pr-48 flex gap-4 overflow-x-auto text-sm items-center">
     <a href="/admin"{% if section == "settings" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "settings" %} font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
     <a href="/admin/users"{% if section == "users" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "users" %} font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
     <a href="/admin/invites"{% if section == "invites" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "invites" %} font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
