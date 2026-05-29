@@ -79,7 +79,8 @@ error-status-bad-request = Solicitud incorrecta
 error-status-payload-too-large = Carga demasiado grande
 error-status-too-many-requests = Demasiadas solicitudes
 error-status-internal = Error del servidor
-error-back-home = Volver al inicio
+## (La etiqueta "Volver al inicio" se comparte con el 404 de nivel de router
+## a través de la clave existente `not-found-back-home`; LC-220 no la duplica.)
 
 ## Poll modal
 poll-create-title = Crear encuesta

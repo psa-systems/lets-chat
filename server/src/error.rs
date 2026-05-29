@@ -32,19 +32,40 @@ pub enum AppError {
     Redirect(Redirect),
 }
 
+/// LC-220: maximum length of the dynamic `msg` rendered on the error page.
+/// `BadRequest` / `Conflict` / `PayloadTooLarge` callers sometimes
+/// interpolate user-supplied strings (e.g. `format!("invalid mute_mode: {}",
+/// form.mute_mode)`); Askama auto-escapes HTML so XSS is prevented, but
+/// clamping the length limits same-session content reflection (a phishing
+/// payload squeezed into a query param cannot grow arbitrarily large).
+const MAX_MESSAGE_LEN: usize = 200;
+
 /// LC-220: render the styled error page or fall back to bare text + the raw
 /// status code if Askama somehow fails. Used by `AppError::IntoResponse`
-/// for every variant except `Redirect`.
+/// for every variant except `Redirect`. The `back_url` is hardcoded to `/`;
+/// the auth middleware redirects unauthed visitors to `/login` from there,
+/// so a single value works for both cases.
 fn render_styled(status: StatusCode, heading_key: &str, message: Option<&str>) -> Response {
     // Heading is localized through Fluent (CURRENT_LOCALE task-local is set
     // by resolve_locale middleware before the handler runs, so it is still
     // in scope here when IntoResponse fires).
     let heading = i18n::translate_current(heading_key);
-    let back_label = i18n::translate_current("error-back-home");
+    let back_label = i18n::translate_current("not-found-back-home");
+    // Clamp the dynamic message to MAX_MESSAGE_LEN chars (NOT bytes) so a
+    // long error string from a foreign-language locale or a deeply nested
+    // serde / sqlx error display does not blow out the panel. Truncation
+    // happens AFTER any escaping handled by Askama at render time.
+    let clamped: Option<String> = message.map(|m| {
+        if m.chars().count() > MAX_MESSAGE_LEN {
+            m.chars().take(MAX_MESSAGE_LEN).collect::<String>() + "…"
+        } else {
+            m.to_string()
+        }
+    });
     let page = ErrorPage {
         status: status.as_u16(),
         status_heading: &heading,
-        message,
+        message: clamped.as_deref(),
         back_url: "/",
         back_label: &back_label,
         asset_version: "",

@@ -19,10 +19,11 @@ pub struct ErrorPage<'a> {
     /// Optional variant-specific detail. Plain text; HTML-escaped by Askama.
     /// `None` renders the heading + back link only.
     pub message: Option<&'a str>,
-    /// Where the "Back" button navigates to. `/` for authed users, `/login`
-    /// for unauthed, but the caller decides.
+    /// Where the "Back" button navigates to. `AppError::IntoResponse`
+    /// always sets `/`; the auth middleware redirects unauthed visitors
+    /// to `/login` from there, so a single value works for both cases.
     pub back_url: &'a str,
-    /// Localized "Back to home" / "Back to login" label.
+    /// Localized "Back to home" label.
     pub back_label: &'a str,
     /// Cache-buster appended to CSS / JS / favicon URLs in `base.html`. We
     /// use an empty string here because `AppError::IntoResponse` has no

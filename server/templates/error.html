@@ -10,9 +10,14 @@
    "Back to home" link, or via the global page chrome if their device has
    the LC-199 mobile drawer open. #}
 <main class="min-h-screen flex items-center justify-center p-6 bg-surface text-content">
-  <section class="card max-w-lg w-full p-8 space-y-4 text-center">
+  {# LC-220: role="alert" tells assistive tech this section is the error
+     announcement (URL change alone is not always announced). Heading color
+     is `text-danger` for 5xx (genuine server fault) and `text-warning` for
+     4xx (client / informational). Uniform red across all errors reads as
+     alarming on a 404 or 429. #}
+  <section role="alert" class="card max-w-lg w-full p-8 space-y-4 text-center">
     <p class="font-mono text-sm text-content-muted">{{ status }}</p>
-    <h1 class="text-2xl font-semibold text-danger">{{ status_heading }}</h1>
+    <h1 class="text-2xl font-semibold {% if status >= 500 %}text-danger{% else %}text-warning{% endif %}">{{ status_heading }}</h1>
     {% if let Some(m) = message.as_ref() %}
     <p class="text-content-muted">{{ m }}</p>
     {% endif %}
