@@ -11,7 +11,7 @@
   <span class="ml-1 text-content-subtle">{{ message.created_at }}</span>
 </div>
 {% else %}
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
+<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
     {% match message.actor %}
