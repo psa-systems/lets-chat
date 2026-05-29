@@ -195,6 +195,12 @@ async fn setup_pool() -> SqlitePool {
     .execute(&pool)
     .await
     .expect("migration 55");
+    sqlx::raw_sql(include_str!(
+        "../migrations/chat/0057_enclave_msg_rate_limit.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("migration 56");
 
     pool
 }
