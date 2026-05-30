@@ -149,18 +149,14 @@ pub async fn process_attachment(
             .acquire()
             .await
             .expect("thumbnail semaphore never closed");
-        let tmp_for_blocking = tmp_path.clone();
-        let mime_for_blocking = sniffed_mime.clone();
-        let processed = tokio::task::spawn_blocking(move || {
-            pipeline::process_image(&tmp_for_blocking, &mime_for_blocking)
-        })
-        .await
-        .map_err(|e| AttachmentDrop::ImagePipeline {
-            detail: format!("join: {e}"),
-        })?
-        .map_err(|e| AttachmentDrop::ImagePipeline {
-            detail: format!("{e}"),
-        })?;
+        // LC-206: route through the shared safe helper. Both a decoder
+        // panic and a normal decode/encode failure fold into the same
+        // ImagePipeline drop, matching the pre-LC-206 two-stage map_err.
+        let processed = pipeline::process_image_safely(tmp_path.clone(), sniffed_mime.clone())
+            .await
+            .map_err(|e| AttachmentDrop::ImagePipeline {
+                detail: format!("{e}"),
+            })?;
         let pipeline::ProcessedImage {
             original_bytes,
             preview_bytes,
