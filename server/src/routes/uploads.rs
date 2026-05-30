@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
-use crate::uploads::pipeline::{self, PipelineError, ProcessedImage};
+use crate::uploads::pipeline::{self, PipelineError, ProcessedImage, SafeImageError};
 
 use crate::auth::{AuthUser, OptionalUser};
 use crate::db;
@@ -266,30 +266,25 @@ pub async fn post_upload(
                 .await
                 .expect("thumbnail semaphore never closed");
 
-            // Pipeline is CPU- and sync-IO-bound; run on the blocking pool so the
-            // async runtime threads stay free for other requests.
-            let tmp_for_blocking = tmp_path.clone();
-            let mime_for_blocking = mime_type.clone();
-            let processed_result = tokio::task::spawn_blocking(move || {
-                pipeline::process_image(&tmp_for_blocking, &mime_for_blocking)
-            })
-            .await
-            .map_err(|e| AppError::Internal(format!("image pipeline join: {e}")))?;
-
-            let processed = match processed_result {
-                Ok(p) => p,
-                Err(PipelineError::Decode(e)) => {
-                    tracing::warn!(error = %e, "image decode failed");
-                    let _ = tokio::fs::remove_file(&tmp_path).await;
-                    return Ok(
-                        (StatusCode::BAD_REQUEST, "image could not be decoded").into_response()
-                    );
-                }
-                Err(e) => {
-                    let _ = tokio::fs::remove_file(&tmp_path).await;
-                    return Err(AppError::Internal(format!("image pipeline: {e}")));
-                }
-            };
+            // LC-206: decode + re-encode runs through the shared safe helper
+            // (spawn_blocking off the async runtime + JoinError panic
+            // boundary). A bad image still 400s; a panic or any other
+            // failure 500s, same as the pre-LC-206 inline spawn_blocking.
+            let processed =
+                match pipeline::process_image_safely(tmp_path.clone(), mime_type.clone()).await {
+                    Ok(p) => p,
+                    Err(SafeImageError::Pipeline(PipelineError::Decode(e))) => {
+                        tracing::warn!(error = %e, "image decode failed");
+                        let _ = tokio::fs::remove_file(&tmp_path).await;
+                        return Ok(
+                            (StatusCode::BAD_REQUEST, "image could not be decoded").into_response()
+                        );
+                    }
+                    Err(e) => {
+                        let _ = tokio::fs::remove_file(&tmp_path).await;
+                        return Err(AppError::Internal(format!("image pipeline: {e}")));
+                    }
+                };
 
             let ProcessedImage {
                 original_bytes,

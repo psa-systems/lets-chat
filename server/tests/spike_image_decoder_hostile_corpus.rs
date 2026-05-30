@@ -17,6 +17,15 @@
 //! Failure here is a blocker: if any input panics, the fetch module needs
 //! `catch_unwind` defense in depth on the production path, or a smaller cap,
 //! or a sandboxing layer. The spike is the gate, not the fix.
+//!
+//! ## LC-206 extension: 10 MiB ceiling
+//!
+//! The avatar fetch caps at 1 MiB, but the UPLOAD path (which runs the same
+//! decoder) allows 10 MiB. Size-dependent decoder bugs (dimension /
+//! allocation overflow that only triggers at large inputs) are exactly what
+//! a 1 MiB-only spike misses. LC-206 re-ran the corpus scaled to 10 MiB and
+//! it stayed clean (0 panics); those rows are promoted below so the
+//! validation is permanent, not a one-off pre-execution run.
 
 use std::io::Cursor;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -184,4 +193,109 @@ fn known_good_png_round_trips() {
         .write_image(&img, 2, 2, image::ExtendedColorType::Rgba8)
         .unwrap();
     assert_eq!(try_decode(&buf), Ok(true), "a valid PNG must decode");
+}
+
+// ---------------------------------------------------------------------------
+// LC-206: the same corpus scaled to the upload path's 10 MiB ceiling. All
+// rows stayed clean (Err, never panic) when first run; these guard against a
+// future image-crate bump regressing at the larger input size.
+// ---------------------------------------------------------------------------
+
+const MIB: usize = 1 << 20;
+const TEN_MIB: usize = 10 * MIB;
+
+/// Fixed-seed pseudo-random bytes (same LCG the 1 MiB row uses, factored).
+fn lcg_fill(n: usize, seed: u32) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(n);
+    let mut x = seed;
+    for _ in 0..n {
+        x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+        buf.push((x >> 16) as u8);
+    }
+    buf
+}
+
+#[test]
+fn ten_mib_random_bytes_does_not_panic() {
+    assert!(try_decode(&lcg_fill(TEN_MIB, 0xC0FFEE)).is_ok());
+}
+
+#[test]
+fn ten_mib_png_sig_plus_garbage_does_not_panic() {
+    let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    b.extend(lcg_fill(TEN_MIB, 0x1111));
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn ten_mib_jpeg_soi_plus_garbage_does_not_panic() {
+    let mut b = vec![0xFF, 0xD8];
+    b.extend(lcg_fill(TEN_MIB, 0x2222));
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn ten_mib_jpeg_soi_plus_ff_run_does_not_panic() {
+    // Long run of marker-prefix bytes: a JPEG scanner stress case at scale.
+    let mut b = vec![0xFF, 0xD8];
+    b.extend(std::iter::repeat_n(0xFFu8, TEN_MIB));
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn ten_mib_gif_header_plus_garbage_does_not_panic() {
+    let mut b = b"GIF89a".to_vec();
+    b.extend(lcg_fill(TEN_MIB, 0x3333));
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn ten_mib_webp_lying_riff_size_does_not_panic() {
+    // RIFF with a declared size far larger than the actual buffer; WebP
+    // decoders have historically panicked on lying chunk sizes.
+    let mut b = Vec::with_capacity(TEN_MIB + 12);
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    b.extend_from_slice(b"WEBP");
+    b.extend(lcg_fill(TEN_MIB, 0x4444));
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn jpeg_sof0_huge_dims_truncated_does_not_panic() {
+    // SOF0 claims 65500x65500 then the stream is truncated: forces the
+    // decoder to read declared dimensions before the data runs out.
+    let mut b = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+    b.extend_from_slice(b"JFIF\x00");
+    b.extend_from_slice(&[0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
+    b.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x11, 0x08, 0xFF, 0xDC, 0xFF, 0xDC, 0x03]);
+    b.extend_from_slice(&[0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01]);
+    assert!(try_decode(&b).is_ok());
+}
+
+#[test]
+fn large_valid_png_decodes_at_scale_without_panic() {
+    // CAVEAT: this row tests ALLOCATION-at-scale, not compression ratio.
+    // The pixel data is LCG noise, so the encoded PNG is large (~36 MB) and
+    // decodes to a 3000*3000*4 = 36 MB buffer - it exercises the real
+    // large-allocation decode path. It is NOT a decompression bomb (small
+    // compressed -> huge decoded); that high-ratio vector is covered by
+    // `pixel_bomb_dimension_overflow_does_not_panic`, which image 0.25
+    // rejects at header-read before allocating. Do not read this passing
+    // row as "decompression bombs are fine" - read it as "a genuinely large
+    // valid decode does not panic." Both properties matter; they are
+    // different rows.
+    use image::ImageEncoder;
+    let (w, h) = (3000u32, 3000u32);
+    let pixels = lcg_fill((w * h * 4) as usize, 0x5555);
+    let img = image::RgbaImage::from_raw(w, h, pixels).expect("raw buffer");
+    let mut buf = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut buf)
+        .write_image(&img, w, h, image::ExtendedColorType::Rgba8)
+        .expect("encode large png");
+    assert_eq!(
+        try_decode(&buf),
+        Ok(true),
+        "a large valid PNG must DECODE, not Err or panic"
+    );
 }
