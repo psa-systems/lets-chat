@@ -111,7 +111,8 @@ Run `just --list` to see all available recipes.
 | `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for WebRTC calls and voice channels. Add a TURN entry for reliable NAT traversal. |
 | `LETS_CHAT_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID contact address sent with Web Push delivery requests. |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
-| `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. |
+| `LETS_CHAT_UPDATE_URL` | `https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat` | Forgejo Generic Packages root the desktop self-updater reads. Every fetch and each redirect hop is validated against a public-IP SSRF filter. |
+| `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE` | (unset = off) | Exempts only the initial `LETS_CHAT_UPDATE_URL` from the SSRF filter (private internal mirror or loopback test fixture). Redirect targets are still validated. |
 | `LETS_CHAT_SMTP_HOST` / `LETS_CHAT_SMTP_PORT` / `LETS_CHAT_SMTP_TLS` / `LETS_CHAT_SMTP_FROM` / `LETS_CHAT_SMTP_USERNAME` / `LETS_CHAT_SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
 | `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room message `retention_days`. Read once at startup; flipping it requires a restart. |
 
