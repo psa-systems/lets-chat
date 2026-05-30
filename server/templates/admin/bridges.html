@@ -3,7 +3,10 @@
 {% block title %}{{ "admin-bridges-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-bridges-heading"|t }}</h1>
+<div class="flex items-baseline gap-2 mb-4">
+  <h1 class="text-lg font-semibold">{{ "admin-bridges-heading"|t }}</h1>
+  <a href="/admin/bridges/avatars" class="ml-auto text-sm text-accent hover:underline">{{ "admin-bridges-avatars-link"|t }}</a>
+</div>
 <p class="text-sm text-content-muted mb-4">
   {{ "admin-bridges-intro"|t }}
 </p>

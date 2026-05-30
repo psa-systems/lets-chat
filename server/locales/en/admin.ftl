@@ -376,3 +376,24 @@ admin-users-th-role = Role
 admin-users-th-status = Status
 admin-users-th-storage = Storage (used / quota MiB)
 admin-users-th-actions = Actions
+
+# LC-207: bridge-avatar cache diagnostic page
+admin-bridges-avatars-link = Avatar cache
+admin-bridge-avatars-title = Bridge avatar cache
+admin-bridge-avatars-heading = Bridge avatar cache
+admin-bridge-avatars-back = Back to bridges
+admin-bridge-avatars-intro = Diagnostics for the proxied foreign bridge-avatar cache. When a bridged user renders as initials instead of an avatar, the failed fetch and its reason appear below. Read-only; failed fetches are terminal in v2 (render falls back to initials).
+admin-bridge-avatars-stat-total = Cached
+admin-bridge-avatars-stat-ok = OK
+admin-bridge-avatars-stat-pending = Pending
+admin-bridge-avatars-stat-failed = Failed
+admin-bridge-avatars-stat-bytes = Bytes on disk
+admin-bridge-avatars-stat-oldest = Oldest last-seen
+admin-bridge-avatars-stale-pending-prefix = Anomaly:
+admin-bridge-avatars-stale-pending-suffix = pending fetch(es) older than 70 minutes (the orphan sweep should have flipped these to failed; the sweeper may be broken or restart-looping).
+admin-bridge-avatars-failures-heading = Recent failed fetches
+admin-bridge-avatars-th-host = Foreign host
+admin-bridge-avatars-th-reason = Failure reason
+admin-bridge-avatars-th-type = Type
+admin-bridge-avatars-th-last-seen = Last referenced
+admin-bridge-avatars-empty = No failed bridge-avatar fetches.
