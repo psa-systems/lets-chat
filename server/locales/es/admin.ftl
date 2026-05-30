@@ -376,3 +376,24 @@ admin-users-th-role = Rol
 admin-users-th-status = Estado
 admin-users-th-storage = Almacenamiento (usado / cuota MiB)
 admin-users-th-actions = Acciones
+
+# LC-207: panel de diagnostico de la cache de avatares de puente
+admin-bridges-avatars-link = Cache de avatares
+admin-bridge-avatars-title = Cache de avatares de puente
+admin-bridge-avatars-heading = Cache de avatares de puente
+admin-bridge-avatars-back = Volver a puentes
+admin-bridge-avatars-intro = Diagnostico de la cache de avatares externos de puente. Cuando un usuario de puente se muestra con iniciales en lugar de avatar, la descarga fallida y su motivo aparecen abajo. Solo lectura; las descargas fallidas son terminales en v2 (se recurre a iniciales).
+admin-bridge-avatars-stat-total = En cache
+admin-bridge-avatars-stat-ok = OK
+admin-bridge-avatars-stat-pending = Pendiente
+admin-bridge-avatars-stat-failed = Fallido
+admin-bridge-avatars-stat-bytes = Bytes en disco
+admin-bridge-avatars-stat-oldest = Visto por ultima vez (mas antiguo)
+admin-bridge-avatars-stale-pending-prefix = Anomalia:
+admin-bridge-avatars-stale-pending-suffix = descarga(s) pendiente(s) de mas de 70 minutos (el barrido de huerfanos deberia haberlas marcado como fallidas; el barredor puede estar roto o reiniciandose en bucle).
+admin-bridge-avatars-failures-heading = Descargas fallidas recientes
+admin-bridge-avatars-th-host = Host externo
+admin-bridge-avatars-th-reason = Motivo del fallo
+admin-bridge-avatars-th-type = Tipo
+admin-bridge-avatars-th-last-seen = Ultima referencia
+admin-bridge-avatars-empty = No hay descargas de avatar de puente fallidas.
