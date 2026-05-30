@@ -79,6 +79,8 @@ docker run --publish 8080:8080 --volume lets-chat-data:/data lets-chat
 
 Then open `http://localhost:8080`. The first registered account is automatically promoted to Admin.
 
+> **Upgrading?** Read [`CHANGELOG.md`](CHANGELOG.md) first. It calls out default-on behavior changes, security fixes, and env vars you may need to set before upgrading. The convention behind it is in [`docs/releasing.md`](docs/releasing.md).
+
 ### Local Development
 
 The host needs only Docker, [just](https://github.com/casey/just), and (optionally) [Nushell](https://www.nushell.sh/) for the `verify` recipe. Cargo and Bun run inside containers via the wrappers in `dev/`.
