@@ -17,9 +17,16 @@
 // /api/packages/{owner}/generic/{package}/{version}/{filename}, so the
 // release workflow publishes the binaries under {version}/ and the manifest
 // under /latest/latest.json. Pointing LETS_CHAT_UPDATE_URL at an alternative
-// host (eg. for a fork, a staging mirror, or an offline mirror served over
-// file://) overrides the default.
+// http(s) host (eg. a fork or a staging mirror) overrides the default.
+//
+// LC-210: every fetch here (manifest + binary download) goes through
+// `net_guard::guarded_get`, which validates each redirect hop against the
+// public-IP filter (an injected redirect to an internal host is refused).
+// `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE=1` exempts ONLY the initial URL from
+// that filter, for an operator running a private internal update mirror;
+// redirect targets are still validated.
 
+use crate::net_guard;
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -46,15 +53,27 @@ fn update_url() -> String {
     std::env::var("LETS_CHAT_UPDATE_URL").unwrap_or_else(|_| DEFAULT_UPDATE_URL.to_string())
 }
 
+// LC-210: opt-out for the initial-URL public-IP filter only (redirect hops
+// are always validated). Lets an operator point LETS_CHAT_UPDATE_URL at a
+// private internal mirror without disabling redirect-target protection.
+fn allow_private_initial() -> bool {
+    matches!(
+        std::env::var("LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE")
+            .ok()
+            .as_deref()
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
 fn manifest_url(base: &str) -> String {
     format!("{}/latest/latest.json", base.trim_end_matches('/'))
 }
 
 pub fn fetch_manifest() -> Result<Manifest, String> {
     let url = manifest_url(&update_url());
-    let response = ureq::get(&url)
-        .timeout(MANIFEST_TIMEOUT)
-        .call()
+    let response = net_guard::guarded_get(&url, allow_private_initial(), MANIFEST_TIMEOUT)
         .map_err(|e| format!("fetch manifest from {url}: {e}"))?;
     response
         .into_json::<Manifest>()
@@ -134,10 +153,9 @@ pub fn apply() -> Result<ApplyOutcome, String> {
     ));
 
     {
-        let response = ureq::get(&artifact.url)
-            .timeout(DOWNLOAD_TIMEOUT)
-            .call()
-            .map_err(|e| format!("download {}: {e}", artifact.url))?;
+        let response =
+            net_guard::guarded_get(&artifact.url, allow_private_initial(), DOWNLOAD_TIMEOUT)
+                .map_err(|e| format!("download {}: {e}", artifact.url))?;
         let mut file = std::fs::File::create(&tmp_path)
             .map_err(|e| format!("create {}: {e}", tmp_path.display()))?;
         std::io::copy(&mut response.into_reader(), &mut file)

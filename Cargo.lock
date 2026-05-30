@@ -3334,6 +3334,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-single-instance",
  "ureq",
+ "url",
  "webkit2gtk",
  "webview2-com",
  "windows",
