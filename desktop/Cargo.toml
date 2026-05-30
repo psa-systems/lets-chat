@@ -37,6 +37,9 @@ serde_json = { workspace = true }
 # both Linux and the windows-gnu cross-compile without dragging in system
 # OpenSSL / Schannel build dependencies.
 ureq = { version = "2", features = ["json"] }
+# LC-210: relative-Location resolution + host parsing in the self-updater's
+# manual redirect loop (net_guard.rs). Already in the workspace tree (server).
+url = "2"
 # Atomic in-place replace of the currently running executable. Handles the
 # Windows-cant-delete-running-exe restriction by renaming the live binary
 # aside before writing the new one.
