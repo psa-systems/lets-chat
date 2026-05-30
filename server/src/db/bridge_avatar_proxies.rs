@@ -128,6 +128,80 @@ pub async fn mark_failed(pool: &SqlitePool, hash: &str, reason: &str) -> Result<
     Ok(result.rows_affected() > 0)
 }
 
+/// LC-207: aggregate cache stats for the admin diagnostic page. One query
+/// with conditional SUMs (SQLite booleans are 1/0, so `SUM(cond)` counts).
+/// `total_bytes` sums `byte_size`, which is non-NULL only on `ok` rows, so
+/// it naturally reflects bytes-on-disk. `oldest_last_seen` is `MIN`
+/// (`None` over an empty table). Covered by the
+/// `(fetch_status, last_seen_at)` index.
+#[derive(Debug, Clone, Default)]
+pub struct CacheStats {
+    pub total: i64,
+    pub ok: i64,
+    pub pending: i64,
+    pub failed: i64,
+    /// Pending rows older than `PENDING_STALE_SECS` by `last_seen_at`: the
+    /// orphan-pending anomaly counter.
+    pub pending_stale: i64,
+    pub total_bytes: i64,
+    pub oldest_last_seen: Option<String>,
+}
+
+/// Stale-pending display threshold = the sweep's pending threshold (600s,
+/// `bridge_avatar::sweep_tick` arg in `main.rs`) + one sweep interval (3600s,
+/// `spawn_orphan_sweeper`'s `TICK_SECS`) = 4200s. A pending row older than
+/// this has had a full sweep opportunity pass without being flipped to
+/// `failed`, so it is genuinely anomalous (sweep broken / restart loop), not
+/// normal sweep lag. Re-derive if either sweep constant changes. (Those
+/// constants are a bare literal arg + a function-local const, so a parity
+/// meta-test would require plumbing both out; the comment carries it.)
+const PENDING_STALE_SECS: i64 = 4200;
+
+pub async fn cache_stats(pool: &SqlitePool) -> Result<CacheStats, sqlx::Error> {
+    let cutoff = format!("-{PENDING_STALE_SECS} seconds");
+    let row = sqlx::query(
+        "SELECT COUNT(*) AS total, \
+         COALESCE(SUM(fetch_status = 'ok'), 0) AS ok, \
+         COALESCE(SUM(fetch_status = 'pending'), 0) AS pending, \
+         COALESCE(SUM(fetch_status = 'failed'), 0) AS failed, \
+         COALESCE(SUM(fetch_status = 'pending' AND last_seen_at < datetime('now', ?)), 0) AS pending_stale, \
+         COALESCE(SUM(byte_size), 0) AS total_bytes, \
+         MIN(last_seen_at) AS oldest_last_seen \
+         FROM bridge_avatar_proxies",
+    )
+    .bind(cutoff)
+    .fetch_one(pool)
+    .await?;
+    Ok(CacheStats {
+        total: row.get("total"),
+        ok: row.get("ok"),
+        pending: row.get("pending"),
+        failed: row.get("failed"),
+        pending_stale: row.get("pending_stale"),
+        total_bytes: row.get("total_bytes"),
+        oldest_last_seen: row.get("oldest_last_seen"),
+    })
+}
+
+/// LC-207: the most-recently-referenced `failed` rows for the admin
+/// diagnostic page. Ordered by `last_seen_at DESC` because that is the only
+/// non-NULL timestamp a failed row carries (`fetched_at` is set on `mark_ok`
+/// only) AND it surfaces the page's actual subjects first: a recently-seen
+/// failure is an avatar users are actively hitting that renders as initials.
+pub async fn recent_failures(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<BridgeAvatarProxy>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT hash, foreign_url, content_type, byte_size, fetched_at, last_seen_at, fetch_status, failure_reason \
+         FROM bridge_avatar_proxies WHERE fetch_status = 'failed' ORDER BY last_seen_at DESC LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map).collect())
+}
+
 /// GC: hashes of rows whose `last_seen_at` is older than the retention
 /// threshold AND no live `messages.bridge_foreign_avatar` row references
 /// them. Caller deletes the rows + the disk files in the same sweep tick.

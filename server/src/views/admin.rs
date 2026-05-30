@@ -668,3 +668,56 @@ pub struct OutgoingWebhookDeliveriesPage<'a> {
     pub webhook_id: i64,
     pub deliveries: &'a [DeliveryRowView],
 }
+
+// LC-207: bridge-avatar cache diagnostic page ----------------------------
+
+/// Pre-formatted cache stats for the header. Counts stay numeric (the
+/// template colors `pending_stale` when `> 0`); `total_bytes` is formatted
+/// in the handler via `format_bytes_mib`; `oldest_last_seen` is `Option`
+/// so the template renders a "-" placeholder over an empty cache rather
+/// than a discriminant.
+pub struct BridgeAvatarStatsView {
+    pub total: i64,
+    pub ok: i64,
+    pub pending: i64,
+    pub failed: i64,
+    pub pending_stale: i64,
+    pub total_bytes_display: String,
+    pub oldest_last_seen: Option<String>,
+}
+
+/// One failed-fetch row. `foreign_host` is the host (or the `<unparseable>`
+/// sentinel) for the at-a-glance cell; `foreign_url` is the full URL for the
+/// `title=` tooltip. Host-only in the cell is a summary affordance, not a
+/// secret (admin already has DB access); the migration's "URL not in
+/// rendered HTML" concern is about room-viewer message HTML, not this
+/// admin-only page.
+pub struct BridgeAvatarFailureView {
+    pub foreign_host: String,
+    pub foreign_url: String,
+    pub failure_reason: String,
+    pub content_type: Option<String>,
+    pub last_seen_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/bridge_avatars.html")]
+pub struct BridgeAvatarsPage<'a> {
+    pub user: &'a crate::models::User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub stats: &'a BridgeAvatarStatsView,
+    pub failures: &'a [BridgeAvatarFailureView],
+}

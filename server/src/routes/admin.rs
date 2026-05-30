@@ -12,12 +12,12 @@ use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
-    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BridgeRowView, BridgesPage,
-    BuiltinCommandRowView, DeliveryRowView, EnclavesPage, InvitesPage, LinkFilterPage,
-    LinkFilterRuleView, MetricCard, ModLogPage, OutgoingWebhookDeliveriesPage,
-    OutgoingWebhookRowView, OutgoingWebhooksPage, QuarantineEntryView, QuarantinePage,
-    RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView, SlashCommandsPage,
-    UserRowFragment, UsersPage, OUTGOING_EVENTS,
+    BackupRestorePage, BotRowView, BotsPage, BrandingPage, BridgeAvatarFailureView,
+    BridgeAvatarStatsView, BridgeAvatarsPage, BridgeRowView, BridgesPage, BuiltinCommandRowView,
+    DeliveryRowView, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard,
+    ModLogPage, OutgoingWebhookDeliveriesPage, OutgoingWebhookRowView, OutgoingWebhooksPage,
+    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
+    SlashCommandRowView, SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
 use crate::views::charts;
 use crate::views::{html, Html};
@@ -88,6 +88,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
         .route("/admin/bridges", get(get_bridges).post(post_bridges))
+        .route("/admin/bridges/avatars", get(get_bridge_avatars))
         .route("/admin/bridges/{id}/remove", post(post_bridge_remove))
         .route(
             "/admin/outgoing-webhooks",
@@ -3055,5 +3056,84 @@ pub async fn get_outgoing_deliveries(
         section: "outgoing_webhooks",
         webhook_id: id,
         deliveries: &deliveries,
+    })
+}
+
+/// LC-207: host for the at-a-glance failures cell, or the `<unparseable>`
+/// sentinel when the stored `foreign_url` does not parse / has no host. The
+/// sentinel flags the row as broken-upstream (a truncated raw string would
+/// visually read like a host and hide the anomaly); the full raw value still
+/// rides along in the row's `title=` tooltip for diagnosis.
+fn host_or_sentinel(foreign_url: &str) -> String {
+    url::Url::parse(foreign_url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_string()))
+        .unwrap_or_else(|| "<unparseable>".to_string())
+}
+
+/// LC-207: read-only bridge-avatar cache diagnostic page. Answers "why is
+/// this bridged user showing initials" without dropping to SQL: a stats
+/// header (counts by status, bytes on disk, oldest last-seen, stale-pending
+/// anomaly counter) plus the last 50 failed fetches with failure_reason and
+/// foreign host. Hybrid mirror of the deliveries page (table / empty-state /
+/// read-only / static) rendered as a global nav-reachable page (the cache is
+/// keyed by hash, owned by no bridge).
+pub async fn get_bridge_avatars(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+
+    let raw = db::bridge_avatar_proxies::cache_stats(&state.chat).await?;
+    let stats = BridgeAvatarStatsView {
+        total: raw.total,
+        ok: raw.ok,
+        pending: raw.pending,
+        failed: raw.failed,
+        pending_stale: raw.pending_stale,
+        total_bytes_display: format_bytes_mib(raw.total_bytes),
+        oldest_last_seen: raw.oldest_last_seen,
+    };
+
+    let failures: Vec<BridgeAvatarFailureView> =
+        db::bridge_avatar_proxies::recent_failures(&state.chat, 50)
+            .await?
+            .into_iter()
+            .map(|r| BridgeAvatarFailureView {
+                foreign_host: host_or_sentinel(&r.foreign_url),
+                foreign_url: r.foreign_url,
+                failure_reason: r.failure_reason.unwrap_or_else(|| "-".to_string()),
+                content_type: r.content_type,
+                last_seen_at: r.last_seen_at,
+            })
+            .collect();
+
+    html(&BridgeAvatarsPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "bridges",
+        stats: &stats,
+        failures: &failures,
     })
 }

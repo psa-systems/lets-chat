@@ -133,3 +133,105 @@ async fn sweep_pending_orphans_marks_stale_pending_failed() {
         "pending"
     );
 }
+
+// LC-207: admin diagnostic helpers --------------------------------------
+
+#[tokio::test]
+async fn recent_failures_filters_failed_and_orders_by_last_seen_desc() {
+    let chat = common::pool("chat").await;
+    // One ok row (must be excluded), two failed rows with distinct last_seen.
+    p::upsert_pending(&chat, "okrow", "https://x.test/ok")
+        .await
+        .unwrap();
+    p::mark_ok(&chat, "okrow", "image/png", 10).await.unwrap();
+    p::upsert_pending(&chat, "f_old", "https://x.test/fold")
+        .await
+        .unwrap();
+    p::mark_failed(&chat, "f_old", "dns").await.unwrap();
+    p::upsert_pending(&chat, "f_new", "https://x.test/fnew")
+        .await
+        .unwrap();
+    p::mark_failed(&chat, "f_new", "http 404").await.unwrap();
+    // Make f_old strictly older than f_new by last_seen_at.
+    sqlx::query("UPDATE bridge_avatar_proxies SET last_seen_at = datetime('now', '-1 hour') WHERE hash = 'f_old'")
+        .execute(&chat)
+        .await
+        .unwrap();
+
+    let failures = p::recent_failures(&chat, 50).await.unwrap();
+    let hashes: Vec<&str> = failures.iter().map(|r| r.hash.as_str()).collect();
+    assert_eq!(
+        hashes,
+        vec!["f_new", "f_old"],
+        "failed only, most-recently-referenced first; ok row excluded"
+    );
+}
+
+#[tokio::test]
+async fn cache_stats_counts_by_status_sums_bytes_and_flags_stale_pending() {
+    let chat = common::pool("chat").await;
+    // ok row with bytes; failed row; fresh pending; stale pending.
+    p::upsert_pending(&chat, "ok1", "https://x.test/ok1")
+        .await
+        .unwrap();
+    p::mark_ok(&chat, "ok1", "image/png", 1000).await.unwrap();
+    p::upsert_pending(&chat, "fail1", "https://x.test/fail1")
+        .await
+        .unwrap();
+    p::mark_failed(&chat, "fail1", "size cap").await.unwrap();
+    p::upsert_pending(&chat, "pend_fresh", "https://x.test/pf")
+        .await
+        .unwrap();
+    p::upsert_pending(&chat, "pend_stale", "https://x.test/ps")
+        .await
+        .unwrap();
+    // Back-date pend_stale beyond the 4200s (70-min) display threshold; a row
+    // just past the 600s sweep threshold (e.g. 30 min) must NOT count as stale.
+    sqlx::query("UPDATE bridge_avatar_proxies SET last_seen_at = datetime('now', '-90 minutes') WHERE hash = 'pend_stale'")
+        .execute(&chat)
+        .await
+        .unwrap();
+
+    let s = p::cache_stats(&chat).await.unwrap();
+    assert_eq!(s.total, 4);
+    assert_eq!(s.ok, 1);
+    assert_eq!(s.failed, 1);
+    assert_eq!(s.pending, 2);
+    assert_eq!(s.pending_stale, 1, "only the 90-min pending row is stale");
+    assert_eq!(
+        s.total_bytes, 1000,
+        "sum is over ok rows only (byte_size NULL elsewhere)"
+    );
+    assert!(s.oldest_last_seen.is_some());
+}
+
+#[tokio::test]
+async fn cache_stats_empty_cache_renders_zeros_and_no_oldest() {
+    let chat = common::pool("chat").await;
+    let s = p::cache_stats(&chat).await.unwrap();
+    assert_eq!(s.total, 0);
+    assert_eq!(
+        s.total_bytes, 0,
+        "COALESCE(SUM(...),0) over empty table is 0"
+    );
+    assert!(
+        s.oldest_last_seen.is_none(),
+        "MIN over empty table is NULL -> None (template renders '-')"
+    );
+}
+
+#[tokio::test]
+async fn fresh_pending_just_past_sweep_threshold_is_not_stale() {
+    let chat = common::pool("chat").await;
+    p::upsert_pending(&chat, "p30", "https://x.test/p30")
+        .await
+        .unwrap();
+    // 30 min: past the 600s sweep threshold but inside the 4200s display
+    // threshold, so it is normal sweep lag, not an anomaly.
+    sqlx::query("UPDATE bridge_avatar_proxies SET last_seen_at = datetime('now', '-30 minutes') WHERE hash = 'p30'")
+        .execute(&chat)
+        .await
+        .unwrap();
+    let s = p::cache_stats(&chat).await.unwrap();
+    assert_eq!(s.pending_stale, 0);
+}
