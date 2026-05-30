@@ -139,27 +139,24 @@ async fn fetch_and_cache_inner(chat: &SqlitePool, req: reqwest::RequestBuilder, 
         return;
     }
 
-    // Re-encode through the uploads pipeline. spawn_blocking isolates the
-    // sync decoder + any panic (belt-and-suspenders on top of the spike
-    // confirming image 0.25 does not panic on hostile inputs at 1MiB).
-    let tmp_for_decode = tmp_path.clone();
-    let mime_for_decode = sniffed.clone();
-    let decoded = tokio::task::spawn_blocking(move || {
-        crate::uploads::pipeline::process_image(&tmp_for_decode, &mime_for_decode)
-    })
-    .await;
+    // Re-encode through the uploads pipeline. LC-206: routed through the
+    // shared safe helper (spawn_blocking + JoinError panic boundary) so the
+    // sync decoder never parks a runtime thread and a decoder panic is
+    // caught, not unwound. The spike confirms image 0.25 does not panic on
+    // the hostile corpus through 10 MiB; the boundary is belt-and-suspenders
+    // against a future image-crate regression. The decode-vs-panic log
+    // distinction is preserved via SafeImageError's two variants.
+    let decoded =
+        crate::uploads::pipeline::process_image_safely(tmp_path.clone(), sniffed.clone()).await;
     let _ = tokio::fs::remove_file(&tmp_path).await;
     let processed = match decoded {
-        Ok(Ok(p)) => p,
-        Ok(Err(e)) => {
+        Ok(p) => p,
+        Err(crate::uploads::pipeline::SafeImageError::Pipeline(e)) => {
             mark(chat, hash, &format!("decode: {e}")).await;
             return;
         }
-        Err(join_err) => {
-            // Panic from spawn_blocking. The spike says this should not
-            // happen on the hostile corpus at the 1MiB cap, but the catch
-            // is here as defense in depth (image-crate bump might regress).
-            mark(chat, hash, &format!("decoder panic: {join_err}")).await;
+        Err(crate::uploads::pipeline::SafeImageError::Panic(e)) => {
+            mark(chat, hash, &format!("decoder panic: {e}")).await;
             return;
         }
     };
