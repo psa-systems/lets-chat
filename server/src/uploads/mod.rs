@@ -44,8 +44,17 @@ pub fn mime_for_storage_path(storage_name: &str) -> Option<&'static str> {
 /// any error, the partial file is cleaned up best-effort. Used by both the
 /// upload handler and the admin regenerate-thumbnails action.
 pub async fn write_atomic(final_path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    // LC-208: the staging name MUST be unique per write, not a fixed
+    // `{final}.partial`. Content-addressed storage means two concurrent
+    // uploads of identical bytes derive the same final path, and the dedup
+    // check in `post_upload` is TOCTOU (both see "final absent", both write).
+    // With a shared staging path both writers race on one `{final}.partial`:
+    // whichever renames second hits ENOENT after the first consumes it, and
+    // the upload 500s. A per-write nonce gives each writer its own staging
+    // file; both renames target the same (identical-content) final path,
+    // which is safe (rename is atomic, last writer wins with the same bytes).
     let mut partial_os = final_path.as_os_str().to_owned();
-    partial_os.push(".partial");
+    partial_os.push(format!(".{}.partial", uuid::Uuid::new_v4()));
     let partial: std::path::PathBuf = partial_os.into();
     if let Err(e) = tokio::fs::write(&partial, bytes).await {
         let _ = tokio::fs::remove_file(&partial).await;
