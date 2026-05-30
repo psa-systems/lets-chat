@@ -398,13 +398,16 @@ pub async fn post_regenerate_thumbnails(
             .acquire()
             .await
             .expect("thumbnail semaphore never closed");
-        let path_for_blocking = original_path.clone();
-        let mime_for_blocking = row.mime_type.clone();
-        let preview_result = tokio::task::spawn_blocking(move || {
-            crate::uploads::pipeline::preview_from_path(&path_for_blocking, &mime_for_blocking)
-        })
-        .await
-        .map_err(|e| AppError::Internal(format!("regen join: {e}")))?;
+        // LC-206: preview regen routes through the shared safe helper
+        // (spawn_blocking + JoinError panic boundary). Behavior preserved:
+        // a normal pipeline failure warns + continues the batch, a decoder
+        // panic propagates as 500 (the old code's `?` on the JoinError) -
+        // split explicitly in the match below.
+        let preview_result = crate::uploads::pipeline::process_preview_safely(
+            original_path.clone(),
+            row.mime_type.clone(),
+        )
+        .await;
         drop(permit);
 
         match preview_result {
@@ -419,12 +422,15 @@ pub async fn post_regenerate_thumbnails(
                     regenerated += 1;
                 }
             }
-            Err(e) => {
+            Err(crate::uploads::pipeline::SafeImageError::Pipeline(e)) => {
                 tracing::warn!(
                     error = %e,
                     row_id = row.id,
                     "regenerate: pipeline failed",
                 );
+            }
+            Err(crate::uploads::pipeline::SafeImageError::Panic(e)) => {
+                return Err(AppError::Internal(format!("regen decoder panic: {e}")));
             }
         }
     }

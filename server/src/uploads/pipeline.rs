@@ -5,7 +5,7 @@
 
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::codecs::gif::{GifDecoder, GifEncoder, Repeat};
 use image::codecs::jpeg::JpegEncoder;
@@ -65,6 +65,64 @@ impl Format {
             Self::Webp => "image/webp",
         }
     }
+}
+
+/// LC-206: error from the async safe-decode helpers. `Pipeline` carries a
+/// normal `process_image` / `preview_from_path` failure (decode / encode /
+/// unsupported / io); `Panic` carries a `spawn_blocking` `JoinError` (a
+/// decoder panic under `panic=unwind`; a task cancellation would also land
+/// here, matching the pre-LC-206 bridge-avatar code which bucketed every
+/// `JoinError` under "decoder panic"). Keeping the two variants distinct
+/// lets a caller log decode-vs-panic separately (bridge_avatar) or fold
+/// them (uploads / attachments) as it sees fit.
+#[derive(Debug, thiserror::Error)]
+pub enum SafeImageError {
+    #[error("{0}")]
+    Pipeline(#[from] PipelineError),
+    #[error("image decoder panicked: {0}")]
+    Panic(String),
+}
+
+/// Shared panic boundary for the safe-decode helpers. Runs a sync pipeline
+/// fn on the blocking pool so the CPU-bound decode never parks a tokio
+/// runtime thread, and folds a panicking closure (tokio surfaces it as a
+/// `JoinError` under `panic=unwind`) into `SafeImageError::Panic` instead of
+/// letting it unwind. `#[doc(hidden)] pub` only so the killer test
+/// (`image_decode_safe_boundary`) can drive it with a synthetic panic; it is
+/// NOT a routine entry point. The LC-206 grep-ban forbids calling it from
+/// `src/` outside this file, exactly as LC-152 bans `outbound_unchecked` -
+/// a `src/` caller would replicate the spawn_blocking + JoinError boilerplate
+/// inline and defeat the dedup these helpers exist to provide.
+#[doc(hidden)]
+pub async fn run_blocking<T, F>(f: F) -> Result<T, SafeImageError>
+where
+    F: FnOnce() -> Result<T, PipelineError> + Send + 'static,
+    T: Send + 'static,
+{
+    match tokio::task::spawn_blocking(f).await {
+        Ok(r) => r.map_err(SafeImageError::Pipeline),
+        Err(join) => Err(SafeImageError::Panic(format!("{join}"))),
+    }
+}
+
+/// Safe async entry point for the full decode + re-encode pipeline. Wraps
+/// the whole `process_image` (not decode-only: re-encode is also CPU work
+/// that belongs off the async runtime). Every `src/` caller routes through
+/// here; raw `process_image` stays `pub` as the sync unit-test seam only.
+pub async fn process_image_safely(
+    path: PathBuf,
+    mime: String,
+) -> Result<ProcessedImage, SafeImageError> {
+    run_blocking(move || process_image(&path, &mime)).await
+}
+
+/// Safe async entry point for the preview-only path (admin thumbnail
+/// regen). Same panic boundary as `process_image_safely`, different return.
+pub async fn process_preview_safely(
+    path: PathBuf,
+    mime: String,
+) -> Result<Vec<u8>, SafeImageError> {
+    run_blocking(move || preview_from_path(&path, &mime)).await
 }
 
 pub fn process_image(tmp_path: &Path, sniffed_mime: &str) -> Result<ProcessedImage, PipelineError> {
