@@ -242,5 +242,5 @@ Both surfaces are invisible until they fail. Reference: `routes_mentions.rs` (ad
 
 ### Other notes
 
-- The `server/tests/` directory contains 50 integration binaries. A flake in one (current: `routes_uploads`'s upload-pipeline tests under concurrent-binary load) is not a drift category and is not in scope for "make tests pass."
+- The `server/tests/` directory contains 50 integration binaries. A genuine flake in one is not a drift category and is not in scope for "make tests pass." (The historic `routes_uploads` flake was fixed in LC-208: it was an intra-binary race, not cross-binary load. Concurrent tests share a process-global upload dir and reuse identical fixture bytes, so content-addressed paths collide; `uploads::write_atomic` staged to a fixed `{final}.partial`, so two concurrent identical-content uploads raced on one staging file and the second rename hit ENOENT, 500ing the upload. Fixed by making the staging name unique per write.)
 - Two `setup_*_pool()` patterns coexist in test files (array vs. verbose). Consolidating them is a clean follow-up hygiene task; not in scope for any given feature phase.
