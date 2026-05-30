@@ -154,6 +154,17 @@ Two layered knobs gate `POST /room/{id}/messages`:
 
 Both checks share the 60 s window. The per-enclave cap never relaxes the site cap; it can only tighten it for posts inside that enclave. DMs (rooms with no enclave) skip the per-enclave check.
 
+## Operator-visible changes and releases (LC-209)
+
+Operator-facing change records live in `CHANGELOG.md` (curated at release time) and `docs/releasing.md` (the full convention + release process). The decision was a hybrid, not per-PR CHANGELOG edits: there is no CI gate and high commit velocity, so the changelog is filled mechanically at `just create-release` time by grepping markers, and records tagged releases only (so it cannot go stale - the between-release delta lives in immutable git markers).
+
+When a PR changes **operator-visible** behavior - a new/changed env var or its default, a config-format change, a security fix present in shipped versions, an upgrade-visible behavior change, a deprecation, or an integration-contract change (webhook payload/event, API shape) - the author MUST:
+
+- put `[operator-action]` in the **PR title and commit subject** (it rides the auto-generated `git log` release body and is greppable: `git log --grep='\[operator-action\]' <last-tag>..HEAD`), and
+- add an `Operator-Action:` commit-body trailer with the one-line instruction (what to set / know; for security items, the "upgrade promptly" + vector).
+
+Internal-only work (refactors, test hygiene, dependency hardening with no operator action) does NOT get the marker; git history is its complete record. See `docs/releasing.md` for the operator-visible definition list and the cut-a-release checklist.
+
 ## Workspace Layout
 
 `Cargo.toml` at the repo root defines a Cargo workspace with two members:
