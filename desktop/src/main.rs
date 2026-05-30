@@ -1,5 +1,6 @@
 mod config;
 mod inject;
+mod net_guard;
 mod update;
 mod welcome;
 

@@ -273,6 +273,13 @@ test:
 test-saas:
     ./dev/cargo test -p lets-chat-server --no-default-features --features saas
 
+# Run desktop crate tests (LC-210 established the pattern: #[cfg(test)] modules
+# in desktop/src/). Desktop is bin-only, so these are in-crate unit tests. Run
+# this for any PR touching desktop/ - `just check` only compiles it.
+[group('test')]
+test-desktop:
+    ./dev/cargo-desktop test -p lets-chat-desktop
+
 # Verify the standalone server binary starts and serves the login page
 [group('test')]
 verify: build-css

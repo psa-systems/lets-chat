@@ -21,6 +21,14 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 // webview). Network-layer failures (DNS, connect, TLS, timeout) also
 // short-circuit to the welcome page.
 pub fn server_reachable(url: &str) -> Result<(), String> {
+    // LC-210: this is the ONE deliberately-unguarded ureq call in the desktop
+    // crate (allow-listed in the net_guard grep-ban). It probes the
+    // operator-configured LETS_CHAT_SERVER_URL, which is legitimately often a
+    // LAN / private IP for self-hosted deployments, and the webview loads that
+    // exact URL regardless - so the probe adds no SSRF surface beyond what the
+    // app already does. Routing it through net_guard's public-IP filter would
+    // break every LAN deployment. Do NOT "harden" this to net_guard without
+    // reading that reasoning; the grep-ban meta-test pins this exception.
     match ureq::get(url).timeout(PROBE_TIMEOUT).call() {
         Ok(_) => Ok(()),
         Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code} from {url}")),
