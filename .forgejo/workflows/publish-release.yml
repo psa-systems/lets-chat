@@ -71,6 +71,9 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
+              # public key so the shipped binary enforces signature checks.
+              --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
               --tag lets-chat-desktop-linux:publish
               --load
               -f ci-build/Dockerfile.desktop-linux-bundles
@@ -109,6 +112,9 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
+              # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
+              # public key so the shipped binary enforces signature checks.
+              --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
               --tag lets-chat-desktop-windows:publish
               --load
               -f ci-build/Dockerfile.desktop-windows
@@ -127,16 +133,54 @@ jobs:
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          # LC-210-BINARY-INTEGRITY (#277): each artifact carries its
+          # lowercase-hex SHA-256 (nushell `hash sha256`). The desktop updater
+          # checks the downloaded binary against this value, and the value is
+          # covered by the manifest signature added in the next step - so a
+          # swapped binary OR a swapped hash is refused client-side.
+          let deb_src = (ls artifacts/bundle-linux/*.deb | first | get name)
+          let appimage_src = (ls artifacts/bundle-linux/*.AppImage | first | get name)
           let manifest = {
               version: $version,
-              linux_x86_64:   { url: $"($base)/($version)/lets-chat-desktop-linux-x86_64" },
-              linux_deb:      { url: $"($base)/($version)/lets-chat-desktop-linux-amd64.deb" },
-              linux_appimage: { url: $"($base)/($version)/lets-chat-desktop-linux-amd64.AppImage" },
-              windows_x86_64: { url: $"($base)/($version)/lets-chat-desktop-windows-x86_64.exe" },
+              linux_x86_64:   { url: $"($base)/($version)/lets-chat-desktop-linux-x86_64",        sha256: (open --raw artifacts/lets-chat-desktop-linux-x86_64 | hash sha256) },
+              linux_deb:      { url: $"($base)/($version)/lets-chat-desktop-linux-amd64.deb",      sha256: (open --raw $deb_src | hash sha256) },
+              linux_appimage: { url: $"($base)/($version)/lets-chat-desktop-linux-amd64.AppImage", sha256: (open --raw $appimage_src | hash sha256) },
+              windows_x86_64: { url: $"($base)/($version)/lets-chat-desktop-windows-x86_64.exe",   sha256: (open --raw artifacts/lets-chat-desktop-windows-x86_64.exe | hash sha256) },
           }
           $manifest | to json --indent 2 | save artifacts/latest.json
           print "Generated artifacts/latest.json:"
           open --raw artifacts/latest.json | print
+
+      - name: Sign update manifest
+        shell: nu {0}
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_KEY }}
+        run: |
+          # LC-210-BINARY-INTEGRITY (#277): produce the detached Ed25519
+          # signature the desktop updater verifies before it trusts the
+          # manifest. DESKTOP_UPDATE_SIGNING_KEY is the PRIVATE key in PKCS#8
+          # PEM; its public half is embedded in the desktop build via
+          # LETS_CHAT_UPDATE_PUBLIC_KEY (see docs/desktop-update-signing.md).
+          # `openssl pkeyutl -rawin` needs OpenSSL 3.x (present on the openSUSE
+          # runner) and writes the raw 64-byte signature, which is exactly what
+          # the client reads. Fail the release if the secret is unset rather
+          # than publishing an unsigned manifest the updater would then reject.
+          if ($env.UPDATE_SIGNING_KEY | is-empty) {
+              print --stderr "DESKTOP_UPDATE_SIGNING_KEY is unset; refusing to publish an unsigned update manifest"
+              exit 1
+          }
+          $env.UPDATE_SIGNING_KEY | save ed25519_private.pem
+          (
+              ^openssl pkeyutl
+                  -sign
+                  -rawin
+                  -inkey ed25519_private.pem
+                  -in artifacts/latest.json
+                  -out artifacts/latest.json.sig
+          )
+          rm ed25519_private.pem
+          let sig_size = (ls artifacts/latest.json.sig | first | get size)
+          print $"Signed latest.json -> latest.json.sig (($sig_size))"
 
       - name: Upload binaries and manifest to Generic Packages
         shell: nu {0}
@@ -158,6 +202,9 @@ jobs:
               { src: $appimage_src,                                    dest: [$version, "lets-chat-desktop-linux-amd64.AppImage"] }
               { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: [$version, "lets-chat-desktop-windows-x86_64.exe"] }
               { src: "artifacts/latest.json",                          dest: ["latest", "latest.json"] }
+              # LC-210-BINARY-INTEGRITY (#277): detached signature, fetched and
+              # verified by the desktop updater alongside the manifest.
+              { src: "artifacts/latest.json.sig",                      dest: ["latest", "latest.json.sig"] }
           ]
           for entry in $uploads {
               let url = (
@@ -198,6 +245,7 @@ jobs:
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           print $"Manifest:        ($base)/latest/latest.json"
+          print $"Signature:       ($base)/latest/latest.json.sig"
           print $"Linux binary:    ($base)/($version)/lets-chat-desktop-linux-x86_64"
           print $"Linux .deb:      ($base)/($version)/lets-chat-desktop-linux-amd64.deb"
           print $"Linux .AppImage: ($base)/($version)/lets-chat-desktop-linux-amd64.AppImage"

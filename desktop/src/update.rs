@@ -9,8 +9,8 @@
 // Manifest shape:
 //     {
 //       "version": "v0.2.0",
-//       "linux_x86_64":   { "url": "https://.../v0.2.0/lets-chat-desktop-linux-x86_64" },
-//       "windows_x86_64": { "url": "https://.../v0.2.0/lets-chat-desktop-windows-x86_64.exe" }
+//       "linux_x86_64":   { "url": "https://.../v0.2.0/lets-chat-desktop-linux-x86_64",     "sha256": "<hex>" },
+//       "windows_x86_64": { "url": "https://.../v0.2.0/lets-chat-desktop-windows-x86_64.exe", "sha256": "<hex>" }
 //     }
 //
 // Forgejo's Generic Packages API serves files under
@@ -19,21 +19,40 @@
 // under /latest/latest.json. Pointing LETS_CHAT_UPDATE_URL at an alternative
 // http(s) host (eg. a fork or a staging mirror) overrides the default.
 //
-// LC-210: every fetch here (manifest + binary download) goes through
-// `net_guard::guarded_get`, which validates each redirect hop against the
-// public-IP filter (an injected redirect to an internal host is refused).
+// LC-210: every fetch here (manifest + signature + binary download) goes
+// through `net_guard::guarded_get`, which validates each redirect hop against
+// the public-IP filter (an injected redirect to an internal host is refused).
 // `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE=1` exempts ONLY the initial URL from
 // that filter, for an operator running a private internal update mirror;
 // redirect targets are still validated.
+//
+// LC-210-BINARY-INTEGRITY (#277): the SSRF guard does not make the artifact
+// trustworthy (a redirect to a public attacker host still serves bytes). So
+// `fetch_manifest` also fetches the detached signature `latest.json.sig` and
+// verifies it over the raw manifest bytes before parsing, and `apply` verifies
+// the downloaded binary's SHA-256 against the signed manifest value before
+// `self_replace`. Both fail closed. See `update_verify` and
+// `docs/desktop-update-signing.md`.
 
 use crate::net_guard;
+use crate::update_verify;
 use serde::Deserialize;
+use std::io::Read;
 use std::time::Duration;
 
 pub const DEFAULT_UPDATE_URL: &str = "https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat";
 
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(10);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+
+// Upper bound on what we will buffer in memory for hash verification. The
+// binary must be fully read to hash it before writing/replacing, so it is held
+// in a Vec; the cap turns a hostile/oversized response into a clean error
+// instead of an OOM. Generous vs a desktop binary (tens of MiB).
+const MAX_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
+// The manifest + signature are tiny; cap small so a hostile endpoint cannot
+// stream gigabytes into the verifier.
+const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Manifest {
@@ -47,6 +66,12 @@ pub struct Manifest {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Artifact {
     pub url: String,
+    // LC-210-BINARY-INTEGRITY: lowercase-hex SHA-256 of the artifact, covered
+    // by the manifest signature. Optional in the type so a malformed/legacy
+    // manifest deserializes; `apply` treats a missing hash as a hard error
+    // (MissingArtifactHash) rather than installing unverified bytes.
+    #[serde(default)]
+    pub sha256: Option<String>,
 }
 
 fn update_url() -> String {
@@ -71,13 +96,50 @@ fn manifest_url(base: &str) -> String {
     format!("{}/latest/latest.json", base.trim_end_matches('/'))
 }
 
+// LC-210-BINARY-INTEGRITY: detached signature lives next to the manifest.
+fn signature_url(base: &str) -> String {
+    format!("{}/latest/latest.json.sig", base.trim_end_matches('/'))
+}
+
+// Read a guarded response body into memory, refusing anything past `max` so a
+// hostile endpoint cannot OOM us. Reads one byte past the cap to distinguish
+// "exactly max" from "too large".
+fn read_body_capped(response: ureq::Response, max: usize) -> Result<Vec<u8>, String> {
+    let mut buf = Vec::new();
+    let mut reader = response.into_reader().take((max as u64) + 1);
+    reader
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read response body: {e}"))?;
+    if buf.len() > max {
+        return Err(format!("response body exceeds {max} bytes"));
+    }
+    Ok(buf)
+}
+
+// Fetches the manifest AND its detached signature, verifies the signature over
+// the raw manifest bytes with the build-embedded public key, and only then
+// parses the JSON. A build with no embedded key fails closed here, so neither
+// the startup check nor `--update` will trust an unsigned/unverifiable
+// manifest. LC-210-BINARY-INTEGRITY (#277).
 pub fn fetch_manifest() -> Result<Manifest, String> {
-    let url = manifest_url(&update_url());
-    let response = net_guard::guarded_get(&url, allow_private_initial(), MANIFEST_TIMEOUT)
-        .map_err(|e| format!("fetch manifest from {url}: {e}"))?;
-    response
-        .into_json::<Manifest>()
-        .map_err(|e| format!("parse manifest JSON from {url}: {e}"))
+    let base = update_url();
+    let allow_private = allow_private_initial();
+
+    let m_url = manifest_url(&base);
+    let manifest_resp = net_guard::guarded_get(&m_url, allow_private, MANIFEST_TIMEOUT)
+        .map_err(|e| format!("fetch manifest from {m_url}: {e}"))?;
+    let manifest_bytes = read_body_capped(manifest_resp, MAX_MANIFEST_BYTES)?;
+
+    let s_url = signature_url(&base);
+    let sig_resp = net_guard::guarded_get(&s_url, allow_private, MANIFEST_TIMEOUT)
+        .map_err(|e| format!("fetch signature from {s_url}: {e}"))?;
+    let signature = read_body_capped(sig_resp, MAX_MANIFEST_BYTES)?;
+
+    update_verify::verify_manifest_signature(&manifest_bytes, &signature)
+        .map_err(|e| format!("verify manifest {m_url}: {e}"))?;
+
+    serde_json::from_slice::<Manifest>(&manifest_bytes)
+        .map_err(|e| format!("parse manifest JSON from {m_url}: {e}"))
 }
 
 pub fn platform_artifact(m: &Manifest) -> Option<&Artifact> {
@@ -144,6 +206,22 @@ pub fn apply() -> Result<ApplyOutcome, String> {
     }
     let artifact = platform_artifact(&m)
         .ok_or_else(|| "no release artifact published for this platform/arch".to_string())?;
+    // The manifest was signature-verified in fetch_manifest, so this sha256 is
+    // authentic. A manifest missing the hash for our platform is refused rather
+    // than installed unverified. LC-210-BINARY-INTEGRITY (#277).
+    let expected_sha256 = artifact
+        .sha256
+        .as_deref()
+        .ok_or_else(|| update_verify::VerifyError::MissingArtifactHash.to_string())?;
+
+    // Download fully into memory so we can hash BEFORE writing anything to disk
+    // or replacing the running binary.
+    let response = net_guard::guarded_get(&artifact.url, allow_private_initial(), DOWNLOAD_TIMEOUT)
+        .map_err(|e| format!("download {}: {e}", artifact.url))?;
+    let body = read_body_capped(response, MAX_ARTIFACT_BYTES)
+        .map_err(|e| format!("download {}: {e}", artifact.url))?;
+    update_verify::verify_artifact_sha256(&body, expected_sha256)
+        .map_err(|e| format!("verify {}: {e}", artifact.url))?;
 
     let mut tmp_path = std::env::temp_dir();
     tmp_path.push(format!(
@@ -152,15 +230,7 @@ pub fn apply() -> Result<ApplyOutcome, String> {
         m.version,
     ));
 
-    {
-        let response =
-            net_guard::guarded_get(&artifact.url, allow_private_initial(), DOWNLOAD_TIMEOUT)
-                .map_err(|e| format!("download {}: {e}", artifact.url))?;
-        let mut file = std::fs::File::create(&tmp_path)
-            .map_err(|e| format!("create {}: {e}", tmp_path.display()))?;
-        std::io::copy(&mut response.into_reader(), &mut file)
-            .map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
-    }
+    std::fs::write(&tmp_path, &body).map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
 
     #[cfg(unix)]
     {
