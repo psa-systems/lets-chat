@@ -3,9 +3,14 @@
 //! outgoing / slash-command webhook deliverers (LC-152) so the IP allowlist is
 //! defined once and every fetch path enforces the same policy.
 //!
-//! DNS rebinding across the resolve-then-connect gap remains a small residual
-//! risk; callers mitigate with short timeouts and body caps, and re-run the
-//! check on every redirect hop (see `unfurl`).
+//! DNS rebinding is closed at connect time, not merely mitigated: the shared
+//! outbound client (`http_client`) resolves through a public-only
+//! `dns::Resolve` whose returned addresses ARE the addresses reqwest connects
+//! on, so a rebind to a private address between this submit-time check and the
+//! connect is refused at connect (LC-152-TOCTOU, #286). Literal-IP URLs are
+//! rejected at submit (the connector's literal-IP fast path skips the
+//! resolver), and redirect-following re-runs the full check on every hop (see
+//! `unfurl`).
 
 use std::net::IpAddr;
 use url::Url;
