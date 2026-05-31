@@ -43,6 +43,8 @@ async fn fresh_pool() -> SqlitePool {
         include_str!("../migrations/chat/0055_messages_bridge_actor.sql"),
         include_str!("../migrations/chat/0056_bridge_avatar_proxies.sql"),
         include_str!("../migrations/chat/0057_enclave_msg_rate_limit.sql"),
+        include_str!("../migrations/chat/0058_email_ingress_drops.sql"),
+        include_str!("../migrations/chat/0059_retention_sweep_status.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     }

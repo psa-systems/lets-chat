@@ -123,6 +123,66 @@
   <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-imap-save"|t }}</button>
 </form>
 
+{# LC-207-OBSERVABILITY (#278): read-only poll-loop health + recent drops, so an operator can answer "is ingress alive / why didn't my email post?" without container logs. #}
+<h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-ingress-health-heading"|t }}</h2>
+<div class="max-w-lg space-y-2 text-sm mb-4">
+  {% if let Some(s) = imap_poll_status %}
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-ingress-last-poll"|t }}</span>
+    <span class="font-mono">{% if let Some(t) = s.last_poll_at %}{{ t }}{% else %}-{% endif %}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-ingress-last-ok"|t }}</span>
+    <span class="font-mono">{% if let Some(t) = s.last_ok_at %}{{ t }}{% else %}-{% endif %}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-ingress-consecutive-failures"|t }}</span>
+    <span class="font-mono {% if s.consecutive_failures > 0 %}text-danger{% endif %}">{{ s.consecutive_failures }}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-ingress-last-tick"|t }}</span>
+    <span class="font-mono">{{ s.last_fetched }} / {{ s.last_posted }} / {{ s.last_dropped }}</span>
+  </div>
+  {% if let Some(err) = s.last_error %}
+  <div class="p-2 rounded bg-danger-surface border border-danger-border text-danger-surface-content text-xs">
+    {{ "admin-settings-ingress-last-error"|t }} <span class="font-mono">{{ err }}</span>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="text-content-muted">{{ "admin-settings-ingress-not-run"|t }}</p>
+  {% endif %}
+</div>
+{% if !imap_drop_counts.is_empty() %}
+<p class="text-sm font-medium mb-1">{{ "admin-settings-ingress-drops-24h"|t }}</p>
+<div class="max-w-lg flex flex-wrap gap-2 text-xs mb-3">
+  {% for c in imap_drop_counts %}
+  <span class="px-2 py-0.5 rounded bg-surface-muted font-mono">{{ c.0 }}: {{ c.1 }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+{% if !imap_recent_drops.is_empty() %}
+<table class="max-w-2xl w-full text-xs border-collapse mb-4">
+  <thead>
+    <tr class="text-left border-b border-border">
+      <th class="py-1 pr-3">{{ "admin-settings-ingress-drop-time"|t }}</th>
+      <th class="py-1 pr-3">{{ "admin-settings-ingress-drop-reason"|t }}</th>
+      <th class="py-1 pr-3">{{ "admin-settings-ingress-drop-uid"|t }}</th>
+      <th class="py-1">{{ "admin-settings-ingress-drop-detail"|t }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in imap_recent_drops %}
+    <tr class="border-b border-border-subtle">
+      <td class="py-1 pr-3 font-mono whitespace-nowrap">{{ d.dropped_at }}</td>
+      <td class="py-1 pr-3 font-mono">{{ d.reason }}</td>
+      <td class="py-1 pr-3 font-mono">{% if let Some(u) = d.uid %}{{ u }}{% else %}-{% endif %}</td>
+      <td class="py-1">{% if let Some(detail) = d.detail %}{{ detail }}{% else %}-{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 <h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-uploads-heading"|t }}</h2>
 {% if let Some(n) = regenerated %}
 <div class="mb-3 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
@@ -168,4 +228,39 @@
   </label>
   <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-settings-defaults-save"|t }}</button>
 </form>
+
+{# LC-207-OBSERVABILITY (#278): retention-sweep status, so an operator who enabled the destructive sweep can confirm it ran and how much it deleted. #}
+<h2 class="text-base font-semibold mt-8 mb-3">{{ "admin-settings-retention-heading"|t }}</h2>
+<div class="max-w-lg space-y-2 text-sm">
+  {% if retention_sweep_enabled %}
+  <p class="text-content-muted">{{ "admin-settings-retention-enabled"|t }}</p>
+  {% if let Some(s) = retention_status %}
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-retention-last-run"|t }}</span>
+    <span class="font-mono">{% if let Some(t) = s.last_run_at %}{{ t }}{% else %}-{% endif %}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-retention-last-deleted"|t }}</span>
+    <span class="font-mono">{{ s.last_messages_deleted }} ({{ s.last_rooms_touched }})</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-retention-total-deleted"|t }}</span>
+    <span class="font-mono">{{ s.total_messages_deleted }}</span>
+  </div>
+  <div class="flex justify-between">
+    <span>{{ "admin-settings-retention-runs"|t }}</span>
+    <span class="font-mono">{{ s.runs }}</span>
+  </div>
+  {% if let Some(err) = s.last_error %}
+  <div class="p-2 rounded bg-danger-surface border border-danger-border text-danger-surface-content text-xs">
+    {{ "admin-settings-retention-last-error"|t }} <span class="font-mono">{{ err }}</span>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="text-content-muted">{{ "admin-settings-retention-not-run"|t }}</p>
+  {% endif %}
+  {% else %}
+  <p class="text-content-muted">{{ "admin-settings-retention-disabled"|t }}</p>
+  {% endif %}
+</div>
 {% endblock %}
