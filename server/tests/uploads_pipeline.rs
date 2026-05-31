@@ -1,8 +1,11 @@
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use image::codecs::gif::{GifDecoder, GifEncoder, Repeat};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::{AnimationDecoder, ExtendedColorType, ImageEncoder};
 use lets_chat::uploads::pipeline::{preview_from_path, process_image, PipelineError};
+use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 fn unique_path(stem: &str) -> std::path::PathBuf {
@@ -189,4 +192,102 @@ fn preview_from_path_emits_only_preview_bytes() {
     assert_eq!(decoded.width().max(decoded.height()), 360);
 
     let _ = std::fs::remove_file(&p);
+}
+
+// ---------------------------------------------------------------------------
+// LC-206-IMAGE-LIMITS (#284): a VALID PNG decompression bomb (tiny file, huge
+// decoded dimensions) must be rejected by the decode `Limits`, not decoded
+// into a multi-hundred-MB buffer. This is distinct from the malformed pixel-
+// bomb in the spike corpus (which image rejects at header-read for bad CRCs /
+// truncation): here the PNG is well-formed, so rejection PROVES the limit
+// fires, not that the input is broken. The small control below decodes fine,
+// pinning that the builder produces valid PNGs.
+// ---------------------------------------------------------------------------
+
+/// IEEE CRC-32 (reflected), the variant PNG chunks use.
+fn png_crc32(bytes: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &b in bytes {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+fn png_chunk(out: &mut Vec<u8>, ctype: &[u8; 4], data: &[u8]) {
+    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    out.extend_from_slice(ctype);
+    out.extend_from_slice(data);
+    let mut crc_input = Vec::with_capacity(4 + data.len());
+    crc_input.extend_from_slice(ctype);
+    crc_input.extend_from_slice(data);
+    out.extend_from_slice(&png_crc32(&crc_input).to_be_bytes());
+}
+
+/// A well-formed 8-bit RGB PNG of `w`x`h` all-zero pixels. The scanlines are
+/// streamed through a real zlib encoder (never materialised in full), so a
+/// 12000x12000 image whose decoded buffer is ~432 MB is produced from a row
+/// at a time and a few-KB output - exactly the decompression-bomb shape.
+fn constant_rgb_png(w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&w.to_be_bytes());
+    ihdr.extend_from_slice(&h.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]); // 8-bit depth, color type 2 (RGB)
+    png_chunk(&mut out, b"IHDR", &ihdr);
+
+    let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+    let row = vec![0u8; 1 + (w as usize) * 3]; // filter byte + RGB pixels, all zero
+    for _ in 0..h {
+        enc.write_all(&row).unwrap();
+    }
+    let idat = enc.finish().unwrap();
+    png_chunk(&mut out, b"IDAT", &idat);
+
+    png_chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+#[test]
+fn constant_png_builder_produces_a_decodable_image() {
+    // Control: the SAME builder at tiny dimensions yields a valid PNG that the
+    // pipeline decodes. So the bomb test below fails on the LIMIT, not on a
+    // malformed fixture.
+    let p = write_temp("ctrl.png", &constant_rgb_png(8, 8));
+    let out = process_image(&p, "image/png");
+    let _ = std::fs::remove_file(&p);
+    // ProcessedImage has no Debug (it would dump raw bytes), so use is_ok()
+    // with a static message rather than Debug-printing the Ok value.
+    assert!(
+        out.is_ok(),
+        "small constant PNG must decode through the pipeline",
+    );
+}
+
+#[test]
+fn png_decompression_bomb_rejected_by_limits() {
+    // 12000x12000 RGB -> ~432 MB decoded, over the 256 MiB max_alloc but under
+    // the 16384 dimension cap, so it is the max_alloc path under test. Tiny on
+    // disk (all-zero pixels compress to a few KB).
+    let bomb = constant_rgb_png(12_000, 12_000);
+    // The whole point: it is small on disk (~410 KB, well under the 10 MiB
+    // upload byte cap) yet decodes to ~432 MB. The byte cap does NOT catch it;
+    // the decode Limits must.
+    assert!(
+        bomb.len() < 10 * 1024 * 1024,
+        "bomb must pass the 10 MiB byte cap to reach the decoder, was {} bytes",
+        bomb.len()
+    );
+    let p = write_temp("bomb.png", &bomb);
+    let out = process_image(&p, "image/png");
+    let _ = std::fs::remove_file(&p);
+    // Match directly (ProcessedImage has no Debug, so no expect_err).
+    match out {
+        Err(PipelineError::Decode(image::ImageError::Limits(_))) => {}
+        Err(other) => panic!("bomb must be rejected by the decode Limits, got {other:?}"),
+        Ok(_) => panic!("decompression bomb decoded instead of being rejected"),
+    }
 }

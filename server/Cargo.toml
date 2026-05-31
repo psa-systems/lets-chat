@@ -125,3 +125,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 kamadak-exif = "0.5"
+# LC-206-IMAGE-LIMITS (#284): craft a valid PNG decompression-bomb fixture
+# (tiny file, huge decoded dimensions) by streaming zero scanlines through a
+# real zlib encoder, to prove the decode Limits reject it. Already in the tree
+# transitively (image -> png -> flate2), so this adds no new download.
+flate2 = "1"

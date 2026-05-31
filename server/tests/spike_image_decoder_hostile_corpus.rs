@@ -138,12 +138,16 @@ fn truncated_after_dimensions_does_not_panic() {
 
 #[test]
 fn pixel_bomb_dimension_overflow_does_not_panic() {
-    // Hand-crafted PNG IHDR claiming 65535x65535 (~4 GB raw RGBA). image-rs
-    // 0.25 has no default Limits, so this CAN return Err on memory failure
-    // but MUST NOT panic. If the decoder OOMs into a panic (e.g., via
-    // `try_reserve` returning Err but a downstream `vec![0; n]` failing),
-    // the production fetch needs additional defenses (Limits::max_image_size
-    // or pre-decode dimension sniff + reject).
+    // Hand-crafted PNG IHDR claiming 65535x65535 (~4 GB raw RGBA), but with a
+    // bad CRC and a 2-byte IDAT, so image rejects it as MALFORMED at header
+    // read - this row proves no-panic on a broken bomb, NOT memory-limit
+    // enforcement on a VALID one. (Correction, LC-206-IMAGE-LIMITS: an earlier
+    // comment here claimed "image 0.25 has no default Limits"; that is wrong -
+    // `Limits::default()` caps `max_alloc` at 512 MiB for the still path, while
+    // `GifDecoder::new` starts at `no_limits()`. The production pipeline no
+    // longer relies on either default: `uploads::pipeline` pins explicit
+    // `Limits` at every decode site, and the VALID-decompression-bomb
+    // behavioral test lives in `uploads_pipeline.rs`.)
     let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x0D]);
     bytes.extend_from_slice(b"IHDR");
