@@ -14,10 +14,11 @@ use crate::views::admin::{
     AdminEnclaveView, AdminInviteView, AdminRoomView, AdminUserView, AnalyticsPage, AntiSpamPage,
     BackupRestorePage, BotRowView, BotsPage, BrandingPage, BridgeAvatarFailureView,
     BridgeAvatarStatsView, BridgeAvatarsPage, BridgeRowView, BridgesPage, BuiltinCommandRowView,
-    DeliveryRowView, EnclavesPage, InvitesPage, LinkFilterPage, LinkFilterRuleView, MetricCard,
-    ModLogPage, OutgoingWebhookDeliveriesPage, OutgoingWebhookRowView, OutgoingWebhooksPage,
-    QuarantineEntryView, QuarantinePage, RoomRowFragment, RoomsPage, SettingsPage,
-    SlashCommandRowView, SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
+    DeliveryRowView, DropView, EnclavesPage, ImapPollStatusView, InvitesPage, LinkFilterPage,
+    LinkFilterRuleView, MetricCard, ModLogPage, OutgoingWebhookDeliveriesPage,
+    OutgoingWebhookRowView, OutgoingWebhooksPage, QuarantineEntryView, QuarantinePage,
+    RetentionStatusView, RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView,
+    SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
 use crate::views::charts;
 use crate::views::{html, Html};
@@ -274,6 +275,43 @@ pub async fn get_settings(
         imap_dead_letter_folder,
         imap_enabled,
     ) = load_imap_settings_for_display(&state).await;
+    // LC-207-OBSERVABILITY (#278): poll-loop health + recent drops + retention
+    // sweep status, surfaced read-only next to the config they describe.
+    let imap_poll_status =
+        db::imap_poll_status::read(&state.settings)
+            .await?
+            .map(|s| ImapPollStatusView {
+                last_poll_at: s.last_poll_at,
+                last_ok_at: s.last_ok_at,
+                last_error: s.last_error,
+                consecutive_failures: s.consecutive_failures,
+                last_fetched: s.last_fetched,
+                last_posted: s.last_posted,
+                last_dropped: s.last_dropped,
+            });
+    let imap_drop_counts = db::email_ingress_drops::counts_by_reason(&state.chat, 24).await?;
+    let imap_recent_drops = db::email_ingress_drops::recent(&state.chat, 20)
+        .await?
+        .into_iter()
+        .map(|d| DropView {
+            dropped_at: d.dropped_at,
+            reason: d.reason,
+            uid: d.uid,
+            detail: d.detail,
+        })
+        .collect();
+    let retention_sweep_enabled = crate::retention::sweep::flag_enabled();
+    let retention_status =
+        db::retention_status::read(&state.chat)
+            .await?
+            .map(|s| RetentionStatusView {
+                last_run_at: s.last_run_at,
+                last_rooms_touched: s.last_rooms_touched,
+                last_messages_deleted: s.last_messages_deleted,
+                total_messages_deleted: s.total_messages_deleted,
+                runs: s.runs,
+                last_error: s.last_error,
+            });
     let page = SettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -308,6 +346,11 @@ pub async fn get_settings(
         imap_enabled,
         imap_error: None,
         imap_saved: q.imap_saved.is_some(),
+        imap_poll_status,
+        imap_drop_counts,
+        imap_recent_drops,
+        retention_sweep_enabled,
+        retention_status,
     };
     html(&page)
 }

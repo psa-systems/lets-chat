@@ -325,6 +325,31 @@ admin-settings-defaults-digest = New users start with email digest enabled
 admin-settings-defaults-digest-note = Off by default for privacy. Only affects future registrations; existing users are not changed. Email digest also requires SMTP configured via environment variables.
 admin-settings-defaults-save = Save default
 
+# LC-207-OBSERVABILITY (#278): email-ingress poll health + drop log.
+admin-settings-ingress-health-heading = Email ingress health
+admin-settings-ingress-last-poll = Last poll
+admin-settings-ingress-last-ok = Last successful poll
+admin-settings-ingress-consecutive-failures = Consecutive failures
+admin-settings-ingress-last-tick = Last tick (fetched / posted / dropped)
+admin-settings-ingress-last-error = Last error:
+admin-settings-ingress-not-run = The IMAP poll loop has not run yet (disabled, or no tick since startup).
+admin-settings-ingress-drops-24h = Drops by reason (last 24h)
+admin-settings-ingress-drop-time = Time
+admin-settings-ingress-drop-reason = Reason
+admin-settings-ingress-drop-uid = UID
+admin-settings-ingress-drop-detail = Detail
+
+# LC-207-OBSERVABILITY (#278): retention-sweep status.
+admin-settings-retention-heading = Message retention sweep
+admin-settings-retention-enabled = Enabled via LETS_CHAT_RETENTION_SWEEP_ENABLED.
+admin-settings-retention-disabled = Disabled. Set LETS_CHAT_RETENTION_SWEEP_ENABLED=1 and restart to enable the per-room retention hard-delete sweep.
+admin-settings-retention-not-run = Enabled, but the sweep has not run yet (runs hourly; first tick is one hour after startup).
+admin-settings-retention-last-run = Last run
+admin-settings-retention-last-deleted = Last run deleted (rooms)
+admin-settings-retention-total-deleted = Total deleted (lifetime)
+admin-settings-retention-runs = Completed runs
+admin-settings-retention-last-error = Last error:
+
 ## Slash commands
 admin-slash-title = Slash commands
 admin-slash-heading = Slash commands

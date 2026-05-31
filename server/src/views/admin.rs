@@ -239,6 +239,47 @@ pub struct SettingsPage<'a> {
     /// Some(N) renders a one-line success banner; None renders nothing.
     pub regenerated: Option<i64>,
     pub purged: Option<i64>,
+    /// LC-207-OBSERVABILITY (#278): IMAP poll-loop health. `None` until the
+    /// loop has ticked at least once (or it is disabled).
+    pub imap_poll_status: Option<ImapPollStatusView>,
+    /// Email-ingress drop counts by reason over the last 24h, highest first.
+    pub imap_drop_counts: Vec<(String, i64)>,
+    /// Most recent email-ingress drops, newest first.
+    pub imap_recent_drops: Vec<DropView>,
+    /// LC-207-OBSERVABILITY: retention sweep. `enabled` reflects the
+    /// `LETS_CHAT_RETENTION_SWEEP_ENABLED` gate; `status` is `None` until the
+    /// sweep has ticked at least once.
+    pub retention_sweep_enabled: bool,
+    pub retention_status: Option<RetentionStatusView>,
+}
+
+/// LC-207-OBSERVABILITY (#278): admin-page view of the IMAP poll-loop health.
+pub struct ImapPollStatusView {
+    pub last_poll_at: Option<String>,
+    pub last_ok_at: Option<String>,
+    pub last_error: Option<String>,
+    pub consecutive_failures: i64,
+    pub last_fetched: i64,
+    pub last_posted: i64,
+    pub last_dropped: i64,
+}
+
+/// One row of the email-ingress drop log.
+pub struct DropView {
+    pub dropped_at: String,
+    pub reason: String,
+    pub uid: Option<i64>,
+    pub detail: Option<String>,
+}
+
+/// Admin-page view of the message-retention sweep status.
+pub struct RetentionStatusView {
+    pub last_run_at: Option<String>,
+    pub last_rooms_touched: i64,
+    pub last_messages_deleted: i64,
+    pub total_messages_deleted: i64,
+    pub runs: i64,
+    pub last_error: Option<String>,
 }
 
 pub struct AdminEnclaveView {
