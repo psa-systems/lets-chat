@@ -3416,6 +3416,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "dashmap",
+ "flate2",
  "fluent-templates",
  "futures",
  "hex",
