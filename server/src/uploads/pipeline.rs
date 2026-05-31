@@ -12,8 +12,33 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
 use image::{
-    AnimationDecoder, DynamicImage, ExtendedColorType, Frame, ImageEncoder, ImageError, ImageReader,
+    AnimationDecoder, DynamicImage, ExtendedColorType, Frame, ImageDecoder, ImageEncoder,
+    ImageError, ImageReader,
 };
+
+// LC-206-IMAGE-LIMITS (#284): explicit decode limits applied at EVERY decode
+// site. `image` 0.25 caps still-image allocation at 512 MiB by default, but
+// `GifDecoder::new` starts at `Limits::no_limits()` - the GIF path was
+// UNBOUNDED, so a GIF dimension / animation bomb could allocate without limit.
+// 512 MiB x THUMBNAIL_CONCURRENCY (4 permits) is also ~2 GiB of transient
+// decode memory on a burst, too loose for a small self-hosted host. Pinning an
+// explicit ceiling (a) covers the GIF hole, (b) tightens the aggregate, and
+// (c) stops correctness from depending on the image-crate default, which a
+// version bump could silently change (an in-tree spike comment already
+// believed - wrongly - that 0.25 had "no default Limits"). 256 MiB admits a
+// ~64 MP RGBA image, which covers real photos uploaded under the 10 MiB byte
+// cap while rejecting decompression bombs; the dimension caps reject
+// pathological aspect ratios before allocation.
+const MAX_DECODE_ALLOC_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_DECODE_DIM: u32 = 16_384;
+
+fn decode_limits() -> image::Limits {
+    let mut limits = image::Limits::no_limits();
+    limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
+    limits.max_image_width = Some(MAX_DECODE_DIM);
+    limits.max_image_height = Some(MAX_DECODE_DIM);
+    limits
+}
 
 const PREVIEW_MAX_DIM: u32 = 360;
 /// q=92 is below the visual-threshold for typical chat content; the small
@@ -135,10 +160,9 @@ pub fn process_image(tmp_path: &Path, sniffed_mime: &str) -> Result<ProcessedIma
 }
 
 fn process_still(tmp_path: &Path, format: Format) -> Result<ProcessedImage, PipelineError> {
-    let decoded = ImageReader::open(tmp_path)?
-        .with_guessed_format()?
-        .decode()
-        .map_err(PipelineError::Decode)?;
+    let mut reader = ImageReader::open(tmp_path)?.with_guessed_format()?;
+    reader.limits(decode_limits()); // LC-206-IMAGE-LIMITS
+    let decoded = reader.decode().map_err(PipelineError::Decode)?;
 
     let preview = thumbnail(&decoded);
     let original_bytes = encode(&decoded, format)?;
@@ -159,7 +183,12 @@ fn process_still(tmp_path: &Path, format: Format) -> Result<ProcessedImage, Pipe
 /// deviation for the rare finite-loop GIF.
 fn process_gif(tmp_path: &Path) -> Result<ProcessedImage, PipelineError> {
     let file = File::open(tmp_path)?;
-    let decoder = GifDecoder::new(BufReader::new(file)).map_err(PipelineError::Decode)?;
+    let mut decoder = GifDecoder::new(BufReader::new(file)).map_err(PipelineError::Decode)?;
+    // LC-206-IMAGE-LIMITS: GifDecoder::new starts at no_limits(); pin ours so
+    // a GIF dimension / animation bomb is rejected instead of allocating freely.
+    decoder
+        .set_limits(decode_limits())
+        .map_err(PipelineError::Decode)?;
     let frames: Vec<Frame> = decoder
         .into_frames()
         .collect::<Result<Vec<_>, _>>()
@@ -203,10 +232,9 @@ fn process_gif(tmp_path: &Path) -> Result<ProcessedImage, PipelineError> {
 pub fn preview_from_path(path: &std::path::Path, mime: &str) -> Result<Vec<u8>, PipelineError> {
     let format =
         Format::from_mime(mime).ok_or_else(|| PipelineError::UnsupportedMime(mime.to_string()))?;
-    let decoded = ImageReader::open(path)?
-        .with_guessed_format()?
-        .decode()
-        .map_err(PipelineError::Decode)?;
+    let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+    reader.limits(decode_limits()); // LC-206-IMAGE-LIMITS
+    let decoded = reader.decode().map_err(PipelineError::Decode)?;
     let preview = thumbnail(&decoded);
     encode(&preview, format)
 }
