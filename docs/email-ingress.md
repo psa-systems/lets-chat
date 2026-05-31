@@ -10,7 +10,7 @@ LC-77 lets external senders mail a chat room directly. An operator-configured IM
 
 **Isn't**: an SMTP server. lets-chat does not bind port 25 or 587 and does not own MX for any domain. The operator provides a mailbox at their mail provider; lets-chat polls it via IMAP.
 
-**Isn't**: a reply-to-chat-notification system. Replying to chat email notifications is the deferred half of LC-77 and lives in a separate ticket.
+**Is also** (LC-77-REPLY stage 2, shipped): a reply-by-email path. A user replying to a chat notification email has their reply posted to the room as themselves; see "Reply-by-email" below. This was the formerly-deferred half of LC-77 and is now shipped (#201).
 
 ## Threat model
 
@@ -85,6 +85,8 @@ Every dropped message logs at `WARN` with `target: "email_ingress::drop"`. The `
 | `revoked_inbox` | The token matched, but the inbox has been revoked by an admin. | Tell the sender to use a fresh inbox (created via the per-room admin page). |
 | `loop_detected` | The message looked machine-generated (Auto-Submitted, Precedence: bulk/list/junk, X-Autoreply, X-Autorespond, or List-Id). | This is a deliberate drop. **`List-Id`-tagged mail is dropped even when the sender is a legitimate automated tool that happens to tag itself as a list** - that's the v1 posture; if your monitoring tool tags itself with `List-Id`, see the "Not supported" section below. |
 | `rate_limited` | Inbox exceeded 60 messages per minute. | The sender is misbehaving; throttle at the source. |
+| `reply_expired` | A `reply-<token>@<ingress-domain>` reply (LC-77-REPLY) matched no live reply token: the 7-day TTL elapsed, or the token was already consumed by an earlier reply (one-shot). | The user replied too late, or replied twice to the same notification. They can post a fresh message or reply to a newer notification. |
+| `duplicate` | The message's RFC 5322 `Message-ID:` was already processed (exactly-once dedup, LC-77-MID-DEDUP); nothing is posted. | Normal on a wire-identical replay (e.g. a crash between post and `\Seen`). No action - the dedup is working as designed. |
 | `internal_error` | Catch-all (DB, disk, IMAP transport). | Check `detail`; usually a transient. If persistent, investigate the lets-chat data dir or the IMAP provider. |
 
 Attachment drops are logged separately at `INFO` with `target: "email_ingress::attachment_drop"` and `reason` ∈ {`over_size`, `disallowed_mime`, `sniff_failed`, `image_pipeline`, `io`, `db`}. The parent message still posts; the bad attachment is the only thing dropped.
@@ -105,7 +107,7 @@ Attachment drops are logged separately at `INFO` with `target: "email_ingress::a
 
 ## Notification emails (LC-77-REPLY stage 1)
 
-lets-chat sends a notification email to a user for each `@username` mention or DM they receive, gated by per-user opt-in. The email body shows the sender, the room, a 140-char snippet, and a CTA link back to the message. If email-ingress is configured on the deployment, the email also carries a `Reply-To: reply-<token>@<ingress-domain>` header; the inbound resolver that consumes those replies lands in stage 2 (deferred).
+lets-chat sends a notification email to a user for each `@username` mention or DM they receive, gated by per-user opt-in. The email body shows the sender, the room, a 140-char snippet, and a CTA link back to the message. If email-ingress is configured on the deployment, the email also carries a `Reply-To: reply-<token>@<ingress-domain>` header; the inbound resolver that consumes those replies is stage 2 (shipped; see "Reply-by-email" below).
 
 ### Opt-in
 
@@ -267,7 +269,7 @@ The hash is computed as `HMAC-SHA256(LETS_CHAT_SECRET_KEY, message_id_plaintext)
 - **The ingress address is a bearer secret.** Anyone who learns it can post to the room. Treat it like a webhook URL: don't paste it into shared docs without thinking, don't log it in your monitoring tool's outbound history.
 - **To rotate**: create a new inbox in the per-room admin page, then revoke the old one. Mail to the old address starts dropping with `reason=revoked_inbox` on the next poll tick.
 - **The IMAP password is stored AES-256-GCM-sealed in `settings.db`.** Same pattern as the VAPID keypair. A `settings.db` leak does not yield a usable IMAP password without `LETS_CHAT_SECRET_KEY` from the operator's environment.
-- **SMTP password (used for outbound digest / verification mail) is currently stored plaintext.** This is a known inconsistency; tracked as `LC-77-SMTP-SEAL`. It does not affect email ingress (which only reads the sealed IMAP password), but is worth knowing if `settings.db` ever leaks.
+- **SMTP credentials (outbound digest / verification / notification mail) are configured via environment variables (`LETS_CHAT_SMTP_*`), not stored at rest.** LC-77-SMTP-SEAL (shipped) removed the legacy plaintext SMTP columns from `settings.db` (migration `settings/0006_drop_smtp_settings.sql`), so there is no SMTP secret in the database to leak. Email ingress reads the AES-256-GCM-sealed IMAP password separately, under `LETS_CHAT_SECRET_KEY`.
 
 ## Related modules
 
