@@ -403,6 +403,14 @@ mod tests {
     // construction in desktop/src/ MUST go through net_guard, except the two
     // allow-listed files. net_guard.rs owns the guarded agents; welcome.rs is
     // the deliberately-unguarded LAN server probe (see its inline rationale).
+    //
+    // LC-210-GREPBAN-FULLPATH (#285): allow-list entries are full paths
+    // RELATIVE TO src/ (forward-slash separated), NOT basenames - mirroring the
+    // LC-152/204/206 bans, which chose full paths specifically so a future
+    // same-basename file in a subdirectory cannot inherit the exemption (a
+    // `src/foo/welcome.rs` is `foo/welcome.rs`, not `welcome.rs`). The walker
+    // is recursive for the same reason: a raw ureq added in a future subdir
+    // file must be SCANNED, not silently skipped as the old flat read_dir did.
     const BAN_ALLOWED: &[&str] = &["net_guard.rs", "welcome.rs"];
     const BANNED: &[&str] = &[
         "ureq::get(",
@@ -414,21 +422,42 @@ mod tests {
         "ureq::AgentBuilder",
     ];
 
+    fn src_root() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
+    }
+
+    /// Every `.rs` file under src/, recursively.
     fn src_files() -> Vec<std::path::PathBuf> {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        std::fs::read_dir(dir)
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&src_root(), &mut out);
+        out
+    }
+
+    /// Path relative to src/, forward-slash separated, so allow-list matching
+    /// is stable across platforms and across subdirectories.
+    fn rel_to_src(path: &std::path::Path) -> String {
+        path.strip_prefix(src_root())
             .unwrap()
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("rs"))
-            .collect()
+            .to_string_lossy()
+            .replace('\\', "/")
     }
 
     #[test]
     fn no_raw_ureq_construction_outside_net_guard() {
         let mut violations = Vec::new();
         for path in src_files() {
-            let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if BAN_ALLOWED.contains(&name.as_str()) {
+            let rel = rel_to_src(&path);
+            if BAN_ALLOWED.contains(&rel.as_str()) {
                 continue;
             }
             let body = std::fs::read_to_string(&path).unwrap();
@@ -438,7 +467,7 @@ mod tests {
                 }
                 for pat in BANNED {
                     if line.contains(pat) {
-                        violations.push(format!("{name}:{}: {}", n + 1, line.trim()));
+                        violations.push(format!("{rel}:{}: {}", n + 1, line.trim()));
                     }
                 }
             }
@@ -456,10 +485,10 @@ mod tests {
         // Each allow-listed file must actually contain a banned token, so a
         // refactor that moves the raw ureq elsewhere fails HERE rather than
         // silently leaving the guard's coverage expanded over the LAN probe.
+        // `allowed` is a src-relative path, so `src_root().join(allowed)`
+        // resolves a future subdir entry too.
         for allowed in BAN_ALLOWED {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src")
-                .join(allowed);
+            let path = src_root().join(allowed);
             let body = std::fs::read_to_string(&path)
                 .unwrap_or_else(|_| panic!("allow-listed {allowed} not found; update the ban"));
             assert!(
