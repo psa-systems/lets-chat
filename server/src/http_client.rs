@@ -1,7 +1,8 @@
 //! LC-152: shared outbound HTTP with built-in SSRF guard.
 //!
-//! **Every outbound HTTP call in this server MUST go through `outbound_get()`,
-//! `outbound_post()`, or `outbound_get_following_redirects()`** below. The
+//! **Every outbound HTTP call in this server MUST go through `outbound_get()`
+//! or `outbound_post()`** below (redirect-following is the caller's job, per
+//! the "No auto-redirect client" note below). The
 //! underlying `reqwest::Client`s are private to this module — there is NO
 //! public way to obtain a `reqwest::Client` from outside `http_client.rs`,
 //! which makes the no-bypass rule structural (no `.get()` / `.post()`
@@ -58,23 +59,38 @@
 //! manipulation on a pooled HTTPS connection is bounded by the original
 //! SNI'd hostname.
 //!
-//! ## Redirect cap (independent of per-hop filter)
+//! ## No auto-redirect client (LC-152-TOCTOU, #286)
 //!
-//! `outbound_get_following_redirects` uses `Policy::limited(3)` to match
-//! the unfurl path's pre-existing cap. Each redirect connection runs the
-//! resolver inline (the filter catches a single hop to internal); the cap
-//! independently bounds chain length so a redirect loop can't be used to
-//! amplify outbound traffic.
+//! There is deliberately NO reqwest-auto-redirect client here. reqwest's
+//! redirect follower resolves each new hop with its OWN connector, and the
+//! connector's literal-IP fast path skips `dns::Resolve` (see layer 1) — so a
+//! response that 302s to a literal private IP (`http://169.254.169.254/...`)
+//! would be followed WITHOUT either layer firing, an SSRF bypass. The only
+//! code that follows redirects (link unfurl) does it MANUALLY, re-running
+//! `outbound_get` (and thus full URL-input validation) on every hop, exactly
+//! like the desktop `net_guard` manual loop (LC-210). Any future redirect-
+//! following caller MUST use that per-hop-validated pattern, never reqwest's
+//! `Policy::limited`.
+//!
+//! ## On "pinning to the validated IP" (#286)
+//!
+//! For a hostname, `PublicOnlyResolver` IS the authoritative resolution
+//! reqwest connects on, and it validates public-only on exactly the addresses
+//! it returns (`lc152_resolver_property_pair::reqwest_connects_to_resolver_supplied_ip`
+//! proves reqwest uses the resolver's IPs, not a silent re-resolve). So the
+//! connected IP is always a validated-public IP, and a DNS rebind to a private
+//! address between submit-time validation and connect-time resolution is
+//! REFUSED at connect — the rebind window is already collapsed, not left open.
+//! A single connect-layer IP-pin (Option A below) would additionally guarantee
+//! "connected IP == the exact IP validated" even against a hypothetical
+//! `is_globally_routable` bug; that is defense-in-depth only and still awaits a
+//! clean reqwest connector hook.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
-
-/// Maximum redirect hops for paths that legitimately follow redirects
-/// (currently only the unfurl preview).
-const MAX_REDIRECTS: usize = 3;
 
 /// Default client timeout. Per-request override via `.timeout()` on the
 /// `RequestBuilder` is honored.
@@ -116,31 +132,44 @@ pub enum OutboundError {
 /// the whole answer leaves no gap.
 struct PublicOnlyResolver;
 
+/// Resolve `host` and return its addresses ONLY if every one is publicly
+/// routable; otherwise `Err`. This is the connect-time guard: the addresses it
+/// returns are exactly the addresses reqwest connects on, so the connected IP
+/// is provably one this function validated (no second, unguarded resolution).
+/// All-or-nothing: any non-public address rejects the WHOLE answer (a
+/// dual-record `[public, private]` reply is the classic DNS-rebinding setup).
+/// Factored out of the `Resolve` impl so it is unit-testable without
+/// constructing a `reqwest::dns::Name`.
+async fn resolve_public_only(host: &str) -> Result<Vec<SocketAddr>, String> {
+    // Per `Resolve::resolve` contract: port 0 here is replaced by reqwest at
+    // connect time with the URL's actual port.
+    let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host, 0))
+        .await
+        .map_err(|e| e.to_string())?
+        .collect();
+    if resolved.is_empty() {
+        return Err("no addresses returned for host".into());
+    }
+    for sa in &resolved {
+        if !crate::ssrf::is_globally_routable(sa.ip()) {
+            // Name "non-public" without naming the specific address so the
+            // failure does not enumerate internal topology in logs.
+            return Err(format!(
+                "host {host} resolves to a non-public address; refusing"
+            ));
+        }
+    }
+    Ok(resolved)
+}
+
 impl Resolve for PublicOnlyResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let host = name.as_str().to_string();
         Box::pin(async move {
-            // Per `Resolve::resolve` contract: port 0 here is replaced by
-            // reqwest at connect time with the URL's actual port.
-            let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-                .collect();
-            if resolved.is_empty() {
-                return Err("no addresses returned for host".into());
+            match resolve_public_only(&host).await {
+                Ok(addrs) => Ok(Box::new(addrs.into_iter()) as Addrs),
+                Err(msg) => Err(msg.into()),
             }
-            for sa in &resolved {
-                if !crate::ssrf::is_globally_routable(sa.ip()) {
-                    // Strict: any private address rejects the WHOLE answer.
-                    // Error message names "non-public" without naming the
-                    // specific address so the failure doesn't enumerate
-                    // internal topology in logs.
-                    return Err(
-                        format!("host {host} resolves to a non-public address; refusing").into(),
-                    );
-                }
-            }
-            Ok(Box::new(resolved.into_iter()) as Addrs)
         })
     }
 }
@@ -150,31 +179,22 @@ fn resolver() -> Arc<PublicOnlyResolver> {
     R.get_or_init(|| Arc::new(PublicOnlyResolver)).clone()
 }
 
-fn build_client(redirects: reqwest::redirect::Policy) -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent("lets-chat/1")
-        .timeout(DEFAULT_TIMEOUT)
-        .redirect(redirects)
-        .dns_resolver(resolver())
-        .build()
-        .expect("outbound client build (panic indicates a bug in the helper itself, not a runtime failure)")
-}
-
-/// Private. The pool-shared no-redirects client. Callers reach it only
-/// through `outbound_get` / `outbound_post`, both of which do the URL-
-/// input validation before handing back a `RequestBuilder`.
+/// Private. The pool-shared client. Redirects are disabled (`Policy::none`):
+/// see the module doc - redirect-following must be per-hop validated by the
+/// caller, never delegated to reqwest. Callers reach it only through
+/// `outbound_get` / `outbound_post`, both of which do the URL-input validation
+/// before handing back a `RequestBuilder`.
 fn client_no_redirects() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| build_client(reqwest::redirect::Policy::none()))
-}
-
-/// Private. The pool-shared redirect-following client used only by
-/// `outbound_get_following_redirects`. Each redirect hop's connection
-/// re-invokes the resolver, so the per-hop filter and the cap both bound
-/// the chain.
-fn client_following_redirects() -> &'static reqwest::Client {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| build_client(reqwest::redirect::Policy::limited(MAX_REDIRECTS)))
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .user_agent("lets-chat/1")
+            .timeout(DEFAULT_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            .dns_resolver(resolver())
+            .build()
+            .expect("outbound client build (panic indicates a bug in the helper itself, not a runtime failure)")
+    })
 }
 
 /// Validate a URL string before letting reqwest see it. Parses, gates
@@ -213,18 +233,6 @@ pub async fn outbound_post(url: &str) -> Result<reqwest::RequestBuilder, Outboun
     Ok(client_no_redirects().post(parsed))
 }
 
-/// GET via the redirect-following client (cap `MAX_REDIRECTS`). Used ONLY
-/// by link-unfurl, which legitimately chases short redirect chains for
-/// canonical-URL discovery. Every redirect hop is independently filtered
-/// by the resolver inline (the helper's two-layer guarantee applies per
-/// connection, including each redirect's new connection).
-pub async fn outbound_get_following_redirects(
-    url: &str,
-) -> Result<reqwest::RequestBuilder, OutboundError> {
-    let parsed = validate_url(url).await?;
-    Ok(client_following_redirects().get(parsed))
-}
-
 /// LC-152 test seam. Returns a fresh `reqwest::Client` with the DEFAULT
 /// reqwest resolver (no public-IP filter) AND no URL-input validation,
 /// so tests can target loopback receivers. Mirrors the LC-75
@@ -240,4 +248,50 @@ pub fn outbound_unchecked() -> reqwest::Client {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("test client build")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-152-TOCTOU (#286): the connect-time resolver is the authoritative
+    // guard - it returns ONLY validated-public addresses, so the address
+    // reqwest connects on is provably one this layer accepted. These exercise
+    // `resolve_public_only` directly (the core the `Resolve` impl delegates to)
+    // to prove the second layer refuses private resolutions on its own, not
+    // just `validate_url`. Cases are deterministic: literal IPs never hit DNS,
+    // and `localhost` is a hosts-file loopback.
+
+    #[tokio::test]
+    async fn resolver_refuses_loopback_literal() {
+        assert!(resolve_public_only("127.0.0.1").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn resolver_refuses_rfc1918_and_metadata_literals() {
+        assert!(resolve_public_only("10.0.0.1").await.is_err());
+        assert!(resolve_public_only("169.254.169.254").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn resolver_refuses_localhost_hostname() {
+        // A hostname that resolves to loopback must be refused at the
+        // connect-time layer (this is the DNS-rebind-to-private case: the
+        // resolution reqwest would connect on is rejected).
+        assert!(resolve_public_only("localhost").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn resolver_accepts_public_literal() {
+        // Control: a public literal passes and is returned for connection, so
+        // the filter is not refusing everything. 93.184.216.34 (example.com)
+        // is a stable documentation-adjacent public address; as a literal it
+        // does not depend on DNS.
+        let addrs = resolve_public_only("93.184.216.34")
+            .await
+            .expect("public literal must pass the filter");
+        assert!(addrs
+            .iter()
+            .all(|sa| crate::ssrf::is_globally_routable(sa.ip())));
+    }
 }

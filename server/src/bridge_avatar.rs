@@ -12,11 +12,12 @@
 //! `failure_reason` for the admin to read, and the render falls back to
 //! initials via the `<img onerror>` path.
 //!
-//! Production callers must pre-validate the URL via
-//! `crate::ssrf::host_resolves_public` to keep DNS-rebinding small (the
-//! re-resolve here happens at fetch time, but there is a TOCTOU window
-//! between this call and `reqwest`'s own DNS resolution shared with the
-//! LC-152 outgoing-webhook delivery path).
+//! Production callers fetch via `http_client::outbound_get`, whose connect-time
+//! public-only resolver is the authoritative resolution reqwest connects on, so
+//! a DNS rebind to a private address is refused AT CONNECT rather than left as
+//! an open window (LC-152-TOCTOU, #286). The submit-time
+//! `crate::ssrf::host_resolves_public` pre-check is a fast-fail + literal-IP
+//! gate layered on top of that.
 
 use crate::db::bridge_avatar_proxies;
 use sqlx::SqlitePool;
