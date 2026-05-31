@@ -391,6 +391,32 @@ pub async fn get_description_edit(
     })
 }
 
+/// LC-153-WIKI-DESC-CAP (#283): room description and wiki bodies render
+/// through the same markdown + LaTeX pipeline as chat messages, but had no
+/// length bound - the only limit was Axum's ~2 MiB `DefaultBodyLimit`, so a
+/// privileged-but-untrusted room moderator could feed a multi-MiB body to the
+/// renderer on every save (and to every viewer on every page load). Cap them
+/// the way chat messages are capped (LC-153, `room::check_message_length`),
+/// with a doc-appropriate bound: generous for a wiki page, ~32x below the
+/// framework body limit, and small enough to keep render + storage + broadcast
+/// cheap. `markdown::render` is synchronous and called inline everywhere (the
+/// chat post path included; only `warm_syntect` is offloaded), so bounding the
+/// INPUT - not offloading the render - is the actual mitigation.
+const MAX_DOC_CHARS: usize = 64_000;
+
+/// Reject an over-length description/wiki body before any DB write or render.
+/// `body` is the already-trimmed text; counts characters (not bytes) so
+/// multibyte (CJK / emoji) docs are not unfairly penalized, matching
+/// `room::check_message_length`.
+fn check_doc_length(body: &str) -> Result<(), AppError> {
+    if body.chars().count() > MAX_DOC_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "document too long (max {MAX_DOC_CHARS} characters)"
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct DescriptionForm {
     pub body: String,
@@ -405,6 +431,7 @@ pub async fn patch_description(
 ) -> Result<impl IntoResponse, AppError> {
     require_can_edit_description(&state, &user, room_id).await?;
     let trimmed = form.body.trim();
+    check_doc_length(trimmed)?;
     let body_opt = if trimmed.is_empty() {
         None
     } else {
@@ -464,6 +491,7 @@ pub async fn patch_wiki(
 ) -> Result<impl IntoResponse, AppError> {
     require_can_edit_wiki(&state, &user, room_id).await?;
     let trimmed = form.body.trim();
+    check_doc_length(trimmed)?;
     let body_opt = if trimmed.is_empty() {
         None
     } else {
