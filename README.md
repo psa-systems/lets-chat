@@ -115,6 +115,7 @@ Run `just --list` to see all available recipes.
 | `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE` | (unset = off) | Exempts only the initial `LETS_CHAT_UPDATE_URL` from the SSRF filter (private internal mirror or loopback test fixture). Redirect targets are still validated. |
 | `LETS_CHAT_SMTP_HOST` / `LETS_CHAT_SMTP_PORT` / `LETS_CHAT_SMTP_TLS` / `LETS_CHAT_SMTP_FROM` / `LETS_CHAT_SMTP_USERNAME` / `LETS_CHAT_SMTP_PASSWORD` | (none) | SMTP relay configuration. All five non-credential vars must be set together to enable outbound mail. Username+password are an optional pair. |
 | `LETS_CHAT_RETENTION_SWEEP_ENABLED` | (unset = disabled) | Set to `1` or `true` to enable the destructive hard-delete sweep that enforces per-room message `retention_days`. Read once at startup; flipping it requires a restart. |
+| `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED` | (unset = enabled) | LC-78-AVATAR-PROXY. When enabled (the default), a bridge daemon may submit a `foreign_avatar` URL: the server fetches it once, magic-byte-sniffs and re-encodes it through the uploads pipeline, and serves it same-origin. Set to `false`/`0`/`no`/`off` to restore v1's posture (reject any non-null `foreign_avatar` with HTTP 400). Read per request. |
 
 ### `LETS_CHAT_SECRET_KEY`
 
