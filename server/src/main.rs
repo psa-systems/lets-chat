@@ -417,6 +417,15 @@ fn spawn_orphan_sweeper(state: AppState) {
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "email-ingress dedup sweep failed"),
             }
+            // LC-207-OBSERVABILITY: drop the admin-visible email-ingress drop
+            // log at the same 30-day horizon as the dedup table.
+            match lets_chat::db::email_ingress_drops::sweep_old(&state.chat, 30).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(rows = n, "email-ingress drop-log sweep complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "email-ingress drop-log sweep failed"),
+            }
             // LC-78-AVATAR-PROXY: drop unreferenced bridge-avatar cache
             // entries older than 30 days, and recover any pending-fetch
             // rows orphaned by a process restart (older than 10 minutes).
@@ -501,22 +510,44 @@ fn spawn_message_retention_sweeper(state: AppState) {
         loop {
             tick.tick().await;
             match lets_chat::retention::sweep::sweep_once(&state.chat).await {
-                Ok(stats) if stats.messages_deleted > 0 => {
-                    tracing::info!(
-                        rooms = stats.rooms_touched,
-                        messages = stats.messages_deleted,
-                        "retention sweep complete",
-                    );
-                    for (message_id, room_id) in &stats.purged {
-                        let event = lets_chat::ws::events::ChatEvent::MessagePurged {
-                            message_id: *message_id,
-                            room_id: *room_id,
-                        };
-                        state.hub.broadcast_to_room(*room_id, &event);
+                Ok(stats) => {
+                    if stats.messages_deleted > 0 {
+                        tracing::info!(
+                            rooms = stats.rooms_touched,
+                            messages = stats.messages_deleted,
+                            "retention sweep complete",
+                        );
+                        for (message_id, room_id) in &stats.purged {
+                            let event = lets_chat::ws::events::ChatEvent::MessagePurged {
+                                message_id: *message_id,
+                                room_id: *room_id,
+                            };
+                            state.hub.broadcast_to_room(*room_id, &event);
+                        }
+                    }
+                    // LC-207-OBSERVABILITY (#278): record every completed tick
+                    // (including zero-delete) so an operator who enabled the
+                    // destructive sweep can confirm from the admin page that it
+                    // ran and how much it deleted, without container logs.
+                    if let Err(e) = lets_chat::db::retention_status::record_run(
+                        &state.chat,
+                        stats.rooms_touched as i64,
+                        stats.messages_deleted as i64,
+                    )
+                    .await
+                    {
+                        tracing::warn!(error = %e, "retention sweep status write failed");
                     }
                 }
-                Ok(_) => {}
-                Err(e) => tracing::warn!(error = %e, "retention sweep failed"),
+                Err(e) => {
+                    tracing::warn!(error = %e, "retention sweep failed");
+                    if let Err(e2) =
+                        lets_chat::db::retention_status::record_error(&state.chat, &e.to_string())
+                            .await
+                    {
+                        tracing::warn!(error = %e2, "retention sweep status write failed");
+                    }
+                }
             }
         }
     });
