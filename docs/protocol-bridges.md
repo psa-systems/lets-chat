@@ -86,7 +86,7 @@ Validation:
 
 - `body`: trimmed, non-empty, bounded by the LC-153 message length cap.
 - `foreign_name`: trimmed, non-empty, max 256 bytes.
-- `foreign_avatar`: must be absent or null in v1. Any non-null value is rejected with HTTP 400 and an `LC-78-AVATAR-PROXY` token in the error body.
+- `foreign_avatar`: accepted by default (v2). A non-null URL is fetched once, proxied, and served same-origin (see the avatar-proxy notes above). It is rejected with HTTP 400 and an `LC-78-AVATAR-PROXY` token in the error body ONLY when the operator has set `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` (or `0`/`no`/`off`) to restore v1's reject-non-null posture. A URL over the length cap is rejected with HTTP 400 regardless of the proxy setting.
 
 Effects:
 
