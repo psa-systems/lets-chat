@@ -144,22 +144,57 @@ pub fn spawn_email_poll(state: AppState) {
         tick.tick().await;
         loop {
             tick.tick().await;
-            match poll_once(&state, secret_key.as_ref(), &config).await {
-                Ok(report) if report.fetched > 0 || !report.dropped.is_empty() => {
-                    tracing::info!(
-                        fetched = report.fetched,
-                        posted = report.posted,
-                        dropped = ?report.dropped,
-                        "email ingress tick complete",
-                    );
+            let result = poll_once(&state, secret_key.as_ref(), &config).await;
+            // LC-207-OBSERVABILITY (#278): persist per-tick health to
+            // settings.db so the admin page can show "last poll / last success
+            // / consecutive failures / last error" without container logs. A
+            // status-write failure is itself just logged; it never blocks the
+            // loop.
+            match &result {
+                Ok(report) => {
+                    if report.fetched > 0 || !report.dropped.is_empty() {
+                        tracing::info!(
+                            fetched = report.fetched,
+                            posted = report.posted,
+                            dropped = ?report.dropped,
+                            "email ingress tick complete",
+                        );
+                    }
+                    let dropped: usize = report.dropped.values().sum();
+                    if let Err(e) = db::imap_poll_status::record_success(
+                        &state.settings,
+                        report.fetched as i64,
+                        report.posted as i64,
+                        dropped as i64,
+                    )
+                    .await
+                    {
+                        tracing::warn!(error = %e, "imap poll status write failed");
+                    }
                 }
-                Ok(_) => {}
                 Err(e) => {
                     tracing::warn!(error = %e, "email ingress tick failed");
+                    if let Err(e2) =
+                        db::imap_poll_status::record_failure(&state.settings, &e.to_string()).await
+                    {
+                        tracing::warn!(error = %e2, "imap poll status write failed");
+                    }
                 }
             }
         }
     });
+}
+
+/// LC-207-OBSERVABILITY (#278): best-effort persist of a single drop to the
+/// admin-visible drop log. A write failure is logged and swallowed - dropping
+/// a message must never be blocked by the observability write.
+async fn record_drop(state: &AppState, uid: u32, reason: DropReason, detail: &str) {
+    if let Err(e) =
+        db::email_ingress_drops::record(&state.chat, reason.as_str(), Some(uid as i64), detail)
+            .await
+    {
+        tracing::warn!(error = %e, "email ingress drop-log write failed");
+    }
 }
 
 /// Drive one full IMAP poll tick: TCP+TLS connect → LOGIN → SELECT →
@@ -213,6 +248,13 @@ pub async fn poll_once(
                     "FETCH failed; marking Seen and continuing",
                 );
                 report.count_drop(DropReason::InternalError);
+                record_drop(
+                    state,
+                    *uid,
+                    DropReason::InternalError,
+                    &format!("FETCH failed: {e}"),
+                )
+                .await;
                 // LC-77-DEAD-LETTER: we tried to FETCH and failed; COPY
                 // is unlikely to succeed either but we attempt for
                 // visibility. The helper logs INFO on failure and
@@ -233,6 +275,16 @@ pub async fn poll_once(
                 "email ingress dropped message",
             );
             report.count_drop(DropReason::InternalError);
+            record_drop(
+                state,
+                *uid,
+                DropReason::InternalError,
+                &format!(
+                    "raw message {} bytes over {MAX_RAW_MESSAGE_BYTES} cap",
+                    raw.len()
+                ),
+            )
+            .await;
             dead_letter_uid(&mut session, *uid, dead_letter_folder, "oversize").await;
             let _ = mark_seen(&mut session, *uid).await;
             continue;
@@ -256,6 +308,7 @@ pub async fn poll_once(
                     "email ingress dropped message",
                 );
                 report.count_drop(reason);
+                record_drop(state, *uid, reason, &detail).await;
                 // LC-77-DEAD-LETTER: COPY the dropped UID into the
                 // configured folder so the operator can inspect what
                 // was rejected without grepping logs. No-op when the

@@ -325,6 +325,31 @@ admin-settings-defaults-digest = Los nuevos usuarios empiezan con el resumen por
 admin-settings-defaults-digest-note = Desactivado por defecto por privacidad. Solo afecta a futuros registros; los usuarios existentes no cambian. El resumen por correo tambien requiere SMTP configurado mediante variables de entorno.
 admin-settings-defaults-save = Guardar valor predeterminado
 
+# LC-207-OBSERVABILITY (#278): salud del sondeo de ingreso de correo + registro de descartes.
+admin-settings-ingress-health-heading = Salud del ingreso de correo
+admin-settings-ingress-last-poll = Ultimo sondeo
+admin-settings-ingress-last-ok = Ultimo sondeo correcto
+admin-settings-ingress-consecutive-failures = Fallos consecutivos
+admin-settings-ingress-last-tick = Ultimo ciclo (obtenidos / publicados / descartados)
+admin-settings-ingress-last-error = Ultimo error:
+admin-settings-ingress-not-run = El bucle de sondeo IMAP aun no se ha ejecutado (deshabilitado, o sin ciclos desde el arranque).
+admin-settings-ingress-drops-24h = Descartes por motivo (ultimas 24h)
+admin-settings-ingress-drop-time = Hora
+admin-settings-ingress-drop-reason = Motivo
+admin-settings-ingress-drop-uid = UID
+admin-settings-ingress-drop-detail = Detalle
+
+# LC-207-OBSERVABILITY (#278): estado del barrido de retencion.
+admin-settings-retention-heading = Barrido de retencion de mensajes
+admin-settings-retention-enabled = Habilitado mediante LETS_CHAT_RETENTION_SWEEP_ENABLED.
+admin-settings-retention-disabled = Deshabilitado. Define LETS_CHAT_RETENTION_SWEEP_ENABLED=1 y reinicia para habilitar el barrido de borrado definitivo por sala.
+admin-settings-retention-not-run = Habilitado, pero el barrido aun no se ha ejecutado (se ejecuta cada hora; el primer ciclo es una hora despues del arranque).
+admin-settings-retention-last-run = Ultima ejecucion
+admin-settings-retention-last-deleted = Borrados en la ultima ejecucion (salas)
+admin-settings-retention-total-deleted = Borrados en total (historico)
+admin-settings-retention-runs = Ejecuciones completadas
+admin-settings-retention-last-error = Ultimo error:
+
 ## Slash commands
 admin-slash-title = Comandos de barra
 admin-slash-heading = Comandos de barra
