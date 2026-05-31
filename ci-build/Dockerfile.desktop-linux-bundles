@@ -19,9 +19,16 @@ FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS builder
 ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
+# LC-210-BINARY-INTEGRITY (#277): hex Ed25519 public key embedded into the
+# desktop binary (option_env! in update_verify.rs). Empty by default, which
+# leaves the self-updater fail-closed; the release pipeline passes the real
+# key (a non-secret repo/org variable) so verification is enforced. See
+# docs/desktop-update-signing.md.
+ARG LETS_CHAT_UPDATE_PUBLIC_KEY=
 ENV GIT_HASH=${GIT_HASH} \
     GIT_VERSION=${GIT_VERSION} \
-    BUILD_DATE=${BUILD_DATE}
+    BUILD_DATE=${BUILD_DATE} \
+    LETS_CHAT_UPDATE_PUBLIC_KEY=${LETS_CHAT_UPDATE_PUBLIC_KEY}
 
 # Cap concurrent rustc / build-script processes; see Dockerfile.desktop-linux
 # for the same trick. Overridable via `--build-arg CARGO_BUILD_JOBS=N`.
