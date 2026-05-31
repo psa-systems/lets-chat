@@ -2,6 +2,7 @@ mod config;
 mod inject;
 mod net_guard;
 mod update;
+mod update_verify;
 mod welcome;
 
 use tauri::{
