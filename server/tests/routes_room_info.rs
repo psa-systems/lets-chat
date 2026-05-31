@@ -227,3 +227,79 @@ async fn empty_wiki_body_clears_metadata() {
             .unwrap();
     assert!(body.is_none() && at.is_none() && by.is_none());
 }
+
+// LC-153-WIKI-DESC-CAP (#283): description + wiki bodies are capped like chat
+// messages so a moderator cannot feed a multi-MiB body to the markdown
+// renderer. MAX_DOC_CHARS is 64_000; the boundary is inclusive.
+#[tokio::test]
+async fn over_long_wiki_rejected() {
+    let t = app().await;
+    let body = format!("body={}", "a".repeat(64_001));
+    let (status, _) = req(
+        &t.app,
+        &t.admin_session,
+        Method::PATCH,
+        "/room/1/wiki",
+        &body,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "64001-char wiki must be rejected"
+    );
+    // Nothing was written.
+    let stored: Option<String> = sqlx::query_scalar("SELECT wiki_body FROM rooms WHERE id=1")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert!(stored.is_none(), "rejected wiki must not be stored");
+}
+
+#[tokio::test]
+async fn over_long_description_rejected() {
+    let t = app().await;
+    let body = format!("body={}", "a".repeat(64_001));
+    let (status, _) = req(
+        &t.app,
+        &t.admin_session,
+        Method::PATCH,
+        "/room/1/description",
+        &body,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "64001-char description must be rejected"
+    );
+    let stored: Option<String> = sqlx::query_scalar("SELECT description FROM rooms WHERE id=1")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert!(stored.is_none(), "rejected description must not be stored");
+}
+
+#[tokio::test]
+async fn wiki_at_cap_accepted() {
+    let t = app().await;
+    let body = format!("body={}", "a".repeat(64_000));
+    let (status, _) = req(
+        &t.app,
+        &t.admin_session,
+        Method::PATCH,
+        "/room/1/wiki",
+        &body,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "64000-char wiki is exactly at the cap"
+    );
+    let stored: Option<String> = sqlx::query_scalar("SELECT wiki_body FROM rooms WHERE id=1")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(stored.as_deref().map(str::len), Some(64_000));
+}

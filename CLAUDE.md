@@ -160,6 +160,10 @@ Two layered knobs gate `POST /room/{id}/messages`:
 
 Both checks share the 60 s window. The per-enclave cap never relaxes the site cap; it can only tighten it for posts inside that enclave. DMs (rooms with no enclave) skip the per-enclave check.
 
+## Markdown surfaces share a length cap (LC-153)
+
+Every surface that stores user text and later renders it through `views::markdown::render` MUST length-cap the input on the write path. `markdown::render` is synchronous and called inline on the request thread everywhere (the chat post path included; only the one-time `warm_syntect` warm-up is `spawn_blocking`-offloaded), so an uncapped body is rendered on a tokio worker on every save and on every viewer's page load. Bounding the INPUT is the mitigation, not offloading the render. Chat messages cap at `MAX_MESSAGE_CHARS = 16_000` (`routes::room::check_message_length`, LC-153); room description + wiki cap at `MAX_DOC_CHARS = 64_000` (`routes::room_info::check_doc_length`, LC-153-WIKI-DESC-CAP). When adding a new markdown-backed field (room topic blurbs, profile bios, pinned-note bodies, ...), add a cap on its write handler in the same shape, or the only bound is Axum's ~2 MiB `DefaultBodyLimit`.
+
 ## Operator-visible changes and releases (LC-209)
 
 Operator-facing change records live in `CHANGELOG.md` (curated at release time) and `docs/releasing.md` (the full convention + release process). The decision was a hybrid, not per-PR CHANGELOG edits: there is no CI gate and high commit velocity, so the changelog is filled mechanically at `just create-release` time by grepping markers, and records tagged releases only (so it cannot go stale - the between-release delta lives in immutable git markers).
