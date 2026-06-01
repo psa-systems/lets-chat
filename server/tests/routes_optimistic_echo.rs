@@ -90,6 +90,18 @@ async fn setup() -> TestApp {
 
 /// POST /room/{id}/messages with a raw url-encoded form body.
 async fn post_form(app: &Router, session: &str, room_id: i64, form: &str) -> StatusCode {
+    let (status, _) = post_form_with_headers(app, session, room_id, form).await;
+    status
+}
+
+/// Same as `post_form`, but also returns whether the LC-230 `X-LC-Echo-Drop`
+/// response header was set (the no-broadcast-coming signal).
+async fn post_form_with_headers(
+    app: &Router,
+    session: &str,
+    room_id: i64,
+    form: &str,
+) -> (StatusCode, bool) {
     let req = Request::builder()
         .method(Method::POST)
         .uri(format!("/room/{room_id}/messages"))
@@ -99,8 +111,9 @@ async fn post_form(app: &Router, session: &str, room_id: i64, form: &str) -> Sta
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status();
+    let echo_drop = res.headers().contains_key("x-lc-echo-drop");
     let _ = to_bytes(res.into_body(), 1 << 20).await.unwrap();
-    status
+    (status, echo_drop)
 }
 
 /// Receive the next NewMessage event (skipping unrelated events like typing).
@@ -195,6 +208,71 @@ async fn invalid_client_id_is_dropped_not_rejected() {
     let (body, client_id) = next_new_message(&mut rx).await;
     assert_eq!(body, "blank");
     assert_eq!(client_id, None, "empty client_id must be treated as absent");
+}
+
+#[tokio::test]
+async fn quarantined_post_signals_echo_drop_and_broadcasts_nothing() {
+    let t = setup().await;
+    let (_conn, mut rx, _) = t.state.hub.connect(&t.alice_id, "alice");
+
+    // A link-filter rule with action=quarantine (normal admin-configured
+    // deployment state). A matching post returns 204 but never broadcasts,
+    // so the composer's optimistic placeholder would otherwise sit as
+    // "Sending..." forever - the X-LC-Echo-Drop header tells it to remove
+    // the placeholder.
+    db::anti_spam::insert_rule(
+        &t.state.chat,
+        "*.spammy.example",
+        db::anti_spam::FilterAction::Quarantine,
+        "admin",
+    )
+    .await
+    .unwrap();
+
+    let (status, echo_drop) = post_form_with_headers(
+        &t.app,
+        &t.alice_session,
+        t.room_id,
+        "body=see%20https%3A%2F%2Ffoo.spammy.example%2Fx&client_id=quarantine-cid-1",
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NO_CONTENT,
+        "quarantine still returns 204"
+    );
+    assert!(
+        echo_drop,
+        "quarantine response must carry X-LC-Echo-Drop so the placeholder is removed"
+    );
+
+    // No NewMessage broadcast for the quarantined post.
+    let got_event = tokio::time::timeout(Duration::from_millis(300), async {
+        loop {
+            match rx.recv().await {
+                Ok(ChatEvent::NewMessage { .. }) => break true,
+                Ok(_) => continue,
+                Err(_) => break false,
+            }
+        }
+    })
+    .await
+    .unwrap_or(false);
+    assert!(!got_event, "quarantined post must not broadcast NewMessage");
+
+    // A normal (non-quarantined) post does NOT carry the header.
+    let (status, echo_drop) = post_form_with_headers(
+        &t.app,
+        &t.alice_session,
+        t.room_id,
+        "body=clean&client_id=clean-cid-1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(
+        !echo_drop,
+        "a broadcasting post must not carry X-LC-Echo-Drop"
+    );
 }
 
 fn user_view(body: &str) -> MessageView {

@@ -87,14 +87,14 @@
   // attribute itself never reaches the DOM (beforeend swaps discard the
   // wrapper), which is why this must read the *incoming* fragment here.
   document.body.addEventListener('htmx:oobBeforeSwap', function (evt) {
+    // For a beforeend OOB swap, htmx 2.0.4 passes the cloned wrapper element
+    // itself as detail.fragment (isInlineSwap is true only for outerHTML
+    // swaps), so a single attribute read resolves the id. Non-echo OOB swaps
+    // (typing, badges, reactions, edits) pay one null attribute read here
+    // and return.
     var frag = evt.detail && evt.detail.fragment;
-    if (!frag) return;
-    var cid = null;
-    if (frag.getAttribute) cid = frag.getAttribute('data-lc-client-id');
-    if (!cid && frag.querySelector) {
-      var tagged = frag.querySelector('[data-lc-client-id]');
-      if (tagged) cid = tagged.getAttribute('data-lc-client-id');
-    }
+    if (!frag || !frag.getAttribute) return;
+    var cid = frag.getAttribute('data-lc-client-id');
     if (!cid) return;
     // The cid is server-sanitized to [A-Za-z0-9-], so it is selector-safe.
     var pending = document.querySelector('#messages [data-client-id="' + cid + '"]');
