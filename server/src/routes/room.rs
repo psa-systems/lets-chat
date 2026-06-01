@@ -588,7 +588,7 @@ pub async fn post_message(
     // None and falls through to posting the literal text.
     if body.starts_with('/') {
         if let Some(resp) = super::slash::try_dispatch(&state, &room, &user, body).await? {
-            return Ok(resp.into_response());
+            return Ok(resp);
         }
     }
 
