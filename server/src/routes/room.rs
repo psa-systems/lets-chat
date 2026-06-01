@@ -652,13 +652,26 @@ pub async fn post_message(
                     Some(host),
                 )
                 .await?;
-                // LC-228: link-filter Block drops the message silently.
-                // Form is `hx-swap="none"` so any returned body is
-                // discarded; return NO_CONTENT to skip the ~5 KB
-                // ComposerFragment render. (Pre-LC-228 returned a
-                // rendered fragment for nothing; same byte-on-wire +
-                // CPU cost as the success path.)
-                return Ok(StatusCode::NO_CONTENT.into_response());
+                // LC-228: quarantine holds the message silently. Form is
+                // `hx-swap="none"` so any returned body is discarded;
+                // return NO_CONTENT to skip the ~5 KB ComposerFragment
+                // render. (Pre-LC-228 returned a rendered fragment for
+                // nothing; same byte-on-wire + CPU cost as the success
+                // path.)
+                //
+                // LC-230: this is the one 2xx path that never broadcasts a
+                // NewMessage, so the author's optimistic placeholder would
+                // sit as "Sending..." forever. The X-LC-Echo-Drop header
+                // tells the composer to remove the placeholder. Removal
+                // (not a "held for review" label) keeps quarantine's
+                // existing posture: the filter's existence is not revealed
+                // to the poster.
+                let mut response = StatusCode::NO_CONTENT.into_response();
+                response.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static("x-lc-echo-drop"),
+                    axum::http::HeaderValue::from_static("1"),
+                );
+                return Ok(response);
             }
             db::anti_spam::FilterAction::Warn => {
                 db::moderation::log_mod_action(

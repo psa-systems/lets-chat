@@ -32,6 +32,11 @@
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
     var qbar = document.getElementById('composer-quote-bar');
+    /* LC-230: this request's own params (client_id, body), so rapid-fire
+       concurrent sends each resolve their own placeholder / clear check. */
+    var reqParams = event.detail.requestConfig && event.detail.requestConfig.parameters
+      ? event.detail.requestConfig.parameters : null;
+    var echoCid = reqParams ? reqParams.client_id : null;
     /* LC-216: debounce the failure banner. Rapid successive submits can
        cause an in-flight htmx request to be cancelled by the next submit
        (or to land slowly), firing afterRequest with successful=false even
@@ -41,12 +46,26 @@
        timer to fire and the banner reveals on schedule. */
     if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
     if (event.detail.successful) {
-      ta.value = '';
-      ta.style.height = 'auto';
-      /* LC-229: a sub-frame 204 response (LC-228) can land before the last
-         keystroke's resize rAF fires; cancel it so the stale frame does not
-         re-measure the just-cleared textarea and undercut the 'auto' height. */
-      if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
+      /* LC-230: a 2xx that will never broadcast (link-filter quarantine -
+         silent by design) says so via this header; remove the placeholder
+         so it cannot sit as 'Sending...' forever. */
+      if (echoCid && window.__lcEchoDrop && event.detail.xhr
+          && event.detail.xhr.getResponseHeader('x-lc-echo-drop')) {
+        window.__lcEchoDrop(echoCid);
+      }
+      /* LC-230: clear the textarea only if it still holds exactly what this
+         request sent. A fast typist - or the failed-row Retry, which stashes
+         and restores the in-progress draft - may have new text in the box by
+         the time the response lands; wiping it would lose that text. */
+      var sentBody = reqParams ? reqParams.body : null;
+      if (sentBody == null || ta.value === sentBody) {
+        ta.value = '';
+        ta.style.height = 'auto';
+        /* LC-229: a sub-frame 204 response (LC-228) can land before the last
+           keystroke's resize rAF fires; cancel it so the stale frame does not
+           re-measure the just-cleared textarea and undercut the 'auto' height. */
+        if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
+      }
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
@@ -60,12 +79,15 @@
       ta.focus();
     } else {
       /* LC-230: flip this request's optimistic placeholder (if any) to the
-         failed state with retry / discard controls. The client_id is read
-         from the request's own config so rapid-fire concurrent sends each
-         flip their own placeholder. */
-      var failedCid = event.detail.requestConfig && event.detail.requestConfig.parameters
-        ? event.detail.requestConfig.parameters.client_id : null;
-      if (failedCid && window.__lcEchoFailed) window.__lcEchoFailed(failedCid);
+         failed state - on the same 2s debounce as the LC-216 banner. A slow
+         or flaky request can complete with successful=false yet still have
+         posted; the canonical WS render removes the pending row inside the
+         debounce window and the late flip becomes a no-op (__lcEchoFailed
+         only flips rows still in the pending state). No timer handle needed:
+         the no-op IS the cancellation. */
+      if (echoCid && window.__lcEchoFailed) {
+        setTimeout(function(){ window.__lcEchoFailed(echoCid); }, 2000);
+      }
       window.__lcComposerErrTimer = setTimeout(function(){
         err.classList.remove('hidden');
         window.__lcComposerErrTimer = null;
@@ -78,6 +100,14 @@
      under compact density. The lc-pb-safe BOTTOM floor stays as-is so the
      iOS home-indicator inset is never eroded. #}
   data-lc-density-tight="composer"
+  {# LC-230: optimistic-echo UI strings ride as data attributes (HTML-attribute
+     context, where Askama escaping round-trips correctly through getAttribute)
+     instead of being interpolated into JS string literals, where a locale
+     containing an apostrophe would display the &#x27; entity literally. #}
+  data-lc-echo-sending="{{ "room-composer-echo-sending"|t }}"
+  data-lc-echo-failed="{{ "room-composer-send-failed"|t }}"
+  data-lc-echo-retry="{{ "room-composer-retry"|t }}"
+  data-lc-echo-discard="{{ "room-composer-echo-discard"|t }}"
   class="border-t border-border px-2 pt-2 lc-pb-safe"
 >
   <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-content-muted"></div>
@@ -872,19 +902,31 @@
 // placeholder removal and the canonical insert land in the same swap cycle -
 // no double render, no gap). On request failure, hx-on::after-request calls
 // __lcEchoFailed(cid) to flip the placeholder to a failed row with retry /
-// discard controls.
+// discard controls; on a quarantine 2xx it calls __lcEchoDrop(cid) instead.
 //
-// The placeholder is intentionally minimal: plain text body (no markdown
-// render, no attachments preview), the viewer's own display name, and a
-// dimmed "sending" style. Fidelity arrives with the canonical render.
+// The placeholder mirrors the canonical row chrome (avatar + name layout from
+// room/message.html) so the swap to the canonical render does not reflow, but
+// the body stays plain text (no markdown render, no attachments preview).
+// Fidelity arrives with the canonical render.
 (function(){
+  var form = document.getElementById('composer');
+  // UI strings come in as data attributes on the form (see the form tag) so
+  // Askama's HTML escaping round-trips correctly through getAttribute.
+  var STR = {
+    sending: (form && form.getAttribute('data-lc-echo-sending')) || 'Sending...',
+    failed: (form && form.getAttribute('data-lc-echo-failed')) || 'Could not send.',
+    retry: (form && form.getAttribute('data-lc-echo-retry')) || 'Retry',
+    discard: (form && form.getAttribute('data-lc-echo-discard')) || 'Discard'
+  };
   function messagesEl(){ return document.getElementById('messages'); }
-  function selfName(){
-    // The sidebar self block's avatar (layout.html) carries the viewer's
-    // display label as alt text; reuse it rather than threading a new
-    // template variable into ComposerFragment.
-    var img = document.querySelector('[data-lc-local-avatar]');
-    return (img && img.getAttribute('alt')) || '';
+  function selfAvatar(){
+    // The always-present WebRTC call dialog (layout.html, #lc-call-root)
+    // carries the viewer's own avatar src + display label as alt text; reuse
+    // it rather than threading new template variables into ComposerFragment.
+    return document.querySelector('[data-lc-local-avatar]');
+  }
+  function findPending(cid){
+    return document.querySelector('#messages [data-client-id="' + cid + '"][data-lc-pending]');
   }
 
   window.__lcOptimisticEcho = function(cid, body){
@@ -894,20 +936,31 @@
     row.id = 'msg-pending-' + cid;
     row.setAttribute('data-client-id', cid);
     row.setAttribute('data-lc-pending', 'true');
+    // Mirror the canonical row chrome (room/message.html non-follow-up:
+    // h-6 w-6 avatar + items-center gap-2 + font-medium name) so the swap to
+    // the canonical render does not shift the row horizontally.
     row.className = 'lc-anim-swap relative px-4 py-2';
     row.style.opacity = '0.6';
 
     var header = document.createElement('div');
-    header.className = 'flex items-baseline gap-2';
+    header.className = 'flex items-center gap-2';
+    var src = selfAvatar();
+    if (src) {
+      var img = document.createElement('img');
+      img.src = src.getAttribute('src');
+      img.alt = '';
+      img.className = 'h-6 w-6 rounded-full object-cover';
+      header.appendChild(img);
+    }
     var name = document.createElement('span');
-    name.className = 'font-semibold';
-    name.textContent = selfName();
+    name.className = 'font-medium';
+    name.textContent = (src && src.getAttribute('alt')) || '';
     header.appendChild(name);
     var state = document.createElement('span');
     state.className = 'text-xs text-content-muted';
     state.style.fontStyle = 'italic';
     state.setAttribute('data-lc-echo-state', '');
-    state.textContent = '{{ "room-composer-echo-sending"|t }}';
+    state.textContent = STR.sending;
     header.appendChild(state);
     row.appendChild(header);
 
@@ -918,59 +971,75 @@
     row.appendChild(bodyEl);
 
     list.appendChild(row);
-    // The user just sent this; always reveal it (auto_scroll.html only
-    // follows htmx swaps, not direct appendChild).
+    // The user just sent this; always reveal it. Deliberate divergence from
+    // auto_scroll.html's followIfPinned (which only follows when the viewer
+    // was already at the bottom): sending your own message jumps to it, the
+    // convention in other chat clients. After the jump wasAtBottom is true,
+    // so the canonical render's follow-up scroll stays consistent.
     list.scrollTop = list.scrollHeight;
   };
 
+  // LC-230: a 2xx response that will never broadcast (link-filter quarantine,
+  // signaled by the X-LC-Echo-Drop header) removes the placeholder outright.
+  // Silent removal is deliberate: quarantine does not reveal the filter to
+  // the poster, and pre-LC-230 the message simply never appeared.
+  window.__lcEchoDrop = function(cid){
+    var row = findPending(cid);
+    if (row) row.remove();
+  };
+
   window.__lcEchoFailed = function(cid){
-    var list = messagesEl();
-    if (!list) return;
-    var row = list.querySelector('[data-client-id="' + cid + '"][data-lc-pending]');
+    // Only rows still in the pending state flip; a row already removed by
+    // the WS dedupe (the false-failure case) or already flipped is a no-op.
+    var row = findPending(cid);
     if (!row) return;
     row.removeAttribute('data-lc-pending');
     row.setAttribute('data-lc-failed', 'true');
     row.style.opacity = '1';
 
     var state = row.querySelector('[data-lc-echo-state]');
-    if (state) {
-      state.textContent = '';
-      state.style.fontStyle = 'normal';
+    if (!state) return;
+    state.textContent = '';
+    state.style.fontStyle = 'normal';
 
-      var failed = document.createElement('span');
-      failed.className = 'text-danger';
-      failed.textContent = '{{ "room-composer-send-failed"|t }}';
-      state.appendChild(failed);
+    var failed = document.createElement('span');
+    failed.className = 'text-danger';
+    failed.textContent = STR.failed;
+    state.appendChild(failed);
 
-      var retry = document.createElement('button');
-      retry.type = 'button';
-      retry.className = 'underline hover:no-underline ml-2';
-      retry.textContent = '{{ "room-composer-retry"|t }}';
-      retry.addEventListener('click', function(){
-        // Re-submit through the composer form so the retry gets a fresh
-        // client_id, a fresh placeholder, and the normal failure handling.
-        // If the user already cleared the textarea, restore this row's body
-        // first so the retry sends what the row shows.
-        var formEl = document.getElementById('composer');
-        var taEl = formEl && formEl.querySelector('textarea[name=body]');
-        if (!formEl || !taEl) return;
-        if (!taEl.value.trim()) {
-          var bodyEl = row.querySelector('.whitespace-pre-wrap');
-          taEl.value = bodyEl ? bodyEl.textContent : '';
-          taEl.dispatchEvent(new Event('input'));
-        }
-        row.remove();
-        formEl.requestSubmit();
-      });
-      state.appendChild(retry);
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'underline hover:no-underline ml-2';
+    retry.textContent = STR.retry;
+    retry.addEventListener('click', function(){
+      // Always resend THIS row's body, never whatever happens to be in the
+      // textarea (the user may have started typing a new message). Stash the
+      // in-progress draft, submit the failed body through the normal form
+      // path (fresh client_id, fresh placeholder, normal failure handling),
+      // then restore the draft. requestSubmit() serializes the form
+      // synchronously, so the restore cannot race the submit; and the
+      // after-request success handler's conditional clear leaves the
+      // restored draft alone because it no longer matches the sent body.
+      var formEl = document.getElementById('composer');
+      var taEl = formEl && formEl.querySelector('textarea[name=body]');
+      var bodyEl = row.querySelector('.whitespace-pre-wrap');
+      var failedBody = bodyEl ? bodyEl.textContent : '';
+      if (!formEl || !taEl || !failedBody) { row.remove(); return; }
+      var draft = taEl.value;
+      taEl.value = failedBody;
+      row.remove();
+      formEl.requestSubmit();
+      taEl.value = draft;
+      taEl.dispatchEvent(new Event('input'));
+    });
+    state.appendChild(retry);
 
-      var discard = document.createElement('button');
-      discard.type = 'button';
-      discard.className = 'underline hover:no-underline ml-2 text-content-muted';
-      discard.textContent = '{{ "room-composer-echo-discard"|t }}';
-      discard.addEventListener('click', function(){ row.remove(); });
-      state.appendChild(discard);
-    }
+    var discard = document.createElement('button');
+    discard.type = 'button';
+    discard.className = 'underline hover:no-underline ml-2 text-content-muted';
+    discard.textContent = STR.discard;
+    discard.addEventListener('click', function(){ row.remove(); });
+    state.appendChild(discard);
   };
 })();
 </script>
