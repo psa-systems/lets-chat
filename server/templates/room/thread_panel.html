@@ -27,7 +27,6 @@
     hx-swap="none"
     hx-on::after-request="
       var ta = this.querySelector('textarea[name=body]');
-      var send = this.querySelector('.thread-send');
       var err = this.querySelector('.thread-error');
       /* LC-216: debounce. Distinct timer key from the main composer so the
          two banners do not fight when both are active (the thread panel can
@@ -37,7 +36,10 @@
       if (event.detail.successful) {
         ta.value = '';
         ta.style.height = 'auto';
-        send.disabled = true;
+        /* LC-229: cancel a pending resize rAF so it cannot re-measure the
+           just-cleared textarea (mirrors the main composer). */
+        if (window.__lcThreadResizeRaf) { cancelAnimationFrame(window.__lcThreadResizeRaf); window.__lcThreadResizeRaf = 0; }
+        if (window.__lcThreadRefreshSend) window.__lcThreadRefreshSend();
         err.classList.add('hidden');
         window.__lcLastThreadTyping = 0;
       } else {
@@ -63,9 +65,17 @@
         placeholder="{{ "room-thread-reply-placeholder"|t }}"
         class="flex-1 resize-none overflow-y-auto rounded border px-3 py-1.5 text-sm max-h-32"
         oninput="
-          this.style.height = 'auto';
-          this.style.height = Math.min(this.scrollHeight, 128) + 'px';
-          this.form.querySelector('.thread-send').disabled = !this.value.trim();
+          /* LC-229: rAF-coalesced auto-resize + cached send button, mirroring
+             the main composer. Separate rAF handle so the thread panel and
+             the main composer never cancel each other's pending resize. */
+          var ta = this;
+          if (window.__lcThreadResizeRaf) cancelAnimationFrame(window.__lcThreadResizeRaf);
+          window.__lcThreadResizeRaf = requestAnimationFrame(function () {
+            window.__lcThreadResizeRaf = 0;
+            ta.style.height = 'auto';
+            ta.style.height = Math.min(ta.scrollHeight, 128) + 'px';
+          });
+          if (window.__lcThreadRefreshSend) window.__lcThreadRefreshSend();
           var ws = window.__lcWS;
           if (!ws) return;
           var now = Date.now();
@@ -92,4 +102,20 @@
       </button>
     </div>
   </form>
+  <script>
+  // LC-229: cache the thread textarea + send button once so the per-keystroke
+  // disabled toggle hits closed-over references instead of a DOM query
+  // (mirrors window.__lcRefreshSend in the main composer). The thread panel is
+  // swapped via outerHTML, so each render re-runs this and rebinds the helper
+  // to the fresh nodes.
+  (function(){
+    var form = document.getElementById('thread-composer-{{ parent.id }}');
+    var ta = form && form.querySelector('textarea[name=body]');
+    var sendBtn = form && form.querySelector('.thread-send');
+    if (!ta || !sendBtn) return;
+    window.__lcThreadRefreshSend = function () {
+      sendBtn.disabled = !ta.value.trim();
+    };
+  })();
+  </script>
 </aside>
