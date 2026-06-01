@@ -223,7 +223,7 @@ async fn at_here_resolves_to_online_room_members_excluding_dnd_and_author() {
         .unwrap();
 
     let status = post_message(&t.app, &t.viewer_session, 1, "ping @here").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let mid = last_message_id(&t.chat, 1).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
@@ -236,7 +236,7 @@ async fn at_channel_resolves_to_all_room_members_excluding_author() {
     let t = setup_app_with_users("viewer", &["alice", "bob", "carol"]).await;
 
     let status = post_message(&t.app, &t.viewer_session, 1, "notice @channel").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let mid = last_message_id(&t.chat, 1).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
@@ -268,7 +268,7 @@ async fn at_channel_in_dm_writes_no_mention_rows() {
         "anyone there @channel",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let mid = last_message_id(&t.chat, dm_room.id).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
@@ -283,7 +283,7 @@ async fn at_here_with_no_connected_users_is_noop() {
     // No hub.connect calls -> nobody is online. @here resolves to zero rows.
     let t = setup_app_with_users("viewer", &["alice", "bob"]).await;
     let status = post_message(&t.app, &t.viewer_session, 1, "echo @here").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let mid = last_message_id(&t.chat, 1).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
     assert!(
@@ -302,7 +302,7 @@ async fn at_here_dedup_with_explicit_username() {
     let _alice_conn = t.hub.connect(alice, "alice");
 
     let status = post_message(&t.app, &t.viewer_session, 1, "ping @here @alice").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let mid = last_message_id(&t.chat, 1).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
     assert_eq!(
@@ -323,7 +323,7 @@ async fn edit_reconciliation_channel_to_here() {
     let _alice_conn = t.hub.connect(alice, "alice");
 
     let status = post_message(&t.app, &t.viewer_session, 1, "all hands @channel").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let mid = last_message_id(&t.chat, 1).await;
     let before = mention_user_ids(&t.chat, mid).await;
     assert_eq!(
@@ -377,7 +377,7 @@ async fn mute_all_recipient_gets_no_push_send() {
         .unwrap();
 
     let status = post_message(&t.app, &t.viewer_session, 1, "broadcast @channel").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let mid = last_message_id(&t.chat, 1).await;
     let mentioned = mention_user_ids(&t.chat, mid).await;
@@ -530,7 +530,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
     let app = routes::build_router(state);
 
     let status = post_message(&app, &t.viewer_session, 1, "all hands @channel").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     // dispatch is fire-and-forget (see push::dispatch doc comment), so the
     // HTTP response returns before the spawned send tasks have settled.

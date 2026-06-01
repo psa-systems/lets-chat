@@ -111,7 +111,7 @@ async fn zero_override_falls_through_to_global() {
     // Global is 0 (unset) -> no limit applies. 10 fast posts all succeed.
     for i in 0..10 {
         let s = post_msg(&t.app, &t.session, room_id, &format!("hi-{i}")).await;
-        assert_eq!(s, StatusCode::OK, "post {i} expected 200, got {s}");
+        assert_eq!(s, StatusCode::NO_CONTENT, "post {i} expected 204, got {s}");
     }
 }
 
@@ -125,7 +125,7 @@ async fn nonzero_override_blocks_at_threshold() {
     // First 3 succeed.
     for i in 0..3 {
         let s = post_msg(&t.app, &t.session, room_id, &format!("ok-{i}")).await;
-        assert_eq!(s, StatusCode::OK, "post {i} expected 200, got {s}");
+        assert_eq!(s, StatusCode::NO_CONTENT, "post {i} expected 204, got {s}");
     }
     // Fourth hits the 429 from the per-enclave cap.
     let s = post_msg(&t.app, &t.session, room_id, "blocked").await;
@@ -146,13 +146,13 @@ async fn limits_are_per_enclave() {
     // Burn enclave A to its cap.
     assert_eq!(
         post_msg(&t.app, &t.session, room_a, "a1").await,
-        StatusCode::OK,
-        "A1 expected 200"
+        StatusCode::NO_CONTENT,
+        "A1 expected 204"
     );
     assert_eq!(
         post_msg(&t.app, &t.session, room_a, "a2").await,
-        StatusCode::OK,
-        "A2 expected 200"
+        StatusCode::NO_CONTENT,
+        "A2 expected 204"
     );
     assert_eq!(
         post_msg(&t.app, &t.session, room_a, "a3").await,
@@ -162,7 +162,11 @@ async fn limits_are_per_enclave() {
     // Enclave B has its own counter; 5 more should succeed.
     for i in 0..5 {
         let s = post_msg(&t.app, &t.session, room_b, &format!("b-{i}")).await;
-        assert_eq!(s, StatusCode::OK, "B post {i} expected 200, got {s}");
+        assert_eq!(
+            s,
+            StatusCode::NO_CONTENT,
+            "B post {i} expected 204, got {s}"
+        );
     }
     // 6th in B hits its cap.
     let s = post_msg(&t.app, &t.session, room_b, "b-6").await;
