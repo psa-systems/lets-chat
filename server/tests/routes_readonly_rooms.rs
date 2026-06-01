@@ -184,7 +184,7 @@ async fn member_post_blocked_in_moderators_only_room() {
         "body=announcement&file_id=",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]
@@ -218,7 +218,7 @@ async fn moderator_override_unlocks_moderators_only_room() {
         "body=hello&file_id=",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]

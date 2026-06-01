@@ -454,8 +454,8 @@ async fn send_message_with_attachment_renders_inline_image() {
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(
         resp.status(),
-        StatusCode::OK,
-        "send message returned non-200"
+        StatusCode::NO_CONTENT,
+        "send message returned non-204 (LC-228)"
     );
 
     // Re-render the room and assert the image partial is in the HTML.
