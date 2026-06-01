@@ -32,13 +32,17 @@
       if (window.__lcClearAttach) window.__lcClearAttach();
       if (bcast) bcast.innerHTML = '';
       if (qbar) qbar.innerHTML = '';
+      /* LC-229: re-focus only on success (rapid-fire send case). On the
+         failure-debounced path the user may have collapsed the mobile
+         keyboard; a focus call here would snap it back open 2s after the
+         submit. Tapping the textarea is the way back to typing. */
+      ta.focus();
     } else {
       window.__lcComposerErrTimer = setTimeout(function(){
         err.classList.remove('hidden');
         window.__lcComposerErrTimer = null;
       }, 2000);
     }
-    ta.focus();
   "
   {# LC-199: lc-pb-safe pushes the form's bottom padding down by the iOS
      home-indicator inset on mobile (no-op on desktop / non-cutout devices). #}
@@ -106,9 +110,19 @@
       hx-swap="none"
       hx-trigger="keyup[event.key !== 'Enter' || event.shiftKey] changed delay:1000ms"
       oninput="
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 160) + 'px';
-        document.getElementById('composer-send').disabled = !this.value.trim() && !this.form.file_id.value;
+        /* LC-229: batch the auto-resize into one rAF so the write -> read
+           (scrollHeight) -> write sequence happens inside a single paint
+           frame instead of forcing a synchronous reflow per keystroke.
+           cancel-and-reschedule collapses rapid input events into one
+           frame's resize. The send-disabled toggle lives in the setup IIFE
+           below (cached node, no per-keystroke DOM query). */
+        var ta = this;
+        if (window.__lcResizeRaf) cancelAnimationFrame(window.__lcResizeRaf);
+        window.__lcResizeRaf = requestAnimationFrame(function () {
+          window.__lcResizeRaf = 0;
+          ta.style.height = 'auto';
+          ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+        });
         var ws = window.__lcWS;
         if (!ws) return;
         var now = Date.now();
@@ -169,6 +183,10 @@
   var ta = document.querySelector('#composer textarea[name=body]');
   var slot = document.getElementById('lc-mention-popover');
   var bcastSlot = document.getElementById('lc-broadcast-count');
+  // LC-229: capture the send button once. Pre-LC-229 the inline oninput did a
+  // document.getElementById('composer-send') on every keystroke; the result is
+  // the same node every time, so close over it here instead.
+  var sendBtn = document.getElementById('composer-send');
   if (!ta || !slot) return;
   var roomId = {{ room.id }};
   var TOKEN = /(^|\s)@([A-Za-z0-9_-]{0,32})$/;
@@ -266,6 +284,12 @@
     close();
     ta.dispatchEvent(new Event('input'));
   }
+  // LC-229: send-disabled toggle, moved out of the inline oninput so it hits
+  // the closed-over sendBtn reference instead of a per-keystroke DOM query.
+  function refreshSendDisabled() {
+    if (sendBtn) sendBtn.disabled = !ta.value.trim() && !ta.form.file_id.value;
+  }
+  ta.addEventListener('input', refreshSendDisabled);
   ta.addEventListener('input', refresh);
   ta.addEventListener('input', refreshBroadcastCount);
   ta.addEventListener('blur', function(){ setTimeout(close, 100); });
@@ -317,6 +341,9 @@
     // LC-216: cancel a pending failure-banner reveal so it cannot fire on a
     // detached .composer-error after the form is swapped out.
     if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
+    // LC-229: cancel a pending auto-resize rAF so it cannot run against a
+    // detached textarea after the form is swapped out.
+    if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
