@@ -1,4 +1,5 @@
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -9,9 +10,9 @@ use crate::error::AppError;
 use crate::models::{Message, User};
 use crate::state::AppState;
 use crate::views::room::{
-    ComposerFragment, ComposerQuoteChip, EditFormFragment, HistoryEntryView,
-    HistoryPanelClosedFragment, HistoryPanelFragment, MessageView, ReactionView, RoomPage,
-    SingleMessageFragment, ThreadPanelClosedFragment, ThreadPanelFragment,
+    ComposerQuoteChip, EditFormFragment, HistoryEntryView, HistoryPanelClosedFragment,
+    HistoryPanelFragment, MessageView, ReactionView, RoomPage, SingleMessageFragment,
+    ThreadPanelClosedFragment, ThreadPanelFragment,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -430,7 +431,7 @@ pub async fn post_message(
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
     axum::Form(form): axum::Form<MessageForm>,
-) -> Result<Html, AppError> {
+) -> Result<Response, AppError> {
     let body = form.body.trim();
     // An attachment alone (no body) is a valid send (image-only messages);
     // both empty body AND no attachment is rejected.
@@ -642,10 +643,13 @@ pub async fn post_message(
                     Some(host),
                 )
                 .await?;
-                return html(&ComposerFragment {
-                    room: &room,
-                    initial_draft: "",
-                });
+                // LC-228: link-filter Block drops the message silently.
+                // Form is `hx-swap="none"` so any returned body is
+                // discarded; return NO_CONTENT to skip the ~5 KB
+                // ComposerFragment render. (Pre-LC-228 returned a
+                // rendered fragment for nothing; same byte-on-wire +
+                // CPU cost as the success path.)
+                return Ok(StatusCode::NO_CONTENT.into_response());
             }
             db::anti_spam::FilterAction::Warn => {
                 db::moderation::log_mod_action(
@@ -664,11 +668,14 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body).await?;
 
-    let fragment = ComposerFragment {
-        room: &room,
-        initial_draft: "",
-    };
-    html(&fragment)
+    // LC-228: form is `hx-swap="none"` (composer.html:11), so any returned
+    // body is discarded by htmx. Skip the ~5 KB ComposerFragment render +
+    // serialization and return 204. The user-visible effects already
+    // happened: finalize_message_send fanned the rendered message out to
+    // every connection via the WS hub, and hx-on::after-request clears the
+    // textarea + disables the send button based on `event.detail.successful`
+    // (true for any 2xx including 204).
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Post-insert side effects shared by the live POST handler and the

@@ -378,7 +378,8 @@ async fn slash_command_posts_poll() {
         "body=%2Fpoll%20%22Fav%3F%22%20%22A%22%20%22B%22&file_id=&quote_id=",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    // LC-228: slash dispatch returns 204 (form `hx-swap="none"`).
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let mid = latest_message_id(&t.chat, room).await;
     let poll = db::polls::get(&t.chat, mid).await.unwrap();
     assert!(poll.is_some(), "slash command created a poll");

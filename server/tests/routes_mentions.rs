@@ -388,7 +388,7 @@ async fn send_message_with_mention_inserts_row() {
     // Seeded general room is id 1; both users were added by
     // backfill_general_membership.
     let status = post_message(&t.app, &t.session, 1, "@alice hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let n = count_mentions_for_user(&t.chat, &t.peer_id).await;
     assert_eq!(n, 1, "expected one mention row for alice");
 }
@@ -397,7 +397,7 @@ async fn send_message_with_mention_inserts_row() {
 async fn edit_removing_mention_deletes_row() {
     let t = app_with_two_users("viewer", "alice").await;
     let status = post_message(&t.app, &t.session, 1, "@alice hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(count_mentions_for_user(&t.chat, &t.peer_id).await, 1);
 
     let msg_id = last_message_id(&t.chat, 1).await;
@@ -432,7 +432,7 @@ async fn cross_room_mention_dropped() {
         .unwrap();
 
     let status = post_message(&t.app, &t.session, private_room_id, "@alice hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(
         count_mentions_for_user(&t.chat, &t.peer_id).await,
         0,
@@ -444,7 +444,7 @@ async fn cross_room_mention_dropped() {
 async fn self_mention_dropped() {
     let t = app_with_two_users("viewer", "alice").await;
     let status = post_message(&t.app, &t.session, 1, "@viewer hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(
         count_mentions_for_user(&t.chat, &t.viewer_id).await,
         0,

@@ -154,7 +154,7 @@ async fn message_rate_limit_returns_429_after_cap() {
             &format!("body=msg{i}"),
         )
         .await;
-        assert_eq!(status, StatusCode::OK, "msg {i} failed: {body}");
+        assert_eq!(status, StatusCode::NO_CONTENT, "msg {i} failed: {body}");
     }
     let (status, body) = send(
         &t.app,
@@ -184,7 +184,7 @@ async fn message_rate_limit_disabled_when_cap_is_zero() {
             &format!("body=msg{i}"),
         )
         .await;
-        assert_eq!(status, StatusCode::OK);
+        assert_eq!(status, StatusCode::NO_CONTENT);
     }
 }
 
@@ -218,7 +218,7 @@ async fn message_at_length_cap_is_accepted() {
         &format!("body={at_limit}"),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
 // ── Honeypot + register ───────────────────────────────────────────────────
@@ -372,7 +372,7 @@ async fn link_filter_quarantine_hides_message_until_approved() {
         "body=see https://foo.spammy.net",
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "post returns the empty composer");
+    assert_eq!(status, StatusCode::NO_CONTENT, "post returns 204 (LC-228)");
     // The message exists but is invisible to readers.
     let visible = db::chat::list_messages(&t.chat, 1).await.unwrap();
     assert!(
@@ -418,7 +418,7 @@ async fn link_filter_warn_passes_through_and_audit_logs() {
         "body=check https://watchme.org/x",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     let visible = db::chat::list_messages(&t.chat, 1).await.unwrap();
     assert!(visible.iter().any(|m| m.body.contains("watchme.org")));
     let actions = db::moderation::list_mod_actions(&t.chat).await.unwrap();
@@ -450,7 +450,7 @@ async fn link_filter_disabled_lets_block_rule_pass() {
         "body=https://x.evil.com",
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
 // ── Admin pages (standalone-only) ─────────────────────────────────────────

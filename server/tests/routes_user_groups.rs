@@ -169,7 +169,8 @@ async fn group_mention_expands_to_member_mention_rows() {
         .body(Body::from(body))
         .unwrap();
     let resp = t.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    // LC-228: post_message returns 204.
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let row: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mentions WHERE mentioned_user_id = ?")
         .bind(&t.member_id)
