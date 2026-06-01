@@ -16,6 +16,8 @@ room-composer-schedule-title = Programar para mas tarde
 room-composer-schedule-aria = Programar mensaje para mas tarde
 room-composer-send-message = Enviar mensaje
 room-composer-drop-file = Suelta el archivo para adjuntarlo
+room-composer-echo-sending = Enviando...
+room-composer-echo-discard = Descartar
 
 ## Quote chip
 room-quote-replying-to = Respondiendo a

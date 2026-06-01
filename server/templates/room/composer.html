@@ -9,6 +9,24 @@
   data-room-id="{{ room.id }}"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
+  hx-on::config-request="
+    /* LC-230: optimistic local echo. Tag this send with a client-generated id
+       and render a pending placeholder into #messages immediately, so the
+       message appears before the network round-trip. The id rides the form
+       params; the server echoes it on the author's WS broadcast
+       (data-lc-client-id) and live.js removes the placeholder when the
+       canonical render arrives. Skipped for: requests bubbling up from child
+       elements (the textarea's draft-autosave PUT), slash commands (no
+       message will post), and attachment-only sends (no body to echo). */
+    if (event.detail.elt !== this) return;
+    var echoBody = this.body.value.trim();
+    if (!echoBody || echoBody.charAt(0) === '/') return;
+    var cid = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'cid-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    event.detail.parameters.client_id = cid;
+    if (window.__lcOptimisticEcho) window.__lcOptimisticEcho(cid, echoBody);
+  "
   hx-on::after-request="
     var ta = this.querySelector('textarea[name=body]');
     var err = this.querySelector('.composer-error');
@@ -41,6 +59,13 @@
          submit. Tapping the textarea is the way back to typing. */
       ta.focus();
     } else {
+      /* LC-230: flip this request's optimistic placeholder (if any) to the
+         failed state with retry / discard controls. The client_id is read
+         from the request's own config so rapid-fire concurrent sends each
+         flip their own placeholder. */
+      var failedCid = event.detail.requestConfig && event.detail.requestConfig.parameters
+        ? event.detail.requestConfig.parameters.client_id : null;
+      if (failedCid && window.__lcEchoFailed) window.__lcEchoFailed(failedCid);
       window.__lcComposerErrTimer = setTimeout(function(){
         err.classList.remove('hidden');
         window.__lcComposerErrTimer = null;
@@ -835,6 +860,117 @@
     // LC-229: shared predicate (pre-LC-229 this site checked only
     // ta.value.trim() and ignored an attached file_id).
     if (window.__lcRefreshSend) window.__lcRefreshSend();
+  };
+})();
+</script>
+<script>
+// LC-230: optimistic local echo. The form's hx-on::config-request calls
+// __lcOptimisticEcho(cid, body) to append a pending placeholder to #messages
+// before the POST round-trip completes. Dedupe: the server echoes the cid on
+// the author's WS broadcast as data-lc-client-id on the OOB wrapper, and
+// live.js removes the matching placeholder in htmx:oobBeforeSwap (so the
+// placeholder removal and the canonical insert land in the same swap cycle -
+// no double render, no gap). On request failure, hx-on::after-request calls
+// __lcEchoFailed(cid) to flip the placeholder to a failed row with retry /
+// discard controls.
+//
+// The placeholder is intentionally minimal: plain text body (no markdown
+// render, no attachments preview), the viewer's own display name, and a
+// dimmed "sending" style. Fidelity arrives with the canonical render.
+(function(){
+  function messagesEl(){ return document.getElementById('messages'); }
+  function selfName(){
+    // The sidebar self block's avatar (layout.html) carries the viewer's
+    // display label as alt text; reuse it rather than threading a new
+    // template variable into ComposerFragment.
+    var img = document.querySelector('[data-lc-local-avatar]');
+    return (img && img.getAttribute('alt')) || '';
+  }
+
+  window.__lcOptimisticEcho = function(cid, body){
+    var list = messagesEl();
+    if (!list) return;
+    var row = document.createElement('div');
+    row.id = 'msg-pending-' + cid;
+    row.setAttribute('data-client-id', cid);
+    row.setAttribute('data-lc-pending', 'true');
+    row.className = 'lc-anim-swap relative px-4 py-2';
+    row.style.opacity = '0.6';
+
+    var header = document.createElement('div');
+    header.className = 'flex items-baseline gap-2';
+    var name = document.createElement('span');
+    name.className = 'font-semibold';
+    name.textContent = selfName();
+    header.appendChild(name);
+    var state = document.createElement('span');
+    state.className = 'text-xs text-content-muted';
+    state.style.fontStyle = 'italic';
+    state.setAttribute('data-lc-echo-state', '');
+    state.textContent = '{{ "room-composer-echo-sending"|t }}';
+    header.appendChild(state);
+    row.appendChild(header);
+
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'whitespace-pre-wrap break-words';
+    // textContent (never innerHTML): the body is untrusted user input.
+    bodyEl.textContent = body;
+    row.appendChild(bodyEl);
+
+    list.appendChild(row);
+    // The user just sent this; always reveal it (auto_scroll.html only
+    // follows htmx swaps, not direct appendChild).
+    list.scrollTop = list.scrollHeight;
+  };
+
+  window.__lcEchoFailed = function(cid){
+    var list = messagesEl();
+    if (!list) return;
+    var row = list.querySelector('[data-client-id="' + cid + '"][data-lc-pending]');
+    if (!row) return;
+    row.removeAttribute('data-lc-pending');
+    row.setAttribute('data-lc-failed', 'true');
+    row.style.opacity = '1';
+
+    var state = row.querySelector('[data-lc-echo-state]');
+    if (state) {
+      state.textContent = '';
+      state.style.fontStyle = 'normal';
+
+      var failed = document.createElement('span');
+      failed.className = 'text-danger';
+      failed.textContent = '{{ "room-composer-send-failed"|t }}';
+      state.appendChild(failed);
+
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'underline hover:no-underline ml-2';
+      retry.textContent = '{{ "room-composer-retry"|t }}';
+      retry.addEventListener('click', function(){
+        // Re-submit through the composer form so the retry gets a fresh
+        // client_id, a fresh placeholder, and the normal failure handling.
+        // If the user already cleared the textarea, restore this row's body
+        // first so the retry sends what the row shows.
+        var formEl = document.getElementById('composer');
+        var taEl = formEl && formEl.querySelector('textarea[name=body]');
+        if (!formEl || !taEl) return;
+        if (!taEl.value.trim()) {
+          var bodyEl = row.querySelector('.whitespace-pre-wrap');
+          taEl.value = bodyEl ? bodyEl.textContent : '';
+          taEl.dispatchEvent(new Event('input'));
+        }
+        row.remove();
+        formEl.requestSubmit();
+      });
+      state.appendChild(retry);
+
+      var discard = document.createElement('button');
+      discard.type = 'button';
+      discard.className = 'underline hover:no-underline ml-2 text-content-muted';
+      discard.textContent = '{{ "room-composer-echo-discard"|t }}';
+      discard.addEventListener('click', function(){ row.remove(); });
+      state.appendChild(discard);
+    }
   };
 })();
 </script>

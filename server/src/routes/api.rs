@@ -258,7 +258,7 @@ async fn post_message(
     let room = require_room_access(&state, &auth, room_id).await?;
     let new_id = db::chat::insert_message(&state.chat, room_id, &auth.user.id, body).await?;
     let message =
-        super::room::finalize_message_send(&state, &room, &auth.user, new_id, body).await?;
+        super::room::finalize_message_send(&state, &room, &auth.user, new_id, body, None).await?;
     Ok(Json(ApiMessage {
         id: message.id,
         room_id: message.room_id,
