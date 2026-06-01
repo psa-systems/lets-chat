@@ -8,6 +8,8 @@
 //! happens to type a slash).
 
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
 
@@ -19,7 +21,6 @@ use crate::error::AppError;
 use crate::i18n::filters;
 use crate::models::{Room, User};
 use crate::state::AppState;
-use crate::views::room::ComposerFragment;
 use crate::views::{html, Html};
 use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
@@ -108,7 +109,7 @@ pub(crate) async fn try_dispatch(
     room: &Room,
     user: &User,
     body: &str,
-) -> Result<Option<Html>, AppError> {
+) -> Result<Option<Response>, AppError> {
     let body = body.trim();
     if !body.starts_with('/') {
         return Ok(None);
@@ -132,7 +133,7 @@ pub(crate) async fn try_dispatch(
             "help" => {
                 let custom = db::slash::list_global(&state.chat).await?;
                 let rows = visible_commands(user, &custom, "");
-                return Ok(Some(html(&SlashHelp { commands: rows })?));
+                return Ok(Some(html(&SlashHelp { commands: rows })?.into_response()));
             }
             "me" => {
                 if rest.is_empty() {
@@ -167,10 +168,10 @@ pub(crate) async fn try_dispatch(
             }
             _ => return Ok(None),
         }
-        return Ok(Some(html(&ComposerFragment {
-            room,
-            initial_draft: "",
-        })?));
+        // LC-228: form is `hx-swap="none"` so the rendered ComposerFragment
+        // was discarded by htmx. Return 204; the side-effects (posted
+        // message, reminder row) already broadcast via the WS hub.
+        return Ok(Some(StatusCode::NO_CONTENT.into_response()));
     }
 
     // Custom (admin-defined) commands.
@@ -187,10 +188,8 @@ pub(crate) async fn try_dispatch(
             return Err(AppError::BadRequest("command produced no output".into()));
         }
         post_message_body(state, room, user, out).await?;
-        return Ok(Some(html(&ComposerFragment {
-            room,
-            initial_draft: "",
-        })?));
+        // LC-228: see note above; same waste pattern for custom commands.
+        return Ok(Some(StatusCode::NO_CONTENT.into_response()));
     }
 
     // Unknown command: fall back to posting the literal text.

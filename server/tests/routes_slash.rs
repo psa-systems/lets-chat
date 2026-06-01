@@ -164,7 +164,9 @@ async fn me_posts_italic_action() {
     let t = app().await;
     let room = make_room(&t).await;
     let (status, _) = post_msg(&t.app, &t.alice_session, room, "/me waves").await;
-    assert_eq!(status, StatusCode::OK);
+    // LC-228: slash dispatch returns 204 for message-posting commands (form
+    // is `hx-swap="none"`, so the rendered ComposerFragment was discarded).
+    assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(latest_body(&t.chat, room).await.unwrap(), "_waves_");
 }
 
@@ -195,7 +197,8 @@ async fn remind_posts_and_sets_reminder() {
     let t = app().await;
     let room = make_room(&t).await;
     let (status, _) = post_msg(&t.app, &t.alice_session, room, "/remind 1h call mom").await;
-    assert_eq!(status, StatusCode::OK);
+    // LC-228: see /me note above.
+    assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(latest_body(&t.chat, room).await.unwrap(), "call mom");
     let pending = db::reminders::list_pending_for_user(&t.chat, &t.alice)
         .await
