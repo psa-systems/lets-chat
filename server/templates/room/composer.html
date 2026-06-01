@@ -11,7 +11,6 @@
   hx-swap="none"
   hx-on::after-request="
     var ta = this.querySelector('textarea[name=body]');
-    var send = this.querySelector('#composer-send');
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
     var qbar = document.getElementById('composer-quote-bar');
@@ -26,19 +25,27 @@
     if (event.detail.successful) {
       ta.value = '';
       ta.style.height = 'auto';
-      send.disabled = true;
+      /* LC-229: a sub-frame 204 response (LC-228) can land before the last
+         keystroke's resize rAF fires; cancel it so the stale frame does not
+         re-measure the just-cleared textarea and undercut the 'auto' height. */
+      if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
       if (bcast) bcast.innerHTML = '';
       if (qbar) qbar.innerHTML = '';
+      /* LC-229: re-focus only on success (rapid-fire send case). On the
+         failure-debounced path the user may have collapsed the mobile
+         keyboard; a focus call here would snap it back open 2s after the
+         submit. Tapping the textarea is the way back to typing. */
+      ta.focus();
     } else {
       window.__lcComposerErrTimer = setTimeout(function(){
         err.classList.remove('hidden');
         window.__lcComposerErrTimer = null;
       }, 2000);
     }
-    ta.focus();
   "
   {# LC-199: lc-pb-safe pushes the form's bottom padding down by the iOS
      home-indicator inset on mobile (no-op on desktop / non-cutout devices). #}
@@ -106,9 +113,20 @@
       hx-swap="none"
       hx-trigger="keyup[event.key !== 'Enter' || event.shiftKey] changed delay:1000ms"
       oninput="
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 160) + 'px';
-        document.getElementById('composer-send').disabled = !this.value.trim() && !this.form.file_id.value;
+        /* LC-229: coalesce the auto-resize to at most one per painted frame.
+           The write -> read (scrollHeight) -> write still forces one layout
+           when it runs (the 'auto' reset is required so the box can shrink),
+           but cancel-and-reschedule collapses bursts of input events (paste,
+           IME, autocomplete inserts) into a single resize. The send-disabled
+           toggle lives in the setup IIFE below (cached node, no per-keystroke
+           DOM query). */
+        var ta = this;
+        if (window.__lcResizeRaf) cancelAnimationFrame(window.__lcResizeRaf);
+        window.__lcResizeRaf = requestAnimationFrame(function () {
+          window.__lcResizeRaf = 0;
+          ta.style.height = 'auto';
+          ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+        });
         var ws = window.__lcWS;
         if (!ws) return;
         var now = Date.now();
@@ -169,6 +187,22 @@
   var ta = document.querySelector('#composer textarea[name=body]');
   var slot = document.getElementById('lc-mention-popover');
   var bcastSlot = document.getElementById('lc-broadcast-count');
+  // LC-229: capture the send button once. Pre-LC-229 the inline oninput did a
+  // document.getElementById('composer-send') on every keystroke; the result is
+  // the same node every time, so close over it here instead.
+  var sendBtn = document.getElementById('composer-send');
+  // LC-229: single shared writer for the send button's disabled state,
+  // exposed on window (same pattern as __lcClearAttach) so the after-request
+  // handler, the upload/voice IIFEs, and __lcInsertSlash all compute the one
+  // canonical predicate: enabled when there is text OR an attachment.
+  // Registered before the mention-popover guard below so the toggle never
+  // depends on the popover slot existing.
+  if (ta && sendBtn) {
+    window.__lcRefreshSend = function () {
+      sendBtn.disabled = !ta.value.trim() && !ta.form.file_id.value;
+    };
+    ta.addEventListener('input', window.__lcRefreshSend);
+  }
   if (!ta || !slot) return;
   var roomId = {{ room.id }};
   var TOKEN = /(^|\s)@([A-Za-z0-9_-]{0,32})$/;
@@ -317,6 +351,9 @@
     // LC-216: cancel a pending failure-banner reveal so it cannot fire on a
     // detached .composer-error after the form is swapped out.
     if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
+    // LC-229: cancel a pending auto-resize rAF so it cannot run against a
+    // detached textarea after the form is swapped out.
+    if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
@@ -371,6 +408,10 @@
     staged.textContent = '';
     errSlot.textContent = '';
     input.value = '';
+    // LC-229: removing the attachment can flip the send button back to
+    // disabled (when the textarea is also empty); go through the shared
+    // predicate instead of leaving the button stale.
+    if (window.__lcRefreshSend) window.__lcRefreshSend();
   }
   window.__lcClearAttach = clear;
 
@@ -414,7 +455,7 @@
           '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
           '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
-      document.getElementById('composer-send').disabled = false;
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
       errSlot.textContent = 'upload failed';
       revokePreview();
@@ -487,7 +528,6 @@
   var staged = document.getElementById('lc-staged');
   var errSlot = document.getElementById('lc-upload-error');
   var hidden = document.querySelector('#composer input[name=file_id]');
-  var sendBtn = document.getElementById('composer-send');
   if (!recordBtn || !staged || !errSlot || !hidden) return;
 
   var mediaRecorder = null;
@@ -670,7 +710,7 @@
           '<span>Voice message attached</span>' +
           '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
-      if (sendBtn) sendBtn.disabled = false;
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
       errSlot.textContent = 'upload failed';
       staged.textContent = '';
@@ -792,8 +832,9 @@
     ta.value = '/' + name + ' ';
     clearPopover();
     ta.focus();
-    var send = document.getElementById('composer-send');
-    if (send) send.disabled = !ta.value.trim();
+    // LC-229: shared predicate (pre-LC-229 this site checked only
+    // ta.value.trim() and ignored an attached file_id).
+    if (window.__lcRefreshSend) window.__lcRefreshSend();
   };
 })();
 </script>
