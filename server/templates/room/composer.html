@@ -9,11 +9,34 @@
   data-room-id="{{ room.id }}"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
+  hx-on::config-request="
+    /* LC-230: optimistic local echo. Tag this send with a client-generated id
+       and render a pending placeholder into #messages immediately, so the
+       message appears before the network round-trip. The id rides the form
+       params; the server echoes it on the author's WS broadcast
+       (data-lc-client-id) and live.js removes the placeholder when the
+       canonical render arrives. Skipped for: requests bubbling up from child
+       elements (the textarea's draft-autosave PUT), slash commands (no
+       message will post), and attachment-only sends (no body to echo). */
+    if (event.detail.elt !== this) return;
+    var echoBody = this.body.value.trim();
+    if (!echoBody || echoBody.charAt(0) === '/') return;
+    var cid = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'cid-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    event.detail.parameters.client_id = cid;
+    if (window.__lcOptimisticEcho) window.__lcOptimisticEcho(cid, echoBody);
+  "
   hx-on::after-request="
     var ta = this.querySelector('textarea[name=body]');
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
     var qbar = document.getElementById('composer-quote-bar');
+    /* LC-230: this request's own params (client_id, body), so rapid-fire
+       concurrent sends each resolve their own placeholder / clear check. */
+    var reqParams = event.detail.requestConfig && event.detail.requestConfig.parameters
+      ? event.detail.requestConfig.parameters : null;
+    var echoCid = reqParams ? reqParams.client_id : null;
     /* LC-216: debounce the failure banner. Rapid successive submits can
        cause an in-flight htmx request to be cancelled by the next submit
        (or to land slowly), firing afterRequest with successful=false even
@@ -23,12 +46,26 @@
        timer to fire and the banner reveals on schedule. */
     if (window.__lcComposerErrTimer) { clearTimeout(window.__lcComposerErrTimer); window.__lcComposerErrTimer = null; }
     if (event.detail.successful) {
-      ta.value = '';
-      ta.style.height = 'auto';
-      /* LC-229: a sub-frame 204 response (LC-228) can land before the last
-         keystroke's resize rAF fires; cancel it so the stale frame does not
-         re-measure the just-cleared textarea and undercut the 'auto' height. */
-      if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
+      /* LC-230: a 2xx that will never broadcast (link-filter quarantine -
+         silent by design) says so via this header; remove the placeholder
+         so it cannot sit as 'Sending...' forever. */
+      if (echoCid && window.__lcEchoDrop && event.detail.xhr
+          && event.detail.xhr.getResponseHeader('x-lc-echo-drop')) {
+        window.__lcEchoDrop(echoCid);
+      }
+      /* LC-230: clear the textarea only if it still holds exactly what this
+         request sent. A fast typist - or the failed-row Retry, which stashes
+         and restores the in-progress draft - may have new text in the box by
+         the time the response lands; wiping it would lose that text. */
+      var sentBody = reqParams ? reqParams.body : null;
+      if (sentBody == null || ta.value === sentBody) {
+        ta.value = '';
+        ta.style.height = 'auto';
+        /* LC-229: a sub-frame 204 response (LC-228) can land before the last
+           keystroke's resize rAF fires; cancel it so the stale frame does not
+           re-measure the just-cleared textarea and undercut the 'auto' height. */
+        if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
+      }
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
@@ -41,6 +78,16 @@
          submit. Tapping the textarea is the way back to typing. */
       ta.focus();
     } else {
+      /* LC-230: flip this request's optimistic placeholder (if any) to the
+         failed state - on the same 2s debounce as the LC-216 banner. A slow
+         or flaky request can complete with successful=false yet still have
+         posted; the canonical WS render removes the pending row inside the
+         debounce window and the late flip becomes a no-op (__lcEchoFailed
+         only flips rows still in the pending state). No timer handle needed:
+         the no-op IS the cancellation. */
+      if (echoCid && window.__lcEchoFailed) {
+        setTimeout(function(){ window.__lcEchoFailed(echoCid); }, 2000);
+      }
       window.__lcComposerErrTimer = setTimeout(function(){
         err.classList.remove('hidden');
         window.__lcComposerErrTimer = null;
@@ -53,6 +100,14 @@
      under compact density. The lc-pb-safe BOTTOM floor stays as-is so the
      iOS home-indicator inset is never eroded. #}
   data-lc-density-tight="composer"
+  {# LC-230: optimistic-echo UI strings ride as data attributes (HTML-attribute
+     context, where Askama escaping round-trips correctly through getAttribute)
+     instead of being interpolated into JS string literals, where a locale
+     containing an apostrophe would display the &#x27; entity literally. #}
+  data-lc-echo-sending="{{ "room-composer-echo-sending"|t }}"
+  data-lc-echo-failed="{{ "room-composer-send-failed"|t }}"
+  data-lc-echo-retry="{{ "room-composer-retry"|t }}"
+  data-lc-echo-discard="{{ "room-composer-echo-discard"|t }}"
   class="border-t border-border px-2 pt-2 lc-pb-safe"
 >
   <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-content-muted"></div>
@@ -835,6 +890,156 @@
     // LC-229: shared predicate (pre-LC-229 this site checked only
     // ta.value.trim() and ignored an attached file_id).
     if (window.__lcRefreshSend) window.__lcRefreshSend();
+  };
+})();
+</script>
+<script>
+// LC-230: optimistic local echo. The form's hx-on::config-request calls
+// __lcOptimisticEcho(cid, body) to append a pending placeholder to #messages
+// before the POST round-trip completes. Dedupe: the server echoes the cid on
+// the author's WS broadcast as data-lc-client-id on the OOB wrapper, and
+// live.js removes the matching placeholder in htmx:oobBeforeSwap (so the
+// placeholder removal and the canonical insert land in the same swap cycle -
+// no double render, no gap). On request failure, hx-on::after-request calls
+// __lcEchoFailed(cid) to flip the placeholder to a failed row with retry /
+// discard controls; on a quarantine 2xx it calls __lcEchoDrop(cid) instead.
+//
+// The placeholder mirrors the canonical row chrome (avatar + name layout from
+// room/message.html) so the swap to the canonical render does not reflow, but
+// the body stays plain text (no markdown render, no attachments preview).
+// Fidelity arrives with the canonical render.
+(function(){
+  var form = document.getElementById('composer');
+  // UI strings come in as data attributes on the form (see the form tag) so
+  // Askama's HTML escaping round-trips correctly through getAttribute.
+  var STR = {
+    sending: (form && form.getAttribute('data-lc-echo-sending')) || 'Sending...',
+    failed: (form && form.getAttribute('data-lc-echo-failed')) || 'Could not send.',
+    retry: (form && form.getAttribute('data-lc-echo-retry')) || 'Retry',
+    discard: (form && form.getAttribute('data-lc-echo-discard')) || 'Discard'
+  };
+  function messagesEl(){ return document.getElementById('messages'); }
+  function selfAvatar(){
+    // The always-present WebRTC call dialog (layout.html, #lc-call-root)
+    // carries the viewer's own avatar src + display label as alt text; reuse
+    // it rather than threading new template variables into ComposerFragment.
+    return document.querySelector('[data-lc-local-avatar]');
+  }
+  function findPending(cid){
+    return document.querySelector('#messages [data-client-id="' + cid + '"][data-lc-pending]');
+  }
+
+  window.__lcOptimisticEcho = function(cid, body){
+    var list = messagesEl();
+    if (!list) return;
+    var row = document.createElement('div');
+    row.id = 'msg-pending-' + cid;
+    row.setAttribute('data-client-id', cid);
+    row.setAttribute('data-lc-pending', 'true');
+    // Mirror the canonical row chrome (room/message.html non-follow-up:
+    // h-6 w-6 avatar + items-center gap-2 + font-medium name) so the swap to
+    // the canonical render does not shift the row horizontally.
+    row.className = 'lc-anim-swap relative px-4 py-2';
+    row.style.opacity = '0.6';
+
+    var header = document.createElement('div');
+    header.className = 'flex items-center gap-2';
+    var src = selfAvatar();
+    if (src) {
+      var img = document.createElement('img');
+      img.src = src.getAttribute('src');
+      img.alt = '';
+      img.className = 'h-6 w-6 rounded-full object-cover';
+      header.appendChild(img);
+    }
+    var name = document.createElement('span');
+    name.className = 'font-medium';
+    name.textContent = (src && src.getAttribute('alt')) || '';
+    header.appendChild(name);
+    var state = document.createElement('span');
+    state.className = 'text-xs text-content-muted';
+    state.style.fontStyle = 'italic';
+    state.setAttribute('data-lc-echo-state', '');
+    state.textContent = STR.sending;
+    header.appendChild(state);
+    row.appendChild(header);
+
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'whitespace-pre-wrap break-words';
+    // textContent (never innerHTML): the body is untrusted user input.
+    bodyEl.textContent = body;
+    row.appendChild(bodyEl);
+
+    list.appendChild(row);
+    // The user just sent this; always reveal it. Deliberate divergence from
+    // auto_scroll.html's followIfPinned (which only follows when the viewer
+    // was already at the bottom): sending your own message jumps to it, the
+    // convention in other chat clients. After the jump wasAtBottom is true,
+    // so the canonical render's follow-up scroll stays consistent.
+    list.scrollTop = list.scrollHeight;
+  };
+
+  // LC-230: a 2xx response that will never broadcast (link-filter quarantine,
+  // signaled by the X-LC-Echo-Drop header) removes the placeholder outright.
+  // Silent removal is deliberate: quarantine does not reveal the filter to
+  // the poster, and pre-LC-230 the message simply never appeared.
+  window.__lcEchoDrop = function(cid){
+    var row = findPending(cid);
+    if (row) row.remove();
+  };
+
+  window.__lcEchoFailed = function(cid){
+    // Only rows still in the pending state flip; a row already removed by
+    // the WS dedupe (the false-failure case) or already flipped is a no-op.
+    var row = findPending(cid);
+    if (!row) return;
+    row.removeAttribute('data-lc-pending');
+    row.setAttribute('data-lc-failed', 'true');
+    row.style.opacity = '1';
+
+    var state = row.querySelector('[data-lc-echo-state]');
+    if (!state) return;
+    state.textContent = '';
+    state.style.fontStyle = 'normal';
+
+    var failed = document.createElement('span');
+    failed.className = 'text-danger';
+    failed.textContent = STR.failed;
+    state.appendChild(failed);
+
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'underline hover:no-underline ml-2';
+    retry.textContent = STR.retry;
+    retry.addEventListener('click', function(){
+      // Always resend THIS row's body, never whatever happens to be in the
+      // textarea (the user may have started typing a new message). Stash the
+      // in-progress draft, submit the failed body through the normal form
+      // path (fresh client_id, fresh placeholder, normal failure handling),
+      // then restore the draft. requestSubmit() serializes the form
+      // synchronously, so the restore cannot race the submit; and the
+      // after-request success handler's conditional clear leaves the
+      // restored draft alone because it no longer matches the sent body.
+      var formEl = document.getElementById('composer');
+      var taEl = formEl && formEl.querySelector('textarea[name=body]');
+      var bodyEl = row.querySelector('.whitespace-pre-wrap');
+      var failedBody = bodyEl ? bodyEl.textContent : '';
+      if (!formEl || !taEl || !failedBody) { row.remove(); return; }
+      var draft = taEl.value;
+      taEl.value = failedBody;
+      row.remove();
+      formEl.requestSubmit();
+      taEl.value = draft;
+      taEl.dispatchEvent(new Event('input'));
+    });
+    state.appendChild(retry);
+
+    var discard = document.createElement('button');
+    discard.type = 'button';
+    discard.className = 'underline hover:no-underline ml-2 text-content-muted';
+    discard.textContent = STR.discard;
+    discard.addEventListener('click', function(){ row.remove(); });
+    state.appendChild(discard);
   };
 })();
 </script>

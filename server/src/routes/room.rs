@@ -51,6 +51,15 @@ pub struct MessageForm {
     /// the field (so empty deserializes as `None`).
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub quote_id: Option<i64>,
+    /// LC-230: opaque client-generated id (UUID) for optimistic local echo.
+    /// Echoed back on the author's WS broadcast as `data-lc-client-id` so the
+    /// sending tab can dedupe its optimistic placeholder against the
+    /// canonical render. Never persisted. Sanitized in `post_message`: only
+    /// `[A-Za-z0-9-]`, max 64 chars; anything else is treated as absent
+    /// rather than rejected (the echo is a UX nicety and must never block a
+    /// send).
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 fn empty_string_as_none<'de, D>(de: D) -> Result<Option<i64>, D::Error>
@@ -643,13 +652,26 @@ pub async fn post_message(
                     Some(host),
                 )
                 .await?;
-                // LC-228: link-filter Block drops the message silently.
-                // Form is `hx-swap="none"` so any returned body is
-                // discarded; return NO_CONTENT to skip the ~5 KB
-                // ComposerFragment render. (Pre-LC-228 returned a
-                // rendered fragment for nothing; same byte-on-wire +
-                // CPU cost as the success path.)
-                return Ok(StatusCode::NO_CONTENT.into_response());
+                // LC-228: quarantine holds the message silently. Form is
+                // `hx-swap="none"` so any returned body is discarded;
+                // return NO_CONTENT to skip the ~5 KB ComposerFragment
+                // render. (Pre-LC-228 returned a rendered fragment for
+                // nothing; same byte-on-wire + CPU cost as the success
+                // path.)
+                //
+                // LC-230: this is the one 2xx path that never broadcasts a
+                // NewMessage, so the author's optimistic placeholder would
+                // sit as "Sending..." forever. The X-LC-Echo-Drop header
+                // tells the composer to remove the placeholder. Removal
+                // (not a "held for review" label) keeps quarantine's
+                // existing posture: the filter's existence is not revealed
+                // to the poster.
+                let mut response = StatusCode::NO_CONTENT.into_response();
+                response.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static("x-lc-echo-drop"),
+                    axum::http::HeaderValue::from_static("1"),
+                );
+                return Ok(response);
             }
             db::anti_spam::FilterAction::Warn => {
                 db::moderation::log_mod_action(
@@ -666,7 +688,12 @@ pub async fn post_message(
         }
     }
 
-    finalize_message_send(&state, &room, &user, new_id, body).await?;
+    // LC-230: sanitize the optimistic-echo client id (drop, never reject).
+    let client_id = form.client_id.as_deref().map(str::trim).filter(|s| {
+        !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    });
+
+    finalize_message_send(&state, &room, &user, new_id, body, client_id).await?;
 
     // LC-228: form is `hx-swap="none"` (composer.html:11), so any returned
     // body is discarded by htmx. Skip the ~5 KB ComposerFragment render +
@@ -690,6 +717,9 @@ pub(crate) async fn finalize_message_send(
     author: &User,
     new_id: i64,
     body: &str,
+    // LC-230: optimistic-echo dedupe id from the composer; `None` for every
+    // non-composer caller (slash, polls, API, scheduled, reply-by-email).
+    client_id: Option<&str>,
 ) -> Result<Message, AppError> {
     // Re-fetch the inserted row to pick up the server-assigned created_at.
     let raw = db::chat::get_message(&state.chat, new_id)
@@ -726,6 +756,7 @@ pub(crate) async fn finalize_message_send(
     let event = ChatEvent::NewMessage {
         message: message.clone(),
         is_dm: room.room_type == "dm",
+        client_id: client_id.map(str::to_string),
     };
     state.hub.stop_typing(room.id, &author.id);
     super::broadcast_room_message(state, room, &event).await?;
@@ -891,6 +922,7 @@ pub(crate) async fn finalize_email_inbox_message_send(
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
+        client_id: None,
     };
     super::broadcast_room_message(state, room, &event).await?;
 
@@ -1013,6 +1045,7 @@ pub(crate) async fn finalize_webhook_message_send(
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
+        client_id: None,
     };
     super::broadcast_room_message(state, room, &event).await?;
 
@@ -1113,6 +1146,7 @@ pub(crate) async fn finalize_bridge_message_send(
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
+        client_id: None,
     };
     super::broadcast_room_message(state, room, &event).await?;
 

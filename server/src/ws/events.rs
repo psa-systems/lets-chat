@@ -9,6 +9,15 @@ pub enum ChatEvent {
     NewMessage {
         message: Message,
         is_dm: bool,
+        /// LC-230: opaque client-generated id echoed from the composer's
+        /// `MessageForm.client_id`. The author's own WS render carries it as
+        /// a `data-lc-client-id` attribute on the OOB wrapper so the sending
+        /// tab can remove its optimistic placeholder when the canonical
+        /// render arrives. Always `None` for non-composer senders (webhooks,
+        /// email ingress, bridges, scheduled sends, slash/poll output,
+        /// quarantine release, call-started notices).
+        #[serde(default)]
+        client_id: Option<String>,
     },
     MessageEdited {
         message_id: i64,
