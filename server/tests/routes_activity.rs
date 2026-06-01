@@ -130,7 +130,9 @@ async fn peer_mention_appears_in_activity() {
         .body(Body::from(body))
         .unwrap();
     let resp = t.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    // LC-228: post_message returns 204 NO_CONTENT (form is hx-swap="none";
+    // the WS broadcast does the user-visible work).
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     let (status, body) = get(&t.app, &t.viewer_session, "/activity").await;
     assert_eq!(status, StatusCode::OK);

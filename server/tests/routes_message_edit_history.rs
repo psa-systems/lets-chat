@@ -159,7 +159,7 @@ async fn unedited_message_returns_single_current_entry() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "hello world").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -182,7 +182,7 @@ async fn unedited_message_label_has_no_trailing_timestamp() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "fresh post").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -203,7 +203,7 @@ async fn two_edits_render_three_entries_oldest_first() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "v0").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     assert_eq!(
@@ -237,7 +237,7 @@ async fn unauthenticated_request_redirects_or_unauthorized() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "hi").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -271,7 +271,7 @@ async fn non_room_member_blocked_from_private_history() {
         .unwrap();
     assert_eq!(
         post_message(&t.app, &t.viewer_session, private_id, "secret").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, private_id).await;
     assert_eq!(
@@ -292,7 +292,7 @@ async fn soft_deleted_message_history_returns_404() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "doomed").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     assert_eq!(
@@ -315,7 +315,7 @@ async fn markdown_in_prior_body_renders_through_pipeline() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "**emphasis** present").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     assert_eq!(
@@ -340,7 +340,7 @@ async fn mention_chip_persists_when_removed_by_edit() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "hi @alice").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     assert_eq!(
@@ -368,7 +368,7 @@ async fn mention_chip_overlap_renders_in_both_entries() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "ping @alice round 1").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     assert_eq!(
@@ -391,7 +391,7 @@ async fn unresolved_mention_token_renders_as_literal_text() {
     let t = app_with_two_users("viewer", "alice").await;
     assert_eq!(
         post_message(&t.app, &t.viewer_session, 1, "shout out @nosuchuser").await,
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     );
     let mid = last_message_id(&t.chat, 1).await;
     // Edit so the message has a prior version archived.

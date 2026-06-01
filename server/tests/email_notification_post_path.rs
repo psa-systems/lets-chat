@@ -193,7 +193,7 @@ async fn mention_in_room_message_triggers_dispatcher_and_mints_reply_token() {
     assert_eq!(reply_tokens_for_user(&t.chat, &t.bob_id).await, 0);
 
     let status = post_message_via_http(&t.app, &t.alice_session, t.public_room, "hey @bob").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let count = wait_for_token(&t.chat, &t.bob_id, 1).await;
     assert_eq!(
@@ -208,7 +208,7 @@ async fn dm_send_triggers_dispatcher() {
     assert_eq!(reply_tokens_for_user(&t.chat, &t.bob_id).await, 0);
 
     let status = post_message_via_http(&t.app, &t.alice_session, t.dm_room, "private hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     let count = wait_for_token(&t.chat, &t.bob_id, 1).await;
     assert_eq!(
@@ -223,7 +223,7 @@ async fn opt_out_recipient_dm_does_not_mint_token() {
     assert_eq!(reply_tokens_for_user(&t.chat, &t.bob_id).await, 0);
 
     let status = post_message_via_http(&t.app, &t.alice_session, t.dm_room, "private hi").await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     // Generous wait; if any reply-token was going to land it would land here.
     tokio::time::sleep(Duration::from_millis(300)).await;

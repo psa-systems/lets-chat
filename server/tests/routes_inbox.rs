@@ -136,7 +136,8 @@ async fn unread_message_appears_in_inbox() {
         .body(Body::from("body=hello+from+peer&file_id="))
         .unwrap();
     let resp = t.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    // LC-228: post_message returns 204 NO_CONTENT.
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     let _ = t.user_id;
     let _ = t.chat;
 

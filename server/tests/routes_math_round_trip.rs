@@ -174,7 +174,7 @@ async fn edit_form_contains_raw_inline_math_source() {
     let body = "energy: $E = mc^2$";
     assert_eq!(
         post_message(&t.app, &t.session, 1, body).await,
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -201,7 +201,7 @@ async fn edit_form_contains_raw_display_math_source() {
     let body = "see: $$\\int_0^1 f(x)\\,dx$$";
     assert_eq!(
         post_message(&t.app, &t.session, 1, body).await,
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -228,7 +228,7 @@ async fn composer_quote_chip_contains_raw_math_source() {
     let body = "key formula: $x^2 + y^2 = z^2$";
     assert_eq!(
         post_message(&t.app, &t.session, 1, body).await,
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
     );
     let mid = last_message_id(&t.chat, 1).await;
 
@@ -254,7 +254,7 @@ async fn edit_form_round_trip_then_resubmit_preserves_math() {
     let body = "$x^2$";
     assert_eq!(
         post_message(&t.app, &t.session, 1, body).await,
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
     );
     let mid = last_message_id(&t.chat, 1).await;
 
