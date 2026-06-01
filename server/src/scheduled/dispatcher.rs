@@ -227,7 +227,8 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
     }
 
     if let Err(e) =
-        crate::routes::room::finalize_message_send(state, &room, &user, new_id, &row.body).await
+        crate::routes::room::finalize_message_send(state, &room, &user, new_id, &row.body, None)
+            .await
     {
         tracing::warn!(
             error = %e,

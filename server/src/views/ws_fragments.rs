@@ -11,6 +11,12 @@ use crate::ws::events::ChatEvent;
 #[template(path = "ws/new_message.html")]
 pub struct NewMessageFragment<'a> {
     pub message: &'a MessageView,
+    /// LC-230: optimistic-echo dedupe id, rendered as `data-lc-client-id` on
+    /// the OOB wrapper. `Some(...)` only on the author's own connections; the
+    /// attribute lives on the wrapper (discarded by the beforeend swap), so
+    /// it never reaches the persistent DOM - live.js reads it from the
+    /// incoming fragment in `htmx:oobBeforeSwap` to remove the placeholder.
+    pub client_id: Option<&'a str>,
 }
 
 #[derive(Template)]

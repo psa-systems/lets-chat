@@ -264,7 +264,7 @@ pub async fn post_reply_message(
     };
 
     if let Err(e) =
-        crate::routes::room::finalize_message_send(state, &room, &user, new_id, body).await
+        crate::routes::room::finalize_message_send(state, &room, &user, new_id, body, None).await
     {
         // Row is committed; broadcast/mention reconcile may be lossy.
         // Same shape as the email-inbox actor's tolerance for finalize

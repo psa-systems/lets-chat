@@ -16,6 +16,8 @@ room-composer-schedule-title = Schedule for later
 room-composer-schedule-aria = Schedule message for later
 room-composer-send-message = Send message
 room-composer-drop-file = Drop file to attach
+room-composer-echo-sending = Sending...
+room-composer-echo-discard = Discard
 
 ## Quote chip
 room-quote-replying-to = Replying to
