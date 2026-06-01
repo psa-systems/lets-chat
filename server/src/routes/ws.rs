@@ -180,10 +180,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                     match evt {
                         Ok(e) => {
                             let rendered = match &e {
-                                ChatEvent::NewMessage { message, .. } => {
+                                ChatEvent::NewMessage {
+                                    message, client_id, ..
+                                } => {
                                     render_new_message_or_bump(
                                         &send_state,
                                         message,
+                                        client_id.as_deref(),
                                         &send_user,
                                         &send_subscribed,
                                     )
@@ -741,6 +744,9 @@ async fn render_dm_read(
 async fn render_new_message_or_bump(
     state: &AppState,
     message: &models::Message,
+    // LC-230: optimistic-echo dedupe id; rendered as `data-lc-client-id` on
+    // the OOB wrapper, but only for the author's own connections.
+    client_id: Option<&str>,
     viewer: &User,
     subscribed: &Arc<Mutex<HashSet<i64>>>,
 ) -> Option<String> {
@@ -782,7 +788,7 @@ async fn render_new_message_or_bump(
                 state.hub.broadcast_to_room(message.room_id, &event);
             }
         }
-        return render_new_message(state, message, viewer).await;
+        return render_new_message(state, message, client_id, viewer).await;
     }
     if message.user_id == viewer.id {
         return None;
@@ -857,6 +863,8 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
 async fn render_new_message(
     state: &AppState,
     message: &models::Message,
+    // LC-230: see render_new_message_or_bump.
+    client_id: Option<&str>,
     viewer: &User,
 ) -> Option<String> {
     let can_edit = message.user_id == viewer.id;
@@ -960,7 +968,18 @@ async fn render_new_message(
         author_is_bot,
         actor,
     };
-    render_template(&NewMessageFragment { message: &view }).ok()
+    // LC-230: only the author's own connections carry the dedupe attribute;
+    // every other viewer's frame stays byte-identical to the pre-LC-230 shape.
+    let echo_client_id = if viewer.id == message.user_id {
+        client_id
+    } else {
+        None
+    };
+    render_template(&NewMessageFragment {
+        message: &view,
+        client_id: echo_client_id,
+    })
+    .ok()
 }
 
 /// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
@@ -1420,6 +1439,7 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
     let event = ChatEvent::NewMessage {
         message,
         is_dm: true,
+        client_id: None,
     };
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
         tracing::warn!(error = %e, "failed to broadcast call-started message");

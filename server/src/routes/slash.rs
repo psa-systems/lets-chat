@@ -204,7 +204,7 @@ async fn post_message_body(
     body: &str,
 ) -> Result<(), AppError> {
     let new_id = db::chat::insert_message(&state.chat, room.id, &user.id, body).await?;
-    super::room::finalize_message_send(state, room, user, new_id, body).await?;
+    super::room::finalize_message_send(state, room, user, new_id, body, None).await?;
     Ok(())
 }
 
@@ -227,7 +227,7 @@ async fn handle_remind(
         AppError::BadRequest("reminder time must look like 15m, 1h, 3h, or 1d".into())
     })?;
     let new_id = db::chat::insert_message(&state.chat, room.id, &user.id, text).await?;
-    super::room::finalize_message_send(state, room, user, new_id, text).await?;
+    super::room::finalize_message_send(state, room, user, new_id, text, None).await?;
     let remind_at = (Utc::now() + Duration::minutes(minutes))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();

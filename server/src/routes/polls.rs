@@ -103,7 +103,8 @@ pub(crate) async fn create_poll(
         closes_at.as_deref(),
     )
     .await?;
-    super::room::finalize_message_send(state, room, user, message_id, question.trim()).await?;
+    super::room::finalize_message_send(state, room, user, message_id, question.trim(), None)
+        .await?;
     Ok(())
 }
 

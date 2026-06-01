@@ -76,4 +76,28 @@
   }
   document.body.addEventListener('htmx:load', onContentSwap);
   document.body.addEventListener('htmx:afterSettle', onContentSwap);
+
+  // LC-230: optimistic-echo dedupe. The composer renders a pending
+  // placeholder tagged data-client-id into #messages at submit time; the
+  // canonical render arrives over the WS as an OOB beforeend fragment whose
+  // wrapper carries the same id in data-lc-client-id (author's connections
+  // only). Remove the placeholder just before the swap so the placeholder
+  // removal and the canonical insert land in the same swap cycle: the message
+  // never renders twice and never disappears in between. The wrapper
+  // attribute itself never reaches the DOM (beforeend swaps discard the
+  // wrapper), which is why this must read the *incoming* fragment here.
+  document.body.addEventListener('htmx:oobBeforeSwap', function (evt) {
+    var frag = evt.detail && evt.detail.fragment;
+    if (!frag) return;
+    var cid = null;
+    if (frag.getAttribute) cid = frag.getAttribute('data-lc-client-id');
+    if (!cid && frag.querySelector) {
+      var tagged = frag.querySelector('[data-lc-client-id]');
+      if (tagged) cid = tagged.getAttribute('data-lc-client-id');
+    }
+    if (!cid) return;
+    // The cid is server-sanitized to [A-Za-z0-9-], so it is selector-safe.
+    var pending = document.querySelector('#messages [data-client-id="' + cid + '"]');
+    if (pending) pending.remove();
+  });
 })();

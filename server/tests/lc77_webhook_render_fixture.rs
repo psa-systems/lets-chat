@@ -80,9 +80,14 @@ fn email_inbox_view(with_avatar: bool) -> MessageView {
 }
 
 fn render_fragment(view: &MessageView) -> String {
-    NewMessageFragment { message: view }
-        .render()
-        .expect("template render must succeed under fixture conditions")
+    // LC-230: client_id is None here, so the rendered wrapper is byte-identical
+    // to the pre-LC-230 shape and the existing fixtures stay valid.
+    NewMessageFragment {
+        message: view,
+        client_id: None,
+    }
+    .render()
+    .expect("template render must succeed under fixture conditions")
 }
 
 fn fixture_path(name: &str) -> std::path::PathBuf {

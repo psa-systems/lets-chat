@@ -1678,6 +1678,7 @@ pub async fn post_quarantine_approve(
             let event = ChatEvent::NewMessage {
                 message,
                 is_dm: room.room_type == "dm",
+                client_id: None,
             };
             let _ = super::broadcast_room_message(&state, &room, &event).await;
         }
