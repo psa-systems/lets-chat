@@ -9,7 +9,7 @@ name: dev-web-local-saas-${USER}
 services:
 
   app:
-    image: ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie
+    image: ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie
     container_name: dev-lets-chat-web-local-saas-${USER}
     init: true
     restart: "no"
