@@ -15,7 +15,7 @@
 #   /build/target/release/bundle/appimage/lets-chat_<ver>_amd64.AppImage
 # The just recipe + CI workflow extract these via `docker create`+`docker cp`.
 
-FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie AS builder
+FROM ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie AS builder
 ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
