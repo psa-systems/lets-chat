@@ -76,7 +76,7 @@ docker run --rm --init \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     "${EXTRA_ARGS[@]}" \
-    ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
     bash -c '
         set -euo pipefail
         for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do

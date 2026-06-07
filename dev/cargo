@@ -44,7 +44,7 @@ docker run --rm --init \
     -e "GIT_HASH=$GIT_HASH" \
     -e "GIT_VERSION=$GIT_VERSION" \
     -e "BUILD_DATE=$BUILD_DATE" \
-    ghcr.io/niceguyit/rust-builder-glibc:v1.0.0-rust1.94-trixie \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
     bash -c '
         set -euo pipefail
         for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do
