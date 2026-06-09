@@ -1,6 +1,6 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -2049,6 +2049,44 @@ pub async fn get_history_panel(
 /// hidden aside.
 pub async fn close_history_panel() -> Result<Html, AppError> {
     html(&HistoryPanelClosedFragment)
+}
+
+/// GET /m/:message_id - LC-246 message permalink. Resolves the message's
+/// canonical page and 302-redirects there with a `#msg-{id}` fragment so the
+/// client (`partials/auto_scroll.html`) scrolls to and highlights it:
+/// `/dm/{peer}#msg-{id}` for a DM, `/room/{room_id}#msg-{id}` otherwise.
+///
+/// Returns 404 (not 403) for a missing, deleted, quarantined, or
+/// inaccessible message: the permalink must never reveal that a message
+/// exists in a room the viewer cannot see. Thread replies redirect to the
+/// room (the reply lives in the thread panel, not the main list), where the
+/// highlight no-ops gracefully.
+pub async fn get_message_permalink(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(message_id): Path<i64>,
+) -> Result<Redirect, AppError> {
+    let Some(msg) = db::chat::get_message(&state.chat, message_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, msg.room_id, &user.id, is_admin).await? {
+        // 404, not 403: do not confirm the message exists in a hidden room.
+        return Err(AppError::NotFound);
+    }
+    let Some(room) = db::chat::get_room(&state.chat, msg.room_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let target = if room.room_type == "dm" {
+        match db::chat::get_dm_peer(&state.chat, msg.room_id, &user.id).await? {
+            Some(peer_id) => format!("/dm/{peer_id}#msg-{message_id}"),
+            // The viewer is not a participant in this DM; treat as not found.
+            None => return Err(AppError::NotFound),
+        }
+    } else {
+        format!("/room/{}#msg-{message_id}", msg.room_id)
+    };
+    Ok(Redirect::to(&target))
 }
 
 /// GET /room/:room_id/composer-quote/:message_id - returns the inline
