@@ -294,6 +294,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_saved_list(&send_state, &send_user).await
                                 }
+                                // LC-250: the viewer marked everything read.
+                                // broadcast_to_user fans to all their tabs;
+                                // re-render the sidebar so cleared badges land
+                                // live. Gated to the owner (defensive).
+                                ChatEvent::ReadAllChanged { user_id }
+                                    if user_id == &send_user.id =>
+                                {
+                                    render_sidebar(&send_state, &send_user).await
+                                }
                                 // LC-239: the viewer saved or cleared a draft.
                                 // broadcast_to_user fans to all their tabs;
                                 // swap the sidebar draft badge OOB

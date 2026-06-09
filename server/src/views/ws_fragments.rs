@@ -338,6 +338,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         // LC-239: rendered per recipient in the WS send task (sidebar draft
         // badge OOB), so the recipient-independent path emits nothing.
         | ChatEvent::DraftChanged { .. }
+        // LC-250: rendered per recipient in the WS send task (sidebar OOB).
+        | ChatEvent::ReadAllChanged { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
         | ChatEvent::PollUpdated { .. }
