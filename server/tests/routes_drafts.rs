@@ -960,3 +960,39 @@ async fn message_list_no_duplicate_separator_within_a_day() {
         "same-day messages share one separator, not one per message",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-248: Arrow-Up in an empty composer edits the last own message. The
+// find-last-and-click + Esc-cancel are JS-only (LC-249 QA pass); these pin
+// that the shortcut script ships and the edit form auto-focuses.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn room_page_ships_arrowup_edit_last_shortcut() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("__lcEditLast"),
+        "composer must ship the Arrow-Up edit-last handler",
+    );
+}
+
+#[tokio::test]
+async fn edit_form_autofocuses_its_input() {
+    let t = app().await;
+    let mid = insert_message_at(&t.chat, 1, &t.alice_id, "editable", 0).await;
+    let (status, body) = send(
+        &t.app,
+        &t.alice_session,
+        Method::GET,
+        &format!("/messages/{mid}/edit"),
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("autofocus"),
+        "edit form input must autofocus so the editor takes focus on open",
+    );
+}

@@ -1117,3 +1117,34 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
+<script>
+// LC-248: Arrow-Up in an EMPTY composer edits your most recent message.
+// The per-message hover "Edit" button (button[hx-get$="/edit"]) only renders
+// for the viewer's own editable messages, so the LAST such button in #messages
+// is the most recent own message; clicking it drives the existing edit route,
+// and the edit form's autofocus (room/edit_form.html) lands the caret. Empty-
+// composer-only so Up still navigates the caret in a multi-line draft; defers
+// to an open mention/slash combobox (those keydown handlers run in capture
+// phase and stopPropagation when open, so they already win - the explicit
+// guard is belt-and-suspenders). Cleanup-root is #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  var messages = document.getElementById('messages');
+  if (!form || !ta || !messages) return;
+  function onKeydown(e){
+    if (e.key !== 'ArrowUp' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    if (ta.value !== '') return;
+    if (document.querySelector('#lc-mention-popover li[role="option"], #lc-slash-popover li[role="option"]')) return;
+    var btns = messages.querySelectorAll('button[hx-get$="/edit"]');
+    if (!btns.length) return;
+    e.preventDefault();
+    btns[btns.length - 1].click();
+  }
+  ta.addEventListener('keydown', onKeydown);
+  window.__lcEditLast = onKeydown;
+  function teardown(){ ta.removeEventListener('keydown', onKeydown); }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
