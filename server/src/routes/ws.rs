@@ -972,6 +972,8 @@ async fn render_new_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count: 0,
         parent_id: message.parent_id,
         attachments,
@@ -1098,6 +1100,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count,
         parent_id,
         attachments,
@@ -1180,6 +1184,8 @@ async fn render_thread_reply(
         seen_caption: None,
         is_follow_up: false,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count: 0,
         parent_id: Some(parent_id),
         attachments,

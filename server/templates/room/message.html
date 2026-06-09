@@ -1,3 +1,14 @@
+{# LC-244: day separator above the first message and on each UTC day change.
+   `role="separator"` keeps it out of the message stream for assistive tech.
+   The client (partials/auto_scroll.html) inserts the same markup for live
+   arrivals that cross a day boundary. #}
+{% if let Some(day_label) = message.day_label.as_ref() %}
+<div data-lc-day-divider role="separator" class="flex items-center gap-2 px-4 py-2 text-xs font-medium uppercase tracking-wide text-content-muted">
+  <span class="h-px flex-1 bg-border"></span>
+  <span>{{ day_label }}</span>
+  <span class="h-px flex-1 bg-border"></span>
+</div>
+{% endif %}
 {% if message.show_unread_divider %}
 <div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-danger">
   <span class="h-px flex-1 bg-danger"></span>
@@ -6,12 +17,12 @@
 </div>
 {% endif %}
 {% if message.is_system %}
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap px-4 py-1 text-center text-xs text-content-muted">
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap px-4 py-1 text-center text-xs text-content-muted">
   <span class="font-medium">{{ message.label() }}</span> {{ message.body }}
   <span class="ml-1 text-content-subtle">{{ message.created_at }}</span>
 </div>
 {% else %}
-<div id="msg-{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
     {% match message.actor %}

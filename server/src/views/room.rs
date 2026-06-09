@@ -84,6 +84,11 @@ pub struct MessageView {
     /// inline; the User variant is unit because the user-identity scalars
     /// already live on this struct.
     pub actor: MessageActor,
+    /// LC-244: `Some(label)` renders a day separator row ("Today" /
+    /// "Yesterday" / absolute date) ABOVE this message. Set by the page
+    /// builder on the first message and on every UTC day change; `None`
+    /// for the per-message WS fragments (the client inserts live dividers).
+    pub day_label: Option<String>,
 }
 
 /// LC-66: a poll rendered beneath its anchor message. Built by
@@ -185,12 +190,44 @@ pub struct QuotePreview {
     pub deleted: bool,
 }
 
+/// LC-244: human label for the UTC calendar day of `created_at`
+/// (`YYYY-MM-DD HH:MM:SS`). Returns the localized "Today"/"Yesterday" for
+/// those days relative to UTC `now`, otherwise an English long-form date
+/// (`June 9, 2026`). Day boundaries are UTC to match the app's UTC inline
+/// timestamps; viewer-local boundaries and month-name localization are
+/// deferred to a future timezone pass (LC-244). Falls back to the raw date
+/// prefix if `created_at` is malformed.
+pub(crate) fn day_label_for(created_at: &str) -> String {
+    use chrono::{Duration, NaiveDate, Utc};
+    let raw = created_at.get(..10).unwrap_or(created_at);
+    let Ok(date) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") else {
+        return raw.to_string();
+    };
+    let today = Utc::now().date_naive();
+    if date == today {
+        crate::i18n::translate_current("room-day-today")
+    } else if date == today - Duration::days(1) {
+        crate::i18n::translate_current("room-day-yesterday")
+    } else {
+        date.format("%B %-d, %Y").to_string()
+    }
+}
+
 impl MessageView {
     pub fn label(&self) -> &str {
         match self.display_name.as_deref() {
             Some(n) if !n.trim().is_empty() => n,
             _ => &self.username,
         }
+    }
+
+    /// LC-244: the message's UTC calendar day (`YYYY-MM-DD`), the prefix of
+    /// `created_at`. Rendered as `data-lc-day` so the client can insert a day
+    /// divider above a live-arriving message that crosses a day boundary.
+    pub fn day(&self) -> &str {
+        self.created_at
+            .get(..10)
+            .unwrap_or(self.created_at.as_str())
     }
 
     /// True when the message has no body text and exactly one image
