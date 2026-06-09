@@ -88,6 +88,30 @@
     <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-reply"|t }}</button>
     {% endif %}
     <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-thread"|t }}</button>
+    {# LC-246: copy a permalink (/m/{id}) to this message. Pure client-side;
+       writes to the clipboard and flips the label to "Copied" for ~1.5s. The
+       localized strings ride as data attributes so the inline handler can swap
+       them without re-rendering. #}
+    <button type="button"
+      data-lc-copy-link="{{ message.id }}"
+      data-lc-copied-label="{{ "room-msg-copied"|t }}"
+      class="text-content-muted hover:underline"
+      onclick="
+        var b = this;
+        var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
+        var done = function(){
+          var orig = b.textContent;
+          b.textContent = b.getAttribute('data-lc-copied-label');
+          setTimeout(function(){ b.textContent = orig; }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, function(){
+            window.__lcCopyFallback && window.__lcCopyFallback(url); done();
+          });
+        } else if (window.__lcCopyFallback) {
+          window.__lcCopyFallback(url); done();
+        }
+      ">{{ "room-msg-copy-link"|t }}</button>
     {% if message.is_pinned %}
     <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-unpin"|t }}</button>
     {% else %}

@@ -669,6 +669,21 @@ math {
     opacity: 0;
 }
 
+/* LC-246: brief highlight when arriving at a message via a `/m/{id}` permalink.
+   `partials/auto_scroll.html` adds `.lc-msg-flash` to the target row on load and
+   removes it after the animation. Theme-aware via `--accent-surface`. */
+@keyframes lc-msg-flash {
+    0%   { background-color: var(--accent-surface); }
+    100% { background-color: transparent; }
+}
+.lc-msg-flash {
+    animation: lc-msg-flash 2s ease-out;
+    border-radius: 0.25rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lc-msg-flash { animation: none; }
+}
+
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
 .lc-skeleton {
