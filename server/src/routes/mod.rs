@@ -359,6 +359,8 @@ pub(crate) async fn load_message_view_for_viewer(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count,
         parent_id: m.parent_id,
         attachments,
