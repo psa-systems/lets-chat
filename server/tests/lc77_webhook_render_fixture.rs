@@ -46,6 +46,7 @@ fn synthetic_view(actor: MessageActor, username: &str, body: &str) -> MessageVie
         seen_caption: None,
         is_follow_up: false,
         show_unread_divider: false,
+        day_label: None,
         reply_count: 0,
         parent_id: None,
         attachments: vec![],

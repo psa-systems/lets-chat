@@ -295,6 +295,7 @@ fn user_view(body: &str) -> MessageView {
         seen_caption: None,
         is_follow_up: false,
         show_unread_divider: false,
+        day_label: None,
         reply_count: 0,
         parent_id: None,
         attachments: vec![],
