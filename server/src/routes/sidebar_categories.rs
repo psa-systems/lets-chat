@@ -256,7 +256,9 @@ async fn assert_room_in_enclave(
     Ok(())
 }
 
-async fn render_sidebar_fragment(
+// LC-250: reused by `routes::read_all` to return the re-rendered sidebar after
+// "mark all as read", enclave-aware via the HX-Current-URL header.
+pub(crate) async fn render_sidebar_fragment(
     state: &AppState,
     user: &User,
     headers: &HeaderMap,

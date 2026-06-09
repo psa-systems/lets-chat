@@ -152,6 +152,13 @@ pub enum ChatEvent {
     SavedChanged {
         user_id: String,
     },
+    /// LC-250: the viewer used "mark all as read", clearing unread + mention
+    /// state across their conversations. Routed via
+    /// `broadcast_to_user(user_id, ...)` so every tab re-renders the sidebar
+    /// (badges cleared) without a reload.
+    ReadAllChanged {
+        user_id: String,
+    },
     /// LC-239: the viewer's draft for `room_id` was saved (`has_draft = true`)
     /// via the debounced composer PUT, or cleared (`has_draft = false`) by a
     /// send / schedule / empty-body delete. Routed via

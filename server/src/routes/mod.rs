@@ -56,6 +56,7 @@ mod pinned;
 mod polls;
 mod push;
 mod reactions;
+mod read_all;
 mod reminders;
 mod retention;
 pub(crate) mod room;
@@ -969,6 +970,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
+        // LC-250: mark every conversation read in one action.
+        .route("/read-all", post(read_all::post_read_all))
         .route("/room/{room_id}/info", get(room_info::get_page))
         .route("/room/{room_id}/files", get(room_info::get_files))
         .route("/room/{room_id}/wiki/edit", get(room_info::get_wiki_edit))
