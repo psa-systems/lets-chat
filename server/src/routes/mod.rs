@@ -915,6 +915,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
+        // LC-246: message permalink. Redirects to the canonical room/DM page
+        // with a #msg-{id} fragment so the client scrolls to + highlights it.
+        .route("/m/{message_id}", get(room::get_message_permalink))
         .route("/room/{room_id}/messages", post(room::post_message))
         .route("/room/{room_id}/draft", put(drafts::put_draft))
         .route(

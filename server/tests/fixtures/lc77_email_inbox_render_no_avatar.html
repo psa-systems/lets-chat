@@ -25,6 +25,27 @@
     
     <button hx-get="/room/1/thread/1" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">Thread</button>
     
+    <button type="button"
+      data-lc-copy-link="1"
+      data-lc-copied-label="Copied"
+      class="text-content-muted hover:underline"
+      onclick="
+        var b = this;
+        var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
+        var done = function(){
+          var orig = b.textContent;
+          b.textContent = b.getAttribute('data-lc-copied-label');
+          setTimeout(function(){ b.textContent = orig; }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, function(){
+            window.__lcCopyFallback && window.__lcCopyFallback(url); done();
+          });
+        } else if (window.__lcCopyFallback) {
+          window.__lcCopyFallback(url); done();
+        }
+      ">Copy link</button>
+    
     <button hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="text-warning hover:underline">Pin</button>
     
     

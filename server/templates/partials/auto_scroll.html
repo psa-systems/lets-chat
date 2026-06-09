@@ -1,5 +1,24 @@
 <script>
 (function() {
+  // LC-246: clipboard fallback for the per-message "Copy link" buttons when
+  // navigator.clipboard is unavailable (older browsers / non-secure contexts).
+  // Defined once here since auto_scroll.html is included once per chat page.
+  if (!window.__lcCopyFallback) {
+    window.__lcCopyFallback = function (text) {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e) { /* best-effort */ }
+    };
+  }
+
   var messages = document.getElementById('messages');
   if (!messages) return;
   var slack = 50;
@@ -48,10 +67,29 @@
   }
   messages.addEventListener('scroll', onScroll);
 
+  // LC-246: when arriving via a /m/{id} permalink (#msg-<id>), scroll to and
+  // briefly highlight that message instead of the usual bottom/unread anchor.
+  // The full room history is in the DOM, so the target row is present unless
+  // it is a thread reply (which lives in the panel) - then this no-ops and the
+  // normal anchor runs.
+  var focused = false;
+  if (/^#msg-\d+$/.test(location.hash)) {
+    var target = document.getElementById(location.hash.slice(1));
+    if (target && messages.contains(target)) {
+      target.scrollIntoView({ block: 'center' });
+      target.classList.add('lc-msg-flash');
+      setTimeout(function () { target.classList.remove('lc-msg-flash'); }, 2000);
+      wasAtBottom = isAtBottom();
+      focused = true;
+    }
+  }
   // Initial paint: anchor at the unread divider if there is one, otherwise
-  // jump to the newest message.
-  var divider = messages.querySelector('[data-unread-divider]');
-  if (divider) {
+  // jump to the newest message. Skipped entirely when a permalink target was
+  // anchored above.
+  var divider = focused ? null : messages.querySelector('[data-unread-divider]');
+  if (focused) {
+    // Permalink target already centered; leave it in view.
+  } else if (divider) {
     divider.scrollIntoView({ block: 'start' });
     wasAtBottom = isAtBottom();
   } else {
