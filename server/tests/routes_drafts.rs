@@ -897,3 +897,66 @@ async fn room_page_renders_jump_to_latest_pill_hidden() {
         "pill carries the localized many-form template with the %n% token",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-244: message-list date separators. Day boundaries are UTC; the first
+// message and each day change render a divider. Live insertion is JS-only
+// (LC-245 QA pass); these pin the server render + the data-lc-day attribute.
+// ----------------------------------------------------------------------
+
+async fn set_created_at(chat: &SqlitePool, message_id: i64, created_at: &str) {
+    sqlx::query("UPDATE messages SET created_at = ? WHERE id = ?")
+        .bind(created_at)
+        .bind(message_id)
+        .execute(chat)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn message_list_renders_day_separator_on_day_change() {
+    let t = app().await;
+    // An old message (fixed absolute date) followed by a fresh one (today UTC,
+    // the default created_at). Two distinct UTC days => two dividers.
+    let old = insert_message_at(&t.chat, 1, &t.alice_id, "old", 0).await;
+    set_created_at(&t.chat, old, "2020-01-01 10:00:00").await;
+    insert_message_at(&t.chat, 1, &t.alice_id, "fresh", 0).await;
+
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-day-divider"),
+        "a day separator must render",
+    );
+    // Absolute date for the old day (appears once, for its single divider).
+    assert_eq!(
+        body.matches("January 1, 2020").count(),
+        1,
+        "old message's day shows an absolute-date separator exactly once",
+    );
+    // The fresh message's day is today UTC -> localized "Today".
+    assert!(body.contains("Today"), "today's day shows the Today label");
+    // Each row carries its UTC day for the client-side live-divider hook.
+    assert!(
+        body.contains("data-lc-day=\"2020-01-01\""),
+        "message row carries its UTC day",
+    );
+}
+
+#[tokio::test]
+async fn message_list_no_duplicate_separator_within_a_day() {
+    let t = app().await;
+    // Two messages on the SAME UTC day => exactly one divider for that day.
+    let a = insert_message_at(&t.chat, 1, &t.alice_id, "first", 0).await;
+    set_created_at(&t.chat, a, "2020-03-04 09:00:00").await;
+    let b = insert_message_at(&t.chat, 1, &t.alice_id, "second", 0).await;
+    set_created_at(&t.chat, b, "2020-03-04 11:30:00").await;
+
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body.matches("March 4, 2020").count(),
+        1,
+        "same-day messages share one separator, not one per message",
+    );
+}

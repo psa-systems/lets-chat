@@ -128,6 +128,9 @@ room-wiki-label = Wiki (Markdown)
 
 ## Message row
 room-msg-unread-divider = Mensajes no leidos
+# LC-244: date separators in the message list.
+room-day-today = Hoy
+room-day-yesterday = Ayer
 room-msg-webhook-title = Publicado por un webhook entrante
 room-msg-webhook-badge = webhook
 room-msg-email-title = Publicado mediante entrada de correo

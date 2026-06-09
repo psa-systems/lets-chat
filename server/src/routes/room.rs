@@ -231,6 +231,9 @@ pub async fn get_room(
 
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
+    // LC-244: track the previous rendered message's UTC day so a day change
+    // (or the first message) places a date separator above the row.
+    let mut prev_day: Option<String> = None;
     let mut unread_divider_placed = false;
     for m in raw_messages {
         let meta = if let Some(entry) = author_cache.get(&m.user_id) {
@@ -261,6 +264,16 @@ pub async fn get_room(
             (&m.user_id, &m.created_at),
         );
         prev = Some((m.user_id.clone(), m.created_at.clone()));
+        // LC-244: day separator above the first message and on each UTC day
+        // change. `created_at` is "YYYY-MM-DD HH:MM:SS"; the date is its first
+        // 10 chars.
+        let cur_day = m.created_at.get(..10).unwrap_or("").to_string();
+        let day_label = if prev_day.as_deref() != Some(cur_day.as_str()) {
+            Some(crate::views::room::day_label_for(&m.created_at))
+        } else {
+            None
+        };
+        prev_day = Some(cur_day);
         let show_unread_divider =
             !unread_divider_placed && m.id > prior_watermark && m.user_id != user.id;
         if show_unread_divider {
@@ -285,6 +298,7 @@ pub async fn get_room(
             seen_caption: None,
             is_follow_up,
             show_unread_divider,
+            day_label,
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
             attachments,
@@ -1683,6 +1697,8 @@ pub async fn patch_message(
         seen_caption: None,
         is_follow_up,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count,
         parent_id: m.parent_id,
         attachments,
@@ -1794,6 +1810,8 @@ pub async fn get_thread_panel(
         seen_caption: None,
         is_follow_up: false,
         show_unread_divider: false,
+        // LC-244: per-message render; the client inserts live day dividers.
+        day_label: None,
         reply_count: 0,
         parent_id: None,
         attachments: attachments_by_message
@@ -1859,6 +1877,8 @@ pub async fn get_thread_panel(
             seen_caption: None,
             is_follow_up: false,
             show_unread_divider: false,
+            // LC-244: per-message render; the client inserts live day dividers.
+            day_label: None,
             reply_count: 0,
             parent_id: r.parent_id,
             attachments,

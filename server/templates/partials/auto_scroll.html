@@ -82,11 +82,38 @@
   // lands while the viewer is scrolled up, bump the pill count. Own sends are
   // excluded for free: the optimistic echo (LC-230) jumps to the bottom, so
   // `wasAtBottom` is true by the time the canonical render arrives.
+  // LC-244: insert a day divider above the just-appended message when its UTC
+  // day differs from the previous message row's. Live sends are always "today"
+  // in UTC, so the realistic trigger is crossing midnight UTC with the tab open;
+  // the label uses the localized "Today" string carried on #messages. Inserted
+  // BEFORE followIfPinned so a pinned viewer ends up below the new divider too.
+  function maybeInsertDayDivider() {
+    var rows = messages.querySelectorAll('[data-lc-day]');
+    if (rows.length === 0) return;
+    var last = rows[rows.length - 1];
+    var prevRow = rows.length > 1 ? rows[rows.length - 2] : null;
+    var lastDay = last.getAttribute('data-lc-day');
+    var prevDay = prevRow ? prevRow.getAttribute('data-lc-day') : null;
+    if (prevDay === lastDay) return;
+    // A server-rendered (or prior live) divider already sits above this row.
+    var before = last.previousElementSibling;
+    if (before && before.hasAttribute('data-lc-day-divider')) return;
+    var label = messages.getAttribute('data-lc-day-today') || lastDay;
+    var div = document.createElement('div');
+    div.setAttribute('data-lc-day-divider', '');
+    div.setAttribute('role', 'separator');
+    div.className = 'flex items-center gap-2 px-4 py-2 text-xs font-medium uppercase tracking-wide text-content-muted';
+    div.innerHTML = '<span class="h-px flex-1 bg-border"></span><span></span><span class="h-px flex-1 bg-border"></span>';
+    div.children[1].textContent = label;
+    last.parentNode.insertBefore(div, last);
+  }
+
   function onOob(evt) {
-    followIfPinned();
-    if (!pill) return;
     var tgt = (evt && evt.detail && evt.detail.target) || (evt && evt.target);
-    if (tgt && tgt.id === 'messages' && !wasAtBottom) {
+    var isMsgAppend = tgt && tgt.id === 'messages';
+    if (isMsgAppend) maybeInsertDayDivider();
+    followIfPinned();
+    if (pill && isMsgAppend && !wasAtBottom) {
       newCount++;
       renderPill();
     }
