@@ -18,6 +18,7 @@ sidebar-section-rooms = Salas
 sidebar-section-direct-messages = Mensajes directos
 sidebar-star = Destacar
 sidebar-unstar = Quitar de destacados
+sidebar-draft-indicator = Borrador sin enviar
 sidebar-set-status = Establecer estado
 sidebar-move-to-category = Mover a categoría
 sidebar-remove-from-category = Quitar de la categoría

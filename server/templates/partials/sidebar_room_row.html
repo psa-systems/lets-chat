@@ -4,6 +4,9 @@
     <span>&#128266; {{ room.name }}</span>
     {% else %}
     <span># {{ room.name }}</span>
+    {% let draft_room_id = room.id %}
+    {% let has_draft = room.has_draft %}
+    {% include "partials/draft_badge.html" %}
     {% let kind = "room" %}
     {% let id = room.id.to_string() %}
     {% let unread = room.unread %}

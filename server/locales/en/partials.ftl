@@ -18,6 +18,7 @@ sidebar-section-rooms = Rooms
 sidebar-section-direct-messages = Direct messages
 sidebar-star = Star
 sidebar-unstar = Unstar
+sidebar-draft-indicator = Unsent draft
 sidebar-set-status = Set status
 sidebar-move-to-category = Move to category
 sidebar-remove-from-category = Remove from category

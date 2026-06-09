@@ -1,0 +1,10 @@
+{# LC-239: per-conversation draft indicator. Rendered inline by
+   sidebar_room_row.html / sidebar_peer_row.html (let-bound `draft_room_id`
+   + `has_draft`) and mirrored for live OOB swaps by ws/draft_badge.html.
+   The id-keyed empty span is always present so a later DraftChanged OOB
+   swap has a target whether or not a draft exists at first paint. #}
+{% if has_draft %}
+<span id="lc-draft-{{ draft_room_id }}" class="ml-1 text-content-subtle" title="{{ "sidebar-draft-indicator"|t }}" aria-label="{{ "sidebar-draft-indicator"|t }}">&#9998;</span>
+{% else %}
+<span id="lc-draft-{{ draft_room_id }}"></span>
+{% endif %}

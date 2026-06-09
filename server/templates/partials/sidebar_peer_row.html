@@ -11,6 +11,9 @@
       <div class="truncate">{{ peer.label() }}</div>
       <div data-user-custom="{{ peer.id }}" class="text-xs italic text-content-muted truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
     </div>
+    {% let draft_room_id = peer.dm_room_id %}
+    {% let has_draft = peer.has_draft %}
+    {% include "partials/draft_badge.html" %}
     {% let kind = "dm" %}
     {% let id = peer.id.clone() %}
     {% let unread = peer.unread %}

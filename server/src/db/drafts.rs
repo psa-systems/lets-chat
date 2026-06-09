@@ -10,6 +10,8 @@
 //! `routes/room.rs::finalize_message_send` (clear-on-send), and
 //! `routes/scheduled.rs::post_create` (clear-on-schedule).
 
+use std::collections::HashSet;
+
 use sqlx::{Row, SqlitePool};
 
 /// A draft row as read from the DB. `updated_at` is the SQLite
@@ -112,6 +114,31 @@ pub async fn delete_for_user_in_room(
     room_id: i64,
 ) -> Result<u64, sqlx::Error> {
     delete(pool, user_id, room_id).await
+}
+
+/// LC-239: the set of `room_id`s in which this user has a fresh
+/// (non-stale) draft. Drives the per-conversation sidebar draft
+/// indicator built in `routes/mod.rs::load_sidebar`. Mirrors the
+/// `max_age_days` freshness rule the render sites apply in
+/// `get_fresh_or_purge`, so a stale draft never shows a badge; stale
+/// rows are not deleted here (the lazy purge stays on the per-room
+/// render path). `body != ''` is belt-and-suspenders: the PUT handler
+/// already deletes on empty, so no empty-body row should exist.
+pub async fn room_ids_with_drafts(
+    pool: &SqlitePool,
+    user_id: &str,
+    max_age_days: i64,
+) -> Result<HashSet<i64>, sqlx::Error> {
+    let rows = sqlx::query_scalar::<_, i64>(
+        "SELECT room_id FROM message_drafts \
+         WHERE user_id = ? AND body != '' \
+           AND updated_at >= datetime('now', ?)",
+    )
+    .bind(user_id)
+    .bind(format!("-{max_age_days} days"))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Read this user's draft for `room_id` and apply the lazy-cleanup
