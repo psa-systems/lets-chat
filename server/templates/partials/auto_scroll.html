@@ -5,15 +5,47 @@
   var slack = 50;
   var wasAtBottom = true;
 
+  // LC-242: jump-to-latest pill. Shown only when the viewer is scrolled up;
+  // counts messages that arrive live while they read history. Localized
+  // one/many forms ride as data attributes (the count is client-side dynamic,
+  // so it cannot be server-rendered via |tn); the %n% token is substituted in.
+  var pill = document.getElementById('lc-jump-latest');
+  var countEl = document.getElementById('lc-jump-count');
+  var oneTpl = pill ? (pill.getAttribute('data-lc-jump-one') || '') : '';
+  var manyTpl = pill ? (pill.getAttribute('data-lc-jump-many') || '') : '';
+  var newCount = 0;
+
   function isAtBottom() {
     return messages.scrollTop + messages.clientHeight >= messages.scrollHeight - slack;
   }
   function scrollToBottom() {
     messages.scrollTop = messages.scrollHeight;
   }
+  // Reflect the current (wasAtBottom, newCount) state onto the pill: hidden at
+  // the bottom, visible when scrolled up, with the count text only once at
+  // least one message has arrived (a bare chevron otherwise).
+  function renderPill() {
+    if (!pill) return;
+    if (wasAtBottom) {
+      pill.classList.add('hidden');
+      if (countEl) countEl.textContent = '';
+      return;
+    }
+    pill.classList.remove('hidden');
+    if (countEl) {
+      countEl.textContent = newCount <= 0
+        ? ''
+        : (newCount === 1 ? oneTpl : manyTpl.replace('%n%', newCount));
+    }
+  }
 
   // Track scroll position so we know whether the user is parked at the bottom.
-  function onScroll() { wasAtBottom = isAtBottom(); }
+  // Reaching the bottom clears the pending-count and hides the pill (LC-242).
+  function onScroll() {
+    wasAtBottom = isAtBottom();
+    if (wasAtBottom) newCount = 0;
+    renderPill();
+  }
   messages.addEventListener('scroll', onScroll);
 
   // Initial paint: anchor at the unread divider if there is one, otherwise
@@ -26,6 +58,9 @@
     scrollToBottom();
     wasAtBottom = true;
   }
+  // LC-242: set the pill's initial state to match where we anchored (hidden at
+  // the bottom; a bare chevron when anchored at an unread divider up-list).
+  renderPill();
 
   // Follow new content if the user has not scrolled away from the bottom.
   // `wasAtBottom` is driven by real scroll events only. The previous
@@ -40,8 +75,38 @@
   // bottom before the composer grew, they still are.
   function followIfPinned() { if (wasAtBottom) scrollToBottom(); }
   document.body.addEventListener('htmx:afterSwap', followIfPinned);
-  // OOB swaps (new messages over WS) take a separate event path.
-  document.body.addEventListener('htmx:oobAfterSwap', followIfPinned);
+  // OOB swaps (new messages over WS) take a separate event path. A new message
+  // appends to #messages (ws/new_message.html, hx-swap-oob="beforeend"), so the
+  // oobAfterSwap event targets #messages itself; edits/reactions/polls target a
+  // message- or bar-scoped id and are ignored here. LC-242: when such an append
+  // lands while the viewer is scrolled up, bump the pill count. Own sends are
+  // excluded for free: the optimistic echo (LC-230) jumps to the bottom, so
+  // `wasAtBottom` is true by the time the canonical render arrives.
+  function onOob(evt) {
+    followIfPinned();
+    if (!pill) return;
+    var tgt = (evt && evt.detail && evt.detail.target) || (evt && evt.target);
+    if (tgt && tgt.id === 'messages' && !wasAtBottom) {
+      newCount++;
+      renderPill();
+    }
+  }
+  document.body.addEventListener('htmx:oobAfterSwap', onOob);
+
+  // Click the pill: scroll to the newest message (smooth, or instant under
+  // prefers-reduced-motion), then clear the count and hide.
+  function jumpToLatest() {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof messages.scrollTo !== 'function') {
+      messages.scrollTop = messages.scrollHeight;
+    } else {
+      messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+    }
+    wasAtBottom = true;
+    newCount = 0;
+    renderPill();
+  }
+  if (pill) pill.addEventListener('click', jumpToLatest);
 
   // Re-anchor on container resize. Composer growth (mention insert,
   // multi-line typing) and typing-indicator updates both shrink
@@ -69,7 +134,8 @@
     torndown = true;
     messages.removeEventListener('scroll', onScroll);
     document.body.removeEventListener('htmx:afterSwap', followIfPinned);
-    document.body.removeEventListener('htmx:oobAfterSwap', followIfPinned);
+    document.body.removeEventListener('htmx:oobAfterSwap', onOob);
+    if (pill) pill.removeEventListener('click', jumpToLatest);
     if (ro) ro.disconnect();
     messages.removeEventListener('htmx:beforeCleanupElement', maybeTeardown);
   }

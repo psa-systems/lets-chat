@@ -1,0 +1,21 @@
+{# LC-242: floating "jump to latest" pill over #messages. Hidden by default;
+   partials/auto_scroll.html toggles its visibility on scroll and maintains the
+   new-message count. Localized strings ride as data attributes (the
+   data-lc-echo-* pattern in room/composer.html) because the count is
+   client-side dynamic and cannot be server-rendered through the |tn filter.
+   The %n% token in the "many" form is substituted with the live count in JS.
+   Lives inside the relative wrapper around #messages so `absolute` anchors it
+   to the bottom-right of the message viewport, above the composer. #}
+<button
+  type="button"
+  id="lc-jump-latest"
+  class="hidden absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-sm font-medium text-accent-content shadow-lg hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-ring"
+  aria-label="{{ "room-jump-to-latest-aria"|t }}"
+  data-lc-jump-one="{{ "room-jump-new-one"|t }}"
+  data-lc-jump-many="{{ "room-jump-new-many"|t }}"
+>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+    <path fill-rule="evenodd" d="M10 3a.75.75 0 01.75.75v9.69l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V3.75A.75.75 0 0110 3z" clip-rule="evenodd" />
+  </svg>
+  <span id="lc-jump-count" aria-live="polite"></span>
+</button>
