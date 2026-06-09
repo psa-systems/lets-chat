@@ -450,6 +450,11 @@ pub(crate) async fn load_sidebar(
 > {
     let is_admin = user.role == "admin";
 
+    // LC-239: rooms/DMs in which the viewer has a fresh unsent draft, so each
+    // sidebar row can render the pencil draft indicator. 60-day freshness
+    // matches the per-room render purge in `db::drafts::get_fresh_or_purge`.
+    let draft_room_ids = db::drafts::room_ids_with_drafts(&state.chat, &user.id, 60).await?;
+
     let (sidebar_rooms, sidebar_peers) = if let Some(eid) = current_enclave {
         let rooms = db::chat::list_rooms_in_enclave(&state.chat, eid, &user.id, is_admin).await?;
         let room_unreads: HashMap<i64, i64> =
@@ -475,6 +480,7 @@ pub(crate) async fn load_sidebar(
                     .unwrap_or(db::notifications::MuteMode::None)
                     .as_str()
                     .to_string(),
+                has_draft: draft_room_ids.contains(&r.id),
                 id: r.id,
                 name: r.name,
                 is_voice: r.is_voice,
@@ -517,6 +523,7 @@ pub(crate) async fn load_sidebar(
                         .as_str()
                         .to_string(),
                     active: false,
+                    has_draft: draft_room_ids.contains(&room.id),
                 });
             }
         }

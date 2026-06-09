@@ -324,7 +324,23 @@ pub async fn post_scheduled(
     // eventual delivery path goes through finalize_message_send,
     // which also clears the draft - the redundancy is harmless and
     // matches the "clear at every commit point" posture.
-    let _ = db::drafts::delete(&state.chat, &user.id, room.id).await;
+    // LC-239: clear the sidebar draft indicator across the user's tabs when
+    // a draft actually existed. Gated on rows_affected to avoid a redundant
+    // OOB fan when scheduling without a saved draft.
+    if db::drafts::delete(&state.chat, &user.id, room.id)
+        .await
+        .unwrap_or(0)
+        > 0
+    {
+        state.hub.broadcast_to_user(
+            &user.id,
+            &crate::ws::events::ChatEvent::DraftChanged {
+                user_id: user.id.clone(),
+                room_id: room.id,
+                has_draft: false,
+            },
+        );
+    }
 
     let success = format!(
         "<div class=\"text-sm text-green-700\" role=\"status\" \

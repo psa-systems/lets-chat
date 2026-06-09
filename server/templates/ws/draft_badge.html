@@ -1,0 +1,10 @@
+{# LC-239: OOB swap of a sidebar conversation's draft indicator when the
+   viewer saves or clears a draft. Swaps #lc-draft-{room_id} by id; tabs whose
+   current page lacks that sidebar row have no matching id and htmx drops it
+   silently. Inner markup mirrors partials/draft_badge.html so the live update
+   and a fresh page load render identically. #}
+{% if has_draft %}
+<span id="lc-draft-{{ room_id }}" hx-swap-oob="outerHTML" class="ml-1 text-content-subtle" title="{{ "sidebar-draft-indicator"|t }}" aria-label="{{ "sidebar-draft-indicator"|t }}">&#9998;</span>
+{% else %}
+<span id="lc-draft-{{ room_id }}" hx-swap-oob="outerHTML"></span>
+{% endif %}

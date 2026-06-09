@@ -18,6 +18,10 @@ pub struct SidebarRoom {
     /// skip the unread/mention badges (voice channels have no messages).
     pub is_voice: bool,
     pub active: bool,
+    /// LC-239: true when the viewer has a fresh unsent draft in this room.
+    /// Renders the pencil draft indicator (`partials/draft_badge.html`);
+    /// updated live over `ChatEvent::DraftChanged`.
+    pub has_draft: bool,
 }
 
 /// One row in the sidebar's "Direct messages" section. Carries the unread
@@ -41,6 +45,10 @@ pub struct SidebarPeer {
     /// greyed-link treatment uniformly.
     pub mute_mode: String,
     pub active: bool,
+    /// LC-239: true when the viewer has a fresh unsent draft in this DM.
+    /// Keyed on `dm_room_id` (the draft table is per chat.db room id), so
+    /// it lines up with `ChatEvent::DraftChanged { room_id }`.
+    pub has_draft: bool,
 }
 
 impl SidebarPeer {
