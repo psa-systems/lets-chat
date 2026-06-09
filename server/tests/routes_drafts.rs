@@ -776,3 +776,90 @@ async fn race_guard_query_plan_uses_an_index() {
         "race-guard SELECT must walk via an index, not a full scan. plan: {plan_text}",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-239: per-conversation draft indicator. The set query that feeds the
+// sidebar badge, plus the page render asserting the badge appears next to a
+// room with a draft and is absent (empty id-keyed span) otherwise.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn room_ids_with_drafts_returns_only_fresh_nonempty_rows() {
+    let t = app().await;
+    let r2 = private_room(&t.chat, "two").await;
+    let r3 = private_room(&t.chat, "three").await;
+
+    // Fresh drafts in rooms 1 and r2 for alice.
+    db::drafts::upsert(&t.chat, &t.alice_id, 1, "a").await.unwrap();
+    db::drafts::upsert(&t.chat, &t.alice_id, r2, "b")
+        .await
+        .unwrap();
+    // A stale draft in r3 must be excluded (mirrors the render-side freshness
+    // rule) without being deleted here.
+    db::drafts::upsert(&t.chat, &t.alice_id, r3, "old")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE message_drafts SET updated_at = datetime('now', '-61 days') WHERE user_id = ? AND room_id = ?")
+        .bind(&t.alice_id)
+        .bind(r3)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    // Bob's draft in room 1 must not leak into alice's set.
+    db::drafts::upsert(&t.chat, &t.bob_id, 1, "bob")
+        .await
+        .unwrap();
+
+    let set = db::drafts::room_ids_with_drafts(&t.chat, &t.alice_id, 60)
+        .await
+        .unwrap();
+    assert!(set.contains(&1), "fresh draft in room 1 must be in the set");
+    assert!(set.contains(&r2), "fresh draft in r2 must be in the set");
+    assert!(!set.contains(&r3), "stale draft must be excluded");
+    assert_eq!(set.len(), 2, "exactly the two fresh rooms, no leakage");
+
+    // The stale row is excluded from the set but NOT deleted by this read
+    // (lazy purge stays on the per-room render path).
+    assert!(
+        db::drafts::get(&t.chat, &t.alice_id, r3)
+            .await
+            .unwrap()
+            .is_some(),
+        "room_ids_with_drafts must not delete the stale row",
+    );
+}
+
+#[tokio::test]
+async fn sidebar_shows_draft_pencil_for_room_with_draft() {
+    let t = app().await;
+    db::drafts::upsert(&t.chat, &t.alice_id, 1, "half-typed")
+        .await
+        .unwrap();
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    // The id-keyed badge span is always present (so a later DraftChanged OOB
+    // swap has a target); with a draft it carries the pencil glyph.
+    assert!(
+        body.contains("id=\"lc-draft-1\""),
+        "sidebar row for room 1 must carry the draft badge target span",
+    );
+    assert!(
+        body.contains("&#9998;"),
+        "a room with a draft must render the pencil draft indicator",
+    );
+}
+
+#[tokio::test]
+async fn sidebar_omits_draft_pencil_when_no_draft() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"lc-draft-1\""),
+        "the empty id-keyed badge span must still render as the OOB swap target",
+    );
+    assert!(
+        !body.contains("&#9998;"),
+        "no draft anywhere means no pencil indicator is rendered",
+    );
+}

@@ -1043,3 +1043,77 @@
   };
 })();
 </script>
+<script>
+// LC-238: caret-position restore for the per-conversation draft. The draft
+// BODY is restored server-side (the textarea is rendered with `initial_draft`
+// from message_drafts, LC-64); this adds the one piece LC-237 asks for that
+// the server cannot cheaply persist - the caret/selection offset - keyed by
+// conversation id in localStorage so it survives reloads and PWA restarts.
+// Device-local by design: the text is the cross-device state, the caret is an
+// ephemeral per-device convenience. Cleanup-root is #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  if (!form || !ta) return;
+  // {{ room.id }} is the chat.db room id for both rooms and DMs (the DM page
+  // reuses this composer with room.id = the DM's room id), so the key lines up
+  // with the server-side draft row and the sidebar badge id.
+  var KEY = 'lc-draft-caret-' + {{ room.id }};
+  function clearCaret(){ try { localStorage.removeItem(KEY); } catch (e) {} }
+  function readCaret(){
+    try {
+      var o = JSON.parse(localStorage.getItem(KEY));
+      return o && typeof o.s === 'number' && typeof o.e === 'number' ? o : null;
+    } catch (e) { return null; }
+  }
+  var saveTimer = null;
+  function saveCaret(){
+    // No text means no draft (the server deletes the row on empty); drop the
+    // stored caret rather than persist a position into an empty box.
+    if (!ta.value) { clearCaret(); return; }
+    try { localStorage.setItem(KEY, JSON.stringify({ s: ta.selectionStart, e: ta.selectionEnd })); } catch (e) {}
+  }
+  function scheduleSave(){
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveCaret, 300);
+  }
+  // Restore once on mount, only when the server actually rendered draft text.
+  // requestAnimationFrame defers past the textarea's `autofocus` so the
+  // selection sticks. Clamp to the live text length: the cross-device draft
+  // body may have changed since this device last stored a caret. Absent a
+  // stored caret, fall back to end-of-text (nicer than the browser default).
+  if (ta.value) {
+    var c = readCaret();
+    requestAnimationFrame(function(){
+      var len = ta.value.length;
+      var clamp = function(n){ return Math.min(Math.max(n, 0), len); };
+      var s = c ? clamp(c.s) : len;
+      var e = c ? clamp(c.e) : len;
+      try { ta.setSelectionRange(s, e); } catch (err) {}
+    });
+  }
+  ta.addEventListener('keyup', scheduleSave);
+  ta.addEventListener('click', scheduleSave);
+  ta.addEventListener('input', scheduleSave);
+  // A successful composer send (form POST) clears the textarea, so drop the
+  // stored caret too - mirroring the server-side draft delete on send. The
+  // debounced draft PUT (verb=put) and a failed send keep the text and caret.
+  // htmx:afterRequest bubbles from the textarea's PUT and the form's POST; key
+  // off the verb so this does not depend on when the inline success handler
+  // wipes ta.value.
+  function onAfterRequest(ev){
+    var d = ev.detail;
+    if (!d || !d.successful) return;
+    var verb = d.requestConfig && d.requestConfig.verb;
+    if (verb && verb.toLowerCase() === 'post') clearCaret();
+  }
+  form.addEventListener('htmx:afterRequest', onAfterRequest);
+  function teardown(){
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    form.removeEventListener('htmx:afterRequest', onAfterRequest);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>

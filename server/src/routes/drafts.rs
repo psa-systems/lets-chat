@@ -32,6 +32,21 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::ws::events::ChatEvent;
+
+/// LC-239: tell every one of `user_id`'s tabs to swap the sidebar draft
+/// indicator for `room_id`. Per-user fan-out; tabs whose current page lacks
+/// that sidebar row drop the OOB swap silently.
+fn broadcast_draft_changed(state: &AppState, user_id: &str, room_id: i64, has_draft: bool) {
+    state.hub.broadcast_to_user(
+        user_id,
+        &ChatEvent::DraftChanged {
+            user_id: user_id.to_string(),
+            room_id,
+            has_draft,
+        },
+    );
+}
 
 #[derive(Deserialize)]
 pub struct DraftForm {
@@ -69,7 +84,16 @@ pub async fn put_draft(
     let body = form.body.trim();
 
     if body.is_empty() {
-        let _ = db::drafts::delete(&state.chat, &user.id, room_id).await;
+        // Only signal the sidebar when a row actually went away; an empty
+        // PUT for a room that never had a draft is a no-op the badge already
+        // reflects.
+        if db::drafts::delete(&state.chat, &user.id, room_id)
+            .await
+            .unwrap_or(0)
+            > 0
+        {
+            broadcast_draft_changed(&state, &user.id, room_id, false);
+        }
         return Ok(StatusCode::NO_CONTENT);
     }
 
@@ -102,5 +126,9 @@ pub async fn put_draft(
     }
 
     db::drafts::upsert(&state.chat, &user.id, room_id, body).await?;
+    // Light the sidebar indicator across the user's tabs. Idempotent: the
+    // debounced PUT re-fires every ~1s of typing and re-swaps the same pencil
+    // (a tiny per-user OOB), so no transition tracking is needed.
+    broadcast_draft_changed(&state, &user.id, room_id, true);
     Ok(StatusCode::NO_CONTENT)
 }
