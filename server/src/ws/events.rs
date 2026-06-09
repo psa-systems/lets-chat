@@ -152,6 +152,17 @@ pub enum ChatEvent {
     SavedChanged {
         user_id: String,
     },
+    /// LC-239: the viewer's draft for `room_id` was saved (`has_draft = true`)
+    /// via the debounced composer PUT, or cleared (`has_draft = false`) by a
+    /// send / schedule / empty-body delete. Routed via
+    /// `broadcast_to_user(user_id, ...)` so every tab updates the sidebar
+    /// draft indicator (`#lc-draft-{room_id}`) OOB without a reload. Tabs
+    /// whose current page lacks that sidebar row drop the swap silently.
+    DraftChanged {
+        user_id: String,
+        room_id: i64,
+        has_draft: bool,
+    },
     /// LC-175: a user's admin-list row changed (ban / mute / role / quota) or
     /// was removed (delete). Broadcast on the `admin` topic so every admin's
     /// open user list refreshes the `#user-{id}` row OOB. `removed` swaps the

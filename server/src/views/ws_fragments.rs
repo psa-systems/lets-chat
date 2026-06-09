@@ -89,6 +89,17 @@ pub struct UnreadBadgeFragment<'a> {
     pub mute_mode: &'a str,
 }
 
+/// LC-239: OOB swap of one sidebar conversation's draft indicator
+/// (`#lc-draft-{room_id}`) when the viewer saves or clears a draft.
+/// Rendered per recipient in the WS send task, gated to the draft owner
+/// (the event is `broadcast_to_user`), so `render_event` returns `None`.
+#[derive(Template)]
+#[template(path = "ws/draft_badge.html")]
+pub struct DraftBadgeFragment {
+    pub room_id: i64,
+    pub has_draft: bool,
+}
+
 /// Out-of-band swap that updates the "Seen HH:MM" caption under one DM
 /// message. `caption = None` clears the slot; `Some(text)` populates it. The
 /// element id is `seen-{message_id}`, present in the DOM for every
@@ -324,6 +335,9 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::AdminRoomChanged { .. }
         // LC-178: rendered per recipient in the WS send task (/saved list OOB).
         | ChatEvent::SavedChanged { .. }
+        // LC-239: rendered per recipient in the WS send task (sidebar draft
+        // badge OOB), so the recipient-independent path emits nothing.
+        | ChatEvent::DraftChanged { .. }
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
         | ChatEvent::PollUpdated { .. }

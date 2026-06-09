@@ -868,7 +868,23 @@ pub(crate) async fn finalize_message_send(
     // chokepoint covers both direct sends and LC-62 scheduled-message
     // deliveries (the dispatcher funnels through here). Best-effort:
     // a DB hiccup on the draft delete must not fail the send.
-    let _ = db::drafts::delete(&state.chat, &author.id, room.id).await;
+    // LC-239: when a draft actually went away, clear its sidebar indicator
+    // across the author's tabs. Gated on rows_affected so the common
+    // no-draft send does not fan a redundant OOB to every tab.
+    if db::drafts::delete(&state.chat, &author.id, room.id)
+        .await
+        .unwrap_or(0)
+        > 0
+    {
+        state.hub.broadcast_to_user(
+            &author.id,
+            &ChatEvent::DraftChanged {
+                user_id: author.id.clone(),
+                room_id: room.id,
+                has_draft: false,
+            },
+        );
+    }
 
     Ok(message)
 }

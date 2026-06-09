@@ -294,6 +294,26 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_saved_list(&send_state, &send_user).await
                                 }
+                                // LC-239: the viewer saved or cleared a draft.
+                                // broadcast_to_user fans to all their tabs;
+                                // swap the sidebar draft badge OOB
+                                // (#lc-draft-{room_id}). Tabs whose current page
+                                // lacks that sidebar row drop the swap. Gated to
+                                // the owner (defensive; the event is only ever
+                                // routed to them via broadcast_to_user). No DB
+                                // read: the event already carries the new state.
+                                ChatEvent::DraftChanged {
+                                    user_id,
+                                    room_id,
+                                    has_draft,
+                                } if user_id == &send_user.id => {
+                                    crate::views::ws_fragments::DraftBadgeFragment {
+                                        room_id: *room_id,
+                                        has_draft: *has_draft,
+                                    }
+                                    .render()
+                                    .ok()
+                                }
                                 // LC-175: a user's admin-list row changed.
                                 // Broadcast on the `admin` topic (only admins
                                 // can subscribe), so every admin's open user
