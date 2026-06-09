@@ -5,7 +5,13 @@
   hx-swap="outerHTML"
   class="px-4 py-2 bg-yellow-50"
 >
-  <input name="body" value="{{ current_body }}" class="w-full border rounded px-2 py-1">
+  {# LC-248: autofocus so the global after-swap focus handler (layout.html)
+     lands the caret in the editor for both the hover "Edit" and the
+     Arrow-Up-edits-last shortcut. Escape triggers the Cancel control below
+     (restores the message via its hx-get). #}
+  <input name="body" value="{{ current_body }}" autofocus
+    onkeydown="if (event.key === 'Escape') { event.preventDefault(); var c = this.form.querySelector('button[hx-get]'); if (c) c.click(); }"
+    class="w-full border rounded px-2 py-1">
   <div class="text-xs mt-1 flex gap-2">
     <button class="text-accent hover:underline">{{ "room-save"|t }}</button>
     <button type="button" hx-get="/messages/{{ message_id }}" hx-target="#msg-{{ message_id }}" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-cancel"|t }}</button>
