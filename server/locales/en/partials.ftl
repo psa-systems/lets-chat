@@ -86,3 +86,9 @@ partials-room-info-docs-title = Room info / docs / wiki
 partials-room-info = Info
 partials-room-moderators-title = Manage per-room moderators
 partials-room-moderators = Moderators
+
+## Message list (LC-242 jump-to-latest pill)
+# %n% is replaced with the live message count in JS (partials/auto_scroll.html).
+room-jump-to-latest-aria = Jump to latest message
+room-jump-new-one = 1 new message
+room-jump-new-many = %n% new messages

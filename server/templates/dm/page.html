@@ -8,7 +8,12 @@
     {% let mute_mode = mute_mode.as_str() %}
     {% include "partials/dm_header.html" %}
     {{ pinned_strip_html|safe }}
-    {% include "room/messages.html" %}
+    {# LC-242: relative wrapper anchors the jump-to-latest pill to the
+       bottom-right of the message viewport (above the composer). #}
+    <div class="relative flex flex-1 flex-col min-h-0">
+      {% include "room/messages.html" %}
+      {% include "partials/jump_to_latest.html" %}
+    </div>
     <div id="typing" class="px-4 text-xs text-content-muted"></div>
     {% include "room/composer.html" %}
   </div>
