@@ -458,3 +458,23 @@ async fn block_does_not_break_existing_dm_mute_endpoint() {
     let (status, _) = post_mute_full(&t.app, &t.session, &t.peer_id, "muted=on").await;
     assert_eq!(status, StatusCode::OK);
 }
+
+// LC-242: the jump-to-latest pill renders on the DM page too (scope is rooms
+// AND DMs). Counter/scroll behaviour is JS-only and covered by the LC-243 QA
+// pass; this pins that the shared partial reaches the DM page.
+#[tokio::test]
+async fn dm_page_renders_jump_to_latest_pill() {
+    let t = app_with_two_users("viewer", "alice").await;
+    seed_dm_room(&t).await;
+
+    let (status, body) = get_dm_page(&t.app, &t.session, &t.peer_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"lc-jump-latest\""),
+        "DM page must render the jump-to-latest pill",
+    );
+    assert!(
+        body.contains("data-lc-jump-many=\"%n% new messages\""),
+        "pill carries the localized many-form template",
+    );
+}

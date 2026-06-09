@@ -790,7 +790,9 @@ async fn room_ids_with_drafts_returns_only_fresh_nonempty_rows() {
     let r3 = private_room(&t.chat, "three").await;
 
     // Fresh drafts in rooms 1 and r2 for alice.
-    db::drafts::upsert(&t.chat, &t.alice_id, 1, "a").await.unwrap();
+    db::drafts::upsert(&t.chat, &t.alice_id, 1, "a")
+        .await
+        .unwrap();
     db::drafts::upsert(&t.chat, &t.alice_id, r2, "b")
         .await
         .unwrap();
@@ -861,5 +863,37 @@ async fn sidebar_omits_draft_pencil_when_no_draft() {
     assert!(
         !body.contains("&#9998;"),
         "no draft anywhere means no pencil indicator is rendered",
+    );
+}
+
+// ----------------------------------------------------------------------
+// LC-242: jump-to-latest pill renders (hidden) on the room page with its
+// localized strings. Counter/scroll behaviour is JS-only and covered by the
+// LC-243 QA pass; this just pins that the markup and i18n keys are present.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn room_page_renders_jump_to_latest_pill_hidden() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"lc-jump-latest\""),
+        "room page must render the jump-to-latest pill",
+    );
+    // Starts hidden; auto_scroll.html reveals it on scroll-up.
+    assert!(
+        body.contains("class=\"hidden absolute"),
+        "pill must start hidden",
+    );
+    // i18n keys resolve (not echoed literally) for the aria-label and the
+    // localized count templates the JS substitutes %n% into.
+    assert!(
+        body.contains("aria-label=\"Jump to latest message\""),
+        "pill aria-label i18n key must resolve",
+    );
+    assert!(
+        body.contains("data-lc-jump-many=\"%n% new messages\""),
+        "pill carries the localized many-form template with the %n% token",
     );
 }
