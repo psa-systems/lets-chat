@@ -1203,6 +1203,19 @@ pub async fn set_last_read(
     upsert_dm_read(pool, user_id, room_id, message_id).await
 }
 
+/// LC-250: the highest message id in a room, or `None` for an empty room.
+/// Used by "mark all as read" to advance the viewer's read watermark to the
+/// latest message in each conversation that has unread.
+pub async fn latest_message_id(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(id) FROM messages WHERE room_id = ?")
+        .bind(room_id)
+        .fetch_one(pool)
+        .await
+}
+
 /// Return the peer's user_id for a DM room from the caller's perspective, or
 /// None if the room is not a DM the caller is a member of.
 pub async fn get_dm_peer(
