@@ -324,6 +324,78 @@ verify: build-css
 fmt:
     ./dev/cargo fmt --all
 
+# ── Cleanup ────────────────────────────────────────────────────────────────
+
+# Tear down THIS repo's entire dev footprint: bring down every dev compose stack (web, web-saas, web-local, web-local-saas, desktop) with their networks and project-scoped volumes, remove the fixed-name cargo/data volumes the `dev/cargo` + `dev/server-up` wrappers create, and delete local build/runtime artifacts (target/, data/, artifacts/ desktop bundles). Supersedes the per-mode dev-web*-clean recipes (each only `down --volumes` for one stack); this one teardown covers every mode at once. Scoped to this repo, safe on a shared host (no host-global prune).
+[group: 'cleanup']
+dev-clean:
+    #!/usr/bin/env nu
+    # Each dev mode has its own compose file; `down --remove-orphans --volumes`
+    # drops the stack, its default network, and its project-scoped named
+    # volumes (cargo-registry/cargo-git/target/data, lets-chat-data) without
+    # needing to spell the project-prefixed volume names out by hand.
+    let compose_files = [
+        "compose.dev-web.yml"
+        "compose.dev-web-saas.yml"
+        "compose.dev-web-local.yml"
+        "compose.dev-web-local-saas.yml"
+        "compose.dev-desktop.yml"
+        "compose.yml"
+    ]
+    for f in $compose_files {
+        if ($f | path exists) {
+            docker compose --file $f down --remove-orphans --volumes
+        }
+    }
+    # Fixed-name volumes from the ad-hoc `docker run` wrappers (dev/cargo,
+    # dev/server-up). These are NOT compose-managed, so `compose down` above
+    # never touches them; remove by name, guarded so a missing one is a no-op.
+    let vols = [
+        "lets-chat-rewrite-cargo-registry"
+        "lets-chat-rewrite-cargo-git"
+        "lets-chat-rewrite-target"
+        "lets-chat-rewrite-data"
+    ]
+    let existing = docker volume ls --quiet | lines
+    for vol in $vols {
+        if $vol in $existing {
+            docker volume rm $vol
+        }
+    }
+    # Local build + runtime artifacts: Rust target/, the dev SQLite data/ dir
+    # (gitignored bind-mount state), and artifacts/ where the desktop build
+    # recipes drop binaries and the deb/appimage bundles (artifacts/bundle-linux/).
+    let paths = [target data artifacts]
+    for p in $paths {
+        if ($p | path exists) {
+            rm --recursive $p
+            print $"removed ($p)"
+        }
+    }
+    print "dev-clean: done"
+
+# Everything dev-clean does, plus remove the Docker images this repo builds locally (web + saas + desktop check/local/bundles tags) and prune the buildx cache. Run for a from-scratch rebuild.
+[group: 'cleanup']
+dev-clean-all: dev-clean
+    #!/usr/bin/env nu
+    let images = [
+        "lets-chat:local"
+        "lets-chat:check"
+        "lets-chat-saas:local"
+        "lets-chat-saas:check"
+        "lets-chat-desktop:local"
+        "lets-chat-desktop:bundles"
+        "lets-chat-desktop-windows:local"
+    ]
+    for img in $images {
+        let present = (do { ^docker image inspect $img } | complete).exit_code == 0
+        if $present {
+            docker image rm $img
+        }
+    }
+    docker buildx prune --force
+    print "dev-clean-all: done"
+
 # ── Release ──────────────────────────────────────────────────────────────
 
 # Create a release: bump major (vx.0.0), minor (v0.x.0), or hotfix (v0.0.x), push branch, and open the release PR via fj.
