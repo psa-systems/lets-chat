@@ -69,6 +69,8 @@ partials-dm-block-confirm-prefix = Block
 partials-dm-block-confirm-suffix = They won't be able to message you and you won't see their messages.
 
 ## Pinned strip
+partials-pinned-heading = Pinned
+partials-pinned-toggle = Toggle pinned messages
 partials-pinned-see-all-prefix = See all
 partials-pinned-see-all-suffix = pinned
 
