@@ -89,6 +89,7 @@ partials-reaction-add = Añadir reacción
 partials-room-info-title = Ver información, descripción y wiki de la sala
 partials-room-info-docs-title = Información / documentos / wiki de la sala
 partials-room-info = Información
+partials-room-search-placeholder = Buscar en esta sala...
 partials-room-moderators-title = Gestionar moderadores de la sala
 partials-room-moderators = Moderadores
 

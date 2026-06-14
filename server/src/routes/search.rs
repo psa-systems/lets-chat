@@ -19,6 +19,9 @@ fn empty_popover() -> Html {
 pub struct SearchQuery {
     pub q: Option<String>,
     pub enclave_id: Option<i64>,
+    /// LC-268: scope the search to a single room (the room-header search box).
+    /// When set, takes precedence over `enclave_id`.
+    pub room_id: Option<i64>,
 }
 
 /// GET /search?q=... - full-text search over messages the caller can read.
@@ -29,7 +32,11 @@ pub struct SearchQuery {
 pub async fn get_search(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
-    Query(SearchQuery { q, enclave_id }): Query<SearchQuery>,
+    Query(SearchQuery {
+        q,
+        enclave_id,
+        room_id,
+    }): Query<SearchQuery>,
 ) -> Result<Html, AppError> {
     let query = q.unwrap_or_default();
     let trimmed = query.trim();
@@ -44,23 +51,37 @@ pub async fn get_search(
     };
 
     let is_admin = user.role == "admin";
-    if let Some(eid) = enclave_id {
-        // Membership gate: site admins bypass.
-        if !is_admin
-            && db::enclave::get_membership(&state.chat, eid, &user.id)
-                .await?
-                .is_none()
-        {
+
+    // LC-268: room-scoped search (the room-header box) takes precedence over an
+    // enclave scope. Gate on room access (403) then narrow the FTS to that
+    // room; the home-scope clause still enforces readability, so the room
+    // filter only narrows. When no room is given, fall back to the existing
+    // enclave / home behavior.
+    let (room_filter, enclave_filter) = if let Some(rid) = room_id {
+        if !db::chat::is_room_accessible(&state.chat, rid, &user.id, is_admin).await? {
             return Err(AppError::Forbidden);
         }
-    }
-    let home_scope = enclave_id.is_none();
+        (Some(rid), None)
+    } else {
+        if let Some(eid) = enclave_id {
+            // Membership gate: site admins bypass.
+            if !is_admin
+                && db::enclave::get_membership(&state.chat, eid, &user.id)
+                    .await?
+                    .is_none()
+            {
+                return Err(AppError::Forbidden);
+            }
+        }
+        (None, enclave_id)
+    };
+    let home_scope = enclave_filter.is_none();
     let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
     let rows: Vec<_> = db::chat::search_messages(
         &state.chat,
         &fts_query,
-        None,
-        enclave_id,
+        room_filter,
+        enclave_filter,
         home_scope,
         &user.id,
         is_admin,

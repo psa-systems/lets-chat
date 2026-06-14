@@ -89,6 +89,7 @@ partials-reaction-add = Add reaction
 partials-room-info-title = View room info, description, and wiki
 partials-room-info-docs-title = Room info / docs / wiki
 partials-room-info = Info
+partials-room-search-placeholder = Search this room...
 partials-room-moderators-title = Manage per-room moderators
 partials-room-moderators = Moderators
 
