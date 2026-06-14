@@ -150,6 +150,23 @@
         <path d="M8.603 14.768a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 005.656 5.656l3-3a4 4 0 00-.225-5.865.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3z"/>
       </svg>
     </button>
+    {# LC-300: strikethrough (inline, GFM ~~). #}
+    <button type="button" data-lc-fmt="strike" data-lc-ph="{{ "room-composer-format-strike-ph"|t }}" title="{{ "room-composer-format-strike"|t }}" aria-label="{{ "room-composer-format-strike"|t }}"
+      class="px-2 py-1 rounded line-through hover:text-content hover:bg-surface-sunken">S</button>
+    {# LC-300: bulleted list (line-prefix `- `). #}
+    <button type="button" data-lc-fmt="ul" data-lc-ph="{{ "room-composer-format-list-ph"|t }}" title="{{ "room-composer-format-list"|t }}" aria-label="{{ "room-composer-format-list"|t }}"
+      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+        <path d="M3 4.5a1 1 0 100 2 1 1 0 000-2zM6.25 5a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM6.25 9.25a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM6.25 13.5a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM4 10a1 1 0 11-2 0 1 1 0 012 0zM3 13.5a1 1 0 100 2 1 1 0 000-2z"/>
+      </svg>
+    </button>
+    {# LC-300: blockquote (line-prefix `> `). #}
+    <button type="button" data-lc-fmt="quote" data-lc-ph="{{ "room-composer-format-quote-ph"|t }}" title="{{ "room-composer-format-quote"|t }}" aria-label="{{ "room-composer-format-quote"|t }}"
+      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+        <path d="M2 4a.75.75 0 00-.75.75v9.5a.75.75 0 001.5 0v-9.5A.75.75 0 002 4zM5.75 4a.75.75 0 000 1.5h9.5a.75.75 0 000-1.5h-9.5zM5 9.25a.75.75 0 01.75-.75h9.5a.75.75 0 010 1.5h-9.5A.75.75 0 015 9.25zM5.75 13a.75.75 0 000 1.5h5.5a.75.75 0 000-1.5h-5.5z"/>
+      </svg>
+    </button>
     {# LC-276: Write/Preview toggle. Renders the draft through the SAME server
        markdown pipeline that posting uses, so the preview matches the result. #}
     <button type="button" data-lc-preview-toggle data-lc-edit-label="{{ "room-composer-edit"|t }}"
@@ -1309,6 +1326,23 @@
     ta.dispatchEvent(new Event('input'));
   }
 
+  // LC-300: line-oriented prefix (bulleted list `- `, blockquote `> `). Expands
+  // the selection to whole lines and prefixes each; with no selection it
+  // prefixes the current line, or inserts the placeholder on an empty line.
+  function linePrefix(prefix, placeholder){
+    var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    var lineStart = v.lastIndexOf('\n', s - 1) + 1;
+    var lineEnd = v.indexOf('\n', e);
+    if (lineEnd === -1) lineEnd = v.length;
+    var block = v.slice(lineStart, lineEnd);
+    if (block.length === 0) block = placeholder;
+    var prefixed = block.split('\n').map(function(line){ return prefix + line; }).join('\n');
+    ta.value = v.slice(0, lineStart) + prefixed + v.slice(lineEnd);
+    ta.focus();
+    ta.setSelectionRange(lineStart, lineStart + prefixed.length);
+    ta.dispatchEvent(new Event('input'));
+  }
+
   // Link is special-cased to [text](url); selecting `url` so the user types the
   // destination straight away.
   function link(textPh, urlPh){
@@ -1327,6 +1361,9 @@
     if (kind === 'bold')        wrap('**', '**', ph || 'bold text');
     else if (kind === 'italic') wrap('*', '*', ph || 'italic text');
     else if (kind === 'code')   wrap('`', '`', ph || 'code');
+    else if (kind === 'strike') wrap('~~', '~~', ph || 'strikethrough');
+    else if (kind === 'ul')     linePrefix('- ', ph || 'list item');
+    else if (kind === 'quote')  linePrefix('> ', ph || 'quote');
     else if (kind === 'link')   link(ph || 'text', (btn && btn.getAttribute('data-lc-ph-url')) || 'url');
   }
   window.__lcFormat = apply;

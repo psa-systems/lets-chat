@@ -624,6 +624,21 @@ mod tests {
         assert!(out.contains("<li>one"), "no li: {out}");
     }
 
+    // LC-300: the composer toolbar's strike/quote buttons emit `~~...~~` and
+    // `> ...`; pin that those render as expected (list is covered above).
+    #[test]
+    fn strikethrough_renders() {
+        let out = render("~~gone~~", &[], &[]);
+        assert!(out.contains("<del>gone</del>"), "no del: {out}");
+    }
+
+    #[test]
+    fn blockquote_renders() {
+        let out = render("> quoted", &[], &[]);
+        assert!(out.contains("<blockquote>"), "no blockquote: {out}");
+        assert!(out.contains("quoted"), "quote text lost: {out}");
+    }
+
     // ---------- LC-59: math integration through the markdown pipeline ----------
 
     #[test]

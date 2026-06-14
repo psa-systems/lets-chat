@@ -24,11 +24,17 @@ room-composer-format-bold = Negrita
 room-composer-format-italic = Cursiva
 room-composer-format-code = Código
 room-composer-format-link = Enlace
+room-composer-format-strike = Tachado
+room-composer-format-list = Lista con viñetas
+room-composer-format-quote = Cita
 room-composer-format-bold-ph = texto en negrita
 room-composer-format-italic-ph = texto en cursiva
 room-composer-format-code-ph = código
 room-composer-format-link-text-ph = texto
 room-composer-format-link-url-ph = url
+room-composer-format-strike-ph = tachado
+room-composer-format-list-ph = elemento de lista
+room-composer-format-quote-ph = cita
 
 ## Quote chip
 room-quote-replying-to = Respondiendo a
