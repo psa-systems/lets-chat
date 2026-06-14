@@ -19,6 +19,7 @@ struct TestApp {
     alice_id: String,
     alice_session: String,
     bob_id: String,
+    bob_session: String,
 }
 
 async fn setup() -> TestApp {
@@ -34,6 +35,9 @@ async fn setup() -> TestApp {
         .await
         .unwrap();
     let alice_session = db::auth::create_session(&auth, &alice_id).await.unwrap();
+    // LC-258: bob stays a non-admin (no role bump) so the access-gate test can
+    // assert a 403 on a private room he is not a member of.
+    let bob_session = db::auth::create_session(&auth, &bob_id).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
@@ -65,6 +69,7 @@ async fn setup() -> TestApp {
         alice_id,
         alice_session,
         bob_id,
+        bob_session,
     }
 }
 
@@ -83,6 +88,20 @@ async fn post_read_all(app: &Router, sess: &str) -> (StatusCode, String) {
     let req = Request::builder()
         .method(Method::POST)
         .uri("/read-all")
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let body = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&body).into_owned())
+}
+
+// LC-258: per-room mark-as-read.
+async fn post_room_read(app: &Router, sess: &str, room_id: i64) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/room/{room_id}/read"))
         .header(header::COOKIE, format!("session={sess}"))
         .body(Body::empty())
         .unwrap();
@@ -183,5 +202,82 @@ async fn read_all_is_idempotent() {
             .await
             .unwrap(),
         0
+    );
+}
+
+// LC-258: marking ONE room read clears only that room (and its mentions),
+// leaving every other unread conversation untouched.
+#[tokio::test]
+async fn read_one_room_clears_only_that_room() {
+    let t = setup().await;
+
+    // Unread in room 1 (General) + a mention of alice there.
+    let m1 = insert_message(&t.chat, 1, &t.bob_id, "hi 1").await;
+    insert_message(&t.chat, 1, &t.bob_id, "hi 2").await;
+    sqlx::query(
+        "INSERT INTO mentions (message_id, room_id, mentioned_user_id, author_user_id) \
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(m1)
+    .bind(1i64)
+    .bind(&t.alice_id)
+    .bind(&t.bob_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+    // Unread in a separate DM that must NOT be cleared.
+    let dm = db::chat::create_dm_room(&t.chat, "@bob", &t.alice_id, &t.bob_id)
+        .await
+        .unwrap();
+    insert_message(&t.chat, dm.id, &t.bob_id, "dm hi").await;
+
+    let (status, body) = post_room_read(&t.app, &t.alice_session, 1).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"sidebar\""),
+        "returns the sidebar fragment"
+    );
+
+    // Room 1 + its mention cleared.
+    assert_eq!(
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+            .await
+            .unwrap(),
+        0,
+        "target room unread cleared",
+    );
+    assert!(
+        db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id)
+            .await
+            .unwrap()
+            .is_empty(),
+        "target room mention cleared",
+    );
+    // The DM is untouched.
+    assert_eq!(
+        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id)
+            .await
+            .unwrap(),
+        1,
+        "other conversation stays unread",
+    );
+}
+
+// LC-258: a viewer cannot mark a room they cannot see. bob (non-admin) is not a
+// member of a fresh private room, so the access gate returns 403.
+#[tokio::test]
+async fn read_room_forbidden_when_inaccessible() {
+    let t = setup().await;
+    let private = sqlx::query("INSERT INTO rooms (name, room_type) VALUES ('secret', 'private')")
+        .execute(&t.chat)
+        .await
+        .unwrap()
+        .last_insert_rowid();
+
+    let (status, _) = post_room_read(&t.app, &t.bob_session, private).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "non-member cannot mark an inaccessible private room read",
     );
 }

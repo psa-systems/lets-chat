@@ -147,7 +147,8 @@ async fn switcher_person_not_duplicated() {
     let (status, body) = switcher(&t.app, &t.alice_session, "carol", t.enclave_id).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
-        body.matches(&format!("href=\"/dm/{}\"", t.carol_id)).count(),
+        body.matches(&format!("href=\"/dm/{}\"", t.carol_id))
+            .count(),
         1,
         "a person appears exactly once",
     );
