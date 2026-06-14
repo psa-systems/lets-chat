@@ -69,6 +69,8 @@ partials-dm-block-confirm-prefix = ¿Bloquear a
 partials-dm-block-confirm-suffix = No podrá enviarte mensajes y no verás los suyos.
 
 ## Pinned strip
+partials-pinned-heading = Fijados
+partials-pinned-toggle = Mostrar u ocultar mensajes fijados
 partials-pinned-see-all-prefix = Ver todos los
 partials-pinned-see-all-suffix = fijados
 

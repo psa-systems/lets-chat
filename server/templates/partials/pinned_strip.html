@@ -1,13 +1,26 @@
-<div id="lc-pinned-strip-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-warning-border bg-warning-surface{% endif %}">
+<div id="lc-pinned-strip-{{ room_id }}" data-lc-pinned-strip data-room-id="{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-warning-border bg-warning-surface{% endif %}">
   {% if total_count > 0 %}
-  <ul class="px-4 py-2 space-y-1 text-sm">
+  {# LC-264: header carries the collapse toggle. Folding hides the list below
+     (persisted per-room in localStorage by the script). #}
+  <div class="flex items-center gap-2 px-4 pt-2 pb-1 text-xs text-warning">
+    <span class="shrink-0" aria-hidden="true">
+      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M10 1a1 1 0 011 1v3.586l3.207 3.207A1 1 0 0114 10.5H11v6.586a1 1 0 11-2 0V10.5H6a1 1 0 01-.707-1.707L8.5 5.586V2a1 1 0 011-1z"/>
+      </svg>
+    </span>
+    <span class="font-semibold uppercase tracking-wide">{{ "partials-pinned-heading"|t }}</span>
+    <span class="text-content-muted">{{ total_count }}</span>
+    <button type="button" data-lc-pin-toggle aria-expanded="true" aria-controls="lc-pinned-list-{{ room_id }}"
+            title="{{ "partials-pinned-toggle"|t }}" aria-label="{{ "partials-pinned-toggle"|t }}"
+            class="ml-auto shrink-0 text-content-muted hover:text-content">
+      <svg data-lc-pin-chevron class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.085l3.71-3.855a.75.75 0 111.08 1.04l-4.25 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+      </svg>
+    </button>
+  </div>
+  <ul id="lc-pinned-list-{{ room_id }}" data-lc-pin-list class="px-4 pb-2 space-y-1 text-sm">
     {% for p in top_pins %}
     <li class="flex items-center gap-2">
-      <span class="text-warning shrink-0" aria-hidden="true">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 1a1 1 0 011 1v3.586l3.207 3.207A1 1 0 0114 10.5H11v6.586a1 1 0 11-2 0V10.5H6a1 1 0 01-.707-1.707L8.5 5.586V2a1 1 0 011-1z"/>
-        </svg>
-      </span>
       <a href="#msg-{{ p.message_id }}" class="flex-1 truncate text-content hover:underline">
         <span class="font-medium">{{ p.author_label }}:</span>
         {{ p.snippet }}
@@ -23,3 +36,44 @@
   </ul>
   {% endif %}
 </div>
+<script>
+// LC-264: per-room collapse for the pinned strip. State is device-local
+// (localStorage), re-applied on initial load and after every live OOB
+// re-render (htmx:afterSettle), so collapsing does not pop back open when
+// someone pins/unpins. Once-guarded: the strip re-renders on pin changes, so
+// the handler registers a single delegated listener and just re-applies state
+// on subsequent runs.
+(function(){
+  function key(id){ return 'lc-pins-collapsed-' + id; }
+  function collapsed(id){ try { return localStorage.getItem(key(id)) === '1'; } catch (e) { return false; } }
+  function setCollapsed(id, v){
+    try { if (v) localStorage.setItem(key(id), '1'); else localStorage.removeItem(key(id)); } catch (e) {}
+  }
+  function apply(strip){
+    var id = strip.getAttribute('data-room-id');
+    var list = strip.querySelector('[data-lc-pin-list]');
+    var btn = strip.querySelector('[data-lc-pin-toggle]');
+    if (!list || !btn) return;
+    var c = collapsed(id);
+    list.hidden = c;
+    btn.setAttribute('aria-expanded', c ? 'false' : 'true');
+  }
+  function applyAll(){
+    var strips = document.querySelectorAll('[data-lc-pinned-strip]');
+    for (var i = 0; i < strips.length; i++) apply(strips[i]);
+  }
+  if (window.__lcPinsInit) { applyAll(); return; }
+  window.__lcPinsInit = true;
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('[data-lc-pin-toggle]');
+    if (!btn) return;
+    var strip = btn.closest('[data-lc-pinned-strip]');
+    if (!strip) return;
+    var id = strip.getAttribute('data-room-id');
+    setCollapsed(id, !collapsed(id));
+    apply(strip);
+  });
+  document.body.addEventListener('htmx:afterSettle', applyAll);
+  applyAll();
+})();
+</script>
