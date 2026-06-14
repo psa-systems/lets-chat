@@ -65,6 +65,35 @@
   var manyTpl = pill ? (pill.getAttribute('data-lc-jump-many') || '') : '';
   var newCount = 0;
 
+  // LC-294: jump-to-first-unread pill. Mirror of the latest pill but upward.
+  // Queried independently of the permalink anchor below so it still works when
+  // a #msg-<id> took the initial scroll. Shown whenever the unread divider
+  // exists but is currently scrolled out of the #messages viewport.
+  var unreadPill = document.getElementById('lc-jump-unread');
+  var unreadDivider = messages.querySelector('[data-unread-divider]');
+  function isDividerVisible() {
+    if (!unreadDivider) return false;
+    var mr = messages.getBoundingClientRect();
+    var dr = unreadDivider.getBoundingClientRect();
+    return dr.bottom > mr.top && dr.top < mr.bottom;
+  }
+  function renderUnreadPill() {
+    if (!unreadPill) return;
+    if (unreadDivider && !isDividerVisible()) unreadPill.classList.remove('hidden');
+    else unreadPill.classList.add('hidden');
+  }
+  function jumpToUnread() {
+    if (!unreadDivider) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof unreadDivider.scrollIntoView !== 'function') {
+      unreadDivider.scrollIntoView({ block: 'start' });
+    } else {
+      unreadDivider.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    renderUnreadPill();
+  }
+  if (unreadPill) unreadPill.addEventListener('click', jumpToUnread);
+
   function isAtBottom() {
     return messages.scrollTop + messages.clientHeight >= messages.scrollHeight - slack;
   }
@@ -95,6 +124,7 @@
     wasAtBottom = isAtBottom();
     if (wasAtBottom) newCount = 0;
     renderPill();
+    renderUnreadPill();
   }
   messages.addEventListener('scroll', onScroll);
 
@@ -130,6 +160,10 @@
   // LC-242: set the pill's initial state to match where we anchored (hidden at
   // the bottom; a bare chevron when anchored at an unread divider up-list).
   renderPill();
+  // LC-294: hidden at load when we anchored the divider into view; appears once
+  // the reader scrolls it off-screen (or immediately if a permalink anchor left
+  // the divider out of view).
+  renderUnreadPill();
 
   // Follow new content if the user has not scrolled away from the bottom.
   // `wasAtBottom` is driven by real scroll events only. The previous
@@ -197,6 +231,8 @@
       newCount++;
       renderPill();
     }
+    // LC-294: a live append can shift the divider out of (or further from) view.
+    renderUnreadPill();
   }
   document.body.addEventListener('htmx:oobAfterSwap', onOob);
 
@@ -221,7 +257,7 @@
   // afterSwap hook alone is not enough.
   var ro = null;
   if (typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver(followIfPinned);
+    ro = new ResizeObserver(function () { followIfPinned(); renderUnreadPill(); });
     ro.observe(messages);
   }
 
@@ -244,6 +280,7 @@
     document.body.removeEventListener('htmx:afterSwap', onAfterSwapCollapse);
     document.body.removeEventListener('htmx:oobAfterSwap', onOob);
     if (pill) pill.removeEventListener('click', jumpToLatest);
+    if (unreadPill) unreadPill.removeEventListener('click', jumpToUnread);
     if (ro) ro.disconnect();
     messages.removeEventListener('htmx:beforeCleanupElement', maybeTeardown);
   }
