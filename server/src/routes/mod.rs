@@ -45,6 +45,7 @@ pub(crate) mod email_verification;
 mod enclave;
 mod export;
 mod feeds;
+mod forward;
 mod home;
 mod inbox;
 pub(crate) mod login_alerts;
@@ -979,6 +980,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/m/{message_id}", get(room::get_message_permalink))
         .route("/room/{room_id}/messages", post(room::post_message))
         .route("/room/{room_id}/preview", post(room::post_preview))
+        .route(
+            "/messages/{message_id}/forward",
+            get(forward::get_forward_picker),
+        )
+        .route(
+            "/messages/{message_id}/forward/{dest_room_id}",
+            post(forward::post_forward),
+        )
         .route("/room/{room_id}/draft", put(drafts::put_draft))
         .route(
             "/room/{room_id}/notify-prefs",

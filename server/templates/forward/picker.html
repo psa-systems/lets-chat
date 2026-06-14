@@ -1,0 +1,80 @@
+{# LC-278: forward-message destination picker, swapped into the singleton
+   #lc-forward-modal slot by the message hover-menu "Forward" button. Each
+   destination button POSTs the forward; the confirm fragment replaces this
+   picker in the same slot. Modal a11y mirrors reminders/picker.html: focus
+   trap (window.__lcDialogTrap), Escape / backdrop / X to close, focus restored
+   to the opener. A small filter narrows the destination list. #}
+<div class="modal-backdrop"
+     role="dialog" aria-modal="true" aria-label="{{ "room-forward-label"|t }}"
+     data-lc-forward-dialog>
+  <div class="modal-panel max-w-sm">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 class="text-lg font-semibold">{{ "room-forward-title"|t }}</h2>
+      <button type="button" aria-label="{{ "room-forward-close"|t }}" data-lc-forward-close
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    {% if rooms.is_empty() && dms.is_empty() %}
+    <p class="text-sm text-content-muted">{{ "room-forward-empty"|t }}</p>
+    {% else %}
+    <input type="text" data-lc-forward-filter autocomplete="off"
+           placeholder="{{ "room-forward-filter"|t }}" aria-label="{{ "room-forward-filter"|t }}"
+           class="w-full rounded border border-border-strong px-2 py-1 text-sm mb-2">
+    <div data-lc-forward-list class="max-h-72 overflow-y-auto flex flex-col gap-1">
+      {% if !rooms.is_empty() %}
+      <div class="text-xs uppercase tracking-wide text-content-muted px-1 pt-1">{{ "room-forward-rooms"|t }}</div>
+      {% for d in rooms %}
+      <button data-lc-forward-name="{{ d.name }}"
+              hx-post="/messages/{{ message_id }}/forward/{{ d.room_id }}"
+              hx-target="#lc-forward-modal" hx-swap="innerHTML"
+              class="flex items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-surface-sunken">
+        <span class="text-content-muted">{{ d.glyph }}</span><span class="truncate">{{ d.label }}</span>
+      </button>
+      {% endfor %}
+      {% endif %}
+      {% if !dms.is_empty() %}
+      <div class="text-xs uppercase tracking-wide text-content-muted px-1 pt-1">{{ "room-forward-dms"|t }}</div>
+      {% for d in dms %}
+      <button data-lc-forward-name="{{ d.name }}"
+              hx-post="/messages/{{ message_id }}/forward/{{ d.room_id }}"
+              hx-target="#lc-forward-modal" hx-swap="innerHTML"
+              class="flex items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-surface-sunken">
+        <span class="text-content-muted">{{ d.glyph }}</span><span class="truncate">{{ d.label }}</span>
+      </button>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+<script>
+(function(){
+  var slot = document.getElementById('lc-forward-modal');
+  if (!slot) return;
+  var dialog = slot.querySelector('[data-lc-forward-dialog]');
+  if (!dialog) return;
+  var opener = document.activeElement;
+  var trap = window.__lcDialogTrap ? window.__lcDialogTrap(dialog) : null;
+  try { (dialog.querySelector('input, button, [href]') || dialog).focus(); } catch (e) {}
+  function disposeTrap(){ if (trap) { trap.dispose(); trap = null; } }
+  function close(){
+    disposeTrap();
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    slot.innerHTML = '';
+  }
+  dialog.querySelector('[data-lc-forward-close]').addEventListener('click', close);
+  dialog.addEventListener('mousedown', function(e){ if (e.target === dialog) close(); });
+  dialog.addEventListener('keydown', function(e){ if (e.key === 'Escape') { e.preventDefault(); close(); } });
+  // A successful forward POST swaps the confirm fragment into the slot, tearing
+  // this dialog down; dispose the trap as it goes.
+  dialog.addEventListener('htmx:beforeCleanupElement', disposeTrap, { once: true });
+  var filter = dialog.querySelector('[data-lc-forward-filter]');
+  if (filter) filter.addEventListener('input', function(){
+    var q = filter.value.trim().toLowerCase();
+    var btns = dialog.querySelectorAll('[data-lc-forward-name]');
+    for (var i = 0; i < btns.length; i++) {
+      var n = (btns[i].getAttribute('data-lc-forward-name') || '');
+      btns[i].hidden = q !== '' && n.indexOf(q) === -1;
+    }
+  });
+})();
+</script>

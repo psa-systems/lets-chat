@@ -164,11 +164,24 @@ room-msg-pin = Fijar
 room-msg-unsave = Quitar guardado
 room-msg-save = Guardar
 room-msg-remind = Recordar
+room-msg-forward = Reenviar
 room-msg-edit = Editar
 room-msg-delete = Eliminar
 room-msg-delete-confirm = ¿Eliminar este mensaje?
 room-msg-quote-deleted = (el mensaje citado fue eliminado)
 room-msg-seen = Visto
+
+## Forward (LC-278)
+room-forward-title = Reenviar mensaje
+room-forward-label = Reenviar el mensaje a una conversación
+room-forward-rooms = Salas
+room-forward-dms = Mensajes directos
+room-forward-filter = Filtrar conversaciones...
+room-forward-close = Cerrar
+room-forward-empty = No hay conversaciones a las que reenviar.
+room-forward-confirm = Reenviado a
+room-forward-done = Hecho
+room-forward-attribution = Reenviado de
 
 ## Reply count
 room-reply-singular = respuesta

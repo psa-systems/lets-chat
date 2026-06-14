@@ -1,0 +1,19 @@
+{# LC-278: inline confirmation after a successful forward. Replaces the picker
+   in #lc-forward-modal, then auto-dismisses. #}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     onmousedown="if(event.target===this)this.parentElement.innerHTML='';">
+  <div class="w-80 rounded-lg bg-surface-elevated p-5 shadow-xl text-center">
+    <div class="text-2xl mb-2" aria-hidden="true">&#8618;</div>
+    <p class="text-sm text-content-muted">{{ "room-forward-confirm"|t }}</p>
+    <p class="font-semibold">{{ dest_label }}</p>
+    <button type="button"
+            class="mt-4 rounded bg-accent px-3 py-1 text-sm text-accent-content hover:bg-accent-hover"
+            onclick="document.getElementById('lc-forward-modal').innerHTML='';">{{ "room-forward-done"|t }}</button>
+  </div>
+</div>
+<script>
+  setTimeout(function(){
+    var slot = document.getElementById('lc-forward-modal');
+    if (slot) slot.innerHTML = '';
+  }, 4000);
+</script>
