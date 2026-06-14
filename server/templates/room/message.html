@@ -152,6 +152,9 @@
     <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-success-surface-content hover:underline">{{ "room-msg-save"|t }}</button>
     {% endif %}
     <button hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">{{ "room-msg-remind"|t }}</button>
+    {# LC-286: mark this conversation unread from here (rewinds the read
+       watermark so this message + newer re-raise the sidebar badge). #}
+    <button hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-mark-unread"|t }}</button>
     {# LC-278: forward this message to another room/DM via the destination picker. #}
     <button hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-forward"|t }}</button>
     {% if message.can_edit %}

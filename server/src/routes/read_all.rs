@@ -102,3 +102,38 @@ pub async fn post_room_read(
 
     super::sidebar_categories::render_sidebar_fragment(&state, &user, &headers).await
 }
+
+/// `POST /messages/{message_id}/unread`
+///
+/// LC-286: mark a conversation unread from a message - the inverse of the read
+/// paths. Rewinds the room's read watermark to just before the message
+/// (`message_id - 1`), so `get_unread_count`'s `id > watermark` re-raises this
+/// message and everything after it. Access-gated to the message's room. Reuses
+/// the `ReadAllChanged` broadcast (sidebar re-render, live across tabs).
+pub async fn post_message_unread(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(message_id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Html, AppError> {
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, m.room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    // Watermark just below the target so the target (and newer) become unread.
+    let watermark = (message_id - 1).max(0);
+    db::chat::rewind_dm_read(&state.chat, &user.id, m.room_id, watermark).await?;
+
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::ReadAllChanged {
+            user_id: user.id.clone(),
+        },
+    );
+
+    super::sidebar_categories::render_sidebar_fragment(&state, &user, &headers).await
+}

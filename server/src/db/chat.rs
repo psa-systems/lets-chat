@@ -1028,6 +1028,32 @@ pub async fn upsert_dm_read(
     Ok(updated_at)
 }
 
+/// LC-286: set the read watermark to an EXACT value, even a lower one. Unlike
+/// `upsert_dm_read` (which keeps `MAX` so the read paths only advance), this
+/// overwrites unconditionally so "mark unread" can move the watermark backward.
+pub async fn rewind_dm_read(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_id: i64,
+    last_read_message_id: i64,
+) -> Result<(), sqlx::Error> {
+    let updated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    sqlx::query(
+        "INSERT INTO dm_read_state (user_id, room_id, last_read_message_id, updated_at) \
+         VALUES (?, ?, ?, ?) \
+         ON CONFLICT(user_id, room_id) DO UPDATE SET \
+           last_read_message_id = excluded.last_read_message_id, \
+           updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind(room_id)
+    .bind(last_read_message_id)
+    .bind(&updated_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn get_dm_read_state(
     pool: &sqlx::SqlitePool,
     user_id: &str,
