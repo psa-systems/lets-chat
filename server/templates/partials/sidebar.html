@@ -62,6 +62,8 @@
     <a href="/saved" class="text-content-muted hover:underline">{{ "sidebar-link-saved"|t }}</a>
     <a href="/scheduled" class="text-content-muted hover:underline">{{ "sidebar-link-scheduled"|t }}</a>
     <a href="/settings" class="text-content-muted hover:underline">{{ "sidebar-link-settings"|t }}</a>
+    {# LC-292: quick-toggle the theme dark<->light without opening Settings. #}
+    <button type="button" data-lc-theme-toggle onclick="window.__lcToggleTheme && window.__lcToggleTheme()" class="text-left text-content-muted hover:underline">{{ "sidebar-toggle-theme"|t }}</button>
     {# LC-252: opens the keyboard-shortcuts cheat-sheet (also bound to `?`). #}
     <button type="button" onclick="window.__lcOpenShortcuts && window.__lcOpenShortcuts()" class="text-left text-content-muted hover:underline">{{ "sidebar-link-shortcuts"|t }}</button>
     <a href="/logout" class="text-content-muted hover:underline">{{ "sidebar-link-sign-out"|t }}</a>

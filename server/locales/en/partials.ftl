@@ -14,6 +14,7 @@ sidebar-link-saved = Saved
 sidebar-link-scheduled = Scheduled
 sidebar-link-settings = Settings
 sidebar-link-shortcuts = Keyboard shortcuts
+sidebar-toggle-theme = Toggle theme
 sidebar-link-sign-out = Sign out
 sidebar-section-starred = Starred
 sidebar-section-all-rooms = All rooms
