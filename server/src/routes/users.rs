@@ -64,6 +64,62 @@ pub async fn get_user_search(
     html(&fragment)
 }
 
+/// GET /users/{user_id}/hovercard - the small profile popover shown on
+/// username/avatar hover (LC-298). Auth-gated; any signed-in user may view
+/// another's card (names/avatars are already visible app-wide). Bio is gated to
+/// public profiles unless the viewer is the target or an admin; the Message
+/// link is shown only when a DM would actually be permitted, so it never leads
+/// to a rejection.
+pub async fn get_hovercard(
+    State(state): State<AppState>,
+    AuthUser(viewer): AuthUser,
+    Path(user_id): Path<String>,
+) -> Result<Html, AppError> {
+    let rec = db::auth::find_user_by_id(&state.auth, &user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let is_self = rec.id == viewer.id;
+    let status = if is_self {
+        rec.status.clone()
+    } else {
+        effective_status(&state, &rec.id, &rec.status)
+    };
+    let viewer_is_admin = viewer.role == "admin";
+    let show_bio = rec.is_profile_public || is_self || viewer_is_admin;
+
+    // Mirror what routes::dm will allow: a DM to a private-profile stranger is
+    // refused unless a DM already exists between the two.
+    let can_message = !is_self
+        && (rec.is_profile_public
+            || db::chat::find_dm_room(&state.chat, &viewer.id, &rec.id)
+                .await?
+                .is_some());
+
+    let label = match rec.display_name.as_deref() {
+        Some(n) if !n.trim().is_empty() => n.to_string(),
+        _ => rec.username.clone(),
+    };
+    let bio = if show_bio {
+        rec.bio.filter(|b| !b.trim().is_empty())
+    } else {
+        None
+    };
+
+    let fragment = crate::views::hovercard::HovercardFragment {
+        user_id: rec.id,
+        username: rec.username,
+        label,
+        avatar_ext: rec.avatar_ext,
+        status,
+        custom_status: rec.custom_status,
+        is_bot: rec.is_bot,
+        bio,
+        can_message,
+    };
+    html(&fragment)
+}
+
 #[derive(Deserialize)]
 pub struct BlockReturn {
     #[serde(default)]

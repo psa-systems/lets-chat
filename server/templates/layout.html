@@ -459,6 +459,83 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-298: user profile hovercard. One delegated controller for any element
+// carrying data-lc-hovercard="<user_id>" (currently message-row author names;
+// other surfaces opt in by adding the attribute). Hovering for ~350ms fetches
+// /users/<id>/hovercard and shows it in a single body-appended popover,
+// positioned near the trigger (flipped/clamped to stay on-screen). Moving onto
+// the card keeps it open; leaving it, Esc, or scrolling dismisses it. No cache,
+// so presence/status stays fresh.
+(function(){
+  var card = null, showTimer = null, hideTimer = null, currentId = null, currentTrigger = null;
+  function ensureCard(){
+    if (card) return card;
+    card = document.createElement('div');
+    card.id = 'lc-hovercard';
+    card.setAttribute('role', 'dialog');
+    card.className = 'hidden fixed z-50 w-64 rounded-lg border border-border bg-surface-elevated p-3 shadow-xl';
+    card.addEventListener('mouseenter', function(){ if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } });
+    card.addEventListener('mouseleave', scheduleHide);
+    document.body.appendChild(card);
+    return card;
+  }
+  function hide(){
+    if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+    if (card) { card.classList.add('hidden'); card.replaceChildren(); }
+    currentId = null; currentTrigger = null;
+  }
+  function scheduleHide(){
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, 200);
+  }
+  function position(){
+    if (!card || !currentTrigger) return;
+    var r = currentTrigger.getBoundingClientRect();
+    var cw = card.offsetWidth, ch = card.offsetHeight;
+    var top = r.bottom + 6;
+    if (top + ch > window.innerHeight - 6) top = Math.max(6, r.top - ch - 6);
+    var left = r.left;
+    if (left + cw > window.innerWidth - 6) left = window.innerWidth - cw - 6;
+    card.style.top = top + 'px';
+    card.style.left = Math.max(6, left) + 'px';
+  }
+  function show(trigger){
+    var id = trigger.getAttribute('data-lc-hovercard');
+    if (!id) return;
+    var c = ensureCard();
+    currentId = id; currentTrigger = trigger;
+    fetch('/users/' + encodeURIComponent(id) + '/hovercard', { credentials: 'same-origin' })
+      .then(function(resp){ return resp.ok ? resp.text() : null; })
+      .then(function(t){
+        if (t == null || currentId !== id) return;
+        c.innerHTML = t;
+        c.classList.remove('hidden');
+        position();
+      })
+      .catch(function(){});
+  }
+  document.addEventListener('mouseover', function(e){
+    var t = e.target.closest && e.target.closest('[data-lc-hovercard]');
+    if (!t) return;
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (t === currentTrigger) return; // already showing/queued for this trigger
+    if (showTimer) clearTimeout(showTimer);
+    showTimer = setTimeout(function(){ showTimer = null; show(t); }, 350);
+  });
+  document.addEventListener('mouseout', function(e){
+    var t = e.target.closest && e.target.closest('[data-lc-hovercard]');
+    if (!t) return;
+    if (showTimer && t === currentTrigger) { /* keep */ }
+    if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+    scheduleHide();
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') hide(); });
+  // Hide on scroll of any container (capture) so the card never floats detached
+  // from a trigger that scrolled away.
+  window.addEventListener('scroll', hide, true);
+})();
+</script>
+<script>
 // LC-274: reaction-picker filter. One delegated input listener narrows the
 // picker's emoji buttons by case-insensitive substring against each button's
 // data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
