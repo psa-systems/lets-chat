@@ -435,6 +435,27 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-274: reaction-picker filter. One delegated input listener narrows the
+// picker's emoji buttons by case-insensitive substring against each button's
+// data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
+// ephemeral (htmx-swapped in/out), so a single permanent listener suffices.
+(function(){
+  document.addEventListener('input', function(e){
+    var input = e.target;
+    if (!input || !input.matches || !input.matches('[data-lc-emoji-filter]')) return;
+    var picker = input.closest('[id^="picker-"]');
+    var grid = picker && picker.querySelector('[data-lc-emoji-grid]');
+    if (!grid) return;
+    var q = input.value.trim().toLowerCase();
+    var btns = grid.querySelectorAll('[data-lc-emoji-name]');
+    for (var i = 0; i < btns.length; i++) {
+      var name = (btns[i].getAttribute('data-lc-emoji-name') || '').toLowerCase();
+      btns[i].hidden = q !== '' && name.indexOf(q) === -1;
+    }
+  });
+})();
+</script>
+<script>
 // Persistent-shell script: same lifetime rationale as the two scripts above.
 // The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
 // htmx:wsError, the watchdog timers, and the manual-reconnect helper are
