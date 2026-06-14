@@ -1,0 +1,95 @@
+{# LC-262: image lightbox, singleton in the persistent shell. A delegated click
+   on any `a[data-lc-lightbox]` (set on image attachments in
+   partials/attachment.html) opens the full image here instead of navigating to
+   the raw file. ArrowLeft/Right page through every such anchor on the page;
+   Esc / backdrop / the close button dismiss. Mirrors the shortcuts/switcher
+   modal lifecycle (__lcDialogTrap focus trap, opener focus restore). With JS
+   off the anchor's href/target opens the raw image in a new tab (no-JS
+   fallback), so nothing is hidden. #}
+<div data-lc-lightbox-modal
+     class="hidden fixed inset-0 z-50 flex items-center justify-center gap-2 bg-black/60 p-4"
+     role="dialog" aria-modal="true" aria-label="{{ "lightbox-label"|t }}" aria-hidden="true">
+  <button type="button" data-lc-lightbox-close aria-label="{{ "lightbox-close"|t }}"
+          class="absolute right-4 top-4 text-white text-3xl leading-none">&times;</button>
+  <button type="button" data-lc-lightbox-prev aria-label="{{ "lightbox-prev"|t }}" hidden
+          class="shrink-0 text-white text-3xl leading-none px-2">&lsaquo;</button>
+  <figure class="flex flex-col items-center gap-2 min-w-0">
+    <img data-lc-lightbox-img src="" alt="" class="lc-lightbox-img rounded">
+    <figcaption data-lc-lightbox-caption class="text-sm text-slate-300 text-center break-words"></figcaption>
+  </figure>
+  <button type="button" data-lc-lightbox-next aria-label="{{ "lightbox-next"|t }}" hidden
+          class="shrink-0 text-white text-3xl leading-none px-2">&rsaquo;</button>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-lightbox-modal]');
+  if (!modal) return;
+  var imgEl = modal.querySelector('[data-lc-lightbox-img]');
+  var capEl = modal.querySelector('[data-lc-lightbox-caption]');
+  var prevBtn = modal.querySelector('[data-lc-lightbox-prev]');
+  var nextBtn = modal.querySelector('[data-lc-lightbox-next]');
+  var closeBtn = modal.querySelector('[data-lc-lightbox-close]');
+  var list = [];
+  var idx = -1;
+  var opener = null;
+  var trap = null;
+
+  function show(i){
+    if (!list.length) return;
+    idx = (i + list.length) % list.length;
+    var a = list[idx];
+    var img = a.querySelector('img');
+    imgEl.src = a.getAttribute('href');
+    var caption = img ? (img.getAttribute('alt') || '') : '';
+    imgEl.alt = caption;
+    capEl.textContent = caption;
+    var multi = list.length > 1;
+    prevBtn.hidden = !multi;
+    nextBtn.hidden = !multi;
+  }
+  function open(anchor){
+    list = Array.prototype.slice.call(document.querySelectorAll('a[data-lc-lightbox]'));
+    idx = list.indexOf(anchor);
+    if (idx < 0) return;
+    opener = document.activeElement;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    show(idx);
+    try { closeBtn.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  }
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    imgEl.removeAttribute('src'); // release the decoded image
+    list = [];
+    idx = -1;
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  window.__lcOpenLightbox = open;
+
+  // Delegated so it covers images rendered after load (live arrivals, thread
+  // panel, edits). Plain left-click only - let modified clicks (open-in-tab)
+  // and the no-JS path keep the anchor's native behavior.
+  document.addEventListener('click', function(e){
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest && e.target.closest('a[data-lc-lightbox]');
+    if (!a) return;
+    e.preventDefault();
+    open(a);
+  });
+  closeBtn.addEventListener('click', close);
+  prevBtn.addEventListener('click', function(e){ e.stopPropagation(); show(idx - 1); });
+  nextBtn.addEventListener('click', function(e){ e.stopPropagation(); show(idx + 1); });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+  modal.addEventListener('keydown', function(e){
+    if (modal.classList.contains('hidden')) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); show(idx - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); show(idx + 1); }
+  });
+})();
+</script>

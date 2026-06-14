@@ -121,6 +121,12 @@ shortcuts-help = Show this help
 switcher-placeholder = Jump to a room, DM, or person...
 switcher-no-results = No matches
 
+## Image lightbox (LC-262)
+lightbox-label = Image viewer
+lightbox-close = Close
+lightbox-prev = Previous image
+lightbox-next = Next image
+
 ## Scheduled message modal
 scheduled-modal-title = Schedule message
 scheduled-modal-deliver-at = Deliver at (your local time)

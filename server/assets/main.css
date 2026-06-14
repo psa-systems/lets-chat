@@ -705,6 +705,15 @@ math {
     pointer-events: none;
 }
 
+/* LC-262: image lightbox. The full image is constrained to the viewport and
+   letterboxed; sizing lives here (not Tailwind arbitrary values) so it is
+   reliable without a CSS rebuild. The modal shell is lightbox_modal.html. */
+.lc-lightbox-img {
+    max-width: 90vw;
+    max-height: 85vh;
+    object-fit: contain;
+}
+
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
 .lc-skeleton {
