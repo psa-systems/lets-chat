@@ -1,0 +1,33 @@
+{# LC-296: emoji :shortcode: autocomplete popover. Mirror of
+   partials/mention_popover.html (same listbox/option ARIA shape and ids the
+   composer's keyboard nav expects). Each option carries data-insert: the exact
+   string spliced into the textarea (a `:shortcode:` for custom, a glyph for
+   unicode). #}
+{% if results.is_empty() %}
+<ul id="lc-emoji-list" class="hidden"></ul>
+{% else %}
+<ul id="lc-emoji-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-border bg-surface-elevated shadow-lg" role="listbox">
+  {% for s in results %}
+  <li role="option" id="lc-emoji-option-{{ loop.index0 }}" aria-selected="false">
+    <button type="button"
+      class="w-full text-left px-2 py-1 hover:bg-surface-sunken flex items-center gap-2"
+      data-insert="{{ s.insert }}">
+      {% if s.kind == "custom" %}
+      {% if let Some(id) = s.emoji_id %}
+      <img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{{ id }}" alt=":{{ s.shortcode }}:">
+      {% endif %}
+      <span class="font-mono text-sm">:{{ s.shortcode }}:</span>
+      {% else %}
+      {% if let Some(g) = s.glyph.as_ref() %}
+      <span class="text-base" aria-hidden="true">{{ g }}</span>
+      {% endif %}
+      <span class="font-mono text-sm">:{{ s.shortcode }}:</span>
+      {% if !s.name.is_empty() %}
+      <span class="text-xs text-content-muted truncate">{{ s.name }}</span>
+      {% endif %}
+      {% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

@@ -10,6 +10,7 @@ pub mod email_auth;
 pub mod email_digest;
 pub mod email_inboxes;
 pub mod email_notification;
+pub mod emoji_complete;
 pub mod enclave;
 pub mod error_page;
 pub mod feeds;
