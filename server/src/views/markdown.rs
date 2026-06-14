@@ -98,6 +98,50 @@ fn link_scheme_is_safe(dest: &str) -> bool {
     }
 }
 
+/// LC-290: spoiler pass. Splits a (non-code, non-link) text run on `||...||`
+/// pairs, runs every non-spoiler segment AND each spoiler's inner text through
+/// the normal `render_math_in_text` pipeline (so math/mentions/emoji/links work
+/// inside and around a spoiler), and wraps each spoiler's inner HTML in a
+/// click-to-reveal box. An unterminated `||` is emitted literally. No
+/// locale-dependent text is produced, so the content-keyed markdown cache stays
+/// correct across locales. Code never reaches this function (code spans/blocks
+/// are intercepted before the text branch), so `||` inside code stays literal.
+fn render_with_spoilers(text: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+    if !text.contains("||") {
+        return math::render_math_in_text(text, mentions, emojis);
+    }
+    let mut out = String::new();
+    let mut rest = text;
+    loop {
+        let Some(open) = rest.find("||") else {
+            out.push_str(&math::render_math_in_text(rest, mentions, emojis));
+            break;
+        };
+        out.push_str(&math::render_math_in_text(&rest[..open], mentions, emojis));
+        let after_open = &rest[open + 2..];
+        match after_open.find("||") {
+            // Non-empty inner: a spoiler.
+            Some(close) if close > 0 => {
+                let inner = math::render_math_in_text(&after_open[..close], mentions, emojis);
+                out.push_str(
+                    "<span class=\"lc-spoiler\" data-lc-spoiler tabindex=\"0\">\
+                     <span class=\"lc-spoiler-inner\">",
+                );
+                out.push_str(&inner);
+                out.push_str("</span></span>");
+                rest = &after_open[close + 2..];
+            }
+            // No closer (or empty `||||`): the opening `||` is literal; keep
+            // scanning the remainder so a later real pair still renders.
+            _ => {
+                out.push_str("||");
+                rest = after_open;
+            }
+        }
+    }
+    out
+}
+
 fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -263,7 +307,7 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
                 // accumulator above), so math detection is automatically
                 // skipped inside code - same protection mentions and
                 // emoji already have.
-                math::render_math_in_text(t.as_ref(), mentions, emojis)
+                render_with_spoilers(t.as_ref(), mentions, emojis)
             };
             Some(Event::Html(html.into()))
         }
@@ -736,5 +780,31 @@ mod tests {
             out.contains("example.com"),
             "URL text dropped from output: {out}",
         );
+    }
+
+    // LC-290: `||text||` becomes a click-to-reveal spoiler span.
+    #[test]
+    fn renders_spoiler() {
+        let out = render("a ||secret|| b", &[], &[]);
+        assert!(out.contains("lc-spoiler"), "no spoiler span: {out}");
+        assert!(out.contains("data-lc-spoiler"), "no reveal hook: {out}");
+        assert!(out.contains("secret"), "inner text lost: {out}");
+    }
+
+    // LC-290: `||` inside inline code stays literal (code never reaches the
+    // text branch where the spoiler pass runs).
+    #[test]
+    fn spoiler_marker_in_code_is_literal() {
+        let out = render("use `a || b` here", &[], &[]);
+        assert!(out.contains("<code"), "no inline code: {out}");
+        assert!(!out.contains("lc-spoiler"), "code wrongly spoilered: {out}");
+    }
+
+    // LC-290: an unterminated `||` is emitted literally, not eaten.
+    #[test]
+    fn unterminated_spoiler_marker_is_literal() {
+        let out = render("a || b without close", &[], &[]);
+        assert!(!out.contains("lc-spoiler"), "spurious spoiler: {out}");
+        assert!(out.contains("||"), "literal marker dropped: {out}");
     }
 }

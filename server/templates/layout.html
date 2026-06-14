@@ -437,6 +437,28 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-290: spoiler reveal. `||text||` renders as a .lc-spoiler box (server-side,
+// views/markdown.rs). One delegated handler reveals the closest spoiler on click
+// or Enter/Space. Reveal is one-way per element; spoilers in live-appended
+// messages work for free since the listener is on document.
+(function(){
+  function reveal(el){
+    if (el && !el.classList.contains('lc-spoiler-revealed')) {
+      el.classList.add('lc-spoiler-revealed');
+    }
+  }
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-lc-spoiler]');
+    if (t) reveal(t);
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    var t = e.target.closest && e.target.closest('[data-lc-spoiler]');
+    if (t && !t.classList.contains('lc-spoiler-revealed')) { e.preventDefault(); reveal(t); }
+  });
+})();
+</script>
+<script>
 // LC-274: reaction-picker filter. One delegated input listener narrows the
 // picker's emoji buttons by case-insensitive substring against each button's
 // data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
