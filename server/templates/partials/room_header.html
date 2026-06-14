@@ -8,6 +8,25 @@
     </a>
   </div>
   <div class="flex items-center gap-2 shrink-0">
+    {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
+       search.js combobox nav; results are jump links to #msg-{id} in-room. #}
+    <form class="relative" autocomplete="off" onsubmit="return false">
+      <input
+        name="q"
+        placeholder="{{ "partials-room-search-placeholder"|t }}"
+        hx-get="/search?room_id={{ room.id }}"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-target="#lc-room-search-results"
+        hx-swap="innerHTML"
+        data-lc-search
+        data-lc-search-results="#lc-room-search-results"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="lc-room-search-results"
+        aria-autocomplete="list"
+        class="w-44 rounded border border-border px-2 py-1 text-xs">
+      <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
+    </form>
     <a href="/room/{{ room.id }}/info"
        class="inline-flex items-center rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken"
        title="{{ "partials-room-info-docs-title"|t }}">{{ "partials-room-info"|t }}</a>

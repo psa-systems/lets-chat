@@ -42,7 +42,12 @@ async fn picker(app: &Router, sess: &str, message_id: i64) -> StatusCode {
 }
 
 // LC-266: the reaction toggle returns the re-rendered bar; capture its body.
-async fn react_body(app: &Router, sess: &str, message_id: i64, emoji: &str) -> (StatusCode, String) {
+async fn react_body(
+    app: &Router,
+    sess: &str,
+    message_id: i64,
+    emoji: &str,
+) -> (StatusCode, String) {
     let req = Request::builder()
         .method(Method::POST)
         .uri(format!("/messages/{message_id}/reactions/{emoji}"))
@@ -51,7 +56,9 @@ async fn react_body(app: &Router, sess: &str, message_id: i64, emoji: &str) -> (
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
