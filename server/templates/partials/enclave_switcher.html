@@ -31,4 +31,15 @@
      title="{{ "switcher-discover"|t }}">
     +
   </a>
+  {# LC-270: collapse the room sidebar to this rail (desktop only). State is
+     device-local in localStorage; the no-flash bootstrap in base.html applies
+     it and __lcToggleSidebar flips it. Chevron rotates via CSS when collapsed. #}
+  <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
+          onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
+          title="{{ "switcher-sidebar-toggle"|t }}" aria-label="{{ "switcher-sidebar-toggle"|t }}"
+          class="hidden md:flex w-10 h-10 rounded-lg bg-slate-700 hover:bg-slate-600 items-center justify-center text-slate-300 hover:text-white">
+    <svg data-lc-sidebar-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+      <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L9.06 10l3.71 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.06.02z" clip-rule="evenodd"/>
+    </svg>
+  </button>
 </nav>

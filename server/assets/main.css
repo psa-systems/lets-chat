@@ -723,6 +723,23 @@ math {
     transform: rotate(-90deg);
 }
 
+/* LC-270: collapse the room sidebar to the enclave rail on desktop. The wide
+   #sidebar hides; the w-16 enclave switcher stays as the rail. Desktop only:
+   on mobile the sidebar is an overlay with its own toggle (lcOpenNav), so the
+   collapse preference must not hide it there. The toggle chevron points left
+   (collapse) when expanded and flips to point right (expand) when collapsed. */
+@media (min-width: 768px) {
+    html[data-lc-sidebar="collapsed"] #sidebar {
+        display: none;
+    }
+}
+[data-lc-sidebar-chevron] {
+    transition: transform 0.15s ease;
+}
+html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
+    transform: rotate(180deg);
+}
+
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
 .lc-skeleton {
