@@ -1401,6 +1401,23 @@ pub fn sanitize_fts_query(raw: &str) -> Option<String> {
 ///   this combination is not produced by the route handler.
 ///
 /// `room_id_filter` further narrows the result to a single room when set.
+/// LC-280: optional refinements parsed from search operators (`from:`,
+/// `before:`, `after:`). All `None` = a plain search (the `search_messages`
+/// shim passes this). `before`/`after` are `YYYY-MM-DD` strings compared
+/// lexicographically against `created_at` ("YYYY-MM-DD HH:MM:SS"), which is
+/// correct for this fixed ISO-ish format.
+#[derive(Default, Clone, Debug)]
+pub struct SearchFilters {
+    /// Restrict to messages authored by this user id.
+    pub author_id: Option<String>,
+    /// Only messages strictly before this date (`created_at < before`).
+    pub before: Option<String>,
+    /// Only messages on/after this date (`created_at >= after`).
+    pub after: Option<String>,
+}
+
+/// Plain full-text search (no operator refinements). Thin shim over
+/// [`search_messages_filtered`] so existing callers stay unchanged.
 pub async fn search_messages(
     pool: &sqlx::SqlitePool,
     fts_query: &str,
@@ -1410,9 +1427,52 @@ pub async fn search_messages(
     caller_user_id: &str,
     is_site_admin: bool,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
+    search_messages_filtered(
+        pool,
+        fts_query,
+        room_id_filter,
+        enclave_id_filter,
+        home_scope,
+        caller_user_id,
+        is_site_admin,
+        &SearchFilters::default(),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn search_messages_filtered(
+    pool: &sqlx::SqlitePool,
+    fts_query: &str,
+    room_id_filter: Option<i64>,
+    enclave_id_filter: Option<i64>,
+    home_scope: bool,
+    caller_user_id: &str,
+    is_site_admin: bool,
+    filters: &SearchFilters,
+) -> Result<Vec<SearchResult>, sqlx::Error> {
     let room_filter_clause = match room_id_filter {
         Some(_) => "AND m.room_id = ?",
         None => "",
+    };
+
+    // LC-280: operator refinements. Clauses are appended AFTER scope_clause and
+    // their binds AFTER the scope binds, in author/before/after order, to keep
+    // the existing positional bind order intact.
+    let author_clause = if filters.author_id.is_some() {
+        "AND m.user_id = ?"
+    } else {
+        ""
+    };
+    let before_clause = if filters.before.is_some() {
+        "AND m.created_at < ?"
+    } else {
+        ""
+    };
+    let after_clause = if filters.after.is_some() {
+        "AND m.created_at >= ?"
+    } else {
+        ""
     };
 
     let scope_clause = if enclave_id_filter.is_some() {
@@ -1466,6 +1526,9 @@ pub async fn search_messages(
            AND m.deleted_at IS NULL AND m.quarantined = 0 \
            {room_filter_clause} \
            {scope_clause} \
+           {author_clause} \
+           {before_clause} \
+           {after_clause} \
          ORDER BY messages_fts.rank \
          LIMIT 50"
     );
@@ -1488,6 +1551,16 @@ pub async fn search_messages(
                 .bind(caller_user_id)
                 .bind(caller_user_id);
         }
+    }
+    // LC-280: operator binds, last and in clause order (author, before, after).
+    if let Some(author_id) = &filters.author_id {
+        q = q.bind(author_id);
+    }
+    if let Some(before) = &filters.before {
+        q = q.bind(before);
+    }
+    if let Some(after) = &filters.after {
+        q = q.bind(after);
     }
 
     let rows = q.fetch_all(pool).await?;
