@@ -80,6 +80,8 @@
     
     <button hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">Remind</button>
     
+    <button hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="text-content-muted hover:underline">Mark unread</button>
+    
     <button hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="text-content-muted hover:underline">Forward</button>
     
     
