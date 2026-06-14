@@ -442,20 +442,32 @@ pub struct ReactionView {
     /// `<img>` tags; unicode emojis become the escaped text glyph. The
     /// template renders this with `|safe`.
     pub display_html: String,
+    /// LC-266: comma-joined display names of everyone who reacted with this
+    /// emoji, rendered as the pill's `title` (the "who reacted" tooltip).
+    /// Empty when names could not be resolved (best-effort: no tooltip).
+    pub reactors_title: String,
 }
 
 impl ReactionView {
     /// Build a ReactionView with the display HTML pre-rendered against the
     /// supplied enclave emoji set. Pass an empty slice in DM contexts (or
     /// any room without an enclave); unknown shortcodes fall through to
-    /// escaped text so the bar still renders.
-    pub fn new(emoji: String, count: i64, viewer_reacted: bool, emojis: &[EmojiRef]) -> Self {
+    /// escaped text so the bar still renders. `reactors_title` is the
+    /// pre-built "who reacted" tooltip text (empty = no tooltip).
+    pub fn new(
+        emoji: String,
+        count: i64,
+        viewer_reacted: bool,
+        reactors_title: String,
+        emojis: &[EmojiRef],
+    ) -> Self {
         let display_html = Self::render_emoji(&emoji, emojis);
         Self {
             emoji,
             count,
             viewer_reacted,
             display_html,
+            reactors_title,
         }
     }
 
