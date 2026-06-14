@@ -1123,3 +1123,23 @@ async fn page_ships_sidebar_collapse_toggle() {
         "page must ship the sidebar collapse flipper",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-272: code-block copy button. The enhancer is JS (wraps each .lc-md pre);
+// this pins that the page ships it.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn page_ships_code_copy_enhancer() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("lc-code-copy"),
+        "page must ship the code-block copy enhancer",
+    );
+    assert!(
+        body.contains("data-lc-code-done"),
+        "enhancer must mark processed blocks idempotently",
+    );
+}

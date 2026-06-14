@@ -382,6 +382,59 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-272: copy button on code blocks. Enhances each rendered `.lc-md pre`
+// (syntect blocks have no inner <code>, so we wrap the <pre> and read its
+// textContent for the raw code, never polluting it with the button). Runs on
+// load and after every htmx settle so live-arriving / edited messages and any
+// markdown surface get a button; the data-lc-code-done marker keeps it
+// idempotent. Progressive enhancement: no JS = the code still renders + selects.
+(function(){
+  var COPY = "{{ "code-copy"|t }}";
+  var COPIED = "{{ "code-copied"|t }}";
+  function enhance(scope){
+    var root = (scope && scope.querySelectorAll) ? scope : document;
+    var pres = root.querySelectorAll('.lc-md pre:not([data-lc-code-done])');
+    for (var i = 0; i < pres.length; i++) {
+      (function(pre){
+        pre.setAttribute('data-lc-code-done', '1');
+        var wrap = document.createElement('div');
+        wrap.className = 'lc-code-wrap';
+        var parent = pre.parentNode;
+        if (!parent) return;
+        parent.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'lc-code-copy';
+        btn.textContent = COPY;
+        btn.setAttribute('aria-label', COPY);
+        btn.addEventListener('click', function(){
+          var text = pre.textContent;
+          var done = function(){
+            btn.textContent = COPIED;
+            setTimeout(function(){ btn.textContent = COPY; }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function(){
+              if (window.__lcCopyFallback) window.__lcCopyFallback(text);
+              done();
+            });
+          } else if (window.__lcCopyFallback) {
+            window.__lcCopyFallback(text); done();
+          }
+        });
+        wrap.appendChild(btn);
+      })(pres[i]);
+    }
+  }
+  enhance(document);
+  // afterSettle covers normal swaps; oobAfterSwap covers live message arrivals
+  // (the WS append to #messages). The marker makes a full rescan cheap.
+  document.body.addEventListener('htmx:afterSettle', function(){ enhance(document); });
+  document.body.addEventListener('htmx:oobAfterSwap', function(){ enhance(document); });
+})();
+</script>
+<script>
 // Persistent-shell script: same lifetime rationale as the two scripts above.
 // The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
 // htmx:wsError, the watchdog timers, and the manual-reconnect helper are
