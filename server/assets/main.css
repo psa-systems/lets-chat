@@ -447,6 +447,35 @@ body {
 }
 .lc-md pre code { background: transparent; padding: 0; }
 
+/* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
+   <pre> in .lc-code-wrap and drops a .lc-code-copy button in the top-right,
+   revealed on hover/focus. */
+.lc-code-wrap {
+    position: relative;
+}
+.lc-code-copy {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    background: var(--surface-sunken);
+    color: var(--content-muted);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    cursor: pointer;
+}
+.lc-code-wrap:hover .lc-code-copy,
+.lc-code-copy:focus {
+    opacity: 1;
+}
+.lc-code-copy:hover {
+    color: var(--content);
+}
+
 /* Quote-reply UI.
  *
  * The chip is rendered inline above a message body to show the message it
