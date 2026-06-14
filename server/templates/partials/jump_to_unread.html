@@ -1,0 +1,17 @@
+{# LC-294: floating "jump to first unread" pill over #messages. Hidden by
+   default; partials/auto_scroll.html shows it whenever an unread divider
+   ([data-unread-divider]) exists but is scrolled out of the viewport, and
+   smooth-scrolls back to it on click. Mirror of the LC-242 jump-to-latest
+   pill but points up and is anchored top-center so the two never collide.
+   Lives inside the relative wrapper around #messages. #}
+<button
+  type="button"
+  id="lc-jump-unread"
+  class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-sm font-medium text-accent-content shadow-lg hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-ring"
+  aria-label="{{ "room-jump-unread-aria"|t }}"
+>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+    <path fill-rule="evenodd" d="M10 17a.75.75 0 01-.75-.75V6.56L6.03 9.78a.75.75 0 01-1.06-1.06l4.5-4.5a.75.75 0 011.06 0l4.5 4.5a.75.75 0 11-1.06 1.06l-3.22-3.22v9.69A.75.75 0 0110 17z" clip-rule="evenodd" />
+  </svg>
+  <span>{{ "room-jump-unread-label"|t }}</span>
+</button>
