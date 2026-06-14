@@ -81,6 +81,30 @@
         } catch (e) {}
         applyDensity(v);
       };
+
+      // LC-270: collapse the room sidebar to the enclave rail (desktop only).
+      // Device-local (localStorage), applied here BEFORE CSS so a collapsed
+      // sidebar never flashes wide on load. Toggled from the rail button.
+      function applySidebar(v) {
+        if (v === "collapsed") d.setAttribute("data-lc-sidebar", "collapsed");
+        else d.removeAttribute("data-lc-sidebar");
+      }
+      var sb = null;
+      try { sb = localStorage.getItem("lc-sidebar"); } catch (e) {}
+      applySidebar(sb);
+      window.__lcToggleSidebar = function () {
+        var collapsed = d.getAttribute("data-lc-sidebar") === "collapsed";
+        var next = collapsed ? "" : "collapsed";
+        try {
+          if (next) localStorage.setItem("lc-sidebar", next);
+          else localStorage.removeItem("lc-sidebar");
+        } catch (e) {}
+        applySidebar(next);
+        var btns = document.querySelectorAll("[data-lc-sidebar-toggle]");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].setAttribute("aria-expanded", next ? "false" : "true");
+        }
+      };
     })();
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">

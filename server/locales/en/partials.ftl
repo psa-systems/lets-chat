@@ -39,6 +39,7 @@ sidebar-category-add = Add
 ## Enclave switcher
 switcher-enclave-settings = Enclave settings
 switcher-discover = Discover or create enclaves
+switcher-sidebar-toggle = Collapse or expand the sidebar
 
 ## Avatar / status
 partials-status-dnd = Do not disturb
