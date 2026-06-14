@@ -20,6 +20,12 @@
     {% let mute_mode = peer.mute_mode.as_str() %}
     {% include "partials/unread_badge.html" %}
   </a>
+  {# LC-258: per-room mark-as-read, shown on hover only when this DM is unread. #}
+  {% if peer.unread > 0 %}
+  <form hx-post="/room/{{ peer.dm_room_id }}/read" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
+    <button type="submit" class="text-xs px-1 text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-content" title="{{ "sidebar-mark-room-read"|t }}" aria-label="{{ "sidebar-mark-room-read"|t }}">&#10003;</button>
+  </form>
+  {% endif %}
   <form hx-post="/rooms/{{ peer.dm_room_id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
     <button type="submit" class="text-xs px-1{% if is_starred %} text-amber-500 hover:text-amber-600{% else %} text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-amber-500{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
   </form>
