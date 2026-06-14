@@ -874,9 +874,11 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
     let counts = db::chat::list_reactions(&state.chat, message_id, user_id)
         .await
         .ok()?;
+    let reactor_titles = super::build_reactor_titles(state, &counts).await;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &emojis))
+        .zip(reactor_titles)
+        .map(|(r, title)| ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &emojis))
         .collect();
     ReactionUpdateFragment {
         message_id,
@@ -1046,9 +1048,13 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
         .ok()?;
+    let reactor_titles = super::build_reactor_titles(state, &counts).await;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
+        .zip(reactor_titles)
+        .map(|(r, title)| {
+            ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
+        })
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id)
         .await

@@ -4,6 +4,7 @@
     hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
     hx-target="#reactions-{{ message_id }}"
     hx-swap="outerHTML"
+    {% if !r.reactors_title.is_empty() %}title="{{ r.reactors_title }}"{% endif %}
     class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content{% else %}bg-surface-sunken hover:bg-surface-sunken{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}

@@ -1287,7 +1287,8 @@ pub async fn list_reactions(
 ) -> Result<Vec<Reaction>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT emoji, COUNT(*) AS count, \
-                MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me \
+                MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me, \
+                group_concat(user_id) AS reactor_ids \
          FROM message_reactions \
          WHERE message_id = ? \
          GROUP BY emoji \
@@ -1304,8 +1305,19 @@ pub async fn list_reactions(
             emoji: r.get("emoji"),
             count: r.get("count"),
             reacted_by_me: r.get::<i64, _>("reacted_by_me") == 1,
+            reactor_ids: split_reactor_ids(r.get::<Option<String>, _>("reactor_ids")),
         })
         .collect())
+}
+
+/// Parse the `group_concat(user_id)` blob from a reaction aggregate into a
+/// `Vec<String>`. SQLite joins with a literal comma and user ids never contain
+/// commas, so a plain split is safe. NULL / empty -> empty vec.
+fn split_reactor_ids(raw: Option<String>) -> Vec<String> {
+    match raw {
+        Some(s) if !s.is_empty() => s.split(',').map(|p| p.to_string()).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// List all reactions for every message in a room, in a single query.
@@ -1318,7 +1330,8 @@ pub async fn list_room_reactions(
     let rows = sqlx::query(
         "SELECT mr.message_id, mr.emoji, \
                 COUNT(*) AS count, \
-                MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me \
+                MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me, \
+                group_concat(mr.user_id) AS reactor_ids \
          FROM message_reactions mr \
          JOIN messages m ON m.id = mr.message_id \
          WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0 \
@@ -1339,6 +1352,7 @@ pub async fn list_room_reactions(
                     emoji: r.get("emoji"),
                     count: r.get("count"),
                     reacted_by_me: r.get::<i64, _>("reacted_by_me") == 1,
+                    reactor_ids: split_reactor_ids(r.get::<Option<String>, _>("reactor_ids")),
                 },
             )
         })
