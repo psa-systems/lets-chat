@@ -41,6 +41,20 @@ async fn picker(app: &Router, sess: &str, message_id: i64) -> StatusCode {
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+// LC-266: the reaction toggle returns the re-rendered bar; capture its body.
+async fn react_body(app: &Router, sess: &str, message_id: i64, emoji: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/messages/{message_id}/reactions/{emoji}"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 struct Setup {
     app: Router,
     member_session: String,
@@ -140,6 +154,18 @@ async fn non_member_cannot_open_picker_in_private_room() {
     assert_eq!(
         picker(&s.app, &s.outsider_session, s.private_msg).await,
         StatusCode::FORBIDDEN
+    );
+}
+
+// LC-266: the reaction pill carries a `title` listing who reacted.
+#[tokio::test]
+async fn reaction_pill_titles_who_reacted() {
+    let s = setup().await;
+    let (status, body) = react_body(&s.app, &s.member_session, s.general_msg, "%F0%9F%91%8D").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(r#"title="member""#),
+        "reaction pill must title the reactor's name: {body}"
     );
 }
 

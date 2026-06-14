@@ -91,6 +91,59 @@ pub(crate) fn effective_status(state: &AppState, user_id: &str, persisted: &str)
     }
 }
 
+/// LC-266: build the per-reaction "who reacted" tooltip text, aligned to
+/// `reactions`. Resolves every distinct reactor id across the slice in ONE
+/// auth query, then comma-joins each reaction's reactor display names (capped).
+/// Best-effort: a label-lookup error yields empty titles (no tooltip), never an
+/// `Err`, so the reaction bar always renders.
+pub(crate) async fn build_reactor_titles(
+    state: &AppState,
+    reactions: &[crate::models::reaction::Reaction],
+) -> Vec<String> {
+    use std::collections::HashSet;
+    let mut id_set: HashSet<&str> = HashSet::new();
+    for r in reactions {
+        for id in &r.reactor_ids {
+            id_set.insert(id.as_str());
+        }
+    }
+    if id_set.is_empty() {
+        return vec![String::new(); reactions.len()];
+    }
+    let ids: Vec<&str> = id_set.into_iter().collect();
+    let labels = db::auth::display_names_for_ids(&state.auth, &ids)
+        .await
+        .unwrap_or_default();
+    reactions
+        .iter()
+        .map(|r| reactor_title_from_labels(&r.reactor_ids, &labels))
+        .collect()
+}
+
+/// Comma-join reactor display names (display_name else username) for one
+/// reaction, capped so the rendered `title` attribute stays bounded.
+fn reactor_title_from_labels(
+    reactor_ids: &[String],
+    labels: &HashMap<String, (String, Option<String>)>,
+) -> String {
+    const CAP: usize = 20;
+    let names: Vec<String> = reactor_ids
+        .iter()
+        .map(|id| match labels.get(id) {
+            Some((username, display_name)) => match display_name.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => username.clone(),
+            },
+            None => id.clone(),
+        })
+        .collect();
+    if names.len() <= CAP {
+        names.join(", ")
+    } else {
+        format!("{}, +{}", names[..CAP].join(", "), names.len() - CAP)
+    }
+}
+
 /// Per-message author metadata cached by callers that build many MessageViews.
 /// Keeps the join across auth.db and chat.db to a single field per author.
 #[derive(Clone)]
@@ -320,10 +373,14 @@ pub(crate) async fn load_message_view_for_viewer(
         || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
             .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
-    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
-        .await?
+    let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id).await?;
+    let reactor_titles = build_reactor_titles(state, &reaction_counts).await;
+    let reactions: Vec<ReactionView> = reaction_counts
         .into_iter()
-        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
+        .zip(reactor_titles)
+        .map(|(r, title)| {
+            ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
+        })
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
     let is_follow_up = db::chat::is_follow_up_of(

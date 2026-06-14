@@ -178,9 +178,15 @@ pub async fn get_room(
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
 
     // Reactions for every message in the room, in a single query. Group them
-    // by message_id so we can attach to each MessageView below.
+    // by message_id so we can attach to each MessageView below. LC-266: resolve
+    // every reactor's display name for the whole page in ONE auth query, then
+    // build each pill's "who reacted" title from that map.
+    let room_reactions = db::chat::list_room_reactions(&state.chat, room_id, &user.id).await?;
+    let reaction_only: Vec<crate::models::reaction::Reaction> =
+        room_reactions.iter().map(|(_, r)| r.clone()).collect();
+    let reactor_titles = super::build_reactor_titles(&state, &reaction_only).await;
     let mut reactions_by_message: HashMap<i64, Vec<ReactionView>> = HashMap::new();
-    for (mid, r) in db::chat::list_room_reactions(&state.chat, room_id, &user.id).await? {
+    for ((mid, r), title) in room_reactions.into_iter().zip(reactor_titles) {
         reactions_by_message
             .entry(mid)
             .or_default()
@@ -188,6 +194,7 @@ pub async fn get_room(
                 r.emoji,
                 r.count,
                 r.reacted_by_me,
+                title,
                 &custom_emojis,
             ));
     }
@@ -1656,10 +1663,14 @@ pub async fn patch_message(
     )
     .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
-    let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
-        .await?
+    let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &user.id).await?;
+    let reactor_titles = super::build_reactor_titles(&state, &reaction_counts).await;
+    let reactions: Vec<ReactionView> = reaction_counts
         .into_iter()
-        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
+        .zip(reactor_titles)
+        .map(|(r, title)| {
+            ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
+        })
         .collect();
     let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id).await?;
     let is_follow_up = db::chat::is_follow_up_of(
