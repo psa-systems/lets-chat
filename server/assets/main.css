@@ -714,6 +714,15 @@ math {
     object-fit: contain;
 }
 
+/* LC-264: pinned-strip collapse chevron. Points down when expanded, rotates to
+   point right when the strip is collapsed (toggle aria-expanded=false). */
+[data-lc-pin-chevron] {
+    transition: transform 0.15s ease;
+}
+[data-lc-pin-toggle][aria-expanded="false"] [data-lc-pin-chevron] {
+    transform: rotate(-90deg);
+}
+
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
 .lc-skeleton {

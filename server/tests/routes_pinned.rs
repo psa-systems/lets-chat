@@ -172,6 +172,36 @@ async fn pin_room_message_returns_oob_strip() {
     assert_eq!(n, 1);
 }
 
+// LC-264: the strip ships the per-room collapse toggle. The fold state is
+// JS-persisted (localStorage); this pins that the markup is present.
+#[tokio::test]
+async fn pinned_strip_ships_collapse_toggle() {
+    let t = app_with_two_users("viewer", "peer").await;
+    let room = seed_public_room(&t, "general-room").await;
+    let msg = seed_message(&t, room, &t.peer_id, "important update").await;
+
+    let (status, body) = send(
+        &t.app,
+        &t.viewer_session,
+        Method::POST,
+        &format!("/messages/{msg}/pin"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        body.contains("data-lc-pinned-strip"),
+        "strip root must carry the collapse marker: {body}"
+    );
+    assert!(
+        body.contains("data-lc-pin-toggle"),
+        "strip must ship the collapse toggle: {body}"
+    );
+    assert!(
+        body.contains(&format!(r#"id="lc-pinned-list-{room}""#)),
+        "strip must wrap its list in an id'd, collapsible container: {body}"
+    );
+}
+
 #[tokio::test]
 async fn unpin_room_message_returns_oob_strip() {
     let t = app_with_two_users("viewer", "peer").await;
