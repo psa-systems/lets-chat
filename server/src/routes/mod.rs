@@ -972,6 +972,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/activity", get(activity::get_activity))
         // LC-250: mark every conversation read in one action.
         .route("/read-all", post(read_all::post_read_all))
+        .route("/room/{room_id}/read", post(read_all::post_room_read))
         .route("/room/{room_id}/info", get(room_info::get_page))
         .route("/room/{room_id}/files", get(room_info::get_files))
         .route("/room/{room_id}/wiki/edit", get(room_info::get_wiki_edit))
