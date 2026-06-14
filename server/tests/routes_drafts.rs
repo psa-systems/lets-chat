@@ -996,3 +996,28 @@ async fn edit_form_autofocuses_its_input() {
         "edit form input must autofocus so the editor takes focus on open",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-252: keyboard-shortcuts cheat-sheet. The `?` keybind, open/close, and
+// focus trap are JS-only; this pins that the singleton modal + its `?`
+// handler ship in the persistent shell and the sidebar exposes the link.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn room_page_ships_shortcuts_overlay() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-shortcuts-modal"),
+        "page must ship the keyboard-shortcuts modal markup",
+    );
+    assert!(
+        body.contains("__lcOpenShortcuts"),
+        "page must ship the `?` keybind / open handler",
+    );
+    assert!(
+        body.contains("lc-shortcuts-modal-title"),
+        "shortcuts modal must be labelled for assistive tech",
+    );
+}

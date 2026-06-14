@@ -1,0 +1,115 @@
+{# LC-252: singleton keyboard-shortcuts cheat-sheet, in the persistent shell
+   so its document-level `?` keybind survives #main swaps. Opened by the `?`
+   key (outside any text field), the sidebar footer link, or
+   window.__lcOpenShortcuts(). Mirrors poll_modal.html: .modal-backdrop /
+   .modal-panel, Escape + backdrop-mousedown close, opener focus restore,
+   shared window.__lcDialogTrap focus trap. Pure front-end; no server route. #}
+<div data-lc-shortcuts-modal
+     class="hidden modal-backdrop"
+     role="dialog" aria-modal="true" aria-labelledby="lc-shortcuts-modal-title" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-shortcuts-modal-title" class="text-lg font-semibold">{{ "shortcuts-title"|t }}</h2>
+      <button type="button" data-lc-shortcuts-close aria-label="{{ "shortcuts-close-dialog"|t }}"
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <div class="flex flex-col gap-4 text-sm">
+      <section>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-content-muted mb-2">{{ "shortcuts-section-messaging"|t }}</h3>
+        <dl class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-send"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Enter</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-newline"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Shift</kbd> + <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Enter</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-edit-last"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">&uarr;</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-cancel"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Esc</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-mention"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">@</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-slash"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">/</kbd></dd>
+          </div>
+        </dl>
+      </section>
+      <section>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-content-muted mb-2">{{ "shortcuts-section-navigation"|t }}</h3>
+        <dl class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-next-unread"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Alt</kbd> + <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Shift</kbd> + <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">&darr;</kbd></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-prev-unread"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Alt</kbd> + <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">Shift</kbd> + <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">&uarr;</kbd></dd>
+          </div>
+        </dl>
+      </section>
+      <section>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-content-muted mb-2">{{ "shortcuts-section-general"|t }}</h3>
+        <dl class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-content-muted">{{ "shortcuts-help"|t }}</dt>
+            <dd><kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs font-mono">?</kbd></dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-shortcuts-modal]');
+  if (!modal) return;
+  var opener = null;
+  var trap = null;
+
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  function open(){
+    if (!modal.classList.contains('hidden')) return;
+    opener = document.activeElement;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { modal.querySelector('[data-lc-shortcuts-close]').focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  }
+
+  modal.querySelector('[data-lc-shortcuts-close]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+
+  window.__lcOpenShortcuts = open;
+
+  // Global `?` keybind. Ignore when typing in a field, when composing (IME),
+  // when a modifier is held, or when another dialog/popover is already open.
+  document.addEventListener('keydown', function(e){
+    if (e.key !== '?' || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (document.querySelector('.modal-backdrop:not(.hidden)')) return;
+    if (document.querySelector('#lc-mention-popover li[role="option"], #lc-slash-popover li[role="option"]')) return;
+    e.preventDefault();
+    open();
+  });
+})();
+</script>
