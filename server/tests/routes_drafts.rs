@@ -1103,3 +1103,23 @@ async fn image_attachment_ships_lightbox_markup() {
         "the page must ship the lightbox modal",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-270: collapse-sidebar-to-rail. The toggle + persistence are JS/CSS; this
+// pins that the rail ships the toggle and the bootstrap exposes the flipper.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn page_ships_sidebar_collapse_toggle() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-sidebar-toggle"),
+        "enclave rail must ship the sidebar collapse toggle",
+    );
+    assert!(
+        body.contains("__lcToggleSidebar"),
+        "page must ship the sidebar collapse flipper",
+    );
+}

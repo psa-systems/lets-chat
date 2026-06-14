@@ -370,6 +370,16 @@ document.body.addEventListener('click', function(e){
   var link = e.target.closest('#lc-nav-panel a');
   if (link) lcCloseNav();
 });
+// LC-270: sync the sidebar collapse toggle's aria-expanded to the persisted
+// state (set on <html> by the base.html no-flash bootstrap). The collapse
+// state is client-only, so the server cannot render the right value.
+(function(){
+  var collapsed = document.documentElement.getAttribute('data-lc-sidebar') === 'collapsed';
+  var btns = document.querySelectorAll('[data-lc-sidebar-toggle]');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+})();
 </script>
 <script>
 // Persistent-shell script: same lifetime rationale as the two scripts above.

@@ -39,6 +39,7 @@ sidebar-category-add = Añadir
 ## Enclave switcher
 switcher-enclave-settings = Ajustes del enclave
 switcher-discover = Descubrir o crear enclaves
+switcher-sidebar-toggle = Contraer o expandir la barra lateral
 
 ## Avatar / status
 partials-status-dnd = No molestar
