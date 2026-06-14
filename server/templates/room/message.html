@@ -112,6 +112,35 @@
           window.__lcCopyFallback(url); done();
         }
       ">{{ "room-msg-copy-link"|t }}</button>
+    {# LC-282: copy the message's raw markdown source. The raw text is fetched
+       from /messages/{id}/raw on click (not inlined per row) so large rooms
+       stay lean; flips the label to "Copied" like the copy-link button. #}
+    {% if !message.body.is_empty() %}
+    <button type="button"
+      data-lc-copy-text="{{ message.id }}"
+      data-lc-copied-label="{{ "room-msg-copied"|t }}"
+      class="text-content-muted hover:underline"
+      onclick="
+        var b = this;
+        fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+          .then(function(r){ return r.ok ? r.text() : null; })
+          .then(function(t){
+            if (t === null) return;
+            var done = function(){
+              var orig = b.textContent;
+              b.textContent = b.getAttribute('data-lc-copied-label');
+              setTimeout(function(){ b.textContent = orig; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(t).then(done, function(){
+                window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+              });
+            } else if (window.__lcCopyFallback) {
+              window.__lcCopyFallback(t); done();
+            }
+          });
+      ">{{ "room-msg-copy-text"|t }}</button>
+    {% endif %}
     {% if message.is_pinned %}
     <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-unpin"|t }}</button>
     {% else %}
