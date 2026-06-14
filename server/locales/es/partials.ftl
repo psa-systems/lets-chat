@@ -12,6 +12,7 @@ sidebar-link-activity = Actividad
 sidebar-link-saved = Guardados
 sidebar-link-scheduled = Programados
 sidebar-link-settings = Ajustes
+sidebar-link-shortcuts = Atajos de teclado
 sidebar-link-sign-out = Cerrar sesión
 sidebar-section-starred = Destacados
 sidebar-section-all-rooms = Todas las salas
