@@ -116,6 +116,12 @@ shortcuts-help = Mostrar esta ayuda
 switcher-placeholder = Ir a una sala, MD o persona...
 switcher-no-results = Sin coincidencias
 
+## Image lightbox (LC-262)
+lightbox-label = Visor de imágenes
+lightbox-close = Cerrar
+lightbox-prev = Imagen anterior
+lightbox-next = Imagen siguiente
+
 ## Scheduled message modal
 scheduled-modal-title = Programar mensaje
 scheduled-modal-deliver-at = Entregar el (tu hora local)
