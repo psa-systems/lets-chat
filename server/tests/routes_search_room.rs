@@ -16,6 +16,8 @@ mod common;
 struct TestApp {
     app: Router,
     chat: SqlitePool,
+    alice_id: String,
+    bob_id: String,
     alice_session: String,
     bob_session: String,
     enclave_id: i64,
@@ -68,6 +70,8 @@ async fn setup() -> TestApp {
     TestApp {
         app,
         chat,
+        alice_id,
+        bob_id,
         alice_session,
         bob_session,
         enclave_id,
@@ -78,6 +82,21 @@ async fn search(app: &Router, sess: &str, room_id: i64, q: &str) -> (StatusCode,
     let req = Request::builder()
         .method(Method::GET)
         .uri(format!("/search?room_id={room_id}&q={q}"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let body = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&body).into_owned())
+}
+
+// LC-280: global search with a raw query (operators); spaces percent-encoded.
+async fn search_global(app: &Router, sess: &str, q: &str) -> (StatusCode, String) {
+    let uri = format!("/search?q={}", q.replace(' ', "%20"));
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
         .header(header::COOKIE, format!("session={sess}"))
         .body(Body::empty())
         .unwrap();
@@ -129,5 +148,51 @@ async fn room_search_forbidden_when_inaccessible() {
         status,
         StatusCode::FORBIDDEN,
         "non-member cannot search a private room they cannot access",
+    );
+}
+
+// LC-280: from:<username> narrows results to that author; an unknown user
+// matches nothing.
+#[tokio::test]
+async fn from_operator_filters_by_author() {
+    let t = setup().await;
+    let room = db::chat::create_room(&t.chat, "ops", None, "public", None, Some(t.enclave_id))
+        .await
+        .unwrap();
+    db::chat::insert_message(&t.chat, room, &t.alice_id, "needle from alice")
+        .await
+        .unwrap();
+    db::chat::insert_message(&t.chat, room, &t.bob_id, "needle from bob")
+        .await
+        .unwrap();
+
+    // alice is admin (sees all rooms). Filter to bob's authorship.
+    let (status, body) = search_global(&t.app, &t.alice_session, "from:bob needle").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("needle from bob"),
+        "bob's hit must appear: {body}"
+    );
+    assert!(
+        !body.contains("needle from alice"),
+        "from:bob must exclude alice's hit: {body}"
+    );
+}
+
+#[tokio::test]
+async fn from_operator_unknown_user_returns_empty() {
+    let t = setup().await;
+    let room = db::chat::create_room(&t.chat, "ops2", None, "public", None, Some(t.enclave_id))
+        .await
+        .unwrap();
+    db::chat::insert_message(&t.chat, room, &t.alice_id, "needle here")
+        .await
+        .unwrap();
+
+    let (status, body) = search_global(&t.app, &t.alice_session, "from:nobody needle").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("role=\"listbox\""),
+        "an unknown from: user yields no results: {body}"
     );
 }
