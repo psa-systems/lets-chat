@@ -18,6 +18,15 @@ room-composer-send-message = Enviar mensaje
 room-composer-drop-file = Suelta el archivo para adjuntarlo
 room-composer-echo-sending = Enviando...
 room-composer-echo-discard = Descartar
+room-composer-format-bold = Negrita
+room-composer-format-italic = Cursiva
+room-composer-format-code = Código
+room-composer-format-link = Enlace
+room-composer-format-bold-ph = texto en negrita
+room-composer-format-italic-ph = texto en cursiva
+room-composer-format-code-ph = código
+room-composer-format-link-text-ph = texto
+room-composer-format-link-url-ph = url
 
 ## Quote chip
 room-quote-replying-to = Respondiendo a
