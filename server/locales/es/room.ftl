@@ -181,6 +181,8 @@ room-msg-delete = Eliminar
 room-msg-delete-confirm = ¿Eliminar este mensaje?
 room-msg-quote-deleted = (el mensaje citado fue eliminado)
 room-msg-seen = Visto
+# LC-302: accessible name for the one-tap quick-reaction hover bar.
+room-quick-react-aria = Reacciones rápidas
 
 ## Forward (LC-278)
 room-forward-title = Reenviar mensaje
