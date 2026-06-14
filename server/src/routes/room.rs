@@ -70,6 +70,27 @@ pub async fn post_preview(
     )))
 }
 
+/// `GET /messages/{message_id}/raw`
+///
+/// LC-282: the raw markdown source of a message, as `text/plain`, for the
+/// "Copy text" hover action. Fetched on click (not inlined per row) to keep
+/// page weight flat. 404 for a missing/soft-deleted message; access-gated to
+/// the message's room. Returns only what the caller can already see.
+pub async fn get_message_raw(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(message_id): Path<i64>,
+) -> Result<Response, AppError> {
+    let m = db::chat::get_message(&state.chat, message_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, m.room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    Ok(m.body.into_response())
+}
+
 #[derive(Deserialize)]
 pub struct MessageForm {
     pub body: String,

@@ -41,6 +41,22 @@ async fn picker(app: &Router, sess: &str, message_id: i64) -> StatusCode {
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+// LC-282: the raw-markdown endpoint behind the "Copy text" hover action.
+async fn raw(app: &Router, sess: &str, message_id: i64) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/messages/{message_id}/raw"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 // LC-274: the picker returns a filterable fragment; capture its body.
 async fn picker_body(app: &Router, sess: &str, message_id: i64) -> (StatusCode, String) {
     let req = Request::builder()
@@ -178,6 +194,29 @@ async fn non_member_cannot_open_picker_in_private_room() {
         picker(&s.app, &s.outsider_session, s.private_msg).await,
         StatusCode::FORBIDDEN
     );
+}
+
+// LC-282: GET /messages/{id}/raw returns the stored body, access-gated.
+#[tokio::test]
+async fn raw_returns_body_for_accessible_message() {
+    let s = setup().await;
+    let (status, body) = raw(&s.app, &s.member_session, s.general_msg).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "hello general");
+}
+
+#[tokio::test]
+async fn raw_forbidden_for_inaccessible_room() {
+    let s = setup().await;
+    let (status, _) = raw(&s.app, &s.outsider_session, s.private_msg).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn raw_not_found_for_missing_message() {
+    let s = setup().await;
+    let (status, _) = raw(&s.app, &s.member_session, 999_999).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 // LC-274: the picker ships a filter input and per-button searchable name tokens.

@@ -980,6 +980,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/m/{message_id}", get(room::get_message_permalink))
         .route("/room/{room_id}/messages", post(room::post_message))
         .route("/room/{room_id}/preview", post(room::post_preview))
+        .route("/messages/{message_id}/raw", get(room::get_message_raw))
         .route(
             "/messages/{message_id}/forward",
             get(forward::get_forward_picker),
