@@ -172,12 +172,16 @@ pub async fn get_picker(
     // operator/maintainer-controlled, but escape defensively so a future string
     // with a quote cannot break out of the attribute).
     let filter_label = attr_escape(&crate::i18n::translate_current("partials-reaction-filter"));
+    // LC-288: empty recent-emoji row; the layout IIFE fills it from localStorage
+    // when the picker opens (hidden when there is no history).
+    let recent_label = attr_escape(&crate::i18n::translate_current("partials-reaction-recent"));
     let body = format!(
         r##"<div id="picker-{message_id}" class="inline-flex flex-col gap-1 rounded border border-border bg-surface-elevated p-1 shadow">
   <div class="flex items-center gap-1">
     <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="w-32 rounded border border-border px-1 py-0.5 text-xs">
     <button hx-get="/messages/{message_id}/reactions/cancel" hx-target="#picker-{message_id}" hx-swap="outerHTML" class="text-xs text-content-muted hover:text-content px-1" aria-label="Close">×</button>
   </div>
+  <div data-lc-emoji-recent data-lc-recent-label="{recent_label}" class="hidden flex flex-wrap gap-1 items-center w-56 text-xs text-content-muted"></div>
   <div data-lc-emoji-grid class="flex flex-wrap gap-1 max-h-40 overflow-y-auto w-56">{buttons}</div>
 </div>"##,
     );
