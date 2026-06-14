@@ -165,6 +165,7 @@ room-msg-pin = Fijar
 room-msg-unsave = Quitar guardado
 room-msg-save = Guardar
 room-msg-remind = Recordar
+room-msg-mark-unread = Marcar como no leído
 room-msg-forward = Reenviar
 room-msg-edit = Editar
 room-msg-delete = Eliminar
