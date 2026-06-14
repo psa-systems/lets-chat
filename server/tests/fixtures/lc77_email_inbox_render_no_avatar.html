@@ -4,7 +4,7 @@
 
 
 
-<div id="msg-1" data-lc-day="2026-01-01" data-lc-density-tight="row" class="lc-anim-swap relative px-4 py-2 hover:bg-surface-sunken group">
+<div id="msg-1" data-lc-day="2026-01-01" data-lc-quick-react="1" data-lc-density-tight="row" class="lc-anim-swap relative px-4 py-2 hover:bg-surface-sunken group">
   
   <div class="flex items-center gap-2">
     
@@ -19,7 +19,9 @@
     
   </div>
   
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-surface-sunken px-1 rounded">
+  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex items-center gap-2 text-xs bg-surface-sunken px-1 rounded">
+    
+    <span data-lc-quick-bar role="group" aria-label="Quick reactions" class="hidden items-center gap-1 border-r border-border pr-2"></span>
     
     <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">Reply</button>
     

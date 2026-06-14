@@ -22,7 +22,7 @@
   <span class="ml-1 text-content-subtle">{{ message.created_at }}</span>
 </div>
 {% else %}
-<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
     {% match message.actor %}
@@ -83,7 +83,11 @@
     {% endif %}
   </div>
   {% endif %}
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex gap-2 text-xs bg-surface-sunken px-1 rounded">
+  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 flex items-center gap-2 text-xs bg-surface-sunken px-1 rounded">
+    {# LC-302: quick-reaction bar - filled client-side from the LC-288 recent
+       emoji MRU (or defaults) on first row hover; one tap reacts via the same
+       toggle endpoint as the picker. #}
+    <span data-lc-quick-bar role="group" aria-label="{{ "room-quick-react-aria"|t }}" class="hidden items-center gap-1 border-r border-border pr-2"></span>
     {% if message.parent_id.is_none() %}
     <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-reply"|t }}</button>
     {% endif %}
