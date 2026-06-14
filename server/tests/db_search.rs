@@ -406,3 +406,112 @@ async fn test_search_home_admin_sees_all_non_dm_rooms() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].room_name, "global");
 }
+
+// ----------------------------------------------------------------------
+// LC-280: operator filters (from: / before: / after:) via SearchFilters.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn search_filters_by_author() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let room = lets_chat::db::chat::create_room(&pool, "by-author", None, "public", None, Some(g))
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, room, "alice", "shared term")
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(&pool, room, "bob", "shared term")
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("shared").unwrap();
+    let filters = lets_chat::db::chat::SearchFilters {
+        author_id: Some("alice".into()),
+        before: None,
+        after: None,
+    };
+    let res = lets_chat::db::chat::search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "alice",
+        false,
+        &filters,
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.len(), 1, "author filter keeps only alice's hit");
+    assert_eq!(res[0].user_id, "alice");
+}
+
+#[tokio::test]
+async fn search_filters_by_date_range() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let room = lets_chat::db::chat::create_room(&pool, "by-date", None, "public", None, Some(g))
+        .await
+        .unwrap();
+    let old = lets_chat::db::chat::insert_message(&pool, room, "user-1", "dated term")
+        .await
+        .unwrap();
+    let new = lets_chat::db::chat::insert_message(&pool, room, "user-1", "dated term")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE messages SET created_at = '2020-01-01 00:00:00' WHERE id = ?")
+        .bind(old)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE messages SET created_at = '2024-01-01 00:00:00' WHERE id = ?")
+        .bind(new)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let fts = lets_chat::db::chat::sanitize_fts_query("dated").unwrap();
+
+    // before:2022 keeps only the 2020 message.
+    let before = lets_chat::db::chat::SearchFilters {
+        author_id: None,
+        before: Some("2022-01-01".into()),
+        after: None,
+    };
+    let res = lets_chat::db::chat::search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &before,
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.len(), 1);
+    assert_eq!(res[0].message_id, old);
+
+    // after:2022 keeps only the 2024 message.
+    let after = lets_chat::db::chat::SearchFilters {
+        author_id: None,
+        before: None,
+        after: Some("2022-01-01".into()),
+    };
+    let res = lets_chat::db::chat::search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &after,
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.len(), 1);
+    assert_eq!(res[0].message_id, new);
+}

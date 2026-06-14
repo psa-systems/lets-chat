@@ -45,12 +45,33 @@ pub async fn get_search(
         return Ok(empty_popover());
     }
 
-    let fts_query = match db::chat::sanitize_fts_query(trimmed) {
+    // LC-280: pull operator tokens (from:/before:/after:) out of the query; the
+    // remainder is the FTS text. Operators refine a text query - a query that is
+    // ONLY operators leaves empty text and collapses the popover, same as today.
+    let (text, from_name, before, after) = parse_operators(trimmed);
+
+    let fts_query = match db::chat::sanitize_fts_query(&text) {
         Some(q) => q,
         None => return Ok(empty_popover()),
     };
 
     let is_admin = user.role == "admin";
+
+    // LC-280: resolve from:<username> to an author id; an unknown user can match
+    // nothing, so collapse rather than ignore the filter.
+    let author_id = if let Some(name) = &from_name {
+        match db::auth::find_user_by_username(&state.auth, name).await? {
+            Some(rec) => Some(rec.id),
+            None => return Ok(empty_popover()),
+        }
+    } else {
+        None
+    };
+    let filters = db::chat::SearchFilters {
+        author_id,
+        before,
+        after,
+    };
 
     // LC-268: room-scoped search (the room-header box) takes precedence over an
     // enclave scope. Gate on room access (403) then narrow the FTS to that
@@ -77,7 +98,7 @@ pub async fn get_search(
     };
     let home_scope = enclave_filter.is_none();
     let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
-    let rows: Vec<_> = db::chat::search_messages(
+    let rows: Vec<_> = db::chat::search_messages_filtered(
         &state.chat,
         &fts_query,
         room_filter,
@@ -85,6 +106,7 @@ pub async fn get_search(
         home_scope,
         &user.id,
         is_admin,
+        &filters,
     )
     .await?
     .into_iter()
@@ -143,4 +165,70 @@ pub async fn get_search(
         results: &results,
     };
     html(&fragment)
+}
+
+/// LC-280: split a raw query into (free_text, from, before, after). Recognized
+/// `key:value` tokens (`from:`, `before:`, `after:`) are pulled out; everything
+/// else stays as free text. `before`/`after` values must be `YYYY-MM-DD` or the
+/// token is left in the text (so a stray `before:foo` does not silently filter).
+/// Last occurrence of a given operator wins.
+fn parse_operators(raw: &str) -> (String, Option<String>, Option<String>, Option<String>) {
+    let mut text: Vec<&str> = Vec::new();
+    let mut from_name = None;
+    let mut before = None;
+    let mut after = None;
+    for tok in raw.split_whitespace() {
+        if let Some(v) = tok.strip_prefix("from:") {
+            if !v.is_empty() {
+                from_name = Some(v.to_string());
+                continue;
+            }
+        } else if let Some(v) = tok.strip_prefix("before:") {
+            if is_ymd(v) {
+                before = Some(v.to_string());
+                continue;
+            }
+        } else if let Some(v) = tok.strip_prefix("after:") {
+            if is_ymd(v) {
+                after = Some(v.to_string());
+                continue;
+            }
+        }
+        text.push(tok);
+    }
+    (text.join(" "), from_name, before, after)
+}
+
+/// True iff `s` parses as a `YYYY-MM-DD` calendar date.
+fn is_ymd(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_ymd, parse_operators};
+
+    #[test]
+    fn parses_operators_and_leaves_text() {
+        let (text, from, before, after) =
+            parse_operators("from:alice before:2024-01-15 hello world");
+        assert_eq!(text, "hello world");
+        assert_eq!(from.as_deref(), Some("alice"));
+        assert_eq!(before.as_deref(), Some("2024-01-15"));
+        assert_eq!(after, None);
+    }
+
+    #[test]
+    fn invalid_date_stays_as_text() {
+        let (text, _, before, _) = parse_operators("before:nope cat");
+        assert_eq!(text, "before:nope cat");
+        assert_eq!(before, None);
+    }
+
+    #[test]
+    fn ymd_validation() {
+        assert!(is_ymd("2024-12-31"));
+        assert!(!is_ymd("2024-13-01"));
+        assert!(!is_ymd("yesterday"));
+    }
 }
