@@ -41,6 +41,22 @@ async fn picker(app: &Router, sess: &str, message_id: i64) -> StatusCode {
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+// LC-274: the picker returns a filterable fragment; capture its body.
+async fn picker_body(app: &Router, sess: &str, message_id: i64) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/messages/{message_id}/reactions/picker"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 // LC-266: the reaction toggle returns the re-rendered bar; capture its body.
 async fn react_body(
     app: &Router,
@@ -161,6 +177,22 @@ async fn non_member_cannot_open_picker_in_private_room() {
     assert_eq!(
         picker(&s.app, &s.outsider_session, s.private_msg).await,
         StatusCode::FORBIDDEN
+    );
+}
+
+// LC-274: the picker ships a filter input and per-button searchable name tokens.
+#[tokio::test]
+async fn picker_ships_filter_and_name_tokens() {
+    let s = setup().await;
+    let (status, body) = picker_body(&s.app, &s.member_session, s.general_msg).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        body.contains("data-lc-emoji-filter"),
+        "picker must ship the filter input: {body}"
+    );
+    assert!(
+        body.contains("data-lc-emoji-name="),
+        "picker buttons must carry searchable name tokens: {body}"
     );
 }
 
