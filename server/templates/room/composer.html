@@ -123,6 +123,9 @@
   <div id="lc-mention-popover" data-lc-skip-focus class="relative"></div>
   <!-- LC-76: slash-command autocomplete + ephemeral command result. -->
   <div id="lc-slash-popover" data-lc-skip-focus class="relative"></div>
+  <!-- LC-296: emoji :shortcode: autocomplete. Same combobox pattern as the
+       mention popover; focus stays in the textarea. -->
+  <div id="lc-emoji-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
     <span>{{ "room-composer-send-failed"|t }}</span>
@@ -214,7 +217,7 @@
       "
       onkeydown="
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-          if (document.querySelector('#lc-mention-popover li[role=option][aria-selected=true], #lc-slash-popover li[role=option][aria-selected=true]')) return;
+          if (document.querySelector('#lc-mention-popover li[role=option][aria-selected=true], #lc-slash-popover li[role=option][aria-selected=true], #lc-emoji-popover li[role=option][aria-selected=true]')) return;
           event.preventDefault();
           if (this.value.trim() || this.form.file_id.value) this.form.requestSubmit();
         }
@@ -437,6 +440,108 @@
     // LC-229: cancel a pending auto-resize rAF so it cannot run against a
     // detached textarea after the form is swapped out.
     if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-296: emoji :shortcode: autocomplete. Third autocomplete on the composer,
+// mirroring the @mention block above (same combobox/listbox ARIA model, 200ms
+// debounce, keyboard nav, and form-swap teardown). Inserts data-insert from the
+// chosen option: a `:shortcode:` for a custom emoji (rendered to an <img> by the
+// markdown pipeline) or the literal glyph for a Unicode emoji.
+(function(){
+  var ta = document.querySelector('#composer textarea[name=body]');
+  var slot = document.getElementById('lc-emoji-popover');
+  if (!ta || !slot) return;
+  var roomId = {{ room.id }};
+  // `:` must follow start-of-line or whitespace so we never trigger inside a
+  // URL (http://) or a time (10:30). Prefix charset covers shortcode chars.
+  var TOKEN = /(^|\s):([A-Za-z0-9_+-]{0,32})$/;
+  var current = null;
+  function activeToken() {
+    var pos = ta.selectionStart;
+    var before = ta.value.slice(0, pos);
+    var m = before.match(TOKEN);
+    if (!m) return null;
+    var prefix = m[2];
+    var start = pos - prefix.length - 1;
+    return { start: start, end: pos, prefix: prefix };
+  }
+  function close() {
+    current = null;
+    slot.replaceChildren();
+    ta.setAttribute('aria-expanded', 'false');
+    ta.removeAttribute('aria-activedescendant');
+  }
+  var emojiTimer = null;
+  function refresh() {
+    if (emojiTimer) clearTimeout(emojiTimer);
+    emojiTimer = setTimeout(function () {
+      emojiTimer = null;
+      current = activeToken();
+      if (!current) return close();
+      var url = '/rooms/' + roomId + '/emoji-complete?q=' + encodeURIComponent(current.prefix);
+      if (window.htmx) {
+        htmx.ajax('GET', url, { target: '#lc-emoji-popover', swap: 'innerHTML' });
+      }
+    }, 200);
+  }
+  function items() { return slot.querySelectorAll('li[role="option"]'); }
+  function selected() { return slot.querySelector('li[role="option"][aria-selected="true"]'); }
+  function select(li) {
+    items().forEach(function(l){ l.setAttribute('aria-selected', l === li ? 'true' : 'false'); });
+    if (!li) return;
+    if (li.id) ta.setAttribute('aria-activedescendant', li.id);
+    if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
+  }
+  function insert(li) {
+    if (!current || !li) return close();
+    var btn = li.querySelector('button[data-insert]');
+    if (!btn) return close();
+    var ins = btn.getAttribute('data-insert');
+    var v = ta.value;
+    ta.value = v.slice(0, current.start) + ins + ' ' + v.slice(current.end);
+    var pos = current.start + ins.length + 1;
+    ta.selectionStart = ta.selectionEnd = pos;
+    close();
+    ta.dispatchEvent(new Event('input'));
+  }
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('blur', function(){ setTimeout(close, 100); });
+  ta.addEventListener('keydown', function(e){
+    var list = items();
+    if (!current || list.length === 0) return;
+    var sel = selected() || list[0];
+    var idx = Array.prototype.indexOf.call(list, sel);
+    if (e.key === 'ArrowDown')      { e.preventDefault(); e.stopPropagation(); select(list[Math.min(idx + 1, list.length - 1)]); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); e.stopPropagation(); select(list[Math.max(idx - 1, 0)]); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); insert(sel); }
+    else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); }
+  }, true);
+  function onAfterSwap(e){
+    if (e.target && e.target.id === 'lc-emoji-popover') {
+      var firstLi = slot.querySelector('li[role="option"]');
+      if (firstLi) {
+        firstLi.setAttribute('aria-selected', 'true');
+        ta.setAttribute('aria-expanded', 'true');
+        if (firstLi.id) ta.setAttribute('aria-activedescendant', firstLi.id);
+      } else {
+        ta.setAttribute('aria-expanded', 'false');
+        ta.removeAttribute('aria-activedescendant');
+      }
+      slot.addEventListener('mousedown', function(ev){
+        var li = ev.target.closest('li[role="option"]');
+        if (li) { ev.preventDefault(); insert(li); }
+      }, { once: true });
+    }
+  }
+  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  function teardown() {
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+    if (emojiTimer) { clearTimeout(emojiTimer); emojiTimer = null; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
@@ -1163,7 +1268,7 @@
   function onKeydown(e){
     if (e.key !== 'ArrowUp' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     if (ta.value !== '') return;
-    if (document.querySelector('#lc-mention-popover li[role="option"], #lc-slash-popover li[role="option"]')) return;
+    if (document.querySelector('#lc-mention-popover li[role="option"], #lc-slash-popover li[role="option"], #lc-emoji-popover li[role="option"]')) return;
     var btns = messages.querySelectorAll('button[hx-get$="/edit"]');
     if (!btns.length) return;
     e.preventDefault();
