@@ -1,0 +1,17 @@
+{# LC-260: quick-switcher results listbox. Rows are navigation anchors with
+   role="option" so the shared search.js keyboard nav (Arrow/Enter/Esc) drives
+   selection and Enter clicks the highlighted anchor. #}
+{% if items.is_empty() %}
+<div class="px-3 py-4 text-sm text-content-muted">{{ "switcher-no-results"|t }}</div>
+{% else %}
+<div role="listbox" class="max-h-96 overflow-y-auto">
+  {% for it in items %}
+  <a href="{{ it.href }}" role="option" id="{{ it.opt_id }}" aria-selected="false"
+     class="flex items-center gap-2 px-3 py-2 hover:bg-surface-sunken border-b border-border last:border-b-0">
+    <span class="w-5 text-center text-content-muted">{{ it.glyph }}</span>
+    <span class="font-medium truncate">{{ it.label }}</span>
+    {% if !it.sublabel.is_empty() %}<span class="text-xs text-content-muted truncate">{{ it.sublabel }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
