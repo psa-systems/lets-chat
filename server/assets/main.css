@@ -447,6 +447,15 @@ body {
 }
 .lc-md pre code { background: transparent; padding: 0; }
 
+/* LC-284: self-mention highlight. A message that @-mentions the viewer gets a
+   layout-neutral left accent bar (inset box-shadow, so the row box is
+   unchanged) plus a faint accent wash. Theme-aware via --accent; hover still
+   shows the sunken background (the Tailwind :hover utility wins). */
+.lc-mentioned {
+    box-shadow: inset 3px 0 0 0 var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 /* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
    <pre> in .lc-code-wrap and drops a .lc-code-copy button in the top-right,
    revealed on hover/focus. */

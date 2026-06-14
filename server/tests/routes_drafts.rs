@@ -1187,3 +1187,45 @@ async fn preview_forbidden_when_inaccessible() {
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+// ----------------------------------------------------------------------
+// LC-284: self-mention highlight. A message that @-mentions the viewer gets the
+// lc-mentioned class; one that does not, does not.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn message_mentioning_viewer_is_highlighted() {
+    let t = app().await;
+    let mid = insert_message_at(&t.chat, 1, &t.bob_id, "ping @alice", 0).await;
+    sqlx::query(
+        "INSERT INTO mentions (message_id, room_id, mentioned_user_id, author_user_id) \
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(mid)
+    .bind(1i64)
+    .bind(&t.alice_id)
+    .bind(&t.bob_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("lc-mentioned"),
+        "a message that mentions the viewer must carry the highlight class",
+    );
+}
+
+#[tokio::test]
+async fn message_without_mention_is_not_highlighted() {
+    let t = app().await;
+    insert_message_at(&t.chat, 1, &t.bob_id, "just a normal message", 0).await;
+
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("lc-mentioned"),
+        "a message that does not mention the viewer is not highlighted",
+    );
+}
