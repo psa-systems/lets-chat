@@ -9,7 +9,10 @@
 </div>
 {% else if a.is_image() %}
 <div class="mt-1">
-  <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">
+  {# LC-262: data-lc-lightbox opens the full image in the in-app lightbox
+     (lightbox_modal.html); href + target stay as the no-JS fallback (open the
+     raw file in a new tab). #}
+  <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer">
     <img src="{{ a.url }}?size=preview" alt="{{ a.filename }}"
          class="max-w-sm max-h-96 rounded border border-border">
   </a>

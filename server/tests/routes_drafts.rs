@@ -1063,3 +1063,43 @@ async fn message_body_ships_collapse_markup() {
         "message must ship the Show more/less toggle",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-262: image lightbox. The viewer is JS-driven; the server marks image
+// attachment anchors with data-lc-lightbox and ships the singleton modal.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn image_attachment_ships_lightbox_markup() {
+    let t = app().await;
+    let mid = insert_message_at(&t.chat, 1, &t.alice_id, "look at this", 0).await;
+    let up = db::uploads::insert_upload(
+        &t.chat,
+        &t.alice_id,
+        "pic.png",
+        "image/png",
+        1234,
+        "a/b/hash.png",
+        None,
+    )
+    .await
+    .unwrap();
+    db::uploads::link_upload_to_message(&t.chat, up, mid)
+        .await
+        .unwrap();
+
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(&format!("/api/files/{up}")),
+        "the image attachment must render",
+    );
+    assert!(
+        body.contains("data-lc-lightbox target="),
+        "the image anchor must be lightbox-enabled",
+    );
+    assert!(
+        body.contains("data-lc-lightbox-modal"),
+        "the page must ship the lightbox modal",
+    );
+}
