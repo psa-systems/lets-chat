@@ -390,6 +390,19 @@ body {
    `#64748b` (slate-500) and `#2563eb` (blue-600) which stayed constant
    across all four themes. */
 .lc-md del { text-decoration: line-through; color: var(--content-muted); }
+/* LC-290: spoiler. `||text||` renders as a filled box; the inner text is
+   transparent until revealed (one-way, on click / Enter / Space via the
+   layout.html delegated handler). Box recolors with the active theme. */
+.lc-spoiler {
+    background: var(--content-muted);
+    border-radius: 0.25rem;
+    padding: 0 0.2rem;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.lc-spoiler-inner { opacity: 0; }
+.lc-spoiler-revealed { background: transparent; cursor: text; }
+.lc-spoiler-revealed .lc-spoiler-inner { opacity: 1; }
 .lc-md a { color: var(--accent); }
 .lc-md a:hover { color: var(--accent-hover); text-decoration: underline; }
 .lc-md ul, .lc-md ol { padding-left: 1.5rem; margin: 0.25rem 0; }
