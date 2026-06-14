@@ -452,6 +452,38 @@ pub async fn post_appearance(
     Ok(Redirect::to("/settings?saved=1"))
 }
 
+#[derive(serde::Deserialize)]
+pub struct ThemeForm {
+    /// "system" / "light" / "dark" / "hc-light" / "hc-dark".
+    #[serde(default)]
+    pub theme: String,
+}
+
+/// LC-292: POST /settings/theme - the sidebar quick-toggle's persist endpoint.
+/// Saves only the theme (no density), and returns 204 with a `lc-theme` cookie
+/// so the very next navigation reads the correct value (no flash-of-old-theme).
+/// The no-flash bootstrap + `resolve_locale` middleware otherwise mirror this
+/// cookie from `users.theme`; setting it here just closes the one-load gap for
+/// the fire-and-forget fetch path (the redirect-based appearance form gets this
+/// for free). An invalid value falls back to "system" rather than 500ing.
+pub async fn post_theme(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<ThemeForm>,
+) -> Result<Response, AppError> {
+    let theme = match form.theme.trim() {
+        t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
+        _ => "system",
+    };
+    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    let cookie = format!("lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax");
+    Ok((
+        axum::http::StatusCode::NO_CONTENT,
+        [(axum::http::header::SET_COOKIE, cookie)],
+    )
+        .into_response())
+}
+
 pub async fn post_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
