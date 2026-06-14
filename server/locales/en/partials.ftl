@@ -85,6 +85,7 @@ partials-poll-closes = closes
 
 ## Reaction bar
 partials-reaction-add = Add reaction
+partials-reaction-filter = Filter emoji
 
 ## Room header
 partials-room-info-title = View room info, description, and wiki

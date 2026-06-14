@@ -35,6 +35,14 @@ fn is_valid_reaction(emoji: &str) -> bool {
     !emoji.is_empty() && emoji.len() <= MAX_REACTION_BYTES && !emoji.chars().any(|c| c.is_control())
 }
 
+/// LC-274: minimal HTML-attribute escaping for values inlined into the raw
+/// picker markup (there is no Askama template on this path to auto-escape).
+fn attr_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+}
+
 /// POST /messages/:message_id/reactions/:emoji
 /// Toggle the caller's reaction for the given emoji on the given message.
 /// Broadcasts a ReactionAdded or ReactionRemoved event to subscribers and
@@ -125,12 +133,22 @@ pub async fn get_picker(
         .ok_or(AppError::NotFound)?;
     require_room_access(&state, &user, m.room_id).await?;
 
-    let unicode_defaults = ["👍", "❤", "😂", "🎉", "😮", "😢"];
+    // LC-274: searchable keyword tokens for the unicode defaults so the filter
+    // can find them by name (the glyph itself is not typeable). Custom emojis
+    // are matched on their shortcode below.
+    let unicode_defaults = [
+        ("👍", "thumbsup +1 like"),
+        ("❤", "heart love"),
+        ("😂", "joy laugh lol"),
+        ("🎉", "tada party celebrate"),
+        ("😮", "wow open_mouth surprised"),
+        ("😢", "cry sad"),
+    ];
     let mut buttons = String::new();
-    for e in &unicode_defaults {
+    for (e, name) in &unicode_defaults {
         let encoded = percent_encoding::utf8_percent_encode(e, percent_encoding::NON_ALPHANUMERIC);
         buttons.push_str(&format!(
-            r##"<button hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
+            r##"<button data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
         ));
     }
 
@@ -142,7 +160,7 @@ pub async fn get_picker(
         // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
         // so it is safe to inline into the markup without escaping.
         buttons.push_str(&format!(
-            r##"<button hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
+            r##"<button data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
             id = message_id,
             enc = encoded,
             code = emoji.shortcode,
@@ -150,8 +168,18 @@ pub async fn get_picker(
         ));
     }
 
+    // LC-274: localized filter placeholder, attribute-escaped (translations are
+    // operator/maintainer-controlled, but escape defensively so a future string
+    // with a quote cannot break out of the attribute).
+    let filter_label = attr_escape(&crate::i18n::translate_current("partials-reaction-filter"));
     let body = format!(
-        r##"<div id="picker-{message_id}" class="inline-flex gap-1 items-center">{buttons}<button hx-get="/messages/{message_id}/reactions/cancel" hx-target="#picker-{message_id}" hx-swap="outerHTML" class="text-xs text-slate-500">×</button></div>"##,
+        r##"<div id="picker-{message_id}" class="inline-flex flex-col gap-1 rounded border border-border bg-surface-elevated p-1 shadow">
+  <div class="flex items-center gap-1">
+    <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="w-32 rounded border border-border px-1 py-0.5 text-xs">
+    <button hx-get="/messages/{message_id}/reactions/cancel" hx-target="#picker-{message_id}" hx-swap="outerHTML" class="text-xs text-content-muted hover:text-content px-1" aria-label="Close">×</button>
+  </div>
+  <div data-lc-emoji-grid class="flex flex-wrap gap-1 max-h-40 overflow-y-auto w-56">{buttons}</div>
+</div>"##,
     );
     Ok(axum::response::Html(body).into_response())
 }
