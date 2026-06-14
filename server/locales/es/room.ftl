@@ -139,6 +139,9 @@ room-wiki-label = Wiki (Markdown)
 
 ## Message row
 room-msg-unread-divider = Mensajes no leidos
+# LC-294: floating pill that scrolls back to the unread divider.
+room-jump-unread-label = No leidos
+room-jump-unread-aria = Saltar al primer mensaje no leido
 # LC-244: date separators in the message list.
 room-day-today = Hoy
 room-day-yesterday = Ayer
