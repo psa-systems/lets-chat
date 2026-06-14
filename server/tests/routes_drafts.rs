@@ -1041,3 +1041,25 @@ async fn room_page_ships_formatting_toolbar() {
         "composer must ship the formatting handler",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-256: collapse long messages. The fold is JS-measured (auto_scroll.html);
+// the server always ships the marker + hidden toggle, so this pins that a
+// non-empty message body carries the collapse markup.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn message_body_ships_collapse_markup() {
+    let t = app().await;
+    insert_message_at(&t.chat, 1, &t.alice_id, "a long-enough body", 0).await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-collapse"),
+        "message body must carry the collapse marker",
+    );
+    assert!(
+        body.contains("data-lc-collapse-toggle"),
+        "message must ship the Show more/less toggle",
+    );
+}
