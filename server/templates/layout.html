@@ -620,6 +620,43 @@ document.body.addEventListener('click', function(e){
   }
   document.body.addEventListener('htmx:afterSettle', scan);
   scan();
+
+  // LC-302: quick-reaction hover bar. On first hover of a message row, fill its
+  // [data-lc-quick-bar] with up to QCAP one-tap buttons from the same MRU (or a
+  // default set when empty). Each button is the SAME hx-post the picker emits,
+  // so the recorder above also records quick-react clicks. Lazy per-row fill
+  // keeps large rooms from processing every message on load.
+  var DEFAULTS = ['\u{1F44D}', '\u{2764}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
+  var QCAP = 5;
+  function fillQuick(row){
+    var bar = row.querySelector('[data-lc-quick-bar]');
+    if (!bar || bar.getAttribute('data-lc-quick-done')) return;
+    bar.setAttribute('data-lc-quick-done', '1');
+    var mid = row.getAttribute('data-lc-quick-react');
+    if (!mid) return;
+    var recents = read();
+    var list = (recents.length ? recents : DEFAULTS).slice(0, QCAP);
+    list.forEach(function(g){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'leading-none hover:scale-125 transition-transform';
+      b.setAttribute('aria-label', g);
+      b.setAttribute('title', g);
+      b.setAttribute('data-lc-emoji-name', g);
+      b.setAttribute('hx-post', '/messages/' + mid + '/reactions/' + encodeURIComponent(g));
+      b.setAttribute('hx-target', '#reactions-' + mid);
+      b.setAttribute('hx-swap', 'outerHTML');
+      b.textContent = g;
+      bar.appendChild(b);
+    });
+    bar.classList.remove('hidden');
+    bar.classList.add('inline-flex');
+    if (window.htmx) window.htmx.process(bar);
+  }
+  document.addEventListener('mouseover', function(e){
+    var row = e.target.closest && e.target.closest('[data-lc-quick-react]');
+    if (row) fillQuick(row);
+  });
 })();
 </script>
 <script>
