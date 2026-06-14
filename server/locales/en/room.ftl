@@ -165,6 +165,7 @@ room-msg-pin = Pin
 room-msg-unsave = Unsave
 room-msg-save = Save
 room-msg-remind = Remind
+room-msg-mark-unread = Mark unread
 room-msg-forward = Forward
 room-msg-edit = Edit
 room-msg-delete = Delete

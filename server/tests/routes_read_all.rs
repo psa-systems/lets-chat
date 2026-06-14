@@ -111,6 +111,20 @@ async fn post_room_read(app: &Router, sess: &str, room_id: i64) -> (StatusCode, 
     (status, String::from_utf8_lossy(&body).into_owned())
 }
 
+// LC-286: mark a conversation unread from a message.
+async fn post_message_unread(app: &Router, sess: &str, message_id: i64) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/messages/{message_id}/unread"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let body = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&body).into_owned())
+}
+
 #[tokio::test]
 async fn read_all_clears_room_dm_unread_and_mentions() {
     let t = setup().await;
@@ -280,4 +294,59 @@ async fn read_room_forbidden_when_inaccessible() {
         StatusCode::FORBIDDEN,
         "non-member cannot mark an inaccessible private room read",
     );
+}
+
+// LC-286: marking a message unread rewinds the watermark so it (and newer)
+// re-raise the unread badge.
+#[tokio::test]
+async fn mark_unread_rewinds_the_watermark() {
+    let t = setup().await;
+    insert_message(&t.chat, 1, &t.bob_id, "first").await;
+    let m2 = insert_message(&t.chat, 1, &t.bob_id, "second").await;
+    // Read up to the latest: unread is 0.
+    db::chat::set_last_read(&t.chat, &t.alice_id, 1, m2)
+        .await
+        .unwrap();
+    assert_eq!(
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+            .await
+            .unwrap(),
+        0
+    );
+
+    let (status, body) = post_message_unread(&t.app, &t.alice_session, m2).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("id=\"sidebar\""),
+        "returns the sidebar fragment"
+    );
+    assert!(
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+            .await
+            .unwrap()
+            >= 1,
+        "the message and newer become unread again",
+    );
+}
+
+#[tokio::test]
+async fn mark_unread_forbidden_when_inaccessible() {
+    let t = setup().await;
+    let private = sqlx::query("INSERT INTO rooms (name, room_type) VALUES ('secret', 'private')")
+        .execute(&t.chat)
+        .await
+        .unwrap()
+        .last_insert_rowid();
+    let msg = insert_message(&t.chat, private, &t.alice_id, "hidden").await;
+
+    // bob (non-admin) is not a member of the private room.
+    let (status, _) = post_message_unread(&t.app, &t.bob_session, msg).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn mark_unread_not_found_for_missing_message() {
+    let t = setup().await;
+    let (status, _) = post_message_unread(&t.app, &t.alice_session, 999_999).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
