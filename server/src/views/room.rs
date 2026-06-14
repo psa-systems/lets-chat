@@ -245,6 +245,13 @@ impl MessageView {
         markdown::render(&self.body, &self.mentions, &self.custom_emojis)
     }
 
+    /// LC-284: true when this message directly `@`-mentions the viewer, so the
+    /// template can highlight it. The resolved mention set is already loaded for
+    /// chip rendering, so this is a cheap membership check (no extra query).
+    pub fn mentions_viewer(&self) -> bool {
+        self.mentions.iter().any(|m| m.user_id == self.viewer_id)
+    }
+
     /// First URL in the body, or `None`. The template uses this to render
     /// at most one preview-card lazy-load shell per message so repeated
     /// links in a single body don't multiply network fetches.
