@@ -66,6 +66,25 @@
         apply(p);
       };
 
+      // LC-292: sidebar quick-toggle. Flips the active theme dark<->light WITHIN
+      // the same contrast family (so an accessibility user on high-contrast
+      // stays high-contrast), applies it instantly via __lcSetTheme, and
+      // fire-and-forget persists it server-side. The endpoint also sets the
+      // lc-theme cookie so the next full navigation has no flash-of-old-theme.
+      // hc/system remain on the Settings appearance picker.
+      var FLIP = { light: "dark", dark: "light", "hc-light": "hc-dark", "hc-dark": "hc-light" };
+      window.__lcToggleTheme = function () {
+        var next = FLIP[d.getAttribute("data-theme")] || "dark";
+        window.__lcSetTheme(next);
+        try {
+          fetch("/settings/theme", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "theme=" + encodeURIComponent(next),
+          });
+        } catch (e) {}
+      };
+
       // LC-194: density (comfortable/compact). Same cookie/localStorage source
       // as theme; defaults to comfortable. No system mode.
       function applyDensity(v) {
