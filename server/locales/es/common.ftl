@@ -122,6 +122,10 @@ lightbox-close = Cerrar
 lightbox-prev = Imagen anterior
 lightbox-next = Imagen siguiente
 
+## Code block copy (LC-272)
+code-copy = Copiar
+code-copied = Copiado
+
 ## Scheduled message modal
 scheduled-modal-title = Programar mensaje
 scheduled-modal-deliver-at = Entregar el (tu hora local)
