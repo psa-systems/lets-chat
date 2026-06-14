@@ -158,6 +158,7 @@ room-msg-show-less = Show less
 room-msg-reply = Reply
 room-msg-thread = Thread
 room-msg-copy-link = Copy link
+room-msg-copy-text = Copy text
 room-msg-copied = Copied
 room-msg-unpin = Unpin
 room-msg-pin = Pin

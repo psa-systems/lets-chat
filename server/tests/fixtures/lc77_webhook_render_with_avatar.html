@@ -46,6 +46,33 @@
         }
       ">Copy link</button>
     
+    
+    <button type="button"
+      data-lc-copy-text="1"
+      data-lc-copied-label="Copied"
+      class="text-content-muted hover:underline"
+      onclick="
+        var b = this;
+        fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+          .then(function(r){ return r.ok ? r.text() : null; })
+          .then(function(t){
+            if (t === null) return;
+            var done = function(){
+              var orig = b.textContent;
+              b.textContent = b.getAttribute('data-lc-copied-label');
+              setTimeout(function(){ b.textContent = orig; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(t).then(done, function(){
+                window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+              });
+            } else if (window.__lcCopyFallback) {
+              window.__lcCopyFallback(t); done();
+            }
+          });
+      ">Copy text</button>
+    
+    
     <button hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="text-warning hover:underline">Pin</button>
     
     
