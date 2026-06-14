@@ -11,6 +11,7 @@
        bottom-right of the message viewport (above the composer). #}
     <div class="relative flex flex-1 flex-col min-h-0">
       {% include "room/messages.html" %}
+      {% include "partials/jump_to_unread.html" %}
       {% include "partials/jump_to_latest.html" %}
     </div>
     <div id="typing" class="px-4 text-xs text-content-muted"></div>
