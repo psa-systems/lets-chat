@@ -1184,6 +1184,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/search", get(search::get_search))
         .route("/users/search", get(users::get_user_search))
+        .route("/users/{user_id}/hovercard", get(users::get_hovercard))
         .route("/users/mentions", get(mentions::get_autocomplete))
         .route(
             "/rooms/{room_id}/emoji-complete",

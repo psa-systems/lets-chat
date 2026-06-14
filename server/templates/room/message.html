@@ -63,7 +63,7 @@
     {% let avatar_size = "h-6 w-6 text-xs" %}
     {% include "partials/avatar.html" %}
     {% if message.user_id != message.viewer_id %}
-    <a href="/dm/{{ message.user_id }}" class="font-medium text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
+    <a href="/dm/{{ message.user_id }}" data-lc-hovercard="{{ message.user_id }}" class="font-medium text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
     {% else %}
     <span class="font-medium">{{ message.label() }}</span>
     {% endif %}
