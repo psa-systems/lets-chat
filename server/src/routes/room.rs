@@ -22,7 +22,7 @@ use crate::ws::events::ChatEvent;
 /// stopping ~2 MiB bodies from being stored and broadcast to every subscriber
 /// (the send path otherwise only checked for emptiness). Applies to new
 /// messages, thread replies, and edits.
-const MAX_MESSAGE_CHARS: usize = 16_000;
+pub(crate) const MAX_MESSAGE_CHARS: usize = 16_000;
 
 /// Reject an over-length body before any DB write or broadcast. `body` is the
 /// already-trimmed message text. `pub(crate)` so the JSON API v1 message POST
