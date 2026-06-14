@@ -1143,3 +1143,47 @@ async fn page_ships_code_copy_enhancer() {
         "enhancer must mark processed blocks idempotently",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-276: composer markdown preview. POST /room/{id}/preview renders the draft
+// through the server markdown pipeline (access-gated), for the Write/Preview
+// toggle.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn preview_renders_markdown() {
+    let t = app().await;
+    let (status, body) = send(
+        &t.app,
+        &t.alice_session,
+        Method::POST,
+        "/room/1/preview",
+        "body=**bold**",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("<strong>bold</strong>"),
+        "preview must render markdown via the server pipeline: {body}",
+    );
+    assert!(
+        body.contains("lc-md"),
+        "preview wraps the render in the lc-md surface",
+    );
+}
+
+#[tokio::test]
+async fn preview_forbidden_when_inaccessible() {
+    let t = app().await;
+    // bob is a non-admin and not a member of this fresh private room.
+    let priv_id = private_room(&t.chat, "secret").await;
+    let (status, _) = send(
+        &t.app,
+        &t.bob_session,
+        Method::POST,
+        &format!("/room/{priv_id}/preview"),
+        "body=hi",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
