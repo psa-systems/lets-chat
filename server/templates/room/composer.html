@@ -129,6 +129,25 @@
     <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
   </div>
   <input type="hidden" name="file_id">
+  {# LC-254: Markdown formatting toolbar. Buttons wrap the textarea selection
+     (or insert a placeholder) in Markdown; the body is rendered server-side, so
+     this is a pure client string transform. data-lc-fmt drives the handler in
+     the LC-254 IIFE below; Bold/Italic also bind Ctrl/Cmd+B / Ctrl/Cmd+I. #}
+  <div class="flex items-center gap-1 mb-1 text-content-muted">
+    <button type="button" data-lc-fmt="bold" data-lc-ph="{{ "room-composer-format-bold-ph"|t }}" title="{{ "room-composer-format-bold"|t }}" aria-label="{{ "room-composer-format-bold"|t }}"
+      class="px-2 py-1 rounded font-bold hover:text-content hover:bg-surface-sunken">B</button>
+    <button type="button" data-lc-fmt="italic" data-lc-ph="{{ "room-composer-format-italic-ph"|t }}" title="{{ "room-composer-format-italic"|t }}" aria-label="{{ "room-composer-format-italic"|t }}"
+      class="px-2 py-1 rounded italic hover:text-content hover:bg-surface-sunken">I</button>
+    <button type="button" data-lc-fmt="code" data-lc-ph="{{ "room-composer-format-code-ph"|t }}" title="{{ "room-composer-format-code"|t }}" aria-label="{{ "room-composer-format-code"|t }}"
+      class="px-2 py-1 rounded font-mono text-xs hover:text-content hover:bg-surface-sunken">&lt;/&gt;</button>
+    <button type="button" data-lc-fmt="link" data-lc-ph="{{ "room-composer-format-link-text-ph"|t }}" data-lc-ph-url="{{ "room-composer-format-link-url-ph"|t }}" title="{{ "room-composer-format-link"|t }}" aria-label="{{ "room-composer-format-link"|t }}"
+      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+        <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z"/>
+        <path d="M8.603 14.768a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 005.656 5.656l3-3a4 4 0 00-.225-5.865.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3z"/>
+      </svg>
+    </button>
+  </div>
   <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
        combobox (mention or slash) has a highlighted option open, Enter belongs
        to that combobox (insert the option), not the form. The combobox keydown
@@ -1144,6 +1163,80 @@
   ta.addEventListener('keydown', onKeydown);
   window.__lcEditLast = onKeydown;
   function teardown(){ ta.removeEventListener('keydown', onKeydown); }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-254: Markdown formatting toolbar. Each [data-lc-fmt] button wraps the
+// current textarea selection (or inserts a localized placeholder when nothing
+// is selected) in Markdown; the body is rendered server-side, so this is a pure
+// client string transform. After every mutation we dispatch a synthetic 'input'
+// so the auto-resize (LC-229), draft autosave (LC-64), and send-enable
+// (__lcRefreshSend) all run - identical to the mention/slash insert path.
+// Ctrl/Cmd+B and Ctrl/Cmd+I mirror the Bold/Italic buttons. Cleanup-root is
+// #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  if (!form || !ta) return;
+  var bar = form.querySelector('[data-lc-fmt]') ? form : null;
+
+  // Wrap the selection (or `placeholder`) in prefix/suffix and re-select the
+  // inner text so the user can keep typing or re-format.
+  function wrap(prefix, suffix, placeholder){
+    var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    var sel = v.slice(s, e);
+    var inner = sel || placeholder;
+    ta.value = v.slice(0, s) + prefix + inner + suffix + v.slice(e);
+    var innerStart = s + prefix.length;
+    ta.focus();
+    ta.setSelectionRange(innerStart, innerStart + inner.length);
+    ta.dispatchEvent(new Event('input'));
+  }
+
+  // Link is special-cased to [text](url); selecting `url` so the user types the
+  // destination straight away.
+  function link(textPh, urlPh){
+    var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    var text = v.slice(s, e) || textPh;
+    var insert = '[' + text + '](' + urlPh + ')';
+    ta.value = v.slice(0, s) + insert + v.slice(e);
+    var urlStart = s + 1 + text.length + 2; // past "[" + text + "]("
+    ta.focus();
+    ta.setSelectionRange(urlStart, urlStart + urlPh.length);
+    ta.dispatchEvent(new Event('input'));
+  }
+
+  function apply(kind, btn){
+    var ph = btn ? (btn.getAttribute('data-lc-ph') || '') : '';
+    if (kind === 'bold')        wrap('**', '**', ph || 'bold text');
+    else if (kind === 'italic') wrap('*', '*', ph || 'italic text');
+    else if (kind === 'code')   wrap('`', '`', ph || 'code');
+    else if (kind === 'link')   link(ph || 'text', (btn && btn.getAttribute('data-lc-ph-url')) || 'url');
+  }
+  window.__lcFormat = apply;
+
+  function onClick(e){
+    var btn = e.target.closest('[data-lc-fmt]');
+    if (!btn || !form.contains(btn)) return;
+    e.preventDefault();
+    apply(btn.getAttribute('data-lc-fmt'), btn);
+  }
+  function btnFor(kind){ return form.querySelector('[data-lc-fmt="' + kind + '"]'); }
+  function onKeydown(e){
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return;
+    var k = e.key.toLowerCase();
+    if (k === 'b')      { e.preventDefault(); apply('bold', btnFor('bold')); }
+    else if (k === 'i') { e.preventDefault(); apply('italic', btnFor('italic')); }
+  }
+  if (bar) form.addEventListener('click', onClick);
+  ta.addEventListener('keydown', onKeydown);
+
+  function teardown(){
+    if (bar) form.removeEventListener('click', onClick);
+    ta.removeEventListener('keydown', onKeydown);
+  }
   var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();

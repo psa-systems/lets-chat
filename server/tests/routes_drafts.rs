@@ -1021,3 +1021,23 @@ async fn room_page_ships_shortcuts_overlay() {
         "shortcuts modal must be labelled for assistive tech",
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-254: composer Markdown formatting toolbar. The wrap/link transforms and
+// Ctrl/Cmd+B/I are JS-only; this pins that the toolbar markup + handler ship.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn room_page_ships_formatting_toolbar() {
+    let t = app().await;
+    let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("data-lc-fmt=\"bold\""),
+        "composer must ship the formatting toolbar buttons",
+    );
+    assert!(
+        body.contains("__lcFormat"),
+        "composer must ship the formatting handler",
+    );
+}
