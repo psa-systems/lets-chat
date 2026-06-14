@@ -93,6 +93,22 @@ poll-close-after = Cerrar tras
 poll-close-after-suffix = minutos (0 = nunca)
 poll-post = Publicar encuesta
 
+## Keyboard shortcuts overlay (LC-252)
+shortcuts-title = Atajos de teclado
+shortcuts-close-dialog = Cerrar diálogo
+shortcuts-section-messaging = Mensajería
+shortcuts-section-navigation = Navegación
+shortcuts-section-general = General
+shortcuts-send = Enviar mensaje
+shortcuts-newline = Nueva línea
+shortcuts-edit-last = Editar tu último mensaje
+shortcuts-cancel = Cancelar edición / cerrar diálogo
+shortcuts-mention = Mencionar a alguien
+shortcuts-slash = Comando de barra
+shortcuts-next-unread = Siguiente sala sin leer
+shortcuts-prev-unread = Sala anterior sin leer
+shortcuts-help = Mostrar esta ayuda
+
 ## Scheduled message modal
 scheduled-modal-title = Programar mensaje
 scheduled-modal-deliver-at = Entregar el (tu hora local)
