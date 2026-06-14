@@ -92,9 +92,13 @@ pub async fn toggle_reaction(
 
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
     let counts = db::chat::list_reactions(&state.chat, message_id, &user.id).await?;
+    let reactor_titles = super::build_reactor_titles(&state, &counts).await;
     let reactions: Vec<ReactionView> = counts
         .into_iter()
-        .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &custom_emojis))
+        .zip(reactor_titles)
+        .map(|(r, title)| {
+            ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
+        })
         .collect();
     let fragment = ReactionBarFragment {
         message_id,

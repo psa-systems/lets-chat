@@ -209,10 +209,14 @@ pub async fn get_dm(
         };
         let can_edit = m.user_id == user.id;
         let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
-        let reactions: Vec<ReactionView> = db::chat::list_reactions(&state.chat, m.id, &user.id)
-            .await?
+        let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &user.id).await?;
+        let reactor_titles = super::build_reactor_titles(&state, &reaction_counts).await;
+        let reactions: Vec<ReactionView> = reaction_counts
             .into_iter()
-            .map(|r| ReactionView::new(r.emoji, r.count, r.reacted_by_me, &shared_emojis))
+            .zip(reactor_titles)
+            .map(|(r, title)| {
+                ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &shared_emojis)
+            })
             .collect();
         let is_follow_up = db::chat::is_follow_up_of(
             prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
