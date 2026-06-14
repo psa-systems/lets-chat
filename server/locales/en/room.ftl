@@ -164,11 +164,24 @@ room-msg-pin = Pin
 room-msg-unsave = Unsave
 room-msg-save = Save
 room-msg-remind = Remind
+room-msg-forward = Forward
 room-msg-edit = Edit
 room-msg-delete = Delete
 room-msg-delete-confirm = Delete this message?
 room-msg-quote-deleted = (quoted message was deleted)
 room-msg-seen = Seen
+
+## Forward (LC-278)
+room-forward-title = Forward message
+room-forward-label = Forward message to a conversation
+room-forward-rooms = Rooms
+room-forward-dms = Direct messages
+room-forward-filter = Filter conversations...
+room-forward-close = Close
+room-forward-empty = No conversations to forward to.
+room-forward-confirm = Forwarded to
+room-forward-done = Done
+room-forward-attribution = Forwarded from
 
 ## Reply count
 room-reply-singular = reply
