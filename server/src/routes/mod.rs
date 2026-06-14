@@ -978,6 +978,7 @@ pub fn build_router(state: AppState) -> Router {
         // with a #msg-{id} fragment so the client scrolls to + highlights it.
         .route("/m/{message_id}", get(room::get_message_permalink))
         .route("/room/{room_id}/messages", post(room::post_message))
+        .route("/room/{room_id}/preview", post(room::post_preview))
         .route("/room/{room_id}/draft", put(drafts::put_draft))
         .route(
             "/room/{room_id}/notify-prefs",

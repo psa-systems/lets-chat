@@ -36,6 +36,40 @@ pub(crate) fn check_message_length(body: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// LC-276: composer Write/Preview toggle.
+#[derive(Deserialize)]
+pub struct PreviewForm {
+    #[serde(default)]
+    pub body: String,
+}
+
+/// `POST /room/{room_id}/preview`
+///
+/// Render the composer draft through the SAME markdown pipeline that posting
+/// uses, so the Write/Preview toggle shows exactly what will appear. Access-
+/// gated (403 on a room the caller cannot see). Mentions are NOT resolved (the
+/// message is not posted, so no mention rows exist) - `@user` renders as plain
+/// text; this is a formatting preview, not a mention-resolution preview. The
+/// body is capped to `MAX_MESSAGE_CHARS` before rendering to honor LC-153 (the
+/// markdown render runs synchronously on the request thread).
+pub async fn post_preview(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    axum::Form(form): axum::Form<PreviewForm>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let capped: String = form.body.chars().take(MAX_MESSAGE_CHARS).collect();
+    let emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let rendered = crate::views::markdown::render(&capped, &[], &emojis);
+    Ok(Html(format!(
+        r#"<div class="lc-md leading-snug">{rendered}</div>"#
+    )))
+}
+
 #[derive(Deserialize)]
 pub struct MessageForm {
     pub body: String,

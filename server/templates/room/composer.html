@@ -147,6 +147,10 @@
         <path d="M8.603 14.768a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 005.656 5.656l3-3a4 4 0 00-.225-5.865.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3z"/>
       </svg>
     </button>
+    {# LC-276: Write/Preview toggle. Renders the draft through the SAME server
+       markdown pipeline that posting uses, so the preview matches the result. #}
+    <button type="button" data-lc-preview-toggle data-lc-edit-label="{{ "room-composer-edit"|t }}"
+      class="ml-auto px-2 py-1 rounded text-xs hover:text-content hover:bg-surface-sunken">{{ "room-composer-preview"|t }}</button>
   </div>
   <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
        combobox (mention or slash) has a highlighted option open, Enter belongs
@@ -216,6 +220,11 @@
         }
       "
     >{{ initial_draft }}</textarea>
+    {# LC-276: preview pane. Hidden until the Write/Preview toggle is on; the
+       server-rendered markdown HTML is swapped into it (same trust model as
+       message bodies). Sits in the textarea's flex slot so it occupies the
+       same width when shown. #}
+    <div data-lc-preview-pane class="hidden flex-1 lc-md leading-snug rounded border px-3 py-2 max-h-40 overflow-y-auto"></div>
     <button
       type="button"
       title="{{ "room-composer-create-poll"|t }}"
@@ -1236,6 +1245,67 @@
   function teardown(){
     if (bar) form.removeEventListener('click', onClick);
     ta.removeEventListener('keydown', onKeydown);
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-276: Write/Preview toggle. Renders the current draft through the server's
+// markdown pipeline (POST /room/{id}/preview) so the preview is byte-identical
+// to what posting produces, then shows it in place of the textarea. Toggling
+// back does not re-fetch. A successful send resets to Write so a stale preview
+// is not left showing. Cleanup-root is #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  var btn = form && form.querySelector('[data-lc-preview-toggle]');
+  var pane = form && form.querySelector('[data-lc-preview-pane]');
+  if (!form || !ta || !btn || !pane) return;
+  var roomId = {{ room.id }};
+  var WRITE = btn.textContent;
+  var EDIT = btn.getAttribute('data-lc-edit-label') || 'Edit';
+  var previewing = false;
+
+  function toEdit(){
+    previewing = false;
+    pane.classList.add('hidden');
+    pane.innerHTML = '';
+    ta.classList.remove('hidden');
+    btn.textContent = WRITE;
+    btn.setAttribute('aria-pressed', 'false');
+    try { ta.focus(); } catch (e) {}
+  }
+  function toPreview(){
+    var body = new URLSearchParams();
+    body.set('body', ta.value);
+    fetch('/room/' + roomId + '/preview', {
+      method: 'POST', body: body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'same-origin',
+    }).then(function(r){ return r.ok ? r.text() : ''; }).then(function(html){
+      // Server returns trusted, sanitized markdown HTML (same render path as
+      // message bodies, which the templates emit with |safe).
+      pane.innerHTML = html;
+      previewing = true;
+      ta.classList.add('hidden');
+      pane.classList.remove('hidden');
+      btn.textContent = EDIT;
+      btn.setAttribute('aria-pressed', 'true');
+    }).catch(function(){ /* leave in edit mode on failure */ });
+  }
+  function onClick(){ if (previewing) toEdit(); else toPreview(); }
+  btn.addEventListener('click', onClick);
+
+  // Reset to Write after a successful send so the next message starts in edit
+  // mode (no draft PUT fires while previewing - the textarea is hidden - so a
+  // successful request here is the POST send).
+  function onAfterReq(e){ if (e.detail && e.detail.successful && previewing) toEdit(); }
+  form.addEventListener('htmx:afterRequest', onAfterReq);
+
+  function teardown(){
+    btn.removeEventListener('click', onClick);
+    form.removeEventListener('htmx:afterRequest', onAfterReq);
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
