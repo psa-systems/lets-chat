@@ -684,6 +684,27 @@ math {
     .lc-msg-flash { animation: none; }
 }
 
+/* LC-256: long-message fold. `partials/auto_scroll.html` adds `.lc-collapsible`
+   to a message body that overflows the threshold (and removes it on expand).
+   The bottom fade hints that more content is hidden; it fades to `--surface`
+   (the message-list background) and is non-interactive so the toggle below
+   stays clickable. */
+.lc-collapsible {
+    max-height: 20rem;
+    overflow: hidden;
+    position: relative;
+}
+.lc-collapsible::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3rem;
+    background: linear-gradient(to bottom, transparent, var(--surface));
+    pointer-events: none;
+}
+
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
 .lc-skeleton {

@@ -24,6 +24,37 @@
   var slack = 50;
   var wasAtBottom = true;
 
+  // LC-256: long-message fold. Measure each unprocessed body's natural height;
+  // only when it overflows COLLAPSE_MAX do we clamp it (.lc-collapsible) and
+  // reveal its "Show more" toggle. Progressive enhancement: the body always
+  // renders in full, so a no-JS client sees everything. Idempotent via the
+  // -done marker, so re-running over #messages after a live append only touches
+  // the new rows; an edited message re-renders without the marker and is
+  // re-measured. `scope` is the swapped element (a #msg-<id> on edit) or
+  // #messages on init / append.
+  var COLLAPSE_MAX = 420;
+  function processCollapse(scope) {
+    var nodes = (scope || messages).querySelectorAll('[data-lc-collapse]:not([data-lc-collapse-done])');
+    for (var i = 0; i < nodes.length; i++) {
+      (function (body) {
+        body.setAttribute('data-lc-collapse-done', '1');
+        if (body.scrollHeight <= COLLAPSE_MAX) return;
+        body.classList.add('lc-collapsible');
+        var btn = body.nextElementSibling;
+        if (!btn || !btn.hasAttribute('data-lc-collapse-toggle')) return;
+        btn.hidden = false;
+        btn.textContent = btn.getAttribute('data-lc-more');
+        btn.addEventListener('click', function () {
+          var collapsed = body.classList.toggle('lc-collapsible');
+          btn.textContent = collapsed ? btn.getAttribute('data-lc-more') : btn.getAttribute('data-lc-less');
+        });
+      })(nodes[i]);
+    }
+  }
+  // Initial pass before anchoring so the scroll target accounts for the
+  // clamped (shorter) heights.
+  processCollapse(messages);
+
   // LC-242: jump-to-latest pill. Shown only when the viewer is scrolled up;
   // counts messages that arrive live while they read history. Localized
   // one/many forms ride as data attributes (the count is client-side dynamic,
@@ -113,6 +144,14 @@
   // bottom before the composer grew, they still are.
   function followIfPinned() { if (wasAtBottom) scrollToBottom(); }
   document.body.addEventListener('htmx:afterSwap', followIfPinned);
+  // LC-256: re-measure the swapped subtree (an edited message re-renders as a
+  // #msg-<id> outerHTML swap, dropping the -done marker) so a freshly long /
+  // short edit gets the right fold state.
+  function onAfterSwapCollapse(evt) {
+    var tgt = (evt && evt.target) || null;
+    if (tgt && tgt.querySelectorAll) processCollapse(tgt);
+  }
+  document.body.addEventListener('htmx:afterSwap', onAfterSwapCollapse);
   // OOB swaps (new messages over WS) take a separate event path. A new message
   // appends to #messages (ws/new_message.html, hx-swap-oob="beforeend"), so the
   // oobAfterSwap event targets #messages itself; edits/reactions/polls target a
@@ -150,6 +189,9 @@
     var tgt = (evt && evt.detail && evt.detail.target) || (evt && evt.target);
     var isMsgAppend = tgt && tgt.id === 'messages';
     if (isMsgAppend) maybeInsertDayDivider();
+    // LC-256: fold a long live arrival before re-anchoring so a pinned viewer
+    // lands at the clamped bottom, not below an un-clamped wall of text.
+    if (isMsgAppend) processCollapse(messages);
     followIfPinned();
     if (pill && isMsgAppend && !wasAtBottom) {
       newCount++;
@@ -199,6 +241,7 @@
     torndown = true;
     messages.removeEventListener('scroll', onScroll);
     document.body.removeEventListener('htmx:afterSwap', followIfPinned);
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwapCollapse);
     document.body.removeEventListener('htmx:oobAfterSwap', onOob);
     if (pill) pill.removeEventListener('click', jumpToLatest);
     if (ro) ro.disconnect();
