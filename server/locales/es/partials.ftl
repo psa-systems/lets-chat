@@ -51,6 +51,9 @@ partials-status-online = En línea
 ## Voice attachment
 partials-voice-play = Reproducir mensaje de voz
 
+## Profile hovercard (LC-298)
+hovercard-message = Mensaje
+
 ## Broadcast count
 partials-broadcast-notify-prefix = Esto notificará a
 partials-broadcast-person = persona
