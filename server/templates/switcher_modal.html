@@ -1,0 +1,93 @@
+{# LC-260: quick-switcher palette, singleton in the persistent shell so its
+   Ctrl/Cmd+K keybind survives #main swaps. The input opts into the shared
+   search.js keyboard nav (data-lc-search + data-lc-search-results); search.js
+   handles Arrow/Enter (clicks the highlighted anchor -> navigates). This shell
+   handles open/close, the Ctrl/Cmd+K chord, Esc/backdrop dismiss, the focus
+   trap, and stamping the current enclave id (read from the sidebar nav id) so
+   the fragment can scope room results. Mirrors shortcuts_modal.html. #}
+<div data-lc-switcher-modal
+     class="hidden modal-backdrop"
+     role="dialog" aria-modal="true" aria-label="{{ "switcher-placeholder"|t }}" aria-hidden="true">
+  <div class="modal-panel self-start mt-8">
+    <input
+      data-lc-search
+      data-lc-search-results="#lc-switcher-results"
+      type="text"
+      name="q"
+      autocomplete="off"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="lc-switcher-results"
+      placeholder="{{ "switcher-placeholder"|t }}"
+      hx-get="/switcher"
+      hx-trigger="input changed delay:120ms, lcswitcheropen"
+      hx-target="#lc-switcher-results"
+      hx-swap="innerHTML"
+      hx-include="#lc-switcher-enclave"
+      class="w-full border rounded px-3 py-2 mb-2">
+    <input type="hidden" name="enclave_id" id="lc-switcher-enclave" value="">
+    <div id="lc-switcher-results" class="min-h-0"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-switcher-modal]');
+  if (!modal) return;
+  var input = modal.querySelector('input[name="q"]');
+  var enclaveField = modal.querySelector('#lc-switcher-enclave');
+  var results = modal.querySelector('#lc-switcher-results');
+  var opener = null;
+  var trap = null;
+
+  function currentEnclaveId(){
+    var nav = document.querySelector('#sidebar nav[id^="sidebar-nav"]');
+    if (!nav) return '';
+    var m = /sidebar-nav-(\d+)/.exec(nav.id);
+    return m ? m[1] : '';
+  }
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  function open(){
+    if (!modal.classList.contains('hidden')) return;
+    opener = document.activeElement;
+    if (enclaveField) enclaveField.value = currentEnclaveId();
+    input.value = '';
+    if (results) results.innerHTML = '';
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { input.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+    // Populate the default list (rooms + DMs) for an empty query.
+    if (window.htmx) window.htmx.trigger(input, 'lcswitcheropen');
+  }
+  window.__lcOpenSwitcher = open;
+
+  // Esc closes the whole palette. stopPropagation so the global search.js Esc
+  // handler does not merely clear the result highlight and swallow the close.
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+      e.preventDefault(); e.stopPropagation(); close();
+    }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+  // A result click navigates; close so a back-nav does not reveal a stale list.
+  results.addEventListener('click', function(e){
+    if (e.target.closest('a[role="option"]')) close();
+  });
+
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey
+        && (e.key === 'k' || e.key === 'K') && !e.isComposing) {
+      e.preventDefault();
+      if (modal.classList.contains('hidden')) open(); else close();
+    }
+  });
+})();
+</script>

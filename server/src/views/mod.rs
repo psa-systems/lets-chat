@@ -32,6 +32,7 @@ pub mod room_moderators;
 pub mod scheduled;
 pub mod search;
 pub mod settings;
+pub mod switcher;
 pub mod two_factor;
 pub mod users;
 pub mod voice;

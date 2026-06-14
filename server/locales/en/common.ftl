@@ -114,7 +114,12 @@ shortcuts-mention = Mention someone
 shortcuts-slash = Slash command
 shortcuts-next-unread = Next unread room
 shortcuts-prev-unread = Previous unread room
+shortcuts-switcher = Quick switcher
 shortcuts-help = Show this help
+
+## Quick switcher (LC-260)
+switcher-placeholder = Jump to a room, DM, or person...
+switcher-no-results = No matches
 
 ## Scheduled message modal
 scheduled-modal-title = Schedule message
