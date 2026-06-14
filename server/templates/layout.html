@@ -458,6 +458,72 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-288: recently-used emoji. Records the unicode emoji you react with
+// (device-local, MRU) and fills the picker's recent row on open. Custom
+// :shortcode: reactions are skipped (enclave-scoped, not reusable across
+// rooms). One permanent delegated listener + an afterSettle filler; the picker
+// is ephemeral so nothing to tear down.
+(function(){
+  var KEY = 'lc-recent-emoji';
+  var CAP = 12;
+  function read(){
+    try { var a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; }
+    catch (e) { return []; }
+  }
+  function record(glyph){
+    var a = read().filter(function(g){ return g !== glyph; });
+    a.unshift(glyph);
+    if (a.length > CAP) a = a.slice(0, CAP);
+    try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {}
+  }
+  // Record on any reaction POST (picker buttons, existing pills, recent
+  // buttons). cancel/open use hx-get, so they never match.
+  document.addEventListener('click', function(e){
+    var el = e.target.closest && e.target.closest('[hx-post*="/reactions/"]');
+    if (!el) return;
+    var m = (el.getAttribute('hx-post') || '').match(/\/reactions\/([^/?]+)$/);
+    if (!m) return;
+    var emoji;
+    try { emoji = decodeURIComponent(m[1]); } catch (err) { return; }
+    if (!emoji || /^:.*:$/.test(emoji)) return; // skip custom shortcodes
+    record(emoji);
+  });
+  function fill(box){
+    if (box.getAttribute('data-lc-recent-done')) return;
+    box.setAttribute('data-lc-recent-done', '1');
+    var picker = box.closest('[id^="picker-"]');
+    if (!picker) return;
+    var mid = picker.id.slice('picker-'.length);
+    var recents = read();
+    if (!recents.length) return;
+    var label = box.getAttribute('data-lc-recent-label');
+    if (label) {
+      var s = document.createElement('span');
+      s.textContent = label;
+      box.appendChild(s);
+    }
+    recents.forEach(function(g){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'text-base';
+      b.setAttribute('data-lc-emoji-name', g);
+      b.setAttribute('hx-post', '/messages/' + mid + '/reactions/' + encodeURIComponent(g));
+      b.setAttribute('hx-target', '#reactions-' + mid);
+      b.setAttribute('hx-swap', 'outerHTML');
+      b.textContent = g;
+      box.appendChild(b);
+    });
+    box.classList.remove('hidden');
+    if (window.htmx) window.htmx.process(box);
+  }
+  function scan(){
+    document.querySelectorAll('[data-lc-emoji-recent]:not([data-lc-recent-done])').forEach(fill);
+  }
+  document.body.addEventListener('htmx:afterSettle', scan);
+  scan();
+})();
+</script>
+<script>
 // Persistent-shell script: same lifetime rationale as the two scripts above.
 // The body listeners for htmx:wsOpen / htmx:wsAfterMessage / htmx:wsClose /
 // htmx:wsError, the watchdog timers, and the manual-reconnect helper are
