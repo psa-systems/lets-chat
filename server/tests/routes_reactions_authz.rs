@@ -233,6 +233,12 @@ async fn picker_ships_filter_and_name_tokens() {
         body.contains("data-lc-emoji-name="),
         "picker buttons must carry searchable name tokens: {body}"
     );
+    // LC-288: the recent-emoji row placeholder (filled client-side from
+    // localStorage) ships in the picker.
+    assert!(
+        body.contains("data-lc-emoji-recent"),
+        "picker must ship the recent-emoji row placeholder: {body}"
+    );
 }
 
 // LC-266: the reaction pill carries a `title` listing who reacted.
