@@ -124,6 +124,32 @@
           btns[i].setAttribute("aria-expanded", next ? "false" : "true");
         }
       };
+
+      // LC-308: unread-only sidebar filter. Device-local; set before paint so
+      // hidden rows never flash in. The actual hiding is pure CSS keyed on
+      // this attribute (main.css), so it tracks live unread-badge OOB swaps
+      // automatically. The toggle button's aria-pressed is synced here and on
+      // htmx settle (layout.html) so a re-rendered sidebar stays in step.
+      function applyUnreadOnly(v) {
+        if (v === "1") d.setAttribute("data-lc-unread-only", "1");
+        else d.removeAttribute("data-lc-unread-only");
+      }
+      var uo = null;
+      try { uo = localStorage.getItem("lc-unread-only"); } catch (e) {}
+      applyUnreadOnly(uo);
+      window.__lcToggleUnreadOnly = function () {
+        var on = d.getAttribute("data-lc-unread-only") === "1";
+        var next = on ? "" : "1";
+        try {
+          if (next) localStorage.setItem("lc-unread-only", next);
+          else localStorage.removeItem("lc-unread-only");
+        } catch (e) {}
+        applyUnreadOnly(next);
+        var btns = document.querySelectorAll("[data-lc-unread-toggle]");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].setAttribute("aria-pressed", next ? "true" : "false");
+        }
+      };
     })();
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">

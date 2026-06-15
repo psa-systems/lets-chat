@@ -6,18 +6,18 @@
    connections whose current page is that enclave. References the sidebar_*
    fields + `user` from whichever parent includes it. #}
     {% if !sidebar_starred_rooms.is_empty() || !sidebar_starred_peers.is_empty() %}
-    <section>
+    <section data-lc-sb-section>
       <h2 class="text-xs uppercase text-content-muted px-2">&#9733; {{ "sidebar-section-starred"|t }}</h2>
       <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
         {% for room in sidebar_starred_rooms %}
-        <li data-room-id="{{ room.id }}" draggable="true">
+        <li data-lc-sb-row data-room-id="{{ room.id }}" draggable="true">
           {% let is_starred = true %}
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
         </li>
         {% endfor %}
         {% for peer in sidebar_starred_peers %}
-        <li data-room-id="{{ peer.dm_room_id }}" draggable="true">
+        <li data-lc-sb-row data-room-id="{{ peer.dm_room_id }}" draggable="true">
           {% let is_starred = true %}
           {% include "partials/sidebar_peer_row.html" %}
         </li>
@@ -28,7 +28,7 @@
     {% if let Some(_eid) = sidebar_current_enclave %}
     <div data-category-list{% if can_manage_sidebar_categories %} data-positions-url="/enclave/{{ _eid }}/sidebar/categories/positions"{% endif %} class="space-y-4">
     {% for category in sidebar_categories %}
-    <section data-category-id="{{ category.id }}"{% if can_manage_sidebar_categories %} draggable="true"{% endif %}>
+    <section data-lc-sb-section data-category-id="{{ category.id }}"{% if can_manage_sidebar_categories %} draggable="true"{% endif %}>
       <div class="flex items-center justify-between px-2">
         {# Per-user collapse toggle. Any enclave member may fold their own
            view, so this form is unconditional (no admin RBAC). #}
@@ -41,10 +41,10 @@
           <button type="submit" class="w-full text-left text-xs uppercase text-content-muted hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
             <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
-            <span class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
+            <span data-lc-unread class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
             {% endif %}
             {% if category.collapsed && category.mention_total > 0 %}
-            <span class="text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ category.mention_total }}</span>
+            <span data-lc-mention class="text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ category.mention_total }}</span>
             {% endif %}
           </button>
         </form>
@@ -66,7 +66,7 @@
       {% if !category.collapsed %}
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories %} data-room-list data-positions-url="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}/positions"{% endif %}>
         {% for room in category.rooms %}
-        <li{% if can_manage_sidebar_categories %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
+        <li data-lc-sb-row{% if can_manage_sidebar_categories %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
           {% let is_starred = false %}
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
@@ -79,11 +79,11 @@
     </div>
     {% endif %}
     {% if !sidebar_rooms.is_empty() %}
-    <section>
+    <section data-lc-sb-section>
       <h2 class="text-xs uppercase text-content-muted px-2">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
         {% for room in sidebar_rooms %}
-        <li{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
+        <li data-lc-sb-row{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
           {% let is_starred = false %}
           {% let room_id_str = room.id.to_string() %}
           {% include "partials/sidebar_room_row.html" %}
@@ -93,11 +93,11 @@
     </section>
     {% endif %}
     {% if !sidebar_peers.is_empty() %}
-    <section>
+    <section data-lc-sb-section>
       <h2 class="text-xs uppercase text-content-muted px-2">{{ "sidebar-section-direct-messages"|t }}</h2>
       <ul class="mt-1">
         {% for peer in sidebar_peers %}
-        <li>
+        <li data-lc-sb-row>
           {% let is_starred = false %}
           {% include "partials/sidebar_peer_row.html" %}
         </li>

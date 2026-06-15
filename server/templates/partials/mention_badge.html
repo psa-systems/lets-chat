@@ -1,5 +1,5 @@
 {% if mentions > 0 %}
-<span id="mention-room-{{ id }}" class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ mentions }}</span>
+<span id="mention-room-{{ id }}" data-lc-mention class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ mentions }}</span>
 {% else %}
-<span id="mention-room-{{ id }}"></span>
+<span id="mention-room-{{ id }}" data-lc-mention></span>
 {% endif %}
