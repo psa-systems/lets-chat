@@ -213,6 +213,17 @@ pub(crate) fn day_label_for(created_at: &str) -> String {
     }
 }
 
+/// LC-314: convert a SQLite `YYYY-MM-DD HH:MM:SS` UTC timestamp to a JS-safe
+/// RFC3339 (`YYYY-MM-DDTHH:MM:SSZ`). Non-standard input passes through.
+fn to_iso_utc(created_at: &str) -> String {
+    let s = created_at.trim();
+    if s.len() >= 19 && s.as_bytes().get(10) == Some(&b' ') {
+        format!("{}T{}Z", &s[..10], &s[11..19])
+    } else {
+        s.to_string()
+    }
+}
+
 impl MessageView {
     pub fn label(&self) -> &str {
         match self.display_name.as_deref() {
@@ -228,6 +239,15 @@ impl MessageView {
         self.created_at
             .get(..10)
             .unwrap_or(self.created_at.as_str())
+    }
+
+    /// LC-314: `created_at` as a JS-safe RFC3339 UTC string for the relative-
+    /// time `<time datetime>` attribute. SQLite stores `YYYY-MM-DD HH:MM:SS`
+    /// (UTC); `new Date("YYYY-MM-DD HH:MM:SS")` is parsed as LOCAL (or rejected)
+    /// across browsers, so emit `YYYY-MM-DDTHH:MM:SSZ` which is unambiguously
+    /// UTC. Any non-standard value passes through unchanged (best-effort).
+    pub fn created_at_iso(&self) -> String {
+        to_iso_utc(&self.created_at)
     }
 
     /// True when the message has no body text and exactly one image
@@ -628,6 +648,18 @@ pub fn strip_shortcode(s: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn to_iso_utc_converts_sqlite_datetime() {
+        assert_eq!(to_iso_utc("2026-06-15 14:23:01"), "2026-06-15T14:23:01Z");
+    }
+
+    #[test]
+    fn to_iso_utc_passes_through_nonstandard() {
+        assert_eq!(to_iso_utc("not-a-date"), "not-a-date");
+        // Already-ISO-ish input is left alone rather than mangled.
+        assert_eq!(to_iso_utc(""), "");
+    }
 
     #[test]
     fn excerpt_collapses_newlines_and_trims() {
