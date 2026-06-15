@@ -217,6 +217,9 @@
       title = d.roomLabel ? ('Reminder: ' + d.roomLabel) : 'Reminder';
     } else if (d.kind === 'dm') {
       title = 'Direct message from ' + d.author;
+    } else if (d.kind === 'thread') {
+      // LC-310: a new reply in a thread the viewer follows.
+      title = d.author + ' replied in ' + d.roomLabel;
     } else {
       title = d.author + ' mentioned you in ' + d.roomLabel;
     }

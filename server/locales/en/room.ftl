@@ -286,5 +286,10 @@ room-pins-back = Back
 ## Thread panel
 room-thread-heading = Thread
 room-thread-close = Close thread
+# LC-310: thread following toggle.
+room-thread-follow = Follow
+room-thread-follow-title = Follow this thread to be notified of new replies
+room-thread-following = Following
+room-thread-following-title = You are following this thread. Click to stop notifications.
 room-thread-reply-placeholder = Reply...
 room-thread-send-reply = Send reply
