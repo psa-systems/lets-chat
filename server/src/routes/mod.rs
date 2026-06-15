@@ -1003,6 +1003,10 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/thread/{parent_id}/messages",
             post(room::post_thread_reply),
         )
+        .route(
+            "/room/{room_id}/thread/{parent_id}/follow",
+            post(room::post_thread_follow).delete(room::delete_thread_follow),
+        )
         .route("/thread-panel", delete(room::close_thread_panel))
         .route(
             "/room/{room_id}/composer-quote/{message_id}",

@@ -1,13 +1,20 @@
 <aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
   <header class="flex items-center justify-between border-b border-border px-3 py-2">
     <div class="font-semibold">{{ "room-thread-heading"|t }}</div>
-    <button
-      hx-delete="/thread-panel"
-      hx-target="#thread-panel"
-      hx-swap="outerHTML"
-      class="text-content-subtle hover:text-content-muted"
-      aria-label="{{ "room-thread-close"|t }}"
-    >&#10005;</button>
+    <div class="flex items-center gap-2">
+      {# LC-310: follow/unfollow this thread to be notified of new replies. #}
+      {% let room_id = room.id %}
+      {% let parent_id = parent.id %}
+      {% let following = is_following %}
+      {% include "partials/thread_follow_button.html" %}
+      <button
+        hx-delete="/thread-panel"
+        hx-target="#thread-panel"
+        hx-swap="outerHTML"
+        class="text-content-subtle hover:text-content-muted"
+        aria-label="{{ "room-thread-close"|t }}"
+      >&#10005;</button>
+    </div>
   </header>
   <div class="border-b border-border px-3 py-2 bg-surface">
     {% let parent_message = parent %}

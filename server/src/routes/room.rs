@@ -2053,12 +2053,65 @@ pub async fn get_thread_panel(
         });
     }
 
+    // LC-310: whether the viewer follows this thread (drives the toggle).
+    let is_following =
+        db::thread_followers::is_following(&state.chat, &user.id, message_id).await?;
+
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
         replies: &replies,
+        is_following,
     };
     html(&fragment)
+}
+
+/// POST /room/{room_id}/thread/{parent_id}/follow - subscribe to a thread's
+/// replies. DELETE unsubscribes. Both re-render the toggle button. Room-access
+/// + parent gated like the reply handler.
+pub async fn post_thread_follow(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    thread_follow_toggle(&state, &user, room_id, parent_id, true).await
+}
+
+pub async fn delete_thread_follow(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    thread_follow_toggle(&state, &user, room_id, parent_id, false).await
+}
+
+async fn thread_follow_toggle(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    parent_id: i64,
+    follow: bool,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let parent = db::chat::get_message(&state.chat, parent_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if parent.room_id != room_id || parent.parent_id.is_some() {
+        return Err(AppError::NotFound);
+    }
+    if follow {
+        db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await?;
+    } else {
+        db::thread_followers::unfollow(&state.chat, &user.id, parent_id).await?;
+    }
+    html(&crate::views::room::ThreadFollowFragment {
+        room_id,
+        parent_id,
+        following: follow,
+    })
 }
 
 /// POST /room/:room_id/thread/:parent_id/messages - post a reply into the
@@ -2140,8 +2193,72 @@ pub async fn post_thread_reply(
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);
     super::broadcast_room_message(&state, &room, &event).await?;
 
+    // LC-310: thread following. Auto-follow the replier and the thread root's
+    // author (so they hear about replies to their message), then notify every
+    // follower of this new reply. Follows are NOT mention rows; we reuse only
+    // the mention fan-out (WS toast + push + email, mute-gated). Best-effort:
+    // a follow/notify hiccup must not fail the reply that already landed.
+    let _ = db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await;
+    if parent.user_id != user.id {
+        let _ =
+            db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await;
+    }
+    notify_thread_followers(&state, &room, parent_id, new_id, &user, body).await;
+
     // Empty 204 - composer clears via hx-on::before-request, no body needed.
     Ok(axum::http::StatusCode::NO_CONTENT.into_response())
+}
+
+/// LC-310: fan out a `kind="thread"` notification to every follower of the
+/// thread rooted at `parent_id` for the just-posted reply `reply_id`, excluding
+/// the reply's author and any follower who no longer has access to the room
+/// (so a departed member is never pinged). Reuses `fanout_mention_events`, so
+/// the WS toast + push + email all honor the recipient's prefs and room mute.
+async fn notify_thread_followers(
+    state: &AppState,
+    room: &crate::models::Room,
+    parent_id: i64,
+    reply_id: i64,
+    author: &User,
+    body: &str,
+) {
+    let followers = match db::thread_followers::followers(&state.chat, parent_id).await {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let snippet = build_snippet(body);
+    let author_label = author_label(author);
+    let mut events: Vec<(String, ChatEvent)> = Vec::new();
+    for uid in followers {
+        if uid == author.id {
+            continue;
+        }
+        // The follower must still be able to see the room. is_room_accessible
+        // is the same gate mentions use; the follower count is small.
+        if !db::chat::is_room_accessible(&state.chat, room.id, &uid, false)
+            .await
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        events.push((
+            uid.clone(),
+            ChatEvent::Mentioned {
+                kind: "thread".into(),
+                room_id: room.id,
+                room_type: room.room_type.clone(),
+                room_label: format!("#{}", room.name),
+                message_id: reply_id,
+                mentioned_user_id: uid,
+                author_label: author_label.clone(),
+                snippet: snippet.clone(),
+                target_path: format!("/room/{}", room.id),
+            },
+        ));
+    }
+    if !events.is_empty() {
+        fanout_mention_events(state, room, events).await;
+    }
 }
 
 /// DELETE /thread-panel - close the panel by replacing it with an empty
