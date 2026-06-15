@@ -1,0 +1,24 @@
+{# LC-316: composer emoji picker panel. Browse-and-click grid of popular
+   Unicode emojis + the room's custom emojis. Filtering is client-side, reusing
+   the LC-274 reaction-picker filter (the root id starts with "picker-" and it
+   carries [data-lc-emoji-filter] + [data-lc-emoji-grid]). Each button carries
+   data-lc-emoji-insert (the text spliced at the textarea cursor by the layout
+   handler) and data-lc-emoji-name (filter tokens). #}
+<div id="picker-composer" data-lc-emoji-picker-panel
+  class="absolute bottom-full left-0 mb-1 z-30 w-64 rounded border border-border bg-surface-elevated p-2 shadow-lg">
+  <input data-lc-emoji-filter type="text" autocomplete="off" autofocus
+    aria-label="{{ "partials-reaction-filter"|t }}" placeholder="{{ "partials-reaction-filter"|t }}"
+    class="mb-1 w-full rounded border border-border px-1 py-0.5 text-xs">
+  <div data-lc-emoji-grid class="flex flex-wrap gap-1 max-h-48 overflow-y-auto">
+    {% for s in suggestions %}
+    <button type="button" data-lc-emoji-insert="{{ s.insert }}" data-lc-emoji-name="{{ s.shortcode }} {{ s.name }}"
+      title=":{{ s.shortcode }}:" class="text-base leading-none hover:bg-surface-sunken rounded p-0.5">
+      {% if s.kind == "custom" %}
+      {% if let Some(id) = s.emoji_id %}<img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{{ id }}" alt=":{{ s.shortcode }}:">{% endif %}
+      {% else %}
+      {% if let Some(g) = s.glyph.as_ref() %}{{ g }}{% endif %}
+      {% endif %}
+    </button>
+    {% endfor %}
+  </div>
+</div>
