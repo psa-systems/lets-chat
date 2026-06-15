@@ -1197,6 +1197,10 @@ pub fn build_router(state: AppState) -> Router {
             get(emoji_complete::get_autocomplete),
         )
         .route(
+            "/rooms/{room_id}/emoji-picker",
+            get(emoji_complete::get_picker),
+        )
+        .route(
             "/api/rooms/{room_id}/broadcast-count",
             get(mentions::get_broadcast_count),
         )

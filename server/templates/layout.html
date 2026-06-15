@@ -602,6 +602,39 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-316: composer emoji picker. Clicking a [data-lc-emoji-insert] button in
+// the picker splices its text (a glyph, or :shortcode: for a custom emoji) at
+// the composer textarea cursor and fires `input` so auto-resize / draft-save /
+// send-enable run - identical to the formatting toolbar. The picker is closed
+// (slot emptied) on Escape or an outside click; the panel stays open after an
+// insert so several can be picked. Permanent + delegated (the picker is
+// htmx-swapped in/out).
+(function(){
+  function slot(){ return document.getElementById('lc-emoji-picker-slot'); }
+  function closePicker(){ var s = slot(); if (s) s.replaceChildren(); }
+  document.addEventListener('click', function(e){
+    var ins = e.target.closest && e.target.closest('[data-lc-emoji-insert]');
+    if (ins) {
+      var ta = document.querySelector('#composer textarea[name=body]');
+      if (!ta) return;
+      var text = ins.getAttribute('data-lc-emoji-insert');
+      var s = ta.selectionStart, en = ta.selectionEnd, v = ta.value;
+      ta.value = v.slice(0, s) + text + v.slice(en);
+      var pos = s + text.length;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+    // Outside click closes an open picker (ignore clicks on the open button or
+    // inside the panel itself).
+    if (e.target.closest && (e.target.closest('[data-lc-emoji-open]') || e.target.closest('[data-lc-emoji-picker-panel]'))) return;
+    closePicker();
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closePicker(); });
+})();
+</script>
+<script>
 // LC-308: keep the unread-only toggle's aria-pressed in step with the <html>
 // data-lc-unread-only flag after a sidebar re-render (the button is server-
 // rendered aria-pressed="false"; the flag is the source of truth, set no-flash
