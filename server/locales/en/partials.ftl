@@ -9,6 +9,7 @@ sidebar-link-moderate = Moderate
 sidebar-link-inbox = Inbox
 sidebar-mark-all-read = Mark all as read
 sidebar-mark-room-read = Mark as read
+sidebar-unread-only = Unread only
 sidebar-link-activity = Activity
 sidebar-link-saved = Saved
 sidebar-link-scheduled = Scheduled

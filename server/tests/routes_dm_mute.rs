@@ -370,8 +370,13 @@ async fn sidebar_unread_badge_hidden_for_muted_dm() {
 
     let (status, body) = get_root(&t.app, &t.session).await;
     assert_eq!(status, StatusCode::OK);
+    // LC-308: the badge span carries data-lc-unread (drives the unread-only
+    // filter); the muted-DM contract is that it stays EMPTY (no count text).
     assert!(
-        body.contains(&format!(r#"<span id="unread-dm-{}"></span>"#, t.peer_id)),
+        body.contains(&format!(
+            r#"<span id="unread-dm-{}" data-lc-unread></span>"#,
+            t.peer_id
+        )),
         "expected empty unread span for muted DM, got: {body}"
     );
 }
