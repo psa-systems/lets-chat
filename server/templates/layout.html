@@ -539,6 +539,24 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-312: re-run a saved search. Clicking a [data-lc-saved-query] row fills the
+// nearest search input with the saved query and dispatches `input`, so the
+// existing htmx /search trigger runs and the popover swaps to results - no
+// navigation. Delegated + permanent (the saved list is htmx-swapped in/out).
+(function(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('[data-lc-saved-query]');
+    if (!btn) return;
+    var form = btn.closest('form');
+    var input = form && form.querySelector('input[name=q]');
+    if (!input) return;
+    input.value = btn.getAttribute('data-lc-saved-query');
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+})();
+</script>
+<script>
 // LC-308: keep the unread-only toggle's aria-pressed in step with the <html>
 // data-lc-unread-only flag after a sidebar re-render (the button is server-
 // rendered aria-pressed="false"; the flag is the source of truth, set no-flash

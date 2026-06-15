@@ -1187,6 +1187,8 @@ pub fn build_router(state: AppState) -> Router {
             post(reactions::toggle_reaction),
         )
         .route("/search", get(search::get_search))
+        .route("/searches", post(search::post_save))
+        .route("/searches/delete", post(search::post_delete))
         .route("/users/search", get(users::get_user_search))
         .route("/users/{user_id}/hovercard", get(users::get_hovercard))
         .route("/users/mentions", get(mentions::get_autocomplete))
