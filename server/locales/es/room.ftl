@@ -286,5 +286,10 @@ room-pins-back = Volver
 ## Thread panel
 room-thread-heading = Hilo
 room-thread-close = Cerrar hilo
+# LC-310: thread following toggle.
+room-thread-follow = Seguir
+room-thread-follow-title = Sigue este hilo para recibir avisos de nuevas respuestas
+room-thread-following = Siguiendo
+room-thread-following-title = Estás siguiendo este hilo. Haz clic para dejar de recibir avisos.
 room-thread-reply-placeholder = Responder...
 room-thread-send-reply = Enviar respuesta

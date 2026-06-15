@@ -1,0 +1,18 @@
+{# LC-310: thread Follow/Following toggle. Included by the thread panel header
+   and re-rendered by the follow/unfollow endpoints (swaps itself outerHTML).
+   When following, the button unfollows (hx-delete) and vice versa. #}
+{% if following %}
+<button type="button"
+  hx-delete="/room/{{ room_id }}/thread/{{ parent_id }}/follow"
+  hx-swap="outerHTML"
+  aria-pressed="true"
+  class="text-xs rounded px-2 py-0.5 bg-accent-surface text-accent-surface-content hover:bg-accent-surface/80"
+  title="{{ "room-thread-following-title"|t }}">{{ "room-thread-following"|t }}</button>
+{% else %}
+<button type="button"
+  hx-post="/room/{{ room_id }}/thread/{{ parent_id }}/follow"
+  hx-swap="outerHTML"
+  aria-pressed="false"
+  class="text-xs rounded px-2 py-0.5 text-content-muted hover:text-content hover:bg-surface-sunken"
+  title="{{ "room-thread-follow-title"|t }}">{{ "room-thread-follow"|t }}</button>
+{% endif %}
