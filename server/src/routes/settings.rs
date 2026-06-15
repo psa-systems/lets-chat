@@ -168,6 +168,8 @@ pub async fn get_settings(
         });
     }
 
+    let keywords = db::notification_keywords::list(&state.auth, &user.id).await?;
+
     let page = UserSettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -206,8 +208,53 @@ pub async fn get_settings(
         dnd_weekend_end: dnd.weekend_end,
         timezones,
         locales,
+        keywords,
     };
     html(&page)
+}
+
+#[derive(Deserialize)]
+pub struct KeywordForm {
+    #[serde(default)]
+    pub word: String,
+}
+
+/// LC-304: re-render the highlight-words chip list fragment for the caller.
+async fn keyword_list_fragment(state: &AppState, user_id: &str) -> Result<Html, AppError> {
+    let keywords = db::notification_keywords::list(&state.auth, user_id).await?;
+    let at_cap = keywords.len() >= db::notification_keywords::MAX_KEYWORDS_PER_USER;
+    html(&crate::views::settings::KeywordListFragment { keywords, at_cap })
+}
+
+/// POST /settings/keywords - add a highlight word. Trims, lowercases nothing
+/// (stored as entered; matched case-insensitively), bounds length, and enforces
+/// the per-user cap. Returns the re-rendered chip list. A blank or over-cap add
+/// is a no-op that still returns the current list.
+pub async fn post_keyword_add(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<KeywordForm>,
+) -> Result<Html, AppError> {
+    let word = form.word.trim();
+    if !word.is_empty()
+        && word.chars().count() <= db::notification_keywords::MAX_KEYWORD_LEN
+        && db::notification_keywords::count(&state.auth, &user.id).await?
+            < db::notification_keywords::MAX_KEYWORDS_PER_USER as i64
+    {
+        db::notification_keywords::add(&state.auth, &user.id, word).await?;
+    }
+    keyword_list_fragment(&state, &user.id).await
+}
+
+/// POST /settings/keywords/delete - remove a highlight word. Returns the
+/// re-rendered chip list.
+pub async fn post_keyword_delete(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<KeywordForm>,
+) -> Result<Html, AppError> {
+    db::notification_keywords::remove(&state.auth, &user.id, form.word.trim()).await?;
+    keyword_list_fragment(&state, &user.id).await
 }
 
 async fn build_session_views(

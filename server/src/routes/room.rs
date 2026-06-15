@@ -858,9 +858,8 @@ pub(crate) async fn finalize_message_send(
     // Token resolution covers `@username`, `@here`, and `@channel` via the
     // shared resolver; broadcast tokens write one row per resolved user.
     if room.room_type != "dm" {
-        let tokens = db::mentions::parse_mention_tokens(body);
-        if !tokens.is_empty() {
-            let targets = resolve_tokens_for_room(state, room, &author.id, &tokens).await?;
+        let targets = resolve_targets_for_body(state, room, &author.id, body).await?;
+        if !targets.is_empty() {
             let (added, _removed) = db::mentions::reconcile_mentions(
                 &state.chat,
                 new_id,
@@ -1043,9 +1042,8 @@ pub(crate) async fn finalize_email_inbox_message_send(
     // admin to issue an address), so we gate the mention reconcile by
     // room_type the same way the webhook path does.
     if room.room_type != "dm" {
-        let tokens = db::mentions::parse_mention_tokens(body);
-        if !tokens.is_empty() {
-            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+        let targets = resolve_targets_for_body(state, room, "", body).await?;
+        if !targets.is_empty() {
             let (added, _removed) =
                 db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
                     .await?;
@@ -1161,9 +1159,8 @@ pub(crate) async fn finalize_webhook_message_send(
     // Mentions: a webhook can @mention people. No author to exclude (empty
     // author id excludes nobody).
     if room.room_type != "dm" {
-        let tokens = db::mentions::parse_mention_tokens(body);
-        if !tokens.is_empty() {
-            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+        let targets = resolve_targets_for_body(state, room, "", body).await?;
+        if !targets.is_empty() {
             let (added, _removed) =
                 db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
                     .await?;
@@ -1262,9 +1259,8 @@ pub(crate) async fn finalize_bridge_message_send(
 
     // Mentions: a bridge message can @mention people, same as a webhook.
     if room.room_type != "dm" {
-        let tokens = db::mentions::parse_mention_tokens(body);
-        if !tokens.is_empty() {
-            let targets = resolve_tokens_for_room(state, room, "", &tokens).await?;
+        let targets = resolve_targets_for_body(state, room, "", body).await?;
+        if !targets.is_empty() {
             let (added, _removed) =
                 db::mentions::reconcile_mentions(&state.chat, new_id, room.id, "", &targets)
                     .await?;
@@ -1486,6 +1482,97 @@ async fn resolve_tokens_for_room(
     Ok(targets)
 }
 
+/// LC-304: resolve everyone who should get a mention row for `body` in `room` -
+/// the explicit `@token` targets PLUS any member whose configured highlight
+/// word appears in the body. Deduped. All message-creation reconcile sites
+/// (post / edit / webhook / email-ingress / bridge) call this so keyword
+/// matches behave exactly like @mentions (badge, row highlight, inbox, notify).
+async fn resolve_targets_for_body(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+    body: &str,
+) -> Result<Vec<db::mentions::MentionRef>, AppError> {
+    let tokens = db::mentions::parse_mention_tokens(body);
+    let mut targets = resolve_tokens_for_room(state, room, author_id, &tokens).await?;
+    append_keyword_targets(state, room, author_id, body, &mut targets).await?;
+    Ok(targets)
+}
+
+/// Append members whose LC-304 highlight word matches `body` to `targets`,
+/// skipping the author, non-members, and anyone already targeted by an
+/// @mention. Cheap when nothing matches: the room's member set is resolved
+/// only after a configured word actually hits the body.
+async fn append_keyword_targets(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+    body: &str,
+    targets: &mut Vec<db::mentions::MentionRef>,
+) -> Result<(), AppError> {
+    let keywords = db::notification_keywords::all(&state.auth).await?;
+    if keywords.is_empty() {
+        return Ok(());
+    }
+    let body_lower = body.to_lowercase();
+    let already: std::collections::HashSet<&str> =
+        targets.iter().map(|m| m.user_id.as_str()).collect();
+    let mut matched: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (uid, word) in &keywords {
+        if uid == author_id || already.contains(uid.as_str()) || matched.contains(uid) {
+            continue;
+        }
+        if keyword_matches_body(&body_lower, &word.to_lowercase()) {
+            matched.insert(uid.clone());
+        }
+    }
+    if matched.is_empty() {
+        return Ok(());
+    }
+    // Only room members may be keyword-targeted (a mention row for a non-member
+    // would surface a message they cannot open). resolve_channel_targets yields
+    // exactly the member set minus the author, already carrying usernames.
+    let members = resolve_channel_targets(state, room, author_id).await?;
+    let mut seen: std::collections::HashSet<String> =
+        already.iter().map(|s| s.to_string()).collect();
+    for m in members {
+        if matched.contains(&m.user_id) && seen.insert(m.user_id.clone()) {
+            targets.push(m);
+        }
+    }
+    Ok(())
+}
+
+/// Case-insensitive, word-boundary keyword match; both inputs must already be
+/// lowercased. "deploy" matches "deploy" / "deploy!" / "the deploy" but not
+/// "deployment"; a multi-word phrase matches as a bounded substring.
+fn keyword_matches_body(body_lower: &str, word_lower: &str) -> bool {
+    if word_lower.is_empty() {
+        return false;
+    }
+    let mut from = 0;
+    while let Some(rel) = body_lower[from..].find(word_lower) {
+        let start = from + rel;
+        let end = start + word_lower.len();
+        let before_ok = body_lower[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = body_lower[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok {
+            return true;
+        }
+        from = end;
+        if from >= body_lower.len() {
+            break;
+        }
+    }
+    false
+}
+
 /// Resolve `@here` against `room`: every candidate member who has at least
 /// one live WebSocket connection AND whose persisted status is neither DND
 /// nor manual `away`. Excludes the author. Auto-`idle` is intentionally
@@ -1658,8 +1745,7 @@ pub async fn patch_message(
     let edited_room = db::chat::get_room(&state.chat, m.room_id).await?;
     if let Some(ref edited_room) = edited_room {
         if edited_room.room_type != "dm" {
-            let tokens = db::mentions::parse_mention_tokens(body);
-            let targets = resolve_tokens_for_room(&state, edited_room, &user.id, &tokens).await?;
+            let targets = resolve_targets_for_body(&state, edited_room, &user.id, body).await?;
             let (added, removed) = db::mentions::reconcile_mentions(
                 &state.chat,
                 message_id,
