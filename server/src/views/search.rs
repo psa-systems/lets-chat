@@ -9,6 +9,14 @@ pub struct ResultsFragment<'a> {
     pub results: &'a [SearchResult],
 }
 
+/// LC-312: the saved-searches list shown in the search popover when the input
+/// is focused/empty. Each query re-runs by filling the search box client-side.
+#[derive(Template)]
+#[template(path = "search/saved.html")]
+pub struct SavedSearchesFragment {
+    pub queries: Vec<String>,
+}
+
 pub struct SearchResult {
     pub message_id: i64,
     /// "room" or "dm" - selects the URL prefix.

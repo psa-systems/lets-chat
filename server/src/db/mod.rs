@@ -37,6 +37,7 @@ pub mod reply_tokens;
 pub mod retention_status;
 pub mod room_feeds;
 pub mod room_rbac;
+pub mod saved_searches;
 pub mod scheduled;
 pub mod settings;
 pub mod sidebar_categories;
