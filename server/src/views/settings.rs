@@ -83,6 +83,18 @@ pub struct UserSettingsPage<'a> {
     /// LC-100: available UI locales for the language picker, plus a synthetic
     /// "system" option (empty code) for the Accept-Language fallback.
     pub locales: Vec<LocaleOption>,
+    /// LC-304: the user's highlight words, alphabetical, for the chip list.
+    pub keywords: Vec<String>,
+}
+
+/// LC-304: the highlight-words chip list, re-rendered by the add/remove
+/// endpoints and included by the settings page.
+#[derive(Template)]
+#[template(path = "partials/keyword_list.html")]
+pub struct KeywordListFragment {
+    pub keywords: Vec<String>,
+    /// True when the per-user cap is reached (the add input is disabled).
+    pub at_cap: bool,
 }
 
 /// One entry in the language picker. `selected` is precomputed; an empty
