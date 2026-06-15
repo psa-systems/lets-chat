@@ -11,7 +11,7 @@
         name="q"
         placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
         hx-get="/search"
-        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+        hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
         hx-target="#search-msg-results"
         hx-swap="innerHTML"
         data-lc-search

@@ -13,6 +13,11 @@ home-pending-invitations-suffix = .
 
 ## Message search results
 search-no-results = No results.
+# LC-312: saved searches
+search-save = Save search
+search-saved = Saved
+search-saved-heading = Saved searches
+search-saved-remove = Remove saved search
 
 ## People search results
 people-no-results = No matching people.

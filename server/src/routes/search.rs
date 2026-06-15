@@ -6,13 +6,62 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::search::{ResultsFragment, SearchResult};
+use crate::views::search::{ResultsFragment, SavedSearchesFragment, SearchResult};
 use crate::views::{html, Html};
 
 /// Empty popover body. The sidebar's results container uses `empty:hidden`,
 /// so an empty body collapses the popover entirely.
 fn empty_popover() -> Html {
     Html(String::new())
+}
+
+/// LC-312: when the search box is focused/empty, show the caller's saved
+/// searches instead of an empty popover. Falls back to empty (collapsed) when
+/// they have none, preserving the old behavior for users with no saved searches.
+async fn saved_or_empty(state: &AppState, user_id: &str) -> Result<Html, AppError> {
+    let queries = db::saved_searches::list(&state.chat, user_id).await?;
+    if queries.is_empty() {
+        return Ok(empty_popover());
+    }
+    html(&SavedSearchesFragment { queries })
+}
+
+#[derive(Deserialize)]
+pub struct SaveForm {
+    #[serde(default)]
+    pub query: String,
+}
+
+/// POST /searches - save the current query (cap-enforced). Returns a small
+/// "Saved" confirmation that replaces the save form in place (target=self), so
+/// it works inside any results popover regardless of its container id.
+pub async fn post_save(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<SaveForm>,
+) -> Result<Html, AppError> {
+    let query = form.query.trim();
+    if !query.is_empty()
+        && db::saved_searches::count(&state.chat, &user.id).await?
+            < db::saved_searches::MAX_SAVED_SEARCHES as i64
+    {
+        db::saved_searches::add(&state.chat, &user.id, query).await?;
+    }
+    let label = crate::i18n::translate_current("search-saved");
+    Ok(Html(format!(
+        r#"<span class="text-xs text-success-surface-content">{}</span>"#,
+        crate::views::room::html_escape(&label)
+    )))
+}
+
+/// POST /searches/delete - remove a saved query; re-render the saved list.
+pub async fn post_delete(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<SaveForm>,
+) -> Result<Html, AppError> {
+    db::saved_searches::remove(&state.chat, &user.id, form.query.trim()).await?;
+    saved_or_empty(&state, &user.id).await
 }
 
 #[derive(Deserialize)]
@@ -42,6 +91,13 @@ pub async fn get_search(
     let trimmed = query.trim();
 
     if trimmed.is_empty() {
+        // LC-312: an empty query (the box was focused or cleared) shows the
+        // caller's saved searches, scoped to the sidebar message-search box.
+        // The room-header box passes room_id, so restrict the saved list to the
+        // unscoped sidebar search to avoid surfacing it in the room header.
+        if room_id.is_none() && enclave_id.is_none() {
+            return saved_or_empty(&state, &user.id).await;
+        }
         return Ok(empty_popover());
     }
 

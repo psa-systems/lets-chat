@@ -10,5 +10,13 @@
     <div class="text-sm truncate">{{ r.snippet }}</div>
   </a>
   {% endfor %}
+  {# LC-312: one-click save of the current query. Buttons + hx-include (not a
+     nested <form>, which is invalid inside the search form) - the button swaps
+     this footer to a "Saved" confirmation, so it works in any results popover. #}
+  <div id="lc-save-wrap" class="px-3 py-1.5 border-t border-border text-right">
+    <input type="hidden" id="lc-save-q" name="query" value="{{ query }}">
+    <button type="button" hx-post="/searches" hx-include="#lc-save-q" hx-target="#lc-save-wrap" hx-swap="innerHTML"
+      class="text-xs text-content-muted hover:text-content">&#9733; {{ "search-save"|t }}</button>
+  </div>
 </div>
 {% endif %}
