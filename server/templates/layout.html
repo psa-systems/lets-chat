@@ -539,6 +539,51 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-314: relative message timestamps. Each <time data-lc-ts> carries a UTC
+// RFC3339 `datetime`; we render it as compact relative text ("now", "2 minutes
+// ago", "yesterday") via Intl.RelativeTimeFormat (browser-localized, so no
+// Fluent strings), falling back to an absolute date past ~26 days. The exact
+// time stays in the title (and is the no-JS fallback text). Re-rendered on
+// htmx settle / OOB swap and every 30s so "2m" ticks up and live arrivals
+// format immediately.
+(function(){
+  var rtf = null;
+  try { rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }); } catch (e) {}
+  function rel(date){
+    var diff = (date.getTime() - Date.now()) / 1000; // negative = past
+    var abs = Math.abs(diff);
+    if (!rtf) return null;
+    if (abs < 45) return rtf.format(0, 'second');           // "now"
+    if (abs < 2700) return rtf.format(Math.round(diff / 60), 'minute');
+    if (abs < 79200) return rtf.format(Math.round(diff / 3600), 'hour');
+    if (abs < 26 * 86400) return rtf.format(Math.round(diff / 86400), 'day');
+    return null; // older -> absolute date below
+  }
+  function formatTs(el){
+    var iso = el.getAttribute('datetime');
+    if (!iso) return;
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return;
+    var text = rel(d);
+    if (text == null) {
+      try { text = d.toLocaleDateString(); } catch (e) { return; }
+    }
+    el.textContent = text;
+  }
+  function scan(root){
+    var scope = (root && root.querySelectorAll) ? root : document;
+    var nodes = scope.querySelectorAll('[data-lc-ts]');
+    for (var i = 0; i < nodes.length; i++) formatTs(nodes[i]);
+    // A swapped element may itself be a [data-lc-ts] (edited message row).
+    if (root && root.matches && root.matches('[data-lc-ts]')) formatTs(root);
+  }
+  scan(document);
+  document.body.addEventListener('htmx:afterSettle', function(e){ scan(e && e.target); });
+  document.body.addEventListener('htmx:oobAfterSwap', function(e){ scan((e && e.detail && e.detail.target) || document); });
+  setInterval(function(){ scan(document); }, 30000);
+})();
+</script>
+<script>
 // LC-312: re-run a saved search. Clicking a [data-lc-saved-query] row fills the
 // nearest search input with the saved query and dispatches `input`, so the
 // existing htmx /search trigger runs and the popover swaps to results - no
