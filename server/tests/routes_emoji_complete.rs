@@ -37,6 +37,22 @@ async fn complete(app: &Router, sess: &str, room_id: i64, q: &str) -> (StatusCod
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+// LC-316: the composer emoji picker panel.
+async fn picker(app: &Router, sess: &str, room_id: i64) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/rooms/{room_id}/emoji-picker"))
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 struct Setup {
     app: Router,
     member_session: String,
@@ -173,5 +189,34 @@ async fn empty_query_lists_custom_only() {
 async fn non_member_is_forbidden() {
     let s = setup().await;
     let (status, _) = complete(&s.app, &s.outsider_session, s.private_room, "tada").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn picker_lists_popular_unicode_and_custom_with_insert_hooks() {
+    let s = setup().await;
+    let (status, body) = picker(&s.app, &s.member_session, s.general_room).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    // Popular unicode (tada) and the seeded custom emoji both appear, each with
+    // an insert hook + a filter token; the filter input is the LC-274 one.
+    assert!(body.contains("\u{1F389}"), "no popular tada glyph: {body}");
+    assert!(
+        body.contains("data-lc-emoji-insert=\":partyblob:\""),
+        "custom emoji insert hook missing: {body}"
+    );
+    assert!(
+        body.contains("data-lc-emoji-filter"),
+        "no filter input: {body}"
+    );
+    assert!(
+        body.contains("data-lc-emoji-name="),
+        "no filter tokens: {body}"
+    );
+}
+
+#[tokio::test]
+async fn picker_forbidden_for_non_member() {
+    let s = setup().await;
+    let (status, _) = picker(&s.app, &s.outsider_session, s.private_room).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }

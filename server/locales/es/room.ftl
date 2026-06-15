@@ -16,6 +16,7 @@ room-composer-schedule-title = Programar para mas tarde
 room-composer-schedule-aria = Programar mensaje para mas tarde
 room-composer-send-message = Enviar mensaje
 room-composer-preview = Vista previa
+room-composer-emoji = Emoji
 room-composer-edit = Escribir
 room-composer-drop-file = Suelta el archivo para adjuntarlo
 room-composer-echo-sending = Enviando...

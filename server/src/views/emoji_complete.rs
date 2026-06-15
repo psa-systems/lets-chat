@@ -7,6 +7,8 @@
 //!   image inline.
 //! - `unicode`: a Unicode emoji from the `emojis` crate; inserts the literal
 //!   glyph (rendered as plain text, no pipeline change needed).
+#[allow(unused_imports)]
+use crate::i18n::filters; // LC-316: in-scope for the `|t` filter in emoji_picker.html.
 use askama::Template;
 
 /// One autocomplete row. `insert` is the exact string the composer splices in
@@ -55,4 +57,15 @@ impl EmojiSuggestion {
 #[template(path = "partials/emoji_popover.html")]
 pub struct EmojiPopoverFragment<'a> {
     pub results: &'a [EmojiSuggestion],
+}
+
+/// LC-316: the composer emoji picker panel - a browse-and-click grid of popular
+/// Unicode emojis plus the room's custom emojis, filtered client-side (LC-274)
+/// and inserted at the textarea cursor. Full-Unicode search-by-typing is the
+/// `:shortcode:` autocomplete's job (LC-296); this is the click surface.
+#[derive(Template)]
+#[template(path = "partials/emoji_picker.html")]
+pub struct EmojiPickerFragment {
+    pub room_id: i64,
+    pub suggestions: Vec<EmojiSuggestion>,
 }
