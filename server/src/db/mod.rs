@@ -23,6 +23,7 @@ pub mod inbox;
 pub mod login_alerts;
 pub mod mentions;
 pub mod moderation;
+pub mod notification_keywords;
 pub mod notifications;
 pub mod outgoing_webhooks;
 pub mod password_reset;

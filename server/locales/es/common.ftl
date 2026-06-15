@@ -187,6 +187,14 @@ settings-pref-login-alerts-help = Se envía la primera vez que un navegador o IP
 settings-pref-email-activity = Enviarme un correo por cada mención y mensaje directo
 settings-pref-email-activity-help = Un correo por evento (no agrupado como el resumen). Si el operador tiene configurada la entrada por correo, responder al correo publica tu respuesta en el chat en tu nombre. Limitado a 20 correos por minuto por destinatario.
 settings-save-preferences = Guardar preferencias
+# LC-304: highlight words
+settings-keyword-heading = Palabras destacadas
+settings-keyword-help = Recibe una notificación y resalta el mensaje cuando aparezca una de estas palabras, igual que una @mención. No distingue mayúsculas; coincide por palabra completa.
+settings-keyword-placeholder = Añadir una palabra
+settings-keyword-add = Añadir
+settings-keyword-remove = Quitar
+settings-keyword-empty = Aún no hay palabras destacadas.
+settings-keyword-cap = Límite alcanzado
 settings-dnd-heading = No molestar
 settings-dnd-active = Activo ahora
 settings-dnd-explain = Durante No molestar, las notificaciones push se suprimen y el resumen por correo retiene tus menciones perdidas para el próximo envío. La actividad en la aplicación se sigue registrando. Otros ven una insignia de "no molestar" en tu avatar.
