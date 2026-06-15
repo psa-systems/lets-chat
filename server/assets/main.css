@@ -55,6 +55,20 @@ body {
     margin-top: 0.3rem;
 }
 
+/* LC-308: unread-only sidebar filter. Device-local; the <html> attribute is
+   set no-flash by the base.html bootstrap. A row / section is kept only when
+   it :has() a non-empty unread or mention badge, or the currently-open room
+   (aria-current="page"). Because the badge spans OOB-swap live
+   (ws/unread_badge.html), :has()/:empty re-evaluate automatically - a new
+   message re-reveals a row and reading it re-hides it, with no JS. The
+   read-state badge spans are empty elements, so :not(:empty) is false. */
+html[data-lc-unread-only] [data-lc-sb-row]:not(:has([data-lc-unread]:not(:empty), [data-lc-mention]:not(:empty), [aria-current="page"])) {
+    display: none;
+}
+html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:empty), [data-lc-mention]:not(:empty), [aria-current="page"])) {
+    display: none;
+}
+
 /* LC-96 branding hooks. Default values mirror the project's existing
    blue-600 / blue-700 pair so a deployment with no operator-set
    branding looks identical to the pre-LC-96 build. Layout templates

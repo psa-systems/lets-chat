@@ -536,6 +536,24 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-308: keep the unread-only toggle's aria-pressed in step with the <html>
+// data-lc-unread-only flag after a sidebar re-render (the button is server-
+// rendered aria-pressed="false"; the flag is the source of truth, set no-flash
+// in base.html). Toggling itself syncs the button (base.html); this covers OOB
+// sidebar swaps.
+(function(){
+  function sync(){
+    var on = document.documentElement.getAttribute('data-lc-unread-only') === '1';
+    var btns = document.querySelectorAll('[data-lc-unread-toggle]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  document.body.addEventListener('htmx:afterSettle', sync);
+  sync();
+})();
+</script>
+<script>
 // LC-274: reaction-picker filter. One delegated input listener narrows the
 // picker's emoji buttons by case-insensitive substring against each button's
 // data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
