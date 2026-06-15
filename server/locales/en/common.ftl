@@ -192,6 +192,14 @@ settings-pref-login-alerts-help = Sent the first time a browser or IP signs in. 
 settings-pref-email-activity = Email me for each mention and direct message
 settings-pref-email-activity-help = One email per event (not batched like the digest). If the operator has email-ingress configured, replying to the email posts your response back to the chat as you. Capped at 20 emails per minute per recipient.
 settings-save-preferences = Save preferences
+# LC-304: highlight words
+settings-keyword-heading = Highlight words
+settings-keyword-help = Get notified and have the message highlighted when one of these words appears, just like an @mention. Case-insensitive, whole-word match.
+settings-keyword-placeholder = Add a word
+settings-keyword-add = Add
+settings-keyword-remove = Remove
+settings-keyword-empty = No highlight words yet.
+settings-keyword-cap = Limit reached
 settings-dnd-heading = Do Not Disturb
 settings-dnd-active = Active now
 settings-dnd-explain = During Do Not Disturb, push notifications are suppressed and the email digest holds your missed mentions for the next send. In-app activity is still recorded. Others see a "do not disturb" badge on your avatar.
