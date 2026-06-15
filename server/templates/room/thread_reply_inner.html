@@ -9,7 +9,7 @@
     {% let avatar_size = "h-5 w-5 text-xs" %}
     {% include "partials/avatar.html" %}
     <span class="font-medium text-sm">{{ message.label() }}</span>
-    <span class="text-xs text-content-muted">{{ message.created_at }}</span>
+    <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="text-xs text-content-muted">{{ message.created_at }}</time>
     {% if message.edited_at.is_some() %}
     <button
       hx-get="/messages/{{ message.id }}/history"
