@@ -42,6 +42,7 @@ pub mod settings;
 pub mod sidebar_categories;
 pub mod slash;
 pub mod starred_rooms;
+pub mod thread_followers;
 pub mod two_factor;
 pub mod uploads;
 pub mod user_groups;

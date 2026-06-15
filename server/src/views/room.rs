@@ -923,6 +923,18 @@ pub struct ThreadPanelFragment<'a> {
     pub room: &'a Room,
     pub parent: &'a MessageView,
     pub replies: &'a [MessageView],
+    /// LC-310: whether the viewer follows this thread (drives the toggle).
+    pub is_following: bool,
+}
+
+/// LC-310: the thread Follow/Following toggle button, included by the thread
+/// panel and re-rendered by the follow/unfollow endpoints.
+#[derive(Template)]
+#[template(path = "partials/thread_follow_button.html")]
+pub struct ThreadFollowFragment {
+    pub room_id: i64,
+    pub parent_id: i64,
+    pub following: bool,
 }
 
 /// Empty thread panel container, used to close the drawer.
