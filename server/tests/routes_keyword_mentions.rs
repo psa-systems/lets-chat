@@ -117,7 +117,10 @@ async fn add_keyword(app: &Router, sess: &str, word: &str) {
         .header(header::COOKIE, format!("session={sess}"))
         .body(Body::from(form))
         .unwrap();
-    assert_eq!(app.clone().oneshot(req).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
 }
 
 #[tokio::test]

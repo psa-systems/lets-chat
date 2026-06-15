@@ -35,7 +35,10 @@ async fn add_is_idempotent() {
     db::notification_keywords::add(&auth, &uid, "urgent")
         .await
         .unwrap();
-    assert_eq!(db::notification_keywords::count(&auth, &uid).await.unwrap(), 1);
+    assert_eq!(
+        db::notification_keywords::count(&auth, &uid).await.unwrap(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -43,8 +46,12 @@ async fn all_returns_pairs_across_users() {
     let auth = common::pool("auth").await;
     let a = db::auth::create_user(&auth, "ann", "h").await.unwrap();
     let b = db::auth::create_user(&auth, "ben", "h").await.unwrap();
-    db::notification_keywords::add(&auth, &a, "alpha").await.unwrap();
-    db::notification_keywords::add(&auth, &b, "beta").await.unwrap();
+    db::notification_keywords::add(&auth, &a, "alpha")
+        .await
+        .unwrap();
+    db::notification_keywords::add(&auth, &b, "beta")
+        .await
+        .unwrap();
 
     let all = db::notification_keywords::all(&auth).await.unwrap();
     assert_eq!(all.len(), 2);

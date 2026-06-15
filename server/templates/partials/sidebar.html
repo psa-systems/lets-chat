@@ -41,6 +41,14 @@
       <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
   </div>
+  {# LC-308: unread-only filter. Device-local toggle; the hiding is pure CSS
+     keyed on the <html> data-lc-unread-only attribute (set no-flash in
+     base.html), so it tracks live unread-badge swaps with no JS scan. #}
+  <div class="px-2 flex justify-end">
+    <button type="button" data-lc-unread-toggle aria-pressed="false"
+      onclick="window.__lcToggleUnreadOnly && window.__lcToggleUnreadOnly()"
+      class="text-xs text-content-muted hover:text-content aria-pressed:font-semibold aria-pressed:text-accent">{{ "sidebar-unread-only"|t }}</button>
+  </div>
   {# LC-174: enclave-keyed id so an enclave room add/remove can OOB-swap just
      this nav for members currently viewing that enclave. A connection on Home
      or a different enclave has a different id and htmx drops the swap. #}

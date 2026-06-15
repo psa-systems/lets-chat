@@ -365,7 +365,9 @@ async fn sidebar_unread_badge_hidden_for_muted_room() {
     let (status, body) = get_room_page(&t.app, &t.session, 1).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.contains(&format!(r#"<span id="unread-room-{other_id}"></span>"#)),
+        body.contains(&format!(
+            r#"<span id="unread-room-{other_id}" data-lc-unread></span>"#
+        )),
         "expected empty unread span for muted room {other_id}, got body: {body}"
     );
 }
@@ -412,7 +414,7 @@ async fn mention_badge_still_renders_in_except_mentions_mode() {
     assert_eq!(status, StatusCode::OK);
     assert!(
         body.contains(&format!(
-            r#"<span id="mention-room-{other_id}" class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@1</span>"#
+            r#"<span id="mention-room-{other_id}" data-lc-mention class="ml-1 text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@1</span>"#
         )),
         "expected mention badge for except_mentions room, got body: {body}"
     );
