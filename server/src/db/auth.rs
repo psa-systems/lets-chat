@@ -190,11 +190,23 @@ pub enum SetStatusError {
     Db(#[from] sqlx::Error),
 }
 
+/// LC-319: persist a user's status + custom text, optionally scheduling the
+/// custom text to auto-clear.
+///
+/// `expires_modifier` is a SQLite relative-time modifier (e.g. `"+1 hours"`)
+/// applied as `datetime('now', ?)`. It MUST come from the route's fixed
+/// allowlist (`routes::status::expiry_modifier`), never raw user input, since
+/// it is interpolated into the time function. `None` clears any existing
+/// expiry. An expiry without custom text is meaningless, so the caller is
+/// expected to pass `None` whenever `custom` is `None`; the sweep
+/// (`clear_expired_custom_statuses`) only ever nulls a non-null expiry, so a
+/// stray expiry on an empty status is harmless either way.
 pub async fn set_user_status(
     pool: &SqlitePool,
     user_id: &str,
     status: &str,
     custom: Option<&str>,
+    expires_modifier: Option<&str>,
 ) -> Result<(), SetStatusError> {
     if !is_valid_status(status) {
         return Err(SetStatusError::InvalidStatus);
@@ -209,16 +221,62 @@ pub async fn set_user_status(
     } else {
         ""
     };
+    // The CASE keeps this a single statement: a NULL modifier nulls the expiry
+    // column; a present modifier resolves to an absolute timestamp relative to
+    // now. The modifier is bound twice (the IS NULL guard and the datetime arg)
+    // so the present/absent branch is chosen at SQL eval time.
     let sql = format!(
-        "UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now'){now_clause} WHERE id = ?"
+        "UPDATE users SET status = ?, custom_status = ?, \
+         custom_status_expires_at = CASE WHEN ? IS NULL THEN NULL ELSE datetime('now', ?) END, \
+         updated_at = datetime('now'){now_clause} WHERE id = ?"
     );
     sqlx::query(&sql)
         .bind(status)
         .bind(custom)
+        .bind(expires_modifier)
+        .bind(expires_modifier)
         .bind(user_id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// LC-319: the absolute ISO expiry of a user's custom status, if one is
+/// scheduled. Read only by the status picker to render the "auto-clears" hint;
+/// kept out of `row_to_user_record` so the shared `User`/`UserRecord` model and
+/// its read sites stay untouched.
+pub async fn get_custom_status_expiry(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query("SELECT custom_status_expires_at FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<String>, _>("custom_status_expires_at")))
+}
+
+/// LC-319: clear every custom status whose `custom_status_expires_at` has
+/// passed, returning `(user_id, status)` for each so the caller can broadcast a
+/// `UserStatusChanged` with the (unchanged) presence value. Only the custom
+/// text + expiry are nulled; the presence `status` is deliberately untouched.
+/// Mirrors `mark_idle_users`: a single RETURNING UPDATE, no read-path writes.
+pub async fn clear_expired_custom_statuses(
+    pool: &SqlitePool,
+) -> Result<Vec<(String, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE users SET custom_status = NULL, custom_status_expires_at = NULL, \
+         updated_at = datetime('now') \
+         WHERE custom_status_expires_at IS NOT NULL \
+         AND custom_status_expires_at <= datetime('now') \
+         RETURNING id, status",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<String, _>("id"), r.get::<String, _>("status")))
+        .collect())
 }
 
 /// Refresh `last_active_at`. If the user was `'idle'`, promote them back to

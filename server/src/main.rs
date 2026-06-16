@@ -145,6 +145,7 @@ async fn main() {
     let _ = warm.await;
 
     spawn_idle_scanner(state.clone());
+    spawn_status_expiry_scanner(state.clone());
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
@@ -220,6 +221,33 @@ fn spawn_idle_scanner(state: AppState) {
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "idle scan failed"),
+            }
+        }
+    });
+}
+
+/// LC-319: periodically clear custom statuses whose `custom_status_expires_at`
+/// has passed. Runs every 60s, mirroring `spawn_idle_scanner`. Each cleared row
+/// is broadcast over the hub (presence value unchanged, custom text now None)
+/// so other viewers' avatars/hovercards drop the stale text live. The 60s
+/// granularity matches the idle-flip tolerance.
+fn spawn_status_expiry_scanner(state: AppState) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match db::auth::clear_expired_custom_statuses(&state.auth).await {
+                Ok(cleared) => {
+                    for (uid, status) in cleared {
+                        state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+                            user_id: uid,
+                            status,
+                            custom_status: None,
+                        });
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "custom status expiry scan failed"),
             }
         }
     });
