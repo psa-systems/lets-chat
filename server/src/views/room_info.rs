@@ -83,6 +83,24 @@ pub struct RoomInfoPage<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
+    /// LC-321: room id for the per-room nickname form's POST target. Shared
+    /// with `room/nickname_section.html`; named `nick_room_id` so the partial
+    /// can reference the same field name on both this page and the fragment.
+    pub nick_room_id: i64,
+    /// LC-321: the viewer's current nickname in this room, pre-filling the
+    /// form. `None` when they have not set one.
+    pub nick_value: Option<String>,
+}
+
+/// LC-321: per-room nickname section, returned by `POST /room/{id}/nickname`
+/// to swap `#room-nickname` in place after a set/clear. Shares
+/// `room/nickname_section.html` with `RoomInfoPage` (docs tab), so the two
+/// render identically. Field names match the page's `nick_*` fields.
+#[derive(Template)]
+#[template(path = "room/nickname_section.html")]
+pub struct RoomNicknameFragment {
+    pub nick_room_id: i64,
+    pub nick_value: Option<String>,
 }
 
 /// Inline edit form for the wiki, swapped into `#wiki-content` via
