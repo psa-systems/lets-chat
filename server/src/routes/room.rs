@@ -311,6 +311,7 @@ pub async fn get_room(
                 m.bridge_kind.as_deref(),
                 m.bridge_foreign_avatar.as_deref(),
                 &user.id,
+                m.room_id,
             )
             .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
@@ -1801,6 +1802,7 @@ pub async fn patch_message(
         m.bridge_kind.as_deref(),
         m.bridge_foreign_avatar.as_deref(),
         &user.id,
+        m.room_id,
     )
     .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
@@ -1922,6 +1924,7 @@ pub async fn get_thread_panel(
         parent.bridge_kind.as_deref(),
         parent.bridge_foreign_avatar.as_deref(),
         &user.id,
+        parent.room_id,
     )
     .await?;
 
@@ -2002,6 +2005,7 @@ pub async fn get_thread_panel(
                 r.bridge_kind.as_deref(),
                 r.bridge_foreign_avatar.as_deref(),
                 &user.id,
+                r.room_id,
             )
             .await?;
             author_cache.insert(r.user_id.clone(), entry.clone());

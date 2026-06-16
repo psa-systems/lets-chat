@@ -36,6 +36,7 @@ pub mod remote_control_audit;
 pub mod reply_tokens;
 pub mod retention_status;
 pub mod room_feeds;
+pub mod room_nicknames;
 pub mod room_rbac;
 pub mod saved_searches;
 pub mod scheduled;
