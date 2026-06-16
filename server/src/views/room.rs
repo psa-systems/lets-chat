@@ -215,7 +215,8 @@ pub(crate) fn day_label_for(created_at: &str) -> String {
 
 /// LC-314: convert a SQLite `YYYY-MM-DD HH:MM:SS` UTC timestamp to a JS-safe
 /// RFC3339 (`YYYY-MM-DDTHH:MM:SSZ`). Non-standard input passes through.
-fn to_iso_utc(created_at: &str) -> String {
+/// LC-319: also reused by the status picker for the auto-clear expiry hint.
+pub(crate) fn to_iso_utc(created_at: &str) -> String {
     let s = created_at.trim();
     if s.len() >= 19 && s.as_bytes().get(10) == Some(&b' ') {
         format!("{}T{}Z", &s[..10], &s[11..19])
