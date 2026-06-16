@@ -1,0 +1,30 @@
+{# LC-321: per-room nickname form. Self-contained <section id="room-nickname">
+   shared by room/info.html (docs tab) and the POST /room/{id}/nickname response
+   (RoomNicknameFragment), so a set/clear swaps in place. References nick_room_id
+   + nick_value from whichever parent includes/renders it. #}
+<section id="room-nickname" class="space-y-2">
+  <h2 class="font-semibold">{{ "room-nickname-heading"|t }}</h2>
+  <p class="text-sm text-content-muted">{{ "room-nickname-help"|t }}</p>
+  <form hx-post="/room/{{ nick_room_id }}/nickname"
+        hx-target="#room-nickname"
+        hx-swap="outerHTML"
+        class="flex items-center gap-2">
+    <input type="text"
+           name="nickname"
+           maxlength="32"
+           value="{% if let Some(n) = nick_value %}{{ n }}{% endif %}"
+           placeholder="{{ "room-nickname-placeholder"|t }}"
+           class="flex-1 rounded border px-2 py-1 text-sm">
+    <button type="submit"
+            class="rounded bg-accent px-3 py-1 text-xs text-accent-content hover:bg-accent-hover">{{ "action-save"|t }}</button>
+    {% if nick_value.is_some() %}
+    {# Clear posts no fields (no hx-include), so the handler's defaulted-empty
+       nickname removes the row. #}
+    <button type="button"
+            hx-post="/room/{{ nick_room_id }}/nickname"
+            hx-target="#room-nickname"
+            hx-swap="outerHTML"
+            class="text-xs text-content-muted hover:text-content">{{ "room-nickname-clear"|t }}</button>
+    {% endif %}
+  </form>
+</section>
