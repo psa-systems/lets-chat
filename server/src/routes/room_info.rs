@@ -21,7 +21,7 @@ use crate::state::AppState;
 use crate::views::pinned::PinnedListRow;
 use crate::views::room_info::{
     DescriptionEditFragment, DescriptionViewFragment, FileListFragment, RoomFileRow, RoomInfoPage,
-    WikiEditFragment, WikiViewFragment,
+    RoomNicknameFragment, WikiEditFragment, WikiViewFragment,
 };
 use crate::views::{html, Html};
 
@@ -250,6 +250,10 @@ pub async fn get_page(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, current_enclave).await?;
 
+    // LC-321: the viewer's own nickname in this room, pre-filling the docs-tab
+    // form.
+    let nick_value = db::room_nicknames::get(&state.chat, room_id, &user.id).await?;
+
     html(&RoomInfoPage {
         user: &user,
         room: &room,
@@ -272,6 +276,50 @@ pub async fn get_page(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        nick_room_id: room_id,
+        nick_value,
+    })
+}
+
+/// POST /room/{id}/nickname
+///
+/// LC-321: set or clear the caller's own per-room nickname. Self-only (the
+/// nickname is always the authed user's). Access-gated like the info page. An
+/// empty / absent `nickname` field clears it. Returns the re-rendered
+/// `#room-nickname` section for an in-place HTMX swap.
+#[derive(serde::Deserialize)]
+pub struct NicknameForm {
+    #[serde(default)]
+    nickname: String,
+}
+
+pub async fn post_nickname(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    axum::Form(form): axum::Form<NicknameForm>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let trimmed = form.nickname.trim();
+    if trimmed.is_empty() {
+        db::room_nicknames::clear(&state.chat, room_id, &user.id).await?;
+    } else {
+        db::room_nicknames::set(&state.chat, room_id, &user.id, trimmed)
+            .await
+            .map_err(|e| match e {
+                db::room_nicknames::SetNicknameError::TooLong(n) => {
+                    AppError::BadRequest(format!("nickname exceeds {n} characters"))
+                }
+                db::room_nicknames::SetNicknameError::Db(e) => AppError::from(e),
+            })?;
+    }
+    let nick_value = db::room_nicknames::get(&state.chat, room_id, &user.id).await?;
+    html(&RoomNicknameFragment {
+        nick_room_id: room_id,
+        nick_value,
     })
 }
 

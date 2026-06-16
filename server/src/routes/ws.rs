@@ -923,6 +923,7 @@ async fn render_new_message(
         message.bridge_kind.as_deref(),
         message.bridge_foreign_avatar.as_deref(),
         &viewer.id,
+        message.room_id,
     )
     .await
     .ok();
@@ -1038,6 +1039,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         m.bridge_kind.as_deref(),
         m.bridge_foreign_avatar.as_deref(),
         &viewer.id,
+        m.room_id,
     )
     .await
     .ok()?;
@@ -1164,6 +1166,7 @@ async fn render_thread_reply(
         message.bridge_kind.as_deref(),
         message.bridge_foreign_avatar.as_deref(),
         &viewer.id,
+        message.room_id,
     )
     .await
     .ok()?;

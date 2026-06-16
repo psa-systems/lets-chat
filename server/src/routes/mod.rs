@@ -224,6 +224,9 @@ pub(crate) async fn resolve_msg_author(
     bridge_kind: Option<&str>,
     bridge_foreign_avatar: Option<&str>,
     viewer_id: &str,
+    // LC-321: the room the message belongs to, so the real-user branch can
+    // apply a per-room nickname. Synthetic-actor branches ignore it.
+    room_id: i64,
 ) -> Result<AuthorMeta, AppError> {
     if let Some(wid) = webhook_id {
         let (name, avatar_url) = db::webhooks::identity(&state.chat, wid)
@@ -283,7 +286,7 @@ pub(crate) async fn resolve_msg_author(
             }),
         });
     }
-    load_author_meta(state, user_id, viewer_id).await
+    load_author_meta(state, user_id, viewer_id, room_id).await
 }
 
 /// LC-78: synthesize the `actor` block for the LC-75 outgoing-webhook
@@ -327,6 +330,7 @@ pub(crate) async fn load_author_meta(
     state: &AppState,
     user_id: &str,
     viewer_id: &str,
+    room_id: i64,
 ) -> Result<AuthorMeta, AppError> {
     let mut meta = db::auth::find_user_by_id(&state.auth, user_id)
         .await?
@@ -337,6 +341,16 @@ pub(crate) async fn load_author_meta(
     // status rather than the hub's connection set.
     if user_id != viewer_id {
         meta.status = effective_status(state, user_id, &meta.status);
+    }
+    // LC-321: a per-room nickname overrides the global display_name (and the
+    // username fallback) for this author's messages in this room. `username`
+    // is left untouched so @mentions / DM links / avatar initials still work.
+    // Synthetic actors (webhook/email/bridge) return before this in
+    // `resolve_msg_author`, so they never pick up a nickname.
+    if let Some(nick) = db::room_nicknames::get(&state.chat, room_id, user_id).await? {
+        if !nick.trim().is_empty() {
+            meta.display_name = Some(nick);
+        }
     }
     Ok(meta)
 }
@@ -368,6 +382,7 @@ pub(crate) async fn load_message_view_for_viewer(
         m.bridge_kind.as_deref(),
         m.bridge_foreign_avatar.as_deref(),
         &viewer.id,
+        m.room_id,
     )
     .await?;
     let can_edit = m.user_id == viewer.id;
@@ -1053,6 +1068,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/switcher", get(switcher::get_switcher))
         .route("/room/{room_id}/info", get(room_info::get_page))
+        .route("/room/{room_id}/nickname", post(room_info::post_nickname))
         .route("/room/{room_id}/files", get(room_info::get_files))
         .route("/room/{room_id}/wiki/edit", get(room_info::get_wiki_edit))
         .route(

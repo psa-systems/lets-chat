@@ -202,6 +202,7 @@ pub async fn get_dm(
                 m.bridge_kind.as_deref(),
                 m.bridge_foreign_avatar.as_deref(),
                 &user.id,
+                m.room_id,
             )
             .await?;
             author_cache.insert(m.user_id.clone(), entry.clone());
