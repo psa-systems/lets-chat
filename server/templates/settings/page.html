@@ -44,8 +44,27 @@
       <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
       <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
     </select>
+    {# LC-327: message text size. Purely device-local (localStorage), so it is
+       NOT submitted with the theme/density POST - no `name`, no server column.
+       __lcSetTextSize (base.html bootstrap) persists + applies on change; the
+       script below initializes the selected option from localStorage since the
+       server cannot render the selected state for a device-local pref. #}
+    <label class="block text-sm text-content-muted" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>
+    <select id="lc-textsize-select" onchange="window.__lcSetTextSize&&window.__lcSetTextSize(this.value)"
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      <option value="small">{{ "textsize-small"|t }}</option>
+      <option value="normal">{{ "textsize-normal"|t }}</option>
+      <option value="large">{{ "textsize-large"|t }}</option>
+    </select>
     <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
   </form>
+  <script>
+    (function () {
+      var s = document.getElementById("lc-textsize-select");
+      if (!s) return;
+      try { s.value = localStorage.getItem("lc-textsize") || "normal"; } catch (e) {}
+    })();
+  </script>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
