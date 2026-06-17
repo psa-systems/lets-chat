@@ -287,3 +287,76 @@
   messages.addEventListener('htmx:beforeCleanupElement', maybeTeardown);
 })();
 </script>
+<script>
+// LC-325: jump-to-date. The full room history is in #messages, so picking a
+// date in the header control scrolls to the first message on/after that day
+// (lexical compare on the `data-lc-day` "YYYY-MM-DD" attribute is chronological)
+// and briefly flashes it - reusing the permalink highlight (.lc-msg-flash). No
+// server round trip. No-ops on pages without the control (DMs) or with no
+// messages.
+(function() {
+  var root = document.querySelector('[data-lc-jumpdate-root]');
+  var messages = document.getElementById('messages');
+  if (!root || !messages) return;
+  var toggle = root.querySelector('[data-lc-jumpdate-toggle]');
+  var pop = root.querySelector('[data-lc-jumpdate-popover]');
+  var input = root.querySelector('[data-lc-jumpdate-input]');
+  var empty = root.querySelector('[data-lc-jumpdate-empty]');
+  if (!toggle || !pop || !input) return;
+
+  function dayRows() { return messages.querySelectorAll('[data-lc-day]'); }
+
+  // No messages -> nothing to jump to; hide the control entirely.
+  if (dayRows().length === 0) { root.hidden = true; return; }
+
+  function open() {
+    var rows = dayRows();
+    input.min = rows[0].getAttribute('data-lc-day');
+    input.max = rows[rows.length - 1].getAttribute('data-lc-day');
+    if (empty) empty.hidden = true;
+    pop.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    try { input.showPicker ? input.showPicker() : input.focus(); } catch (e) { input.focus(); }
+  }
+  function close() {
+    pop.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+  function jump() {
+    var chosen = input.value; // "YYYY-MM-DD" or ""
+    if (!chosen) return;
+    var rows = dayRows();
+    var target = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute('data-lc-day') >= chosen) { target = rows[i]; break; }
+    }
+    if (!target) { if (empty) empty.hidden = false; return; }
+    close();
+    target.scrollIntoView({ block: 'start' });
+    target.classList.add('lc-msg-flash');
+    setTimeout(function () { target.classList.remove('lc-msg-flash'); }, 2000);
+  }
+
+  function onToggle() { if (pop.hidden) open(); else close(); }
+  function onKey(e) {
+    if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); close(); toggle.focus(); }
+  }
+  function onOutside(e) {
+    if (!pop.hidden && !root.contains(e.target)) close();
+  }
+  toggle.addEventListener('click', onToggle);
+  input.addEventListener('change', jump);
+  document.addEventListener('keydown', onKey);
+  document.addEventListener('mousedown', onOutside);
+
+  function teardown(evt) {
+    if (evt && evt.target !== messages) return;
+    toggle.removeEventListener('click', onToggle);
+    input.removeEventListener('change', jump);
+    document.removeEventListener('keydown', onKey);
+    document.removeEventListener('mousedown', onOutside);
+    messages.removeEventListener('htmx:beforeCleanupElement', teardown);
+  }
+  messages.addEventListener('htmx:beforeCleanupElement', teardown);
+})();
+</script>
