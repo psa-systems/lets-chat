@@ -27,6 +27,11 @@ theme-hc-dark = High contrast (dark)
 settings-density = Density
 density-comfortable = Comfortable
 density-compact = Compact
+# LC-327: message text size (device-local reading scale)
+settings-textsize = Text size
+textsize-small = Small
+textsize-normal = Normal
+textsize-large = Large
 
 ## Login
 login-title = Sign in
