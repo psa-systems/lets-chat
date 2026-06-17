@@ -126,6 +126,9 @@
   <!-- LC-296: emoji :shortcode: autocomplete. Same combobox pattern as the
        mention popover; focus stays in the textarea. -->
   <div id="lc-emoji-popover" data-lc-skip-focus class="relative"></div>
+  <!-- LC-323: #channel autocomplete. Same combobox pattern; inserts a #name
+       token that renders as a link to the room. -->
+  <div id="lc-channel-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
     <span>{{ "room-composer-send-failed"|t }}</span>
@@ -569,6 +572,105 @@
   function teardown() {
     document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
     if (emojiTimer) { clearTimeout(emojiTimer); emojiTimer = null; }
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-323: #channel autocomplete. Mirror of the emoji block above. A `#` after
+// start-of-line or whitespace opens a listbox of accessible same-enclave rooms;
+// choosing one inserts a `#name` token (render_body rewrites it to a /room/{id}
+// link). Charset matches the linkable-room-name rule.
+(function(){
+  var ta = document.querySelector('#composer textarea[name=body]');
+  var slot = document.getElementById('lc-channel-popover');
+  if (!ta || !slot) return;
+  var roomId = {{ room.id }};
+  var TOKEN = /(^|\s)#([A-Za-z0-9_-]{0,64})$/;
+  var current = null;
+  function activeToken() {
+    var pos = ta.selectionStart;
+    var before = ta.value.slice(0, pos);
+    var m = before.match(TOKEN);
+    if (!m) return null;
+    var prefix = m[2];
+    var start = pos - prefix.length - 1;
+    return { start: start, end: pos, prefix: prefix };
+  }
+  function close() {
+    current = null;
+    slot.replaceChildren();
+    ta.setAttribute('aria-expanded', 'false');
+    ta.removeAttribute('aria-activedescendant');
+  }
+  var chanTimer = null;
+  function refresh() {
+    if (chanTimer) clearTimeout(chanTimer);
+    chanTimer = setTimeout(function () {
+      chanTimer = null;
+      current = activeToken();
+      if (!current) return close();
+      var url = '/rooms/' + roomId + '/channel-complete?q=' + encodeURIComponent(current.prefix);
+      if (window.htmx) {
+        htmx.ajax('GET', url, { target: '#lc-channel-popover', swap: 'innerHTML' });
+      }
+    }, 200);
+  }
+  function items() { return slot.querySelectorAll('li[role="option"]'); }
+  function selected() { return slot.querySelector('li[role="option"][aria-selected="true"]'); }
+  function select(li) {
+    items().forEach(function(l){ l.setAttribute('aria-selected', l === li ? 'true' : 'false'); });
+    if (!li) return;
+    if (li.id) ta.setAttribute('aria-activedescendant', li.id);
+    if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
+  }
+  function insert(li) {
+    if (!current || !li) return close();
+    var btn = li.querySelector('button[data-insert]');
+    if (!btn) return close();
+    var ins = btn.getAttribute('data-insert');
+    var v = ta.value;
+    ta.value = v.slice(0, current.start) + ins + ' ' + v.slice(current.end);
+    var pos = current.start + ins.length + 1;
+    ta.selectionStart = ta.selectionEnd = pos;
+    close();
+    ta.dispatchEvent(new Event('input'));
+  }
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('blur', function(){ setTimeout(close, 100); });
+  ta.addEventListener('keydown', function(e){
+    var list = items();
+    if (!current || list.length === 0) return;
+    var sel = selected() || list[0];
+    var idx = Array.prototype.indexOf.call(list, sel);
+    if (e.key === 'ArrowDown')      { e.preventDefault(); e.stopPropagation(); select(list[Math.min(idx + 1, list.length - 1)]); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); e.stopPropagation(); select(list[Math.max(idx - 1, 0)]); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); insert(sel); }
+    else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); }
+  }, true);
+  function onAfterSwap(e){
+    if (e.target && e.target.id === 'lc-channel-popover') {
+      var firstLi = slot.querySelector('li[role="option"]');
+      if (firstLi) {
+        firstLi.setAttribute('aria-selected', 'true');
+        ta.setAttribute('aria-expanded', 'true');
+        if (firstLi.id) ta.setAttribute('aria-activedescendant', firstLi.id);
+      } else {
+        ta.setAttribute('aria-expanded', 'false');
+        ta.removeAttribute('aria-activedescendant');
+      }
+      slot.addEventListener('mousedown', function(ev){
+        var li = ev.target.closest('li[role="option"]');
+        if (li) { ev.preventDefault(); insert(li); }
+      }, { once: true });
+    }
+  }
+  document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+  function teardown() {
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+    if (chanTimer) { clearTimeout(chanTimer); chanTimer = null; }
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;

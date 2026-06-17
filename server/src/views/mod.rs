@@ -3,6 +3,7 @@ pub mod admin;
 pub mod api_tokens;
 pub mod auth;
 pub mod bookmarks;
+pub mod channel_complete;
 pub mod charts;
 pub mod dm;
 pub mod dm_header;
