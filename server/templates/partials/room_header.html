@@ -27,6 +27,32 @@
         class="w-44 rounded border border-border px-2 py-1 text-xs">
       <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
     </form>
+    {# LC-325: jump-to-date. The full room history is already in #messages, so
+       this is a client-side scroll-to (auto_scroll.html wires it up). #}
+    <div class="relative" data-lc-jumpdate-root>
+      <button type="button"
+              data-lc-jumpdate-toggle
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="{{ "partials-room-jumpdate-title"|t }}"
+              aria-label="{{ "partials-room-jumpdate-title"|t }}"
+              class="inline-flex items-center rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken">
+        <svg aria-hidden="true" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </button>
+      <div data-lc-jumpdate-popover
+           hidden
+           class="absolute right-0 top-full mt-1 z-40 rounded border border-border bg-surface-elevated p-2 shadow text-sm">
+        <label class="block text-xs text-content-muted mb-1" for="lc-jumpdate-input">{{ "partials-room-jumpdate-label"|t }}</label>
+        <input type="date" id="lc-jumpdate-input" data-lc-jumpdate-input
+               class="rounded border border-border px-2 py-1 text-xs">
+        <p data-lc-jumpdate-empty hidden class="mt-1 text-xs text-danger">{{ "partials-room-jumpdate-none"|t }}</p>
+      </div>
+    </div>
     <a href="/room/{{ room.id }}/info"
        class="inline-flex items-center rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken"
        title="{{ "partials-room-info-docs-title"|t }}">{{ "partials-room-info"|t }}</a>

@@ -100,6 +100,10 @@ partials-room-info = Info
 partials-room-search-placeholder = Search this room...
 partials-room-moderators-title = Manage per-room moderators
 partials-room-moderators = Moderators
+# LC-325: jump-to-date control.
+partials-room-jumpdate-title = Jump to date
+partials-room-jumpdate-label = Jump to date
+partials-room-jumpdate-none = No messages on or after that date.
 
 ## Message list (LC-242 jump-to-latest pill)
 # %n% is replaced with the live message count in JS (partials/auto_scroll.html).
