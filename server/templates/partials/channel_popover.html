@@ -1,0 +1,20 @@
+{# LC-323: #channel autocomplete popover. Mirror of partials/emoji_popover.html
+   (same listbox/option ARIA shape + ids the composer's keyboard nav expects).
+   Each option carries data-insert: the `#name` token spliced into the
+   textarea, which render_body rewrites to a /room/{id} link. #}
+{% if results.is_empty() %}
+<ul id="lc-channel-list" class="hidden"></ul>
+{% else %}
+<ul id="lc-channel-list" class="absolute z-30 bottom-full mb-1 max-h-64 w-64 overflow-y-auto rounded border border-border bg-surface-elevated shadow-lg" role="listbox" aria-label="{{ "room-channel-popover-aria"|t }}">
+  {% for c in results %}
+  <li role="option" id="lc-channel-option-{{ loop.index0 }}" aria-selected="false">
+    <button type="button"
+      class="w-full text-left px-2 py-1 hover:bg-surface-sunken flex items-center gap-1"
+      data-insert="#{{ c.name }}">
+      <span class="text-content-muted">#</span>
+      <span class="font-mono text-sm truncate">{{ c.name }}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

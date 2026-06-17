@@ -35,6 +35,7 @@ mod bookmarks;
 mod branding;
 mod bridge_avatar_media;
 mod call;
+mod channel_complete;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
@@ -416,6 +417,7 @@ pub(crate) async fn load_message_view_for_viewer(
         Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
         None => None,
     };
+    let channels = channel_refs_for_room(state, m.room_id, viewer).await?;
     Ok(MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -444,6 +446,7 @@ pub(crate) async fn load_message_view_for_viewer(
         is_pinned,
         is_bookmarked,
         custom_emojis,
+        channels,
         quote_preview,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
@@ -811,6 +814,44 @@ pub(crate) async fn enclave_for_room(
         .fetch_optional(&state.chat)
         .await?;
     Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
+}
+
+/// LC-323: true when a room name can be `#`-linked. A channel token is
+/// `#` + `[A-Za-z0-9_-]{1,64}`, so only names entirely within that charset
+/// render as links (and are offered by the autocomplete). Names with spaces or
+/// other characters are simply not `#`-linkable in v1.
+pub(crate) fn is_linkable_channel_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// LC-323: rooms in `room_id`'s enclave that `viewer` can access and that have
+/// a `#`-linkable name, as `ChannelRef`s. Empty for DMs / non-enclave rooms
+/// (nothing to link against). Backs both the `#channel` autocomplete and the
+/// render-time `#name` -> link resolution, so the two stay consistent.
+pub(crate) async fn channel_refs_for_room(
+    state: &AppState,
+    room_id: i64,
+    viewer: &User,
+) -> Result<Vec<crate::views::channel_complete::ChannelRef>, AppError> {
+    use crate::views::channel_complete::ChannelRef;
+    let Some(enclave_id) = enclave_for_room(state, room_id).await? else {
+        return Ok(Vec::new());
+    };
+    let is_admin = viewer.role == "admin";
+    let rooms =
+        db::chat::list_rooms_in_enclave(&state.chat, enclave_id, &viewer.id, is_admin).await?;
+    Ok(rooms
+        .into_iter()
+        .filter(|r| is_linkable_channel_name(&r.name))
+        .map(|r| ChannelRef {
+            name: r.name,
+            room_id: r.id,
+        })
+        .collect())
 }
 
 /// Build the leftmost switcher column: a Home entry plus one icon per
@@ -1211,6 +1252,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/rooms/{room_id}/emoji-complete",
             get(emoji_complete::get_autocomplete),
+        )
+        .route(
+            "/rooms/{room_id}/channel-complete",
+            get(channel_complete::get_autocomplete),
         )
         .route(
             "/rooms/{room_id}/emoji-picker",
