@@ -58,6 +58,7 @@ use regex::Regex;
 
 use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
+use crate::views::channel_complete::ChannelRef;
 use crate::views::room::{html_escape, render_body};
 
 /// Max source-character length of a single math span. Spans larger than
@@ -313,13 +314,18 @@ fn try_render_math(source: &str, display: bool) -> Option<String> {
 /// `text` for math spans, renders each math span to MathML (with literal
 /// fallback on any failure), and routes the surrounding non-math text
 /// through `render_body` for mention / emoji / URL processing.
-pub fn render_math_in_text(text: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+pub fn render_math_in_text(
+    text: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> String {
     let chunks = scan(text);
     // Fast path: no math at all - call `render_body` once and skip the
     // chunk-iteration overhead entirely. Preserves the original behaviour
     // for the overwhelmingly common case of non-math messages.
     if !chunks.iter().any(|c| matches!(c, Chunk::Math { .. })) {
-        return render_body(text, mentions, emojis);
+        return render_body(text, mentions, emojis, channels);
     }
 
     let mut out = String::with_capacity(text.len() + 64);
@@ -328,7 +334,7 @@ pub fn render_math_in_text(text: &str, mentions: &[MentionRef], emojis: &[EmojiR
     for chunk in chunks {
         match chunk {
             Chunk::Text { range } => {
-                out.push_str(&render_body(&text[range], mentions, emojis));
+                out.push_str(&render_body(&text[range], mentions, emojis, channels));
             }
             Chunk::Math {
                 full,
@@ -744,21 +750,21 @@ mod tests {
     #[test]
     fn integration_pure_text_takes_fast_path() {
         // No `$` in the input - render_body output verbatim, no <math> tag.
-        let out = render_math_in_text("hello world", &[], &[]);
+        let out = render_math_in_text("hello world", &[], &[], &[]);
         assert!(!out.contains("<math"), "spurious math element: {out}");
         assert!(out.contains("hello world"), "text lost: {out}");
     }
 
     #[test]
     fn integration_inline_math_typesets() {
-        let out = render_math_in_text("$x^2$", &[], &[]);
+        let out = render_math_in_text("$x^2$", &[], &[], &[]);
         assert!(out.contains("<math"), "no math: {out}");
         assert!(out.contains("<msup>"), "no msup: {out}");
     }
 
     #[test]
     fn integration_display_math_typesets_as_block() {
-        let out = render_math_in_text("$$x^2$$", &[], &[]);
+        let out = render_math_in_text("$$x^2$$", &[], &[], &[]);
         assert!(out.contains(r#"display="block""#), "not block: {out}",);
     }
 
@@ -768,7 +774,7 @@ mod tests {
             user_id: "bob-id".into(),
             username: "bob".into(),
         }];
-        let out = render_math_in_text("see $x^2$ then @bob", &mentions, &[]);
+        let out = render_math_in_text("see $x^2$ then @bob", &mentions, &[], &[]);
         assert!(out.contains("<math"), "no math: {out}");
         assert!(
             out.contains(r#"href="/profile/bob-id""#),
@@ -784,7 +790,7 @@ mod tests {
             user_id: "bob-id".into(),
             username: "bob".into(),
         }];
-        let out = render_math_in_text("$@bob$", &mentions, &[]);
+        let out = render_math_in_text("$@bob$", &mentions, &[], &[]);
         // Positive 1: the math pipeline took ownership of the span -
         // either it rendered as MathML, or it fell back to literal
         // `$@bob$`. The failing case the negative-only test would have
@@ -813,7 +819,7 @@ mod tests {
 
     #[test]
     fn integration_blocklist_hit_falls_back_to_literal_with_delimiters() {
-        let out = render_math_in_text(r"$\def\x{a}\x$", &[], &[]);
+        let out = render_math_in_text(r"$\def\x{a}\x$", &[], &[], &[]);
         assert!(!out.contains("<math"), "math leaked: {out}");
         // The fallback includes the `$` delimiters (escaped) so the
         // user sees what they typed.
@@ -823,7 +829,7 @@ mod tests {
     #[test]
     fn integration_oversize_span_falls_back_to_literal() {
         let big = format!("${}$", "x".repeat(MATH_MAX_SPAN_CHARS + 1));
-        let out = render_math_in_text(&big, &[], &[]);
+        let out = render_math_in_text(&big, &[], &[], &[]);
         assert!(!out.contains("<math"), "math rendered past cap: {out}");
     }
 
@@ -835,7 +841,7 @@ mod tests {
         for _ in 0..MATH_MAX_SPANS_PER_MESSAGE + 2 {
             body.push_str("$x$ ");
         }
-        let out = render_math_in_text(&body, &[], &[]);
+        let out = render_math_in_text(&body, &[], &[], &[]);
         let math_count = out.matches("<math").count();
         assert_eq!(
             math_count, MATH_MAX_SPANS_PER_MESSAGE,
@@ -847,7 +853,7 @@ mod tests {
     fn integration_malformed_math_falls_back_to_literal() {
         // `$\frac{$` is malformed; pulldown-latex emits `<merror>`; the
         // wrapper falls back to literal text containing the source.
-        let out = render_math_in_text(r"$\frac{$", &[], &[]);
+        let out = render_math_in_text(r"$\frac{$", &[], &[], &[]);
         assert!(!out.contains("<math"), "merror leaked: {out}");
     }
 
@@ -855,7 +861,7 @@ mod tests {
     fn integration_unclosed_math_is_plain_text() {
         // No closer for `$x^2`: the scanner emits no math chunk; the
         // text flows through render_body unchanged.
-        let out = render_math_in_text("$x^2 no close", &[], &[]);
+        let out = render_math_in_text("$x^2 no close", &[], &[], &[]);
         assert!(!out.contains("<math"), "phantom math: {out}");
         assert!(out.contains("$x^2"), "text lost: {out}");
     }

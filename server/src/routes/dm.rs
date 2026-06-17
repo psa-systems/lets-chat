@@ -265,6 +265,8 @@ pub async fn get_dm(
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
             custom_emojis: shared_emojis.clone(),
+            // LC-323: DMs have no enclave, so there are no #channel targets.
+            channels: Vec::new(),
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),

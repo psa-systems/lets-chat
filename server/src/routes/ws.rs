@@ -958,6 +958,10 @@ async fn render_new_message(
         .await
         .ok()
         .unwrap_or_default();
+    // LC-323: same-enclave #channel link targets for this viewer.
+    let channels = super::channel_refs_for_room(state, message.room_id, viewer)
+        .await
+        .unwrap_or_default();
     let quote_preview = match message.quote_id {
         Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid)
             .await
@@ -993,6 +997,7 @@ async fn render_new_message(
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis,
+        channels,
         quote_preview,
         is_system: message.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
@@ -1046,6 +1051,10 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
         .await
         .ok()
+        .unwrap_or_default();
+    // LC-323: same-enclave #channel link targets for this viewer.
+    let channels = super::channel_refs_for_room(state, m.room_id, viewer)
+        .await
         .unwrap_or_default();
     let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
         .await
@@ -1126,6 +1135,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         is_pinned: pinned_ids.contains(&m.id),
         is_bookmarked,
         custom_emojis,
+        channels,
         quote_preview,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
@@ -1183,6 +1193,10 @@ async fn render_thread_reply(
         .await
         .ok()
         .unwrap_or_default();
+    // LC-323: same-enclave #channel link targets for this viewer.
+    let channels = super::channel_refs_for_room(state, message.room_id, viewer)
+        .await
+        .unwrap_or_default();
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -1211,6 +1225,7 @@ async fn render_thread_reply(
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis,
+        channels,
         quote_preview: None,
         is_system: message.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)

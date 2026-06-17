@@ -231,6 +231,8 @@ pub async fn get_room(
     // Load the enclave's custom emoji set once for the whole page. Reactions
     // and message bodies share the same map, so a single lookup serves both.
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    // LC-323: same-enclave #channel link targets, resolved once for the page.
+    let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
 
     // Reactions for every message in the room, in a single query. Group them
     // by message_id so we can attach to each MessageView below. LC-266: resolve
@@ -369,6 +371,7 @@ pub async fn get_room(
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
             custom_emojis: custom_emojis.clone(),
+            channels: channel_refs.clone(),
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
@@ -1806,6 +1809,7 @@ pub async fn patch_message(
     )
     .await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let channel_refs = super::channel_refs_for_room(&state, m.room_id, &user).await?;
     let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &user.id).await?;
     let reactor_titles = super::build_reactor_titles(&state, &reaction_counts).await;
     let reactions: Vec<ReactionView> = reaction_counts
@@ -1860,6 +1864,7 @@ pub async fn patch_message(
         is_pinned: false,
         is_bookmarked: db::bookmarks::is_bookmarked(&state.chat, &user.id, m.id).await?,
         custom_emojis,
+        channels: channel_refs,
         quote_preview,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
@@ -1936,6 +1941,7 @@ pub async fn get_thread_panel(
     let mut mentions_by_message =
         db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
     let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
     // LC-66: polls among the parent + replies, so the loop builds poll views
@@ -1976,6 +1982,7 @@ pub async fn get_thread_panel(
         is_pinned: false,
         is_bookmarked: bookmarked_ids.contains(&parent.id),
         custom_emojis: custom_emojis.clone(),
+        channels: channel_refs.clone(),
         quote_preview: parent_quote_preview,
         is_system: parent.is_system,
         poll: if poll_ids.contains(&parent.id) {
@@ -2042,6 +2049,7 @@ pub async fn get_thread_panel(
             is_pinned: false,
             is_bookmarked: bookmarked_ids.contains(&r_id),
             custom_emojis: custom_emojis.clone(),
+            channels: channel_refs.clone(),
             quote_preview: None,
             is_system: r.is_system,
             poll: if poll_ids.contains(&r_id) {

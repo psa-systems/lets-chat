@@ -36,6 +36,8 @@ room-composer-format-link-url-ph = url
 room-composer-format-strike-ph = tachado
 room-composer-format-list-ph = elemento de lista
 room-composer-format-quote-ph = cita
+# LC-323: popover de autocompletado de #canal.
+room-channel-popover-aria = Sugerencias de canales
 
 ## Quote chip
 room-quote-replying-to = Respondiendo a

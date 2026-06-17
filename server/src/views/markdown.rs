@@ -20,6 +20,7 @@ use syntect::parsing::SyntaxSet;
 
 use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
+use crate::views::channel_complete::ChannelRef;
 use crate::views::math;
 use crate::views::room::{emojify_and_escape, html_escape};
 
@@ -33,7 +34,12 @@ use crate::views::room::{emojify_and_escape, html_escape};
 const MARKDOWN_CACHE_MAX_ENTRIES: usize = 4096;
 static MARKDOWN_CACHE: OnceLock<Mutex<HashMap<u64, String>>> = OnceLock::new();
 
-fn markdown_cache_key(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> u64 {
+fn markdown_cache_key(
+    body: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> u64 {
     let mut hasher = DefaultHasher::new();
     body.hash(&mut hasher);
     for m in mentions {
@@ -44,6 +50,12 @@ fn markdown_cache_key(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) 
         e.shortcode.hash(&mut hasher);
         e.id.hash(&mut hasher);
     }
+    // LC-323: channels participate in the rewrite, so they must key the cache
+    // or a body rendered in one enclave could serve a stale link in another.
+    for c in channels {
+        c.name.hash(&mut hasher);
+        c.room_id.hash(&mut hasher);
+    }
     hasher.finish()
 }
 
@@ -51,9 +63,23 @@ fn markdown_cache_key(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) 
 ///
 /// Mentions and custom emojis are processed only on inline text segments -
 /// they are not interpreted inside fenced code blocks or inline `code`
-/// spans, where the literal text is preserved.
+/// spans, where the literal text is preserved. No `#channel` links are
+/// resolved (use `render_with_channels` for the message-body path).
 pub fn render(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
-    let key = markdown_cache_key(body, mentions, emojis);
+    render_with_channels(body, mentions, emojis, &[])
+}
+
+/// LC-323: like `render`, but also rewrites `#name` tokens into links to rooms
+/// in `channels`. Used by the message-body path (`MessageView::body_html`);
+/// the wiki / description / scheduled / edit-history surfaces call the 3-arg
+/// `render` (empty channel set) so their behavior is unchanged.
+pub fn render_with_channels(
+    body: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> String {
+    let key = markdown_cache_key(body, mentions, emojis, channels);
     let cache = MARKDOWN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
         if let Some(cached) = guard.get(&key) {
@@ -61,7 +87,7 @@ pub fn render(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Strin
         }
     }
 
-    let rendered = render_inner(body, mentions, emojis);
+    let rendered = render_inner(body, mentions, emojis, channels);
 
     if let Ok(mut guard) = cache.lock() {
         if guard.len() >= MARKDOWN_CACHE_MAX_ENTRIES {
@@ -106,23 +132,34 @@ fn link_scheme_is_safe(dest: &str) -> bool {
 /// locale-dependent text is produced, so the content-keyed markdown cache stays
 /// correct across locales. Code never reaches this function (code spans/blocks
 /// are intercepted before the text branch), so `||` inside code stays literal.
-fn render_with_spoilers(text: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+fn render_with_spoilers(
+    text: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> String {
     if !text.contains("||") {
-        return math::render_math_in_text(text, mentions, emojis);
+        return math::render_math_in_text(text, mentions, emojis, channels);
     }
     let mut out = String::new();
     let mut rest = text;
     loop {
         let Some(open) = rest.find("||") else {
-            out.push_str(&math::render_math_in_text(rest, mentions, emojis));
+            out.push_str(&math::render_math_in_text(rest, mentions, emojis, channels));
             break;
         };
-        out.push_str(&math::render_math_in_text(&rest[..open], mentions, emojis));
+        out.push_str(&math::render_math_in_text(
+            &rest[..open],
+            mentions,
+            emojis,
+            channels,
+        ));
         let after_open = &rest[open + 2..];
         match after_open.find("||") {
             // Non-empty inner: a spoiler.
             Some(close) if close > 0 => {
-                let inner = math::render_math_in_text(&after_open[..close], mentions, emojis);
+                let inner =
+                    math::render_math_in_text(&after_open[..close], mentions, emojis, channels);
                 out.push_str(
                     "<span class=\"lc-spoiler\" data-lc-spoiler tabindex=\"0\">\
                      <span class=\"lc-spoiler-inner\">",
@@ -142,7 +179,12 @@ fn render_with_spoilers(text: &str, mentions: &[MentionRef], emojis: &[EmojiRef]
     out
 }
 
-fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+fn render_inner(
+    body: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
@@ -307,7 +349,7 @@ fn render_inner(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> Str
                 // accumulator above), so math detection is automatically
                 // skipped inside code - same protection mentions and
                 // emoji already have.
-                render_with_spoilers(t.as_ref(), mentions, emojis)
+                render_with_spoilers(t.as_ref(), mentions, emojis, channels)
             };
             Some(Event::Html(html.into()))
         }
