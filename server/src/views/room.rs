@@ -6,6 +6,7 @@ use crate::db;
 use crate::db::mentions::MentionRef;
 use crate::models::custom_emoji::EmojiRef;
 use crate::models::{Attachment, Room, User};
+use crate::views::channel_complete::ChannelRef;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::markdown;
 use crate::views::message_actor::MessageActor;
@@ -64,6 +65,10 @@ pub struct MessageView {
     /// rewrite `:shortcode:` tokens into `<img>` tags. Empty for DM messages
     /// and any non-enclave room; unknown shortcodes pass through as text.
     pub custom_emojis: Vec<EmojiRef>,
+    /// LC-323: rooms in the message's enclave the viewer can `#`-link, used by
+    /// `body_html()` to rewrite `#name` tokens into links to `/room/{id}`.
+    /// Empty for DM / non-enclave messages; unknown tokens pass through as text.
+    pub channels: Vec<ChannelRef>,
     /// `Some(...)` when this message quote-replies to an earlier message;
     /// renders as an inline chip above the body that links back to the
     /// original. `None` for plain top-level messages.
@@ -263,7 +268,12 @@ impl MessageView {
     /// become custom-emoji images, and bare URLs are linkified. The template
     /// renders the result with `|safe`.
     pub fn body_html(&self) -> String {
-        markdown::render(&self.body, &self.mentions, &self.custom_emojis)
+        markdown::render_with_channels(
+            &self.body,
+            &self.mentions,
+            &self.custom_emojis,
+            &self.channels,
+        )
     }
 
     /// LC-284: true when this message directly `@`-mentions the viewer, so the
@@ -396,7 +406,12 @@ pub(crate) fn render_emoji_img(emoji: &EmojiRef) -> String {
 /// All output is HTML-escaped at the segment level; the chip and anchor
 /// markup is the only inserted HTML, and mentioned usernames are escaped
 /// before inclusion.
-pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRef]) -> String {
+pub(crate) fn render_body(
+    body: &str,
+    mentions: &[MentionRef],
+    emojis: &[EmojiRef],
+    channels: &[ChannelRef],
+) -> String {
     use std::collections::HashMap;
     let emoji_map: HashMap<&str, &EmojiRef> =
         emojis.iter().map(|e| (e.shortcode.as_str(), e)).collect();
@@ -407,20 +422,50 @@ pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRe
         .iter()
         .map(|m| (m.username.to_ascii_lowercase(), m))
         .collect();
-    // Boundary-anchored mention regex matches the server-side parser shape.
-    // We capture the leading boundary character so we can preserve
-    // whitespace/start when rebuilding the string.
+    // LC-323: `#name` -> room link map, keyed by lowercased name.
+    let channel_map: HashMap<String, &ChannelRef> = channels
+        .iter()
+        .map(|c| (c.name.to_ascii_lowercase(), c))
+        .collect();
+    // Boundary-anchored token regex. The `@` arm matches the server-side
+    // mention parser shape; the `#` arm (LC-323) shares the same boundary
+    // anchoring so it never fires mid-word or inside a URL fragment. The sigil
+    // is captured so the loop can branch.
     use std::sync::OnceLock;
-    static MENTION_RE: OnceLock<regex::Regex> = OnceLock::new();
-    let re = MENTION_RE
-        .get_or_init(|| regex::Regex::new(r"(^|\s)@([A-Za-z0-9_-]{1,32})").expect("valid regex"));
+    static TOKEN_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = TOKEN_RE.get_or_init(|| {
+        regex::Regex::new(r"(^|\s)([@#])([A-Za-z0-9_-]{1,64})").expect("valid regex")
+    });
 
     let mut out = String::with_capacity(body.len() * 2);
     let mut cursor = 0usize;
     for cap in re.captures_iter(body) {
         let whole = cap.get(0).unwrap();
-        let token = cap.get(2).unwrap();
+        let sigil = cap.get(2).unwrap().as_str();
+        let token = cap.get(3).unwrap();
         let token_lower = token.as_str().to_ascii_lowercase();
+        let lead = cap.get(1).unwrap();
+
+        if sigil == "#" {
+            // LC-323: resolve `#name` to a same-enclave room the viewer can
+            // access. Unresolved tokens fall through to the trailing linkify
+            // pass as literal text (no leak about inaccessible rooms).
+            if let Some(c) = channel_map.get(&token_lower) {
+                if whole.start() > cursor {
+                    out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
+                }
+                out.push_str(&html_escape(lead.as_str()));
+                out.push_str("<a href=\"/room/");
+                out.push_str(&c.room_id.to_string());
+                out.push_str("\" class=\"font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1\">#");
+                out.push_str(&html_escape(&c.name));
+                out.push_str("</a>");
+                cursor = whole.end();
+            }
+            continue;
+        }
+
+        // sigil == "@"
         // Broadcast tokens render as chips without consulting the mentions
         // lookup. The resolver step has already written mention rows for the
         // resolved users; here we just turn the literal `@here` / `@channel`
@@ -429,7 +474,6 @@ pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRe
         // is not distracted by visual differentiation; v1 treats both as one
         // mention class.
         if token_lower == "here" || token_lower == "channel" {
-            let lead = cap.get(1).unwrap();
             if whole.start() > cursor {
                 out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
             }
@@ -442,7 +486,6 @@ pub(crate) fn render_body(body: &str, mentions: &[MentionRef], emojis: &[EmojiRe
         }
         if let Some(m) = lookup.get(&token_lower) {
             // Emit text up to the boundary char.
-            let lead = cap.get(1).unwrap();
             if whole.start() > cursor {
                 out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
             }
@@ -690,7 +733,7 @@ mod tests {
             user_id: "alice-id".into(),
             username: "alice".into(),
         }];
-        let out = render_body("hey @alice check https://example.com", &mentions, &[]);
+        let out = render_body("hey @alice check https://example.com", &mentions, &[], &[]);
         // The chip is a real anchor (not escaped).
         assert!(
             out.contains(r#"<a href="/profile/alice-id" class="font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1">@alice</a>"#),
@@ -709,7 +752,7 @@ mod tests {
 
     #[test]
     fn render_body_leaves_unknown_token_as_text() {
-        let out = render_body("ping @nobody", &[], &[]);
+        let out = render_body("ping @nobody", &[], &[], &[]);
         // Unknown tokens fall through to linkify+escape: literal `@nobody`.
         assert!(out.contains("@nobody"), "unknown token lost: {out}");
         assert!(!out.contains("href=\"/profile/"));
@@ -721,7 +764,7 @@ mod tests {
         // no MentionRef entry needed, no profile link. This is what makes the
         // chip appear in the body even though resolved mention rows carry the
         // real users' usernames (not the broadcast token).
-        let out = render_body("hey @here and @channel quick update", &[], &[]);
+        let out = render_body("hey @here and @channel quick update", &[], &[], &[]);
         assert!(
             out.contains(
                 r#"<span class="font-medium text-blue-700 bg-blue-50 rounded px-1">@here</span>"#
@@ -746,7 +789,7 @@ mod tests {
         // The mention parser is case-insensitive in its token-lookup pass
         // (note the `to_ascii_lowercase` in render_body). Mirror that for
         // broadcast tokens so `@Here` and `@CHANNEL` also render as chips.
-        let out = render_body("attn @Here and @CHANNEL", &[], &[]);
+        let out = render_body("attn @Here and @CHANNEL", &[], &[], &[]);
         assert!(
             out.contains(">@here</span>"),
             "@Here did not normalize: {out}"
@@ -766,7 +809,7 @@ mod tests {
         // but the chip still renders as text styling. Phase 21 decision:
         // "option A" - chip everywhere; a DM is implicitly one-on-one and the
         // chip-without-effect is honest about what was typed.
-        let out = render_body("can we sync @here?", &[], &[]);
+        let out = render_body("can we sync @here?", &[], &[], &[]);
         assert!(
             out.contains(">@here</span>"),
             "DM body did not chip @here (option A regression): {out}"
@@ -779,7 +822,7 @@ mod tests {
         // `@`. The boundary regex prevents it from matching, same as for
         // user tokens. Guard against a regression where someone "simplifies"
         // the broadcast branch and drops the boundary check.
-        let out = render_body("contact foo@here.example.com", &[], &[]);
+        let out = render_body("contact foo@here.example.com", &[], &[], &[]);
         assert!(
             !out.contains(">@here</span>"),
             "email became broadcast chip: {out}"
@@ -796,7 +839,7 @@ mod tests {
         // boundary before `@`, so the chip pass must skip it. The text
         // should appear as a plain string (linkified as part of any URL,
         // but `foo@bar.com` is not a URL by linkify rules).
-        let out = render_body("ping foo@bar.com", &mentions, &[]);
+        let out = render_body("ping foo@bar.com", &mentions, &[], &[]);
         assert!(
             !out.contains("href=\"/profile/"),
             "email matched chip: {out}"
@@ -810,7 +853,7 @@ mod tests {
             id: 42,
             shortcode: "party".into(),
         }];
-        let out = render_body("hello :party: world", &[], &emojis);
+        let out = render_body("hello :party: world", &[], &emojis, &[]);
         assert!(out.contains("src=\"/api/emojis/42\""), "no img: {out}");
         assert!(out.contains("alt=\":party:\""), "no alt: {out}");
         // Surrounding plain text is preserved and escaped.
@@ -820,7 +863,7 @@ mod tests {
 
     #[test]
     fn render_body_leaves_unknown_shortcode_as_text() {
-        let out = render_body("plain :missing: text", &[], &[]);
+        let out = render_body("plain :missing: text", &[], &[], &[]);
         // Unknown shortcode passes through as literal escaped text.
         assert!(out.contains(":missing:"), "shortcode lost: {out}");
     }
@@ -831,7 +874,7 @@ mod tests {
             id: 1,
             shortcode: "foo".into(),
         }];
-        let out = render_body("see https://example.com/:foo:.png ok", &[], &emojis);
+        let out = render_body("see https://example.com/:foo:.png ok", &[], &emojis, &[]);
         // The url is fully linkified - the :foo: inside the path should not
         // become an img tag because the linkify pass owns that range.
         assert!(
@@ -842,6 +885,74 @@ mod tests {
             out.contains("href=\"https://example.com/:foo:.png\""),
             "url lost: {out}"
         );
+    }
+
+    // LC-323: #channel link rewrite.
+    #[test]
+    fn render_body_rewrites_known_channel_to_link() {
+        let channels = vec![ChannelRef {
+            name: "general".into(),
+            room_id: 7,
+        }];
+        let out = render_body("see #general for news", &[], &[], &channels);
+        assert!(
+            out.contains("href=\"/room/7\""),
+            "channel link missing: {out}"
+        );
+        assert!(
+            out.contains(">#general</a>"),
+            "channel label missing: {out}"
+        );
+    }
+
+    #[test]
+    fn render_body_channel_match_is_case_insensitive() {
+        let channels = vec![ChannelRef {
+            name: "General".into(),
+            room_id: 9,
+        }];
+        let out = render_body("ping #general", &[], &[], &channels);
+        assert!(
+            out.contains("href=\"/room/9\""),
+            "case-insensitive match failed: {out}"
+        );
+        // The canonical room name is rendered, not the typed casing.
+        assert!(out.contains(">#General</a>"), "canonical name lost: {out}");
+    }
+
+    #[test]
+    fn render_body_leaves_unknown_channel_as_text() {
+        let channels = vec![ChannelRef {
+            name: "general".into(),
+            room_id: 7,
+        }];
+        let out = render_body("nothing at #random here", &[], &[], &channels);
+        assert!(
+            !out.contains("href=\"/room/"),
+            "unknown channel linked: {out}"
+        );
+        assert!(out.contains("#random"), "unknown token lost: {out}");
+    }
+
+    #[test]
+    fn render_body_no_channels_leaves_hash_literal() {
+        let out = render_body("a #general b", &[], &[], &[]);
+        assert!(
+            !out.contains("href=\"/room/"),
+            "linked with empty channel set: {out}"
+        );
+        assert!(out.contains("#general"), "literal hash token lost: {out}");
+    }
+
+    #[test]
+    fn render_body_channel_not_matched_mid_word() {
+        // Boundary-anchored: `#general` not at a word boundary must not link.
+        let channels = vec![ChannelRef {
+            name: "general".into(),
+            room_id: 7,
+        }];
+        let out = render_body("foo#general", &[], &[], &channels);
+        assert!(!out.contains("href=\"/room/7\""), "mid-word linked: {out}");
     }
 
     #[test]
