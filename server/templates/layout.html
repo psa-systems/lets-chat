@@ -879,8 +879,15 @@ document.body.addEventListener('click', function(e){
   var rawSocket = null;       // captured from htmx:wsOpen
   var watchdog = null;        // 60s half-open detector
   var escalateTimer = null;   // 5min "still trying" escalation
+  var graceTimer = null;      // LC-318: delay before the banner is shown
   var WATCHDOG_MS = 60 * 1000;
   var ESCALATE_MS = 5 * 60 * 1000;
+  // LC-318: a normal page navigation (hx-boost swaps the ws-connect
+  // element) briefly closes and reopens the socket, which used to flash
+  // "Connection lost. Reconnecting..." for ~1s on every page move. Wait
+  // this long before painting the banner; a reconnect within the window
+  // cancels it, so only a genuine outage (or a slow reconnect) is shown.
+  var GRACE_MS = 3 * 1000;
 
   function setBanner(next, msg) {
     bannerEl.setAttribute('data-state', next);
@@ -908,21 +915,41 @@ document.body.addEventListener('click', function(e){
   function enterReconnecting() {
     if (state === 'reconnecting' || state === 'failed-long') return;
     state = 'reconnecting';
-    setBanner('reconnecting', 'Connection lost. Reconnecting...');
-    clearTimeout(escalateTimer);
-    escalateTimer = setTimeout(function(){
-      if (state === 'reconnecting') {
-        state = 'failed-long';
-        setBanner('failed-long', 'Still trying to reconnect. Check your internet connection.');
-      }
-    }, ESCALATE_MS);
+    // LC-318: defer painting the banner. If the socket reopens within
+    // GRACE_MS (the common case: a page navigation), enterConnected
+    // cancels graceTimer and nothing is ever shown. Only when the
+    // outage outlasts the grace do we paint "Reconnecting" and start
+    // the 5min escalation clock.
+    clearTimeout(graceTimer);
+    graceTimer = setTimeout(function(){
+      graceTimer = null;
+      if (state !== 'reconnecting') return;
+      setBanner('reconnecting', 'Connection lost. Reconnecting...');
+      clearTimeout(escalateTimer);
+      escalateTimer = setTimeout(function(){
+        if (state === 'reconnecting') {
+          state = 'failed-long';
+          setBanner('failed-long', 'Still trying to reconnect. Check your internet connection.');
+        }
+      }, ESCALATE_MS);
+    }, GRACE_MS);
   }
 
   function enterConnected(wasReconnecting) {
     var prev = state;
     state = 'connected';
     clearTimeout(escalateTimer);
-    if (wasReconnecting || prev !== 'connected') {
+    // LC-318: the "Reconnecting" banner was painted only if the grace
+    // period elapsed (graceTimer fired and nulled itself) while in the
+    // reconnecting state, or we had already escalated to failed-long.
+    // If the grace was still pending, the user never saw an outage, so
+    // this was just a navigation: cancel it silently with no green
+    // "Connected" flash and no soft-refresh (the new page is fresh).
+    var bannerWasShown = (prev === 'failed-long') ||
+                         (prev === 'reconnecting' && graceTimer === null);
+    clearTimeout(graceTimer);
+    graceTimer = null;
+    if (bannerWasShown) {
       setBanner('connected-flash', 'Connected');
       setTimeout(function(){
         if (state === 'connected') setBanner('hidden', '');
