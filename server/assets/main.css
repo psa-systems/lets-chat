@@ -67,6 +67,54 @@ body {
     font-size: 1.125rem;
 }
 
+/* LC-329: copy button on fenced code blocks. The button is icon-only in the
+   (locale-independent) cached markdown; layout.html applies its accessible
+   name + handles the click. Revealed on hover / keyboard focus so it does not
+   clutter the block at rest. */
+.lc-codeblock {
+    position: relative;
+}
+.lc-code-copy {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+    cursor: pointer;
+}
+.lc-code-copy svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+.lc-codeblock:hover .lc-code-copy,
+.lc-code-copy:focus-visible {
+    opacity: 1;
+}
+.lc-code-copy.lc-code-copied {
+    opacity: 1;
+}
+/* Visible confirmation for sighted users: swap the icon for a checkmark. The
+   glyph is locale-independent; the accessible name is updated to the localized
+   "Copied" string in layout.html. */
+.lc-code-copy.lc-code-copied svg {
+    display: none;
+}
+.lc-code-copy.lc-code-copied::after {
+    content: "\2713";
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
 /* LC-308: unread-only sidebar filter. Device-local; the <html> attribute is
    set no-flash by the base.html bootstrap. A row / section is kept only when
    it :has() a non-empty unread or mention badge, or the currently-open room

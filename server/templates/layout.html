@@ -635,6 +635,57 @@ document.body.addEventListener('click', function(e){
 })();
 </script>
 <script>
+// LC-329: copy button on fenced code blocks. The button (data-lc-code-copy) is
+// icon-only in the locale-independent cached markdown, so we apply its
+// accessible name + tooltip from localized strings here and handle the click by
+// copying the sibling <pre> text (raw code; syntect spans collapse to text).
+// Delegated, plus an init pass on load / htmx settle so blocks in live-arriving
+// or edited messages (and on the wiki / search surfaces) get an accessible name.
+(function(){
+  var COPY = "{{ "code-copy"|t }}";
+  var COPIED = "{{ "code-copied"|t }}";
+  function label(root){
+    var scope = (root && root.querySelectorAll) ? root : document;
+    var btns = scope.querySelectorAll('[data-lc-code-copy]:not([data-lc-code-labeled])');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('data-lc-code-labeled', '1');
+      btns[i].setAttribute('aria-label', COPY);
+      btns[i].setAttribute('title', COPY);
+    }
+  }
+  function copyText(text, done){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function(){
+        if (window.__lcCopyFallback) window.__lcCopyFallback(text);
+        done();
+      });
+    } else if (window.__lcCopyFallback) {
+      window.__lcCopyFallback(text); done();
+    }
+  }
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('[data-lc-code-copy]');
+    if (!btn) return;
+    var block = btn.closest('.lc-codeblock');
+    var pre = block && block.querySelector('pre');
+    if (!pre) return;
+    copyText(pre.textContent, function(){
+      btn.classList.add('lc-code-copied');
+      btn.setAttribute('aria-label', COPIED);
+      btn.setAttribute('title', COPIED);
+      setTimeout(function(){
+        btn.classList.remove('lc-code-copied');
+        btn.setAttribute('aria-label', COPY);
+        btn.setAttribute('title', COPY);
+      }, 1500);
+    });
+  });
+  label(document);
+  document.body.addEventListener('htmx:afterSettle', function(e){ label(e && e.target); });
+  document.body.addEventListener('htmx:oobAfterSwap', function(e){ label((e && e.detail && e.detail.target) || document); });
+})();
+</script>
+<script>
 // LC-308: keep the unread-only toggle's aria-pressed in step with the <html>
 // data-lc-unread-only flag after a sidebar re-render (the button is server-
 // rendered aria-pressed="false"; the flag is the source of truth, set no-flash
