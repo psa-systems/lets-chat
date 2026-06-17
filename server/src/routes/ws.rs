@@ -433,17 +433,30 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // visibility flip in this tab.
                                     render_sidebar(&send_state, &send_user).await
                                 }
-                                ChatEvent::SidebarCategoriesChanged { .. } => {
-                                    // Shared category state changed in an
-                                    // enclave this user is a member of.
-                                    // Re-render their sidebar so live tabs
-                                    // pick up the change without a manual
-                                    // refresh. The fragment uses None for
-                                    // current_enclave (DM-only shape); WS
-                                    // tabs on /enclave/N will see the room
-                                    // section render via the normal page
-                                    // navigation flow when the user moves.
-                                    render_sidebar(&send_state, &send_user).await
+                                ChatEvent::SidebarCategoriesChanged { enclave_id } => {
+                                    // LC-331: shared category state changed in
+                                    // an enclave this user is a member of
+                                    // (add / delete / rename / reorder / a
+                                    // chat moved between categories). Re-render
+                                    // the enclave-keyed sidebar nav so members
+                                    // viewing that enclave pick up the change
+                                    // in place. This MUST use the
+                                    // `#sidebar-nav-{enclave_id}` fragment (not
+                                    // the whole-sidebar DM-only shape from
+                                    // `render_sidebar`): the DM-only shape has
+                                    // no categories or enclave rooms, so
+                                    // swapping it over `#sidebar` blanked the
+                                    // chat list on add/delete and reverted a
+                                    // just-completed chat move. The enclave-id
+                                    // target is self-limiting, so a connection
+                                    // on Home / a different enclave / a stale
+                                    // subscription drops the swap.
+                                    render_enclave_sidebar_nav(
+                                        &send_state,
+                                        &send_user,
+                                        *enclave_id,
+                                    )
+                                    .await
                                 }
                                 ChatEvent::MessagePinned {
                                     room_id,
