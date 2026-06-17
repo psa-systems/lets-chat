@@ -880,6 +880,7 @@ document.body.addEventListener('click', function(e){
   var watchdog = null;        // 60s half-open detector
   var escalateTimer = null;   // 5min "still trying" escalation
   var graceTimer = null;      // LC-318: delay before the banner is shown
+  var abnormalClose = false;  // LC-318: last close was a real drop, not a nav
   var WATCHDOG_MS = 60 * 1000;
   var ESCALATE_MS = 5 * 60 * 1000;
   // LC-318: a normal page navigation (hx-boost swaps the ws-connect
@@ -935,16 +936,15 @@ document.body.addEventListener('click', function(e){
     }, GRACE_MS);
   }
 
-  function enterConnected(wasReconnecting) {
+  function enterConnected() {
     var prev = state;
     state = 'connected';
     clearTimeout(escalateTimer);
     // LC-318: the "Reconnecting" banner was painted only if the grace
     // period elapsed (graceTimer fired and nulled itself) while in the
     // reconnecting state, or we had already escalated to failed-long.
-    // If the grace was still pending, the user never saw an outage, so
-    // this was just a navigation: cancel it silently with no green
-    // "Connected" flash and no soft-refresh (the new page is fresh).
+    // If the grace was still pending, the user never saw an outage and
+    // we skip the green "Connected" flash.
     var bannerWasShown = (prev === 'failed-long') ||
                          (prev === 'reconnecting' && graceTimer === null);
     clearTimeout(graceTimer);
@@ -954,21 +954,28 @@ document.body.addEventListener('click', function(e){
       setTimeout(function(){
         if (state === 'connected') setBanner('hidden', '');
       }, 500);
-      // Soft-refresh the current page so the user sees missed
-      // content. select:'#main' extracts just the <main> from the
-      // full-page response; without it we would nest the layout
-      // into #main.
-      if (window.htmx && document.getElementById('main')) {
-        try {
-          htmx.ajax('GET', location.pathname + location.search, {
-            target: '#main',
-            swap: 'outerHTML',
-            select: '#main'
-          });
-        } catch (e) { /* navigation away is fine */ }
-      }
     } else {
       setBanner('hidden', '');
+    }
+    // LC-318: recover content missed during the gap. The server does not
+    // replay messages on reconnect, so this soft-refresh is the only
+    // recovery path. Run it whenever the disconnect was a genuine outage
+    // (banner shown, OR an abnormalClose flagged in the wsClose handler
+    // even if the reconnect beat the grace window), but NOT for a clean
+    // navigation close (code 1005), whose new page already loaded fresh.
+    // select:'#main' extracts just the <main> from
+    // the full-page response; without it we would nest the layout into
+    // #main.
+    var needsRefresh = bannerWasShown || abnormalClose;
+    abnormalClose = false;
+    if (needsRefresh && window.htmx && document.getElementById('main')) {
+      try {
+        htmx.ajax('GET', location.pathname + location.search, {
+          target: '#main',
+          swap: 'outerHTML',
+          select: '#main'
+        });
+      } catch (e) { /* navigation away is fine */ }
     }
   }
 
@@ -978,15 +985,14 @@ document.body.addEventListener('click', function(e){
     // that needs to send a frame). Previously set only from the DM page,
     // which left non-DM pages unable to send call control signals.
     if (evt.detail) window.__lcWS = evt.detail.socketWrapper;
-    var wasReconnecting = (state !== 'connected');
-    enterConnected(wasReconnecting);
+    enterConnected();
     startWatchdog();
   });
 
   document.body.addEventListener('htmx:wsAfterMessage', function(){
     // Any inbound text frame (real OOB swap or `<!-- ping -->`)
     // counts as proof of life.
-    if (state !== 'connected') enterConnected(true);
+    if (state !== 'connected') enterConnected();
     startWatchdog();
   });
 
@@ -998,6 +1004,18 @@ document.body.addEventListener('click', function(e){
     // 1011 server error, our own 4000 from the watchdog), force a
     // manual reconnect via __lcReconnectWS.
     var code = evt && evt.detail && evt.detail.event && evt.detail.event.code;
+    // LC-318: flag genuine outages (where the server may have broadcast
+    // events we missed) so enterConnected runs the recovery soft-refresh
+    // even if the reconnect beats the banner grace window. Only an
+    // explicit allow-list counts: 1006 abnormal drop, 1011 server error,
+    // 1012/1013 restart/try-again, and our own 4000 half-open kill. A
+    // page navigation does NOT qualify - htmx-ext-ws calls socket.close()
+    // with no code, which the browser reports as 1005 ("no status"), and
+    // a clean server going-away is 1000/1001; in all those the next page
+    // loads fresh, so refreshing would be the wasteful double-fetch this
+    // fix exists to avoid.
+    abnormalClose = (code === 1006 || code === 1011 ||
+                     code === 1012 || code === 1013 || code === 4000);
     var autoReconnects = (code === 1006 || code === 1012 || code === 1013);
     if (!autoReconnects && window.__lcReconnectWS) {
       // Schedule on the next tick so the extension's own onclose
