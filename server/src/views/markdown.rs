@@ -465,10 +465,28 @@ fn highlight_code(code: &str, lang: &str) -> String {
             .unwrap_or_else(|| ss.find_syntax_plain_text())
     };
 
-    match syntect::html::highlighted_html_for_string(code, ss, syntax, theme) {
+    let inner = match syntect::html::highlighted_html_for_string(code, ss, syntax, theme) {
         Ok(html) => html,
         Err(_) => format!("<pre><code>{}</code></pre>", html_escape(code)),
-    }
+    };
+    wrap_code_block(&inner)
+}
+
+/// LC-329: wrap a rendered `<pre>` code block with a copy affordance. The
+/// button is ICON-ONLY and carries no localized text, so the content-keyed
+/// markdown cache (keyed on body/mentions/emojis, NOT locale) stays correct
+/// across locales - `layout.html` applies the accessible name/tooltip and
+/// handles the click (copying the `<pre>` text) per the viewer's locale.
+fn wrap_code_block(inner: &str) -> String {
+    format!(
+        "<div class=\"lc-codeblock\">\
+         <button type=\"button\" class=\"lc-code-copy\" data-lc-code-copy>\
+         <svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\
+         <rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"></rect>\
+         <path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"></path>\
+         </svg></button>\
+         {inner}</div>"
+    )
 }
 
 #[cfg(test)]
@@ -506,6 +524,46 @@ mod tests {
         let out = render(body, &[], &[]);
         assert!(out.contains("<pre"), "no pre tag: {out}");
         assert!(out.contains("hello"), "body lost: {out}");
+    }
+
+    // LC-329: copy affordance on fenced code blocks.
+    #[test]
+    fn fenced_code_block_gets_copy_affordance() {
+        let out = render("```rust\nfn main() {}\n```", &[], &[]);
+        assert!(out.contains("lc-codeblock"), "no code wrapper: {out}");
+        assert!(out.contains("data-lc-code-copy"), "no copy button: {out}");
+        assert!(out.contains("<pre"), "pre lost: {out}");
+        // Icon-only: no localized text baked into the (locale-independent) cache.
+        assert!(
+            !out.contains("Copy code"),
+            "localized text leaked into cache: {out}"
+        );
+    }
+
+    #[test]
+    fn unknown_language_block_also_gets_copy_affordance() {
+        let out = render("```nosuchlang\nhello\n```", &[], &[]);
+        assert!(
+            out.contains("lc-codeblock"),
+            "no code wrapper on fallback: {out}"
+        );
+        assert!(
+            out.contains("data-lc-code-copy"),
+            "no copy button on fallback: {out}"
+        );
+    }
+
+    #[test]
+    fn plain_message_has_no_copy_affordance() {
+        let out = render("just some `inline` text, no block", &[], &[]);
+        assert!(
+            !out.contains("lc-codeblock"),
+            "spurious code wrapper: {out}"
+        );
+        assert!(
+            !out.contains("data-lc-code-copy"),
+            "spurious copy button: {out}"
+        );
     }
 
     #[test]
