@@ -150,6 +150,26 @@
           btns[i].setAttribute("aria-pressed", next ? "true" : "false");
         }
       };
+
+      // LC-327: message text size (small/normal/large). Device-local
+      // (localStorage only, like sidebar/unread-only - a per-device reading
+      // ergonomic, not synced server-side). Set before paint so message text
+      // never reflows after load. Pure-CSS scaling keyed on data-lc-textsize
+      // (main.css); "normal" is the default and carries no attribute.
+      function applyTextSize(v) {
+        if (v === "small" || v === "large") d.setAttribute("data-lc-textsize", v);
+        else d.removeAttribute("data-lc-textsize");
+      }
+      var tsz = null;
+      try { tsz = localStorage.getItem("lc-textsize"); } catch (e) {}
+      applyTextSize(tsz);
+      window.__lcSetTextSize = function (v) {
+        try {
+          if (v === "small" || v === "large") localStorage.setItem("lc-textsize", v);
+          else localStorage.removeItem("lc-textsize");
+        } catch (e) {}
+        applyTextSize(v);
+      };
     })();
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">

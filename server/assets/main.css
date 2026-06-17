@@ -55,6 +55,18 @@ body {
     margin-top: 0.3rem;
 }
 
+/* LC-327: message text size (reading scale). Device-local; the <html>
+   attribute is set no-flash by the base.html bootstrap from lc-textsize.
+   Scoped to .lc-md (the message body) so chrome / timestamps / sidebar are
+   unaffected; .lc-md code/pre are em-relative and scale with the base. The
+   default ("normal") carries no attribute and inherits the 1rem body size. */
+[data-lc-textsize="small"] .lc-md {
+    font-size: 0.875rem;
+}
+[data-lc-textsize="large"] .lc-md {
+    font-size: 1.125rem;
+}
+
 /* LC-308: unread-only sidebar filter. Device-local; the <html> attribute is
    set no-flash by the base.html bootstrap. A row / section is kept only when
    it :has() a non-empty unread or mention badge, or the currently-open room
