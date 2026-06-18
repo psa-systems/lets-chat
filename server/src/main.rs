@@ -108,6 +108,30 @@ async fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| r#"[{"urls":"stun:stun.l.google.com:19302"}]"#.to_string());
 
+    // LC-22 pure-RP cutover: load and initialize the Bunyip SSO client at
+    // startup. The four `LETS_CHAT_BUNYIP_SSO_*` env vars are mandatory;
+    // bunyip-api must be reachable for discovery + JWKS. Missing env or
+    // unreachable OP is a hard startup failure - there is no "off" state and
+    // no fallback path. See
+    // `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md` §4.2.
+    let bunyip_sso_cfg = match lets_chat::oidc::BunyipSsoConfig::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(error = %e, "bunyip SSO config invalid; refusing to start");
+            std::process::exit(1);
+        }
+    };
+    let bunyip_sso = match lets_chat::oidc::BunyipSsoClient::initialize(bunyip_sso_cfg).await {
+        Ok(c) => {
+            tracing::info!(target: "bunyip_sso", "Bunyip RP initialized");
+            Some(c)
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "bunyip SSO initialize failed; refusing to start");
+            std::process::exit(1);
+        }
+    };
+
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
@@ -130,6 +154,7 @@ async fn main() {
         base_url,
         ice_servers,
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

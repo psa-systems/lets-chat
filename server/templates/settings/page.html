@@ -104,19 +104,6 @@
       <span class="text-content-muted">{{ "settings-email"|t }}</span>
       <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
       <span class="text-xs text-content-muted">{{ "settings-email-help"|t }}</span>
-      {% if email_verification_available && email.is_some() %}
-      <div class="mt-1 flex items-center gap-2 text-xs">
-        {% if email_verified %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-success-surface border border-success-border text-success-surface-content">{{ "settings-email-verified"|t }}</span>
-        {% else %}
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-warning-surface border border-warning-border text-warning-surface-content">{{ "settings-email-unverified"|t }}</span>
-        <button type="submit" form="email-verify-resend" class="text-accent hover:underline">{{ "settings-email-resend"|t }}</button>
-        {% endif %}
-      </div>
-      {% if email_verify_sent %}
-      <p class="text-xs text-success mt-1">{{ "settings-email-verify-sent"|t }}</p>
-      {% endif %}
-      {% endif %}
     </label>
     <label class="block text-sm">
       <span class="text-content-muted">{{ "settings-bio"|t }}</span>
@@ -131,9 +118,6 @@
   </form>
   {% if user.avatar_ext.is_some() %}
   <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
-  {% endif %}
-  {% if email_verification_available %}
-  <form id="email-verify-resend" method="post" action="/verify-email/resend" class="hidden"></form>
   {% endif %}
 
   <form method="post" action="/settings" class="space-y-4">
@@ -286,30 +270,7 @@
     </form>
   </section>
 
-  {% if password_change_available %}
-  <form method="post" action="/settings/password" class="space-y-4">
-    <h2 class="font-medium">{{ "settings-change-password"|t }}</h2>
-    {% if password_changed %}
-    <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-password-updated"|t }}</div>
-    {% endif %}
-    {% if let Some(err) = password_error %}
-    <div class="p-2 bg-danger-surface border border-danger-border text-danger text-sm rounded">{{ err }}</div>
-    {% endif %}
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-current-password"|t }}</span>
-      <input type="password" name="current_password" required class="mt-1 block w-full border rounded px-2 py-1" autocomplete="current-password">
-    </label>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-new-password"|t }}</span>
-      <input type="password" name="new_password" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
-    </label>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-confirm-new-password"|t }}</span>
-      <input type="password" name="new_password_confirm" required minlength="8" class="mt-1 block w-full border rounded px-2 py-1" autocomplete="new-password">
-    </label>
-    <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-update-password"|t }}</button>
-  </form>
-  {% endif %}
+  {# LC-22 cutover: password change form deleted. Bunyip owns credentials. #}
 
   <div class="space-y-3">
     <h2 class="font-medium">{{ "settings-active-sessions"|t }}</h2>
@@ -386,12 +347,8 @@
       {{ "settings-delete-account-explain"|t }}
     </p>
     <form method="post" action="/settings/delete-account" class="space-y-3">
-      {% if password_change_available %}
-      <label class="block text-sm">
-        <span class="text-danger">{{ "settings-current-password"|t }}</span>
-        <input type="password" name="password" required class="mt-1 block w-full border border-danger-border rounded px-2 py-1" autocomplete="current-password">
-      </label>
-      {% endif %}
+      {# LC-22 cutover: no password field. Account deletion just needs the
+         confirm phrase + signed-in session; Bunyip owns credentials. #}
       <label class="block text-sm">
         <span class="text-danger">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
         <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-danger-border rounded px-2 py-1">

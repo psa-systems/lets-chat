@@ -21,7 +21,7 @@ path = "src/lib.rs"
 [features]
 default = ["standalone"]
 standalone = []
-saas = ["dep:jsonwebtoken"]
+saas = []
 
 [dependencies]
 serde = { workspace = true }
@@ -60,7 +60,7 @@ linkify = "0.10"
 # LC-296: Unicode emoji dataset (shortcodes + names) for the composer's
 # :shortcode: autocomplete. Embeds the gemoji set; no runtime fetch.
 emojis = "0.6"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream", "json"] }
 scraper = "0.20"
 url = "2"
 regex = "1"
@@ -117,7 +117,11 @@ tokio-rustls = "0.26"
 webpki-roots = "0.26"
 hmac = { version = "0.12" }
 hex = { version = "0.4" }
-jsonwebtoken = { version = "9", optional = true }
+# LC-22: used by `bunyip_sso` to verify EdDSA `id_token` signatures against
+# bunyip-api's JWKS, and (when the `saas` feature is on) by `saas_auth.rs` for
+# its existing JWT path. Non-feature-gated so the standalone build that runs
+# SSO has access without re-shuffling features.
+jsonwebtoken = "9"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 # Pinned to v2 deliberately. v3+ reshuffled the SimpleFileOptions /
 # ZipWriter API and our backup module is intentionally feature-light
