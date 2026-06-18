@@ -160,12 +160,23 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous
     // slot when the peer reads further.
     let dm_seen_msg: Arc<Mutex<HashMap<i64, i64>>> = Arc::new(Mutex::new(HashMap::new()));
+    // LC-337: the enclave this connection's page is currently viewing, learned
+    // from its `enclave:{id}` SubscribeTopic frame. Every enclave page (room,
+    // landing, settings) sends one on open; Home/DM pages send none. With no
+    // hx-boost, each navigation is a full page load (a fresh connection), so
+    // this is stable for the connection's lifetime. `render_sidebar` reads it
+    // so a whole-sidebar OOB refresh renders the recipient's real context
+    // instead of the DM-only shape, which would otherwise clobber the enclave
+    // sidebar (blank categories + enclave rooms) on mark-all-read / mute /
+    // notify-prefs / room-membership events.
+    let current_enclave: Arc<Mutex<Option<i64>>> = Arc::new(Mutex::new(None));
     let (mut tx, mut rx_ws) = socket.split();
 
     let send_state = state.clone();
     let send_user = user.clone();
     let send_subscribed = subscribed.clone();
     let send_dm_seen = dm_seen_msg.clone();
+    let send_current_enclave = current_enclave.clone();
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
@@ -179,6 +190,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                 evt = rx.recv() => {
                     match evt {
                         Ok(e) => {
+                            // LC-337: snapshot this connection's current enclave
+                            // (Copy) so the guard is not held across the awaits
+                            // in the arms below. Read fresh each event in case
+                            // the SubscribeTopic frame arrived after connect.
+                            let cur_enclave = *send_current_enclave.lock().unwrap();
                             let rendered = match &e {
                                 ChatEvent::NewMessage {
                                     message, client_id, ..
@@ -218,7 +234,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::RoomMemberAdded { user_id, .. }
                                 | ChatEvent::RoomMemberRemoved { user_id, .. } => {
                                     if user_id == &send_user.id {
-                                        render_sidebar(&send_state, &send_user).await
+                                        render_sidebar(&send_state, &send_user, cur_enclave).await
                                     } else {
                                         None
                                     }
@@ -284,7 +300,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::ReadAllChanged { user_id }
                                     if user_id == &send_user.id =>
                                 {
-                                    render_sidebar(&send_state, &send_user).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave).await
                                 }
                                 // LC-239: the viewer saved or cleared a draft.
                                 // broadcast_to_user fans to all their tabs;
@@ -415,7 +431,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::RoomNotifyPrefsChanged { user_id, .. }
                                     if user_id == &send_user.id =>
                                 {
-                                    render_sidebar(&send_state, &send_user).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave).await
                                 }
                                 ChatEvent::DmMuteChanged { .. } => {
                                     // Routed only via
@@ -425,7 +441,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // the sidebar OOB so the peer row's
                                     // greyed-link class and unread-badge
                                     // visibility flip in this tab.
-                                    render_sidebar(&send_state, &send_user).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave).await
                                 }
                                 ChatEvent::SidebarCategoriesChanged { enclave_id } => {
                                     // LC-331: shared category state changed in
@@ -556,6 +572,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // updates for a topic it cannot see).
                             if topic_subscribe_allowed(&state, &user, &topic).await {
                                 state.hub.subscribe_topic(conn_id, &topic);
+                                // LC-337: remember the page's enclave so a
+                                // whole-sidebar OOB refresh (render_sidebar)
+                                // renders this recipient's real context instead
+                                // of the DM-only shape. Only `enclave:{id}`
+                                // topics set it; `user:{id}` / `admin` do not.
+                                if let Some(eid) = topic
+                                    .strip_prefix("enclave:")
+                                    .and_then(|s| s.parse::<i64>().ok())
+                                {
+                                    *current_enclave.lock().unwrap() = Some(eid);
+                                }
                             }
                         }
                         ClientFrame::Typing { room_id } => {
@@ -1994,10 +2021,17 @@ async fn render_enclave_members(
     .ok()
 }
 
-async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
-    // Live OOB sidebar refreshes only fire from DM-creation today, so render
-    // the Home (DM-only) variant. When per-enclave events ship OOB rendering,
-    // they will pass current_enclave themselves.
+async fn render_sidebar(
+    state: &AppState,
+    viewer: &User,
+    current_enclave: Option<i64>,
+) -> Option<String> {
+    // LC-337: render the recipient's CURRENT context, not a hardcoded Home /
+    // DM-only shape. The OOB target `#sidebar` exists on every page, so a
+    // None-enclave render would clobber an enclave viewer's sidebar (blank
+    // categories + enclave rooms) and rename the nav id from
+    // `sidebar-nav-{eid}` to `sidebar-nav`. `current_enclave` comes from the
+    // connection's `enclave:{id}` topic subscription (see handle_socket).
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -2006,7 +2040,9 @@ async fn render_sidebar(state: &AppState, viewer: &User) -> Option<String> {
         sidebar_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
-    ) = super::load_sidebar(state, viewer, None).await.ok()?;
+    ) = super::load_sidebar(state, viewer, current_enclave)
+        .await
+        .ok()?;
     SidebarUpdateFragment {
         user: viewer,
         sidebar_categories: &sidebar_categories,
