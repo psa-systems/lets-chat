@@ -120,6 +120,32 @@
     </div>
   </section>
 
+  {# LC-340: enclave ban-list. Manage-gated; lift a ban (e.g. a Coyote Mode
+     false positive) so the user can rejoin and post again. #}
+  <section class="space-y-3">
+    <h2 class="font-semibold">{{ "enclave-settings-bans-heading"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-bans-help"|t }}</p>
+    {% if bans.is_empty() %}
+    <p class="text-sm text-content-muted italic">{{ "enclave-settings-bans-empty"|t }}</p>
+    {% else %}
+    <ul class="divide-y border rounded">
+      {% for b in bans %}
+      <li class="flex items-center justify-between gap-2 p-2">
+        <div class="min-w-0">
+          <span class="text-sm truncate" title="{{ b.user_id }}">{{ b.label }}</span>
+          <span class="text-xs text-content-muted">
+            {% if let Some(r) = b.reason %}{{ r }} - {% endif %}{{ b.banned_at }}
+          </span>
+        </div>
+        <form method="post" action="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban">
+          <button type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">{{ "enclave-settings-bans-unban"|t }}</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
   <section class="space-y-3">
     <h2 class="font-semibold">{{ "enclave-settings-emojis-heading"|t }}</h2>
     <p class="text-sm text-content-muted">
