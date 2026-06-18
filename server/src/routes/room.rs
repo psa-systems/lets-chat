@@ -293,6 +293,16 @@ pub async fn get_room(
     let viewer_is_room_mod =
         db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role).await?;
 
+    // LC-342: shame-tag prototype - is it on for this enclave, and which of
+    // these messages are default-hidden (community votes past threshold, or a
+    // moderator override)? Both in one batch so the timeline stays O(1) queries.
+    let shame_enabled = db::enclave::shame_tags_enabled_for_room(&state.chat, room_id).await?;
+    let mut shame_hidden_by_message = if shame_enabled {
+        db::shame_tags::hidden_states_for_messages(&state.chat, &message_ids).await?
+    } else {
+        std::collections::HashMap::new()
+    };
+
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     // LC-244: track the previous rendered message's UTC day so a day change
@@ -364,6 +374,8 @@ pub async fn get_room(
             is_follow_up,
             show_unread_divider,
             day_label,
+            shame_enabled,
+            shame_hidden: shame_hidden_by_message.remove(&m.id),
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
             attachments,
@@ -1985,6 +1997,8 @@ pub async fn patch_message(
         show_unread_divider: false,
         // LC-244: per-message render; the client inserts live day dividers.
         day_label: None,
+        shame_enabled: false,
+        shame_hidden: None,
         reply_count,
         parent_id: m.parent_id,
         attachments,
@@ -2101,6 +2115,8 @@ pub async fn get_thread_panel(
         show_unread_divider: false,
         // LC-244: per-message render; the client inserts live day dividers.
         day_label: None,
+        shame_enabled: false,
+        shame_hidden: None,
         reply_count: 0,
         parent_id: None,
         attachments: attachments_by_message
@@ -2170,6 +2186,8 @@ pub async fn get_thread_panel(
             show_unread_divider: false,
             // LC-244: per-message render; the client inserts live day dividers.
             day_label: None,
+            shame_enabled: false,
+            shame_hidden: None,
             reply_count: 0,
             parent_id: r.parent_id,
             attachments,

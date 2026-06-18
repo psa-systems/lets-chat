@@ -1,0 +1,33 @@
+{# LC-342: shame-tag control. Re-rendered in place after each vote / override
+   (hx-target this div). Tag buttons toggle the viewer's vote; managers get
+   force-hide / force-show / clear. #}
+<div id="shame-control-{{ message_id }}" class="p-2 space-y-2 text-xs w-56">
+  <div class="flex flex-wrap gap-1">
+    {% for t in tags %}
+    <button type="button"
+            hx-post="/messages/{{ message_id }}/tags/{{ t.tag }}"
+            hx-target="#shame-control-{{ message_id }}" hx-swap="outerHTML"
+            class="rounded px-2 py-0.5 border border-border {% if t.voted %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface{% endif %}">
+      {{ t.tag }}{% if t.count > 0 %} ({{ t.count }}){% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  {% if can_manage %}
+  <div class="border-t border-border pt-1 flex flex-wrap gap-1">
+    <button type="button"
+            hx-post="/messages/{{ message_id }}/tag-override" hx-vals='{"state":"hide"}'
+            hx-target="#shame-control-{{ message_id }}" hx-swap="outerHTML"
+            class="rounded px-2 py-0.5 border border-border {% if let Some(h) = override_hidden %}{% if h %}bg-danger text-danger-content{% endif %}{% endif %}">{{ "shame-mod-force-hide"|t }}</button>
+    <button type="button"
+            hx-post="/messages/{{ message_id }}/tag-override" hx-vals='{"state":"show"}'
+            hx-target="#shame-control-{{ message_id }}" hx-swap="outerHTML"
+            class="rounded px-2 py-0.5 border border-border {% if let Some(h) = override_hidden %}{% if !h %}bg-success text-success-surface-content{% endif %}{% endif %}">{{ "shame-mod-force-show"|t }}</button>
+    {% if override_hidden.is_some() %}
+    <button type="button"
+            hx-post="/messages/{{ message_id }}/tag-override" hx-vals='{"state":"clear"}'
+            hx-target="#shame-control-{{ message_id }}" hx-swap="outerHTML"
+            class="rounded px-2 py-0.5 border border-border">{{ "shame-mod-clear"|t }}</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
