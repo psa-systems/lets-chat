@@ -13,11 +13,15 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::report::{AdminReportsOob, ReportModal, ReportSubmitted, ReportView};
+use crate::views::report::{ReportModal, ReportSubmitted};
+#[cfg(feature = "standalone")]
+use crate::views::report::{AdminReportsOob, ReportView};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
-/// `display_name` if non-empty, else `username`.
+/// `display_name` if non-empty, else `username`. Only used by the admin
+/// review-queue helpers below, which are `standalone`-only.
+#[cfg(feature = "standalone")]
 fn label_for(rec: &crate::models::user::UserRecord) -> String {
     match rec.display_name.as_deref() {
         Some(n) if !n.trim().is_empty() => n.to_string(),
@@ -25,7 +29,10 @@ fn label_for(rec: &crate::models::user::UserRecord) -> String {
     }
 }
 
-/// Plain-text, whitespace-collapsed, length-bounded excerpt for the queue row.
+/// Plain-text, whitespace-collapsed, length-bounded excerpt for the queue
+/// row. Only used by the admin review-queue helpers below, which are
+/// `standalone`-only.
+#[cfg(feature = "standalone")]
 fn excerpt(body: &str) -> String {
     let collapsed = body.split_whitespace().collect::<Vec<_>>().join(" ");
     let truncated: String = collapsed.chars().take(140).collect();
@@ -129,6 +136,7 @@ pub(crate) fn broadcast_reports_changed(state: &AppState) {
 /// soft-deleted / vanished message renders a placeholder excerpt rather than
 /// dropping the report. Shared by the page handler, the resolve/dismiss
 /// responses, and the WS OOB render.
+#[cfg(feature = "standalone")]
 pub(crate) async fn build_report_views(state: &AppState) -> Result<Vec<ReportView>, AppError> {
     let reports = db::reports::list_open(&state.chat).await?;
     let mut views = Vec::with_capacity(reports.len());
@@ -176,6 +184,7 @@ pub(crate) async fn build_report_views(state: &AppState) -> Result<Vec<ReportVie
 /// Render the report-queue OOB fragment (`#admin-reports-list` + nav badge) for
 /// the acting admin's HTTP response. The same change is broadcast to the topic
 /// for every other admin tab.
+#[cfg(feature = "standalone")]
 pub(crate) async fn render_reports_oob(state: &AppState) -> Result<Html, AppError> {
     let reports = build_report_views(state).await?;
     let open_count = reports.len() as i64;
