@@ -338,6 +338,50 @@ pub async fn is_enclave_banned(
     Ok(row.is_some())
 }
 
+/// LC-340: a row of the enclave ban-list, newest first. `user_id` is raw; the
+/// caller resolves a display label.
+pub struct EnclaveBanRow {
+    pub user_id: String,
+    pub reason: Option<String>,
+    pub banned_at: String,
+}
+
+/// LC-340: list an enclave's bans for the settings UI, newest first.
+pub async fn list_enclave_bans(
+    pool: &SqlitePool,
+    enclave_id: i64,
+) -> Result<Vec<EnclaveBanRow>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT user_id, reason, banned_at FROM enclave_bans \
+         WHERE enclave_id=? ORDER BY banned_at DESC, user_id ASC",
+    )
+    .bind(enclave_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| EnclaveBanRow {
+            user_id: r.get("user_id"),
+            reason: r.get("reason"),
+            banned_at: r.get("banned_at"),
+        })
+        .collect())
+}
+
+/// LC-340: lift an enclave ban. After this the user may rejoin and post again.
+pub async fn unban_from_enclave(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM enclave_bans WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// LC-217: cheap helper for `post_message`'s rate-limit gate. JOINs
 /// `rooms` -> `enclaves` so the caller does not need a separate
 /// "what enclave is this room in" query. Returns `0` when the room is a

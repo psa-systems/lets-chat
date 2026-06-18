@@ -77,6 +77,43 @@ async fn ban_from_enclave_kicks_and_blocks() {
 }
 
 #[tokio::test]
+async fn list_and_unban_round_trip() {
+    let pool = common::chat_pool().await;
+    let eid = enclave(&pool, "E").await;
+    db::enclave::ban_from_enclave(&pool, eid, "bot1", "coyote_mode: cross-room burst")
+        .await
+        .unwrap();
+    db::enclave::ban_from_enclave(&pool, eid, "bot2", "manual")
+        .await
+        .unwrap();
+
+    let bans = db::enclave::list_enclave_bans(&pool, eid).await.unwrap();
+    assert_eq!(bans.len(), 2);
+    // Bans carry their reason; both users are present.
+    let users: Vec<&str> = bans.iter().map(|b| b.user_id.as_str()).collect();
+    assert!(users.contains(&"bot1") && users.contains(&"bot2"));
+    assert!(bans.iter().any(|b| b.reason.as_deref() == Some("manual")));
+
+    db::enclave::unban_from_enclave(&pool, eid, "bot1")
+        .await
+        .unwrap();
+    assert!(!db::enclave::is_enclave_banned(&pool, eid, "bot1")
+        .await
+        .unwrap());
+    assert!(db::enclave::is_enclave_banned(&pool, eid, "bot2")
+        .await
+        .unwrap());
+    let bans = db::enclave::list_enclave_bans(&pool, eid).await.unwrap();
+    assert_eq!(bans.len(), 1);
+    assert_eq!(bans[0].user_id, "bot2");
+
+    // Unbanning a non-banned user is a harmless no-op.
+    db::enclave::unban_from_enclave(&pool, eid, "ghost")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn distinct_room_count_is_window_and_enclave_scoped() {
     let pool = common::chat_pool().await;
     let eid = enclave(&pool, "E").await;

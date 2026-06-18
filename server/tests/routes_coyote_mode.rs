@@ -176,6 +176,82 @@ async fn enclave_ban_blocks_posting() {
 }
 
 #[tokio::test]
+async fn member_cannot_unban() {
+    let t = app().await;
+    db::enclave::ban_from_enclave(&t.chat, 1, &t.member_id, "test")
+        .await
+        .unwrap();
+    let status = send(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        &format!("/enclave/1/bans/{}/unban", t.member_id),
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(
+        db::enclave::is_enclave_banned(&t.chat, 1, &t.member_id)
+            .await
+            .unwrap(),
+        "non-manager unban must not take effect"
+    );
+}
+
+#[tokio::test]
+async fn manager_unban_then_member_can_rejoin_and_post() {
+    let t = app().await;
+    db::enclave::set_public(&t.chat, 1, true).await.unwrap();
+    db::enclave::ban_from_enclave(&t.chat, 1, &t.member_id, "test")
+        .await
+        .unwrap();
+    // Banned -> rejoin refused.
+    let rejoin_blocked = send(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        "/enclaves/discover/1/join",
+        "",
+    )
+    .await;
+    assert_eq!(rejoin_blocked, StatusCode::FORBIDDEN);
+
+    // Manager lifts the ban.
+    let unban = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        &format!("/enclave/1/bans/{}/unban", t.member_id),
+        "",
+    )
+    .await;
+    assert_eq!(unban, StatusCode::SEE_OTHER);
+    assert!(!db::enclave::is_enclave_banned(&t.chat, 1, &t.member_id)
+        .await
+        .unwrap());
+
+    // Unbanned -> can rejoin (regains membership), then post.
+    let rejoin = send(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        "/enclaves/discover/1/join",
+        "",
+    )
+    .await;
+    assert_eq!(rejoin, StatusCode::SEE_OTHER, "unbanned member rejoins");
+    let post = send(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        "/room/1/messages",
+        "body=back",
+    )
+    .await;
+    assert_eq!(post, StatusCode::NO_CONTENT, "rejoined member can post");
+}
+
+#[tokio::test]
 async fn enclave_ban_blocks_rejoin() {
     let t = app().await;
     db::enclave::set_public(&t.chat, 1, true).await.unwrap();

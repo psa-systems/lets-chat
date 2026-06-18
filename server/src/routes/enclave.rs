@@ -103,6 +103,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclave/{id}/share-emojis", post(post_share_emojis))
         .route("/enclave/{id}/rate-limit", post(post_msg_rate_limit))
         .route("/enclave/{id}/coyote-mode", post(post_coyote_mode))
+        .route("/enclave/{id}/bans/{user_id}/unban", post(post_unban))
         .route(
             "/enclave/{id}/invite-code",
             post(post_invite_code).delete(delete_invite_code),
@@ -378,6 +379,18 @@ pub async fn post_coyote_mode(
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_coyote_mode(&state.chat, id, enabled).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+/// LC-340: lift an enclave ban (manager-gated). The user can then rejoin and
+/// post again. Idempotent: unbanning a non-banned user is a no-op redirect.
+pub async fn post_unban(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, target)): Path<(i64, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    db::enclave::unban_from_enclave(&state.chat, id, &target).await?;
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
@@ -700,6 +713,24 @@ pub async fn get_settings(
     let member_views = resolve_member_views(&state, members).await?;
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
 
+    // LC-340: resolve a display label per banned user for the ban-list section.
+    let mut bans: Vec<crate::views::enclave::EnclaveBanView> = Vec::new();
+    for b in db::enclave::list_enclave_bans(&state.chat, id).await? {
+        let label = db::auth::find_user_by_id(&state.auth, &b.user_id)
+            .await?
+            .map(|r| match r.display_name.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => format!("@{}", r.username),
+            })
+            .unwrap_or_else(|| b.user_id.clone());
+        bans.push(crate::views::enclave::EnclaveBanView {
+            user_id: b.user_id,
+            label,
+            reason: b.reason,
+            banned_at: b.banned_at,
+        });
+    }
+
     // LC-83: resolve groups for the enclave alongside their member
     // labels so the settings page can render the CRUD UI without
     // extra fetches per row.
@@ -740,6 +771,7 @@ pub async fn get_settings(
         user: &user,
         enclave: &enclave,
         members: &member_views,
+        bans: &bans,
         groups: &groups,
         emojis: &emojis,
         can_delete,
