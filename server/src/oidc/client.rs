@@ -114,8 +114,11 @@ pub struct BunyipSsoClient {
 struct EdKey {
     kid: Option<String>,
     /// Raw 32-byte Ed25519 public key, base64url-decoded from the JWK `x`
-    /// param.
-    der: Vec<u8>,
+    /// param. Despite the historical field name, this is NOT SPKI-DER:
+    /// `jsonwebtoken`'s `DecodingKey::from_ed_der` stores its input verbatim
+    /// and the eventual `ring::signature::UnparsedPublicKey::new(ED25519, ..)`
+    /// call expects raw 32-byte key material, not SPKI wrapping.
+    raw: Vec<u8>,
 }
 
 impl BunyipSsoClient {
@@ -214,33 +217,31 @@ impl BunyipSsoClient {
         expected_nonce: &str,
     ) -> Result<IdTokenClaims, BunyipSsoError> {
         let kid = peek_kid(token).map_err(BunyipSsoError::Verify)?;
-        let der = self.lookup_key(kid.as_deref()).await;
+        let raw = self.lookup_key(kid.as_deref()).await;
         let issuer = self.discovery.issuer.as_str();
         let aud = &self.config.client_id;
-        match der {
-            Some(der) => {
-                match verify_id_token(token, &der, issuer, aud, expected_nonce) {
-                    Ok(c) => Ok(c),
-                    Err(_) => {
-                        // Refresh JWKS once and retry. Covers the
-                        // bunyip-side key rotation scenario.
-                        self.refresh_jwks().await?;
-                        let der = self
-                            .lookup_key(kid.as_deref())
-                            .await
-                            .ok_or_else(|| BunyipSsoError::Verify("unknown kid".into()))?;
-                        verify_id_token(token, &der, issuer, aud, expected_nonce)
-                            .map_err(BunyipSsoError::Verify)
-                    }
+        match raw {
+            Some(raw) => match verify_id_token(token, &raw, issuer, aud, expected_nonce) {
+                Ok(c) => Ok(c),
+                Err(_) => {
+                    // Refresh JWKS once and retry. Covers the
+                    // bunyip-side key rotation scenario.
+                    self.refresh_jwks().await?;
+                    let raw = self
+                        .lookup_key(kid.as_deref())
+                        .await
+                        .ok_or_else(|| BunyipSsoError::Verify("unknown kid".into()))?;
+                    verify_id_token(token, &raw, issuer, aud, expected_nonce)
+                        .map_err(BunyipSsoError::Verify)
                 }
-            }
+            },
             None => {
                 self.refresh_jwks().await?;
-                let der = self
+                let raw = self
                     .lookup_key(kid.as_deref())
                     .await
                     .ok_or_else(|| BunyipSsoError::Verify("unknown kid".into()))?;
-                verify_id_token(token, &der, issuer, aud, expected_nonce)
+                verify_id_token(token, &raw, issuer, aud, expected_nonce)
                     .map_err(BunyipSsoError::Verify)
             }
         }
@@ -278,9 +279,9 @@ impl BunyipSsoClient {
             Some(k) => keys
                 .iter()
                 .find(|key| key.kid.as_deref() == Some(k))
-                .map(|key| key.der.clone()),
+                .map(|key| key.raw.clone()),
             // No kid in the token header: try the first cached key.
-            None => keys.first().map(|key| key.der.clone()),
+            None => keys.first().map(|key| key.raw.clone()),
         }
     }
 
@@ -315,30 +316,18 @@ async fn fetch_jwks(http: &Client, url: &str) -> Result<Vec<EdKey>, BunyipSsoErr
         let raw = B64URL
             .decode(x.as_bytes())
             .map_err(|e| BunyipSsoError::Jwks(format!("bad x: {e}")))?;
-        let der = ed25519_raw_to_der(&raw);
-        out.push(EdKey { kid: k.kid, der });
+        if raw.len() != 32 {
+            return Err(BunyipSsoError::Jwks(format!(
+                "Ed25519 JWK x is {} bytes; expected 32",
+                raw.len()
+            )));
+        }
+        out.push(EdKey { kid: k.kid, raw });
     }
     if out.is_empty() {
         return Err(BunyipSsoError::Jwks("no EdDSA keys in JWKS".into()));
     }
     Ok(out)
-}
-
-/// `jsonwebtoken`'s `DecodingKey::from_ed_der` wants the
-/// SubjectPublicKeyInfo DER shape. Build it from the raw 32-byte Ed25519
-/// public key per RFC 8410.
-fn ed25519_raw_to_der(raw: &[u8]) -> Vec<u8> {
-    // SEQUENCE(SEQUENCE(OID 1.3.101.112), BIT STRING(0x00 || raw))
-    // Total length is fixed for 32-byte Ed25519 public keys.
-    let mut out = Vec::with_capacity(44);
-    out.extend_from_slice(&[
-        0x30, 0x2a, // SEQUENCE, 42 bytes follow
-        0x30, 0x05, // SEQUENCE, 5 bytes follow
-        0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112 (Ed25519)
-        0x03, 0x21, 0x00, // BIT STRING, 33 bytes, 0 unused bits
-    ]);
-    out.extend_from_slice(raw);
-    out
 }
 
 /// Pull the `kid` from the token's protected header without validating the

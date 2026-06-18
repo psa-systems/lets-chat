@@ -47,14 +47,22 @@ impl AudClaim {
 /// Verify the EdDSA signature + standard claims. The `nonce` argument is the
 /// value the SSO start handler stashed in the `oidc_pending` row; we require
 /// it to match the `nonce` claim in the token to prevent replay.
+///
+/// `jwk_raw` is the raw 32-byte Ed25519 public key as decoded from the JWK
+/// `x` parameter. `jsonwebtoken`'s `DecodingKey::from_ed_der` stores its
+/// input verbatim into the `DecodingKey`, and the eventual
+/// `ring::signature::UnparsedPublicKey::new(ED25519, ..)` call expects raw
+/// 32-byte key material - NOT the SPKI-wrapped DER the function's name
+/// implies. Passing 44-byte SPKI here used to silently signature-fail every
+/// id_token until LC-22 burn-in caught it.
 pub fn verify_id_token(
     token: &str,
-    jwk_der: &[u8],
+    jwk_raw: &[u8],
     expected_issuer: &str,
     expected_audience: &str,
     expected_nonce: &str,
 ) -> Result<IdTokenClaims, String> {
-    let key = DecodingKey::from_ed_der(jwk_der);
+    let key = DecodingKey::from_ed_der(jwk_raw);
     let mut validation = Validation::new(Algorithm::EdDSA);
     validation.set_issuer(&[expected_issuer]);
     // `jsonwebtoken` enforces `aud` membership; we set it to the configured
