@@ -50,6 +50,11 @@ pub struct Enclave {
     /// IN ADDITION to the global cap; the per-enclave cap never relaxes
     /// the global, only tightens it for posts inside this enclave.
     pub msg_rate_limit_burst: u32,
+    /// LC-339: "Coyote Mode" anti-spam. When true, a member who posts in 3+
+    /// distinct rooms of this enclave within <=3 seconds is treated as a bot:
+    /// banned from the enclave (kick + ban-list) and their last-24h messages
+    /// in the enclave's rooms are soft-deleted. Default false.
+    pub coyote_mode: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
