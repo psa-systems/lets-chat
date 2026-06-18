@@ -1,13 +1,12 @@
-#[cfg(feature = "standalone")]
-use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
-use argon2::password_hash::{PasswordHash, PasswordVerifier};
-use argon2::Argon2;
-use askama::Template;
-use axum::extract::State;
+//! LC-22 pure-RP cutover: the auth surface is the SSO shell + logout.
+//!
+//! The local username + password handlers are gone. `routes/bunyip_sso.rs`
+//! mints the session via `db::auth::create_session_with_origin` +
+//! `build_session_cookie` (the same helpers the deleted `post_login` used).
+
+use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use http::header::HeaderMap;
-use http::HeaderValue;
 use serde::Deserialize;
 use time::Duration;
 
@@ -16,46 +15,45 @@ use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::version;
-#[cfg(feature = "standalone")]
-use crate::views::auth::RegisterPage;
-use crate::views::auth::{FormErrors, LoginPage};
+use crate::views::auth::LoginPage;
 use crate::views::{html, Html};
 
-#[derive(Deserialize)]
-pub struct LoginForm {
-    pub username: String,
-    pub password: String,
+#[derive(Debug, Deserialize)]
+pub struct LoginQuery {
+    #[serde(default)]
+    pub sso_error: Option<String>,
 }
 
-#[cfg(feature = "standalone")]
-#[derive(Deserialize)]
-pub struct RegisterForm {
-    pub username: String,
-    pub password: String,
-    pub password_confirm: String,
-    #[serde(default)]
-    pub email: Option<String>,
-    /// LC-94 honeypot. The register form renders a hidden input with
-    /// this name, off-screen and `autocomplete=off`; legit users
-    /// never see it and never fill it in. Bots that auto-fill every
-    /// input populate the field, and the handler rejects the
-    /// submission. Wrapped in `Option` so old clients without the
-    /// field still deserialize cleanly.
-    #[serde(default)]
-    pub website: Option<String>,
-}
-
-pub async fn get_login(State(state): State<AppState>) -> Result<Html, AppError> {
-    let page = build_login_page(&state, None).await?;
+pub async fn get_login(
+    State(state): State<AppState>,
+    Query(q): Query<LoginQuery>,
+) -> Result<Html, AppError> {
+    let sso_error_msg = q.sso_error.as_deref().map(map_sso_error);
+    let host = state
+        .bunyip_sso
+        .as_ref()
+        .map(|c| c.config.issuer.host_str().unwrap_or("Bunyip").to_string())
+        .unwrap_or_else(|| "Bunyip".to_string());
+    let page = build_login_page(&state, sso_error_msg, &host).await?;
     html(&page)
 }
 
-/// Resolve global branding and bake it into a `LoginPage`. Both the
-/// fresh-page handler and the form-error retry path share this so a
-/// failed login retry keeps the same branded chrome.
+fn map_sso_error(code: &str) -> &'static str {
+    match code {
+        "dance" => "Sign-in could not be completed. Please try again.",
+        "op" => "Bunyip rejected the sign-in attempt.",
+        "banned" => "Your account is suspended.",
+        "internal" => "An internal error occurred. Please try again.",
+        _ => "Sign-in failed.",
+    }
+}
+
+/// Resolve global branding and bake it into a `LoginPage`. Now mostly cosmetic
+/// chrome around the SSO button.
 pub(crate) async fn build_login_page<'a>(
     state: &'a AppState,
-    error: Option<&'a str>,
+    sso_error: Option<&'a str>,
+    bunyip_issuer_host: &'a str,
 ) -> Result<LoginPage<'a>, AppError> {
     let branding = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
     let brand_body_html = if branding.login_body.trim().is_empty() {
@@ -64,7 +62,6 @@ pub(crate) async fn build_login_page<'a>(
         crate::views::markdown::render_login_body(&branding.login_body)
     };
     Ok(LoginPage {
-        error,
         asset_version: &state.asset_version,
         app_version: version::VERSION,
         git_hash: version::GIT_HASH,
@@ -72,330 +69,9 @@ pub(crate) async fn build_login_page<'a>(
         brand_logo: branding.logo_upload_id.is_some(),
         brand_heading: branding.login_heading,
         brand_body_html,
+        sso_error,
+        bunyip_issuer_host,
     })
-}
-
-/// LC-151: per-IP throttle shared by the login form and the 2FA / recovery
-/// challenge endpoints, to blunt online password + code brute force. Like the
-/// register limiter it is per-IP, so it is only effective behind a trusted
-/// reverse proxy (`client_ip_for_rate_limit` returns `None` and the check
-/// no-ops otherwise). The operator sets the cap via the `rate_limit_logins`
-/// setting; `0` (default) disables it. All three endpoints share one `Login`
-/// bucket so attempts against the password and the second factor draw from the
-/// same per-IP budget.
-pub(crate) async fn enforce_login_rate_limit(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<(), AppError> {
-    let cap = crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_logins").await;
-    if let Some(ip) = crate::rate_limit::client_ip_for_rate_limit(&state.settings, headers).await {
-        if let crate::rate_limit::Outcome::Deny { retry_after } =
-            state
-                .rate_limits
-                .check(crate::rate_limit::RateLimitKind::Login, &ip, cap)
-        {
-            return Err(AppError::TooManyRequests(
-                format!(
-                    "too many login attempts from this address; retry in {retry_after} seconds"
-                ),
-                retry_after,
-            ));
-        }
-    }
-    Ok(())
-}
-
-pub async fn post_login(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    jar: CookieJar,
-    axum::Form(form): axum::Form<LoginForm>,
-) -> Result<Response, AppError> {
-    enforce_login_rate_limit(&state, &headers).await?;
-    let record = match db::auth::find_user_by_username(&state.auth, &form.username).await? {
-        // LC-73: bots authenticate only via API tokens; the cookie login path
-        // refuses them (same generic error as a wrong password).
-        Some(r) if !r.is_banned && !r.is_bot => r,
-        _ => {
-            return Ok(form_error(
-                &state,
-                &headers,
-                FormPage::Login,
-                "Invalid username or password",
-            ));
-        }
-    };
-
-    if !verify_password(&record.password_hash, &form.password) {
-        return Ok(form_error(
-            &state,
-            &headers,
-            FormPage::Login,
-            "Invalid username or password",
-        ));
-    }
-
-    if record.totp_enabled && state.two_factor_available() {
-        let pending = db::two_factor::create_pending_2fa(&state.auth, &record.id).await?;
-        let cookie =
-            crate::routes::two_factor::build_pending_cookie(state.cookies_secure(), pending);
-        let jar = jar.add(cookie);
-        if is_htmx(&headers) {
-            let mut resp = Response::builder()
-                .status(200)
-                .body(axum::body::Body::empty())
-                .unwrap();
-            resp.headers_mut()
-                .insert("HX-Redirect", HeaderValue::from_static("/login/2fa"));
-            return Ok((jar, resp).into_response());
-        }
-        return Ok((jar, Redirect::to("/login/2fa")).into_response());
-    }
-
-    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
-    let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
-    let token =
-        db::auth::create_session_with_origin(&state.auth, &record.id, ua.as_deref(), ip.as_deref())
-            .await?;
-    crate::routes::login_alerts::spawn_dispatch(&state, record.id.clone(), ua, ip);
-    let cookie = build_session_cookie(state.cookies_secure(), token);
-    let jar = jar.add(cookie);
-
-    if is_htmx(&headers) {
-        let mut resp = Response::builder()
-            .status(200)
-            .body(axum::body::Body::empty())
-            .unwrap();
-        resp.headers_mut()
-            .insert("HX-Redirect", HeaderValue::from_static("/"));
-        Ok((jar, resp).into_response())
-    } else {
-        Ok((jar, Redirect::to("/")).into_response())
-    }
-}
-
-#[cfg(feature = "standalone")]
-pub async fn get_register(State(state): State<AppState>) -> Result<Html, AppError> {
-    let page = RegisterPage {
-        error: None,
-        asset_version: &state.asset_version,
-        app_version: version::VERSION,
-        git_hash: version::GIT_HASH,
-        build_date: version::BUILD_DATE,
-    };
-    html(&page)
-}
-
-#[cfg(feature = "standalone")]
-pub async fn post_register(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    jar: CookieJar,
-    axum::Form(form): axum::Form<RegisterForm>,
-) -> Result<Response, AppError> {
-    // LC-94: honeypot. If the hidden field is populated the request
-    // came from a bot. Return a generic-looking error so the bot
-    // cannot tell it was caught; do not surface a distinct message
-    // (which would let the spammer A/B around the field).
-    let honeypot_on = db::settings::get_setting(&state.settings, "honeypot_enabled")
-        .await?
-        .as_deref()
-        == Some("true");
-    if honeypot_on
-        && form
-            .website
-            .as_deref()
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false)
-    {
-        return Ok(form_error(
-            &state,
-            &headers,
-            FormPage::Register,
-            "Could not create account; please try again",
-        ));
-    }
-
-    // LC-94: per-IP rate limit. Skipped when the cap is 0 (default),
-    // when the request has no extractable client IP (no reverse
-    // proxy upstream), or when the deployment-wide honeypot is the
-    // only defense the operator wants. Each rate-limited 429 still
-    // surfaces a clear error so legitimate retries know to wait.
-    let reg_cap =
-        crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_registrations").await;
-    if let Some(ip) = crate::rate_limit::client_ip_for_rate_limit(&state.settings, &headers).await {
-        if let crate::rate_limit::Outcome::Deny { retry_after } =
-            state
-                .rate_limits
-                .check(crate::rate_limit::RateLimitKind::Register, &ip, reg_cap)
-        {
-            return Err(AppError::TooManyRequests(
-                format!("too many registrations from this address; retry in {retry_after} seconds"),
-                retry_after,
-            ));
-        }
-    }
-
-    let username = form.username.trim();
-    let password = form.password.as_str();
-    if username.len() < 3 || username.len() > 32 {
-        return Ok(form_error(
-            &state,
-            &headers,
-            FormPage::Register,
-            "Username must be 3-32 characters",
-        ));
-    }
-    if password.len() < 8 {
-        return Ok(form_error(
-            &state,
-            &headers,
-            FormPage::Register,
-            "Password must be at least 8 characters",
-        ));
-    }
-    if password != form.password_confirm.as_str() {
-        return Ok(form_error(
-            &state,
-            &headers,
-            FormPage::Register,
-            "Passwords do not match",
-        ));
-    }
-
-    let email = form
-        .email
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    if let Some(ref e) = email {
-        if e.chars().count() > 254 || !looks_like_email_register(e) {
-            return Ok(form_error(
-                &state,
-                &headers,
-                FormPage::Register,
-                "Email address is not valid",
-            ));
-        }
-    }
-
-    let password_hash = match hash_password(password) {
-        Ok(h) => h,
-        Err(e) => return Err(AppError::Internal(format!("hash: {e}"))),
-    };
-
-    // When 2FA enforcement is on for this deployment, defer the actual user
-    // creation until after the TOTP code is verified. Otherwise an abandoned
-    // setup leaves a fully-registered account behind that squats the
-    // username and (if SMTP is wired) has already fired a verification
-    // email - both surprising for the operator and the prospective user.
-    if state.two_factor_available() {
-        return crate::routes::two_factor::stash_pending_registration(
-            &state,
-            &headers,
-            jar,
-            username,
-            email.as_deref(),
-            &password_hash,
-        )
-        .await;
-    }
-
-    let user_id = match db::auth::create_user(&state.auth, username, &password_hash).await {
-        Ok(id) => id,
-        Err(e) => {
-            if is_unique_violation(&e) {
-                return Ok(form_error(
-                    &state,
-                    &headers,
-                    FormPage::Register,
-                    "Username taken",
-                ));
-            }
-            return Err(AppError::Internal(format!("register: {e}")));
-        }
-    };
-
-    if let Some(ref e) = email {
-        if let Err(err) = db::auth::set_user_email(&state.auth, &user_id, Some(e)).await {
-            if is_unique_violation(&err) {
-                // Roll back the freshly created user so the username does not
-                // get squatted by a registration attempt that ultimately
-                // failed validation.
-                let _ = db::auth::delete_user(&state.auth, &user_id).await;
-                return Ok(form_error(
-                    &state,
-                    &headers,
-                    FormPage::Register,
-                    "That email address is already in use",
-                ));
-            }
-            return Err(AppError::Internal(format!("set_user_email: {err}")));
-        }
-
-        // Kick off a verification email when SMTP is configured. The send
-        // is fire-and-forget: registration must succeed even if the relay
-        // is unreachable, and the user can resend from settings later.
-        if state.mail_available() {
-            crate::routes::email_verification::spawn_dispatch(&state, user_id.clone(), e.clone());
-        }
-    }
-
-    // Apply the admin-configured default for new users. The migration
-    // defaults `notify_email_digest_enabled` to 0; this hook overrides
-    // it when the operator has flipped `default_notify_email_digest`.
-    // Failure to apply is logged but not fatal: the worst case is the
-    // user has to opt in manually.
-    if let Ok(Some(ref v)) =
-        db::settings::get_setting(&state.settings, "default_notify_email_digest").await
-    {
-        if v == "1" {
-            if let Err(e) =
-                db::auth::set_notify_email_digest_enabled(&state.auth, &user_id, true).await
-            {
-                tracing::warn!(error = %e, user_id = %user_id, "default digest opt-in apply failed");
-            }
-        }
-    }
-
-    let promoted = promote_first_user_to_admin(&state, &user_id).await?;
-
-    if promoted {
-        if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
-            tracing::warn!(error = %e, "enclave backfill after first registration failed");
-        }
-    }
-
-    let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
-    let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
-    let token =
-        db::auth::create_session_with_origin(&state.auth, &user_id, ua.as_deref(), ip.as_deref())
-            .await?;
-    // Pre-seed the device fingerprint so the first login from the same
-    // browser does not fire a "new device" alert. The user just created
-    // the account from this device - alerting them about it is noise.
-    let _ = db::login_alerts::check_and_record_device(
-        &state.auth,
-        &user_id,
-        ua.as_deref(),
-        ip.as_deref(),
-    )
-    .await;
-    let cookie = build_session_cookie(state.cookies_secure(), token);
-    let jar = jar.add(cookie);
-
-    if is_htmx(&headers) {
-        let mut resp = Response::builder()
-            .status(200)
-            .body(axum::body::Body::empty())
-            .unwrap();
-        resp.headers_mut()
-            .insert("HX-Redirect", HeaderValue::from_static("/"));
-        Ok((jar, resp).into_response())
-    } else {
-        Ok((jar, Redirect::to("/")).into_response())
-    }
 }
 
 pub async fn get_logout(
@@ -412,7 +88,8 @@ pub async fn get_logout(
     Ok((jar, Redirect::to("/login")).into_response())
 }
 
-pub(super) fn build_session_cookie(secure: bool, token: String) -> Cookie<'static> {
+#[cfg_attr(not(feature = "standalone"), allow(dead_code))]
+pub(crate) fn build_session_cookie(secure: bool, token: String) -> Cookie<'static> {
     let mut c = Cookie::new(SESSION_COOKIE, token);
     c.set_http_only(true);
     c.set_secure(secure);
@@ -420,135 +97,4 @@ pub(super) fn build_session_cookie(secure: bool, token: String) -> Cookie<'stati
     c.set_path("/");
     c.set_max_age(Duration::days(30));
     c
-}
-
-pub(super) fn is_htmx(headers: &HeaderMap) -> bool {
-    headers.get("HX-Request").is_some()
-}
-
-enum FormPage {
-    Login,
-    #[cfg(feature = "standalone")]
-    Register,
-}
-
-fn form_error(state: &AppState, headers: &HeaderMap, page: FormPage, msg: &str) -> Response {
-    let body = if is_htmx(headers) {
-        FormErrors { error: Some(msg) }.render()
-    } else {
-        match page {
-            FormPage::Login => LoginPage {
-                error: Some(msg),
-                asset_version: &state.asset_version,
-                app_version: version::VERSION,
-                git_hash: version::GIT_HASH,
-                build_date: version::BUILD_DATE,
-                // The retry path is sync (called from form-validation
-                // sites that do not await) so we cannot resolve
-                // branding here. The middleware still injects the
-                // brand CSS vars; the logo + heading + body render as
-                // their unbranded defaults on this retry surface.
-                brand_logo: false,
-                brand_heading: String::new(),
-                brand_body_html: String::new(),
-            }
-            .render(),
-            #[cfg(feature = "standalone")]
-            FormPage::Register => RegisterPage {
-                error: Some(msg),
-                asset_version: &state.asset_version,
-                app_version: version::VERSION,
-                git_hash: version::GIT_HASH,
-                build_date: version::BUILD_DATE,
-            }
-            .render(),
-        }
-    };
-    let body = match body {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to render form_error template");
-            return AppError::Internal(format!("askama: {e}")).into_response();
-        }
-    };
-    (
-        http::StatusCode::UNPROCESSABLE_ENTITY,
-        axum::response::Html(body),
-    )
-        .into_response()
-}
-
-/// Promote a freshly created user to admin if and only if they are the first
-/// user in the system. The check + update is wrapped in a single transaction
-/// to avoid a race where two concurrent registrations both observe a count
-/// past 1 and neither bootstraps the admin.
-#[cfg(feature = "standalone")]
-async fn promote_first_user_to_admin(state: &AppState, user_id: &str) -> Result<bool, AppError> {
-    let mut tx = state.auth.begin().await?;
-    // LC-73: bots are excluded so a bot registration cannot consume the
-    // first-user-is-admin slot (and a bot can never become admin this way).
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_bot = 0")
-        .fetch_one(&mut *tx)
-        .await?;
-    let promoted = count == 1;
-    if promoted {
-        if let Err(e) = sqlx::query("UPDATE users SET role = 'admin' WHERE id = ?")
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await
-        {
-            tracing::error!(error = %e, user_id, "failed to promote first user to admin");
-            return Err(AppError::Internal(format!("promote admin: {e}")));
-        }
-    }
-    tx.commit().await?;
-    Ok(promoted)
-}
-
-#[cfg(feature = "standalone")]
-fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    Ok(argon2
-        .hash_password(password.as_bytes(), &salt)?
-        .to_string())
-}
-
-fn verify_password(hash: &str, password: &str) -> bool {
-    let parsed = match PasswordHash::new(hash) {
-        Ok(p) => p,
-        Err(_) => return false,
-    };
-    Argon2::default()
-        .verify_password(password.as_bytes(), &parsed)
-        .is_ok()
-}
-
-#[cfg(feature = "standalone")]
-pub(super) fn is_unique_violation(err: &sqlx::Error) -> bool {
-    matches!(err, sqlx::Error::Database(db_err) if db_err.is_unique_violation())
-}
-
-/// Mirrors `settings::looks_like_email`. Duplicated here to keep the
-/// standalone auth flow free of cross-module dependencies on the settings
-/// route. Loose syntactic check, not RFC validation.
-#[cfg(feature = "standalone")]
-fn looks_like_email_register(s: &str) -> bool {
-    if s.chars().any(|c| c.is_whitespace()) {
-        return false;
-    }
-    let mut parts = s.split('@');
-    let local = match parts.next() {
-        Some(l) if !l.is_empty() => l,
-        _ => return false,
-    };
-    let domain = match parts.next() {
-        Some(d) if !d.is_empty() => d,
-        _ => return false,
-    };
-    if parts.next().is_some() {
-        return false;
-    }
-    let _ = local;
-    domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }

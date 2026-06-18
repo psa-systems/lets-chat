@@ -6,6 +6,7 @@ use crate::auth::LastSeenLedger;
 use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
 use crate::mail::Mailer;
+use crate::oidc::BunyipSsoClient;
 use crate::push::{ApnsClient, FcmClient, PushClient};
 use crate::rate_limit::RateLimits;
 use crate::ws::hub::Hub;
@@ -61,6 +62,17 @@ pub struct AppState {
     /// LC-94: per-process rate-limit counters. Shared via `Clone` so all
     /// handler tasks see the same DashMap.
     pub rate_limits: RateLimits,
+    /// LC-22 pure-RP cutover: the Bunyip SSO client. Mandatory at startup
+    /// in production: `main.rs` panics when the four `LETS_CHAT_BUNYIP_SSO_*`
+    /// env vars are missing or bunyip-api is unreachable for discovery.
+    ///
+    /// Typed `Option<...>` for tests: integration test binaries construct
+    /// `AppState` by hand and do not exercise the SSO callback, so `None`
+    /// keeps them building without standing up a mock OP. Route handlers
+    /// `.expect("bunyip_sso required")` because production guarantees it.
+    /// See `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md`
+    /// §4.2.
+    pub bunyip_sso: Option<Arc<BunyipSsoClient>>,
 }
 
 impl AppState {
@@ -90,5 +102,13 @@ impl AppState {
     /// stick.
     pub fn cookies_secure(&self) -> bool {
         self.base_url.starts_with("https://")
+    }
+    /// LC-22: the configured Bunyip RP client. Panics in tests that try to
+    /// reach the SSO surface without standing one up; production guarantees
+    /// Some via main.rs startup.
+    pub fn bunyip_sso_client(&self) -> &Arc<BunyipSsoClient> {
+        self.bunyip_sso
+            .as_ref()
+            .expect("bunyip_sso required; main.rs panics when env is missing")
     }
 }

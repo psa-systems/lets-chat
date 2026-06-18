@@ -55,6 +55,7 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -111,6 +112,7 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     let app = routes::build_router(state);
     (app, s1, id1, s2, id2)

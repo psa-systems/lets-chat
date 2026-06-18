@@ -4,45 +4,25 @@
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
-  <form
-    method="post"
-    action="/login"
-    hx-post="/login"
-    hx-target="#form-errors"
-    hx-target-4*="#form-errors"
-    hx-swap="innerHTML"
-    class="card w-full max-w-sm space-y-4 p-6"
-  >
-    {# LC-96 brand block: logo (if set) + operator heading + body.
-       Each section is independently optional so a deployment can
-       set just a logo, just a heading, or any combination. #}
+  <div class="card w-full max-w-sm space-y-4 p-6 text-center">
     {% if brand_logo %}
     <div class="flex justify-center">
       <img src="/branding/logo?v={{ asset_version }}" alt="Logo"
            class="max-h-16 max-w-full object-contain">
     </div>
     {% endif %}
-    <h1 class="text-xl font-semibold text-center">
+    <h1 class="text-xl font-semibold">
       {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}{{ "login-title"|t }}{% endif %}
     </h1>
     {% if !brand_body_html.is_empty() %}
-    <div class="text-sm text-content-muted prose prose-sm max-w-none">{{ brand_body_html|safe }}</div>
+    <div class="text-sm text-content-muted prose prose-sm max-w-none text-left">{{ brand_body_html|safe }}</div>
     {% endif %}
-    <div id="form-errors">
-      {% include "auth/form_errors.html" %}
-    </div>
-    <label class="block">
-      <span class="text-sm">{{ "login-username"|t }}</span>
-      <input name="username" required class="input mt-1">
-    </label>
-    <label class="block">
-      <span class="text-sm">{{ "login-password"|t }}</span>
-      <input type="password" name="password" required class="input mt-1">
-    </label>
-    <button class="btn btn-primary w-full"><span class="htmx-indicator lc-spinner" aria-hidden="true"></span>{{ "login-submit"|t }}</button>
-    <p class="text-sm text-center"><a href="/forgot" class="text-accent hover:underline">{{ "login-forgot-link"|t }}</a></p>
-    <p class="text-sm text-center">{{ "login-no-account"|t }} <a href="/register" class="text-accent hover:underline">{{ "login-register-link"|t }}</a>.</p>
-    <p class="text-xs text-center text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
-  </form>
+    {% if let Some(err) = sso_error %}
+    <div class="text-sm text-red-600" role="alert">{{ err }}</div>
+    {% endif %}
+    <a href="/auth/bunyip/start" class="btn btn-primary w-full">Sign in with Bunyip</a>
+    <p class="text-xs text-content-subtle">You will be redirected to {{ bunyip_issuer_host }} to sign in.</p>
+    <p class="text-xs text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
+  </div>
 </main>
 {% endblock %}

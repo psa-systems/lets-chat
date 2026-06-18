@@ -85,6 +85,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     Fixture {
         state,
