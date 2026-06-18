@@ -189,6 +189,7 @@ room-msg-save = Save
 room-msg-remind = Remind
 room-msg-mark-unread = Mark unread
 room-msg-forward = Forward
+room-msg-report = Report
 room-msg-edit = Edit
 room-msg-delete = Delete
 room-msg-delete-confirm = Delete this message?
@@ -196,6 +197,34 @@ room-msg-quote-deleted = (quoted message was deleted)
 room-msg-seen = Seen
 # LC-302: accessible name for the one-tap quick-reaction hover bar.
 room-quick-react-aria = Quick reactions
+
+## Report (LC-334): report-a-message modal + site-admin review queue.
+report-title = Report message
+report-close = Close
+report-intro = Tell the moderators what's wrong with this message.
+report-category-legend = Reason
+report-category-spam = Spam
+report-category-harassment = Harassment
+report-category-inappropriate = Inappropriate content
+report-category-other = Other
+report-note-label = Additional details
+report-note-placeholder = Add any details (optional)
+report-cancel = Cancel
+report-submit = Submit report
+report-thanks = Thanks. The moderators have been notified.
+report-done = Done
+report-queue-title = Reports
+report-queue-heading = Reported messages
+report-queue-empty = No open reports.
+report-jump = Jump to message
+report-row-author = Author:
+report-row-in = in
+report-row-note = Note:
+report-row-reporter = Reported by
+report-action-resolve = Resolve
+report-action-dismiss = Dismiss
+report-message-deleted = (message deleted)
+report-room-dm = Direct message
 
 ## Forward (LC-278)
 room-forward-title = Forward message
