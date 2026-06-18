@@ -93,6 +93,7 @@ async fn app_with_user() -> TestApp {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -294,22 +295,9 @@ async fn delete_wipes_user_and_chat_rows() {
     );
 }
 
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn delete_rejects_wrong_password() {
-    let t = app_with_user().await;
-    let (status, body, _) =
-        post_delete(&t.app, &t.session, &form("nope", "delete my account")).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let text = String::from_utf8_lossy(&body);
-    assert!(text.contains("incorrect"), "body: {text}");
-    let still: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE id = ?")
-        .bind(&t.user_id)
-        .fetch_optional(&t.auth)
-        .await
-        .unwrap();
-    assert!(still.is_some(), "user must remain on wrong password");
-}
+// LC-22 cutover: the wrong-password test is gone. Account delete is now
+// session-cookie + confirm-phrase only; Bunyip owns credentials and there is
+// no password to re-confirm.
 
 #[tokio::test]
 async fn delete_rejects_wrong_phrase() {

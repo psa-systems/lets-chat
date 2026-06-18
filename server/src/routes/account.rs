@@ -16,32 +16,25 @@ const CONFIRM_PHRASE: &str = "delete my account";
 #[derive(Deserialize)]
 pub struct DeleteAccountForm {
     #[serde(default)]
-    pub password: Option<String>,
-    #[serde(default)]
     pub confirm_phrase: String,
 }
 
 /// `POST /settings/delete-account` - permanently delete the signed-in user.
 ///
-/// Self-serve account deletion. The caller must:
-/// 1. Type the literal phrase `delete my account` so a stray click on the
-///    button cannot wipe the account.
-/// 2. On standalone, re-enter their password so a stolen session cookie
-///    alone cannot complete the deletion. The saas build skips this step
-///    because authentication is delegated to the upstream IdP.
+/// LC-22 cutover: the password re-confirmation step is gone (no password
+/// exists). The caller must still type the literal phrase `delete my account`
+/// so a stray click cannot wipe the account. If an operator wants stronger
+/// reconfirmation, that work is upstream at Bunyip's session policy.
 ///
 /// The handler refuses if the caller is the sole `owner` of an enclave
 /// that still has other members - they must transfer ownership or delete
-/// the enclave first, otherwise that enclave would be left with no owner
-/// row and the unique partial index would prevent another owner from
-/// being installed without manual intervention.
+/// the enclave first.
 ///
-/// On success the user row is removed (auth.db FKs cascade sessions,
-/// blocks, password-reset tokens, email-verification tokens and
-/// pending_2fa rows), all chat.db rows belonging to or referencing the
-/// user are purged, the avatar file is removed from disk, the session
-/// cookie is cleared, and `ChatEvent::UserBanned` is broadcast so any
-/// other connected clients drop the user from their UI.
+/// On success the user row is removed (auth.db FKs cascade sessions /
+/// blocks / etc.), all chat.db rows belonging to or referencing the user
+/// are purged, the avatar file is removed from disk, the session cookie
+/// is cleared, and `ChatEvent::UserBanned` is broadcast so any other
+/// connected clients drop the user from their UI.
 pub async fn post_delete_account(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -52,26 +45,6 @@ pub async fn post_delete_account(
         return Err(AppError::BadRequest(format!(
             "Type \"{CONFIRM_PHRASE}\" to confirm."
         )));
-    }
-
-    #[cfg(feature = "standalone")]
-    {
-        let password = form.password.as_deref().unwrap_or("");
-        if password.is_empty() {
-            return Err(AppError::BadRequest(
-                "Enter your current password to confirm.".to_string(),
-            ));
-        }
-        let record = db::auth::find_user_by_id(&state.auth, &user.id)
-            .await?
-            .ok_or(AppError::Unauthorized)?;
-        if !verify_password(&record.password_hash, password) {
-            return Err(AppError::BadRequest("Password is incorrect.".to_string()));
-        }
-    }
-    #[cfg(not(feature = "standalone"))]
-    {
-        let _ = form.password;
     }
 
     if would_orphan_admin_role(&state.auth, &user).await? {
@@ -318,15 +291,3 @@ async fn purge_user_auth(auth: &SqlitePool, user_id: &str) -> Result<(), AppErro
     Ok(())
 }
 
-#[cfg(feature = "standalone")]
-fn verify_password(hash: &str, password: &str) -> bool {
-    use argon2::password_hash::{PasswordHash, PasswordVerifier};
-    use argon2::Argon2;
-    let parsed = match PasswordHash::new(hash) {
-        Ok(p) => p,
-        Err(_) => return false,
-    };
-    Argon2::default()
-        .verify_password(password.as_bytes(), &parsed)
-        .is_ok()
-}

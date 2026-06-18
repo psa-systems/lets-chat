@@ -5,19 +5,31 @@ use sqlx::{Row, SqlitePool};
 use crate::models::invite::InviteCode;
 use crate::models::user::UserRecord;
 
+/// Legacy test-only helper: writes a `users` row with a synthesized unique
+/// `bunyip_sub` placeholder so the LC-22 unique constraint stays satisfied.
+/// Production code paths use `create_user_from_bunyip` with a real Bunyip sub.
+///
+/// LC-22 cutover: the password-path `post_register` handler is gone. This
+/// helper survives because ~20 test files construct users via this signature;
+/// rewriting every call site is mechanical follow-up work. The
+/// `password_hash` argument is ignored at runtime (the column is set to an
+/// empty sentinel) but kept in the signature so test files compile unchanged.
 pub async fn create_user(
     pool: &SqlitePool,
     username: &str,
-    password_hash: &str,
+    _password_hash: &str,
 ) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
+    // Synthesize a unique bunyip_sub placeholder so multiple test users in
+    // one pool do not collide on the UNIQUE constraint added in 0031.
+    let placeholder = format!("test-{id}");
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, last_active_at) \
-         VALUES (?, ?, ?, datetime('now'))",
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, last_active_at) \
+         VALUES (?, ?, '', ?, datetime('now'))",
     )
     .bind(&id)
     .bind(username)
-    .bind(password_hash)
+    .bind(&placeholder)
     .execute(pool)
     .await?;
     Ok(id)
@@ -27,12 +39,16 @@ pub async fn create_user(
 /// it: bots authenticate only via API tokens). Returns the new user id.
 pub async fn create_bot(pool: &SqlitePool, username: &str) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
+    // Bots get a synthesized placeholder bunyip_sub for the same reason
+    // create_user does (UNIQUE constraint, no real Bunyip identity).
+    let placeholder = format!("bot-{id}");
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, is_bot, last_active_at) \
-         VALUES (?, ?, '', 1, datetime('now'))",
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, is_bot, last_active_at) \
+         VALUES (?, ?, '', ?, 1, datetime('now'))",
     )
     .bind(&id)
     .bind(username)
+    .bind(&placeholder)
     .execute(pool)
     .await?;
     Ok(id)
@@ -1370,3 +1386,76 @@ pub async fn list_blocked_users(
     .await?;
     Ok(rows.into_iter().map(row_to_user_record).collect())
 }
+
+// =====================================================================
+// LC-22: Bunyip SSO resolver helpers (pure-RP cutover).
+// =====================================================================
+
+/// Returns the lets-chat `users.id` whose `bunyip_sub` column matches the
+/// supplied verified `sub` claim. `None` on no match.
+pub async fn find_user_id_by_bunyip_sub(
+    pool: &SqlitePool,
+    sub: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE bunyip_sub = ?")
+        .bind(sub)
+        .fetch_optional(pool)
+        .await
+}
+
+/// LC-22: lookup by id with the moderation flags the callback resolver
+/// needs. Returns banned + bot booleans alongside the id, so the callback
+/// can short-circuit a banned account or refuse to attach a sub to a bot.
+pub async fn get_user_auth_flags_by_bunyip_sub(
+    pool: &SqlitePool,
+    sub: &str,
+) -> Result<Option<(String, bool, bool)>, sqlx::Error> {
+    let row: Option<(String, i64, i64)> = sqlx::query_as(
+        "SELECT id, is_banned, COALESCE(is_bot, 0) FROM users WHERE bunyip_sub = ?",
+    )
+    .bind(sub)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(id, banned, bot)| (id, banned != 0, bot != 0)))
+}
+
+/// LC-22: create a fresh lets-chat user row from a verified Bunyip identity.
+///
+/// `password_hash` is written as the empty string (the cutover sentinel - see
+/// migration 0032). `bunyip_sub` is NOT NULL UNIQUE post-cutover.
+///
+/// First-user-to-admin promotion is handled outside this helper because the
+/// count-then-promote sequence needs the parent transaction; see
+/// `routes::bunyip_sso::resolve_or_provision_user`.
+pub async fn create_user_from_bunyip(
+    pool: &SqlitePool,
+    username: &str,
+    bunyip_sub: &str,
+    display_name: Option<&str>,
+    email: Option<&str>,
+) -> Result<String, sqlx::Error> {
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, display_name, email, last_active_at) \
+         VALUES (?, ?, '', ?, ?, ?, datetime('now'))",
+    )
+    .bind(&id)
+    .bind(username)
+    .bind(bunyip_sub)
+    .bind(display_name)
+    .bind(email)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+/// LC-22: returns true when the username is already taken (case-insensitive
+/// per the `users.username COLLATE NOCASE` unique constraint).
+pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, sqlx::Error> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE")
+        .bind(username)
+        .fetch_one(pool)
+        .await?;
+    Ok(n > 0)
+}
+

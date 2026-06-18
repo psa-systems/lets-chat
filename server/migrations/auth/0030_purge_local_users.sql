@@ -1,0 +1,11 @@
+-- LC-22: hard cut. Every pre-cutover user has an empty bunyip_sub (the
+-- DEFAULT '' added by 0029); deleting them retires the password-auth path in
+-- one stroke. Sessions / messages / memberships authored by those users are
+-- left as orphan rows; if a pre-cutover user comes back via Bunyip the
+-- operator manually re-grafts their identity onto the orphan data (see
+-- docs/lets-chat/sso/bunyip-only/05-rollout-and-testing.md §5.1 step 7).
+--
+-- Forward-only: the snapshot taken before this migration is the only path to
+-- restoring the deleted rows. See §5.2 of the same doc for the rollback
+-- procedure.
+DELETE FROM users WHERE bunyip_sub = '';

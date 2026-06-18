@@ -5,72 +5,23 @@ use askama::Template;
 #[allow(unused_imports)]
 use crate::i18n::filters;
 
+/// LC-22 cutover: the login page is the "Sign in with Bunyip" shell. No form,
+/// no fields. Existing branding fields stay so operators retain their custom
+/// logo / heading / body markdown over the SSO button.
 #[derive(Template)]
 #[template(path = "auth/login.html")]
 pub struct LoginPage<'a> {
-    pub error: Option<&'a str>,
     pub asset_version: &'a str,
     pub app_version: &'a str,
     pub git_hash: &'a str,
     pub build_date: &'a str,
-    /// LC-96: True when the global branding row has a logo set; the
-    /// template renders `<img src="/branding/logo">` only in that
-    /// case to avoid a guaranteed 404 + broken-image icon.
     pub brand_logo: bool,
-    /// LC-96: operator-supplied heading shown above the form. Empty
-    /// when unset; the template falls back to the default "Sign in".
     pub brand_heading: String,
-    /// LC-96: operator-supplied body rendered as restricted markdown
-    /// (no code blocks). Already escaped + sanitized at this point.
-    /// Empty when unset.
     pub brand_body_html: String,
-}
-
-#[derive(Template)]
-#[template(path = "auth/register.html")]
-pub struct RegisterPage<'a> {
-    pub error: Option<&'a str>,
-    pub asset_version: &'a str,
-    pub app_version: &'a str,
-    pub git_hash: &'a str,
-    pub build_date: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "auth/form_errors.html")]
-pub struct FormErrors<'a> {
-    pub error: Option<&'a str>,
-}
-
-#[derive(Template)]
-#[template(path = "auth/forgot.html")]
-pub struct ForgotPage<'a> {
-    pub error: Option<&'a str>,
-    pub notice: Option<&'a str>,
-    pub asset_version: &'a str,
-    pub app_version: &'a str,
-    pub git_hash: &'a str,
-    pub build_date: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "auth/reset.html")]
-pub struct ResetPage<'a> {
-    pub token: &'a str,
-    pub error: Option<&'a str>,
-    pub asset_version: &'a str,
-    pub app_version: &'a str,
-    pub git_hash: &'a str,
-    pub build_date: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "auth/verify_email_result.html")]
-pub struct VerifyEmailResultPage<'a> {
-    pub notice: Option<&'a str>,
-    pub error: Option<&'a str>,
-    pub asset_version: &'a str,
-    pub app_version: &'a str,
-    pub git_hash: &'a str,
-    pub build_date: &'a str,
+    /// LC-22: optional `?sso_error=<reason>` query parameter rendered as a
+    /// brief banner above the button when an earlier dance failed.
+    pub sso_error: Option<&'a str>,
+    /// LC-22: host portion of the configured Bunyip issuer, rendered in the
+    /// "you will be redirected to ..." note under the button.
+    pub bunyip_issuer_host: &'a str,
 }

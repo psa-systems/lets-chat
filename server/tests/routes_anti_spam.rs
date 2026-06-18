@@ -76,6 +76,7 @@ async fn app() -> TestApp {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -223,101 +224,10 @@ async fn message_at_length_cap_is_accepted() {
 
 // ── Honeypot + register ───────────────────────────────────────────────────
 
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn honeypot_filled_rejects_registration() {
-    let t = app().await;
-    // No 2FA secret in this state: registration completes inline.
-    // The honeypot is on by default; submitting with `website=botpost`
-    // should produce a generic error and NOT create a user.
-    let (status, _body) = send_with_ip_full(
-        &t.app,
-        "1.2.3.4",
-        Method::POST,
-        "/register",
-        "username=botuser&password=longenough&password_confirm=longenough&website=botpost",
-    )
-    .await;
-    // `form_error` returns 422 UNPROCESSABLE_ENTITY with the inline
-    // error page; the bot just sees a generic failure, no hint that
-    // its honeypot fill was what tripped the gate.
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        db::auth::find_user_by_username(&t.auth, "botuser")
-            .await
-            .unwrap()
-            .is_none(),
-        "honeypot must not have allowed user creation"
-    );
-}
-
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn register_rate_limit_returns_429_after_cap() {
-    let t = app().await;
-    db::settings::set_setting(&t.settings, "rate_limit_registrations", "2")
-        .await
-        .unwrap();
-    // Two requests pass (regardless of whether they succeed or fail
-    // validation). Third from the same IP gets 429.
-    for i in 0..2 {
-        let body = format!("username=u{i}&password=longenough&password_confirm=longenough");
-        let status = send_with_ip(&t.app, "5.5.5.5", Method::POST, "/register", &body).await;
-        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
-    }
-    let body = "username=u3&password=longenough&password_confirm=longenough";
-    let status = send_with_ip(&t.app, "5.5.5.5", Method::POST, "/register", body).await;
-    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
-    // A different IP is unaffected.
-    let status = send_with_ip(&t.app, "5.5.5.6", Method::POST, "/register", body).await;
-    assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
-}
-
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn login_rate_limit_returns_429_after_cap() {
-    let t = app().await;
-    db::settings::set_setting(&t.settings, "rate_limit_logins", "3")
-        .await
-        .unwrap();
-    // Wrong-password attempts still count: the limit is checked before the
-    // password verify, so it throttles brute force regardless of outcome.
-    let body = "username=member&password=wrong";
-    for _ in 0..3 {
-        let status = send_with_ip(&t.app, "7.7.7.7", Method::POST, "/login", body).await;
-        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
-    }
-    let status = send_with_ip(&t.app, "7.7.7.7", Method::POST, "/login", body).await;
-    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
-    // A different IP is unaffected.
-    let status = send_with_ip(&t.app, "7.7.7.8", Method::POST, "/login", body).await;
-    assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
-}
-
-#[cfg(feature = "standalone")]
-#[tokio::test]
-async fn login_and_2fa_challenge_share_one_per_ip_budget() {
-    let t = app().await;
-    db::settings::set_setting(&t.settings, "rate_limit_logins", "2")
-        .await
-        .unwrap();
-    // Burn the per-IP login budget on the password form.
-    for _ in 0..2 {
-        send_with_ip(
-            &t.app,
-            "9.9.9.9",
-            Method::POST,
-            "/login",
-            "username=member&password=wrong",
-        )
-        .await;
-    }
-    // The 2FA challenge endpoint draws from the same Login bucket, so an attempt
-    // from the same IP is now throttled - and the rate-limit check runs before
-    // the pending-cookie check, so it 429s even with no valid challenge.
-    let status = send_with_ip(&t.app, "9.9.9.9", Method::POST, "/login/2fa", "code=000000").await;
-    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
-}
+// LC-22 cutover: registration / login / 2FA rate-limit tests deleted with the
+// password path. The site-wide rate_limit_messages knob (exercised above) is
+// the only anti-spam surface lets-chat still owns; per-IP login throttling is
+// upstream at Bunyip.
 
 // LC-94 follow-up TODO: end-to-end /forgot rate-limit test needs a
 // stub `Mailer` in the test AppState. The current AppState literal

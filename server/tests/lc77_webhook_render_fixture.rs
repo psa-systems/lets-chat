@@ -54,12 +54,12 @@ fn synthetic_view(actor: MessageActor, username: &str, body: &str) -> MessageVie
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis: vec![],
-        channels: vec![],
         quote_preview: None,
         is_system: false,
         poll: None,
         author_is_bot: false,
         actor,
+        channels: vec![],
     }
 }
 
