@@ -3,12 +3,13 @@
 {% block title %}{{ enclave.name }} - lets-chat{% endblock %}
 
 {% block main %}
-{# LC-170: subscribe this page to the enclave topic so the member and room
-   lists below update live (member join/leave/role-change, room add/remove)
-   without a manual reload. live.js sends the SubscribeTopic frame; the server
-   authorizes enclave membership before joining the fan-out set. #}
+{# LC-336: empty-state placeholder. The full landing menu was removed; this
+   pane shows only when the enclave has no openable rooms. Create-chat lives on
+   the sidebar `+` (managers); member management on the settings page (reached
+   via the switcher gear). Still subscribed to the enclave topic so the sidebar
+   room list updates live; this pane itself carries no OOB target. #}
 <div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
-<section class="p-6 max-w-4xl">
+<section class="p-6 max-w-2xl">
   {% if let Some(msg) = flash_error %}
   <div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger">
     {{ msg }}
@@ -19,55 +20,10 @@
     {% if let Some(d) = enclave.description %}<p class="text-content-muted mt-1">{{ d }}</p>{% endif %}
     {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
   </header>
-
-  <div class="grid grid-cols-2 gap-6">
-    <section>
-      <div id="lc-enclave-rooms">
-        {% include "enclave/rooms_items.html" %}
-      </div>
-      {% if can_manage %}
-      <form method="post" action="/enclave/{{ enclave.id }}/rooms" class="mt-3 flex flex-wrap gap-2 items-center">
-        <input name="name" placeholder="{{ "enclave-new-room-placeholder"|t }}" class="border rounded px-2 py-1 text-sm" required>
-        <select name="kind" class="border rounded px-2 py-1 text-sm">
-          <option value="text">{{ "enclave-room-kind-text"|t }}</option>
-          <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
-        </select>
-        <select name="room_type" class="border rounded px-2 py-1 text-sm">
-          <option value="public">{{ "enclave-room-type-public"|t }}</option>
-          <option value="private">{{ "enclave-room-type-private"|t }}</option>
-        </select>
-        <button type="submit" class="text-sm bg-accent text-accent-content rounded px-2 py-1">{{ "enclave-add-room"|t }}</button>
-      </form>
-      {% endif %}
-    </section>
-
-    <section>
-      <div id="lc-enclave-members">
-        {% include "enclave/members_items.html" %}
-      </div>
-      {% if can_manage %}
-      <div class="relative mt-3" autocomplete="off">
-        <input
-          name="q"
-          placeholder="{{ "enclave-invite-placeholder"|t }}"
-          hx-get="/enclave/{{ enclave.id }}/invite/search"
-          hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-          hx-target="#enclave-invite-results"
-          hx-swap="innerHTML"
-          autocomplete="off"
-          data-lc-search
-          data-lc-search-results="#enclave-invite-results"
-          role="combobox"
-          aria-expanded="false"
-          aria-controls="enclave-invite-results"
-          aria-autocomplete="list"
-          class="w-full border rounded px-2 py-1 text-sm">
-        <div id="enclave-invite-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
-      </div>
-      <a href="/enclave/{{ enclave.id }}/settings" class="text-sm text-accent hover:underline mt-3 inline-block">{{ "enclave-settings-link"|t }}</a>
-      {% endif %}
-    </section>
-  </div>
+  <p class="text-content-muted">{{ "enclave-empty-no-rooms"|t }}</p>
+  {% if can_manage %}
+  <p class="text-sm text-content-muted mt-2">{{ "enclave-empty-hint"|t }}</p>
+  {% endif %}
 </section>
 </div>
 {% endblock %}
