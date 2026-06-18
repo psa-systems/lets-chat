@@ -103,6 +103,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclave/{id}/share-emojis", post(post_share_emojis))
         .route("/enclave/{id}/rate-limit", post(post_msg_rate_limit))
         .route("/enclave/{id}/coyote-mode", post(post_coyote_mode))
+        .route("/enclave/{id}/shame-tags", post(post_shame_tags))
         .route("/enclave/{id}/bans/{user_id}/unban", post(post_unban))
         .route(
             "/enclave/{id}/invite-code",
@@ -379,6 +380,19 @@ pub async fn post_coyote_mode(
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_coyote_mode(&state.chat, id, enabled).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
+/// LC-342: toggle the shame-tag prototype for an enclave (manager-gated).
+pub async fn post_shame_tags(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<CoyoteModeForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let enabled = form.enabled.trim() == "1";
+    db::enclave::set_shame_tags_enabled(&state.chat, id, enabled).await?;
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 

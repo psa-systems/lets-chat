@@ -120,6 +120,27 @@
     </div>
   </section>
 
+  {# LC-342: shame-tag community moderation (prototype). Manage-gated toggle. #}
+  <section class="space-y-3">
+    <h2 class="font-semibold">{{ "enclave-settings-shame-heading"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-shame-help"|t }}</p>
+    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
+      <div class="text-sm">
+        {% if enclave.shame_tags_enabled %}
+        <strong>{{ "enclave-settings-shame-on-label"|t }}</strong> {{ "enclave-settings-shame-on-text"|t }}
+        {% else %}
+        <strong>{{ "enclave-settings-shame-off-label"|t }}</strong> {{ "enclave-settings-shame-off-text"|t }}
+        {% endif %}
+      </div>
+      <form method="post" action="/enclave/{{ enclave.id }}/shame-tags">
+        <button name="enabled" value="{% if enclave.shame_tags_enabled %}0{% else %}1{% endif %}"
+                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
+          {% if enclave.shame_tags_enabled %}{{ "enclave-settings-shame-disable"|t }}{% else %}{{ "enclave-settings-shame-enable"|t }}{% endif %}
+        </button>
+      </form>
+    </div>
+  </section>
+
   {# LC-340: enclave ban-list. Manage-gated; lift a ban (e.g. a Coyote Mode
      false positive) so the user can rejoin and post again. #}
   <section class="space-y-3">
