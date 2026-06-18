@@ -50,9 +50,7 @@ pub async fn get_start(State(state): State<AppState>) -> Response {
     let state_token = new_random_token();
     let nonce = new_random_token();
     let (verifier, challenge) = new_pkce_pair();
-    if let Err(e) =
-        db::oidc_pending::insert(&state.auth, &state_token, &verifier, &nonce).await
-    {
+    if let Err(e) = db::oidc_pending::insert(&state.auth, &state_token, &verifier, &nonce).await {
         tracing::error!(target: "bunyip_sso", error = %e, "oidc_pending insert failed");
         return err_dance("pending insert failed");
     }
@@ -102,7 +100,10 @@ pub async fn get_callback(
         }
     };
 
-    let id_claims = match client.verify_id_token(&tokens.id_token, &pending.nonce).await {
+    let id_claims = match client
+        .verify_id_token(&tokens.id_token, &pending.nonce)
+        .await
+    {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(target: "bunyip_sso", error = %e, "id_token verify failed");
@@ -208,14 +209,8 @@ async fn resolve_or_provision_user(
     let username = pick_username(state, userinfo).await?;
     let display_name = userinfo.name.as_deref().filter(|s| !s.trim().is_empty());
     let email = userinfo.email.as_deref().filter(|s| !s.trim().is_empty());
-    let id = db::auth::create_user_from_bunyip(
-        &state.auth,
-        &username,
-        sub,
-        display_name,
-        email,
-    )
-    .await?;
+    let id =
+        db::auth::create_user_from_bunyip(&state.auth, &username, sub, display_name, email).await?;
 
     promote_if_first_user(&state.auth, &id).await?;
     Ok(id)
@@ -223,7 +218,10 @@ async fn resolve_or_provision_user(
 
 /// Username pick: prefer `preferred_username`, fall back to the email
 /// local-part. Try up to 5 collision suffixes (`-2` ... `-5`) before bailing.
-async fn pick_username(state: &AppState, info: &crate::oidc::UserInfo) -> Result<String, ResolveError> {
+async fn pick_username(
+    state: &AppState,
+    info: &crate::oidc::UserInfo,
+) -> Result<String, ResolveError> {
     let base = info
         .preferred_username
         .as_deref()
@@ -267,7 +265,10 @@ fn sanitize_username(s: &str) -> String {
 
 /// First-non-bot user gets the admin role. Mirrors the prior password-path
 /// `promote_first_user_to_admin` in `routes/auth.rs`.
-async fn promote_if_first_user(pool: &sqlx::SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+async fn promote_if_first_user(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_bot = 0")
         .fetch_one(&mut *tx)
