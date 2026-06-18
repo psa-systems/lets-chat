@@ -6,6 +6,7 @@ pub mod invite;
 pub mod message;
 pub mod mod_action;
 pub mod reaction;
+pub mod report;
 pub mod room;
 pub mod search_result;
 pub mod session;

@@ -161,6 +161,13 @@
     <button hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-mark-unread"|t }}</button>
     {# LC-278: forward this message to another room/DM via the destination picker. #}
     <button hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-forward"|t }}</button>
+    {# LC-334: report this message to moderators. Hidden on the viewer's own
+       messages (you don't report yourself) and on synthetic-actor messages
+       (webhook / email / bridge have an empty user_id - you report users, not
+       integrations). #}
+    {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+    <button hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="text-danger hover:underline">{{ "room-msg-report"|t }}</button>
+    {% endif %}
     {% if message.can_edit %}
     <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-accent hover:underline">{{ "room-msg-edit"|t }}</button>
     {% endif %}

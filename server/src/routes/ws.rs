@@ -343,6 +343,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::AdminRoomChanged { room_id, removed } => {
                                     render_admin_room_row(&send_state, *room_id, *removed).await
                                 }
+                                // LC-334: the open report set changed. Re-query +
+                                // render the queue list + nav badge OOB for every
+                                // admin (same fragment for all; one render serves
+                                // every recipient). Standalone-only: the admin
+                                // queue is #[cfg(standalone)]; in saas this event
+                                // is never broadcast and falls through to
+                                // render_event (None).
+                                #[cfg(feature = "standalone")]
+                                ChatEvent::AdminReportChanged => {
+                                    render_admin_reports(&send_state).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -1921,6 +1932,22 @@ async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) ->
     crate::views::admin::RoomRowFragment {
         r: &view,
         oob: true,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-334: render the report-queue OOB fragment (`#admin-reports-list` + nav
+/// badge) for the `admin` topic after the open-report set changes. Same fragment
+/// for every admin, so one render serves all recipients. Standalone-only (the
+/// admin queue is `#[cfg(standalone)]`).
+#[cfg(feature = "standalone")]
+async fn render_admin_reports(state: &AppState) -> Option<String> {
+    let reports = super::report::build_report_views(state).await.ok()?;
+    let open_count = reports.len() as i64;
+    crate::views::report::AdminReportsOob {
+        reports,
+        open_count,
     }
     .render()
     .ok()

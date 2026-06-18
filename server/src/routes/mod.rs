@@ -61,6 +61,7 @@ mod push;
 mod reactions;
 mod read_all;
 mod reminders;
+mod report;
 mod retention;
 pub(crate) mod room;
 mod room_info;
@@ -1045,6 +1046,12 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/messages/{message_id}/forward/{dest_room_id}",
             post(forward::post_forward),
+        )
+        // LC-334: report a message (modal + submit). Available in both build
+        // modes; the review queue (/admin/reports) is standalone-only.
+        .route(
+            "/messages/{message_id}/report",
+            get(report::get_report_modal).post(report::post_report),
         )
         .route("/room/{room_id}/draft", put(drafts::put_draft))
         .route(

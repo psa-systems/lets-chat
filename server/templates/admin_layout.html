@@ -32,6 +32,10 @@
     <a href="/admin/branding"{% if section == "branding" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "branding" %} font-semibold{% endif %}">{{ "admin-nav-branding"|t }}</a>
     <a href="/admin/backup-restore"{% if section == "backup" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "backup" %} font-semibold{% endif %}">{{ "admin-nav-backup"|t }}</a>
     <a href="/admin/modlog"{% if section == "modlog" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "modlog" %} font-semibold{% endif %}">{{ "admin-nav-modlog"|t }}</a>
+    {# LC-334: report queue. The badge inner is fetched on load (so the count
+       need not thread through every admin page struct) and re-rendered live via
+       the AdminReportsOob OOB swap on the `admin` topic. #}
+    <a href="/admin/reports"{% if section == "reports" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "reports" %} font-semibold{% endif %}">{{ "admin-nav-reports"|t }}<span id="admin-reports-badge" hx-get="/admin/reports/badge" hx-trigger="load" hx-swap="innerHTML"></span></a>
     <a href="/admin/analytics"{% if section == "analytics" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "analytics" %} font-semibold{% endif %}">{{ "admin-nav-analytics"|t }}</a>
     <a href="/admin/slash-commands"{% if section == "slash_commands" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "slash_commands" %} font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
     <a href="/admin/bots"{% if section == "bots" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "bots" %} font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
