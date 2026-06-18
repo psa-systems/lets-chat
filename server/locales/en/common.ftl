@@ -153,6 +153,12 @@ scheduled-cancel-confirm = Cancel this scheduled message?
 ## Settings page
 settings-page-title = Settings
 settings-heading = Settings
+settings-sections-nav = Settings sections
+settings-section-profile = Profile
+settings-section-appearance = Appearance
+settings-section-notifications = Notifications & Activity
+settings-section-privacy = Privacy & Security
+settings-section-account = Data & Account
 settings-saved = Saved.
 settings-account = Account
 settings-username = Username

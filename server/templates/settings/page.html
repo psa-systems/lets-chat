@@ -7,64 +7,23 @@
   <h1 class="font-semibold">{{ "settings-heading"|t }}</h1>
 </header>
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-xl space-y-8">
+{# LC-345: sticky in-page section nav. Plain anchor links jump to the
+   <section> groups below; `scroll-mt-*` on each section offsets the sticky
+   bar so the heading is not hidden under it. No JS. #}
+<nav aria-label="{{ "settings-sections-nav"|t }}" class="sticky top-0 z-10 bg-surface border-b border-border px-6 py-2 flex gap-4 overflow-x-auto text-sm">
+  <a href="#settings-sec-profile" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-profile"|t }}</a>
+  <a href="#settings-sec-appearance" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-appearance"|t }}</a>
+  <a href="#settings-sec-notifications" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-notifications"|t }}</a>
+  <a href="#settings-sec-privacy" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-privacy"|t }}</a>
+  <a href="#settings-sec-account" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-account"|t }}</a>
+</nav>
+<div class="p-6 max-w-xl space-y-12">
   {% if saved %}
   <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-saved"|t }}</div>
   {% endif %}
 
-  {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
-  <form method="post" action="/settings/language" class="space-y-2">
-    <h2 class="font-medium">{{ "settings-language"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "settings-language-help"|t }}</p>
-    <select name="locale" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      {% for l in locales %}
-      <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-language-save"|t }}</button>
-  </form>
-
-  {# LC-191: theme picker. The inline onchange applies instantly via
-     window.__lcSetTheme (base.html bootstrap) + remembers on this device; the
-     form POST persists server-side and the locale middleware syncs the cookie. #}
-  <form method="post" action="/settings/appearance" class="space-y-2">
-    <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "settings-appearance-help"|t }}</p>
-    <select name="theme" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
-      <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
-      <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
-      <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
-      <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
-    </select>
-    <label class="block text-sm text-content-muted">{{ "settings-density"|t }}</label>
-    <select name="density" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
-      <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
-    </select>
-    {# LC-327: message text size. Purely device-local (localStorage), so it is
-       NOT submitted with the theme/density POST - no `name`, no server column.
-       __lcSetTextSize (base.html bootstrap) persists + applies on change; the
-       script below initializes the selected option from localStorage since the
-       server cannot render the selected state for a device-local pref. #}
-    <label class="block text-sm text-content-muted" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>
-    <select id="lc-textsize-select" onchange="window.__lcSetTextSize&&window.__lcSetTextSize(this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="small">{{ "textsize-small"|t }}</option>
-      <option value="normal">{{ "textsize-normal"|t }}</option>
-      <option value="large">{{ "textsize-large"|t }}</option>
-    </select>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
-  </form>
-  <script>
-    (function () {
-      var s = document.getElementById("lc-textsize-select");
-      if (!s) return;
-      try { s.value = localStorage.getItem("lc-textsize") || "normal"; } catch (e) {}
-    })();
-  </script>
+  <section id="settings-sec-profile" class="space-y-8 scroll-mt-16">
+    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-profile"|t }}</h2>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
@@ -119,6 +78,68 @@
   {% if user.avatar_ext.is_some() %}
   <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
   {% endif %}
+  </section>
+
+  <section id="settings-sec-appearance" class="space-y-8 scroll-mt-16">
+    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-appearance"|t }}</h2>
+
+  {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
+  <form method="post" action="/settings/language" class="space-y-2">
+    <h2 class="font-medium">{{ "settings-language"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "settings-language-help"|t }}</p>
+    <select name="locale" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      {% for l in locales %}
+      <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-language-save"|t }}</button>
+  </form>
+
+  {# LC-191: theme picker. The inline onchange applies instantly via
+     window.__lcSetTheme (base.html bootstrap) + remembers on this device; the
+     form POST persists server-side and the locale middleware syncs the cookie. #}
+  <form method="post" action="/settings/appearance" class="space-y-2">
+    <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "settings-appearance-help"|t }}</p>
+    <select name="theme" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
+      <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
+      <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
+      <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
+      <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
+    </select>
+    <label class="block text-sm text-content-muted">{{ "settings-density"|t }}</label>
+    <select name="density" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
+      <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
+    </select>
+    {# LC-327: message text size. Purely device-local (localStorage), so it is
+       NOT submitted with the theme/density POST - no `name`, no server column.
+       __lcSetTextSize (base.html bootstrap) persists + applies on change; the
+       script below initializes the selected option from localStorage since the
+       server cannot render the selected state for a device-local pref. #}
+    <label class="block text-sm text-content-muted" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>
+    <select id="lc-textsize-select" onchange="window.__lcSetTextSize&&window.__lcSetTextSize(this.value)"
+            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+      <option value="small">{{ "textsize-small"|t }}</option>
+      <option value="normal">{{ "textsize-normal"|t }}</option>
+      <option value="large">{{ "textsize-large"|t }}</option>
+    </select>
+    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
+  </form>
+  <script>
+    (function () {
+      var s = document.getElementById("lc-textsize-select");
+      if (!s) return;
+      try { s.value = localStorage.getItem("lc-textsize") || "normal"; } catch (e) {}
+    })();
+  </script>
+  </section>
+
+  <section id="settings-sec-notifications" class="space-y-8 scroll-mt-16">
+    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-notifications"|t }}</h2>
 
   <form method="post" action="/settings" class="space-y-4">
     <h2 class="font-medium">{{ "settings-preferences"|t }}</h2>
@@ -200,14 +221,14 @@
      chip add/remove are their own HTMX posts. at_cap is bound here so the
      shared keyword_list partial (also rendered standalone by the endpoints)
      has the same context on the initial page render. #}
-  <section class="space-y-2 border-t border-border pt-6">
+  <div class="space-y-2 border-t border-border pt-6">
     <h2 class="font-medium">{{ "settings-keyword-heading"|t }}</h2>
     <p class="text-xs text-content-muted">{{ "settings-keyword-help"|t }}</p>
     {% let at_cap = keywords.len() >= 25 %}
     {% include "partials/keyword_list.html" %}
-  </section>
+  </div>
 
-  <section class="space-y-4 border-t border-border pt-6">
+  <div class="space-y-4 border-t border-border pt-6">
     <div class="flex items-center gap-2">
       <h2 class="font-medium">{{ "settings-dnd-heading"|t }}</h2>
       {% if dnd_active %}
@@ -268,7 +289,11 @@
       <p class="text-xs text-content-muted">{{ "settings-dnd-schedule-help"|t }}</p>
       <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-dnd-save-schedule"|t }}</button>
     </form>
+  </div>
   </section>
+
+  <section id="settings-sec-privacy" class="space-y-8 scroll-mt-16">
+    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-privacy"|t }}</h2>
 
   {# LC-22 cutover: password change form deleted. Bunyip owns credentials. #}
 
@@ -319,6 +344,10 @@
       {{ "settings-api-tokens-help"|t }}
     </p>
   </div>
+  </section>
+
+  <section id="settings-sec-account" class="space-y-8 scroll-mt-16">
+    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-account"|t }}</h2>
 
   <div>
     <h2 class="font-medium mb-2">{{ "settings-storage-heading"|t }}</h2>
@@ -366,6 +395,7 @@
       <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
     </dl>
   </div>
-</section>
+  </section>
+</div>
 </div>
 {% endblock %}
