@@ -36,6 +36,10 @@ room-composer-format-link-url-ph = url
 room-composer-format-strike-ph = tachado
 room-composer-format-list-ph = elemento de lista
 room-composer-format-quote-ph = cita
+# LC-332: contador de caracteres del redactor. %n% se reemplaza en el cliente con
+# la cantidad (token simple, no un placeable de Fluent, para evitar las llaves).
+room-composer-chars-remaining = quedan %n%
+room-composer-chars-over = %n% de más
 # LC-323: popover de autocompletado de #canal.
 room-channel-popover-aria = Sugerencias de canales
 
