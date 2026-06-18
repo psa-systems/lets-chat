@@ -43,14 +43,10 @@ enclave-search-invited = Invited
 enclave-search-you = (you)
 
 ## Members list
-enclave-members-heading = Members
 enclave-members-settings-heading = Members
 
-## Enclave landing page
+## Enclave empty-state placeholder + create-chat
 enclave-public-badge = Public
-enclave-rooms-heading = Rooms
-enclave-room-private-tag = (private)
-enclave-room-remove = Remove
 enclave-new-room-placeholder = new-room
 enclave-room-kind-text = text
 enclave-room-kind-voice = voice
@@ -58,7 +54,8 @@ enclave-room-type-public = public
 enclave-room-type-private = private
 enclave-add-room = Add room
 enclave-invite-placeholder = Invite by username...
-enclave-settings-link = Enclave settings
+enclave-empty-no-rooms = No chats yet.
+enclave-empty-hint = Use the + next to ROOMS in the sidebar to add a chat.
 
 ## Enclave settings
 enclave-settings-title = settings
