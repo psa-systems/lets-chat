@@ -104,12 +104,22 @@ pub struct GroupMemberRowResult<'a> {
     pub message: &'a str,
 }
 
+/// LC-340: one row of the enclave ban-list as rendered in settings. `label` is
+/// the resolved display name; `user_id` keys the unban form.
+pub struct EnclaveBanView {
+    pub user_id: String,
+    pub label: String,
+    pub reason: Option<String>,
+    pub banned_at: String,
+}
+
 #[derive(Template)]
 #[template(path = "enclave/settings.html")]
 pub struct EnclaveSettingsPage<'a> {
     pub user: &'a User,
     pub enclave: &'a Enclave,
     pub members: &'a [EnclaveMemberView],
+    pub bans: &'a [EnclaveBanView],
     pub groups: &'a [EnclaveGroupView],
     pub emojis: &'a [CustomEmoji],
     pub can_delete: bool,
