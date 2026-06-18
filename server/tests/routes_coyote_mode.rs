@@ -107,8 +107,8 @@ async fn load_user(t: &TestApp, user_id: &str) -> lets_chat::models::User {
     lets_chat::models::User::from(rec)
 }
 
-/// Create `n` extra public rooms in enclave 1 and return all enclave-1 room ids
-/// the burst will touch (the General rooms plus the new ones), capped to `n`.
+/// Create `n` fresh public rooms in enclave 1 and return their ids - the
+/// distinct rooms a burst test posts into.
 async fn enclave_rooms(t: &TestApp, n: usize) -> Vec<i64> {
     let mut ids: Vec<i64> = Vec::new();
     for i in 0..n {
