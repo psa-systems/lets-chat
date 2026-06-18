@@ -1,8 +1,9 @@
-//! LC-339: HTTP-level coverage for Coyote Mode - the manager-gated toggle and
-//! the enclave-ban enforcement (a banned user cannot post or rejoin). The
-//! detection/purge logic itself is covered at the DB layer in
-//! `db_coyote_mode.rs`; the auto-ban trigger fires from a fire-and-forget
-//! spawn, so it is not asserted end-to-end here.
+//! LC-339/LC-341: Coyote Mode coverage - the manager-gated toggle, enclave-ban
+//! enforcement (a banned user cannot post or rejoin), and the auto-ban TRIGGER.
+//! The trigger fires from a fire-and-forget spawn in `post_message`; LC-341
+//! extracted the gated decision+action into `routes::maybe_coyote_ban`, which
+//! these tests call directly (awaited) to assert it deterministically without
+//! racing the spawn. The detection/purge SQL is unit-tested in `db_coyote_mode.rs`.
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
@@ -29,7 +30,10 @@ struct TestApp {
     admin_session: String,
     member_session: String,
     member_id: String,
+    admin_id: String,
     chat: SqlitePool,
+    // LC-341: kept so trigger tests can call routes::maybe_coyote_ban directly.
+    state: AppState,
 }
 
 /// Two users in the General enclave (id 1): `admin` (owner) and `member`
@@ -80,14 +84,48 @@ async fn app() -> TestApp {
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
     };
+    let state_for_test = state.clone();
     let app = routes::build_router(state);
     TestApp {
         app,
         admin_session,
         member_session,
         member_id,
+        admin_id,
         chat: chat_for_test,
+        state: state_for_test,
     }
+}
+
+/// Build a `User` for `user_id` from the auth DB (for direct
+/// `maybe_coyote_ban` calls).
+async fn load_user(t: &TestApp, user_id: &str) -> lets_chat::models::User {
+    let rec = db::auth::find_user_by_id(&t.state.auth, user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    lets_chat::models::User::from(rec)
+}
+
+/// Create `n` extra public rooms in enclave 1 and return all enclave-1 room ids
+/// the burst will touch (the General rooms plus the new ones), capped to `n`.
+async fn enclave_rooms(t: &TestApp, n: usize) -> Vec<i64> {
+    let mut ids: Vec<i64> = Vec::new();
+    for i in 0..n {
+        ids.push(
+            db::chat::create_room(
+                &t.state.chat,
+                &format!("burst{i}"),
+                None,
+                "public",
+                None,
+                Some(1),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    ids
 }
 
 async fn send(app: &Router, sess: &str, method: Method, uri: &str, body: &str) -> StatusCode {
@@ -271,4 +309,96 @@ async fn enclave_ban_blocks_rejoin() {
         StatusCode::FORBIDDEN,
         "banned member cannot rejoin via discover"
     );
+}
+
+// LC-341: deterministic coverage of the auto-ban TRIGGER. The production path
+// fires maybe_coyote_ban from a fire-and-forget spawn; these call the extracted
+// fn directly (awaited) so the assertions never race the spawn.
+
+async fn post_in(t: &TestApp, rooms: &[i64], user_id: &str) {
+    for r in rooms {
+        db::chat::insert_message(&t.chat, *r, user_id, "spam")
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn coyote_trigger_bans_on_three_room_burst() {
+    let t = app().await;
+    db::enclave::set_coyote_mode(&t.chat, 1, true)
+        .await
+        .unwrap();
+    let rooms = enclave_rooms(&t, 3).await;
+    post_in(&t, &rooms, &t.member_id).await;
+    let member = load_user(&t, &t.member_id).await;
+
+    let fired = lets_chat::routes::maybe_coyote_ban(&t.state, 1, rooms[0], &member)
+        .await
+        .unwrap();
+    assert!(fired, "3 distinct rooms in window must trigger");
+    assert!(db::enclave::is_enclave_banned(&t.chat, 1, &t.member_id)
+        .await
+        .unwrap());
+    let live: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE user_id=? AND deleted_at IS NULL")
+            .bind(&t.member_id)
+            .fetch_one(&t.chat)
+            .await
+            .unwrap();
+    assert_eq!(live, 0, "burst messages soft-deleted");
+}
+
+#[tokio::test]
+async fn coyote_no_trigger_below_threshold() {
+    let t = app().await;
+    db::enclave::set_coyote_mode(&t.chat, 1, true)
+        .await
+        .unwrap();
+    let rooms = enclave_rooms(&t, 2).await; // only 2 distinct rooms
+    post_in(&t, &rooms, &t.member_id).await;
+    let member = load_user(&t, &t.member_id).await;
+
+    let fired = lets_chat::routes::maybe_coyote_ban(&t.state, 1, rooms[0], &member)
+        .await
+        .unwrap();
+    assert!(!fired, "2 rooms is below the 3-room threshold");
+    assert!(!db::enclave::is_enclave_banned(&t.chat, 1, &t.member_id)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn coyote_off_no_trigger() {
+    let t = app().await; // coyote_mode left off
+    let rooms = enclave_rooms(&t, 3).await;
+    post_in(&t, &rooms, &t.member_id).await;
+    let member = load_user(&t, &t.member_id).await;
+
+    let fired = lets_chat::routes::maybe_coyote_ban(&t.state, 1, rooms[0], &member)
+        .await
+        .unwrap();
+    assert!(!fired, "mode off must never trigger");
+    assert!(!db::enclave::is_enclave_banned(&t.chat, 1, &t.member_id)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn coyote_exempts_admin() {
+    let t = app().await;
+    db::enclave::set_coyote_mode(&t.chat, 1, true)
+        .await
+        .unwrap();
+    let rooms = enclave_rooms(&t, 3).await;
+    post_in(&t, &rooms, &t.admin_id).await;
+    let admin = load_user(&t, &t.admin_id).await; // site admin + enclave owner
+
+    let fired = lets_chat::routes::maybe_coyote_ban(&t.state, 1, rooms[0], &admin)
+        .await
+        .unwrap();
+    assert!(!fired, "managers / site admins are exempt");
+    assert!(!db::enclave::is_enclave_banned(&t.chat, 1, &t.admin_id)
+        .await
+        .unwrap());
 }
