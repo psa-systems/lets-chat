@@ -112,31 +112,8 @@ async fn send(
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
-#[cfg(feature = "standalone")]
-async fn send_with_ip(app: &Router, ip: &str, method: Method, uri: &str, body: &str) -> StatusCode {
-    send_with_ip_full(app, ip, method, uri, body).await.0
-}
-
-#[cfg(feature = "standalone")]
-async fn send_with_ip_full(
-    app: &Router,
-    ip: &str,
-    method: Method,
-    uri: &str,
-    body: &str,
-) -> (StatusCode, String) {
-    let req = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .header("x-forwarded-for", ip)
-        .body(Body::from(body.to_string()))
-        .unwrap();
-    let res = app.clone().oneshot(req).await.unwrap();
-    let s = res.status();
-    let b = to_bytes(res.into_body(), 1 << 20).await.unwrap();
-    (s, String::from_utf8_lossy(&b).into_owned())
-}
+// LC-22 cutover: send_with_ip / send_with_ip_full helpers deleted with the
+// per-IP register/login/2FA rate-limit tests they fed.
 
 // ── Rate limits ───────────────────────────────────────────────────────────
 

@@ -290,4 +290,3 @@ async fn purge_user_auth(auth: &SqlitePool, user_id: &str) -> Result<(), AppErro
     tx.commit().await?;
     Ok(())
 }
-
