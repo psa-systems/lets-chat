@@ -1410,12 +1410,11 @@ pub async fn get_user_auth_flags_by_bunyip_sub(
     pool: &SqlitePool,
     sub: &str,
 ) -> Result<Option<(String, bool, bool)>, sqlx::Error> {
-    let row: Option<(String, i64, i64)> = sqlx::query_as(
-        "SELECT id, is_banned, COALESCE(is_bot, 0) FROM users WHERE bunyip_sub = ?",
-    )
-    .bind(sub)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String, i64, i64)> =
+        sqlx::query_as("SELECT id, is_banned, COALESCE(is_bot, 0) FROM users WHERE bunyip_sub = ?")
+            .bind(sub)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.map(|(id, banned, bot)| (id, banned != 0, bot != 0)))
 }
 
@@ -1458,4 +1457,3 @@ pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, 
         .await?;
     Ok(n > 0)
 }
-
