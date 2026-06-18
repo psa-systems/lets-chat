@@ -13,9 +13,9 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::report::{ReportModal, ReportSubmitted};
 #[cfg(feature = "standalone")]
 use crate::views::report::{AdminReportsOob, ReportView};
+use crate::views::report::{ReportModal, ReportSubmitted};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
