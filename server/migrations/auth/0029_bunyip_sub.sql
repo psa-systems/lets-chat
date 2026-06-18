@@ -1,0 +1,13 @@
+-- LC-22: federated identity from bunyip-api (OIDC) is the SOLE sign-in surface
+-- post-cutover. Every users row is anchored to a Bunyip identity; there is no
+-- nullable case. Plain UNIQUE NOT NULL replaces the additive design's
+-- nullable + partial UNIQUE index. See
+-- docs/lets-chat/sso/bunyip-only/03-account-provisioning.md (§3.4) for the
+-- storage rationale and the hard-cut sequence with 0030 / 0031.
+--
+-- SQLite does not allow `ADD COLUMN ... UNIQUE` in one statement, so the
+-- UNIQUE constraint is added separately in 0031 as a `CREATE UNIQUE INDEX`.
+-- Between 0029 and 0031, migration 0030 deletes every row that retains the
+-- empty-string default, so by the time the unique index is created every
+-- surviving row has a real bunyip_sub and the index is satisfied.
+ALTER TABLE users ADD COLUMN bunyip_sub TEXT NOT NULL DEFAULT '';

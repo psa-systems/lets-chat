@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::auth::{enforce_2fa_enrollment, enforce_maintenance_mode, inject_user, OptionalUser};
+use crate::auth::{enforce_maintenance_mode, inject_user, OptionalUser};
 use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
@@ -34,6 +34,8 @@ mod avatar;
 mod bookmarks;
 mod branding;
 mod bridge_avatar_media;
+#[cfg(feature = "standalone")]
+mod bunyip_sso;
 mod call;
 mod channel_complete;
 mod custom_emojis;
@@ -41,8 +43,6 @@ mod dm;
 mod dm_mute;
 mod drafts;
 mod email_inboxes;
-#[cfg(feature = "standalone")]
-pub(crate) mod email_verification;
 mod emoji_complete;
 mod enclave;
 mod export;
@@ -50,11 +50,8 @@ mod feeds;
 mod forward;
 mod home;
 mod inbox;
-pub(crate) mod login_alerts;
 mod mentions;
 mod notify_prefs;
-#[cfg(feature = "standalone")]
-mod password_reset;
 mod pinned;
 mod polls;
 mod push;
@@ -76,7 +73,6 @@ mod slash;
 mod starred_rooms;
 mod status;
 mod switcher;
-pub(crate) mod two_factor;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -1022,15 +1018,9 @@ pub(crate) async fn handle_not_found(
 pub fn build_router(state: AppState) -> Router {
     let router = Router::new()
         .route("/", get(home::get_home))
-        .route("/login", get(auth::get_login).post(auth::post_login))
-        .route(
-            "/login/2fa",
-            get(two_factor::get_login_challenge).post(two_factor::post_login_challenge),
-        )
-        .route(
-            "/login/recovery",
-            get(two_factor::get_login_recovery).post(two_factor::post_login_recovery),
-        )
+        // LC-22 cutover: /login renders the "Sign in with Bunyip" shell only.
+        // No POST, no form. Username + password handlers are deleted.
+        .route("/login", get(auth::get_login))
         .route("/logout", get(auth::get_logout))
         .route("/room/{room_id}", get(room::get_room))
         // LC-246: message permalink. Redirects to the canonical room/DM page
@@ -1295,10 +1285,6 @@ pub fn build_router(state: AppState) -> Router {
             post(account::post_delete_account),
         )
         .route(
-            "/settings/2fa/setup",
-            get(two_factor::get_setup).post(two_factor::post_setup),
-        )
-        .route(
             "/settings/blocked",
             get(settings::get_blocked_list).post(settings::post_block_by_username),
         )
@@ -1353,30 +1339,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .merge(enclave::router());
 
+    // LC-22 cutover: Bunyip SSO is the sole sign-in surface in the standalone
+    // build. The saas build keeps its own JWT path via `saas_auth::router()`.
     #[cfg(feature = "standalone")]
     let router = router
-        .route(
-            "/register",
-            get(auth::get_register).post(auth::post_register),
-        )
-        .route(
-            "/register/2fa",
-            get(two_factor::get_register_2fa).post(two_factor::post_register_2fa),
-        )
-        .route(
-            "/forgot",
-            get(password_reset::get_forgot).post(password_reset::post_forgot),
-        )
-        .route(
-            "/reset/{token}",
-            get(password_reset::get_reset).post(password_reset::post_reset),
-        )
-        .route("/verify-email/{token}", get(email_verification::get_verify))
-        .route(
-            "/verify-email/resend",
-            post(email_verification::post_resend),
-        )
-        .route("/settings/password", post(settings::post_password))
+        .route("/auth/bunyip/start", get(bunyip_sso::get_start))
+        .route("/auth/bunyip/callback", get(bunyip_sso::get_callback))
         .merge(admin::router());
 
     #[cfg(feature = "saas")]
@@ -1385,10 +1353,6 @@ pub fn build_router(state: AppState) -> Router {
     router
         .nest_service("/assets", ServeDir::new("server/assets"))
         .fallback(handle_not_found)
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            enforce_2fa_enrollment,
-        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             enforce_maintenance_mode,

@@ -76,6 +76,7 @@ async fn setup() -> TestApp {
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
     };
     let app = routes::build_router(state.clone());
     TestApp {
@@ -303,12 +304,12 @@ fn user_view(body: &str) -> MessageView {
         is_pinned: false,
         is_bookmarked: false,
         custom_emojis: vec![],
-        channels: vec![],
         quote_preview: None,
         is_system: false,
         poll: None,
         author_is_bot: false,
         actor: MessageActor::User,
+        channels: vec![],
     }
 }
 

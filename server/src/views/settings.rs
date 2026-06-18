@@ -31,25 +31,10 @@ pub struct UserSettingsPage<'a> {
     pub saved: bool,
     pub push_available: bool,
     pub email: Option<String>,
-    /// True when the email on file has been verified by clicking the link
-    /// sent to that address. Always false when `email` is `None`.
-    pub email_verified: bool,
-    /// True only when SMTP is configured *and* the build supports the
-    /// in-tree verification flow (standalone). Drives whether the
-    /// pending/verified badge and resend button appear at all.
-    pub email_verification_available: bool,
-    /// Flash set by the resend redirect: render a small "we sent a fresh
-    /// link" notice next to the email field.
-    pub email_verify_sent: bool,
     /// Mirror of `state.mail_available()`. Drives the disabled state of
     /// the email-digest checkbox and the help-text branch that explains
     /// why opting in is currently a no-op.
     pub email_available: bool,
-    /// Hide the password-change form entirely in SaaS mode, where identity
-    /// is owned by the parent app.
-    pub password_change_available: bool,
-    pub password_changed: bool,
-    pub password_error: Option<&'a str>,
     /// Live sessions for this user, sorted newest activity first. The row
     /// matching the request's session cookie has `is_current = true` so the
     /// template can mark it and disable its revoke button.
