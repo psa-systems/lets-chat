@@ -61,6 +61,9 @@ mod reminders;
 mod report;
 mod retention;
 pub(crate) mod room;
+// LC-341: expose the extracted Coyote Mode trigger for the test crate without
+// making the whole `room` module public.
+pub use room::maybe_coyote_ban;
 mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]

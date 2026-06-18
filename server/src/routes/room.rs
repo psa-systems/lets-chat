@@ -784,43 +784,20 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body, client_id).await?;
 
-    // LC-339: Coyote Mode bot-burst detection. Only for an enclave room with
-    // the mode on, and never for enclave managers / site admins (avoids
-    // self-lockout and power-user false positives). A user who has posted in
-    // 3+ distinct rooms of the enclave within 3 s is treated as a bot; the
-    // ban + 24h soft-purge runs off the request path so the send still returns
-    // promptly.
+    // LC-339/LC-341: Coyote Mode bot-burst detection. For enclave rooms, run
+    // the (fully gated) check off the request path so the send returns
+    // promptly. All gating + the ban + 24h soft-purge live in
+    // `maybe_coyote_ban`, awaited only inside this spawned task; it is
+    // extracted (not inlined) so tests can assert the trigger deterministically
+    // without racing the spawn (LC-341).
     if let Some(eid) = enclave_id_opt {
-        if !is_admin {
-            let coyote_on = db::enclave::get_coyote_mode_for_room(&state.chat, room_id)
-                .await?
-                .map(|(_, on)| on)
-                .unwrap_or(false);
-            if coyote_on {
-                let role = db::enclave::get_membership(&state.chat, eid, &user.id)
-                    .await?
-                    .map(|m| m.role);
-                let is_manager = crate::perms::enclave_can_manage(role, &user.role);
-                if !is_manager
-                    && db::enclave::count_distinct_rooms_posted_recently(
-                        &state.chat,
-                        eid,
-                        &user.id,
-                        3,
-                    )
-                    .await?
-                        >= 3
-                {
-                    let st = state.clone();
-                    let uid = user.id.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = coyote_ban_and_purge(&st, eid, &uid).await {
-                            tracing::warn!(error = %e, enclave_id = eid, user_id = %uid, "coyote ban+purge failed");
-                        }
-                    });
-                }
+        let st = state.clone();
+        let u = user.clone();
+        tokio::spawn(async move {
+            if let Err(e) = maybe_coyote_ban(&st, eid, room_id, &u).await {
+                tracing::warn!(error = %e, enclave_id = eid, user_id = %u.id, "coyote ban+purge failed");
             }
-        }
+        });
     }
 
     // LC-228: form is `hx-swap="none"` (composer.html:11), so any returned
@@ -831,6 +808,49 @@ pub async fn post_message(
     // textarea + disables the send button based on `event.detail.successful`
     // (true for any 2xx including 204).
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// LC-341: the fully-gated Coyote Mode decision + action, extracted from
+/// `post_message` so it can be awaited and asserted in tests without racing the
+/// fire-and-forget spawn. Returns `Ok(true)` iff the user was banned + purged.
+/// Every exemption - mode off, site admin, enclave manager (owner/admin),
+/// below the 3-distinct-rooms-in-3s threshold - returns `Ok(false)`. Called
+/// only for enclave rooms (the caller passes the resolved `enclave_id`).
+/// Re-exported as `crate::routes::maybe_coyote_ban` for the test crate.
+pub async fn maybe_coyote_ban(
+    state: &AppState,
+    enclave_id: i64,
+    room_id: i64,
+    user: &User,
+) -> Result<bool, AppError> {
+    // Site admins are exempt.
+    if user.role == "admin" {
+        return Ok(false);
+    }
+    // Mode must be on for this room's enclave.
+    let coyote_on = db::enclave::get_coyote_mode_for_room(&state.chat, room_id)
+        .await?
+        .map(|(_, on)| on)
+        .unwrap_or(false);
+    if !coyote_on {
+        return Ok(false);
+    }
+    // Enclave managers (owner/admin) are exempt.
+    let role = db::enclave::get_membership(&state.chat, enclave_id, &user.id)
+        .await?
+        .map(|m| m.role);
+    if crate::perms::enclave_can_manage(role, &user.role) {
+        return Ok(false);
+    }
+    // Bot signal: 3+ distinct enclave rooms posted in within 3 s.
+    if db::enclave::count_distinct_rooms_posted_recently(&state.chat, enclave_id, &user.id, 3)
+        .await?
+        < 3
+    {
+        return Ok(false);
+    }
+    coyote_ban_and_purge(state, enclave_id, &user.id).await?;
+    Ok(true)
 }
 
 /// LC-339: ban a Coyote-Mode-flagged user from the enclave and soft-delete
