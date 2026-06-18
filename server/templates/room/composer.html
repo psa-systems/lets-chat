@@ -30,6 +30,12 @@
     if (window.__lcOptimisticEcho) window.__lcOptimisticEcho(cid, echoBody);
   "
   hx-on::after-request="
+    /* LC-338: only react to THIS form's send. The textarea's draft-autosave
+       PUT (hx-put .../draft) bubbles here too; without this guard its 204 ran
+       the send-completion path below and `ta.value = ''` wiped in-progress
+       text ~1s after the user stopped typing (the draft persists server-side,
+       so a refresh restored it). Mirrors the guard in hx-on::config-request. */
+    if (event.detail.elt !== this) return;
     var ta = this.querySelector('textarea[name=body]');
     var err = this.querySelector('.composer-error');
     var bcast = document.getElementById('lc-broadcast-count');
