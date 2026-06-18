@@ -148,6 +148,12 @@ scheduled-cancel-confirm = ¿Cancelar este mensaje programado?
 ## Settings page
 settings-page-title = Configuración
 settings-heading = Configuración
+settings-sections-nav = Secciones de ajustes
+settings-section-profile = Perfil
+settings-section-appearance = Apariencia
+settings-section-notifications = Notificaciones y actividad
+settings-section-privacy = Privacidad y seguridad
+settings-section-account = Datos y cuenta
 settings-saved = Guardado.
 settings-account = Cuenta
 settings-username = Usuario
