@@ -33,3 +33,12 @@ pub struct DmPage<'a> {
     /// no draft (or stale + just purged).
     pub initial_draft: String,
 }
+
+impl DmPage<'_> {
+    /// LC-332: the message-length cap, surfaced to `room/composer.html` (included
+    /// here) as `data-lc-maxchars` so the character counter reads a single source
+    /// of truth instead of a magic number baked into the template.
+    pub fn max_message_chars(&self) -> usize {
+        crate::routes::room::MAX_MESSAGE_CHARS
+    }
+}
