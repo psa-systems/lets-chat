@@ -1,0 +1,43 @@
+{# LC-334: open-report rows. Shared by admin/reports.html (full page) and
+   admin/reports_oob.html (live OOB swap) so a fresh load and a live update
+   render identically. Iterates `reports` (a slice of views::report::ReportView).
+   Resolve / Dismiss POST with hx-swap="none"; the handler returns an OOB
+   fragment (and broadcasts one to the `admin` topic) that re-renders this list
+   and the nav badge for every admin tab. #}
+{% if reports.is_empty() %}
+<p class="text-sm text-content-muted">{{ "report-queue-empty"|t }}</p>
+{% else %}
+<ul class="flex flex-col gap-3">
+  {% for r in reports %}
+  <li class="rounded border border-border p-3">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <div class="flex items-center gap-2">
+        <span class="rounded bg-danger-surface text-danger-surface-content text-xs px-1.5 py-0.5 uppercase tracking-wide">
+          {% if r.category == "spam" %}{{ "report-category-spam"|t }}
+          {%- else if r.category == "harassment" %}{{ "report-category-harassment"|t }}
+          {%- else if r.category == "inappropriate" %}{{ "report-category-inappropriate"|t }}
+          {%- else %}{{ "report-category-other"|t }}{% endif %}
+        </span>
+        <span class="text-xs text-content-muted">{{ r.created_at }}</span>
+      </div>
+      <a href="/m/{{ r.message_id }}" class="text-xs text-accent hover:underline">{{ "report-jump"|t }}</a>
+    </div>
+    <p class="text-sm">
+      <span class="text-content-muted">{{ "report-row-author"|t }}</span> {{ r.author_label }}
+      <span class="text-content-muted">{{ "report-row-in"|t }}</span> {{ r.room_label }}
+    </p>
+    <p class="text-sm text-content-muted italic mt-1">&ldquo;{{ r.excerpt }}&rdquo;</p>
+    {% if let Some(note) = r.note.as_ref() %}
+    <p class="text-sm mt-1"><span class="text-content-muted">{{ "report-row-note"|t }}</span> {{ note }}</p>
+    {% endif %}
+    <p class="text-xs text-content-muted mt-1">{{ "report-row-reporter"|t }} {{ r.reporter_label }}</p>
+    <div class="flex gap-2 mt-2">
+      <button hx-post="/admin/reports/{{ r.id }}/resolve" hx-swap="none"
+              class="rounded bg-success px-2 py-1 text-xs text-success-content hover:opacity-90">{{ "report-action-resolve"|t }}</button>
+      <button hx-post="/admin/reports/{{ r.id }}/dismiss" hx-swap="none"
+              class="rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken">{{ "report-action-dismiss"|t }}</button>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

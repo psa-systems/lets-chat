@@ -1,0 +1,70 @@
+{# LC-334: report-a-message modal, swapped into the singleton #lc-report-modal
+   slot by the message hover-menu "Report" button. The form POSTs the report;
+   the confirm fragment (report_submitted.html) replaces this modal in the same
+   slot. Modal a11y mirrors forward/picker.html: focus trap, Escape / backdrop /
+   X to close, focus restored to the opener. #}
+<div class="modal-backdrop"
+     role="dialog" aria-modal="true" aria-label="{{ "report-title"|t }}"
+     data-lc-report-dialog>
+  <div class="modal-panel max-w-sm">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 class="text-lg font-semibold">{{ "report-title"|t }}</h2>
+      <button type="button" aria-label="{{ "report-close"|t }}" data-lc-report-close
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <p class="text-sm text-content-muted mb-3">{{ "report-intro"|t }}</p>
+    <form hx-post="/messages/{{ message_id }}/report"
+          hx-target="#lc-report-modal" hx-swap="innerHTML">
+      <fieldset class="flex flex-col gap-2 mb-3">
+        <legend class="sr-only">{{ "report-category-legend"|t }}</legend>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="category" value="spam" checked> {{ "report-category-spam"|t }}
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="category" value="harassment"> {{ "report-category-harassment"|t }}
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="category" value="inappropriate"> {{ "report-category-inappropriate"|t }}
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="category" value="other"> {{ "report-category-other"|t }}
+        </label>
+      </fieldset>
+      {# maxlength mirrors db::reports::MAX_REPORT_NOTE_CHARS (server enforces). #}
+      <textarea name="note" rows="3" maxlength="500" autocomplete="off"
+                placeholder="{{ "report-note-placeholder"|t }}"
+                aria-label="{{ "report-note-label"|t }}"
+                class="w-full resize-none rounded border border-border-strong px-2 py-1 text-sm mb-3"></textarea>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-lc-report-close
+                class="rounded px-3 py-1 text-sm hover:bg-surface-sunken">{{ "report-cancel"|t }}</button>
+        <button type="submit"
+                class="rounded bg-danger px-3 py-1 text-sm text-danger-content hover:opacity-90">{{ "report-submit"|t }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var slot = document.getElementById('lc-report-modal');
+  if (!slot) return;
+  var dialog = slot.querySelector('[data-lc-report-dialog]');
+  if (!dialog) return;
+  var opener = document.activeElement;
+  var trap = window.__lcDialogTrap ? window.__lcDialogTrap(dialog) : null;
+  try { (dialog.querySelector('input, button, [href]') || dialog).focus(); } catch (e) {}
+  function disposeTrap(){ if (trap) { trap.dispose(); trap = null; } }
+  function close(){
+    disposeTrap();
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    slot.innerHTML = '';
+  }
+  var closers = dialog.querySelectorAll('[data-lc-report-close]');
+  for (var i = 0; i < closers.length; i++) closers[i].addEventListener('click', close);
+  dialog.addEventListener('mousedown', function(e){ if (e.target === dialog) close(); });
+  dialog.addEventListener('keydown', function(e){ if (e.key === 'Escape') { e.preventDefault(); close(); } });
+  // A successful report POST swaps the confirm fragment into the slot, tearing
+  // this dialog down; dispose the trap as it goes.
+  dialog.addEventListener('htmx:beforeCleanupElement', disposeTrap, { once: true });
+})();
+</script>

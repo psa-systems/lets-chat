@@ -333,6 +333,9 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         // LC-175/177: rendered per recipient in the WS send task (admin row OOB).
         | ChatEvent::AdminUserChanged { .. }
         | ChatEvent::AdminRoomChanged { .. }
+        // LC-334: rendered per recipient in the WS send task (report queue OOB);
+        // in saas the event never fires, so the None here is the saas behavior.
+        | ChatEvent::AdminReportChanged
         // LC-178: rendered per recipient in the WS send task (/saved list OOB).
         | ChatEvent::SavedChanged { .. }
         // LC-239: rendered per recipient in the WS send task (sidebar draft

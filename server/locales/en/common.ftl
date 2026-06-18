@@ -25,6 +25,7 @@ admin-nav-quarantine = Quarantine
 admin-nav-branding = Branding
 admin-nav-backup = Backup
 admin-nav-modlog = Mod log
+admin-nav-reports = Reports
 admin-nav-analytics = Analytics
 admin-nav-commands = Commands
 admin-nav-bots = Bots

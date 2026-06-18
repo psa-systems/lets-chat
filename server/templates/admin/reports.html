@@ -1,0 +1,12 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{{ "report-queue-title"|t }} - Admin - lets-chat{% endblock %}
+
+{% block admin_main %}
+<h1 class="text-lg font-semibold mb-4">{{ "report-queue-heading"|t }}</h1>
+{# id-keyed live region: the AdminReportsOob fragment swaps this innerHTML on the
+   `admin` topic when the open-report set changes. #}
+<div id="admin-reports-list">
+  {% include "admin/reports_items.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{# LC-334: live OOB fragment for report-queue changes, broadcast on the `admin`
+   topic. Swaps the queue list (present only on /admin/reports) and the nav badge
+   (present on every admin page). id-keyed swaps drop silently where absent. #}
+<div id="admin-reports-list" hx-swap-oob="innerHTML">
+  {% include "admin/reports_items.html" %}
+</div>
+<span id="admin-reports-badge" hx-swap-oob="innerHTML">{% include "admin/reports_badge.html" %}</span>

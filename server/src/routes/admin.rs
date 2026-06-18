@@ -16,7 +16,7 @@ use crate::views::admin::{
     BridgeAvatarStatsView, BridgeAvatarsPage, BridgeRowView, BridgesPage, BuiltinCommandRowView,
     DeliveryRowView, DropView, EnclavesPage, ImapPollStatusView, InvitesPage, LinkFilterPage,
     LinkFilterRuleView, MetricCard, ModLogPage, OutgoingWebhookDeliveriesPage,
-    OutgoingWebhookRowView, OutgoingWebhooksPage, QuarantineEntryView, QuarantinePage,
+    OutgoingWebhookRowView, OutgoingWebhooksPage, QuarantineEntryView, QuarantinePage, ReportsPage,
     RetentionStatusView, RoomRowFragment, RoomsPage, SettingsPage, SlashCommandRowView,
     SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
@@ -86,6 +86,11 @@ pub fn router() -> Router<AppState> {
             post(post_quarantine_reject),
         )
         .route("/admin/modlog", get(get_modlog))
+        // LC-334: message-report review queue.
+        .route("/admin/reports", get(get_reports))
+        .route("/admin/reports/badge", get(get_reports_badge))
+        .route("/admin/reports/{id}/resolve", post(post_report_resolve))
+        .route("/admin/reports/{id}/dismiss", post(post_report_dismiss))
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
         .route("/admin/bridges", get(get_bridges).post(post_bridges))
@@ -1183,6 +1188,102 @@ pub async fn get_modlog(
         entries: &entries,
     };
     html(&page)
+}
+
+// Report queue (LC-334) --------------------------------------------------------
+
+/// `GET /admin/reports` - the open message-report review queue.
+pub async fn get_reports(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let reports = super::report::build_report_views(&state).await?;
+    let page = ReportsPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "reports",
+        reports: &reports,
+    };
+    html(&page)
+}
+
+/// `GET /admin/reports/badge` - the nav open-count badge inner markup, fetched
+/// on load by every admin page (so the count need not thread through every admin
+/// page struct).
+pub async fn get_reports_badge(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+) -> Result<Html, AppError> {
+    let open_count = db::reports::count_open(&state.chat).await?;
+    html(&crate::views::report::AdminReportsBadge { open_count })
+}
+
+/// `POST /admin/reports/{id}/resolve`
+pub async fn post_report_resolve(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    handle_report_status(&state, &user.id, id, "resolved", "report_resolved").await
+}
+
+/// `POST /admin/reports/{id}/dismiss`
+pub async fn post_report_dismiss(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    handle_report_status(&state, &user.id, id, "dismissed", "report_dismissed").await
+}
+
+/// Transition an open report to `status`, audit it in the mod log, and live-
+/// update every admin queue. Returns the OOB fragment so the acting admin's
+/// queue + nav badge update from the HTTP response even if their WS lags. A
+/// report already handled by another admin is a no-op (no second audit row).
+async fn handle_report_status(
+    state: &AppState,
+    actor_id: &str,
+    report_id: i64,
+    status: &str,
+    action: &str,
+) -> Result<Html, AppError> {
+    let updated = db::reports::set_status(&state.chat, report_id, status, actor_id).await?;
+    if updated {
+        db::moderation::log_mod_action(
+            &state.chat,
+            action,
+            &format!("report#{report_id}"),
+            actor_id,
+            None,
+            None,
+            None,
+        )
+        .await?;
+        super::report::broadcast_reports_changed(state);
+    }
+    super::report::render_reports_oob(state).await
 }
 
 fn random_code(len: usize) -> String {
