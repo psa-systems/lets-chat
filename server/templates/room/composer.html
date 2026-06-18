@@ -7,6 +7,8 @@
   id="composer"
   data-lc-cleanup-root
   data-room-id="{{ room.id }}"
+  {# LC-332: message-length cap (room::MAX_MESSAGE_CHARS) for the char counter. #}
+  data-lc-maxchars="{{ self.max_message_chars() }}"
   hx-post="/room/{{ room.id }}/messages"
   hx-swap="none"
   hx-on::config-request="
@@ -180,10 +182,16 @@
         class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">&#128512;</button>
       <span id="lc-emoji-picker-slot" class="relative"></span>
     </span>
+    {# LC-332: live character counter. Hidden until within WARN_WINDOW of the
+       cap; warning color inside the window, danger + disabled Send when over.
+       ml-auto pushes it (and the Preview toggle) to the right of the toolbar. #}
+    <span id="lc-char-count" class="ml-auto text-xs tabular-nums hidden" aria-live="polite"
+      data-lc-remaining-tpl="{{ "room-composer-chars-remaining"|t }}"
+      data-lc-over-tpl="{{ "room-composer-chars-over"|t }}"></span>
     {# LC-276: Write/Preview toggle. Renders the draft through the SAME server
        markdown pipeline that posting uses, so the preview matches the result. #}
     <button type="button" data-lc-preview-toggle data-lc-edit-label="{{ "room-composer-edit"|t }}"
-      class="ml-auto px-2 py-1 rounded text-xs hover:text-content hover:bg-surface-sunken">{{ "room-composer-preview"|t }}</button>
+      class="ml-2 px-2 py-1 rounded text-xs hover:text-content hover:bg-surface-sunken">{{ "room-composer-preview"|t }}</button>
   </div>
   <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
        combobox (mention or slash) has a highlighted option open, Enter belongs
@@ -315,7 +323,11 @@
   // depends on the popover slot existing.
   if (ta && sendBtn) {
     window.__lcRefreshSend = function () {
-      sendBtn.disabled = !ta.value.trim() && !ta.form.file_id.value;
+      // LC-332: keep Send disabled while the body is over the length cap, on
+      // top of the existing "text or attachment present" predicate. The counter
+      // IIFE owns window.__lcOverLimit.
+      sendBtn.disabled = window.__lcOverLimit === true
+        || (!ta.value.trim() && !ta.form.file_id.value);
     };
     ta.addEventListener('input', window.__lcRefreshSend);
   }
@@ -471,6 +483,65 @@
     // detached textarea after the form is swapped out.
     if (window.__lcResizeRaf) { cancelAnimationFrame(window.__lcResizeRaf); window.__lcResizeRaf = 0; }
   }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-332: live character counter. Reveals within WARN_WINDOW chars of the cap,
+// warns inside the window, and flags + disables Send when the body is over the
+// cap. Length is counted by Unicode code point (Array.from(...).length) so it
+// matches the server's body.chars().count() for emoji/astral input - value.length
+// (UTF-16 code units) would over-count there and disagree with the 400 gate.
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  var counter = document.getElementById('lc-char-count');
+  if (!form || !ta || !counter) return;
+  var MAX = parseInt(form.getAttribute('data-lc-maxchars'), 10) || 16000;
+  var WARN_WINDOW = 500;
+  // Locale strings: {n} placeholder filled per render. Sourced from room.ftl.
+  var remainTpl = counter.getAttribute('data-lc-remaining-tpl') || '%n% left';
+  var overTpl = counter.getAttribute('data-lc-over-tpl') || '%n% over';
+  function fmt(tpl, n){ return tpl.replace('%n%', n); }
+  function update(){
+    var len = Array.from(ta.value).length;
+    var remaining = MAX - len;
+    if (remaining > WARN_WINDOW) {
+      // Comfortably under the cap: hide the counter and clear the over-limit gate.
+      counter.classList.add('hidden');
+      counter.textContent = '';
+      if (window.__lcOverLimit) {
+        window.__lcOverLimit = false;
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
+      }
+      return;
+    }
+    counter.classList.remove('hidden');
+    if (remaining < 0) {
+      counter.textContent = fmt(overTpl, -remaining);
+      counter.classList.add('text-danger');
+      counter.classList.remove('text-warning');
+      if (!window.__lcOverLimit) {
+        window.__lcOverLimit = true;
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
+      }
+    } else {
+      counter.textContent = fmt(remainTpl, remaining);
+      counter.classList.add('text-warning');
+      counter.classList.remove('text-danger');
+      if (window.__lcOverLimit) {
+        window.__lcOverLimit = false;
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
+      }
+    }
+  }
+  ta.addEventListener('input', update);
+  update();
+  // The textarea-bound listener dies with the form on swap; clear the stale
+  // over-limit flag so a fresh composer starts ungated. Cleanup-root is #composer.
+  function teardown(){ window.__lcOverLimit = false; }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });

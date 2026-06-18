@@ -36,6 +36,10 @@ room-composer-format-link-url-ph = url
 room-composer-format-strike-ph = strikethrough
 room-composer-format-list-ph = list item
 room-composer-format-quote-ph = quote
+# LC-332: composer character counter. %n% is replaced client-side with the count
+# (a plain token, not a Fluent placeable, so the brace-free text round-trips).
+room-composer-chars-remaining = %n% left
+room-composer-chars-over = %n% over limit
 # LC-323: #channel autocomplete popover.
 room-channel-popover-aria = Channel suggestions
 
