@@ -40,6 +40,7 @@ pub mod room_rbac;
 pub mod saved_searches;
 pub mod scheduled;
 pub mod settings;
+pub mod shame_tags;
 pub mod sidebar_categories;
 pub mod slash;
 pub mod starred_rooms;

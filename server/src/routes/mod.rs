@@ -71,6 +71,7 @@ mod saas_auth;
 mod scheduled;
 mod search;
 mod settings;
+mod shame_tags;
 mod sidebar_categories;
 mod slash;
 mod starred_rooms;
@@ -439,6 +440,8 @@ pub(crate) async fn load_message_view_for_viewer(
         show_unread_divider: false,
         // LC-244: per-message render; the client inserts live day dividers.
         day_label: None,
+        shame_enabled: false,
+        shame_hidden: None,
         reply_count,
         parent_id: m.parent_id,
         attachments,
@@ -1340,7 +1343,8 @@ pub fn build_router(state: AppState) -> Router {
             "/enclave/{id}/branding/logo",
             get(branding::get_enclave_logo),
         )
-        .merge(enclave::router());
+        .merge(enclave::router())
+        .merge(shame_tags::router());
 
     // LC-22 cutover: Bunyip SSO is the sole sign-in surface in the standalone
     // build. The saas build keeps its own JWT path via `saas_auth::router()`.

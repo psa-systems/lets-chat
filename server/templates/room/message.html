@@ -168,6 +168,16 @@
     {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
     <button hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="text-danger hover:underline">{{ "room-msg-report"|t }}</button>
     {% endif %}
+    {# LC-342: shame-tag "Flag" control. Enabled per enclave; the popover panel
+       lazy-loads the tag/vote control on first open (toggle), so the timeline
+       render emits no extra per-message request. #}
+    {% if message.shame_enabled && !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+    <details class="relative inline-block">
+      <summary class="list-none cursor-pointer text-content-muted hover:underline" title="{{ "shame-flag-title"|t }}">{{ "shame-flag"|t }}</summary>
+      <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow"
+           hx-get="/messages/{{ message.id }}/tags" hx-trigger="toggle once from:closest details" hx-swap="innerHTML"></div>
+    </details>
+    {% endif %}
     {% if message.can_edit %}
     <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-accent hover:underline">{{ "room-msg-edit"|t }}</button>
     {% endif %}
@@ -190,6 +200,15 @@
     {% include "partials/attachment.html" %}
   {% else %}
     {% if !message.body.is_empty() %}
+    {% if let Some(h) = message.shame_hidden %}
+    {# LC-342: default-hidden by community shame tags or a moderator override.
+       Collapsed behind a click-through; the body still renders inside so a
+       click reveals it. #}
+    <details data-lc-shame-hidden>
+      <summary class="cursor-pointer text-xs text-content-muted italic">{% if h.by_moderator %}{{ "shame-hidden-moderator"|t }}{% else %}{{ "shame-hidden-prefix"|t }} {{ h.reason }}{% endif %} - {{ "shame-show-anyway"|t }}</summary>
+      <div class="lc-md leading-snug mt-1">{{ message.body_html()|safe }}</div>
+    </details>
+    {% else %}
     {# LC-256: long-message fold. The full body always renders (progressive
        enhancement - no content hidden without JS); auto_scroll.html measures
        it on render and, only when it overflows the threshold, adds the clamp
@@ -200,6 +219,7 @@
       class="mt-1 text-xs text-accent hover:underline">{{ "room-msg-show-more"|t }}</button>
     {% if let Some(u) = message.first_url_encoded() %}
     <div class="mt-1" hx-get="/api/unfurl?url={{ u }}" hx-trigger="load once" hx-swap="innerHTML"></div>
+    {% endif %}
     {% endif %}
     {% endif %}
     {% for a in message.attachments %}

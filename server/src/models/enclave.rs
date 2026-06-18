@@ -55,6 +55,10 @@ pub struct Enclave {
     /// banned from the enclave (kick + ban-list) and their last-24h messages
     /// in the enclave's rooms are soft-deleted. Default false.
     pub coyote_mode: bool,
+    /// LC-342: "shame tag" community-moderation prototype, opt-in per enclave.
+    /// When true, members can vote moderation tags onto messages and
+    /// sufficiently-tagged messages render default-hidden. Default false.
+    pub shame_tags_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

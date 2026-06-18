@@ -94,6 +94,14 @@ pub struct MessageView {
     /// builder on the first message and on every UTC day change; `None`
     /// for the per-message WS fragments (the client inserts live dividers).
     pub day_label: Option<String>,
+    /// LC-342: true when shame-tagging is enabled for this room's enclave, so
+    /// the message renders the "Flag" control. False on every non-room-timeline
+    /// surface (DM / thread / WS fragments) in the prototype.
+    pub shame_enabled: bool,
+    /// LC-342: `Some(_)` when the message is default-hidden by community tags or
+    /// a moderator override; the body renders behind a "show anyway"
+    /// click-through. `None` = shown normally.
+    pub shame_hidden: Option<crate::db::shame_tags::HiddenState>,
 }
 
 /// LC-66: a poll rendered beneath its anchor message. Built by

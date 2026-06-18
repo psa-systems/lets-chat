@@ -258,6 +258,8 @@ pub async fn get_dm(
             is_follow_up,
             show_unread_divider,
             day_label,
+            shame_enabled: false,
+            shame_hidden: None,
             reply_count: *reply_counts.get(&m.id).unwrap_or(&0),
             parent_id: m.parent_id,
             attachments,
