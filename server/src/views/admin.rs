@@ -5,6 +5,7 @@ use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 use crate::db::analytics::RetentionCohort;
 use crate::models::{ModAction, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::report::ReportView;
 
 /// LC-97: one headline metric on the analytics dashboard: a label, the
 /// most recent day's value, the sum over the selected range, and the
@@ -184,6 +185,30 @@ pub struct ModLogPage<'a> {
     pub build_date: &'a str,
     pub section: &'static str,
     pub entries: &'a [ModAction],
+}
+
+/// LC-334: site-admin report-review queue (`/admin/reports`). The open-report
+/// rows render from the shared `admin/reports_items.html` partial (also used by
+/// the live OOB fragment) so a fresh load and a live update render identically.
+#[derive(Template)]
+#[template(path = "admin/reports.html")]
+pub struct ReportsPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub reports: &'a [ReportView],
 }
 
 #[derive(Template)]

@@ -189,6 +189,7 @@ room-msg-save = Guardar
 room-msg-remind = Recordar
 room-msg-mark-unread = Marcar como no leído
 room-msg-forward = Reenviar
+room-msg-report = Denunciar
 room-msg-edit = Editar
 room-msg-delete = Eliminar
 room-msg-delete-confirm = ¿Eliminar este mensaje?
@@ -196,6 +197,34 @@ room-msg-quote-deleted = (el mensaje citado fue eliminado)
 room-msg-seen = Visto
 # LC-302: accessible name for the one-tap quick-reaction hover bar.
 room-quick-react-aria = Reacciones rápidas
+
+## Report (LC-334): modal de denuncia de mensajes + cola de revisión del administrador.
+report-title = Denunciar mensaje
+report-close = Cerrar
+report-intro = Indica a los moderadores qué problema tiene este mensaje.
+report-category-legend = Motivo
+report-category-spam = Spam
+report-category-harassment = Acoso
+report-category-inappropriate = Contenido inapropiado
+report-category-other = Otro
+report-note-label = Detalles adicionales
+report-note-placeholder = Añade detalles (opcional)
+report-cancel = Cancelar
+report-submit = Enviar denuncia
+report-thanks = Gracias. Se ha notificado a los moderadores.
+report-done = Hecho
+report-queue-title = Denuncias
+report-queue-heading = Mensajes denunciados
+report-queue-empty = No hay denuncias abiertas.
+report-jump = Ir al mensaje
+report-row-author = Autor:
+report-row-in = en
+report-row-note = Nota:
+report-row-reporter = Denunciado por
+report-action-resolve = Resolver
+report-action-dismiss = Descartar
+report-message-deleted = (mensaje eliminado)
+report-room-dm = Mensaje directo
 
 ## Forward (LC-278)
 room-forward-title = Reenviar mensaje

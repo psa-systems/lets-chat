@@ -186,6 +186,13 @@ pub enum ChatEvent {
         room_id: i64,
         removed: bool,
     },
+    /// LC-334: the open message-report set changed (a report was filed, resolved,
+    /// or dismissed). Broadcast on the `admin` topic; the WS send task re-queries
+    /// and renders the `#admin-reports-list` + `#admin-reports-badge` OOB
+    /// fragment for each admin. Standalone-only on the render side (the admin
+    /// queue is `#[cfg(standalone)]`); in saas it falls through to `render_event`
+    /// (None).
+    AdminReportChanged,
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.
