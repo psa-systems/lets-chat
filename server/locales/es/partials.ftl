@@ -21,6 +21,7 @@ sidebar-section-starred = Destacados
 sidebar-section-all-rooms = Todas las salas
 sidebar-section-rooms = Salas
 sidebar-section-direct-messages = Mensajes directos
+sidebar-room-add = Anadir chat
 sidebar-star = Destacar
 sidebar-unstar = Quitar de destacados
 sidebar-draft-indicator = Borrador sin enviar

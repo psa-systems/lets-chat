@@ -233,47 +233,30 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_invitations(&send_state, &send_user).await
                                 }
-                                // LC-170/172: enclave member list. Broadcast on
-                                // the enclave:{id} topic, so only connections
-                                // subscribed to that enclave reach here. One
-                                // frame carries both the read-only landing list
-                                // and the per-viewer settings list; htmx applies
-                                // whichever id is on the recipient's page.
+                                // LC-172: enclave member list changed. Broadcast
+                                // on the enclave:{id} topic, so only connections
+                                // subscribed to that enclave reach here. Renders
+                                // the per-viewer settings members list OOB
+                                // (#lc-enclave-settings-members); dropped on tabs
+                                // not on that enclave's settings page.
                                 ChatEvent::EnclaveMemberAdded { enclave_id, .. }
                                 | ChatEvent::EnclaveMemberRemoved { enclave_id, .. }
                                 | ChatEvent::EnclaveMemberRoleChanged { enclave_id, .. } => {
                                     render_enclave_members(&send_state, &send_user, *enclave_id)
                                         .await
                                 }
-                                // LC-170/174: an enclave's room set changed.
-                                // Refresh both the landing-page room list
-                                // (#lc-enclave-rooms) and the enclave-keyed
-                                // sidebar nav (#sidebar-nav-{eid}); each is
-                                // rendered per recipient and htmx applies only
-                                // whichever id is on this connection's page.
+                                // LC-174: an enclave's room set changed. Refresh
+                                // the enclave-keyed sidebar nav (#sidebar-nav-{eid}),
+                                // rendered per recipient; htmx applies it only on
+                                // connections whose current page is that enclave.
                                 ChatEvent::EnclaveRoomAdded { enclave_id, .. }
                                 | ChatEvent::EnclaveRoomRemoved { enclave_id, .. } => {
-                                    let mut out = render_enclave_rooms(
+                                    render_enclave_sidebar_nav(
                                         &send_state,
                                         &send_user,
                                         *enclave_id,
                                     )
                                     .await
-                                    .unwrap_or_default();
-                                    if let Some(nav) = render_enclave_sidebar_nav(
-                                        &send_state,
-                                        &send_user,
-                                        *enclave_id,
-                                    )
-                                    .await
-                                    {
-                                        out.push_str(&nav);
-                                    }
-                                    if out.is_empty() {
-                                        None
-                                    } else {
-                                        Some(out)
-                                    }
                                 }
                                 // LC-173: the editor's own profile changed.
                                 // broadcast_to_user fans to all their tabs;
@@ -1979,62 +1962,33 @@ async fn render_saved_list(state: &AppState, viewer: &User) -> Option<String> {
         .ok()
 }
 
+/// LC-172: re-render the enclave settings members list as an OOB fragment for
+/// `viewer`. Per-viewer because the role-toggle / kick / transfer controls are
+/// gated on `can_delete`. Dropped on tabs not on that enclave's settings page
+/// (the `#lc-enclave-settings-members` id is absent there).
 async fn render_enclave_members(
     state: &AppState,
     viewer: &User,
     enclave_id: i64,
 ) -> Option<String> {
+    let enclave = db::enclave::get_enclave(&state.chat, enclave_id)
+        .await
+        .ok()??;
     let members = db::enclave::list_members(&state.chat, enclave_id)
         .await
         .ok()?;
     let member_views = super::enclave::resolve_member_views(state, members)
         .await
         .ok()?;
-    let mut out = crate::views::enclave::EnclaveMembersLiveFragment {
-        members: &member_views,
-    }
-    .render()
-    .ok()?;
-    // Settings-page variant (per recipient). Skipped if the enclave row is
-    // gone, leaving the landing fragment as the sole output.
-    if let Ok(Some(enclave)) = db::enclave::get_enclave(&state.chat, enclave_id).await {
-        let membership = db::enclave::get_membership(&state.chat, enclave_id, &viewer.id)
-            .await
-            .ok()
-            .flatten();
-        let can_delete = crate::perms::enclave_can_delete(membership.map(|m| m.role), &viewer.role);
-        if let Ok(settings) = (crate::views::enclave::EnclaveSettingsMembersLiveFragment {
-            enclave: &enclave,
-            members: &member_views,
-            can_delete,
-        })
-        .render()
-        {
-            out.push_str(&settings);
-        }
-    }
-    Some(out)
-}
-
-/// LC-170: re-render the enclave landing-page room list as an OOB fragment for
-/// `viewer`. Per-viewer because the per-row Remove control is gated on
-/// `can_manage` and the room set is access-filtered to what this viewer can
-/// see (mirrors the `get_landing` build).
-async fn render_enclave_rooms(state: &AppState, viewer: &User, enclave_id: i64) -> Option<String> {
-    let enclave = db::enclave::get_enclave(&state.chat, enclave_id)
-        .await
-        .ok()??;
     let membership = db::enclave::get_membership(&state.chat, enclave_id, &viewer.id)
         .await
-        .ok()?;
-    let can_manage = crate::perms::enclave_can_manage(membership.map(|m| m.role), &viewer.role);
-    let rooms = db::chat::list_rooms_in_enclave(&state.chat, enclave_id, &viewer.id, can_manage)
-        .await
-        .ok()?;
-    crate::views::enclave::EnclaveRoomsLiveFragment {
+        .ok()
+        .flatten();
+    let can_delete = crate::perms::enclave_can_delete(membership.map(|m| m.role), &viewer.role);
+    crate::views::enclave::EnclaveSettingsMembersLiveFragment {
         enclave: &enclave,
-        rooms: &rooms,
-        can_manage,
+        members: &member_views,
+        can_delete,
     }
     .render()
     .ok()

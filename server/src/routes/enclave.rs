@@ -217,8 +217,6 @@ pub async fn get_landing(
         return Err(AppError::Forbidden);
     }
     let can_manage = enclave_can_manage(role, &user.role);
-    let members = db::enclave::list_members(&state.chat, id).await?;
-    let member_views = resolve_member_views(&state, members).await?;
     // LC-143: open the room the user last had here (validated), else the
     // default (first) room. The redirect target comes from the set the user
     // can actually OPEN - the same accessibility `get_room` enforces
@@ -235,10 +233,9 @@ pub async fn get_landing(
         return Ok(Redirect::to(&format!("/room/{room_id}")).into_response());
     }
 
-    // No openable room: render the landing as an empty/onboarding state. The
-    // manage-view list (can_manage) shows any rooms the operator can manage.
-    let rooms = db::chat::list_rooms_in_enclave(&state.chat, id, &user.id, can_manage).await?;
-
+    // LC-336: no openable room. The full landing menu was removed; render a
+    // small placeholder pane. Create-chat lives on the sidebar `+` (managers)
+    // and member management on the settings page (reached via the switcher gear).
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -252,8 +249,6 @@ pub async fn get_landing(
     Ok(html(&EnclavePage {
         user: &user,
         enclave: &enclave,
-        members: &member_views,
-        rooms: &rooms,
         can_manage,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,

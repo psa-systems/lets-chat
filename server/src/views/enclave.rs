@@ -4,25 +4,26 @@ use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 use crate::models::custom_emoji::CustomEmoji;
 use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveRole};
-use crate::models::{Room, User};
+use crate::models::User;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
-/// One row in the enclave landing/settings members list. Carries a pre-
-/// resolved `label` (display_name when set, otherwise `@username`) so the
-/// template never has to render the opaque user_id.
+/// One row in the enclave settings members list. Carries a pre-resolved
+/// `label` (display_name when set, otherwise `@username`) so the template
+/// never has to render the opaque user_id.
 pub struct EnclaveMemberView {
     pub user_id: String,
     pub label: String,
     pub role: EnclaveRole,
 }
 
+/// LC-336: empty-state placeholder shown by `get_landing` only when the enclave
+/// has no openable rooms. The full landing menu was removed; create-chat now
+/// lives on the sidebar `+` and member management in settings.
 #[derive(Template)]
 #[template(path = "enclave/page.html")]
 pub struct EnclavePage<'a> {
     pub user: &'a User,
     pub enclave: &'a Enclave,
-    pub members: &'a [EnclaveMemberView],
-    pub rooms: &'a [Room],
     pub can_manage: bool,
     pub flash_error: Option<&'a str>,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
@@ -240,35 +241,11 @@ pub struct InvitationsLiveFragment<'a> {
     pub invitations: &'a [(EnclaveInvitation, Enclave)],
 }
 
-/// LC-170: OOB fragment swapping the live `#lc-enclave-members` region on the
-/// enclave landing page when membership/roles change. The member list is
-/// read-only (label + role, no per-viewer controls), so one rendered fragment
-/// is correct for every subscriber. Shares `enclave/members_items.html` with
-/// `EnclavePage` so the page and the live update render identically.
-#[derive(Template)]
-#[template(path = "ws/enclave_members_live.html")]
-pub struct EnclaveMembersLiveFragment<'a> {
-    pub members: &'a [EnclaveMemberView],
-}
-
-/// LC-170: OOB fragment swapping the live `#lc-enclave-rooms` region on the
-/// enclave landing page when rooms are added/removed. Rendered per recipient
-/// in the WS send task because the per-row Remove button depends on the
-/// viewer's `can_manage`, and the room set itself is access-filtered per
-/// viewer. Shares `enclave/rooms_items.html` with `EnclavePage`.
-#[derive(Template)]
-#[template(path = "ws/enclave_rooms_live.html")]
-pub struct EnclaveRoomsLiveFragment<'a> {
-    pub enclave: &'a Enclave,
-    pub rooms: &'a [Room],
-    pub can_manage: bool,
-}
-
 /// LC-172: OOB fragment swapping the live `#lc-enclave-settings-members` region
-/// on the enclave settings page when membership/roles change. Unlike the
-/// read-only landing list, this carries the role-toggle / kick / transfer
-/// controls gated on `can_delete`, so it is rendered per recipient. Shares
-/// `enclave/settings_members_items.html` with `EnclaveSettingsPage`.
+/// on the enclave settings page when membership/roles change. Carries the
+/// role-toggle / kick / transfer controls gated on `can_delete`, so it is
+/// rendered per recipient. Shares `enclave/settings_members_items.html` with
+/// `EnclaveSettingsPage`.
 #[derive(Template)]
 #[template(path = "ws/enclave_settings_members_live.html")]
 pub struct EnclaveSettingsMembersLiveFragment<'a> {
