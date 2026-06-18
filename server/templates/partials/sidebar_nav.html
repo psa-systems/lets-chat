@@ -78,9 +78,36 @@
     {% endfor %}
     </div>
     {% endif %}
-    {% if !sidebar_rooms.is_empty() %}
+    {# LC-336: in an enclave the ROOMS header always renders (even with no rooms)
+       so the `+` create-chat affordance is always reachable; outside an enclave
+       (Home) it shows only when there are rooms and carries no `+`. #}
+    {% if sidebar_current_enclave.is_some() || !sidebar_rooms.is_empty() %}
     <section data-lc-sb-section>
-      <h2 class="text-xs uppercase text-content-muted px-2">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
+      <div class="flex items-center justify-between px-2">
+        <h2 class="text-xs uppercase text-content-muted">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
+        {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
+        <details class="relative">
+          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1 leading-none" title="{{ "sidebar-room-add"|t }}" aria-label="{{ "sidebar-room-add"|t }}">+</summary>
+          <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2">
+            {# Plain POST: post_create_room redirects to /enclave/{id} which then
+               redirects into the newly created room (full navigation). #}
+            <form method="post" action="/enclave/{{ eid }}/rooms" class="space-y-2">
+              <input name="name" placeholder="{{ "enclave-new-room-placeholder"|t }}" maxlength="100" required class="w-full border rounded px-2 py-1 text-xs">
+              <select name="kind" class="w-full border rounded px-2 py-1 text-xs">
+                <option value="text">{{ "enclave-room-kind-text"|t }}</option>
+                <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
+              </select>
+              <select name="room_type" class="w-full border rounded px-2 py-1 text-xs">
+                <option value="public">{{ "enclave-room-type-public"|t }}</option>
+                <option value="private">{{ "enclave-room-type-private"|t }}</option>
+              </select>
+              <button type="submit" class="w-full px-2 py-1 text-xs bg-accent text-accent-content rounded">{{ "enclave-add-room"|t }}</button>
+            </form>
+          </div>
+        </details>
+        {% endif %}{% endif %}
+      </div>
+      {% if !sidebar_rooms.is_empty() %}
       <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
         {% for room in sidebar_rooms %}
         <li data-lc-sb-row{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
@@ -90,6 +117,7 @@
         </li>
         {% endfor %}
       </ul>
+      {% endif %}
     </section>
     {% endif %}
     {% if !sidebar_peers.is_empty() %}

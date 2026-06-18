@@ -21,6 +21,7 @@ sidebar-section-starred = Starred
 sidebar-section-all-rooms = All rooms
 sidebar-section-rooms = Rooms
 sidebar-section-direct-messages = Direct messages
+sidebar-room-add = Add chat
 sidebar-star = Star
 sidebar-unstar = Unstar
 sidebar-draft-indicator = Unsent draft
