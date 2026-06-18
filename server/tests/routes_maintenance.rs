@@ -235,19 +235,17 @@ async fn login_route_stays_reachable_during_maintenance() {
 }
 
 #[tokio::test]
-async fn password_reset_surface_stays_reachable_during_maintenance() {
+async fn login_surface_stays_reachable_during_maintenance() {
     let t = app().await;
     db::settings::set_setting(&t.settings, "maintenance_mode", "true")
         .await
         .unwrap();
-    // An admin who forgot their password must be able to reach the
-    // recovery flow without an out-of-band DB write. The handlers'
-    // own statuses (404 in this test because there's no mailer, OK in
-    // a real deployment) are fine - what we are asserting is that the
-    // maintenance middleware did NOT intercept these paths with a 503.
-    let (status, _) = send(&t.app, None, Method::GET, "/forgot", "").await;
-    assert_ne!(status, StatusCode::SERVICE_UNAVAILABLE);
-    let (status, _) = send(&t.app, None, Method::GET, "/reset/bogus", "").await;
+    // LC-22 cutover: a locked-out admin must still be able to reach the
+    // sign-in shell during a maintenance window. The maintenance middleware
+    // exempts `/login` for that reason. /auth/bunyip/* is also exempt at
+    // the middleware layer but we don't hit it here because the test
+    // AppState has `bunyip_sso = None` and the handler would panic.
+    let (status, _) = send(&t.app, None, Method::GET, "/login", "").await;
     assert_ne!(status, StatusCode::SERVICE_UNAVAILABLE);
 }
 

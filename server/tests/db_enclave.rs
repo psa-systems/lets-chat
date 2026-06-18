@@ -17,8 +17,11 @@ async fn auth_pool() -> SqlitePool {
 }
 
 async fn insert_user(pool: &SqlitePool, id: &str, username: &str, role: &str, created_at: &str) {
-    sqlx::query("INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES (?, ?, 'h', ?, ?, ?)")
-        .bind(id).bind(username).bind(role).bind(created_at).bind(created_at)
+    // LC-22 cutover: synthesize a unique bunyip_sub per row so the
+    // 0031 UNIQUE index does not fire when multiple users are inserted.
+    let sub = format!("test-{id}");
+    sqlx::query("INSERT INTO users (id, username, password_hash, role, bunyip_sub, created_at, updated_at) VALUES (?, ?, '', ?, ?, ?, ?)")
+        .bind(id).bind(username).bind(role).bind(&sub).bind(created_at).bind(created_at)
         .execute(pool).await.unwrap();
 }
 
