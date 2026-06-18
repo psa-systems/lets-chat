@@ -17,22 +17,9 @@
       <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" value="{{ rate_limit_messages }}"
              class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </div>
-    <div>
-      <label class="block text-sm font-medium mb-1" for="rate_limit_registrations">{{ "admin-antispam-registrations-per-ip"|t }}</label>
-      <input id="rate_limit_registrations" name="rate_limit_registrations" type="number" min="0" value="{{ rate_limit_registrations }}"
-             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
-    </div>
-    <div>
-      <label class="block text-sm font-medium mb-1" for="rate_limit_logins">{{ "admin-antispam-login-attempts-per-ip"|t }}</label>
-      <input id="rate_limit_logins" name="rate_limit_logins" type="number" min="0" value="{{ rate_limit_logins }}"
-             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
-      <p class="text-xs text-content-muted mt-1">{{ "admin-antispam-login-attempts-note"|t }}</p>
-    </div>
-    <div>
-      <label class="block text-sm font-medium mb-1" for="rate_limit_password_resets">{{ "admin-antispam-password-resets-per-ip"|t }}</label>
-      <input id="rate_limit_password_resets" name="rate_limit_password_resets" type="number" min="0" value="{{ rate_limit_password_resets }}"
-             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
-    </div>
+    {# LC-22 cutover: registration / login / password-reset per-IP caps are
+       gone with the local-auth surface. Bunyip handles credential rate limits
+       upstream. #}
   </section>
 
   <section class="space-y-3">

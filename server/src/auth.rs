@@ -223,51 +223,15 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     }
 }
 
-/// Middleware: redirect any authenticated user without 2FA enabled to the
-/// enrollment page, with carve-outs for the auth flow itself, the enrollment
-/// page, and static assets so the user can actually complete setup. No-op
-/// when the deployment has no `LETS_CHAT_SECRET_KEY` configured, which
-/// disables 2FA entirely.
-pub async fn enforce_2fa_enrollment(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-    next: Next,
-) -> Response {
-    if !state.two_factor_available() {
-        return next.run(req).await;
-    }
-    let path = req.uri().path();
-    let exempt = path == "/logout"
-        || path == "/login"
-        || path.starts_with("/login/")
-        || path == "/register"
-        || path == "/register/2fa"
-        || path == "/forgot"
-        || path.starts_with("/reset/")
-        || path == "/settings/2fa/setup"
-        || path == "/version"
-        || path.starts_with("/assets/")
-        || path.starts_with("/avatars/");
-    if !exempt {
-        if let Some(u) = req.extensions().get::<User>() {
-            if !u.totp_enabled {
-                return Redirect::to("/settings/2fa/setup").into_response();
-            }
-        }
-    }
-    next.run(req).await
-}
-
+/// LC-22 cutover: `enforce_2fa_enrollment` was deleted. Bunyip owns 2FA;
+/// every Bunyip-provisioned user has `totp_enabled = 0` and the old
+/// middleware would 303 them to a route that no longer exists. If an
+/// operator wants stricter 2FA, they configure it on the Bunyip user.
+///
 /// Middleware: when the `maintenance_mode` setting is on, return a 503
 /// maintenance page for everyone except admins. Admins still need the
-/// admin area, the login surface, and static assets to recover, so each
-/// of those is exempt before the setting is even read. The password-
-/// reset surface (`/forgot`, `/reset/...`) is exempt too so a locked-out
-/// admin can recover without an out-of-band DB write. Registration and
-/// email verification stay 503'd: new accounts should not be created
-/// during a maintenance window. The setting read is one indexed KV
-/// lookup against `settings.db`; we skip it entirely for exempt paths
-/// so static asset requests do not pay the cost.
+/// admin area, the SSO surface, and static assets to recover, so each
+/// of those is exempt before the setting is even read.
 pub async fn enforce_maintenance_mode(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -277,10 +241,8 @@ pub async fn enforce_maintenance_mode(
     let exempt = path.starts_with("/assets/")
         || path.starts_with("/avatars/")
         || path == "/login"
-        || path.starts_with("/login/")
         || path == "/logout"
-        || path == "/forgot"
-        || path.starts_with("/reset/")
+        || path.starts_with("/auth/bunyip/")
         || path == "/version";
     if exempt {
         return next.run(req).await;
