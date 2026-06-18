@@ -1008,6 +1008,14 @@ pub struct RoomPage<'a> {
     pub initial_draft: &'a str,
 }
 
+impl RoomPage<'_> {
+    /// LC-332: message-length cap surfaced to `room/composer.html` as
+    /// `data-lc-maxchars` for the character counter. Single source of truth.
+    pub fn max_message_chars(&self) -> usize {
+        crate::routes::room::MAX_MESSAGE_CHARS
+    }
+}
+
 #[derive(Template)]
 #[template(path = "room/composer.html")]
 pub struct ComposerFragment<'a> {
@@ -1020,6 +1028,14 @@ pub struct ComposerFragment<'a> {
     /// to restore from the server here. The next keystroke will
     /// re-create the draft if non-empty.
     pub initial_draft: &'a str,
+}
+
+impl ComposerFragment<'_> {
+    /// LC-332: see `RoomPage::max_message_chars`. The standalone composer
+    /// re-render path needs the same `data-lc-maxchars` value.
+    pub fn max_message_chars(&self) -> usize {
+        crate::routes::room::MAX_MESSAGE_CHARS
+    }
 }
 
 #[derive(Template)]
