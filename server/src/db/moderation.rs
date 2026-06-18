@@ -64,3 +64,34 @@ pub async fn soft_delete_message(
         .await?;
     Ok(())
 }
+
+/// LC-339: soft-delete all of `user_id`'s last-24h, not-already-deleted
+/// messages in rooms belonging to `enclave_id`. Returns the (message_id,
+/// room_id) of each newly-deleted row so the caller can broadcast a
+/// `MessageDeleted` tombstone per room. Reversible (sets deleted_at), unlike
+/// the retention hard-delete.
+pub async fn soft_delete_user_messages_in_enclave(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    deleted_by: &str,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE messages SET deleted_at = datetime('now'), deleted_by = ? \
+         WHERE id IN ( \
+             SELECT m.id FROM messages m JOIN rooms r ON r.id = m.room_id \
+             WHERE m.user_id = ? AND r.enclave_id = ? AND m.deleted_at IS NULL \
+               AND m.created_at > datetime('now', '-24 hours') \
+         ) \
+         RETURNING id, room_id",
+    )
+    .bind(deleted_by)
+    .bind(user_id)
+    .bind(enclave_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<i64, _>("id"), r.get::<i64, _>("room_id")))
+        .collect())
+}

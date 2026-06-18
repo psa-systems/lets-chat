@@ -583,6 +583,15 @@ pub async fn post_message(
         }
     }
 
+    // LC-339: a user banned from this enclave (e.g. by Coyote Mode) cannot
+    // post in its rooms, even ones still public to non-members. Membership
+    // removal already cuts private-room access; this also covers public rooms.
+    if let Some(eid) = enclave_id_opt {
+        if db::enclave::is_enclave_banned(&state.chat, eid, &user.id).await? {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     // Posting follows the same access predicate as reading. Site admins can
     // post in any non-DM room; DMs require explicit room membership for both
     // read and write. Enclave membership is required for non-DM rooms.
@@ -775,6 +784,45 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body, client_id).await?;
 
+    // LC-339: Coyote Mode bot-burst detection. Only for an enclave room with
+    // the mode on, and never for enclave managers / site admins (avoids
+    // self-lockout and power-user false positives). A user who has posted in
+    // 3+ distinct rooms of the enclave within 3 s is treated as a bot; the
+    // ban + 24h soft-purge runs off the request path so the send still returns
+    // promptly.
+    if let Some(eid) = enclave_id_opt {
+        if !is_admin {
+            let coyote_on = db::enclave::get_coyote_mode_for_room(&state.chat, room_id)
+                .await?
+                .map(|(_, on)| on)
+                .unwrap_or(false);
+            if coyote_on {
+                let role = db::enclave::get_membership(&state.chat, eid, &user.id)
+                    .await?
+                    .map(|m| m.role);
+                let is_manager = crate::perms::enclave_can_manage(role, &user.role);
+                if !is_manager
+                    && db::enclave::count_distinct_rooms_posted_recently(
+                        &state.chat,
+                        eid,
+                        &user.id,
+                        3,
+                    )
+                    .await?
+                        >= 3
+                {
+                    let st = state.clone();
+                    let uid = user.id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = coyote_ban_and_purge(&st, eid, &uid).await {
+                            tracing::warn!(error = %e, enclave_id = eid, user_id = %uid, "coyote ban+purge failed");
+                        }
+                    });
+                }
+            }
+        }
+    }
+
     // LC-228: form is `hx-swap="none"` (composer.html:11), so any returned
     // body is discarded by htmx. Skip the ~5 KB ComposerFragment render +
     // serialization and return 204. The user-visible effects already
@@ -783,6 +831,66 @@ pub async fn post_message(
     // textarea + disables the send button based on `event.detail.successful`
     // (true for any 2xx including 204).
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// LC-339: ban a Coyote-Mode-flagged user from the enclave and soft-delete
+/// their last-24h messages in the enclave's rooms. Runs off the send path
+/// (spawned), so it logs failures rather than surfacing them.
+async fn coyote_ban_and_purge(
+    state: &AppState,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<(), AppError> {
+    // Scrub the soon-to-be-banned user's stars on rooms they're losing, same
+    // as a manual kick (post_kick), so stale starred rows don't linger.
+    let lost = db::chat::list_rooms_in_enclave(&state.chat, enclave_id, user_id, false).await?;
+    let lost_ids: Vec<i64> = lost.iter().map(|r| r.id).collect();
+    db::enclave::ban_from_enclave(
+        &state.chat,
+        enclave_id,
+        user_id,
+        "coyote_mode: cross-room burst",
+    )
+    .await?;
+    db::starred_rooms::forget_rooms(&state.auth, user_id, &lost_ids).await?;
+    let purged = db::moderation::soft_delete_user_messages_in_enclave(
+        &state.chat,
+        enclave_id,
+        user_id,
+        "system:coyote",
+    )
+    .await?;
+    for (message_id, room_id) in &purged {
+        state.hub.broadcast_to_room(
+            *room_id,
+            &ChatEvent::MessageDeleted {
+                message_id: *message_id,
+                room_id: *room_id,
+            },
+        );
+    }
+    let topic = format!("enclave:{enclave_id}");
+    state.hub.broadcast_to_topic(
+        &topic,
+        &ChatEvent::EnclaveMemberRemoved {
+            enclave_id,
+            user_id: user_id.to_string(),
+        },
+    );
+    // LC-176: drop the banned user's enclave-topic subscription so their open
+    // tabs stop receiving its events.
+    state.hub.unsubscribe_user_from_topic(user_id, &topic);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "coyote_ban",
+        user_id,
+        "system:coyote",
+        Some("cross-room burst"),
+        None,
+        Some(&enclave_id.to_string()),
+    )
+    .await?;
+    Ok(())
 }
 
 /// Post-insert side effects shared by the live POST handler and the

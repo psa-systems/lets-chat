@@ -102,6 +102,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclave/{id}/visibility", post(post_visibility))
         .route("/enclave/{id}/share-emojis", post(post_share_emojis))
         .route("/enclave/{id}/rate-limit", post(post_msg_rate_limit))
+        .route("/enclave/{id}/coyote-mode", post(post_coyote_mode))
         .route(
             "/enclave/{id}/invite-code",
             post(post_invite_code).delete(delete_invite_code),
@@ -361,6 +362,25 @@ pub async fn post_msg_rate_limit(
     Ok(Redirect::to(&format!("/enclave/{id}/settings")))
 }
 
+#[derive(Deserialize)]
+pub struct CoyoteModeForm {
+    /// "1" enables, anything else (incl. the toggle-off button's "0") disables.
+    pub enabled: String,
+}
+
+/// LC-339: toggle "Coyote Mode" anti-spam for an enclave (manager-gated).
+pub async fn post_coyote_mode(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<CoyoteModeForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let enabled = form.enabled.trim() == "1";
+    db::enclave::set_coyote_mode(&state.chat, id, enabled).await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+}
+
 pub async fn post_invite_code(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -397,6 +417,10 @@ pub async fn post_discover_join(
     if !enclave.is_public {
         return Err(AppError::Forbidden);
     }
+    // LC-339: a user banned from this enclave (e.g. by Coyote Mode) cannot rejoin.
+    if db::enclave::is_enclave_banned(&state.chat, id, &user.id).await? {
+        return Err(AppError::Forbidden);
+    }
     if db::enclave::get_membership(&state.chat, id, &user.id)
         .await?
         .is_some()
@@ -430,6 +454,10 @@ pub async fn post_join_by_code(
     else {
         return Err(AppError::BadRequest("invalid or revoked code".into()));
     };
+    // LC-339: a user banned from this enclave (e.g. by Coyote Mode) cannot rejoin.
+    if db::enclave::is_enclave_banned(&state.chat, enclave.id, &user.id).await? {
+        return Err(AppError::Forbidden);
+    }
     if db::enclave::get_membership(&state.chat, enclave.id, &user.id)
         .await?
         .is_some()

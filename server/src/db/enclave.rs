@@ -21,6 +21,7 @@ fn map_enclave(row: &sqlx::sqlite::SqliteRow) -> Enclave {
         created_at: row.get("created_at"),
         share_emojis_globally: row.get::<i64, _>("share_emojis_globally") != 0,
         msg_rate_limit_burst: row.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
+        coyote_mode: row.get::<i64, _>("coyote_mode") != 0,
     }
 }
 
@@ -49,7 +50,7 @@ pub async fn create_enclave(
 
 pub async fn get_enclave(pool: &SqlitePool, id: i64) -> Result<Option<Enclave>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst, coyote_mode \
          FROM enclaves WHERE id=?",
     )
     .bind(id)
@@ -63,7 +64,7 @@ pub async fn get_enclave_by_invite_code(
     code: &str,
 ) -> Result<Option<Enclave>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst, coyote_mode \
          FROM enclaves WHERE invite_code = ?",
     )
     .bind(code)
@@ -242,6 +243,101 @@ pub async fn set_msg_rate_limit_burst(
     Ok(())
 }
 
+/// LC-339: toggle "Coyote Mode" anti-spam for an enclave.
+pub async fn set_coyote_mode(pool: &SqlitePool, id: i64, enabled: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE enclaves SET coyote_mode=? WHERE id=?")
+        .bind(if enabled { 1_i64 } else { 0_i64 })
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-339: cheap helper for the burst-detection gate. Resolves the room's
+/// enclave and its `coyote_mode` flag in one JOIN. Returns `None` for a DM
+/// (`rooms.enclave_id IS NULL`) or a missing row; `Some((enclave_id, false))`
+/// when the room is in an enclave with the mode off.
+pub async fn get_coyote_mode_for_room(
+    pool: &SqlitePool,
+    room_id: i64,
+) -> Result<Option<(i64, bool)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT r.enclave_id AS eid, COALESCE(e.coyote_mode, 0) AS cm \
+         FROM rooms r LEFT JOIN enclaves e ON e.id = r.enclave_id \
+         WHERE r.id = ?",
+    )
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| {
+        r.get::<Option<i64>, _>("eid")
+            .map(|eid| (eid, r.get::<i64, _>("cm") != 0))
+    }))
+}
+
+/// LC-339: count how many DISTINCT rooms of `enclave_id` the user has posted a
+/// (non-deleted) message in within the last `secs` seconds. The just-inserted
+/// message counts. `>= 3` over a 3 s window is the bot signal.
+pub async fn count_distinct_rooms_posted_recently(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    secs: i64,
+) -> Result<i64, sqlx::Error> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT m.room_id) FROM messages m \
+         JOIN rooms r ON r.id = m.room_id \
+         WHERE m.user_id = ? AND r.enclave_id = ? AND m.deleted_at IS NULL \
+           AND m.created_at >= datetime('now', '-' || ? || ' seconds')",
+    )
+    .bind(user_id)
+    .bind(enclave_id)
+    .bind(secs)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+/// LC-339: ban a user from an enclave (kick + ban-list so they cannot rejoin).
+/// Idempotent on the ban row; always removes membership.
+pub async fn ban_from_enclave(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    reason: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO enclave_bans (enclave_id, user_id, reason) VALUES (?, ?, ?)",
+    )
+    .bind(enclave_id)
+    .bind(user_id)
+    .bind(reason)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("DELETE FROM enclave_members WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// LC-339: is this user on the enclave's ban-list?
+pub async fn is_enclave_banned(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT 1 FROM enclave_bans WHERE enclave_id=? AND user_id=?")
+        .bind(enclave_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.is_some())
+}
+
 /// LC-217: cheap helper for `post_message`'s rate-limit gate. JOINs
 /// `rooms` -> `enclaves` so the caller does not need a separate
 /// "what enclave is this room in" query. Returns `0` when the room is a
@@ -338,7 +434,7 @@ pub async fn list_invitations_for_user(
 ) -> Result<Vec<(EnclaveInvitation, Enclave)>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT i.id, i.enclave_id, i.invitee_id, i.invited_by, i.created_at, \
-                e.id AS e_id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at AS e_created_at, e.share_emojis_globally, e.msg_rate_limit_burst \
+                e.id AS e_id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at AS e_created_at, e.share_emojis_globally, e.msg_rate_limit_burst, e.coyote_mode \
          FROM enclave_invitations i \
          JOIN enclaves e ON e.id = i.enclave_id \
          WHERE i.invitee_id = ? \
@@ -367,6 +463,7 @@ pub async fn list_invitations_for_user(
                 created_at: r.get("e_created_at"),
                 share_emojis_globally: r.get::<i64, _>("share_emojis_globally") != 0,
                 msg_rate_limit_burst: r.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
+                coyote_mode: r.get::<i64, _>("coyote_mode") != 0,
             };
             (inv, enc)
         })
@@ -456,7 +553,7 @@ pub async fn list_enclaves_for_user(
     user_id: &str,
 ) -> Result<Vec<Enclave>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst \
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, e.coyote_mode \
          FROM enclaves e \
          JOIN enclave_members m ON m.enclave_id = e.id AND m.user_id = ? \
          ORDER BY e.name COLLATE NOCASE",
@@ -471,7 +568,7 @@ pub async fn list_all_enclaves_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<(Enclave, i64, Option<String>)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, \
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, e.coyote_mode, \
                 (SELECT COUNT(*) FROM enclave_members m WHERE m.enclave_id = e.id) AS member_count, \
                 (SELECT user_id FROM enclave_members m WHERE m.enclave_id = e.id AND m.role = 'owner' LIMIT 1) AS owner_id \
          FROM enclaves e ORDER BY e.name COLLATE NOCASE",
@@ -491,6 +588,7 @@ pub async fn list_all_enclaves_with_counts(
                 created_at: r.get("created_at"),
                 share_emojis_globally: r.get::<i64, _>("share_emojis_globally") != 0,
                 msg_rate_limit_burst: r.get::<i64, _>("msg_rate_limit_burst").max(0) as u32,
+                coyote_mode: r.get::<i64, _>("coyote_mode") != 0,
             };
             let count: i64 = r.get("member_count");
             let owner: Option<String> = r.get("owner_id");
@@ -501,7 +599,7 @@ pub async fn list_all_enclaves_with_counts(
 
 pub async fn list_public_enclaves(pool: &SqlitePool) -> Result<Vec<Enclave>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst \
+        "SELECT id, name, description, is_public, invite_code, created_by, created_at, share_emojis_globally, msg_rate_limit_burst, coyote_mode \
          FROM enclaves WHERE is_public = 1 ORDER BY name COLLATE NOCASE",
     )
     .fetch_all(pool)
