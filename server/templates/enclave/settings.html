@@ -99,6 +99,27 @@
     </form>
   </section>
 
+  {# LC-339: Coyote Mode anti-spam. Manage-gated toggle. #}
+  <section class="space-y-3">
+    <h2 class="font-semibold">{{ "enclave-settings-coyote-heading"|t }}</h2>
+    <p class="text-sm text-content-muted">{{ "enclave-settings-coyote-help"|t }}</p>
+    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
+      <div class="text-sm">
+        {% if enclave.coyote_mode %}
+        <strong>{{ "enclave-settings-coyote-on-label"|t }}</strong> {{ "enclave-settings-coyote-on-text"|t }}
+        {% else %}
+        <strong>{{ "enclave-settings-coyote-off-label"|t }}</strong> {{ "enclave-settings-coyote-off-text"|t }}
+        {% endif %}
+      </div>
+      <form method="post" action="/enclave/{{ enclave.id }}/coyote-mode">
+        <button name="enabled" value="{% if enclave.coyote_mode %}0{% else %}1{% endif %}"
+                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
+          {% if enclave.coyote_mode %}{{ "enclave-settings-coyote-disable"|t }}{% else %}{{ "enclave-settings-coyote-enable"|t }}{% endif %}
+        </button>
+      </form>
+    </div>
+  </section>
+
   <section class="space-y-3">
     <h2 class="font-semibold">{{ "enclave-settings-emojis-heading"|t }}</h2>
     <p class="text-sm text-content-muted">
