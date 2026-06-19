@@ -26,6 +26,20 @@ pub struct SettingsQuery {
     /// LC-100: set by the language-save redirect to flash "Saved.".
     #[serde(default)]
     pub saved: Option<String>,
+    /// LC-356: inline error flash for the profile / delete-account forms, set
+    /// by `settings_error_redirect` so a failed save keeps the user on the
+    /// settings page instead of throwing a full-page error.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// LC-356: redirect back to /settings with an inline error flash. `msg` is
+/// always a fixed server-side validation string (never raw user input);
+/// Askama escapes it on render. Replaces the previous `AppError::BadRequest`
+/// full-page error on the profile and delete-account forms.
+pub(crate) fn settings_error_redirect(msg: &str) -> Response {
+    let encoded: String = url::form_urlencoded::byte_serialize(msg.as_bytes()).collect();
+    Redirect::to(&format!("/settings?error={encoded}")).into_response()
 }
 
 /// LC-347: cache-buster for the avatar preview `<img>`. The avatar route serves
@@ -191,6 +205,7 @@ pub async fn get_settings(
         asset_version: &state.asset_version,
         avatar_version,
         saved: q.saved.is_some(),
+        error: q.error.clone(),
         push_available: state.push_available(),
         email,
         email_available: state.mail_available(),
@@ -676,8 +691,8 @@ pub async fn post_profile(
                     .map_err(|e| AppError::BadRequest(format!("display_name: {e}")))?;
                 let trimmed = v.trim();
                 if trimmed.chars().count() > MAX_DISPLAY_NAME_CHARS {
-                    return Err(AppError::BadRequest(format!(
-                        "display name exceeds {MAX_DISPLAY_NAME_CHARS} characters"
+                    return Ok(settings_error_redirect(&format!(
+                        "Display name exceeds {MAX_DISPLAY_NAME_CHARS} characters."
                     )));
                 }
                 display_name = if trimmed.is_empty() {
@@ -693,8 +708,8 @@ pub async fn post_profile(
                     .map_err(|e| AppError::BadRequest(format!("bio: {e}")))?;
                 let trimmed = v.trim();
                 if trimmed.chars().count() > MAX_BIO_CHARS {
-                    return Err(AppError::BadRequest(format!(
-                        "bio exceeds {MAX_BIO_CHARS} characters"
+                    return Ok(settings_error_redirect(&format!(
+                        "Bio exceeds {MAX_BIO_CHARS} characters."
                     )));
                 }
                 bio = if trimmed.is_empty() {
@@ -714,14 +729,12 @@ pub async fn post_profile(
                     email = None;
                 } else {
                     if trimmed.chars().count() > MAX_EMAIL_CHARS {
-                        return Err(AppError::BadRequest(format!(
-                            "email exceeds {MAX_EMAIL_CHARS} characters"
+                        return Ok(settings_error_redirect(&format!(
+                            "Email exceeds {MAX_EMAIL_CHARS} characters."
                         )));
                     }
                     if !looks_like_email(trimmed) {
-                        return Err(AppError::BadRequest(
-                            "email address is not valid".to_string(),
-                        ));
+                        return Ok(settings_error_redirect("Email address is not valid."));
                     }
                     email = Some(trimmed.to_string());
                 }
@@ -735,7 +748,7 @@ pub async fn post_profile(
                     continue;
                 }
                 if bytes.len() > MAX_AVATAR_BYTES {
-                    return Err(AppError::BadRequest("avatar exceeds 1 MiB".to_string()));
+                    return Ok(settings_error_redirect("Avatar image exceeds 1 MiB."));
                 }
                 avatar_bytes = Some(bytes.to_vec());
             }
@@ -754,8 +767,8 @@ pub async fn post_profile(
     if email_present {
         if let Err(e) = db::auth::set_user_email(&state.auth, &user.id, email.as_deref()).await {
             if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
-                return Err(AppError::Conflict(
-                    "That email address is already in use".to_string(),
+                return Ok(settings_error_redirect(
+                    "That email address is already in use.",
                 ));
             }
             return Err(e.into());
@@ -766,8 +779,11 @@ pub async fn post_profile(
     }
 
     if let Some(bytes) = avatar_bytes {
-        let new_ext = sniff_image_ext(&bytes)
-            .ok_or_else(|| AppError::BadRequest("avatar must be PNG, JPEG, or WebP".to_string()))?;
+        let Some(new_ext) = sniff_image_ext(&bytes) else {
+            return Ok(settings_error_redirect(
+                "Avatar must be a PNG, JPEG, or WebP image.",
+            ));
+        };
         let dir = db::avatars_dir();
         let final_path = dir.join(format!("{}.{}", user.id, new_ext));
         let tmp_path = dir.join(format!("{}.{}.tmp", user.id, new_ext));

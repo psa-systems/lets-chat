@@ -41,16 +41,17 @@ pub async fn post_delete_account(
     jar: CookieJar,
     axum::Form(form): axum::Form<DeleteAccountForm>,
 ) -> Result<Response, AppError> {
+    // LC-356: a failed delete-account submission flashes inline on /settings
+    // (the form lives there) instead of throwing a full-page error.
     if form.confirm_phrase.trim().to_ascii_lowercase() != CONFIRM_PHRASE {
-        return Err(AppError::BadRequest(format!(
-            "Type \"{CONFIRM_PHRASE}\" to confirm."
+        return Ok(crate::routes::settings::settings_error_redirect(&format!(
+            "Type \"{CONFIRM_PHRASE}\" to confirm account deletion."
         )));
     }
 
     if would_orphan_admin_role(&state.auth, &user).await? {
-        return Err(AppError::BadRequest(
-            "You are the only admin. Promote another user to admin before deleting your account."
-                .to_string(),
+        return Ok(crate::routes::settings::settings_error_redirect(
+            "You are the only admin. Promote another user to admin before deleting your account.",
         ));
     }
 
@@ -61,7 +62,7 @@ pub async fn post_delete_account(
             .map(|n| format!("\"{n}\""))
             .collect::<Vec<_>>()
             .join(", ");
-        return Err(AppError::BadRequest(format!(
+        return Ok(crate::routes::settings::settings_error_redirect(&format!(
             "Transfer ownership or delete these enclaves first: {names}."
         )));
     }
