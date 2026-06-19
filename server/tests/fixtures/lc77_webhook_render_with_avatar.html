@@ -10,7 +10,7 @@
     
     
     
-    <img src="https://example.com/avatar.png" alt="" class="h-6 w-6 rounded-full object-cover">
+    <img src="https://example.com/avatar.png" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="T">
     
     <span class="font-medium">Test Webhook</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-webhook-surface text-webhook-content rounded px-1 py-0.5" title="Posted by an incoming webhook">webhook</span>
