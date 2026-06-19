@@ -51,6 +51,15 @@ pub fn translate(lang: &LanguageIdentifier, key: &str) -> String {
     LOCALES.lookup(lang, key)
 }
 
+/// The current request's locale as a BCP-47 code (e.g. `en`, `es`) for the
+/// `<html lang>` attribute (LC-354). Falls back to the default locale outside a
+/// request scope (e.g. a render that runs off the task-local).
+pub fn current_lang_code() -> String {
+    CURRENT_LOCALE
+        .try_with(|l| l.to_string())
+        .unwrap_or_else(|_| fallback().to_string())
+}
+
 /// Look up a message in the current request's locale.
 pub fn translate_current(key: &str) -> String {
     CURRENT_LOCALE
@@ -130,6 +139,12 @@ pub mod filters {
     pub fn tn(key: &str, count: i64) -> askama::Result<String> {
         Ok(super::translate_count(key, count))
     }
+
+    /// `{{ ""|lang }}` -> the current request locale's BCP-47 code, for the
+    /// `<html lang>` attribute (LC-354). The filtered input is ignored.
+    pub fn lang(_: &str) -> askama::Result<String> {
+        Ok(super::current_lang_code())
+    }
 }
 
 #[cfg(test)]
@@ -142,6 +157,17 @@ mod tests {
         let es: LanguageIdentifier = "es".parse().unwrap();
         assert_eq!(translate(&en, "login-title"), "Sign in");
         assert_eq!(translate(&es, "login-title"), "Iniciar sesión");
+    }
+
+    #[test]
+    fn current_lang_code_reflects_locale_and_falls_back() {
+        // LC-354: outside a request scope, fall back to the default locale.
+        assert_eq!(current_lang_code(), fallback().to_string());
+        // Within a scoped locale, return its BCP-47 code (drives <html lang>).
+        let es: LanguageIdentifier = "es".parse().unwrap();
+        CURRENT_LOCALE.sync_scope(es, || {
+            assert_eq!(current_lang_code(), "es");
+        });
     }
 
     #[test]
