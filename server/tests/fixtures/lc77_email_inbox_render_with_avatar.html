@@ -6,6 +6,8 @@
 
 <div id="msg-1" data-lc-day="2026-01-01" data-lc-quick-react="1" data-lc-density-tight="row" class="lc-anim-swap relative px-4 py-2 hover:bg-surface-sunken group">
   
+  
+  
   <div class="flex items-center gap-2">
     
     
@@ -106,6 +108,8 @@
     </details>
   </span>
   
+  <div class="pl-8">
+  
   
     
     
@@ -126,14 +130,20 @@
     
     <div id="reactions-1" class="flex flex-wrap gap-1 items-center">
   
+  
   <button
     hx-get="/messages/1/reactions/picker"
     hx-target="this"
     hx-swap="outerHTML"
     aria-label="Add reaction"
+    data-lc-tip="Add reaction" data-lc-tip-pos="top"
     aria-haspopup="dialog"
-    class="text-xs rounded-full border border-border bg-surface-sunken px-2 py-0.5 text-content-muted hover:bg-surface-elevated hover:text-content"
-  >+</button>
+    class="lc-react-add hidden group-hover:inline-flex group-focus-within:inline-flex items-center justify-center h-6 rounded-full border border-border bg-surface-sunken px-1.5 text-content-muted hover:bg-surface-elevated hover:text-content"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/>
+    </svg>
+  </button>
 </div>
   </div>
   
@@ -144,6 +154,7 @@
   
 </div>
   
+  </div>
 </div>
 
 </div>

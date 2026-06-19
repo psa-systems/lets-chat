@@ -23,6 +23,11 @@
 </div>
 {% else %}
 <div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
+  {# LC-377: grouped (follow-up) messages hide the author header; a compact HH:MM
+     reveals in the avatar gutter on row hover so the time is still reachable. #}
+  {% if message.is_follow_up %}
+  <time data-lc-ts data-lc-ts-mode="time" datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-followup-ts">{{ message.created_at }}</time>
+  {% endif %}
   {% if !message.is_follow_up %}
   <div class="flex items-center gap-2">
     {% match message.actor %}
@@ -200,6 +205,10 @@
       </div>
     </details>
   </span>
+  {# LC-377: content column indented `pl-8` (avatar width + gap) so the body,
+     quote, attachments, reactions, and meta align under the author name rather
+     than under the avatar. The author header above stays in the left gutter. #}
+  <div class="pl-8">
   {% if let Some(qp) = message.quote_preview.as_ref() %}
     <a href="#msg-{{ qp.id }}" class="lc-quote-chip">
       {% if qp.deleted %}
@@ -263,5 +272,6 @@
     {% endif %}
   </div>
   {% endif %}
+  </div>
 </div>
 {% endif %}

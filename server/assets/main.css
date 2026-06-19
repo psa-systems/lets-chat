@@ -1220,6 +1220,27 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     opacity: 1;
 }
 
+/* LC-377: follow-up gutter timestamp. A grouped (follow-up) message hides its
+   author/time header; on row hover a compact HH:MM appears in the empty avatar
+   gutter to the left of the body (which is indented `pl-8` to align under the
+   author name). Absolutely placed so it never reserves layout height at rest. */
+.lc-followup-ts {
+    position: absolute;
+    left: 0;
+    width: 3rem;
+    padding-right: 0.5rem;
+    text-align: right;
+    font-size: 0.625rem;
+    line-height: 1.5rem;
+    color: var(--content-subtle);
+    opacity: 0;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+.group:hover .lc-followup-ts {
+    opacity: 1;
+}
+
 /* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
    (inset shadow follows the rounded corners) for a strong, scannable active
    state without a layout-shifting border. Paired in the row templates with a
