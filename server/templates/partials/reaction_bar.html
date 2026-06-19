@@ -5,7 +5,7 @@
     hx-target="#reactions-{{ message_id }}"
     hx-swap="outerHTML"
     {% if !r.reactors_title.is_empty() %}title="{{ r.reactors_title }}"{% endif %}
-    class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content{% else %}bg-surface-sunken hover:bg-surface-sunken{% endif %}"
+    class="text-xs rounded-full border px-2 py-0.5 tabular-nums {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content border-accent font-medium{% else %}bg-surface-sunken border-border text-content-muted hover:bg-surface-elevated hover:text-content{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}
   <button
@@ -14,6 +14,6 @@
     hx-swap="outerHTML"
     aria-label="{{ "partials-reaction-add"|t }}"
     aria-haspopup="dialog"
-    class="text-xs text-content-muted hover:text-content"
+    class="text-xs rounded-full border border-border bg-surface-sunken px-2 py-0.5 text-content-muted hover:bg-surface-elevated hover:text-content"
   >+</button>
 </div>
