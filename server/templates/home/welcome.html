@@ -3,7 +3,15 @@
 {% block title %}{{ "home-page-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex-1 overflow-y-auto">
+<div class="flex flex-col flex-1 overflow-hidden">
+  {# LC-373: minimal home header sharing the room/DM header skeleton, so the
+     main pane always opens with a consistent top bar. #}
+  <header class="lc-header">
+    <div class="min-w-0 flex-1">
+      <h1 class="lc-h1 truncate">{{ "home-page-title"|t }}</h1>
+    </div>
+  </header>
+  <div class="flex-1 overflow-y-auto">
   {# LC-372: centered, vertically balanced empty state. min-h-full + flex
      centering keeps the card group optically centered in the main pane at
      common widths instead of floating top-left. #}
@@ -73,6 +81,7 @@
         </a>
       </div>
     </section>
+  </div>
   </div>
 </div>
 {% endblock %}
