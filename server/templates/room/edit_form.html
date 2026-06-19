@@ -8,10 +8,14 @@
   {# LC-248: autofocus so the global after-swap focus handler (layout.html)
      lands the caret in the editor for both the hover "Edit" and the
      Arrow-Up-edits-last shortcut. Escape triggers the Cancel control below
-     (restores the message via its hx-get). #}
-  <input name="body" value="{{ current_body }}" autofocus
-    onkeydown="if (event.key === 'Escape') { event.preventDefault(); var c = this.form.querySelector('button[hx-get]'); if (c) c.click(); }"
-    class="w-full border rounded px-2 py-1">
+     (restores the message via its hx-get).
+     LC-359: a <textarea>, not a single-line <input>, so a multiline message
+     (code blocks, lists, paragraphs) is fully visible and editable instead of
+     being clipped to its first line. Ctrl/Cmd+Enter saves, so a plain Enter can
+     insert a newline. #}
+  <textarea name="body" autofocus rows="3"
+    onkeydown="if (event.key === 'Escape') { event.preventDefault(); var c = this.form.querySelector('button[hx-get]'); if (c) c.click(); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); this.form.requestSubmit(); }"
+    class="w-full border rounded px-2 py-1">{{ current_body }}</textarea>
   <div class="text-xs mt-1 flex gap-2">
     <button class="text-accent hover:underline">{{ "room-save"|t }}</button>
     <button type="button" hx-get="/messages/{{ message_id }}" hx-target="#msg-{{ message_id }}" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-cancel"|t }}</button>

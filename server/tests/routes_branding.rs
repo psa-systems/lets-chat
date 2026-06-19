@@ -323,6 +323,49 @@ async fn admin_branding_rejects_invalid_color() {
     assert_eq!(stored.primary_color, db::branding::DEFAULT_PRIMARY);
 }
 
+// LC-355: login_body is rendered through markdown on the public /login page, so
+// it must be length-capped on the write path (LC-153). An over-long body
+// re-renders with an inline error and does not persist.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_branding_rejects_over_long_login_body() {
+    let t = app().await;
+    let boundary = "----lc-brand-toolong";
+    let long = "a".repeat(2001); // MAX_LOGIN_BODY_CHARS = 2000
+    let body = build_text_multipart(
+        boundary,
+        &[
+            ("primary_color", "#abcdef"),
+            ("accent_color", "#001122"),
+            ("login_body", &long),
+        ],
+    );
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/admin/branding")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, format!("session={}", t.admin_session))
+        .body(Body::from(body))
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let (status, body) = body_string(res).await;
+    assert!(
+        status.is_success(),
+        "should re-render with an inline error, got {status}"
+    );
+    assert!(body.contains("too long"), "should surface the length error");
+    let stored = db::branding::resolve(&t.chat, db::branding::Scope::Global)
+        .await
+        .unwrap();
+    assert!(
+        stored.login_body.is_empty(),
+        "an over-long body must not persist"
+    );
+}
+
 #[cfg(feature = "standalone")]
 fn build_text_multipart(boundary: &str, fields: &[(&str, &str)]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();

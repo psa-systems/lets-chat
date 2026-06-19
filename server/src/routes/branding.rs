@@ -251,8 +251,31 @@ pub async fn parse_branding_multipart(
             _ => {}
         }
     }
+    // LC-355: cap the markdown-backed login text on the write path. login_body
+    // is rendered through markdown on the PUBLIC /login page, so an uncapped
+    // value (a forged multipart bypassing the client maxlength) is the LC-153
+    // hazard. Caps mirror the template's maxlength attributes.
+    if let Some(h) = out.login_heading.as_deref() {
+        if h.chars().count() > MAX_LOGIN_HEADING_CHARS {
+            return Ok(Err(format!(
+                "Login heading is too long (max {MAX_LOGIN_HEADING_CHARS} characters)."
+            )));
+        }
+    }
+    if let Some(b) = out.login_body.as_deref() {
+        if b.chars().count() > MAX_LOGIN_BODY_CHARS {
+            return Ok(Err(format!(
+                "Login body is too long (max {MAX_LOGIN_BODY_CHARS} characters)."
+            )));
+        }
+    }
     Ok(Ok(out))
 }
+
+/// LC-355: server-side caps for the login branding text, matching the
+/// `maxlength` attributes on `admin/branding.html`.
+const MAX_LOGIN_HEADING_CHARS: usize = 120;
+const MAX_LOGIN_BODY_CHARS: usize = 2000;
 
 #[derive(Default, Debug)]
 pub struct BrandingForm {
