@@ -161,3 +161,38 @@ async fn settings_avatar_preview_cache_busts_not_asset_version() {
 
     let _ = tokio::fs::remove_file(db::avatars_dir().join(format!("{}.png", s.user_id))).await;
 }
+
+// LC-356: a profile validation failure flashes inline on /settings (a redirect
+// with ?error=) instead of throwing a full-page error.
+#[tokio::test]
+async fn over_long_display_name_redirects_with_inline_error() {
+    let s = setup().await;
+    let long = "n".repeat(65); // MAX_DISPLAY_NAME_CHARS = 64
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"display_name\"\r\n\r\n");
+    body.extend_from_slice(long.as_bytes());
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/settings/profile")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
+        .header(header::COOKIE, format!("session={}", s.session))
+        .body(Body::from(body))
+        .unwrap();
+    let resp = s.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let loc = resp
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(
+        loc.starts_with("/settings?error="),
+        "expected inline error flash, got loc: {loc}"
+    );
+}

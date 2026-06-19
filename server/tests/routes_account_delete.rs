@@ -302,9 +302,15 @@ async fn delete_wipes_user_and_chat_rows() {
 #[tokio::test]
 async fn delete_rejects_wrong_phrase() {
     let t = app_with_user().await;
-    let (status, _, _) =
+    let (status, _, headers) =
         post_delete(&t.app, &t.session, &form(PASSWORD, "yes please delete")).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // LC-356: a wrong phrase now flashes inline on /settings, not a full-page 400.
+    assert!(status.is_redirection(), "expected redirect, got {status}");
+    let loc = headers
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(loc.starts_with("/settings?error="), "loc: {loc}");
     let still: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE id = ?")
         .bind(&t.user_id)
         .fetch_optional(&t.auth)
@@ -329,11 +335,17 @@ async fn delete_refuses_when_sole_owner_with_other_members() {
         .await
         .unwrap();
 
-    let (status, body, _) =
+    let (status, _body, headers) =
         post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let text = String::from_utf8_lossy(&body);
-    assert!(text.to_lowercase().contains("my-club"), "body: {text}");
+    // LC-356: the sole-owner blocker now flashes inline on /settings; the
+    // blocking enclave name rides the error query param.
+    assert!(status.is_redirection(), "expected redirect, got {status}");
+    let loc = headers
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(loc.starts_with("/settings?error="), "loc: {loc}");
+    assert!(loc.contains("my-club"), "loc: {loc}");
 
     // User still present, enclave still present.
     let still: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE id = ?")
@@ -359,11 +371,16 @@ async fn delete_refuses_when_caller_is_sole_admin_with_other_users() {
         .await
         .unwrap();
 
-    let (status, body, _) =
+    let (status, _body, headers) =
         post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let text = String::from_utf8_lossy(&body);
-    assert!(text.to_lowercase().contains("only admin"), "body: {text}");
+    // LC-356: the sole-admin blocker now flashes inline on /settings.
+    assert!(status.is_redirection(), "expected redirect, got {status}");
+    let loc = headers
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(loc.starts_with("/settings?error="), "loc: {loc}");
+    assert!(loc.to_lowercase().contains("only+admin"), "loc: {loc}");
 
     let still: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE id = ?")
         .bind(&t.user_id)

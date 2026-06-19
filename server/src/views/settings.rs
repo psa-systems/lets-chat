@@ -34,6 +34,9 @@ pub struct UserSettingsPage<'a> {
     /// instead of being masked by the avatar route's `max-age=300`.
     pub avatar_version: String,
     pub saved: bool,
+    /// LC-356: inline error flash for the profile / delete-account forms
+    /// (set via `?error=` by `settings_error_redirect`).
+    pub error: Option<String>,
     pub push_available: bool,
     pub email: Option<String>,
     /// Mirror of `state.mail_available()`. Drives the disabled state of
