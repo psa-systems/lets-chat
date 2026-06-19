@@ -1,41 +1,44 @@
-<header id="lc-dm-header" class="border-b border-border px-4 py-2 flex items-center gap-3">
-  {% let avatar_user_id = peer.id.clone() %}
-  {% let avatar_username = peer.username.clone() %}
-  {% let avatar_ext = peer.avatar_ext.clone() %}
-  {% let avatar_status = peer.effective_status() %}
-  {% let avatar_custom_status = peer.custom_status.clone() %}
-  {% let avatar_size = "h-8 w-8 text-sm" %}
-  {% include "partials/avatar.html" %}
-  <div class="flex-1 min-w-0">
-    <h1 class="font-semibold truncate">{{ peer.display_label() }}</h1>
-    <div class="text-xs text-content-muted truncate">@{{ peer.username }}</div>
-    <div data-user-custom="{{ peer.id }}" class="text-xs italic text-content-muted truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+<header id="lc-dm-header" data-lc-density-tight="header" class="lc-header">
+  <div class="min-w-0 flex-1 flex items-center gap-3">
+    {% let avatar_user_id = peer.id.clone() %}
+    {% let avatar_username = peer.username.clone() %}
+    {% let avatar_ext = peer.avatar_ext.clone() %}
+    {% let avatar_status = peer.effective_status() %}
+    {% let avatar_custom_status = peer.custom_status.clone() %}
+    {% let avatar_size = "h-8 w-8 text-sm" %}
+    {% include "partials/avatar.html" %}
+    <div class="min-w-0">
+      <h1 class="lc-h1 truncate">{{ peer.display_label() }}</h1>
+      <div class="lc-small text-content-muted truncate">@{{ peer.username }}</div>
+      <div data-user-custom="{{ peer.id }}" class="lc-small italic text-content-muted truncate">{% if let Some(t) = peer.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+    </div>
   </div>
-  <button type="button" data-lc-call-start="audio" title="{{ "partials-dm-voice-call"|t }}" aria-label="{{ "partials-dm-voice-call-start"|t }}"
+  <div class="lc-header-actions">
+  <button type="button" data-lc-call-start="audio" data-lc-tip="{{ "partials-dm-voice-call"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "partials-dm-voice-call-start"|t }}"
           data-room-id="{{ room.id }}"
           data-peer-id="{{ peer.id }}"
           data-peer-name="{{ peer.display_label() }}"
-          class="text-content-muted hover:text-accent">
+          class="lc-header-action">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
       <path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c-.41.117-.643.555-.48.95a11.542 11.542 0 006.254 6.254c.395.163.833-.07.95-.48l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/>
     </svg>
   </button>
-  <button type="button" data-lc-call-start="video" title="{{ "partials-dm-video-call"|t }}" aria-label="{{ "partials-dm-video-call-start"|t }}"
+  <button type="button" data-lc-call-start="video" data-lc-tip="{{ "partials-dm-video-call"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "partials-dm-video-call-start"|t }}"
           data-room-id="{{ room.id }}"
           data-peer-id="{{ peer.id }}"
           data-peer-name="{{ peer.display_label() }}"
-          class="text-content-muted hover:text-accent">
+          class="lc-header-action">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
       <path d="M3.25 4A2.25 2.25 0 001 6.25v7.5A2.25 2.25 0 003.25 16h7.5A2.25 2.25 0 0013 13.75v-7.5A2.25 2.25 0 0010.75 4h-7.5zM19 4.5a.75.75 0 00-1.28-.53l-3 3a.75.75 0 00-.22.53v5a.75.75 0 00.22.53l3 3a.75.75 0 001.28-.53v-11z"/>
     </svg>
   </button>
-  <button type="button" data-lc-open-devices title="{{ "partials-dm-call-devices"|t }}" aria-label="{{ "partials-dm-call-devices-choose"|t }}"
-          class="text-content-muted hover:text-accent">
+  <button type="button" data-lc-open-devices data-lc-tip="{{ "partials-dm-call-devices"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "partials-dm-call-devices-choose"|t }}"
+          class="lc-header-action">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
       <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
     </svg>
   </button>
-  <label class="inline-flex items-center gap-1 text-xs text-content-muted cursor-pointer select-none" title="{{ "partials-dm-mute-title"|t }}">
+  <label class="lc-header-action cursor-pointer select-none" title="{{ "partials-dm-mute-title"|t }}">
     <input type="checkbox"
            name="muted"
            hx-post="/dm/{{ peer.id }}/mute"
@@ -48,6 +51,7 @@
   </label>
   <form method="post" action="/users/{{ peer.id }}/block" onsubmit="return confirm('{{ "partials-dm-block-confirm-prefix"|t }} @{{ peer.username }}? {{ "partials-dm-block-confirm-suffix"|t }}');">
     <input type="hidden" name="return_to" value="/">
-    <button type="submit" class="text-xs text-content-muted hover:text-danger hover:underline">{{ "partials-dm-block"|t }}</button>
+    <button type="submit" class="lc-header-action lc-header-action-danger">{{ "partials-dm-block"|t }}</button>
   </form>
+  </div>
 </header>
