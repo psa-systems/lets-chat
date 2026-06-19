@@ -947,6 +947,18 @@ pub async fn post_member_role(
         "member" => EnclaveRole::Member,
         _ => return Err(AppError::BadRequest("invalid role".into())),
     };
+    // LC-351: never let a role change touch the owner. The template hides the
+    // owner's role control, but update_role's UPDATE has no owner clause, so a
+    // forged POST would otherwise demote the owner and leave the enclave with
+    // zero owners (then un-transferable and un-deletable). Mirror post_kick.
+    let Some(target_m) = db::enclave::get_membership(&state.chat, id, &target).await? else {
+        return Err(AppError::NotFound);
+    };
+    if matches!(target_m.role, EnclaveRole::Owner) {
+        return Err(AppError::BadRequest(
+            "cannot change the owner's role; transfer ownership first".into(),
+        ));
+    }
     db::enclave::update_role(&state.chat, id, &target, new_role).await?;
     broadcast_enclave_topic(
         &state,

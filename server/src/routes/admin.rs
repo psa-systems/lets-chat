@@ -727,11 +727,31 @@ pub async fn get_users(
     html(&page)
 }
 
+/// LC-352: refuse an action that would strip admin capability from the last
+/// active admin (role=admin, not banned) and lock everyone out of /admin.
+/// `target_id` is the user the action removes admin power from. A no-op when the
+/// target is not an active admin or another active admin remains.
+async fn guard_not_last_admin(state: &AppState, target_id: &str) -> Result<(), AppError> {
+    let Some(target) = db::auth::find_user_by_id(&state.auth, target_id).await? else {
+        return Ok(());
+    };
+    let target_is_active_admin = target.role == "admin" && !target.is_banned;
+    if target_is_active_admin
+        && !db::auth::other_active_admin_exists(&state.auth, target_id).await?
+    {
+        return Err(AppError::BadRequest(
+            "cannot remove the last admin; promote another admin first".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn post_ban(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
     Path(user_id): Path<String>,
 ) -> Result<Html, AppError> {
+    guard_not_last_admin(&state, &user_id).await?;
     db::auth::ban_user(&state.auth, &user_id, None).await?;
     db::moderation::log_mod_action(&state.chat, "ban", &user_id, &actor.id, None, None, None)
         .await?;
@@ -788,6 +808,10 @@ pub async fn post_role(
     if !matches!(role, "user" | "moderator" | "admin") {
         return Err(AppError::BadRequest("invalid role".into()));
     }
+    // LC-352: demoting away from admin must not remove the last active admin.
+    if role != "admin" {
+        guard_not_last_admin(&state, &user_id).await?;
+    }
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
     db::moderation::log_mod_action(
         &state.chat,
@@ -810,6 +834,8 @@ pub async fn post_delete_user(
     if user_id == actor.id {
         return Err(AppError::BadRequest("cannot delete yourself".into()));
     }
+    // LC-352: deleting the last active admin would lock everyone out of /admin.
+    guard_not_last_admin(&state, &user_id).await?;
     db::auth::delete_user_sessions(&state.auth, &user_id).await?;
     db::auth::delete_user(&state.auth, &user_id).await?;
     db::moderation::log_mod_action(
