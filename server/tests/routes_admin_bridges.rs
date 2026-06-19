@@ -127,6 +127,40 @@ async fn get_bridges_empty_renders_page() {
     assert!(body.contains("No bridges registered."));
 }
 
+// LC-357: a bridge to a nonexistent room is refused inline, and no bot is
+// minted (the room check runs before bot creation).
+#[tokio::test]
+async fn create_bridge_rejects_nonexistent_room() {
+    let t = app().await;
+    let form = format!("room_id=999999&bot_username=ghostbridge&kind=matrix&config={TEST_CONFIG}");
+    let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
+    assert_eq!(status, StatusCode::OK, "inline re-render, body: {body}");
+    assert!(
+        body.contains("does not exist"),
+        "expected room-not-found error: {body}"
+    );
+    let bot: Option<String> =
+        sqlx::query_scalar("SELECT username FROM users WHERE username = 'ghostbridge'")
+            .fetch_optional(&t.auth)
+            .await
+            .unwrap();
+    assert!(bot.is_none(), "no bot should be created for a bad room");
+}
+
+// LC-357: an outgoing webhook scoped to a nonexistent room is refused inline.
+#[tokio::test]
+async fn create_outgoing_webhook_rejects_nonexistent_scope() {
+    let t = app().await;
+    let form = "scope_kind=room&scope_id=999999&url=https://example.com/hook&e_message_posted=1";
+    let (status, body) =
+        post_form(&t.app, &t.admin_session, "/admin/outgoing-webhooks", form).await;
+    assert_eq!(status, StatusCode::OK, "inline re-render, body: {body}");
+    assert!(
+        body.contains("does not exist"),
+        "expected scope-not-found error: {body}"
+    );
+}
+
 #[tokio::test]
 async fn create_bridge_creates_bot_token_sealed_config_row() {
     let t = app().await;

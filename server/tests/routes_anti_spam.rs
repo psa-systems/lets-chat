@@ -199,6 +199,34 @@ async fn message_at_length_cap_is_accepted() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
+// LC-358: the site-wide message rate-limit must be clamped, like the
+// per-enclave burst, so an operator typo cannot store an absurd value.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn rate_limit_messages_is_clamped_to_max() {
+    let t = app().await;
+    let (status, body) = send(
+        &t.app,
+        Some(&t.admin_session),
+        Method::POST,
+        "/admin/anti-spam",
+        "rate_limit_messages=99999",
+    )
+    .await;
+    assert!(
+        status.is_redirection(),
+        "expected redirect, got {status}: {body}"
+    );
+    let stored = db::settings::get_setting(&t.settings, "rate_limit_messages")
+        .await
+        .unwrap();
+    assert_eq!(
+        stored.as_deref(),
+        Some("10000"),
+        "should clamp to the 10000 ceiling"
+    );
+}
+
 // ── Honeypot + register ───────────────────────────────────────────────────
 
 // LC-22 cutover: registration / login / 2FA rate-limit tests deleted with the

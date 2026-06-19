@@ -18,7 +18,7 @@
     <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
       <span class="font-mono text-content-muted">{{ u.usage_display }}</span>
       <span>/</span>
-      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" placeholder="{{ "admin-userrow-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
+      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" max="16777216" placeholder="{{ "admin-userrow-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
       <button type="submit" class="text-accent hover:underline">{{ "admin-userrow-save"|t }}</button>
     </form>
   </td>
