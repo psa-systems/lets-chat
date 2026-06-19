@@ -160,6 +160,27 @@ async fn create_poll_is_atomic() {
 }
 
 #[tokio::test]
+async fn create_poll_clamps_huge_closes_in_without_panicking() {
+    // LC-350: a huge closes_in must not overflow chrono's Duration math and
+    // panic the handler (500). It is clamped to the 1-year max and the poll is
+    // created with a bounded close time.
+    let t = app().await;
+    let room = seed_room(&t).await;
+    let (status, body) = send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/room/{room}/poll"),
+        "question=Q%3F&options=A%0AB&closes_in=9999999999999999",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "should clamp, not 500: {body}");
+    let mid = latest_message_id(&t.chat, room).await;
+    let poll = db::polls::get(&t.chat, mid).await.unwrap();
+    assert!(poll.is_some(), "poll created with a clamped close time");
+}
+
+#[tokio::test]
 async fn single_choice_moves_and_toggles() {
     let t = app().await;
     let room = seed_room(&t).await;
