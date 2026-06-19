@@ -1,5 +1,7 @@
+use std::hash::{Hash, Hasher};
+
 use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::db;
@@ -9,6 +11,7 @@ use crate::state::AppState;
 pub async fn get_avatar(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let user = db::auth::find_user_by_id(&state.auth, &user_id)
         .await?
@@ -17,9 +20,22 @@ pub async fn get_avatar(
         // No custom avatar: serve a generated initial-on-color SVG so
         // `/avatars/{id}` always resolves to an image (used by the voice
         // grid and DM call overlay, which can't branch on avatar presence).
-        return Ok(default_avatar(&user.username));
+        return Ok(default_avatar(&user.username, &headers));
     };
     let path = db::avatars_dir().join(format!("{user_id}.{ext}"));
+    // LC-348: stat first so the ETag reflects the current file. The bare
+    // `/avatars/{id}` URL is shared by chat rows, the sidebar, hovercards, and
+    // the voice grid; without revalidation a `max-age` cache showed the old
+    // avatar (or the previously-cached default initial) for the whole TTL after
+    // an upload. ETag + `no-cache` makes a changed avatar appear on the next
+    // request while unchanged ones cost only a 304.
+    let meta = tokio::fs::metadata(&path)
+        .await
+        .map_err(|_| AppError::NotFound)?;
+    let etag = file_etag(&ext, &meta);
+    if if_none_match(&headers, &etag) {
+        return Ok(not_modified(&etag));
+    }
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;
@@ -32,8 +48,9 @@ pub async fn get_avatar(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, mime),
-            (header::CACHE_CONTROL, "public, max-age=300"),
+            (header::CONTENT_TYPE, mime.to_string()),
+            (header::CACHE_CONTROL, "no-cache".to_string()),
+            (header::ETAG, etag),
         ],
         bytes,
     )
@@ -43,7 +60,7 @@ pub async fn get_avatar(
 /// Generated fallback avatar: the user's first initial on a flat slate
 /// background, mirroring the CSS default in `partials/avatar.html`. Returned
 /// as an SVG so it scales cleanly in every avatar slot.
-fn default_avatar(username: &str) -> Response {
+fn default_avatar(username: &str, headers: &HeaderMap) -> Response {
     let initial = username
         .chars()
         .next()
@@ -58,13 +75,59 @@ fn default_avatar(username: &str) -> Response {
          <text x=\"64\" y=\"64\" font-family=\"sans-serif\" font-size=\"60\" font-weight=\"600\" \
          fill=\"#334155\" text-anchor=\"middle\" dominant-baseline=\"central\">{initial}</text></svg>"
     );
+    // LC-348: content-based ETag, prefixed `d` so it can never collide with a
+    // real file ETag. The moment the user uploads an avatar this route switches
+    // to the file branch, whose ETag differs, so the browser refetches.
+    let etag = format!("\"d{:x}\"", hash_str(&svg));
+    if if_none_match(headers, &etag) {
+        return not_modified(&etag);
+    }
     (
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, "image/svg+xml"),
-            (header::CACHE_CONTROL, "public, max-age=300"),
+            (header::CONTENT_TYPE, "image/svg+xml".to_string()),
+            (header::CACHE_CONTROL, "no-cache".to_string()),
+            (header::ETAG, etag),
         ],
         svg,
     )
         .into_response()
+}
+
+/// Strong-ish ETag for a stored avatar file: extension + byte length + mtime
+/// nanos. Any re-upload changes the mtime (and usually the length), so the tag
+/// moves whenever the image does.
+fn file_etag(ext: &str, meta: &std::fs::Metadata) -> String {
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("\"{ext}-{}-{mtime}\"", meta.len())
+}
+
+/// True when one of the client's `If-None-Match` tags equals `etag`.
+fn if_none_match(headers: &HeaderMap, etag: &str) -> bool {
+    headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.split(',').any(|t| t.trim() == etag))
+}
+
+fn not_modified(etag: &str) -> Response {
+    (
+        StatusCode::NOT_MODIFIED,
+        [
+            (header::CACHE_CONTROL, "no-cache".to_string()),
+            (header::ETAG, etag.to_string()),
+        ],
+    )
+        .into_response()
+}
+
+fn hash_str(s: &str) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
 }
