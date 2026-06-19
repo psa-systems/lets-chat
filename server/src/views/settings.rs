@@ -28,6 +28,11 @@ pub struct UserSettingsPage<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
+    /// LC-347: cache-buster for the avatar preview `<img>`. Unlike
+    /// `asset_version` (a build constant) this changes whenever the avatar
+    /// file changes, so the new image loads immediately after an upload
+    /// instead of being masked by the avatar route's `max-age=300`.
+    pub avatar_version: String,
     pub saved: bool,
     pub push_available: bool,
     pub email: Option<String>,
