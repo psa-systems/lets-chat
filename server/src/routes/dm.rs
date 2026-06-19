@@ -75,6 +75,7 @@ pub async fn get_dm(
             switcher: &switcher,
             asset_version: &state.asset_version,
             flash_error: Some(&msg),
+            pending_invites: 0,
         };
         return Ok(html(&page)?.into_response());
     }
@@ -116,6 +117,7 @@ pub async fn get_dm(
                     switcher: &switcher,
                     asset_version: &state.asset_version,
                     flash_error: Some(&msg),
+                    pending_invites: 0,
                 };
                 return Ok(html(&page)?.into_response());
             }
