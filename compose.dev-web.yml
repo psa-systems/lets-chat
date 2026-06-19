@@ -27,6 +27,20 @@ services:
       LETS_CHAT_DATA_DIR: /data
       LETS_CHAT_SECRET_KEY: sghsgG8vVnvr9gddWwrL03
       BIND_ADDR: 0.0.0.0:8080
+      # Bunyip SSO is the sole sign-in path post-LC-22; the server refuses
+      # to start unless all four vars are set (server/src/oidc/config.rs).
+      # The dev OP client (id ...000c, confidential, client_secret_basic) is
+      # provisioned in dev-bunyip-postgres-long with the redirect below; the
+      # plaintext secret here is the match for that row's argon2id hash.
+      LETS_CHAT_BUNYIP_SSO_ISSUER: "https://${USER}-bunyip-api.a8n.run"
+      LETS_CHAT_BUNYIP_SSO_CLIENT_ID: b0000000-0000-4000-8000-00000000000c
+      LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: 4f343ca29b71fce56e6bac26a19f850facb3aa344bf431f965c932abac07f3b4
+      LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: "https://${USER}-chat.a8n.run/auth/bunyip/callback"
+      # DEV ONLY. The dev bunyip OP sits behind a Traefik serving a self-signed
+      # default cert for *.a8n.run; reqwest's rustls bundled roots reject it and
+      # there is no env/mount-only remedy, so server-to-server SSO discovery
+      # fails TLS without this. NEVER set in production.
+      LETS_CHAT_BUNYIP_SSO_INSECURE_TLS: "1"
       # Optional: enable password reset emails. Uncomment and fill in all
       # six LETS_CHAT_SMTP_* variables plus LETS_CHAT_BASE_URL with values
       # appropriate to your relay. Leaving any of them blank disables outbound
@@ -41,6 +55,21 @@ services:
       # LETS_CHAT_SMTP_FROM: ""
     volumes:
       - lets-chat-data:/data
+    # DEV ONLY. lets-chat does its SSO calls (discovery/JWKS/token) server-to-
+    # server against the public issuer host. In this dev setup that hostname
+    # resolves to the host's PUBLIC IP, where the dev routers are NOT served
+    # (they live on Traefik's nebula-secure :443 entrypoint), so the fetch
+    # 404s. Pin the issuer host to the dev Traefik container on
+    # network-traefik-public so the request hits the right Traefik; the issuer
+    # string stays the public URL, so ID-token `iss` validation is unaffected.
+    # The browser flow is untouched (the user reaches Traefik over Nebula).
+    # NB: this is the Traefik container's current IP on network-traefik-public;
+    # if that network is recreated, refresh it via
+    #   docker inspect network-traefik --format '{{(index .NetworkSettings.Networks "network-traefik-public").IPAddress}}'
+    # Sequence form so Compose interpolates ${USER} in the hostname (it does
+    # not substitute variables inside YAML mapping keys, only in values).
+    extra_hosts:
+      - "${USER}-bunyip-api.a8n.run:10.200.0.4"
     networks:
       - default
       - network-traefik-public

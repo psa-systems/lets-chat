@@ -41,6 +41,14 @@ pub enum BunyipSsoError {
     Verify(String),
 }
 
+/// True iff `name` is set to `1` or `true` (case-insensitive). Mirrors the
+/// truthy-env convention used by `retention::sweep::flag_enabled`.
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct Discovery {
     issuer: String,
@@ -125,10 +133,23 @@ impl BunyipSsoClient {
     /// Fetch discovery + JWKS, build the client. Failure is fatal at
     /// startup.
     pub async fn initialize(config: BunyipSsoConfig) -> Result<Arc<Self>, BunyipSsoError> {
-        let http = Client::builder()
+        let mut builder = Client::builder()
             .timeout(Duration::from_secs(10))
-            .user_agent(concat!("lets-chat/", env!("CARGO_PKG_VERSION")))
-            .build()?;
+            .user_agent(concat!("lets-chat/", env!("CARGO_PKG_VERSION")));
+        // DEV-ONLY escape hatch. The dev OP (bunyip) sits behind a Traefik that
+        // serves a self-signed default cert for *.a8n.run, and reqwest's
+        // rustls-tls uses bundled webpki roots that ignore the system CA store,
+        // so server-to-server discovery/JWKS/token calls fail TLS verification
+        // with no env- or mount-only remedy. When this flag is truthy we accept
+        // invalid certs for those calls. Never set it in production: it disables
+        // issuer TLS authentication for the entire SSO trust path.
+        if env_flag_enabled("LETS_CHAT_BUNYIP_SSO_INSECURE_TLS") {
+            tracing::warn!(
+                "LETS_CHAT_BUNYIP_SSO_INSECURE_TLS set; accepting invalid TLS certs for Bunyip SSO (dev only)"
+            );
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        let http = builder.build()?;
         let discovery_url = config
             .issuer
             .join("/.well-known/openid-configuration")
