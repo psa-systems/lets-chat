@@ -75,6 +75,23 @@ impl Mailer {
         }
     }
 
+    /// Test-only: a `Mailer` whose transport points at an unreachable local
+    /// relay (so `send` fails fast at connect time) while the mailer itself is
+    /// `Some`. Lets tests exercise the mail-configured path WITHOUT mutating the
+    /// process-global `LETS_CHAT_SMTP_*` env vars, which race across parallel
+    /// test threads (LC-363: a concurrent `remove_var` made another test's
+    /// `from_env()` return `None`, flipping mail off mid-test). Not a production
+    /// entry point.
+    #[doc(hidden)]
+    pub fn unreachable_for_tests() -> Option<Self> {
+        build_transport("127.0.0.1", 1, TlsMode::None, None)
+            .ok()
+            .map(|t| Self {
+                transport: Arc::new(t),
+                from: "noreply@example.test".to_string(),
+            })
+    }
+
     pub async fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), MailError> {
         let from = self
             .from

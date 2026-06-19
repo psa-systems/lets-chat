@@ -100,17 +100,12 @@ async fn setup(bob_opt_in: bool) -> TestApp {
         .unwrap();
     let dm_room = dm.id;
 
-    // Real mailer pointing at unreachable host; SMTP submit returns Err,
-    // but the dispatcher inserts the reply-token row BEFORE the send.
-    std::env::set_var("LETS_CHAT_SMTP_HOST", "127.0.0.1");
-    std::env::set_var("LETS_CHAT_SMTP_PORT", "1");
-    std::env::set_var("LETS_CHAT_SMTP_TLS", "none");
-    std::env::set_var("LETS_CHAT_SMTP_FROM", "noreply@example.test");
-    let mailer = lets_chat::mail::Mailer::from_env();
-    std::env::remove_var("LETS_CHAT_SMTP_HOST");
-    std::env::remove_var("LETS_CHAT_SMTP_PORT");
-    std::env::remove_var("LETS_CHAT_SMTP_TLS");
-    std::env::remove_var("LETS_CHAT_SMTP_FROM");
+    // LC-363: a mailer pointing at an unreachable host (SMTP submit returns
+    // Err, but the dispatcher inserts the reply-token row BEFORE the send).
+    // Built without mutating the process-global LETS_CHAT_SMTP_* env vars,
+    // which raced across parallel test threads (a concurrent remove_var made
+    // this from_env() return None, flipping mail off and failing the assert).
+    let mailer = lets_chat::mail::Mailer::unreachable_for_tests();
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let chat_for_test = chat.clone();
