@@ -432,6 +432,26 @@ async fn admin_user_list_is_wired_for_live_row_updates() {
     );
 }
 
+// LC-358: a quota above the 16 TiB ceiling is rejected, not silently stored.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn admin_quota_over_max_is_rejected() {
+    let t = app().await;
+    let (status, _) = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        &format!("/admin/users/{}/quota", t.member_id),
+        "quota_mib=99999999", // > 16,777,216 MiB
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let stored = db::quota::get_user_quota(&t.chat, &t.member_id)
+        .await
+        .unwrap();
+    assert_eq!(stored, None, "an out-of-range quota must not persist");
+}
+
 #[cfg(feature = "standalone")]
 #[tokio::test]
 async fn admin_form_persists_user_quota_and_writes_audit_row() {

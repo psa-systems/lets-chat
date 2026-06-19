@@ -14,7 +14,7 @@
     <p class="text-xs text-content-muted">{{ "admin-antispam-rate-limits-note-1"|t }} <code>0</code> {{ "admin-antispam-rate-limits-note-2"|t }} <code>X-Forwarded-For</code>.</p>
     <div>
       <label class="block text-sm font-medium mb-1" for="rate_limit_messages">{{ "admin-antispam-messages-per-user"|t }}</label>
-      <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" value="{{ rate_limit_messages }}"
+      <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" max="10000" value="{{ rate_limit_messages }}"
              class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
     </div>
     {# LC-22 cutover: registration / login / password-reset per-IP caps are
