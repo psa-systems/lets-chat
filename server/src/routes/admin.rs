@@ -1334,6 +1334,13 @@ pub struct QuotaForm {
 /// whitespace-only) value returns `Ok(None)` for "unlimited"; a
 /// non-negative integer returns `Ok(Some(mib * 1024 * 1024))`. Anything
 /// else 400s.
+/// LC-358: upper bounds so an operator typo (or a forged POST past the input's
+/// `max`) cannot store an absurd value. The per-enclave message-rate burst is
+/// already capped at 10000; mirror that for the site-wide cap. The quota cap is
+/// generous (16 TiB) but finite.
+const MAX_RATE_LIMIT_MESSAGES: u32 = 10_000;
+const MAX_QUOTA_MIB: i64 = 16 * 1024 * 1024;
+
 fn parse_quota_mib(s: &str) -> Result<Option<i64>, AppError> {
     let t = s.trim();
     if t.is_empty() {
@@ -1346,6 +1353,11 @@ fn parse_quota_mib(s: &str) -> Result<Option<i64>, AppError> {
     })?;
     if n < 0 {
         return Err(AppError::BadRequest("quota must be non-negative".into()));
+    }
+    if n > MAX_QUOTA_MIB {
+        return Err(AppError::BadRequest(format!(
+            "quota too large (max {MAX_QUOTA_MIB} MiB)"
+        )));
     }
     Ok(Some(n.saturating_mul(1024 * 1024)))
 }
@@ -1518,7 +1530,8 @@ pub async fn post_anti_spam(
             .map(str::trim)
             .filter(|t| !t.is_empty())
             .and_then(|t| t.parse::<u32>().ok())
-            .map(|n| n.to_string())
+            // LC-358: clamp to the same ceiling as the per-enclave burst.
+            .map(|n| n.min(MAX_RATE_LIMIT_MESSAGES).to_string())
             .unwrap_or_else(|| "0".to_string())
     }
     let msg = cap_or_zero(&form.rate_limit_messages);
@@ -2843,6 +2856,34 @@ pub async fn post_bridges(
         .await?
         .into_response());
     }
+    // LC-357: the target room must exist and not be a DM (a bridge to a DM is
+    // nonsensical). Validate before minting the bot so a bad room_id cannot
+    // orphan a bot user + token.
+    match db::chat::get_room(&state.chat, form.room_id).await? {
+        Some(room) if room.room_type != "dm" => {}
+        Some(_) => {
+            return Ok(render_bridges_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("Cannot bridge a direct-message room.".into()),
+            )
+            .await?
+            .into_response());
+        }
+        None => {
+            return Ok(render_bridges_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("Selected room does not exist.".into()),
+            )
+            .await?
+            .into_response());
+        }
+    }
     // 1. Mint bot user.
     let bot_id = match db::auth::create_bot(&state.auth, bot_username).await {
         Ok(id) => id,
@@ -3064,12 +3105,20 @@ pub async fn post_outgoing_webhooks(
         )
         .await;
     }
+    // LC-357: validate the scoped target exists so a forged scope_id cannot
+    // create an orphan webhook pointing at a nonexistent room/enclave.
     let scope_kind = form.scope_kind.as_str();
     let scope_id = match scope_kind {
         "global" => None,
-        "enclave" | "room" => match form.scope_id {
-            Some(id) => Some(id),
-            None => return err(&state, &actor, "Enclave/room scope needs a scope id.").await,
+        "room" => match form.scope_id {
+            None => return err(&state, &actor, "Room scope needs a room id.").await,
+            Some(id) if db::chat::get_room(&state.chat, id).await?.is_some() => Some(id),
+            Some(_) => return err(&state, &actor, "Selected room does not exist.").await,
+        },
+        "enclave" => match form.scope_id {
+            None => return err(&state, &actor, "Enclave scope needs an enclave id.").await,
+            Some(id) if db::enclave::get_enclave(&state.chat, id).await?.is_some() => Some(id),
+            Some(_) => return err(&state, &actor, "Selected enclave does not exist.").await,
         },
         _ => return err(&state, &actor, "Invalid scope.").await,
     };
