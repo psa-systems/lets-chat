@@ -1,7 +1,7 @@
 <header id="lc-room-header" data-lc-density-tight="header" class="lc-header">
   <div class="min-w-0 flex-1">
     <a href="/room/{{ room.id }}/info" class="block hover:underline" data-lc-tip="{{ "partials-room-info-title"|t }}" data-lc-tip-pos="bottom">
-      <h1 class="lc-h1 truncate">#{{ room.name }}</h1>
+      <h1 class="lc-h1 truncate"><span class="text-content-subtle">#</span>{{ room.name }}</h1>
       {% if let Some(topic) = room.topic.as_ref() %}
       <p class="lc-small text-content-muted truncate">{{ topic }}</p>
       {% endif %}
