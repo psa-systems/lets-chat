@@ -2,6 +2,32 @@
 
 Shared front-end patterns every new surface should inherit instead of re-deriving. Born out of the LC-148 audit's C3 finding (each new surface silently re-implements a concept rather than reusing it). Keep this list short; when a pattern here changes, update the doc in the same PR.
 
+## Typography scale (LC-365)
+
+Use the semantic typography classes from `server/assets/main.css` instead of hand-rolling `text-2xl font-semibold` combinations. Each class fixes font-size + weight + line-height (+ tracking) so headings and labels stay consistent across surfaces. Color is left to the caller (`text-content` / `text-content-muted`), except `lc-caption` and `lc-section-label`, which already imply a muted tone.
+
+| Class | Use for | Size / weight |
+|---|---|---|
+| `lc-display` | hero / empty-state heading | 1.5rem / 600, tight |
+| `lc-h1` | page or panel heading | 1.125rem / 600 |
+| `lc-h2` | section heading | 1rem / 600 |
+| `lc-h3` | card / row title | 0.875rem / 600 |
+| `lc-body` | default body text | 0.875rem / 400 |
+| `lc-small` | secondary / help text | 0.75rem / 400 |
+| `lc-caption` | timestamps, captions (muted) | 0.75rem / 400 |
+| `lc-section-label` | uppercase group label (sidebar sections) | 0.6875rem / 600, uppercase |
+
+The message body (`.lc-md`) keeps its own size, which the per-device text-size control scales; do not apply the chrome scale there.
+
+## Spacing rhythm (LC-365)
+
+Spacing stays on Tailwind's default 4px scale - compose from it rather than inventing new gaps. Conventions for the chat chrome:
+
+- Inter-element gaps: `gap-1` (4px) inside a control, `gap-2` (8px) between related items, `gap-4` (16px) between groups.
+- Section padding: `p-3` (12px) for dense list regions, `p-4` (16px) for panels, `p-6` (24px) for the main content pane.
+- Separate sections with a `border-t border-border` divider plus an `lc-section-label`, not blank space alone.
+- Row height for nav/list items: `px-2 py-1.5` with `gap-2`, so the left sidebar and enclave rail read at one rhythm.
+
 ## Live updates
 
 A new page that shows mutable data should update over the WebSocket without a manual reload (LC-148 gap C1, closed by the LC-156 epic). The recipe, end to end:

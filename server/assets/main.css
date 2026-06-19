@@ -946,6 +946,31 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     }
 }
 
+/* LC-365: typography scale. Semantic classes that pair font-size + weight +
+   line-height (+ tracking) so the chrome stops hand-rolling `text-2xl
+   font-semibold` combos and every heading/label is consistent. Defined as
+   plain CSS here (not Tailwind `@layer`) so the classes are always present for
+   the redesign work and never purged. Sizes mirror Tailwind's rem scale so
+   they read familiarly. Color is left to the caller (text-content /
+   text-content-muted) EXCEPT caption/section-label, which imply a muted tone.
+   Spacing rhythm stays on Tailwind's 4px scale - see docs/ui-conventions.md. */
+.lc-display { font-size: 1.5rem;    font-weight: 600; line-height: 1.2;  letter-spacing: -0.01em; }
+.lc-h1      { font-size: 1.125rem;  font-weight: 600; line-height: 1.35; }
+.lc-h2      { font-size: 1rem;      font-weight: 600; line-height: 1.4; }
+.lc-h3      { font-size: 0.875rem;  font-weight: 600; line-height: 1.4; }
+.lc-body    { font-size: 0.875rem;  font-weight: 400; line-height: 1.5; }
+.lc-small   { font-size: 0.75rem;   font-weight: 400; line-height: 1.45; }
+.lc-caption { font-size: 0.75rem;   font-weight: 400; line-height: 1.35; color: var(--content-muted); }
+/* Uppercase muted group label (sidebar section headers, Slack/Discord style). */
+.lc-section-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--content-subtle);
+}
+
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
    never fires in some browsers), keeps scroll behaviour instant. Tailwind's
