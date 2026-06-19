@@ -1,13 +1,20 @@
 <div class="relative shrink-0" data-lc-cleanup-root>
+  {# LC-378: notify control as a proper header pill - a bell (unmuted) or a bell
+     with a slash (muted) plus the current state label, on the shared
+     .lc-header-action treatment so it aligns with Info / Moderators. Muted tints
+     warning at rest; the open state tints sunken. The menu + form wiring below
+     is unchanged. #}
   <button type="button"
     id="lc-notify-toggle-{{ room.id }}"
-    class="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring"
+    class="lc-header-action aria-expanded:bg-surface-sunken aria-expanded:text-content{% if mute_mode != "none" %} text-warning{% endif %}"
     aria-haspopup="menu"
     aria-expanded="false"
     aria-controls="lc-notify-menu-{{ room.id }}">
-    {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}
-    {% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}
-    {% else %}{{ "room-notify-muted"|t }}{% endif %}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+      <path fill-rule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.91 32.91 0 003.256.508 3.5 3.5 0 006.972 0 32.903 32.903 0 003.256-.508.75.75 0 00.515-1.076A11.448 11.448 0 0116 8a6 6 0 00-6-6zM8.05 14.943a33.54 33.54 0 003.9 0 2 2 0 01-3.9 0z" clip-rule="evenodd"/>
+      {% if mute_mode != "none" %}<line x1="3" y1="3" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>{% endif %}
+    </svg>
+    <span>{% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}</span>
   </button>
   <div id="lc-notify-menu-{{ room.id }}"
     role="menu"
