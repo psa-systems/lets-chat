@@ -149,13 +149,13 @@
      the LC-254 IIFE below; Bold/Italic also bind Ctrl/Cmd+B / Ctrl/Cmd+I. #}
   <div class="flex items-center gap-1 mb-1 text-content-muted">
     <button type="button" data-lc-fmt="bold" data-lc-ph="{{ "room-composer-format-bold-ph"|t }}" data-lc-tip="{{ "room-composer-format-bold"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-bold"|t }}"
-      class="px-2 py-1 rounded font-bold hover:text-content hover:bg-surface-sunken">B</button>
+      class="lc-fmt-btn font-bold">B</button>
     <button type="button" data-lc-fmt="italic" data-lc-ph="{{ "room-composer-format-italic-ph"|t }}" data-lc-tip="{{ "room-composer-format-italic"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-italic"|t }}"
-      class="px-2 py-1 rounded italic hover:text-content hover:bg-surface-sunken">I</button>
+      class="lc-fmt-btn italic">I</button>
     <button type="button" data-lc-fmt="code" data-lc-ph="{{ "room-composer-format-code-ph"|t }}" data-lc-tip="{{ "room-composer-format-code"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-code"|t }}"
-      class="px-2 py-1 rounded font-mono text-xs hover:text-content hover:bg-surface-sunken">&lt;/&gt;</button>
+      class="lc-fmt-btn font-mono">&lt;/&gt;</button>
     <button type="button" data-lc-fmt="link" data-lc-ph="{{ "room-composer-format-link-text-ph"|t }}" data-lc-ph-url="{{ "room-composer-format-link-url-ph"|t }}" data-lc-tip="{{ "room-composer-format-link"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-link"|t }}"
-      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      class="lc-fmt-btn">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
         <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z"/>
         <path d="M8.603 14.768a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 005.656 5.656l3-3a4 4 0 00-.225-5.865.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3z"/>
@@ -163,17 +163,17 @@
     </button>
     {# LC-300: strikethrough (inline, GFM ~~). #}
     <button type="button" data-lc-fmt="strike" data-lc-ph="{{ "room-composer-format-strike-ph"|t }}" data-lc-tip="{{ "room-composer-format-strike"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-strike"|t }}"
-      class="px-2 py-1 rounded line-through hover:text-content hover:bg-surface-sunken">S</button>
+      class="lc-fmt-btn line-through">S</button>
     {# LC-300: bulleted list (line-prefix `- `). #}
     <button type="button" data-lc-fmt="ul" data-lc-ph="{{ "room-composer-format-list-ph"|t }}" data-lc-tip="{{ "room-composer-format-list"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-list"|t }}"
-      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      class="lc-fmt-btn">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
         <path d="M3 4.5a1 1 0 100 2 1 1 0 000-2zM6.25 5a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM6.25 9.25a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM6.25 13.5a.75.75 0 000 1.5h10a.75.75 0 000-1.5h-10zM4 10a1 1 0 11-2 0 1 1 0 012 0zM3 13.5a1 1 0 100 2 1 1 0 000-2z"/>
       </svg>
     </button>
     {# LC-300: blockquote (line-prefix `> `). #}
     <button type="button" data-lc-fmt="quote" data-lc-ph="{{ "room-composer-format-quote-ph"|t }}" data-lc-tip="{{ "room-composer-format-quote"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-quote"|t }}"
-      class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">
+      class="lc-fmt-btn">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
         <path d="M2 4a.75.75 0 00-.75.75v9.5a.75.75 0 001.5 0v-9.5A.75.75 0 002 4zM5.75 4a.75.75 0 000 1.5h9.5a.75.75 0 000-1.5h-9.5zM5 9.25a.75.75 0 01.75-.75h9.5a.75.75 0 010 1.5h-9.5A.75.75 0 015 9.25zM5.75 13a.75.75 0 000 1.5h5.5a.75.75 0 000-1.5h-5.5z"/>
       </svg>
@@ -185,7 +185,7 @@
       <button type="button" data-lc-emoji-open
         hx-get="/rooms/{{ room.id }}/emoji-picker" hx-target="#lc-emoji-picker-slot" hx-swap="innerHTML"
         data-lc-tip="{{ "room-composer-emoji"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-emoji"|t }}"
-        class="px-2 py-1 rounded hover:text-content hover:bg-surface-sunken">&#128512;</button>
+        class="lc-fmt-btn">&#128512;</button>
       <span id="lc-emoji-picker-slot" class="relative"></span>
     </span>
     {# LC-332: live character counter. Hidden until within WARN_WINDOW of the
@@ -197,7 +197,7 @@
     {# LC-276: Write/Preview toggle. Renders the draft through the SAME server
        markdown pipeline that posting uses, so the preview matches the result. #}
     <button type="button" data-lc-preview-toggle data-lc-edit-label="{{ "room-composer-edit"|t }}"
-      class="ml-2 px-2 py-1 rounded text-xs hover:text-content hover:bg-surface-sunken">{{ "room-composer-preview"|t }}</button>
+      class="lc-fmt-btn ml-2 text-xs">{{ "room-composer-preview"|t }}</button>
   </div>
   <!-- LC-171: the textarea's onkeydown submits on Enter, but when a composer
        combobox (mention or slash) has a highlighted option open, Enter belongs
@@ -210,10 +210,14 @@
        text AND inserts. One guard, both comboboxes (no slash/mention divergence). -->
   <div class="flex items-end gap-2">
     <button type="button" data-lc-tip="{{ "room-composer-attach-file"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-attach-file"|t }}"
-      class="px-2 py-2 rounded text-content-muted hover:text-content hover:bg-surface-sunken"
-      onclick="document.getElementById('lc-file').click()">+</button>
+      class="lc-composer-btn"
+      onclick="document.getElementById('lc-file').click()">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M15.621 4.379a3 3 0 00-4.242 0l-7 7a5 5 0 007.07 7.071l7.071-7.071a.75.75 0 011.06 1.06l-7.07 7.072a6.5 6.5 0 01-9.193-9.193l7-7a4.5 4.5 0 016.364 6.364l-7.072 7.072a2.5 2.5 0 01-3.535-3.536l6.717-6.717a.75.75 0 011.06 1.06l-6.716 6.717a1 1 0 001.414 1.414l7.072-7.071a3 3 0 000-4.243z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     <button type="button" id="lc-record" data-lc-tip="{{ "room-composer-record-voice"|t }}" data-lc-tip-pos="top"
-      class="px-2 py-2 rounded text-content-muted hover:text-content hover:bg-surface-sunken"
+      class="lc-composer-btn"
       aria-label="{{ "room-composer-record-voice"|t }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path d="M10 2a3 3 0 00-3 3v5a3 3 0 006 0V5a3 3 0 00-3-3z"/>
@@ -232,7 +236,7 @@
       aria-expanded="false"
       aria-controls="lc-mention-list"
       aria-haspopup="listbox"
-      class="flex-1 resize-none overflow-y-auto rounded border px-3 py-2 max-h-40"
+      class="flex-1 resize-none overflow-y-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 max-h-40 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
       hx-put="/room/{{ room.id }}/draft"
       hx-include="this"
       hx-swap="none"
@@ -271,13 +275,13 @@
        server-rendered markdown HTML is swapped into it (same trust model as
        message bodies). Sits in the textarea's flex slot so it occupies the
        same width when shown. #}
-    <div data-lc-preview-pane class="hidden flex-1 lc-md leading-snug rounded border px-3 py-2 max-h-40 overflow-y-auto"></div>
+    <div data-lc-preview-pane class="hidden flex-1 lc-md leading-snug rounded-lg border border-border bg-surface-elevated px-3 py-2 max-h-40 overflow-y-auto"></div>
     <button
       type="button"
       data-lc-tip="{{ "room-composer-create-poll"|t }}" data-lc-tip-pos="top"
       aria-label="{{ "room-composer-create-poll"|t }}"
       aria-haspopup="dialog"
-      class="px-2 py-2 rounded text-content-muted hover:text-content hover:bg-surface-sunken"
+      class="lc-composer-btn"
       onclick="window.__lcOpenPollModal && window.__lcOpenPollModal()"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -289,7 +293,7 @@
       data-lc-tip="{{ "room-composer-schedule-title"|t }}" data-lc-tip-pos="top"
       aria-label="{{ "room-composer-schedule-aria"|t }}"
       aria-haspopup="dialog"
-      class="px-2 py-2 rounded text-content-muted hover:text-content hover:bg-surface-sunken"
+      class="lc-composer-btn"
       onclick="window.__lcOpenScheduledModal && window.__lcOpenScheduledModal()"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -300,7 +304,7 @@
       id="composer-send"
       type="submit"
       disabled
-      class="rounded bg-accent px-3 py-2 text-accent-content hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+      class="lc-composer-send"
       aria-label="{{ "room-composer-send-message"|t }}"
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
