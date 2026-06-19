@@ -608,3 +608,34 @@ async fn custom_svg_favicon_served_sandboxed() {
     );
     assert!(body.contains("<svg"), "served the SVG bytes");
 }
+
+// LC-361: every page (via base.html) must emit the JS i18n catalog + helper so
+// client-side scripts can localize. A malformed catalog would break all page
+// JS, so assert it renders with a known English value.
+#[tokio::test]
+async fn page_emits_js_i18n_catalog() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/settings")
+        .header(header::COOKIE, format!("session={}", t.admin_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let (status, body) = body_string(res).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "head: {}",
+        &body[..body.len().min(200)]
+    );
+    assert!(
+        body.contains("window.__lcI18n = {"),
+        "catalog object missing"
+    );
+    assert!(body.contains("window.__lcS ="), "catalog helper missing");
+    assert!(
+        body.contains("callMute: \"Mute\""),
+        "expected the English catalog value to render"
+    );
+}
