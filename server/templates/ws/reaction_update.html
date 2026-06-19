@@ -7,10 +7,13 @@
     class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content{% else %}bg-surface-sunken hover:bg-surface-sunken{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}
+  {# LC-362: keep the add-reaction button's accessible name in step with
+     partials/reaction_bar.html; this OOB twin swaps in on every live update. #}
   <button
     hx-get="/messages/{{ message_id }}/reactions/picker"
     hx-target="this"
     hx-swap="outerHTML"
+    aria-label="{{ "partials-reaction-add"|t }}"
     class="text-xs text-content-muted hover:text-content-muted"
   >+</button>
 </div>
