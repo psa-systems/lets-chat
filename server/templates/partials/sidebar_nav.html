@@ -4,25 +4,40 @@
    refresh just this region for members currently viewing that enclave. The
    parent <nav> carries an enclave-keyed id so the OOB swap lands only on
    connections whose current page is that enclave. References the sidebar_*
-   fields + `user` from whichever parent includes it. #}
+   fields + `user` from whichever parent includes it.
+
+   LC-371: the three top-level sections (Starred / Channels / Direct messages)
+   are device-local collapsible groups. The header is a [data-lc-group-toggle]
+   button driving window.__lcToggleGroup; hiding + chevron rotation are pure CSS
+   keyed on <html data-lc-collapsed-groups> (base.html no-flash bootstrap), so
+   the state survives this fragment's OOB swaps. #}
     {% if !sidebar_starred_rooms.is_empty() || !sidebar_starred_peers.is_empty() %}
-    <section data-lc-sb-section>
-      <h2 class="text-xs uppercase text-content-muted px-2">&#9733; {{ "sidebar-section-starred"|t }}</h2>
-      <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
-        {% for room in sidebar_starred_rooms %}
-        <li data-lc-sb-row data-room-id="{{ room.id }}" draggable="true">
-          {% let is_starred = true %}
-          {% let room_id_str = room.id.to_string() %}
-          {% include "partials/sidebar_room_row.html" %}
-        </li>
-        {% endfor %}
-        {% for peer in sidebar_starred_peers %}
-        <li data-lc-sb-row data-room-id="{{ peer.dm_room_id }}" draggable="true">
-          {% let is_starred = true %}
-          {% include "partials/sidebar_peer_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
+    <section data-lc-sb-section data-lc-sb-group="starred">
+      <button type="button" data-lc-group-toggle="starred" aria-expanded="true" aria-controls="lc-sb-body-starred"
+        onclick="window.__lcToggleGroup && window.__lcToggleGroup('starred')"
+        class="w-full flex items-center gap-1 lc-section-label px-2 py-0.5 hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded">
+        <svg data-lc-group-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+        <span class="flex-1 text-left truncate">&#9733; {{ "sidebar-section-starred"|t }}</span>
+      </button>
+      <div data-lc-sb-group-body id="lc-sb-body-starred">
+        <ul class="mt-1" data-room-list data-positions-url="/sidebar/stars/positions">
+          {% for room in sidebar_starred_rooms %}
+          <li data-lc-sb-row data-room-id="{{ room.id }}" draggable="true">
+            {% let is_starred = true %}
+            {% let room_id_str = room.id.to_string() %}
+            {% include "partials/sidebar_room_row.html" %}
+          </li>
+          {% endfor %}
+          {% for peer in sidebar_starred_peers %}
+          <li data-lc-sb-row data-room-id="{{ peer.dm_room_id }}" draggable="true">
+            {% let is_starred = true %}
+            {% include "partials/sidebar_peer_row.html" %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
     {% endif %}
     {% if let Some(_eid) = sidebar_current_enclave %}
@@ -38,7 +53,7 @@
           {% else %}
           <input type="hidden" name="collapsed" value="1">
           {% endif %}
-          <button type="submit" class="w-full text-left text-xs uppercase text-content-muted hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
+          <button type="submit" class="w-full text-left lc-section-label hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
             <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
             <span data-lc-unread class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
@@ -82,9 +97,16 @@
        so the `+` create-chat affordance is always reachable; outside an enclave
        (Home) it shows only when there are rooms and carries no `+`. #}
     {% if sidebar_current_enclave.is_some() || !sidebar_rooms.is_empty() %}
-    <section data-lc-sb-section>
-      <div class="flex items-center justify-between px-2">
-        <h2 class="text-xs uppercase text-content-muted">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</h2>
+    <section data-lc-sb-section data-lc-sb-group="rooms">
+      <div class="flex items-center justify-between gap-1 px-2">
+        <button type="button" data-lc-group-toggle="rooms" aria-expanded="true" aria-controls="lc-sb-body-rooms"
+          onclick="window.__lcToggleGroup && window.__lcToggleGroup('rooms')"
+          class="flex-1 min-w-0 flex items-center gap-1 lc-section-label py-0.5 hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded">
+          <svg data-lc-group-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 shrink-0" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+          </svg>
+          <span class="flex-1 text-left truncate">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</span>
+        </button>
         {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
         <details class="relative">
           <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1 leading-none" title="{{ "sidebar-room-add"|t }}" aria-label="{{ "sidebar-room-add"|t }}">+</summary>
@@ -108,29 +130,40 @@
         {% endif %}{% endif %}
       </div>
       {% if !sidebar_rooms.is_empty() %}
-      <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
-        {% for room in sidebar_rooms %}
-        <li data-lc-sb-row{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
-          {% let is_starred = false %}
-          {% let room_id_str = room.id.to_string() %}
-          {% include "partials/sidebar_room_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
+      <div data-lc-sb-group-body id="lc-sb-body-rooms">
+        <ul class="mt-1 min-h-[8px]"{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %}{% if let Some(eid) = sidebar_current_enclave %} data-room-list data-uncategorize-url="/enclave/{{ eid }}/sidebar/categories/rooms"{% endif %}{% endif %}>
+          {% for room in sidebar_rooms %}
+          <li data-lc-sb-row{% if can_manage_sidebar_categories && !sidebar_categories.is_empty() %} data-room-id="{{ room.id }}" draggable="true"{% endif %}>
+            {% let is_starred = false %}
+            {% let room_id_str = room.id.to_string() %}
+            {% include "partials/sidebar_room_row.html" %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
       {% endif %}
     </section>
     {% endif %}
     {% if !sidebar_peers.is_empty() %}
-    <section data-lc-sb-section>
-      <h2 class="text-xs uppercase text-content-muted px-2">{{ "sidebar-section-direct-messages"|t }}</h2>
-      <ul class="mt-1">
-        {% for peer in sidebar_peers %}
-        <li data-lc-sb-row>
-          {% let is_starred = false %}
-          {% include "partials/sidebar_peer_row.html" %}
-        </li>
-        {% endfor %}
-      </ul>
+    <section data-lc-sb-section data-lc-sb-group="dms">
+      <button type="button" data-lc-group-toggle="dms" aria-expanded="true" aria-controls="lc-sb-body-dms"
+        onclick="window.__lcToggleGroup && window.__lcToggleGroup('dms')"
+        class="w-full flex items-center gap-1 lc-section-label px-2 py-0.5 hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded">
+        <svg data-lc-group-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+        <span class="flex-1 text-left truncate">{{ "sidebar-section-direct-messages"|t }}</span>
+      </button>
+      <div data-lc-sb-group-body id="lc-sb-body-dms">
+        <ul class="mt-1">
+          {% for peer in sidebar_peers %}
+          <li data-lc-sb-row>
+            {% let is_starred = false %}
+            {% include "partials/sidebar_peer_row.html" %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
     {% endif %}
     {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
