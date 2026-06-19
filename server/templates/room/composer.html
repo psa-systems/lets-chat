@@ -814,14 +814,14 @@
   function showPreview(f){
     revokePreview();
     if (!f.type || !f.type.startsWith('image/')) {
-      staged.innerHTML = 'Uploading ' + f.name + '...';
+      staged.innerHTML = window.__lcS('uploadUploadingFile', 'Uploading %name%...').replace('%name%', function () { return f.name; });
       return;
     }
     currentObjectUrl = URL.createObjectURL(f);
     staged.innerHTML =
       '<span class="inline-flex items-center gap-2">' +
         '<img src="' + currentObjectUrl + '" alt="" class="h-12 w-12 rounded object-cover">' +
-        '<span>Uploading ' + f.name + '...</span>' +
+        '<span>' + window.__lcS('uploadUploadingFile', 'Uploading %name%...').replace('%name%', function () { return f.name; }) + '</span>' +
       '</span>';
   }
 
@@ -833,7 +833,7 @@
       var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
       if (!res.ok) {
         var msg = await res.text();
-        errSlot.textContent = msg || ('upload failed: '+res.status);
+        errSlot.textContent = msg || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
         revokePreview();
         staged.textContent = '';
         input.value = '';
@@ -846,12 +846,12 @@
         : '';
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' + preview +
-          '<span>Attached: ' + f.name + ' (' + fmt(f.size) + ')</span>' +
-          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
+          '<span>' + window.__lcS('uploadAttached', 'Attached: %name% (%size%)').replace('%name%', function () { return f.name; }).replace('%size%', function () { return fmt(f.size); }) + '</span>' +
+          '<button type="button" aria-label="' + window.__lcS('uploadRemoveAttachment', 'Remove attachment') + '" onclick="window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
       if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
-      errSlot.textContent = 'upload failed';
+      errSlot.textContent = window.__lcS('uploadFailed', 'Upload failed');
       revokePreview();
       input.value = '';
     }
@@ -1021,7 +1021,7 @@
   async function start(){
     errSlot.textContent = '';
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      errSlot.textContent = 'Voice recording is not supported in this browser';
+      errSlot.textContent = window.__lcS('voiceRecUnsupported', 'Voice recording is not supported in this browser');
       return;
     }
     try {
@@ -1031,7 +1031,7 @@
       // the raw capture; disabling it lets that noise straight into the file.
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      errSlot.textContent = 'Microphone access denied';
+      errSlot.textContent = window.__lcS('voiceRecMicDenied', 'Microphone access denied');
       return;
     }
     var mimeType = pickMimeType();
@@ -1041,7 +1041,7 @@
         : new MediaRecorder(mediaStream);
     } catch (e) {
       releaseStream();
-      errSlot.textContent = 'Could not start recording';
+      errSlot.textContent = window.__lcS('voiceRecStartFailed', 'Could not start recording');
       return;
     }
     chunks = [];
@@ -1077,11 +1077,11 @@
       return;
     }
     if (blob.size === 0) {
-      errSlot.textContent = 'Recording was empty';
+      errSlot.textContent = window.__lcS('voiceRecEmpty', 'Recording was empty');
       staged.textContent = '';
       return;
     }
-    staged.innerHTML = 'Uploading voice message...';
+    staged.innerHTML = window.__lcS('uploadUploadingVoice', 'Uploading voice message...');
     var wf = await computeWaveform(blob);
     var fd = new FormData();
     // Order matters: the server reads kind + waveform before the file field.
@@ -1093,7 +1093,7 @@
     try {
       var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
       if (!res.ok) {
-        errSlot.textContent = (await res.text()) || ('upload failed: ' + res.status);
+        errSlot.textContent = (await res.text()) || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
         staged.textContent = '';
         return;
       }
@@ -1101,12 +1101,12 @@
       hidden.value = data.file_id;
       staged.innerHTML =
         '<span class="inline-flex items-center gap-2">' +
-          '<span>Voice message attached</span>' +
-          '<button type="button" aria-label="Remove attachment" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
+          '<span>' + window.__lcS('uploadVoiceAttached', 'Voice message attached') + '</span>' +
+          '<button type="button" aria-label="' + window.__lcS('uploadRemoveAttachment', 'Remove attachment') + '" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
         '</span>';
       if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
-      errSlot.textContent = 'upload failed';
+      errSlot.textContent = window.__lcS('uploadFailed', 'Upload failed');
       staged.textContent = '';
     }
   }
