@@ -1178,6 +1178,47 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-menu-item-danger svg {
     color: var(--danger);
 }
+/* Thin divider inside a menu (separates destructive actions). */
+.lc-menu-divider {
+    height: 1px;
+    margin: 0.25rem 0;
+    background-color: var(--border);
+}
+
+/* LC-376: per-message hover action toolbar. Compact square icon buttons in the
+   elevated chip; the long tail of actions collapses into a `...` overflow menu
+   (.lc-msg-menu) built from a native <details> + .lc-menu-item rows. */
+.lc-msg-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: 0.375rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-msg-action:hover {
+    background-color: var(--surface-sunken);
+    color: var(--content);
+}
+.lc-msg-action svg {
+    height: 1rem;
+    width: 1rem;
+}
+.lc-msg-menu {
+    min-width: 11rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background-color: var(--surface-elevated);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+/* Keep the hover chip visible while one of its <details> popovers (overflow
+   menu or flag) is open, so moving the mouse off the row does not dismiss it. */
+.lc-msg-actions:has(details[open]) {
+    opacity: 1;
+}
 
 /* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
    (inset shadow follows the rounded corners) for a strong, scannable active

@@ -83,110 +83,122 @@
     {% endif %}
   </div>
   {% endif %}
-  {# LC-374: hover-revealed action toolbar. Floats top-right as an elevated,
-     bordered chip; revealed on row hover and on keyboard focus-within so the
-     actions are reachable without a mouse. #}
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-1.5 text-xs bg-surface-elevated border border-border shadow-sm px-1.5 py-0.5 rounded-md">
+  {# LC-374/LC-376: hover-revealed action toolbar. Floats top-right as an elevated
+     chip, revealed on row hover and keyboard focus-within. High-frequency actions
+     (reply, thread) are inline icon buttons; the long tail collapses into a `...`
+     overflow menu (native <details> + .lc-menu-item rows), with the destructive
+     Delete separated at the bottom. The .lc-msg-actions :has() rule in main.css
+     keeps the chip visible while a menu is open. #}
+  <span class="lc-msg-actions absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5 text-xs bg-surface-elevated border border-border shadow-sm px-1 py-0.5 rounded-md">
     {# LC-302: quick-reaction bar - filled client-side from the LC-288 recent
        emoji MRU (or defaults) on first row hover; one tap reacts via the same
        toggle endpoint as the picker. #}
-    <span data-lc-quick-bar role="group" aria-label="{{ "room-quick-react-aria"|t }}" class="hidden items-center gap-1 border-r border-border pr-2"></span>
+    <span data-lc-quick-bar role="group" aria-label="{{ "room-quick-react-aria"|t }}" class="hidden items-center gap-1 border-r border-border pr-1 mr-0.5"></span>
     {% if message.parent_id.is_none() %}
-    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-reply"|t }}</button>
+    <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="lc-msg-action" data-lc-tip="{{ "room-msg-reply"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "room-msg-reply"|t }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
+    </button>
     {% endif %}
-    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-thread"|t }}</button>
-    {# LC-246: copy a permalink (/m/{id}) to this message. Pure client-side;
-       writes to the clipboard and flips the label to "Copied" for ~1.5s. The
-       localized strings ride as data attributes so the inline handler can swap
-       them without re-rendering. #}
-    <button type="button"
-      data-lc-copy-link="{{ message.id }}"
-      data-lc-copied-label="{{ "room-msg-copied"|t }}"
-      class="text-content-muted hover:underline"
-      onclick="
-        var b = this;
-        var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
-        var done = function(){
-          var orig = b.textContent;
-          b.textContent = b.getAttribute('data-lc-copied-label');
-          setTimeout(function(){ b.textContent = orig; }, 1500);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(done, function(){
-            window.__lcCopyFallback && window.__lcCopyFallback(url); done();
-          });
-        } else if (window.__lcCopyFallback) {
-          window.__lcCopyFallback(url); done();
-        }
-      ">{{ "room-msg-copy-link"|t }}</button>
-    {# LC-282: copy the message's raw markdown source. The raw text is fetched
-       from /messages/{id}/raw on click (not inlined per row) so large rooms
-       stay lean; flips the label to "Copied" like the copy-link button. #}
-    {% if !message.body.is_empty() %}
-    <button type="button"
-      data-lc-copy-text="{{ message.id }}"
-      data-lc-copied-label="{{ "room-msg-copied"|t }}"
-      class="text-content-muted hover:underline"
-      onclick="
-        var b = this;
-        fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
-          .then(function(r){ return r.ok ? r.text() : null; })
-          .then(function(t){
-            if (t === null) return;
+    <button hx-get="/room/{{ message.room_id }}/thread/{{ message.id }}" hx-target="#thread-panel" hx-swap="outerHTML" class="lc-msg-action" data-lc-tip="{{ "room-msg-thread"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "room-msg-thread"|t }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2 10c0-3.967 3.69-7 8-7s8 3.033 8 7-3.69 7-8 7a9.165 9.165 0 01-1.504-.123 5.976 5.976 0 01-3.935 1.107.75.75 0 01-.584-1.143 3.478 3.478 0 00.522-1.756C2.978 13.825 2 12.025 2 10z" clip-rule="evenodd"/></svg>
+    </button>
+    {# LC-342: shame-tag "Flag". Kept inline (not folded into the overflow menu)
+       because its popover lazy-loads via `toggle ... from:closest details`, which
+       a nested <details> inside the menu would break. #}
+    {% if message.shame_enabled && !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+    <details class="relative inline-flex">
+      <summary class="lc-msg-action list-none" data-lc-tip="{{ "shame-flag-title"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "shame-flag"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 2.25a.75.75 0 01.75.75v.54l1.838-.46a9.75 9.75 0 016.725.738l.108.054a8.25 8.25 0 005.58.652l3.109-.732a.75.75 0 01.917.81 47.784 47.784 0 00.005 10.337.75.75 0 01-.574.812l-3.114.733a9.75 9.75 0 01-6.594-.77l-.108-.054a8.25 8.25 0 00-5.69-.625l-2.202.55V21a.75.75 0 01-1.5 0V3A.75.75 0 013 2.25z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow"
+           hx-get="/messages/{{ message.id }}/tags" hx-trigger="toggle once from:closest details" hx-swap="innerHTML"></div>
+    </details>
+    {% endif %}
+    {# LC-376: overflow menu for the long tail of actions. Native <details> (no
+       per-row JS); the once-wired delegated handler in room/messages.html closes
+       it on Escape / outside-click and closes others when one opens. #}
+    <details class="lc-msg-more relative inline-flex">
+      <summary class="lc-msg-action list-none" aria-haspopup="menu" data-lc-tip="{{ "room-msg-more"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "room-msg-more"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM15.5 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>
+      </summary>
+      <div role="menu" class="lc-msg-menu absolute right-0 top-full mt-1 z-30">
+        {# LC-246: copy a permalink (/m/{id}); pure client-side, flips the label to
+           "Copied" for ~1.5s via the data attributes. #}
+        <button type="button" role="menuitem"
+          data-lc-copy-link="{{ message.id }}"
+          data-lc-copied-label="{{ "room-msg-copied"|t }}"
+          class="lc-menu-item"
+          onclick="
+            var b = this;
+            var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
             var done = function(){
               var orig = b.textContent;
               b.textContent = b.getAttribute('data-lc-copied-label');
               setTimeout(function(){ b.textContent = orig; }, 1500);
             };
             if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(t).then(done, function(){
-                window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+              navigator.clipboard.writeText(url).then(done, function(){
+                window.__lcCopyFallback && window.__lcCopyFallback(url); done();
               });
             } else if (window.__lcCopyFallback) {
-              window.__lcCopyFallback(t); done();
+              window.__lcCopyFallback(url); done();
             }
-          });
-      ">{{ "room-msg-copy-text"|t }}</button>
-    {% endif %}
-    {% if message.is_pinned %}
-    <button hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-unpin"|t }}</button>
-    {% else %}
-    <button hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-warning hover:underline">{{ "room-msg-pin"|t }}</button>
-    {% endif %}
-    {% if message.is_bookmarked %}
-    <button hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-success-surface-content hover:underline">{{ "room-msg-unsave"|t }}</button>
-    {% else %}
-    <button hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-success-surface-content hover:underline">{{ "room-msg-save"|t }}</button>
-    {% endif %}
-    <button hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">{{ "room-msg-remind"|t }}</button>
-    {# LC-286: mark this conversation unread from here (rewinds the read
-       watermark so this message + newer re-raise the sidebar badge). #}
-    <button hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="text-content-muted hover:underline">{{ "room-msg-mark-unread"|t }}</button>
-    {# LC-278: forward this message to another room/DM via the destination picker. #}
-    <button hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="text-content-muted hover:underline">{{ "room-msg-forward"|t }}</button>
-    {# LC-334: report this message to moderators. Hidden on the viewer's own
-       messages (you don't report yourself) and on synthetic-actor messages
-       (webhook / email / bridge have an empty user_id - you report users, not
-       integrations). #}
-    {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
-    <button hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="text-danger hover:underline">{{ "room-msg-report"|t }}</button>
-    {% endif %}
-    {# LC-342: shame-tag "Flag" control. Enabled per enclave; the popover panel
-       lazy-loads the tag/vote control on first open (toggle), so the timeline
-       render emits no extra per-message request. #}
-    {% if message.shame_enabled && !message.user_id.is_empty() && message.user_id != message.viewer_id %}
-    <details class="relative inline-block">
-      <summary class="list-none cursor-pointer text-content-muted hover:underline" title="{{ "shame-flag-title"|t }}">{{ "shame-flag"|t }}</summary>
-      <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow"
-           hx-get="/messages/{{ message.id }}/tags" hx-trigger="toggle once from:closest details" hx-swap="innerHTML"></div>
+          ">{{ "room-msg-copy-link"|t }}</button>
+        {# LC-282: copy the raw markdown source (fetched on click). #}
+        {% if !message.body.is_empty() %}
+        <button type="button" role="menuitem"
+          data-lc-copy-text="{{ message.id }}"
+          data-lc-copied-label="{{ "room-msg-copied"|t }}"
+          class="lc-menu-item"
+          onclick="
+            var b = this;
+            fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+              .then(function(r){ return r.ok ? r.text() : null; })
+              .then(function(t){
+                if (t === null) return;
+                var done = function(){
+                  var orig = b.textContent;
+                  b.textContent = b.getAttribute('data-lc-copied-label');
+                  setTimeout(function(){ b.textContent = orig; }, 1500);
+                };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(t).then(done, function(){
+                    window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+                  });
+                } else if (window.__lcCopyFallback) {
+                  window.__lcCopyFallback(t); done();
+                }
+              });
+          ">{{ "room-msg-copy-text"|t }}</button>
+        {% endif %}
+        {% if message.is_pinned %}
+        <button role="menuitem" hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unpin"|t }}</button>
+        {% else %}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-pin"|t }}</button>
+        {% endif %}
+        {% if message.is_bookmarked %}
+        <button role="menuitem" hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unsave"|t }}</button>
+        {% else %}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-save"|t }}</button>
+        {% endif %}
+        <button role="menuitem" hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-remind"|t }}</button>
+        {# LC-286: mark this conversation unread from here. #}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
+        {# LC-278: forward this message to another room/DM. #}
+        <button role="menuitem" hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-forward"|t }}</button>
+        {# LC-334: report to moderators (not on own / synthetic-actor messages). #}
+        {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+        <button role="menuitem" hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-report"|t }}</button>
+        {% endif %}
+        {% if message.can_edit %}
+        <button role="menuitem" hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-edit"|t }}</button>
+        {% endif %}
+        {% if message.can_delete %}
+        <div class="lc-menu-divider"></div>
+        <button role="menuitem" hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="lc-menu-item lc-menu-item-danger">{{ "room-msg-delete"|t }}</button>
+        {% endif %}
+      </div>
     </details>
-    {% endif %}
-    {% if message.can_edit %}
-    <button hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="text-accent hover:underline">{{ "room-msg-edit"|t }}</button>
-    {% endif %}
-    {% if message.can_delete %}
-    <button hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="text-danger hover:underline">{{ "room-msg-delete"|t }}</button>
-    {% endif %}
   </span>
   {% if let Some(qp) = message.quote_preview.as_ref() %}
     <a href="#msg-{{ qp.id }}" class="lc-quote-chip">
