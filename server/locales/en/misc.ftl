@@ -10,6 +10,14 @@ home-pick-dm-suffix = to chat in rooms.
 home-pending-invitations-prefix = Pending invitations:
 home-pending-invitations-link = view
 home-pending-invitations-suffix = .
+# LC-372: welcome empty-state redesign.
+home-subtitle = Pick up a conversation or start something new.
+home-action-dm-title = Start a direct message
+home-action-dm-desc = Search for someone to chat with.
+home-action-discover-title = Discover or create an enclave
+home-action-discover-desc = Join a community or spin up your own.
+home-action-invitations-title = View invitations
+home-action-invitations-desc = See the enclaves you've been invited to.
 
 ## Message search results
 search-no-results = No results.

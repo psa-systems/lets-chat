@@ -44,6 +44,10 @@ pub async fn get_home(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
+    // LC-372: pending-invitation count for the welcome quick-action badge.
+    let pending_invites = crate::db::enclave::list_invitations_for_user(&state.chat, &user.id)
+        .await?
+        .len();
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -56,6 +60,7 @@ pub async fn get_home(
         switcher: &switcher,
         asset_version: &state.asset_version,
         flash_error: None,
+        pending_invites,
     };
     let body = html(&page)?;
     Ok(body.into_response())

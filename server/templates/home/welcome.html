@@ -4,21 +4,75 @@
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-2xl">
-  {% if let Some(msg) = flash_error %}
-  <div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger">
-    {{ msg }}
+  {# LC-372: centered, vertically balanced empty state. min-h-full + flex
+     centering keeps the card group optically centered in the main pane at
+     common widths instead of floating top-left. #}
+  <div class="min-h-full flex items-center justify-center p-6">
+    <section class="w-full max-w-md">
+      {% if let Some(msg) = flash_error %}
+      <div class="mb-6 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger" role="alert">
+        {{ msg }}
+      </div>
+      {% endif %}
+      <div class="text-center">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent-surface text-accent-surface-content">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-8 w-8" aria-hidden="true">
+            <path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 00-1.032-.211 50.89 50.89 0 00-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 002.433 3.984L7.28 21.53A.75.75 0 016 21v-4.03a48.527 48.527 0 01-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979z"/>
+            <path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 001.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0015.75 7.5z"/>
+          </svg>
+        </div>
+        <h1 class="lc-display">{{ "home-welcome"|t }} {{ user.display_label() }}</h1>
+        <p class="mt-2 lc-body text-content-muted">{{ "home-subtitle"|t }}</p>
+      </div>
+      <div class="mt-6 flex flex-col gap-3">
+        {# Start a DM: jumps the unified sidebar search (LC-369) to the People
+           tab and focuses it - DMs start from a people search, with no separate
+           index page to link to. #}
+        <button type="button"
+          onclick="var t=document.querySelector('[data-lc-search-tab=people]'); if(t)t.click(); var i=document.getElementById('sidebar-search-input'); if(i)i.focus();"
+          class="group flex items-start gap-3 rounded-lg border border-border bg-surface-elevated p-4 text-left hover:border-border-strong hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-surface text-accent-surface-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 2c-4.418 0-8 3.134-8 7 0 1.76.743 3.37 1.97 4.6a.75.75 0 01.219.62l-.243 1.94 1.96-.98a.75.75 0 01.546-.06A9.71 9.71 0 0010 16c4.418 0 8-3.134 8-7s-3.582-7-8-7z" clip-rule="evenodd"/>
+            </svg>
+          </span>
+          <span class="min-w-0">
+            <span class="block lc-h3">{{ "home-action-dm-title"|t }}</span>
+            <span class="block lc-small text-content-muted">{{ "home-action-dm-desc"|t }}</span>
+          </span>
+        </button>
+        <a href="/enclaves/discover"
+          class="group flex items-start gap-3 rounded-lg border border-border bg-surface-elevated p-4 hover:border-border-strong hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-surface text-accent-surface-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clip-rule="evenodd"/>
+            </svg>
+          </span>
+          <span class="min-w-0">
+            <span class="block lc-h3">{{ "home-action-discover-title"|t }}</span>
+            <span class="block lc-small text-content-muted">{{ "home-action-discover-desc"|t }}</span>
+          </span>
+        </a>
+        <a href="/invitations"
+          class="group flex items-start gap-3 rounded-lg border border-border bg-surface-elevated p-4 hover:border-border-strong hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-surface text-accent-surface-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/>
+              <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/>
+            </svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2">
+              <span class="lc-h3">{{ "home-action-invitations-title"|t }}</span>
+              {% if pending_invites > 0 %}
+              <span class="inline-flex items-center justify-center rounded-full bg-danger px-2 text-xs font-semibold text-danger-content">{{ pending_invites }}</span>
+              {% endif %}
+            </span>
+            <span class="block lc-small text-content-muted">{{ "home-action-invitations-desc"|t }}</span>
+          </span>
+        </a>
+      </div>
+    </section>
   </div>
-  {% endif %}
-  <h1 class="lc-display">{{ "home-welcome"|t }} {{ user.display_label() }}</h1>
-  <p class="mt-2 text-content-muted">
-    {{ "home-pick-dm-prefix"|t }}
-    <a href="/enclaves/discover" class="text-accent hover:underline">{{ "home-create-join-link"|t }}</a>
-    {{ "home-pick-dm-suffix"|t }}
-  </p>
-  <p class="mt-2 text-content-muted">
-    {{ "home-pending-invitations-prefix"|t }} <a href="/invitations" class="text-accent hover:underline">{{ "home-pending-invitations-link"|t }}</a>{{ "home-pending-invitations-suffix"|t }}
-  </p>
-</section>
 </div>
 {% endblock %}
