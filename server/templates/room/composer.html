@@ -85,6 +85,10 @@
          keyboard; a focus call here would snap it back open 2s after the
          submit. Tapping the textarea is the way back to typing. */
       ta.focus();
+      /* LC-382: WS-miss safety net. If the canonical WS render does not arrive
+         and remove this cid's placeholder within the grace window, reconcile it
+         by reloading #messages (see __lcEchoReconcile in the script block). */
+      if (echoCid) setTimeout(function(){ window.__lcEchoReconcile && window.__lcEchoReconcile(echoCid); }, 4000);
     } else {
       /* LC-230: flip this request's optimistic placeholder (if any) to the
          failed state - on the same 2s debounce as the LC-216 banner. A slow
@@ -1379,6 +1383,27 @@
     discard.textContent = STR.discard;
     discard.addEventListener('click', function(){ row.remove(); });
     state.appendChild(discard);
+  };
+
+  // LC-382: WS-miss safety net. The canonical render normally arrives over the
+  // WS within a few hundred ms and live.js (htmx:oobBeforeSwap) removes this
+  // cid's placeholder. If that single broadcast is missed - a flaky socket, a
+  // reconnect gap between the POST landing and the socket re-subscribing, a
+  // dropped/unprocessed OOB swap - the placeholder would sit on "Sending..."
+  // forever. Called on a delay from the composer after-request success handler:
+  // if the placeholder is still pending, reload the #messages region from the
+  // current URL so the real message renders and the stale placeholder is
+  // dropped (the manual refresh the user would otherwise do, automated). No-op
+  // once the placeholder is gone - the happy path, a quarantine drop
+  // (__lcEchoDrop), or a failure flip (__lcEchoFailed clears data-lc-pending).
+  window.__lcEchoReconcile = function(cid){
+    if (!cid) return;
+    if (!findPending(cid)) return;
+    if (window.htmx) {
+      htmx.ajax('GET', location.pathname + location.search, {
+        target: '#messages', select: '#messages', swap: 'outerHTML'
+      });
+    }
   };
 })();
 </script>
