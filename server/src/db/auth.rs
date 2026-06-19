@@ -486,6 +486,24 @@ pub async fn set_user_role(
     Ok(())
 }
 
+/// LC-352: true if an active (role=admin, not banned) admin OTHER than
+/// `excluding_user_id` exists. Used to refuse the demote / ban / delete that
+/// would otherwise drop the active-admin count to zero and lock everyone out
+/// of the admin surface.
+pub async fn other_active_admin_exists(
+    pool: &SqlitePool,
+    excluding_user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users \
+         WHERE role = 'admin' AND is_banned = 0 AND id != ?)",
+    )
+    .bind(excluding_user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
+}
+
 /// Issue a session token for `user_id` with no captured origin metadata.
 /// Production code should prefer `create_session_with_origin` so the
 /// settings sessions list can show a meaningful row; this no-origin variant

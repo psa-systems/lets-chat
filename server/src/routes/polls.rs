@@ -28,6 +28,10 @@ const MAX_OPTIONS: usize = 10;
 const MIN_OPTIONS: usize = 2;
 const MAX_QUESTION_LEN: usize = 300;
 const MAX_OPTION_LEN: usize = 150;
+/// LC-350: upper bound on `closes_in` (one year). Without it a huge value
+/// overflows `chrono::Duration::minutes` / the `Utc::now() + _` addition and
+/// panics the handler (500). The modal input also carries a matching `max`.
+const MAX_POLL_CLOSE_MINUTES: i64 = 365 * 24 * 60;
 
 #[derive(Deserialize)]
 pub struct CreatePollForm {
@@ -164,7 +168,9 @@ pub async fn post_create(
     let options: Vec<String> = form.options.lines().map(|l| l.to_string()).collect();
     let closes_at = match form.closes_in {
         Some(m) if m > 0 => Some(
-            (Utc::now() + Duration::minutes(m))
+            // LC-350: clamp before the Duration math so an out-of-range value
+            // cannot overflow and panic the request.
+            (Utc::now() + Duration::minutes(m.min(MAX_POLL_CLOSE_MINUTES)))
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
         ),

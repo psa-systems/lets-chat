@@ -30,7 +30,7 @@
       </label>
       <label class="flex items-center gap-2 text-sm">
         {{ "poll-close-after"|t }}
-        <input type="number" name="closes_in" min="0" step="1" placeholder="0"
+        <input type="number" name="closes_in" min="0" max="525600" step="1" placeholder="0"
                class="w-20 rounded border border-border-strong px-2 py-1"> {{ "poll-close-after-suffix"|t }}
       </label>
       <div data-lc-poll-error class="hidden text-sm text-danger" role="alert"></div>
