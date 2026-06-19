@@ -72,20 +72,11 @@ async fn setup(with_mailer: bool, verified: bool, opted_in: bool) -> Fixture {
         .unwrap();
 
     let mailer = if with_mailer {
-        // Standalone test: we don't actually send mail. Build a Mailer
-        // pointing at an unreachable host so any actual `send` would fail,
-        // but the gating tests never reach that path.
-        std::env::set_var("LETS_CHAT_SMTP_HOST", "127.0.0.1");
-        std::env::set_var("LETS_CHAT_SMTP_PORT", "1");
-        std::env::set_var("LETS_CHAT_SMTP_TLS", "none");
-        std::env::set_var("LETS_CHAT_SMTP_FROM", "noreply@example.test");
-        let m = lets_chat::mail::Mailer::from_env();
-        // Don't leave globals set for sibling tests.
-        std::env::remove_var("LETS_CHAT_SMTP_HOST");
-        std::env::remove_var("LETS_CHAT_SMTP_PORT");
-        std::env::remove_var("LETS_CHAT_SMTP_TLS");
-        std::env::remove_var("LETS_CHAT_SMTP_FROM");
-        m
+        // LC-363: a Mailer pointing at an unreachable host (we never actually
+        // send). Built without mutating the process-global LETS_CHAT_SMTP_* env
+        // vars, which raced across parallel test threads - a concurrent
+        // remove_var could make a sibling test's from_env() return None.
+        lets_chat::mail::Mailer::unreachable_for_tests()
     } else {
         None
     };
