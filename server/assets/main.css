@@ -226,6 +226,15 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --bridge-content:           #6d28d9; /* violet-700 */
     /* Keyboard-focus ring */
     --ring:             var(--brand-primary);
+    /* LC-366: enclave rail. The leftmost app rail reads as a dark Discord/Slack
+       chrome surface independent of the page theme; these tokens give it a
+       theme-aware identity (idle tile, hover tile, icon color) instead of the
+       hardcoded slate-* it used before. Active state reuses --accent. */
+    --rail-surface:        #0f172a; /* slate-900 */
+    --rail-tile:           #334155; /* slate-700 */
+    --rail-tile-hover:     #475569; /* slate-600 */
+    --rail-content:        #ffffff;
+    --rail-content-muted:  #94a3b8; /* slate-400 */
 }
 
 /* LC-191: dark palette. Same token contract as :root, slate-based dark.
@@ -288,6 +297,13 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --bridge-surface:           #2e1065; /* violet-950 */
     --bridge-content:           var(--content);
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
+    /* LC-366: rail sits one step darker than the page surface (slate-950 vs
+       slate-900) so it still reads as distinct chrome in dark mode. */
+    --rail-surface:        #020617; /* slate-950 */
+    --rail-tile:           #1e293b; /* slate-800 */
+    --rail-tile-hover:     #334155; /* slate-700 */
+    --rail-content:        #e2e8f0; /* slate-200 */
+    --rail-content-muted:  #94a3b8; /* slate-400 */
     color-scheme: dark; /* native form controls + scrollbars go dark */
 }
 
@@ -342,6 +358,14 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --bridge-surface:           #ede9fe; /* violet-100 */
     --bridge-content:           #6d28d9; /* violet-700 */
     --ring:             #000000;
+    /* LC-366: hc-light rail stays black-chrome with maximal-contrast white
+       icons; idle tiles use a dark grey so they separate from the surface
+       without relying on a border. */
+    --rail-surface:        #000000;
+    --rail-tile:           #1f2937; /* gray-800 */
+    --rail-tile-hover:     #374151; /* gray-700 */
+    --rail-content:        #ffffff;
+    --rail-content-muted:  #ffffff;
     color-scheme: light;
 }
 [data-theme="hc-dark"] {
@@ -393,6 +417,13 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --bridge-surface:           #0a0a0a;
     --bridge-content:           #c4b5fd; /* violet-300 */
     --ring:             #ffffff;
+    /* LC-366: hc-dark rail is pure black with white icons; idle tiles use a
+       dark grey so they read against the black surface. */
+    --rail-surface:        #000000;
+    --rail-tile:           #1f2937; /* gray-800 */
+    --rail-tile-hover:     #374151; /* gray-700 */
+    --rail-content:        #ffffff;
+    --rail-content-muted:  #ffffff;
     color-scheme: dark;
 }
 
@@ -995,6 +1026,90 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 }
 #lc-tooltip.lc-tooltip-visible {
     opacity: 1;
+}
+
+/* LC-366: enclave rail. Discord/Slack-style vertical app rail driven by the
+   --rail-* tokens (theme-aware, no hardcoded slate-*). Each tile is a rounded
+   square at rest that morphs toward a circle on hover/active, with a white
+   indicator pill in the left gutter that grows on hover and is tallest on the
+   active tile. The pill lives in the rail's left gutter, so it needs the rail
+   itself (not the scrolling tile column) as its visual anchor. */
+#switcher {
+    background-color: var(--rail-surface);
+}
+.lc-rail-tile {
+    position: relative;
+    flex: none;
+    background-color: var(--rail-tile);
+    color: var(--rail-content);
+    border-radius: 0.95rem;
+    transition: border-radius 0.15s ease, background-color 0.15s ease;
+}
+.lc-rail-tile:hover {
+    background-color: var(--rail-tile-hover);
+    border-radius: 1.375rem;
+}
+.lc-rail-tile.lc-rail-active {
+    background-color: var(--accent);
+    color: var(--accent-content);
+    border-radius: 1.375rem;
+}
+/* Left indicator pill (Discord pattern). Sits in the rail gutter to the left of
+   the tile: 0 height at rest, a short stub on hover, tallest when active. */
+.lc-rail-tile::before {
+    content: "";
+    position: absolute;
+    left: -0.625rem;
+    top: 50%;
+    width: 0.25rem;
+    height: 0;
+    border-radius: 0 0.25rem 0.25rem 0;
+    background-color: var(--rail-content);
+    transform: translateY(-50%);
+    transition: height 0.15s ease;
+}
+.lc-rail-tile:hover::before {
+    height: 1.25rem;
+}
+.lc-rail-tile.lc-rail-active::before {
+    height: 2.25rem;
+}
+/* Settings gear on the active enclave tile + the collapse chevron: muted rail
+   icons that brighten on hover. */
+.lc-rail-gear {
+    color: var(--rail-content-muted);
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.lc-rail-gear:hover {
+    color: var(--rail-content);
+    background-color: var(--rail-tile);
+}
+/* Thin divider above the discover / collapse controls at the rail foot. */
+.lc-rail-divider {
+    flex: none;
+    width: 2rem;
+    height: 1px;
+    background-color: var(--rail-tile-hover);
+}
+/* Unread / mention badge: a ring in the rail surface color separates it from a
+   neighboring tile. */
+.lc-rail-badge {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background-color: var(--danger);
+    color: var(--danger-content);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--rail-surface);
 }
 
 /* Universal reduced-motion kill switch. Sets transition + animation duration
