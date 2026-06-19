@@ -971,12 +971,62 @@ document.body.addEventListener('click', function(e){
     var needsRefresh = bannerWasShown || abnormalClose;
     abnormalClose = false;
     if (needsRefresh && window.htmx && document.getElementById('main')) {
+      // LC-346: the #main soft-refresh re-renders the composer from the
+      // server-side draft, which lags continuous typing (the draft PUT is
+      // debounced on a 1s idle gap and never settles mid-typing). Snapshot
+      // the live composer just before the swap and restore it afterwards so
+      // an in-progress message - plus caret/focus, a staged-but-unsent
+      // attachment, and an active quote/reply bar - survives the refresh.
+      // This is the only path that replaces a mounted composer, so the
+      // capture/restore lives here rather than on the composer itself
+      // (hx-preserve would re-run the sibling composer scripts and double-
+      // bind their document-level listeners). DM and room composers share
+      // the same ids, so one snapshot covers both.
+      var snap = null;
+      var cForm = document.getElementById('composer');
+      if (cForm) {
+        var ta = cForm.querySelector('textarea[name=body]');
+        var fileInput = cForm.querySelector('input[name=file_id]');
+        var stagedEl = document.getElementById('lc-staged');
+        var quoteEl = document.getElementById('composer-quote-bar');
+        snap = {
+          body: ta ? ta.value : '',
+          selStart: ta ? ta.selectionStart : 0,
+          selEnd: ta ? ta.selectionEnd : 0,
+          focused: !!ta && document.activeElement === ta,
+          fileId: fileInput ? fileInput.value : '',
+          staged: stagedEl ? stagedEl.innerHTML : '',
+          quote: quoteEl ? quoteEl.innerHTML : ''
+        };
+      }
+      function restoreComposer() {
+        // Nothing in progress: let the server-rendered draft (LC-64) stand.
+        if (!snap || (!snap.body && !snap.fileId && !snap.quote)) return;
+        var c = document.getElementById('composer');
+        if (!c) return;
+        var ta2 = c.querySelector('textarea[name=body]');
+        if (ta2 && snap.body) {
+          ta2.value = snap.body;
+          try { ta2.setSelectionRange(snap.selStart, snap.selEnd); } catch (e) {}
+          if (snap.focused) ta2.focus();
+          // Re-measure the auto-resize and char counter against the restored
+          // text (their listeners key on `input`).
+          ta2.dispatchEvent(new Event('input'));
+        }
+        var f2 = c.querySelector('input[name=file_id]');
+        if (f2 && snap.fileId) f2.value = snap.fileId;
+        var s2 = document.getElementById('lc-staged');
+        if (s2 && snap.staged) s2.innerHTML = snap.staged;
+        var q2 = document.getElementById('composer-quote-bar');
+        if (q2 && snap.quote) q2.innerHTML = snap.quote;
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
+      }
       try {
         htmx.ajax('GET', location.pathname + location.search, {
           target: '#main',
           swap: 'outerHTML',
           select: '#main'
-        });
+        }).then(restoreComposer, function () { /* swap failed; nothing to restore onto */ });
       } catch (e) { /* navigation away is fine */ }
     }
   }
