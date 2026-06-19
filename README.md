@@ -64,7 +64,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 - Anti-spam: rate limits, link filter, and honeypot
 - Backup and restore archive
 - Moderator tools: mute, ban, kick, delete messages
-- Two-factor authentication (TOTP)
+- Single sign-on: "Sign in with Bunyip" (OIDC) is the sole authentication path (LC-22); there is no local username/password, registration, password reset, or 2FA
 - Installable PWA with an offline message outbox
 - Role-based access: Admin > Moderator > User
 
@@ -74,10 +74,17 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 
 ```nu
 docker build --tag lets-chat --file ci-build/Dockerfile.web .
-docker run --publish 8080:8080 --volume lets-chat-data:/data lets-chat
+docker run --publish 8080:8080 --volume lets-chat-data:/data \
+  --env LETS_CHAT_BUNYIP_SSO_ISSUER=https://your-op.example.com \
+  --env LETS_CHAT_BUNYIP_SSO_CLIENT_ID=... \
+  --env LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET=... \
+  --env LETS_CHAT_BUNYIP_SSO_REDIRECT_URI=https://chat.example.com/auth/bunyip/callback \
+  lets-chat
 ```
 
-Then open `http://localhost:8080`. The first registered account is automatically promoted to Admin.
+Then open `http://localhost:8080` and click "Sign in with Bunyip". The first user to sign in is automatically promoted to Admin.
+
+> Authentication is Bunyip SSO only (LC-22): the four `LETS_CHAT_BUNYIP_SSO_*` vars are **mandatory** and the server refuses to start without them. The OIDC client must be registered on your Bunyip OP with the `redirect_uri` above in its `redirect_uris`. There is no local-auth fallback.
 
 > **Upgrading?** Read [`CHANGELOG.md`](CHANGELOG.md) first. It calls out default-on behavior changes, security fixes, and env vars you may need to set before upgrading. The convention behind it is in [`docs/releasing.md`](docs/releasing.md).
 
@@ -97,6 +104,13 @@ Or with Docker + Traefik (requires a configured domain):
 just dev-web
 ```
 
+`just dev-web` serves at `https://${USER}-chat.a8n.run` behind the shared Traefik and needs a working Bunyip OP. The compose file (`compose.dev-web.yml`) wires the SSO vars and two dev-only escape hatches; first-time setup also requires, outside this repo:
+
+1. **An OIDC client for lets-chat on the dev Bunyip OP.** Register a confidential `client_secret_basic` client whose `redirect_uris` includes `https://${USER}-chat.a8n.run/auth/bunyip/callback`, then put its id/secret in `compose.dev-web.yml`. The committed bunyip-api seed only registers the static staging host, so the per-developer dev redirect must be added against the running dev OP DB.
+2. **A hosts entry so the browser resolves the app over the Nebula overlay.** Add `${USER}-chat.a8n.run` to the same `/etc/hosts` line as the other dev hosts (the Nebula IP), or the name falls through to public DNS and Traefik returns 404.
+
+Two dev-only flags in `compose.dev-web.yml` cover the dev OP's posture and are documented inline there: `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS=1` (the dev OP serves a self-signed cert; reqwest's bundled rustls roots reject it with no env-only remedy) and an `extra_hosts` pin of the issuer host to the dev Traefik container (server-to-server SSO calls must hit the Nebula-side Traefik, not the public IP). Neither is for production.
+
 Run `just --list` to see all available recipes.
 
 ## Environment Variables
@@ -106,8 +120,10 @@ Run `just --list` to see all available recipes.
 | `LETS_CHAT_DATA_DIR` | `/data` | Directory for SQLite `.db` files |
 | `BIND_ADDR` | `0.0.0.0:8080` | Server listen address |
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
-| `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID key, 2FA TOTP secrets). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
-| `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used in outbound emails (password reset, email verification, digest deep links). |
+| `LETS_CHAT_BUNYIP_SSO_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | (none) | Bunyip OIDC SSO, the sole sign-in path (LC-22). All four are **mandatory**; the server refuses to start without them. `_REDIRECT_URI` is `{base}/auth/bunyip/callback` and must match a `redirect_uris` row on the OP client. Discovery + JWKS are fetched at startup and must succeed. |
+| `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS` | (unset = strict) | DEV ONLY. `1`/`true` makes the SSO HTTP client accept invalid TLS certs (for a dev OP behind a self-signed cert). Never set in production: it disables issuer TLS authentication. |
+| `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID private key; the sealed IMAP password for email ingress). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
+| `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used to build deep links in outbound mail (digest, mention/DM notifications) and the SSO redirect. |
 | `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for WebRTC calls and voice channels. Add a TURN entry for reliable NAT traversal. |
 | `LETS_CHAT_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID contact address sent with Web Push delivery requests. |
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
@@ -119,7 +135,7 @@ Run `just --list` to see all available recipes.
 
 ### `LETS_CHAT_SECRET_KEY`
 
-Encrypts at-rest secrets used by features that store sensitive data: Web Push (VAPID private key) and 2FA (per-user TOTP secrets). Future encrypted-at-rest features will reuse the same key. (SMTP credentials are passed via environment variables, not the database, so they do not depend on this key.)
+Encrypts at-rest secrets used by features that store sensitive data: Web Push (VAPID private key) and the sealed IMAP password for email ingress. Future encrypted-at-rest features will reuse the same key. (SMTP credentials and the Bunyip SSO client secret are passed via environment variables, not the database, so they do not depend on this key.)
 
 **Format.** Any non-empty string. The server SHA-256-hashes it to derive a 32-byte AES-256-GCM key, so length and encoding don't matter; entropy does. Use at least 32 random bytes.
 
@@ -131,12 +147,12 @@ head -c 32 /dev/urandom | base64
 
 (or `openssl rand -base64 32` if OpenSSL is handy.)
 
-**Without it.** Push and 2FA are silently disabled. Settings shows the relevant checkboxes as disabled with help text pointing back here. The rest of the app works normally.
+**Without it.** Web Push and encrypted email ingress are silently disabled. Settings shows the relevant checkboxes as disabled with help text pointing back here. The rest of the app works normally.
 
 **If you lose it.** Encrypted rows become undecryptable, but the rest of the app continues to run.
 
 - *Web Push:* existing browser subscriptions become orphaned (the server can no longer sign messages for them). Users re-subscribe automatically on their next @-mention or DM after a fresh keypair is generated.
-- *2FA:* enrolled users can't log in. Recovery requires clearing `totp_secret_encrypted`, `totp_nonce`, `totp_enabled`, and `totp_recovery_hashes` for affected users in `auth.db`; they then re-enroll.
+- *Email ingress:* the sealed IMAP password fails to decrypt and the poll loop stays disabled until the IMAP config is re-entered under the new key.
 
 **If you rotate it.** The app does NOT auto-regenerate encrypted rows. On startup with a new key:
 
@@ -145,7 +161,7 @@ head -c 32 /dev/urandom | base64
   sqlite3 /data/settings.db "DELETE FROM vapid_keypair;"
   ```
   After restart, browser subscriptions issued under the old keypair are invalid; users may need to clear site data or unregister the service worker before a new subscription takes hold.
-- *2FA:* same lockout as the lost-key case above; clear the affected `users` columns to unblock login.
+- *Email ingress:* re-enter the IMAP config from `/admin/settings` so the password is re-sealed under the new key.
 
 **Storage.** Treat it like a database password. Use Docker `--env-file`, your deployment's secret manager, or a `.env` file with restricted permissions. Don't bake it into a committed `compose.yml`.
 
@@ -157,23 +173,22 @@ Sends each opted-in user one email summarising mentions and DMs they missed whil
 
 Three things must be configured for the feature to be fully functional.
 
-1. **SMTP environment variables**. The same set used by password reset and email verification. All required to enable outbound mail:
+1. **SMTP environment variables**. The same set used by all outbound mail (digest and mention/DM notifications). All required to enable outbound mail:
    - `LETS_CHAT_SMTP_HOST`
    - `LETS_CHAT_SMTP_PORT`
    - `LETS_CHAT_SMTP_TLS` (one of `tls` / `starttls` / `none`)
    - `LETS_CHAT_SMTP_FROM`
    - `LETS_CHAT_SMTP_USERNAME` and `LETS_CHAT_SMTP_PASSWORD` together (optional pair; both unset means the relay is opened unauthenticated)
 2. **`LETS_CHAT_BASE_URL`** in the environment, e.g. `https://chat.example.com`. Used to construct clickable deep links in the email body. Defaults to `http://localhost:8080` if unset; the digest still sends with that URL but the links will only work for local development.
-3. **(Optional) "New users start with email digest enabled"** at `/admin/settings`. Off by default. Flipping it on only affects users who register after the flip; existing users are unchanged. Users can override their own preference at `/settings`.
+3. **(Optional) "New users start with email digest enabled"** at `/admin/settings`. Off by default. Flipping it on only affects users who first sign in after the flip; existing users are unchanged. Users can override their own preference at `/settings`.
 
 Changes to SMTP env vars take effect on the next server restart.
 
 ### User opt-in
 
-1. Sign in and go to `/settings`.
-2. Enter and verify an email address (the existing email-verification flow).
-3. Tick "Email me a digest of missed mentions and DMs".
-4. Save preferences.
+1. Sign in and go to `/settings`. Your email address comes from your Bunyip account (the SSO `email` claim).
+2. Tick "Email me a digest of missed mentions and DMs".
+3. Save preferences.
 
 Users with no email address on file are skipped by the digest tick regardless of the checkbox state. Muted rooms (`mute_mode = 'all'`) and muted DMs are excluded; `mute_mode = 'except_mentions'` rooms still contribute their mentions.
 
