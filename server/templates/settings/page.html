@@ -39,7 +39,7 @@
       <div class="shrink-0">
         <span class="relative inline-block"{% if let Some(t) = user.custom_status.as_ref() %} title="{{ t }}"{% endif %}>
           {% if user.avatar_ext.is_some() %}
-          <img src="/avatars/{{ user.id }}?v={{ asset_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-border">
+          <img src="/avatars/{{ user.id }}?v={{ avatar_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-border">
           {% else %}
           <div class="h-16 w-16 rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
           {% endif %}
