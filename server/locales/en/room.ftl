@@ -179,6 +179,7 @@ room-msg-show-more = Show more
 room-msg-show-less = Show less
 room-msg-reply = Reply
 room-msg-thread = Thread
+room-msg-more = More actions
 room-msg-copy-link = Copy link
 room-msg-copy-text = Copy text
 room-msg-copied = Copied
