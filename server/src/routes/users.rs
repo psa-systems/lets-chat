@@ -19,9 +19,9 @@ pub struct UserSearchQuery {
 
 /// GET /users/search?q=... - substring match against username and display_name.
 ///
-/// Returns a popover fragment rendered into the sidebar's
-/// `#search-people-results` target. An empty query returns an empty body so
-/// the popover collapses via `empty:hidden`.
+/// Returns a popover fragment rendered into the sidebar's unified
+/// `#sidebar-search-results` target (LC-369). An empty query returns an empty
+/// body so the popover collapses via `empty:hidden`.
 pub async fn get_user_search(
     State(state): State<AppState>,
     AuthUser(viewer): AuthUser,
