@@ -75,9 +75,10 @@ pub struct SearchQuery {
 
 /// GET /search?q=... - full-text search over messages the caller can read.
 ///
-/// The response is a popover fragment rendered into the sidebar's
-/// `#search-msg-results` target. An empty (or post-sanitisation empty) query
-/// returns an empty body so the popover collapses via `empty:hidden`.
+/// The response is a popover fragment rendered into the sidebar's unified
+/// `#sidebar-search-results` target (LC-369). An empty (or post-sanitisation
+/// empty) query returns an empty body so the popover collapses via
+/// `empty:hidden`.
 pub async fn get_search(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,

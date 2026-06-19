@@ -1,8 +1,8 @@
 {# LC-312: saved-searches list shown in the search popover when the box is
    focused/empty. Each row re-runs the query by filling the search input
    (delegated [data-lc-saved-query] handler in layout.html); the × removes it.
-   Rendered into #search-msg-results. Buttons + hx-include, not nested <form>s
-   (which are invalid inside the search form). #}
+   Rendered into #sidebar-search-results (LC-369 unified search). Buttons +
+   hx-include, not nested <form>s (which are invalid inside the search form). #}
 <div class="bg-surface-elevated border border-border-strong rounded shadow-lg max-h-80 overflow-y-auto">
   <div class="px-3 py-1.5 text-xs uppercase tracking-wide text-content-muted border-b border-border">{{ "search-saved-heading"|t }}</div>
   {% for query in queries %}
@@ -10,7 +10,7 @@
     <button type="button" data-lc-saved-query="{{ query }}" class="flex-1 text-left text-sm truncate">{{ query }}</button>
     <input type="hidden" id="lc-del-q-{{ loop.index0 }}" name="query" value="{{ query }}">
     <button type="button" hx-post="/searches/delete" hx-include="#lc-del-q-{{ loop.index0 }}"
-      hx-target="#search-msg-results" hx-swap="innerHTML"
+      hx-target="#sidebar-search-results" hx-swap="innerHTML"
       class="text-content-subtle hover:text-danger px-1" aria-label="{{ "search-saved-remove"|t }}">&times;</button>
   </div>
   {% endfor %}

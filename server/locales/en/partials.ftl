@@ -4,6 +4,8 @@
 ## Sidebar
 sidebar-search-messages-placeholder = Search messages...
 sidebar-search-people-placeholder = Search people...
+sidebar-search-tab-messages = Messages
+sidebar-search-tab-people = People
 sidebar-link-admin = Admin
 sidebar-link-moderate = Moderate
 sidebar-link-inbox = Inbox
