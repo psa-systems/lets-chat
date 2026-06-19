@@ -91,7 +91,7 @@
   <form method="post" action="/settings/language" class="space-y-2">
     <h2 class="font-medium">{{ "settings-language"|t }}</h2>
     <p class="text-sm text-content-muted">{{ "settings-language-help"|t }}</p>
-    <select name="locale" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
+    <select name="locale" aria-label="{{ "settings-language"|t }}" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
       {% for l in locales %}
       <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
       {% endfor %}
@@ -105,7 +105,7 @@
   <form method="post" action="/settings/appearance" class="space-y-2">
     <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
     <p class="text-sm text-content-muted">{{ "settings-appearance-help"|t }}</p>
-    <select name="theme" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
+    <select name="theme" aria-label="{{ "settings-appearance"|t }}" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
             class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
       <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
       <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
@@ -114,7 +114,7 @@
       <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
     </select>
     <label class="block text-sm text-content-muted">{{ "settings-density"|t }}</label>
-    <select name="density" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
+    <select name="density" aria-label="{{ "settings-density"|t }}" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
             class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
       <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
       <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
