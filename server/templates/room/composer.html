@@ -1004,10 +1004,10 @@
   function showRecording(){
     staged.innerHTML =
       '<span class="inline-flex items-center gap-2">' +
-        '<span class="text-danger">● Recording</span>' +
+        '<span class="text-danger">' + window.__lcS('voiceRecording', '● Recording') + '</span>' +
         '<span id="lc-record-time">0:00</span>' +
-        '<button type="button" id="lc-record-stop" class="underline">Stop</button>' +
-        '<button type="button" id="lc-record-cancel" class="text-danger">Cancel</button>' +
+        '<button type="button" id="lc-record-stop" class="underline">' + window.__lcS('voiceRecStop', 'Stop') + '</button>' +
+        '<button type="button" id="lc-record-cancel" class="text-danger">' + window.__lcS('voiceRecCancel', 'Cancel') + '</button>' +
       '</span>';
     document.getElementById('lc-record-stop').addEventListener('click', function(){ stop(false); });
     document.getElementById('lc-record-cancel').addEventListener('click', function(){ stop(true); });

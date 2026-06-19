@@ -204,6 +204,12 @@
       outboxOfflineQueued: "{{ "js-outbox-offline-queued"|t }}",
       outboxOfflineIdle: "{{ "js-outbox-offline-idle"|t }}",
       outboxSending: "{{ "js-outbox-sending"|t }}",
+      outboxQueuedOffline: "{{ "js-outbox-queued-offline"|t }}",
+      outboxYouAreOffline: "{{ "js-outbox-you-are-offline"|t }}",
+      outboxDelivering: "{{ "js-outbox-delivering"|t }}",
+      outboxFailed: "{{ "js-outbox-failed"|t }}",
+      outboxRetry: "{{ "js-outbox-retry"|t }}",
+      outboxDiscard: "{{ "js-outbox-discard"|t }}",
       uploadUploadingFile: "{{ "js-upload-uploading-file"|t }}",
       uploadUploadingVoice: "{{ "js-upload-uploading-voice"|t }}",
       uploadAttached: "{{ "js-upload-attached"|t }}",
@@ -215,12 +221,20 @@
       voiceRecMicDenied: "{{ "js-voice-rec-mic-denied"|t }}",
       voiceRecStartFailed: "{{ "js-voice-rec-start-failed"|t }}",
       voiceRecEmpty: "{{ "js-voice-rec-empty"|t }}",
+      voiceRecording: "{{ "js-voice-recording"|t }}",
+      voiceRecStop: "{{ "js-voice-rec-stop"|t }}",
+      voiceRecCancel: "{{ "js-voice-rec-cancel"|t }}",
       reminderInvalidTime: "{{ "js-reminder-invalid-time"|t }}",
       reminderSetFailed: "{{ "js-reminder-set-failed"|t }}",
       reminderNetworkError: "{{ "js-reminder-network-error"|t }}",
       deviceMicrophone: "{{ "js-device-microphone"|t }}",
       deviceCamera: "{{ "js-device-camera"|t }}",
-      deviceSpeaker: "{{ "js-device-speaker"|t }}"
+      deviceSpeaker: "{{ "js-device-speaker"|t }}",
+      deviceSystemDefault: "{{ "js-device-system-default"|t }}",
+      deviceDialogTitle: "{{ "js-device-dialog-title"|t }}",
+      deviceClose: "{{ "js-device-close"|t }}",
+      devicePermissionHint: "{{ "js-device-permission-hint"|t }}",
+      deviceShowNames: "{{ "js-device-show-names"|t }}"
     };
     // Lookup helper: returns the localized string for `k`, or `fb` (the English
     // literal kept at each call site) when the key is absent.
