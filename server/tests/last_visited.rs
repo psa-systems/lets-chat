@@ -70,6 +70,41 @@ async fn home_renders_welcome_when_no_cookie() {
     assert!(s.contains("Welcome"), "should render welcome page");
 }
 
+// LC-372: the welcome empty state renders the quick-action cards (Start a DM,
+// Discover/create an enclave, View invitations) and the supporting subtitle.
+#[tokio::test]
+async fn home_welcome_renders_quick_actions() {
+    let (app, sess, _id) = app_with_user_in_general().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header("cookie", format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        s.contains("start something new"),
+        "renders the empty-state subtitle"
+    );
+    assert!(
+        s.contains("Start a direct message"),
+        "renders the Start-a-DM quick action"
+    );
+    assert!(
+        s.contains("href=\"/enclaves/discover\""),
+        "renders the discover/create enclave action with its link"
+    );
+    assert!(
+        s.contains("href=\"/invitations\""),
+        "renders the view-invitations action with its link"
+    );
+}
+
 #[tokio::test]
 async fn home_redirects_to_last_visited_room_when_safe() {
     let (app, sess, _id) = app_with_user_in_general().await;

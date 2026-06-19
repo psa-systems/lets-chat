@@ -10,6 +10,14 @@ home-pick-dm-suffix = para chatear en salas.
 home-pending-invitations-prefix = Invitaciones pendientes:
 home-pending-invitations-link = ver
 home-pending-invitations-suffix = .
+# LC-372: rediseño del estado vacío de bienvenida.
+home-subtitle = Retoma una conversación o empieza algo nuevo.
+home-action-dm-title = Iniciar un mensaje directo
+home-action-dm-desc = Busca a alguien con quien chatear.
+home-action-discover-title = Descubrir o crear un enclave
+home-action-discover-desc = Únete a una comunidad o crea la tuya.
+home-action-invitations-title = Ver invitaciones
+home-action-invitations-desc = Mira los enclaves a los que te han invitado.
 
 ## Message search results
 search-no-results = Sin resultados.
