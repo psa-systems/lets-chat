@@ -1241,6 +1241,44 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     opacity: 1;
 }
 
+/* LC-379: day separator. A hairline rule on each side of a small rounded, muted
+   pill label (Slack/Discord style). The server render (room/message.html) and
+   the client insert for live day-boundary arrivals (partials/auto_scroll.html)
+   share these classes verbatim, so the two markups stay in sync by construction
+   instead of by matching long Tailwind strings. */
+.lc-day-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+}
+.lc-day-rule {
+    flex: 1 1 0%;
+    height: 1px;
+    background-color: var(--border);
+}
+.lc-day-chip {
+    flex: none;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--content-subtle);
+}
+/* Unread-separator variant (server-rendered only): same pill shape, danger-toned. */
+.lc-day-rule-danger {
+    background-color: var(--danger-border);
+}
+.lc-day-chip-danger {
+    border-color: var(--danger-border);
+    background-color: var(--danger-surface);
+    color: var(--danger);
+}
+
 /* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
    (inset shadow follows the rounded corners) for a strong, scannable active
    state without a layout-shifting border. Paired in the row templates with a

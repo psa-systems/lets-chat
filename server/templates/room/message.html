@@ -3,17 +3,18 @@
    The client (partials/auto_scroll.html) inserts the same markup for live
    arrivals that cross a day boundary. #}
 {% if let Some(day_label) = message.day_label.as_ref() %}
-<div data-lc-day-divider role="separator" class="flex items-center gap-2 px-4 py-2 text-xs font-medium uppercase tracking-wide text-content-muted">
-  <span class="h-px flex-1 bg-border"></span>
-  <span>{{ day_label }}</span>
-  <span class="h-px flex-1 bg-border"></span>
+<div data-lc-day-divider role="separator" class="lc-day-divider">
+  <span class="lc-day-rule"></span>
+  <span class="lc-day-chip">{{ day_label }}</span>
+  <span class="lc-day-rule"></span>
 </div>
 {% endif %}
 {% if message.show_unread_divider %}
-<div data-unread-divider class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-danger">
-  <span class="h-px flex-1 bg-danger"></span>
-  <span>{{ "room-msg-unread-divider"|t }}</span>
-  <span class="h-px flex-1 bg-danger"></span>
+{# LC-379: unread separator mirrors the day-divider pill shape, danger-toned. #}
+<div data-unread-divider role="separator" class="lc-day-divider">
+  <span class="lc-day-rule lc-day-rule-danger"></span>
+  <span class="lc-day-chip lc-day-chip-danger">{{ "room-msg-unread-divider"|t }}</span>
+  <span class="lc-day-rule lc-day-rule-danger"></span>
 </div>
 {% endif %}
 {% if message.is_system %}
