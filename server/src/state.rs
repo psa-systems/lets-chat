@@ -76,11 +76,6 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// True when a stable encryption key is configured. 2FA flows are
-    /// off-limits without one.
-    pub fn two_factor_available(&self) -> bool {
-        self.secret_key.is_some()
-    }
     /// True when the VAPID keypair has been initialized and Web Push
     /// fan-out / subscription routes are operational.
     pub fn push_available(&self) -> bool {
