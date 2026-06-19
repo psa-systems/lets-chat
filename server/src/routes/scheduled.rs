@@ -273,6 +273,11 @@ pub async fn post_scheduled(
             "scheduled message body cannot be empty".into(),
         ));
     }
+    // LC-349: cap the body on the write path, like the live send path. The
+    // stored body is rendered through the synchronous markdown::render both on
+    // /scheduled views and for every viewer at delivery, so an uncapped body is
+    // the exact LC-153 hazard.
+    crate::routes::room::check_message_length(body)?;
 
     // Rate limit: scheduled sends count against the same per-user cap
     // as live sends. Delivery does NOT re-check rate-limit by design.
@@ -372,6 +377,11 @@ pub async fn patch_scheduled(
             "scheduled message body cannot be empty".into(),
         ));
     }
+    // LC-349: cap the body on the write path, like the live send path. The
+    // stored body is rendered through the synchronous markdown::render both on
+    // /scheduled views and for every viewer at delivery, so an uncapped body is
+    // the exact LC-153 hazard.
+    crate::routes::room::check_message_length(body)?;
 
     let room = db::chat::get_room(&state.chat, existing.room_id)
         .await?

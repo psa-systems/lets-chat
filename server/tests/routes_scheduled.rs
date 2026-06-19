@@ -161,6 +161,35 @@ async fn post_creates_pending_row_for_valid_input() {
 }
 
 #[tokio::test]
+async fn post_rejects_over_length_body() {
+    // LC-349: the scheduled body must be length-capped on the write path like the
+    // live send path (MAX_MESSAGE_CHARS = 16_000), or it renders uncapped through
+    // markdown::render on /scheduled views and at delivery (LC-153 hazard).
+    let t = fresh_app().await;
+    let when = iso(Utc::now() + Duration::hours(1));
+    let huge = "a".repeat(16_001);
+    let body = form_body(&[("room_id", "1"), ("body", &huge), ("scheduled_for", &when)]);
+
+    let (status, resp) = send(
+        &t.app,
+        &t.alice_session,
+        Method::POST,
+        "/scheduled",
+        Some(body),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "over-length body must be rejected, got: {resp}"
+    );
+    assert!(
+        first_pending_id(&t.chat, &t.alice_id).await.is_none(),
+        "no scheduled row should be inserted for an over-length body"
+    );
+}
+
+#[tokio::test]
 async fn post_rejects_lead_time_too_short() {
     let t = fresh_app().await;
     let when = iso(Utc::now() + Duration::seconds(10));
