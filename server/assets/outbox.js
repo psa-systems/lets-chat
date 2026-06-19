@@ -111,8 +111,10 @@
     var html = '';
     if (offline || pending.length) {
       var msg = offline
-        ? (pending.length ? pending.length + ' message(s) queued while offline' : 'You are offline')
-        : 'Delivering ' + pending.length + ' queued message(s)…';
+        ? (pending.length
+            ? window.__lcS('outboxQueuedOffline', '%n% message(s) queued while offline').replace('%n%', pending.length)
+            : window.__lcS('outboxYouAreOffline', 'You are offline'))
+        : window.__lcS('outboxDelivering', 'Delivering %n% queued message(s)…').replace('%n%', pending.length);
       html +=
         '<div class="px-3 py-2 text-xs text-slate-700">' + escapeHtml(msg) + '</div>';
     }
@@ -122,10 +124,10 @@
         var f = failed[i];
         html +=
           '<li class="px-3 py-2 text-xs flex items-center gap-2">' +
-          '<span class="text-danger">Failed (' + escapeHtml(f.status) + '):</span> ' +
+          '<span class="text-danger">' + window.__lcS('outboxFailed', 'Failed (%status%):').replace('%status%', function () { return escapeHtml(f.status); }) + '</span> ' +
           '<span class="flex-1 truncate text-slate-700">' + escapeHtml(f.label) + '</span>' +
-          '<button data-lc-outbox-retry="' + escapeHtml(f.id) + '" class="underline hover:no-underline">Retry</button>' +
-          '<button data-lc-outbox-discard="' + escapeHtml(f.id) + '" class="underline hover:no-underline text-slate-500">Discard</button>' +
+          '<button data-lc-outbox-retry="' + escapeHtml(f.id) + '" class="underline hover:no-underline">' + window.__lcS('outboxRetry', 'Retry') + '</button>' +
+          '<button data-lc-outbox-discard="' + escapeHtml(f.id) + '" class="underline hover:no-underline text-slate-500">' + window.__lcS('outboxDiscard', 'Discard') + '</button>' +
           '</li>';
       }
       html += '</ul>';

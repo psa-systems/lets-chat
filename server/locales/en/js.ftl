@@ -32,6 +32,12 @@ js-call-control-denied = Control request denied
 js-outbox-offline-queued = Offline - %n% message(s) queued
 js-outbox-offline-idle = Offline - messages will send when you reconnect
 js-outbox-sending = Sending %n% queued message(s)…
+js-outbox-queued-offline = %n% message(s) queued while offline
+js-outbox-you-are-offline = You are offline
+js-outbox-delivering = Delivering %n% queued message(s)…
+js-outbox-failed = Failed (%status%):
+js-outbox-retry = Retry
+js-outbox-discard = Discard
 
 # Uploads + voice recording (composer.html)
 js-upload-uploading-file = Uploading %name%...
@@ -45,6 +51,9 @@ js-voice-rec-unsupported = Voice recording is not supported in this browser
 js-voice-rec-mic-denied = Microphone access denied
 js-voice-rec-start-failed = Could not start recording
 js-voice-rec-empty = Recording was empty
+js-voice-recording = ● Recording
+js-voice-rec-stop = Stop
+js-voice-rec-cancel = Cancel
 
 # Reminders (reminders/picker.html)
 js-reminder-invalid-time = Pick a valid time.
@@ -55,3 +64,8 @@ js-reminder-network-error = Network error.
 js-device-microphone = Microphone
 js-device-camera = Camera
 js-device-speaker = Speaker
+js-device-system-default = System default
+js-device-dialog-title = Call devices
+js-device-close = Close
+js-device-permission-hint = Allow microphone or camera access to see device names.
+js-device-show-names = Show device names

@@ -30,6 +30,12 @@ js-call-control-denied = Solicitud de control denegada
 js-outbox-offline-queued = Sin conexión: %n% mensaje(s) en cola
 js-outbox-offline-idle = Sin conexión: los mensajes se enviarán al reconectar
 js-outbox-sending = Enviando %n% mensaje(s) en cola…
+js-outbox-queued-offline = %n% mensaje(s) en cola sin conexión
+js-outbox-you-are-offline = Estás sin conexión
+js-outbox-delivering = Entregando %n% mensaje(s) en cola…
+js-outbox-failed = Error (%status%):
+js-outbox-retry = Reintentar
+js-outbox-discard = Descartar
 
 # Subidas + grabación de voz (composer.html)
 js-upload-uploading-file = Subiendo %name%...
@@ -43,6 +49,9 @@ js-voice-rec-unsupported = Este navegador no admite la grabación de voz
 js-voice-rec-mic-denied = Acceso al micrófono denegado
 js-voice-rec-start-failed = No se pudo iniciar la grabación
 js-voice-rec-empty = La grabación estaba vacía
+js-voice-recording = ● Grabando
+js-voice-rec-stop = Detener
+js-voice-rec-cancel = Cancelar
 
 # Recordatorios (reminders/picker.html)
 js-reminder-invalid-time = Elige una hora válida.
@@ -53,3 +62,8 @@ js-reminder-network-error = Error de red.
 js-device-microphone = Micrófono
 js-device-camera = Cámara
 js-device-speaker = Altavoz
+js-device-system-default = Predeterminado del sistema
+js-device-dialog-title = Dispositivos de llamada
+js-device-close = Cerrar
+js-device-permission-hint = Permite el acceso al micrófono o la cámara para ver los nombres de los dispositivos.
+js-device-show-names = Mostrar nombres de dispositivos
