@@ -1179,6 +1179,35 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     color: var(--danger);
 }
 
+/* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
+   (inset shadow follows the rounded corners) for a strong, scannable active
+   state without a layout-shifting border. Paired in the row templates with a
+   bold-unread / muted-room treatment driven by per-row conditionals. */
+.lc-room-row-active {
+    background-color: var(--accent-surface);
+    color: var(--accent-surface-content);
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+/* LC-371: device-local collapsible sidebar groups (Starred / Channels / DMs).
+   Body hiding + chevron rotation are keyed on the <html data-lc-collapsed-groups>
+   attribute (set no-flash by base.html), so a collapsed group never flashes open
+   and the state survives sidebar OOB swaps with no JS scan. */
+html[data-lc-collapsed-groups~="starred"] [data-lc-sb-group="starred"] [data-lc-sb-group-body],
+html[data-lc-collapsed-groups~="rooms"] [data-lc-sb-group="rooms"] [data-lc-sb-group-body],
+html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-sb-group-body] {
+    display: none;
+}
+[data-lc-group-chevron] {
+    transition: transform 0.15s ease;
+}
+html[data-lc-collapsed-groups~="starred"] [data-lc-sb-group="starred"] [data-lc-group-chevron],
+html[data-lc-collapsed-groups~="rooms"] [data-lc-sb-group="rooms"] [data-lc-group-chevron],
+html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-chevron] {
+    transform: rotate(-90deg);
+}
+
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
    never fires in some browsers), keeps scroll behaviour instant. Tailwind's

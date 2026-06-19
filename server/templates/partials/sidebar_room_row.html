@@ -1,9 +1,11 @@
 <div class="flex items-center group">
-  <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} data-lc-density-tight="row-dense" class="flex-1 flex items-center px-2 py-1 rounded hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring{% if room.active %} bg-accent-surface font-semibold text-accent-surface-content{% else if room.mute_mode != "none" %} text-content-subtle{% endif %}">
+  <a href="/room/{{ room.id }}"{% if room.active %} aria-current="page"{% endif %} data-lc-density-tight="row-dense" class="flex-1 flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring{% if room.active %} lc-room-row-active{% else if room.unread > 0 && room.mute_mode == "none" %} font-semibold text-content{% else if room.mute_mode != "none" %} text-content-subtle{% endif %}">
+    {# LC-371: fixed-width leading glyph so room rows align with the DM avatars. #}
+    <span class="w-6 text-center shrink-0 text-content-subtle">{% if room.is_voice %}&#128266;{% else %}#{% endif %}</span>
     {% if room.is_voice %}
-    <span>&#128266; {{ room.name }}</span>
+    <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
     {% else %}
-    <span># {{ room.name }}</span>
+    <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
     {% let draft_room_id = room.id %}
     {% let has_draft = room.has_draft %}
     {% include "partials/draft_badge.html" %}
