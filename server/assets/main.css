@@ -1146,6 +1146,39 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     color: var(--danger);
 }
 
+/* LC-368: account dropdown menu items. Like .lc-nav-row but tuned for a menu on
+   an elevated surface: full-strength text at rest, a sunken hover/focus tint
+   (the row sits on --surface-elevated, so hover must go the other way). The
+   icon is muted relative to the label. focus-visible mirrors hover for keyboard
+   menu navigation. */
+.lc-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    text-align: left;
+    color: var(--content);
+}
+.lc-menu-item:hover,
+.lc-menu-item:focus-visible {
+    background-color: var(--surface-sunken);
+    outline: none;
+}
+.lc-menu-item svg {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    color: var(--content-muted);
+}
+.lc-menu-item-danger,
+.lc-menu-item-danger svg {
+    color: var(--danger);
+}
+
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
    never fires in some browsers), keeps scroll behaviour instant. Tailwind's

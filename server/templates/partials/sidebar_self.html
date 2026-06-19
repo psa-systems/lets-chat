@@ -1,20 +1,148 @@
-{# LC-173: the logged-in user's own avatar + name block, shared by the sidebar
-   and the live OOB fragment (ws/own_profile_live.html) so a profile edit
-   refreshes it in every tab. References `user` from whichever parent includes
-   it. The #status-picker slot and the rest of the sidebar are NOT part of this
-   block, so swapping it leaves an open status picker and the room/peer lists
-   untouched. #}
-<button id="own-avatar-wrapper" type="button" hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML" class="rounded-full focus:outline-none focus:ring-2 focus:ring-ring" title="{{ "sidebar-set-status"|t }}" aria-label="{{ "sidebar-set-status"|t }}">
-  {% let avatar_user_id = user.id.clone() %}
-  {% let avatar_username = user.username.clone() %}
-  {% let avatar_ext = user.avatar_ext.clone() %}
-  {% let avatar_status = user.effective_status() %}
-  {% let avatar_custom_status = user.custom_status.clone() %}
-  {% let avatar_size = "h-8 w-8 text-sm" %}
-  {% include "partials/avatar.html" %}
-</button>
-<div class="min-w-0">
-  <div class="font-semibold truncate">{{ user.display_label() }}</div>
-  <div class="text-xs text-content-muted truncate">@{{ user.username }}</div>
-  <div data-user-custom="{{ user.id }}" class="text-xs italic text-content-muted truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</div>
+{# LC-173 / LC-368: the logged-in user's own avatar + name block, now the
+   trigger for the account menu (LC-368). Shared by the sidebar and the live OOB
+   fragment (ws/own_profile_live.html) so a profile edit refreshes it in every
+   tab. References `user` from whichever parent includes it. The #status-picker
+   slot and the rest of the sidebar are NOT part of this block, so swapping it
+   leaves an open status picker and the room/peer lists untouched.
+
+   This partial OOB-swaps, so the inline script below follows the disclosure
+   pattern from room/notify_dropdown.html: a per-element wired-flag guards
+   double-binding within one render, and a cleanup-root teardown drops the
+   document-level listeners on the cross-render swap. #}
+<div class="relative w-full" data-lc-cleanup-root>
+  <button id="own-avatar-wrapper" type="button"
+    class="flex items-center gap-2 w-full rounded-md p-1 text-left hover:bg-surface-elevated focus:outline-none focus:ring-2 focus:ring-ring"
+    aria-haspopup="menu" aria-expanded="false" aria-controls="lc-account-menu"
+    aria-label="{{ "sidebar-account-menu"|t }}">
+    {% let avatar_user_id = user.id.clone() %}
+    {% let avatar_username = user.username.clone() %}
+    {% let avatar_ext = user.avatar_ext.clone() %}
+    {% let avatar_status = user.effective_status() %}
+    {% let avatar_custom_status = user.custom_status.clone() %}
+    {% let avatar_size = "h-8 w-8 text-sm" %}
+    {% include "partials/avatar.html" %}
+    <span class="min-w-0 flex-1">
+      <span class="block font-semibold truncate">{{ user.display_label() }}</span>
+      <span class="block text-xs text-content-muted truncate">@{{ user.username }}</span>
+      <span data-user-custom="{{ user.id }}" class="block text-xs italic text-content-muted truncate">{% if let Some(t) = user.custom_status.as_ref() %}{{ t }}{% endif %}</span>
+    </span>
+    <svg data-lc-account-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-content-subtle" aria-hidden="true">
+      <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+    </svg>
+  </button>
+  <div id="lc-account-menu" role="menu" aria-label="{{ "sidebar-account-menu"|t }}" hidden
+    class="absolute left-0 top-full mt-1 z-40 w-56 rounded-lg border border-border bg-surface-elevated p-1.5 shadow-lg">
+    <div class="px-2 py-1.5">
+      <div class="font-semibold truncate">{{ user.display_label() }}</div>
+      <div class="text-xs text-content-muted truncate">@{{ user.username }}</div>
+      {% if let Some(t) = user.custom_status.as_ref() %}
+      <div class="text-xs italic text-content-muted truncate">{{ t }}</div>
+      {% endif %}
+    </div>
+    <div class="my-1 border-t border-border"></div>
+    {# Set status: reuses the existing inline status picker, rendered into the
+       #status-picker slot below the header (LC-368 keeps the picker mechanism). #}
+    <button type="button" role="menuitem" tabindex="-1" data-lc-account-item
+      hx-get="/status/picker" hx-target="#status-picker" hx-swap="innerHTML"
+      class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-set-status"|t }}</span>
+    </button>
+    <a href="/settings#settings-sec-profile" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
+      </svg>
+      <span>{{ "sidebar-edit-profile"|t }}</span>
+    </a>
+    <a href="/settings" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.31 7.498a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-link-settings"|t }}</span>
+    </a>
+    {# LC-292: quick-toggle the theme dark<->light without opening Settings. #}
+    <button type="button" role="menuitem" tabindex="-1" data-lc-account-item data-lc-theme-toggle
+      onclick="window.__lcToggleTheme && window.__lcToggleTheme()" class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 01.26.77 7 7 0 009.958 7.967.75.75 0 011.067.853A8.5 8.5 0 116.647 1.921a.75.75 0 01.808.083z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-toggle-theme"|t }}</span>
+    </button>
+    {# LC-252: opens the keyboard-shortcuts cheat-sheet (also bound to `?`). #}
+    <button type="button" role="menuitem" tabindex="-1" data-lc-account-item
+      onclick="window.__lcOpenShortcuts && window.__lcOpenShortcuts()" class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-link-shortcuts"|t }}</span>
+    </button>
+    {% if user.role == "admin" || user.role == "moderator" %}
+    <div class="my-1 border-t border-border"></div>
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item lc-menu-item-danger">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/>
+      </svg>
+      <span>{% if user.role == "admin" %}{{ "sidebar-link-admin"|t }}{% else %}{{ "sidebar-link-moderate"|t }}{% endif %}</span>
+    </a>
+    {% endif %}
+    <div class="my-1 border-t border-border"></div>
+    <a href="/logout" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h5.5A2.25 2.25 0 0113 4.25v2a.75.75 0 01-1.5 0v-2a.75.75 0 00-.75-.75h-5.5a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 00.75-.75v-2a.75.75 0 011.5 0v2A2.25 2.25 0 0110.75 18h-5.5A2.25 2.25 0 013 15.75V4.25z" clip-rule="evenodd"/>
+        <path fill-rule="evenodd" d="M19 10a.75.75 0 00-.75-.75H8.704l1.048-.943a.75.75 0 10-1.004-1.114l-2.5 2.25a.75.75 0 000 1.114l2.5 2.25a.75.75 0 101.004-1.114L8.704 10.75h9.546A.75.75 0 0019 10z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-link-sign-out"|t }}</span>
+    </a>
+  </div>
 </div>
+<script>
+(function(){
+  // LC-368 account menu. Disclosure + ARIA menu: roving tabindex, arrow-key
+  // navigation, Tab/Shift-Tab focus trap within the open menu, Escape and
+  // click-outside close. Mirrors room/notify_dropdown.html's wired-flag +
+  // cleanup-root teardown so the OOB swap of #sidebar-self does not leak the
+  // document-level click listener.
+  var btn = document.getElementById('own-avatar-wrapper');
+  var menu = document.getElementById('lc-account-menu');
+  if (!btn || !menu || btn.dataset.lcWired === '1') return;
+  btn.dataset.lcWired = '1';
+  function items(){ return Array.prototype.slice.call(menu.querySelectorAll('[data-lc-account-item]')); }
+  function close(){ btn.setAttribute('aria-expanded','false'); menu.hidden = true; }
+  function open(){
+    btn.setAttribute('aria-expanded','true'); menu.hidden = false;
+    var it = items(); if (it.length) it[0].focus();
+  }
+  function focusAt(list, i){ var n = list.length; if (!n) return; var j = (i + n) % n; list[j].focus(); }
+  btn.addEventListener('click', function(){ menu.hidden ? open() : close(); });
+  btn.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  });
+  menu.addEventListener('keydown', function(e){
+    var it = items(); var idx = it.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(it, idx + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusAt(it, idx - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); focusAt(it, 0); }
+    else if (e.key === 'End') { e.preventDefault(); focusAt(it, it.length - 1); }
+    else if (e.key === 'Tab') {
+      // Focus trap: keep Tab cycling inside the open menu.
+      e.preventDefault(); focusAt(it, idx + (e.shiftKey ? -1 : 1));
+    }
+  });
+  // Activating an item (link nav, theme toggle, status picker, ...) closes the
+  // menu; htmx/onclick still fire because hiding the menu does not cancel them.
+  menu.addEventListener('click', function(e){
+    if (e.target.closest('[data-lc-account-item]')) close();
+  });
+  function onDocClick(e){
+    if (menu.hidden) return;
+    if (!menu.contains(e.target) && !btn.contains(e.target)) close();
+  }
+  document.addEventListener('click', onDocClick);
+  function teardown(){ document.removeEventListener('click', onDocClick); }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]') || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
