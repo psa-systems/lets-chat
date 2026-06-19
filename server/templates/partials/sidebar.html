@@ -5,44 +5,81 @@
     </div>
     <div id="status-picker" class="mt-2"></div>
   </div>
-  <div class="p-2 space-y-2">
+  {# LC-369: unified sidebar search. One combobox over both backends - the
+     segmented control (Messages / People) just swaps which endpoint the input
+     targets (data-lc-search-tab + the delegated script below); search.js still
+     owns keyboard nav over [role=option] in the shared #sidebar-search-results
+     popover. Both /search and /users/search stay reachable. #}
+  <div class="p-2 space-y-2" data-lc-search-region>
+    <div class="inline-flex rounded-md border border-border p-0.5 text-xs" role="group"
+      aria-label="{{ "sidebar-search-tab-messages"|t }} / {{ "sidebar-search-tab-people"|t }}">
+      <button type="button" data-lc-search-tab="messages" aria-pressed="true"
+        class="rounded px-2 py-0.5 text-content-muted aria-pressed:bg-accent aria-pressed:text-accent-content">{{ "sidebar-search-tab-messages"|t }}</button>
+      <button type="button" data-lc-search-tab="people" aria-pressed="false"
+        class="rounded px-2 py-0.5 text-content-muted aria-pressed:bg-accent aria-pressed:text-accent-content">{{ "sidebar-search-tab-people"|t }}</button>
+    </div>
     <form class="relative" autocomplete="off">
       <input
+        id="sidebar-search-input"
         name="q"
         placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
         aria-label="{{ "sidebar-search-messages-placeholder"|t }}"
+        data-lc-ph-messages="{{ "sidebar-search-messages-placeholder"|t }}"
+        data-lc-ph-people="{{ "sidebar-search-people-placeholder"|t }}"
         hx-get="/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
-        hx-target="#search-msg-results"
+        hx-target="#sidebar-search-results"
         hx-swap="innerHTML"
         data-lc-search
-        data-lc-search-results="#search-msg-results"
+        data-lc-search-results="#sidebar-search-results"
         role="combobox"
         aria-expanded="false"
-        aria-controls="search-msg-results"
+        aria-controls="sidebar-search-results"
         aria-autocomplete="list"
         class="w-full border rounded px-2 py-1 text-sm">
-      <div id="search-msg-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
-    </form>
-    <form class="relative" autocomplete="off">
-      <input
-        name="q"
-        placeholder="{{ "sidebar-search-people-placeholder"|t }}"
-        aria-label="{{ "sidebar-search-people-placeholder"|t }}"
-        hx-get="/users/search"
-        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-        hx-target="#search-people-results"
-        hx-swap="innerHTML"
-        data-lc-search
-        data-lc-search-results="#search-people-results"
-        role="combobox"
-        aria-expanded="false"
-        aria-controls="search-people-results"
-        aria-autocomplete="list"
-        class="w-full border rounded px-2 py-1 text-sm">
-      <div id="search-people-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+      <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
     </form>
   </div>
+  <script>
+  (function(){
+    // LC-369: segmented search-tab switcher. One document-level delegated
+    // handler, wired once (the sidebar partial OOB-swaps, so re-running this
+    // inline script must not stack listeners). Swapping the tab rewrites the
+    // input's hx-get endpoint + placeholder and re-fires the current query into
+    // the shared results popover; search.js handles keyboard nav unchanged.
+    if (window.__lcSearchTabsWired) return;
+    window.__lcSearchTabsWired = true;
+    document.addEventListener('click', function(e){
+      var tab = e.target.closest && e.target.closest('[data-lc-search-tab]');
+      if (!tab) return;
+      var region = tab.closest('[data-lc-search-region]');
+      if (!region) return;
+      var input = region.querySelector('[data-lc-search]');
+      if (!input) return;
+      var mode = tab.getAttribute('data-lc-search-tab');
+      region.querySelectorAll('[data-lc-search-tab]').forEach(function(b){
+        b.setAttribute('aria-pressed', b === tab ? 'true' : 'false');
+      });
+      var endpoint = mode === 'people' ? '/users/search' : '/search';
+      var ph = mode === 'people'
+        ? input.getAttribute('data-lc-ph-people')
+        : input.getAttribute('data-lc-ph-messages');
+      input.setAttribute('hx-get', endpoint);
+      input.setAttribute('placeholder', ph);
+      input.setAttribute('aria-label', ph);
+      var results = region.querySelector(input.getAttribute('data-lc-search-results'));
+      var q = input.value.trim();
+      // People mode with an empty box has nothing to show; messages mode shows
+      // the caller's saved searches on empty (handled server-side), so re-fire.
+      if (q === '' && mode === 'people') {
+        if (results) results.innerHTML = '';
+      } else if (window.htmx) {
+        htmx.ajax('GET', endpoint, { target: results, swap: 'innerHTML', values: { q: input.value } });
+      }
+      input.focus();
+    });
+  })();
+  </script>
   {# LC-367: primary navigation group, surfaced near the top instead of buried
      in the footer. Icon + label rows on the shared .lc-nav-row rhythm. #}
   <div class="px-2 pb-2 space-y-0.5 border-b border-border">
@@ -72,14 +109,20 @@
       <span>{{ "sidebar-link-scheduled"|t }}</span>
     </a>
   </div>
-  {# LC-308 + LC-367: room-list controls. The unread-only filter toggle
-     (device-local; hiding is pure CSS keyed on <html data-lc-unread-only>, set
-     no-flash in base.html, tracking live unread-badge swaps with no JS scan)
-     paired with mark-all-read promoted to an icon action on this header row. #}
-  <div class="px-3 pt-2 flex items-center justify-between">
+  {# LC-308 + LC-367 + LC-369: room-list controls. Two icon controls on the
+     room-list header: the unread-only filter toggle (device-local; hiding is
+     pure CSS keyed on <html data-lc-unread-only>, set no-flash in base.html,
+     tracking live unread-badge swaps with no JS scan; aria-pressed drives the
+     accent fill) and mark-all-read. #}
+  <div class="px-3 pt-2 flex items-center justify-end gap-1">
     <button type="button" data-lc-unread-toggle aria-pressed="false"
+      aria-label="{{ "sidebar-unread-only"|t }}" data-lc-tip="{{ "sidebar-unread-only"|t }}" data-lc-tip-pos="bottom"
       onclick="window.__lcToggleUnreadOnly && window.__lcToggleUnreadOnly()"
-      class="text-xs text-content-muted hover:text-content aria-pressed:font-semibold aria-pressed:text-accent">{{ "sidebar-unread-only"|t }}</button>
+      class="p-1 rounded text-content-muted hover:text-content hover:bg-surface-elevated aria-pressed:bg-accent aria-pressed:text-accent-content">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.331-.844 1.757l-1.937 1.55A.75.75 0 018 19.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 7.22A2.25 2.25 0 012 5.629V3.34a.75.75 0 01.628-.74z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     {# LC-250: clear unread (and paired mention chips) across every conversation.
        Swaps the whole sidebar so cleared badges land at once; other tabs refresh
        live via ReadAllChanged. #}
