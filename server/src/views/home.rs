@@ -19,4 +19,7 @@ pub struct WelcomePage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub flash_error: Option<&'a str>,
+    /// LC-372: count of pending enclave invitations, drives the count badge on
+    /// the welcome empty-state "View invitations" quick action (hidden when 0).
+    pub pending_invites: usize,
 }
