@@ -971,6 +971,32 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     color: var(--content-subtle);
 }
 
+/* LC-370: shared tooltip element. Positioned (fixed) by tooltip.js so it
+   escapes overflow:auto ancestors like the enclave rail. Token-driven, so it
+   inverts with the theme (dark chip on light themes, light chip on dark). The
+   trigger's aria-label remains the accessible name; this element is visual only
+   (aria-hidden in the JS). */
+#lc-tooltip {
+    position: fixed;
+    z-index: 80;
+    display: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    background-color: var(--content);
+    color: var(--surface-elevated);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
+    opacity: 0;
+    transition: opacity 0.1s ease-out;
+}
+#lc-tooltip.lc-tooltip-visible {
+    opacity: 1;
+}
+
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
    never fires in some browsers), keeps scroll behaviour instant. Tailwind's

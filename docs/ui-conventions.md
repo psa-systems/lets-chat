@@ -93,3 +93,16 @@ To render an avatar inside a `{% for %}` loop, bind the row's fields to those na
 ```
 
 Never re-implement the avatar/badge markup inline. Presence (`avatar_status`) should be resolved with `routes::effective_status` so a disconnected user shows offline consistently with every other surface. Glyph-only badges that are not user avatars (the `@here`/`@channel` broadcast token, the `#group` token in the mention popover) legitimately render their own small glyph and do not use this partial.
+
+## Tooltips (LC-370)
+
+Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded in `base.html`) plus the `#lc-tooltip` rule in `main.css`. Drive a tooltip declaratively with attributes on the trigger - never hand-roll a positioned tooltip element, and prefer this over the native `title=` attribute (which is unstyled, theme-blind, and clipped by `overflow:auto` ancestors like the enclave rail).
+
+```html
+<a href="..." aria-label="Settings" data-lc-tip="Settings" data-lc-tip-pos="right">...</a>
+```
+
+- `data-lc-tip="<text>"` is the visible tooltip text. `data-lc-tip-pos` is `top` (default) | `right` | `bottom` | `left`; the helper clamps into the viewport, so `pos` is a preference, not a guarantee.
+- The tooltip is a single `position:fixed` element appended to `<body>`, so it escapes `overflow` clipping. It shows after a 400ms hover delay, immediately on keyboard focus, and hides on leave/blur/scroll/resize/Escape.
+- **Accessibility:** the tooltip element is `aria-hidden`; it is decoration, not the accessible name. The trigger must carry its own accessible name. For an icon-only control add an explicit `aria-label`; a control with visible text already has one, so do not add a redundant `aria-label` (it would override the visible text). Do not leave a `title=` alongside `data-lc-tip` - it double-renders (native + styled).
+- Placement convention: vertical rails (the enclave switcher) use `data-lc-tip-pos="right"`; top bars (the room header) use `data-lc-tip-pos="bottom"`, so the tooltip opens away from the chrome edge.
