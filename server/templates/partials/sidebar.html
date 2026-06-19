@@ -10,6 +10,7 @@
       <input
         name="q"
         placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
+        aria-label="{{ "sidebar-search-messages-placeholder"|t }}"
         hx-get="/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
         hx-target="#search-msg-results"
@@ -27,6 +28,7 @@
       <input
         name="q"
         placeholder="{{ "sidebar-search-people-placeholder"|t }}"
+        aria-label="{{ "sidebar-search-people-placeholder"|t }}"
         hx-get="/users/search"
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#search-people-results"
