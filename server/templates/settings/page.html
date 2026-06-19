@@ -21,6 +21,10 @@
   {% if saved %}
   <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-saved"|t }}</div>
   {% endif %}
+  {# LC-356: inline error flash for the profile / delete-account forms. #}
+  {% if let Some(e) = error.as_ref() %}
+  <div class="p-2 bg-danger-surface border border-danger-border text-danger-surface-content text-sm rounded" role="alert">{{ e }}</div>
+  {% endif %}
 
   <section id="settings-sec-profile" class="space-y-8 scroll-mt-16">
     <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-profile"|t }}</h2>

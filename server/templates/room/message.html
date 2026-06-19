@@ -29,7 +29,7 @@
     {% when crate::views::message_actor::MessageActor::Webhook with (webhook_avatar_url) %}
     {# LC-74: webhook author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = webhook_avatar_url %}
-    <img src="{{ url }}" alt="" class="h-6 w-6 rounded-full object-cover">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
     {% else %}
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
@@ -38,7 +38,7 @@
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = email_avatar_url %}
-    <img src="{{ url }}" alt="" class="h-6 w-6 rounded-full object-cover">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
     {% else %}
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
