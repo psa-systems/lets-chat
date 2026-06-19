@@ -172,6 +172,74 @@
       };
     })();
   </script>
+  {# LC-361: localized strings for client-side JS (calls, voice, uploads,
+     offline outbox, reminders, device labels). Synchronous + before the
+     deferred asset scripts so window.__lcI18n is set when they run. The JS
+     reads these with an English fallback, so a missing key never breaks a flow.
+     `%name%` / `%status%` / `%n%` are placeholders the JS substitutes. #}
+  <script>
+    window.__lcI18n = {
+      callMute: "{{ "js-call-mute"|t }}",
+      callUnmute: "{{ "js-call-unmute"|t }}",
+      callStartVideo: "{{ "js-call-start-video"|t }}",
+      callStopVideo: "{{ "js-call-stop-video"|t }}",
+      callShareScreen: "{{ "js-call-share-screen"|t }}",
+      callStopSharing: "{{ "js-call-stop-sharing"|t }}",
+      callCalling: "{{ "js-call-calling"|t }}",
+      callConnecting: "{{ "js-call-connecting"|t }}",
+      callReconnecting: "{{ "js-call-reconnecting"|t }}",
+      callConnectionFailed: "{{ "js-call-connection-failed"|t }}",
+      callDeclined: "{{ "js-call-declined"|t }}",
+      callEnded: "{{ "js-call-ended"|t }}",
+      callNoMicCamera: "{{ "js-call-no-mic-camera"|t }}",
+      callNoCamera: "{{ "js-call-no-camera"|t }}",
+      callNoMic: "{{ "js-call-no-mic"|t }}",
+      callNoScreenshare: "{{ "js-call-no-screenshare"|t }}",
+      callAContact: "{{ "js-call-a-contact"|t }}",
+      callRequestControl: "{{ "js-call-request-control"|t }}",
+      callRequesting: "{{ "js-call-requesting"|t }}",
+      callStopControlling: "{{ "js-call-stop-controlling"|t }}",
+      callControlNoAnswer: "{{ "js-call-control-no-answer"|t }}",
+      callControlDenied: "{{ "js-call-control-denied"|t }}",
+      outboxOfflineQueued: "{{ "js-outbox-offline-queued"|t }}",
+      outboxOfflineIdle: "{{ "js-outbox-offline-idle"|t }}",
+      outboxSending: "{{ "js-outbox-sending"|t }}",
+      outboxQueuedOffline: "{{ "js-outbox-queued-offline"|t }}",
+      outboxYouAreOffline: "{{ "js-outbox-you-are-offline"|t }}",
+      outboxDelivering: "{{ "js-outbox-delivering"|t }}",
+      outboxFailed: "{{ "js-outbox-failed"|t }}",
+      outboxRetry: "{{ "js-outbox-retry"|t }}",
+      outboxDiscard: "{{ "js-outbox-discard"|t }}",
+      uploadUploadingFile: "{{ "js-upload-uploading-file"|t }}",
+      uploadUploadingVoice: "{{ "js-upload-uploading-voice"|t }}",
+      uploadAttached: "{{ "js-upload-attached"|t }}",
+      uploadVoiceAttached: "{{ "js-upload-voice-attached"|t }}",
+      uploadFailed: "{{ "js-upload-failed"|t }}",
+      uploadFailedStatus: "{{ "js-upload-failed-status"|t }}",
+      uploadRemoveAttachment: "{{ "js-upload-remove-attachment"|t }}",
+      voiceRecUnsupported: "{{ "js-voice-rec-unsupported"|t }}",
+      voiceRecMicDenied: "{{ "js-voice-rec-mic-denied"|t }}",
+      voiceRecStartFailed: "{{ "js-voice-rec-start-failed"|t }}",
+      voiceRecEmpty: "{{ "js-voice-rec-empty"|t }}",
+      voiceRecording: "{{ "js-voice-recording"|t }}",
+      voiceRecStop: "{{ "js-voice-rec-stop"|t }}",
+      voiceRecCancel: "{{ "js-voice-rec-cancel"|t }}",
+      reminderInvalidTime: "{{ "js-reminder-invalid-time"|t }}",
+      reminderSetFailed: "{{ "js-reminder-set-failed"|t }}",
+      reminderNetworkError: "{{ "js-reminder-network-error"|t }}",
+      deviceMicrophone: "{{ "js-device-microphone"|t }}",
+      deviceCamera: "{{ "js-device-camera"|t }}",
+      deviceSpeaker: "{{ "js-device-speaker"|t }}",
+      deviceSystemDefault: "{{ "js-device-system-default"|t }}",
+      deviceDialogTitle: "{{ "js-device-dialog-title"|t }}",
+      deviceClose: "{{ "js-device-close"|t }}",
+      devicePermissionHint: "{{ "js-device-permission-hint"|t }}",
+      deviceShowNames: "{{ "js-device-show-names"|t }}"
+    };
+    // Lookup helper: returns the localized string for `k`, or `fb` (the English
+    // literal kept at each call site) when the key is absent.
+    window.__lcS = function (k, fb) { var v = window.__lcI18n[k]; return v == null ? fb : v; };
+  </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
   <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>

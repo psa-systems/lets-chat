@@ -13,6 +13,10 @@
 (function () {
   'use strict';
 
+  // LC-361: window.__lcS(key, fallback) returns the localized string from
+  // base.html, or the English fallback at the call site if the key is missing,
+  // so a missing/old catalog never breaks a call flow.
+
   var selfId = null;          // viewer's user id, set on init from layout
   var iceServers = null;      // resolved RTCIceServer array, fetched lazily
   var iceFetch = null;        // de-dupes concurrent /call/config fetches
@@ -188,7 +192,7 @@
     var btn = q('[data-lc-call-camera]');
     if (!btn) return;
     var on = hasLocalCamera();
-    btn.textContent = on ? 'Stop video' : 'Start video';
+    btn.textContent = on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     // While the screen-share track owns the video sender, toggling the camera
     // would race for the same outgoing slot. The `disabled:*` classes on the
@@ -200,7 +204,7 @@
     var btn = q('[data-lc-call-screen]');
     if (!btn) return;
     var on = isSharingScreen();
-    btn.textContent = on ? 'Stop sharing' : 'Share screen';
+    btn.textContent = on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen');
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
@@ -254,15 +258,15 @@
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
     var lv = q('[data-lc-local-video]'); if (lv) lv.srcObject = null;
     var mute = q('[data-lc-call-mute]');
-    if (mute) { mute.textContent = 'Mute'; mute.setAttribute('aria-pressed', 'false'); }
+    if (mute) { mute.textContent = window.__lcS('callMute', 'Mute'); mute.setAttribute('aria-pressed', 'false'); }
     var cam = q('[data-lc-call-camera]');
     if (cam) {
-      cam.textContent = 'Start video';
+      cam.textContent = window.__lcS('callStartVideo', 'Start video');
       cam.setAttribute('aria-pressed', 'false');
       cam.removeAttribute('disabled');
     }
     var ss = q('[data-lc-call-screen]');
-    if (ss) { ss.textContent = 'Share screen'; ss.setAttribute('aria-pressed', 'false'); }
+    if (ss) { ss.textContent = window.__lcS('callShareScreen', 'Share screen'); ss.setAttribute('aria-pressed', 'false'); }
     setRequestBtn();  // phase is now idle -> hides the control affordance
     disposeDialogTrap();
   }
@@ -346,10 +350,10 @@
         phase = 'in-call';
         setStatus(peerName || '');
       } else if (pc.connectionState === 'failed') {
-        setStatus('Connection failed');
+        setStatus(window.__lcS('callConnectionFailed', 'Connection failed'));
         endCall();
       } else if (pc.connectionState === 'disconnected') {
-        setStatus('Reconnecting...');
+        setStatus(window.__lcS('callReconnecting', 'Reconnecting...'));
       }
     };
   }
@@ -414,7 +418,7 @@
     phase = 'outgoing';
     polite = false;
     hide(q('[data-lc-call-incoming]'));
-    setStatus('Calling ' + (peerName || '') + '...');
+    setStatus(window.__lcS('callCalling', 'Calling %name%...').replace('%name%', peerName || ''));
     signal('invite', hasLocalVideo() ? 'video' : 'audio');
   }
 
@@ -422,7 +426,7 @@
     phase = 'connecting';
     polite = true;
     hide(q('[data-lc-call-incoming]'));
-    setStatus('Connecting...');
+    setStatus(window.__lcS('callConnecting', 'Connecting...'));
     signal('accept');
   }
 
@@ -455,7 +459,7 @@
         if (phase !== 'idle') { teardown(); return; }
         becomeCaller();
       }).catch(function () {
-        alert('Could not access your microphone or camera.');
+        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         teardown();
       });
   }
@@ -479,11 +483,11 @@
         setCameraBtn();
         show(q('[data-lc-call-active]'));
         installDialogTrap(q('[data-lc-call-active]'));
-        setStatus('Connecting...');
+        setStatus(window.__lcS('callConnecting', 'Connecting...'));
         signal('accept');
         incoming = null;
       }).catch(function () {
-        alert('Could not access your microphone or camera.');
+        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         signal('reject');
         teardown();
       });
@@ -504,7 +508,7 @@
   function onAccept() {
     if (phase !== 'outgoing') return;
     phase = 'connecting';
-    setStatus('Connecting...');
+    setStatus(window.__lcS('callConnecting', 'Connecting...'));
     createPc();
     addLocalTracks();
   }
@@ -515,7 +519,7 @@
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-call-mute]');
     if (btn) {
-      btn.textContent = on ? 'Mute' : 'Unmute';
+      btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
       // aria-pressed="true" means "currently muted" (the toggle is on).
       // Mirrors the visual: button reads "Unmute" exactly when muted.
       btn.setAttribute('aria-pressed', on ? 'false' : 'true');
@@ -544,7 +548,7 @@
         if (pc) pc.addTrack(vtrack, localStream);
         refreshLocalVideo();
         setCameraBtn();
-      }).catch(function () { alert('Could not access your camera.'); });
+      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -616,7 +620,7 @@
     if (phase === 'idle' || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert('Screen sharing is not supported by your browser.');
+      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     if (!pc) return;
@@ -825,13 +829,13 @@
     if (phase === 'idle' || !remoteVideoOn) { hide(btn); if (uipi) hide(uipi); return; }
     show(btn);
     if (controlPhase === 'controlling') {
-      btn.textContent = 'Stop controlling';
+      btn.textContent = window.__lcS('callStopControlling', 'Stop controlling');
       btn.setAttribute('aria-pressed', 'true');
     } else if (controlPhase === 'requesting') {
-      btn.textContent = 'Requesting...';
+      btn.textContent = window.__lcS('callRequesting', 'Requesting...');
       btn.setAttribute('aria-pressed', 'false');
     } else {
-      btn.textContent = 'Request control';
+      btn.textContent = window.__lcS('callRequestControl', 'Request control');
       btn.setAttribute('aria-pressed', 'false');
     }
     // UIPI hint (LC-186): surface that some windows can't be driven so the
@@ -854,7 +858,7 @@
     controlRequestTimer = setTimeout(function () {
       if (controlPhase === 'requesting') {
         controlPhase = 'none';
-        setStatus('Control request not answered');
+        setStatus(window.__lcS('callControlNoAnswer', 'Control request not answered'));
         setRequestBtn();
       }
     }, CONTROL_REQUEST_TIMEOUT_MS);
@@ -885,7 +889,7 @@
   // ---- remote control: controlled (sharer) side -------------------
   function showControlPrompt(name) {
     var nm = q('[data-lc-control-prompt-name]');
-    if (nm) nm.textContent = name || 'A contact';
+    if (nm) nm.textContent = name || window.__lcS('callAContact', 'A contact');
     show(q('[data-lc-control-prompt]'));
   }
   function hideControlPrompt() { hide(q('[data-lc-control-prompt]')); }
@@ -894,7 +898,7 @@
   // kill-switch button. Shown for the whole duration a peer holds control.
   function showControlBanner() {
     var nm = q('[data-lc-control-banner-name]');
-    if (nm) nm.textContent = controlPeerName || 'A contact';
+    if (nm) nm.textContent = controlPeerName || window.__lcS('callAContact', 'A contact');
     show(q('[data-lc-control-banner]'));
   }
   function hideControlBanner() { hide(q('[data-lc-control-banner]')); }
@@ -936,7 +940,7 @@
   function handleControl(node) {
     var msgRoomId = parseInt(node.getAttribute('data-room-id'), 10);
     var fromId = node.getAttribute('data-from-id');
-    var fromName = node.getAttribute('data-from-name') || 'A contact';
+    var fromName = node.getAttribute('data-from-name') || window.__lcS('callAContact', 'A contact');
     var kind = node.getAttribute('data-kind');
     if (fromId === selfId) return;  // server relays peer-only, but be defensive
     // Only act on signals for the DM whose call we are in.
@@ -953,7 +957,7 @@
       case 'deny':
         if (controlPhase === 'requesting') {
           stopControlling(false);
-          setStatus('Control request denied');
+          setStatus(window.__lcS('callControlDenied', 'Control request denied'));
         }
         break;
       case 'revoke':
@@ -1043,13 +1047,13 @@
         onAccept();
         break;
       case 'reject':
-        if (phase === 'outgoing') { setStatus('Call declined'); setTimeout(teardown, 1200); }
+        if (phase === 'outgoing') { setStatus(window.__lcS('callDeclined', 'Call declined')); setTimeout(teardown, 1200); }
         break;
       case 'cancel':
         if (phase === 'incoming') teardown();
         break;
       case 'hangup':
-        if (phase !== 'idle') { setStatus('Call ended'); setTimeout(teardown, 800); }
+        if (phase !== 'idle') { setStatus(window.__lcS('callEnded', 'Call ended')); setTimeout(teardown, 800); }
         break;
       case 'offer':
         onOffer(payload);

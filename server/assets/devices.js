@@ -21,9 +21,9 @@
     audiooutput: 'lc.dev.audiooutput',
   };
   var KIND_LABEL = {
-    audioinput: 'Microphone',
-    videoinput: 'Camera',
-    audiooutput: 'Speaker',
+    audioinput: window.__lcS('deviceMicrophone', 'Microphone'),
+    videoinput: window.__lcS('deviceCamera', 'Camera'),
+    audiooutput: window.__lcS('deviceSpeaker', 'Speaker'),
   };
 
   function get(kind) {
@@ -123,7 +123,7 @@
     var current = get(kind);
     var def = document.createElement('option');
     def.value = '';
-    def.textContent = 'System default';
+    def.textContent = window.__lcS('deviceSystemDefault', 'System default');
     sel.appendChild(def);
     var n = 0;
     devices.forEach(function (d) {
@@ -198,15 +198,15 @@
     var overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-[60] flex items-center justify-center bg-black/50';
     overlay.innerHTML =
-      '<div role="dialog" aria-modal="true" aria-label="Call devices" class="w-80 rounded-lg bg-white p-5 shadow-xl">' +
+      '<div role="dialog" aria-modal="true" aria-label="' + window.__lcS('deviceDialogTitle', 'Call devices') + '" class="w-80 rounded-lg bg-white p-5 shadow-xl">' +
         '<div class="mb-3 flex items-center justify-between">' +
-          '<h2 class="text-base font-semibold">Call devices</h2>' +
-          '<button type="button" data-close class="text-sm text-slate-500 hover:text-slate-900">Close</button>' +
+          '<h2 class="text-base font-semibold">' + window.__lcS('deviceDialogTitle', 'Call devices') + '</h2>' +
+          '<button type="button" data-close class="text-sm text-slate-500 hover:text-slate-900">' + window.__lcS('deviceClose', 'Close') + '</button>' +
         '</div>' +
         '<div data-fields class="space-y-3"></div>' +
         '<p data-perm-hint class="mt-3 text-xs text-slate-500" style="display:none">' +
-          'Allow microphone or camera access to see device names. ' +
-          '<button type="button" data-grant class="font-medium text-accent hover:underline">Show device names</button>' +
+          window.__lcS('devicePermissionHint', 'Allow microphone or camera access to see device names.') + ' ' +
+          '<button type="button" data-grant class="font-medium text-accent hover:underline">' + window.__lcS('deviceShowNames', 'Show device names') + '</button>' +
         '</p>' +
       '</div>';
     document.body.appendChild(overlay);

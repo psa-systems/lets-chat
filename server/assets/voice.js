@@ -372,7 +372,7 @@
       setCameraBtn();
       wsSend({ type: 'voice_join', room_id: cfg.roomId });
     }).catch(function () {
-      alert('Could not access your microphone.');
+      alert(window.__lcS('callNoMic', 'Could not access your microphone.'));
     });
   }
 
@@ -390,7 +390,7 @@
     if (g) g.replaceChildren();
     joined = false;
     var ss = q('[data-lc-voice-screen]');
-    if (ss) ss.textContent = 'Share screen';
+    if (ss) ss.textContent = window.__lcS('callShareScreen', 'Share screen');
     // Drop ourselves from the participants map and re-render the preview
     // before un-hiding it. Otherwise the leaver would see whatever was
     // server-rendered at page load, which is often "no one is here yet" even
@@ -405,13 +405,13 @@
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-voice-mute]');
-    if (btn) btn.textContent = on ? 'Mute' : 'Unmute';
+    if (btn) btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
   }
 
   function setCameraBtn() {
     var btn = q('[data-lc-voice-camera]');
     if (!btn) return;
-    btn.textContent = hasLocalCamera() ? 'Stop video' : 'Start video';
+    btn.textContent = hasLocalCamera() ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
     // While the screen-share track owns the video sender on every peer,
     // toggling the camera would race for the same outgoing slot. The
     // `disabled:*` classes on the button render the disabled affordance.
@@ -459,7 +459,7 @@
         if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
         updateTileMedia(cfg.selfId);
         setCameraBtn();
-      }).catch(function () { alert('Could not access your camera.'); });
+      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -518,7 +518,7 @@
     if (!joined || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert('Screen sharing is not supported by your browser.');
+      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
