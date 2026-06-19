@@ -151,6 +151,48 @@
         }
       };
 
+      // LC-371: device-local collapsible sidebar groups (Starred / Channels /
+      // Direct messages). Mirrors the unread-only pattern: a space-separated
+      // list of collapsed group names lives in localStorage and on
+      // <html data-lc-collapsed-groups>, set before paint so a collapsed group
+      // never flashes open. Hiding + chevron rotation are pure CSS keyed on the
+      // attribute (main.css), so they survive sidebar OOB swaps with no JS scan.
+      function collapsedGroups() {
+        var v = d.getAttribute("data-lc-collapsed-groups") || "";
+        return v.split(/\s+/).filter(Boolean);
+      }
+      function applyCollapsedGroups(list) {
+        if (list && list.length) d.setAttribute("data-lc-collapsed-groups", list.join(" "));
+        else d.removeAttribute("data-lc-collapsed-groups");
+      }
+      var cg = "";
+      try { cg = localStorage.getItem("lc-collapsed-groups") || ""; } catch (e) {}
+      applyCollapsedGroups(cg.split(/\s+/).filter(Boolean));
+      function syncGroupToggles() {
+        var collapsed = collapsedGroups();
+        var btns = document.querySelectorAll("[data-lc-group-toggle]");
+        for (var i = 0; i < btns.length; i++) {
+          var name = btns[i].getAttribute("data-lc-group-toggle");
+          btns[i].setAttribute("aria-expanded", collapsed.indexOf(name) === -1 ? "true" : "false");
+        }
+      }
+      window.__lcToggleGroup = function (name) {
+        var list = collapsedGroups();
+        var idx = list.indexOf(name);
+        if (idx === -1) list.push(name); else list.splice(idx, 1);
+        try {
+          if (list.length) localStorage.setItem("lc-collapsed-groups", list.join(" "));
+          else localStorage.removeItem("lc-collapsed-groups");
+        } catch (e) {}
+        applyCollapsedGroups(list);
+        syncGroupToggles();
+      };
+      // The toggle buttons render server-side (and re-render on sidebar OOB
+      // swaps) with aria-expanded="true"; sync them from the attribute once the
+      // DOM is up and after every htmx settle so AT state matches the CSS.
+      document.addEventListener("DOMContentLoaded", syncGroupToggles);
+      document.addEventListener("htmx:afterSettle", syncGroupToggles);
+
       // LC-327: message text size (small/normal/large). Device-local
       // (localStorage only, like sidebar/unread-only - a per-device reading
       // ergonomic, not synced server-side). Set before paint so message text
