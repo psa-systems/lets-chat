@@ -697,3 +697,38 @@ async fn post_enclaves_requires_auth() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert!(res.status().is_redirection() || res.status() == StatusCode::SEE_OTHER);
 }
+
+#[tokio::test]
+async fn cannot_demote_enclave_owner() {
+    // LC-351: a role change targeting the owner must be refused. The owner can
+    // manage admins (so it clears the permission gate), but demoting the owner
+    // would leave the enclave with zero owners and no way to transfer/delete it.
+    let (app, sess, owner_id) = app_with_named_user("user", "owner").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=mine"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{id}/members/{owner_id}/role"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("role=member"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
