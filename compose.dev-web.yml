@@ -82,7 +82,11 @@ services:
       - "traefik.docker.network=network-traefik-public"
       - "traefik.http.routers.chat-${USER}.rule=Host(`${USER}-chat.a8n.run`)"
       - "traefik.http.routers.chat-${USER}.service=chat-${USER}@docker"
-      - "traefik.http.routers.chat-${USER}.entrypoints=web-secure"
+      # Both entrypoints, matching the other dev apps (bunyip et al). The dev
+      # hosts are reached over the Nebula overlay, where Traefik's nebula-secure
+      # entrypoint listens on :443 (the default); web-secure alone (:20443) left
+      # `${USER}-chat.a8n.run` returning a 404 in the browser.
+      - "traefik.http.routers.chat-${USER}.entrypoints=web-secure,nebula-secure"
       - "traefik.http.routers.chat-${USER}.tls.certresolver=cert-cloudflare"
       - "traefik.http.services.chat-${USER}.loadbalancer.server.port=8080"
 
