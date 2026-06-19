@@ -566,6 +566,12 @@ document.body.addEventListener('click', function(e){
     if (!iso) return;
     var d = new Date(iso);
     if (isNaN(d.getTime())) return;
+    // LC-377: compact HH:MM mode for the follow-up gutter timestamp (relative
+    // text like "2 minutes ago" is too wide for the 3rem avatar gutter).
+    if (el.getAttribute('data-lc-ts-mode') === 'time') {
+      try { el.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) {}
+      return;
+    }
     var text = rel(d);
     if (text == null) {
       try { text = d.toLocaleDateString(); } catch (e) { return; }

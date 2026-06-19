@@ -189,10 +189,15 @@ pub async fn get_picker(
 }
 
 /// GET /messages/:message_id/reactions/cancel
-/// Replace the picker with the `+` button again.
+/// Replace the picker with the add-reaction button again. LC-377: this mirrors
+/// the smiley pill rendered by `partials/reaction_bar.html`. The picker replaced
+/// the add button in place (`hx-target="this"`), so after a cancel the user has
+/// just been interacting with this message's reactions; the button is rendered
+/// visible (not hover-gated) until the next full re-render reapplies the gate.
 pub async fn cancel_picker(Path(message_id): Path<i64>) -> Response {
+    let add_label = attr_escape(&crate::i18n::translate_current("partials-reaction-add"));
     let body = format!(
-        r##"<button hx-get="/messages/{message_id}/reactions/picker" hx-target="this" hx-swap="outerHTML" class="text-xs text-slate-500 hover:text-slate-700">+</button>"##,
+        r##"<button hx-get="/messages/{message_id}/reactions/picker" hx-target="this" hx-swap="outerHTML" aria-label="{add_label}" data-lc-tip="{add_label}" data-lc-tip-pos="top" aria-haspopup="dialog" class="lc-react-add inline-flex items-center justify-center h-6 rounded-full border border-border bg-surface-sunken px-1.5 text-content-muted hover:bg-surface-elevated hover:text-content"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg></button>"##,
     );
     axum::response::Html(body).into_response()
 }
