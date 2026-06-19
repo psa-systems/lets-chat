@@ -12,3 +12,43 @@
   {% include "room/message.html" %}
   {% endfor %}
 </div>
+<script>
+// LC-376: message overflow-menu behavior. The per-message `...` menu (LC-376) is
+// a native <details class="lc-msg-more">, so it needs no per-row JS; this single
+// delegated handler (wired once) adds the niceties: opening one menu closes the
+// others, clicking a menu item or outside closes it, and Escape closes any open
+// one. Lives here (rendered once around the message loop) rather than per row.
+(function(){
+  if (window.__lcMsgMenuWired) return;
+  window.__lcMsgMenuWired = true;
+  function openMenus(){ return document.querySelectorAll('details.lc-msg-more[open]'); }
+  // Opening one menu closes the others. `toggle` does not bubble, so capture.
+  document.addEventListener('toggle', function(e){
+    var d = e.target;
+    if (!d.matches || !d.matches('details.lc-msg-more') || !d.open) return;
+    openMenus().forEach(function(o){ if (o !== d) o.removeAttribute('open'); });
+  }, true);
+  document.addEventListener('click', function(e){
+    var menus = openMenus();
+    if (!menus.length) return;
+    var inSummary = e.target.closest && e.target.closest('details.lc-msg-more > summary');
+    // Copy actions flip their label to "Copied" in place; keep their menu open so
+    // that feedback is visible (it closes on the next outside click).
+    var inCopy = e.target.closest && e.target.closest('[data-lc-copy-link], [data-lc-copy-text]');
+    menus.forEach(function(d){
+      // Leave the menu whose own summary was just clicked (native toggle owns it).
+      if (inSummary && inSummary.parentElement === d) return;
+      if (inCopy && d.contains(inCopy)) return;
+      // A click on one of this menu's items: let the action fire, then close it.
+      // A click anywhere else outside: close it.
+      d.removeAttribute('open');
+    });
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    var menus = openMenus();
+    if (!menus.length) return;
+    menus.forEach(function(d){ d.removeAttribute('open'); });
+  });
+})();
+</script>

@@ -20,78 +20,90 @@
   </div>
   
   
-  <span class="absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-1.5 text-xs bg-surface-elevated border border-border shadow-sm px-1.5 py-0.5 rounded-md">
+  <span class="lc-msg-actions absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5 text-xs bg-surface-elevated border border-border shadow-sm px-1 py-0.5 rounded-md">
     
-    <span data-lc-quick-bar role="group" aria-label="Quick reactions" class="hidden items-center gap-1 border-r border-border pr-2"></span>
+    <span data-lc-quick-bar role="group" aria-label="Quick reactions" class="hidden items-center gap-1 border-r border-border pr-1 mr-0.5"></span>
     
-    <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="text-content-muted hover:underline">Reply</button>
+    <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="lc-msg-action" data-lc-tip="Reply" data-lc-tip-pos="bottom" aria-label="Reply">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
+    </button>
     
-    <button hx-get="/room/1/thread/1" hx-target="#thread-panel" hx-swap="outerHTML" class="text-content-muted hover:underline">Thread</button>
-    
-    <button type="button"
-      data-lc-copy-link="1"
-      data-lc-copied-label="Copied"
-      class="text-content-muted hover:underline"
-      onclick="
-        var b = this;
-        var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
-        var done = function(){
-          var orig = b.textContent;
-          b.textContent = b.getAttribute('data-lc-copied-label');
-          setTimeout(function(){ b.textContent = orig; }, 1500);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(done, function(){
-            window.__lcCopyFallback && window.__lcCopyFallback(url); done();
-          });
-        } else if (window.__lcCopyFallback) {
-          window.__lcCopyFallback(url); done();
-        }
-      ">Copy link</button>
+    <button hx-get="/room/1/thread/1" hx-target="#thread-panel" hx-swap="outerHTML" class="lc-msg-action" data-lc-tip="Thread" data-lc-tip-pos="bottom" aria-label="Thread">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2 10c0-3.967 3.69-7 8-7s8 3.033 8 7-3.69 7-8 7a9.165 9.165 0 01-1.504-.123 5.976 5.976 0 01-3.935 1.107.75.75 0 01-.584-1.143 3.478 3.478 0 00.522-1.756C2.978 13.825 2 12.025 2 10z" clip-rule="evenodd"/></svg>
+    </button>
     
     
-    <button type="button"
-      data-lc-copy-text="1"
-      data-lc-copied-label="Copied"
-      class="text-content-muted hover:underline"
-      onclick="
-        var b = this;
-        fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
-          .then(function(r){ return r.ok ? r.text() : null; })
-          .then(function(t){
-            if (t === null) return;
+    
+    <details class="lc-msg-more relative inline-flex">
+      <summary class="lc-msg-action list-none" aria-haspopup="menu" data-lc-tip="More actions" data-lc-tip-pos="bottom" aria-label="More actions">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM15.5 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>
+      </summary>
+      <div role="menu" class="lc-msg-menu absolute right-0 top-full mt-1 z-30">
+        
+        <button type="button" role="menuitem"
+          data-lc-copy-link="1"
+          data-lc-copied-label="Copied"
+          class="lc-menu-item"
+          onclick="
+            var b = this;
+            var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
             var done = function(){
               var orig = b.textContent;
               b.textContent = b.getAttribute('data-lc-copied-label');
               setTimeout(function(){ b.textContent = orig; }, 1500);
             };
             if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(t).then(done, function(){
-                window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+              navigator.clipboard.writeText(url).then(done, function(){
+                window.__lcCopyFallback && window.__lcCopyFallback(url); done();
               });
             } else if (window.__lcCopyFallback) {
-              window.__lcCopyFallback(t); done();
+              window.__lcCopyFallback(url); done();
             }
-          });
-      ">Copy text</button>
-    
-    
-    <button hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="text-warning hover:underline">Pin</button>
-    
-    
-    <button hx-post="/messages/1/bookmark" hx-target="#msg-1" hx-swap="outerHTML" class="text-success-surface-content hover:underline">Save</button>
-    
-    <button hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="text-indigo-600 hover:underline">Remind</button>
-    
-    <button hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="text-content-muted hover:underline">Mark unread</button>
-    
-    <button hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="text-content-muted hover:underline">Forward</button>
-    
-    
-    
-    
-    
-    
+          ">Copy link</button>
+        
+        
+        <button type="button" role="menuitem"
+          data-lc-copy-text="1"
+          data-lc-copied-label="Copied"
+          class="lc-menu-item"
+          onclick="
+            var b = this;
+            fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+              .then(function(r){ return r.ok ? r.text() : null; })
+              .then(function(t){
+                if (t === null) return;
+                var done = function(){
+                  var orig = b.textContent;
+                  b.textContent = b.getAttribute('data-lc-copied-label');
+                  setTimeout(function(){ b.textContent = orig; }, 1500);
+                };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(t).then(done, function(){
+                    window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+                  });
+                } else if (window.__lcCopyFallback) {
+                  window.__lcCopyFallback(t); done();
+                }
+              });
+          ">Copy text</button>
+        
+        
+        <button role="menuitem" hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item">Pin</button>
+        
+        
+        <button role="menuitem" hx-post="/messages/1/bookmark" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item">Save</button>
+        
+        <button role="menuitem" hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">Remind</button>
+        
+        <button role="menuitem" hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">Mark unread</button>
+        
+        <button role="menuitem" hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">Forward</button>
+        
+        
+        
+        
+      </div>
+    </details>
   </span>
   
   
