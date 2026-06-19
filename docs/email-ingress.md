@@ -145,7 +145,7 @@ When an email is dispatched, a row is inserted in `chat.db::reply_tokens` mappin
 
 ### Operator deployment
 
-Same SMTP env vars as the digest and the other existing email surfaces (password reset, email verify, login alert). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back.
+Same SMTP env vars as the digest and the other outbound email surfaces (mention/DM notifications). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back.
 
 ## Reply-by-email (LC-77-REPLY stage 2)
 

@@ -81,7 +81,8 @@ desktop/                   # Tao + Wry wrapper
 
 - Sessions are random tokens stored in `auth.db`, served as HTTP-only `Secure SameSite=Strict` cookies with 30-day expiry.
 - The `AuthUser` and `AdminUser` Axum extractors in `server/src/auth.rs` read the cookie and resolve the `User` (or reject the request).
-- First registered user is auto-promoted to Admin.
+- Authentication is Bunyip SSO only (LC-22): the four `LETS_CHAT_BUNYIP_SSO_*` vars are mandatory and there is no local username/password, registration, password reset, or 2FA. The RP lives in `server/src/oidc/` and `server/src/routes/bunyip_sso.rs` (`/auth/bunyip/{start,callback}`).
+- First user to sign in via Bunyip is auto-promoted to Admin (`promote_if_first_user` in `routes/bunyip_sso.rs`).
 - Roles: Admin > Moderator > User. RBAC logic lives in `server/src/db/auth.rs`.
 
 ### WebSocket Flow
@@ -121,7 +122,7 @@ If a migration needs new behaviour, add a new `.sql` file with the next index. I
 | `LETS_CHAT_DATA_DIR` | `/data` | Directory for SQLite `.db` files |
 | `BIND_ADDR` | `0.0.0.0:8080` | Server listen address |
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
-| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for at-rest secrets: Web Push VAPID private key, per-user 2FA TOTP secrets, and the sealed IMAP password for email ingress. SMTP credentials are env-var-only (`LETS_CHAT_SMTP_*`), NOT encrypted here (LC-77-SMTP-SEAL removed the plaintext SMTP columns). |
+| `LETS_CHAT_SECRET_KEY` | (none) | AES-256-GCM key for at-rest secrets: Web Push VAPID private key and the sealed IMAP password for email ingress. (Post-LC-22 there is no 2FA, so no TOTP secrets are stored.) SMTP credentials and the Bunyip SSO client secret are env-var-only, NOT encrypted here (LC-77-SMTP-SEAL removed the plaintext SMTP columns). |
 | `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL used to build deep links in outbound mail (password reset, email verification, digest, mention/DM notifications). |
 | `LETS_CHAT_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID `contact` address sent with Web Push delivery requests. |
 | `LETS_CHAT_SMTP_HOST` / `_PORT` / `_TLS` / `_FROM` / `_USERNAME` / `_PASSWORD` | (none) | SMTP relay for outbound mail. `HOST`/`PORT`/`TLS` (`tls`/`starttls`/`none`)/`FROM` are required together to enable mail; `USERNAME`+`PASSWORD` are an optional pair (omit both for an unauthenticated relay). Read at startup by `Mailer::from_env`; not stored at rest. |
@@ -262,12 +263,13 @@ For each match, eyeball the surrounding code to determine the pattern, then add 
 
 ### 5. Test-harness setup gotchas
 
-Test binaries that exercise authed endpoints need two setup patterns or they fail in non-obvious ways:
+Test binaries that exercise authed endpoints need this setup pattern or they fail in non-obvious ways:
 
-1. **`enforce_2fa_enrollment` middleware activates when `AppState.secret_key.is_some()`.** Users with `totp_enabled = 0` get 303'd to `/settings/2fa/setup` on every authed request. Test harness workaround: `UPDATE users SET totp_enabled = 1` on every created user after registration.
-2. **`db::enclave::backfill_general_membership` early-returns when no admin exists.** Tests that downgrade users to `'user'` role leave them out of the General enclave; all room access then 403s. Test harness must promote at least one user to `'admin'` before backfill runs.
+- **`db::enclave::backfill_general_membership` early-returns when no admin exists.** Tests that downgrade users to `'user'` role leave them out of the General enclave; all room access then 403s. Test harness must promote at least one user to `'admin'` before backfill runs.
 
-Both surfaces are invisible until they fail. Reference: `routes_mentions.rs` (admin promotion pattern), `routes_message_edit_history.rs` (totp_enabled pattern). The symptoms - 303 to `/settings/2fa/setup` and 403 on `POST /room/1/messages` respectively - are both the kind of error that looks like a routing or auth bug but is actually a setup omission.
+This surface is invisible until it fails. Reference: `routes_mentions.rs` (admin promotion pattern). The symptom - 403 on `POST /room/1/messages` - looks like a routing or auth bug but is actually a setup omission.
+
+> Historical (LC-22): older test files force `UPDATE users SET totp_enabled = 1` after creating a user, to dodge the `enforce_2fa_enrollment` middleware that 303'd `totp_enabled = 0` users to `/settings/2fa/setup`. That middleware was **deleted** in the Bunyip SSO cutover (`server/src/auth.rs`), so the workaround is now a harmless no-op; new tests do not need it. The `totp_*` columns still exist (legacy, nulled by migration `0033`) but nothing reads them for enrollment.
 
 ### Other notes
 
