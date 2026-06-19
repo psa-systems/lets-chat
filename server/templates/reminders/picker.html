@@ -78,7 +78,7 @@
     err.classList.add('hidden');
     var local = form.querySelector('input[name=when]').value;
     var dt = new Date(local);
-    if (!local || isNaN(dt.getTime())) { err.textContent = 'Pick a valid time.'; err.classList.remove('hidden'); return; }
+    if (!local || isNaN(dt.getTime())) { err.textContent = window.__lcS('reminderInvalidTime', 'Pick a valid time.'); err.classList.remove('hidden'); return; }
     var body = new URLSearchParams();
     body.set('message_id', form.getAttribute('data-message-id'));
     body.set('remind_at', dt.toISOString());
@@ -90,8 +90,8 @@
       });
       var text = await res.text();
       if (res.ok) { disposeTrap(); slot.innerHTML = text; }
-      else { err.textContent = text || ('Could not set reminder (' + res.status + ')'); err.classList.remove('hidden'); }
-    } catch (e2) { err.textContent = 'Network error.'; err.classList.remove('hidden'); }
+      else { err.textContent = text || window.__lcS('reminderSetFailed', 'Could not set reminder (%status%)').replace('%status%', res.status); err.classList.remove('hidden'); }
+    } catch (e2) { err.textContent = window.__lcS('reminderNetworkError', 'Network error.'); err.classList.remove('hidden'); }
   });
 })();
 </script>

@@ -87,13 +87,13 @@
 
     if (hint) {
       if (offline && pending.length) {
-        hint.textContent = 'Offline - ' + pending.length + ' message(s) queued';
+        hint.textContent = window.__lcS('outboxOfflineQueued', 'Offline - %n% message(s) queued').replace('%n%', pending.length);
         hint.classList.remove('hidden');
       } else if (offline) {
-        hint.textContent = 'Offline - messages will send when you reconnect';
+        hint.textContent = window.__lcS('outboxOfflineIdle', 'Offline - messages will send when you reconnect');
         hint.classList.remove('hidden');
       } else if (pending.length) {
-        hint.textContent = 'Sending ' + pending.length + ' queued message(s)…';
+        hint.textContent = window.__lcS('outboxSending', 'Sending %n% queued message(s)…').replace('%n%', pending.length);
         hint.classList.remove('hidden');
       } else {
         hint.textContent = '';

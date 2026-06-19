@@ -21,9 +21,9 @@
     audiooutput: 'lc.dev.audiooutput',
   };
   var KIND_LABEL = {
-    audioinput: 'Microphone',
-    videoinput: 'Camera',
-    audiooutput: 'Speaker',
+    audioinput: window.__lcS('deviceMicrophone', 'Microphone'),
+    videoinput: window.__lcS('deviceCamera', 'Camera'),
+    audiooutput: window.__lcS('deviceSpeaker', 'Speaker'),
   };
 
   function get(kind) {
