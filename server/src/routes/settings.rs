@@ -28,6 +28,27 @@ pub struct SettingsQuery {
     pub saved: Option<String>,
 }
 
+/// LC-347: cache-buster for the avatar preview `<img>`. The avatar route serves
+/// `Cache-Control: max-age=300`, and the page-wide `asset_version` is a build
+/// constant that never moves on upload, so without this the browser shows the
+/// stale avatar for up to 5 minutes after a successful upload. Keying on the
+/// avatar file's mtime makes the URL change exactly when the image does. Falls
+/// back to `asset_version` when the user has no custom avatar (the `<img>` is
+/// not rendered in that case, so the value only has to be stable).
+async fn avatar_cache_key(user: &crate::models::User, asset_version: &str) -> String {
+    let Some(ext) = user.avatar_ext.as_deref() else {
+        return asset_version.to_string();
+    };
+    let path = db::avatars_dir().join(format!("{}.{}", user.id, ext));
+    match tokio::fs::metadata(&path).await.and_then(|m| m.modified()) {
+        Ok(mtime) => match mtime.duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => d.as_nanos().to_string(),
+            Err(_) => asset_version.to_string(),
+        },
+        Err(_) => asset_version.to_string(),
+    }
+}
+
 #[derive(Deserialize)]
 pub struct SettingsForm {
     #[serde(default)]
@@ -155,6 +176,7 @@ pub async fn get_settings(
     }
 
     let keywords = db::notification_keywords::list(&state.auth, &user.id).await?;
+    let avatar_version = avatar_cache_key(&user, &state.asset_version).await;
 
     let page = UserSettingsPage {
         user: &user,
@@ -167,6 +189,7 @@ pub async fn get_settings(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        avatar_version,
         saved: q.saved.is_some(),
         push_available: state.push_available(),
         email,
@@ -775,7 +798,9 @@ pub async fn post_profile(
         },
     );
 
-    Ok(Redirect::to("/settings").into_response())
+    // LC-347: flash "Saved." on return (mirrors post_language / post_appearance)
+    // so the user gets explicit confirmation the profile + avatar were saved.
+    Ok(Redirect::to("/settings?saved=1").into_response())
 }
 
 pub async fn get_blocked_list(
