@@ -12,48 +12,69 @@
      data-self-id="{{ user.id }}"
      data-self-name="{{ user.display_label() }}"
      data-ice-servers="{{ ice_servers }}">
-  <header class="flex items-center gap-3 border-b border-slate-200 px-4 py-2">
-    <h1 class="truncate font-semibold">{{ room.name }}</h1>
-    <span class="rounded bg-slate-200 px-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">{{ "voice-badge"|t }}</span>
+  {# LC-402: in-call control bar. Two logical clusters - media controls
+     (Mute / Start video / Share screen) and session actions (Transcribe /
+     Transcript panel / Leave) - separated by a divider. All controls except
+     the device gear and Join are hidden until joined (voice.js toggles them).
+     On/off state rides aria-pressed; Leave is danger-styled, Transcribe is the
+     "recording" toggle that pairs with the live pill + drawer header. #}
+  <header class="lc-callbar">
+    <div class="flex min-w-0 items-center gap-2">
+      <h1 class="truncate font-semibold">{{ room.name }}</h1>
+      <span class="rounded bg-surface-sunken px-1.5 text-xs font-medium uppercase tracking-wide text-content-muted">{{ "voice-badge"|t }}</span>
+      <span data-lc-voice-count class="lc-voice-countchip hidden rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-content-muted" aria-label="{{ "voice-in-call"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zM6 8a2 2 0 11-4 0 2 2 0 014 0zM1.49 15.326a.78.78 0 01-.358-.442 3 3 0 014.308-3.516 6.484 6.484 0 00-1.905 3.959c-.023.222-.014.442.025.654a4.97 4.97 0 01-2.07-.655zM16.44 15.98a4.97 4.97 0 002.07-.654.78.78 0 00.357-.442 3 3 0 00-4.308-3.517 6.484 6.484 0 011.907 3.96 2.32 2.32 0 01-.026.654zM18 8a2 2 0 11-4 0 2 2 0 014 0zM5.304 16.19a.844.844 0 01-.277-.71 5 5 0 019.947 0 .843.843 0 01-.277.71A6.975 6.975 0 0110 18a6.974 6.974 0 01-4.696-1.81z"/>
+        </svg>
+        <span data-lc-voice-count-n>0</span>
+      </span>
+    </div>
     <div class="flex-1"></div>
-    <button type="button" data-lc-open-devices title="{{ "voice-devices"|t }}" aria-label="{{ "voice-choose-devices"|t }}"
-            class="rounded bg-slate-200 px-2 py-1.5 text-slate-600 hover:bg-slate-300">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-      </svg>
-    </button>
-    <button type="button" data-lc-voice-join
-            class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">{{ "voice-join"|t }}</button>
-    <button type="button" data-lc-voice-mute
-            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">{{ "voice-mute"|t }}</button>
-    <button type="button" data-lc-voice-camera
-            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "voice-start-video"|t }}</button>
-    <button type="button" data-lc-voice-screen
-            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">{{ "voice-share-screen"|t }}</button>
-    {# LC-393 Phase 2: transcription toggle for the channel. Hidden until joined
-       (voice.js toggles it); data-lc-room tells transcribe.js which room to open
-       a session for. Disabled with the unsupported note where SpeechRecognition
-       is missing. #}
-    <button type="button" data-lc-transcribe-toggle data-lc-room="{{ room.id }}"
-            aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}"
-            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 aria-pressed:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "transcript-toggle"|t }}</button>
-    <button type="button" data-lc-voice-leave
-            class="hidden rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">{{ "voice-leave"|t }}</button>
+
+    <div class="lc-callbar-group">
+      <button type="button" data-lc-open-devices title="{{ "voice-devices"|t }}" aria-label="{{ "voice-choose-devices"|t }}"
+              class="lc-cbtn">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+      <button type="button" data-lc-voice-join class="lc-cbtn lc-cbtn--join">{{ "voice-join"|t }}</button>
+      <button type="button" data-lc-voice-mute aria-pressed="false"
+              class="hidden lc-cbtn">{{ "voice-mute"|t }}</button>
+      <button type="button" data-lc-voice-camera aria-pressed="false"
+              class="hidden lc-cbtn">{{ "voice-start-video"|t }}</button>
+      <button type="button" data-lc-voice-screen aria-pressed="false"
+              class="hidden lc-cbtn">{{ "voice-share-screen"|t }}</button>
+    </div>
+
+    <div data-lc-voice-sep class="lc-callbar-sep hidden"></div>
+
+    <div class="lc-callbar-group">
+      {# LC-393 Phase 2: transcription toggle. Hidden until joined; data-lc-room
+         tells transcribe.js which room to open a session for. The lc-rec-dot +
+         danger on-state (lc-cbtn--rec) tie it to the live pill + drawer. #}
+      <button type="button" data-lc-transcribe-toggle data-lc-room="{{ room.id }}"
+              aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}"
+              class="hidden lc-cbtn lc-cbtn--rec"><span class="lc-rec-dot" aria-hidden="true"></span>{{ "transcript-toggle"|t }}</button>
+      <button type="button" data-lc-transcript-panel-toggle aria-pressed="false"
+              title="{{ "voice-transcript-panel"|t }}" aria-label="{{ "voice-transcript-panel"|t }}"
+              class="hidden lc-cbtn">{{ "voice-transcript-panel"|t }}</button>
+      <button type="button" data-lc-voice-leave
+              class="hidden lc-cbtn lc-cbtn--leave">{{ "voice-leave"|t }}</button>
+    </div>
   </header>
 
-  <div data-lc-voice-preview class="px-4 py-4 text-sm text-slate-500">
+  <div data-lc-voice-preview class="px-4 py-4 text-sm text-content-muted">
     {% if participants.is_empty() %}
-    <span data-lc-voice-preview-empty>{{ "voice-empty-prefix"|t }} <span class="font-medium text-slate-700">{{ "voice-empty-join"|t }}</span> {{ "voice-empty-suffix"|t }}</span>
+    <span data-lc-voice-preview-empty>{{ "voice-empty-prefix"|t }} <span class="font-medium text-content">{{ "voice-empty-join"|t }}</span> {{ "voice-empty-suffix"|t }}</span>
     <span data-lc-voice-preview-list class="hidden">{{ "voice-currently-here"|t }} <span data-lc-voice-preview-names></span></span>
     {% else %}
-    <span data-lc-voice-preview-empty class="hidden">{{ "voice-empty-prefix"|t }} <span class="font-medium text-slate-700">{{ "voice-empty-join"|t }}</span> {{ "voice-empty-suffix"|t }}</span>
-    <span data-lc-voice-preview-list>{{ "voice-currently-here"|t }} <span data-lc-voice-preview-names>{% for p in participants %}<span class="font-medium text-slate-700" data-lc-voice-preview-name="{{ p.user_id }}">{{ p.label }}</span>{% if !loop.last %}, {% endif %}{% endfor %}</span></span>
+    <span data-lc-voice-preview-empty class="hidden">{{ "voice-empty-prefix"|t }} <span class="font-medium text-content">{{ "voice-empty-join"|t }}</span> {{ "voice-empty-suffix"|t }}</span>
+    <span data-lc-voice-preview-list>{{ "voice-currently-here"|t }} <span data-lc-voice-preview-names>{% for p in participants %}<span class="font-medium text-content" data-lc-voice-preview-name="{{ p.user_id }}">{{ p.label }}</span>{% if !loop.last %}, {% endif %}{% endfor %}</span></span>
     {% endif %}
   </div>
 
-  <div data-lc-voice-grid
-       class="flex-1 content-start gap-4 overflow-y-auto p-4"
-       style="display:none; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));"></div>
+  <div data-lc-voice-grid class="lc-voice-grid flex-1 overflow-y-auto p-4" style="display:none;"></div>
 </div>
 {# LC-156: WS room subscription handled declaratively by live.js via the
    data-lc-live-room attribute on the voice root above. #}

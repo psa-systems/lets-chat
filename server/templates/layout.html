@@ -113,14 +113,34 @@
      call overlay) so it works whether or not the fullscreen call dialog is up;
      transcribe.js reveals it whenever a session is active. #lc-caption-log is
      the OOB target the server appends caption lines into. #}
+  {# LC-402: recording awareness pill (shown to every participant whose session
+     is active) + the live transcript drawer. Themed via tokens. The pill and
+     the drawer both carry the pulsing red dot so the "being transcribed" state
+     reads the same in both places and ties to the Transcribe toggle. #}
   <div data-lc-transcript-banner aria-hidden="true" role="status"
-       class="hidden fixed left-1/2 top-3 z-[61] -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/80 px-3 py-1 text-xs text-white shadow-lg">
-    <span class="inline-block h-2 w-2 rounded-full bg-red-500"></span>
+       class="hidden fixed left-1/2 top-3 z-[63] -translate-x-1/2 flex items-center gap-2 rounded-full border border-border bg-surface-elevated px-3 py-1 text-xs text-content shadow-lg">
+    <span class="lc-transcript-rec" aria-hidden="true"></span>
     <span>{{ "transcript-banner"|t }}</span>
   </div>
-  <div data-lc-caption-wrap aria-hidden="true"
-       class="hidden fixed inset-x-0 bottom-0 z-[61] max-h-40 overflow-y-auto bg-gradient-to-t from-black/85 to-transparent px-4 pb-4 pt-6">
-    <div id="lc-caption-log" class="mx-auto max-w-2xl space-y-1"></div>
+  <div data-lc-caption-wrap aria-hidden="true" class="hidden lc-transcript">
+    <div class="lc-transcript-head">
+      <span class="lc-transcript-title"><span class="lc-transcript-rec" aria-hidden="true"></span>{{ "voice-transcript-panel"|t }}</span>
+      <button type="button" data-lc-transcript-close class="lc-transcript-close" aria-label="{{ "voice-transcript-close"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="lc-transcript-body" data-lc-transcript-body>
+      {# #lc-caption-log is the OOB target the server appends caption lines into
+         (ws/transcript_segment.html). #}
+      <div id="lc-caption-log"></div>
+      <button type="button" data-lc-jump-live class="lc-transcript-jump">{{ "voice-jump-live"|t }}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 3a.75.75 0 01.75.75v9.69l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V3.75A.75.75 0 0110 3z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
   </div>
   {% include "scheduled_modal.html" %}
   {% include "poll_modal.html" %}
