@@ -9,6 +9,7 @@ pub mod digest;
 pub mod dnd;
 pub mod email;
 pub mod email_ingress;
+pub mod emoji_catalog;
 pub mod error;
 pub mod http_client;
 pub mod i18n;

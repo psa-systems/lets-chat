@@ -129,78 +129,16 @@ pub async fn get_autocomplete(
     html(&frag)
 }
 
-/// LC-316: curated popular Unicode emojis for the composer picker's browse
-/// grid. Resolved through the `emojis` crate by shortcode so glyph + name come
-/// from the same source the autocomplete uses; an unknown shortcode is silently
-/// skipped (filter_map), so the list can never break the build.
-const POPULAR_SHORTCODES: &[&str] = &[
-    "grinning",
-    "smiley",
-    "smile",
-    "joy",
-    "rofl",
-    "wink",
-    "blush",
-    "heart_eyes",
-    "kissing_heart",
-    "thinking",
-    "neutral_face",
-    "smirk",
-    "sob",
-    "cry",
-    "rage",
-    "scream",
-    "sunglasses",
-    "heart",
-    "thumbsup",
-    "thumbsdown",
-    "ok_hand",
-    "clap",
-    "raised_hands",
-    "pray",
-    "muscle",
-    "wave",
-    "point_up",
-    "fire",
-    "tada",
-    "rocket",
-    "100",
-    "eyes",
-    "sparkles",
-    "star",
-    "zap",
-    "bulb",
-    "white_check_mark",
-    "x",
-    "warning",
-    "question",
-    "exclamation",
-    "bell",
-    "sunny",
-    "partying_face",
-    "see_no_evil",
-    "skull",
-    "poop",
-    "ghost",
-];
-
-fn popular_unicode() -> Vec<EmojiSuggestion> {
-    POPULAR_SHORTCODES
-        .iter()
-        .filter_map(|sc| {
-            emojis::get_by_shortcode(sc)
-                .map(|e| EmojiSuggestion::unicode(e.as_str(), sc.to_string(), e.name().to_string()))
-        })
-        .collect()
-}
-
 /// GET /rooms/:room_id/emoji-picker
 ///
-/// The composer's browse-and-click emoji panel: popular Unicode emojis plus the
-/// room's custom emojis. Access-gated like the autocomplete. Filtering is
-/// client-side (LC-274); insertion at the textarea cursor is client-side too.
-/// Search-by-typing the full Unicode set is the `:shortcode:` autocomplete's
-/// job (LC-296), so this panel deliberately ships only the popular set.
+/// The composer's browse-and-click emoji panel. LC-389: the full `emojis`-crate
+/// set organized into the eight standard categories (browsable via the tab
+/// strip + scroll) plus the room's custom emojis, matching the reaction picker
+/// (the grouping is shared via `crate::emoji_catalog`). Access-gated like the
+/// autocomplete. Filtering is client-side (LC-274 + the LC-389 section
+/// collapse); insertion at the textarea cursor is client-side too. Search-by-
+/// typing across the set is also served by the `:shortcode:` autocomplete
+/// (LC-296).
 pub async fn get_picker(
     State(state): State<AppState>,
     AuthUser(viewer): AuthUser,
@@ -210,14 +148,52 @@ pub async fn get_picker(
     if !db::chat::is_room_accessible(&state.chat, room_id, &viewer.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
-    let mut suggestions = popular_unicode();
+
+    use crate::views::emoji_complete::EmojiCategory;
+    let mut categories: Vec<EmojiCategory> =
+        Vec::with_capacity(crate::emoji_catalog::GROUPS.len() + 1);
+    for &(group, slug, key, tab_glyph) in crate::emoji_catalog::GROUPS {
+        let suggestions = group
+            .emojis()
+            .map(|e| {
+                // Keyword string (name + every shortcode) goes in `name` so the
+                // LC-274 filter searches the whole set; the first shortcode is
+                // the `:title:`. Insert is the literal glyph (no pipeline step).
+                let primary = e.shortcodes().next().unwrap_or_default();
+                EmojiSuggestion::unicode(
+                    e.as_str(),
+                    primary.to_string(),
+                    crate::emoji_catalog::keywords(e),
+                )
+            })
+            .collect();
+        categories.push(EmojiCategory {
+            slug,
+            label: crate::i18n::translate_current(key),
+            tab_glyph,
+            suggestions,
+        });
+    }
+
+    // Per-enclave custom emojis as a trailing Custom category (empty for DMs /
+    // non-enclave rooms, in which case no Custom tab/section renders).
     let mut custom = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
     custom.sort_by(|a, b| a.shortcode.cmp(&b.shortcode));
-    for e in custom {
-        suggestions.push(EmojiSuggestion::custom(e.shortcode, e.id));
+    if !custom.is_empty() {
+        let suggestions = custom
+            .into_iter()
+            .map(|e| EmojiSuggestion::custom(e.shortcode, e.id))
+            .collect();
+        categories.push(EmojiCategory {
+            slug: "custom",
+            label: crate::i18n::translate_current("partials-reaction-cat-custom"),
+            tab_glyph: "⭐",
+            suggestions,
+        });
     }
+
     html(&crate::views::emoji_complete::EmojiPickerFragment {
         room_id,
-        suggestions,
+        categories,
     })
 }

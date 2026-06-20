@@ -115,68 +115,6 @@ pub async fn toggle_reaction(
     html(&fragment)
 }
 
-/// LC-389: the eight standard Unicode emoji categories, in `emojis::Group`
-/// order, each with a stable slug (the tab/section hook), an i18n key for its
-/// label, and a representative glyph for its tab. `Group::emojis()` yields the
-/// group's members in Unicode order, so the rendered grid matches every other
-/// emoji UI the user has seen.
-const EMOJI_GROUPS: &[(emojis::Group, &str, &str, &str)] = &[
-    (
-        emojis::Group::SmileysAndEmotion,
-        "smileys",
-        "partials-reaction-cat-smileys",
-        "😀",
-    ),
-    (
-        emojis::Group::PeopleAndBody,
-        "people",
-        "partials-reaction-cat-people",
-        "👋",
-    ),
-    (
-        emojis::Group::AnimalsAndNature,
-        "nature",
-        "partials-reaction-cat-nature",
-        "🐻",
-    ),
-    (
-        emojis::Group::FoodAndDrink,
-        "food",
-        "partials-reaction-cat-food",
-        "🍔",
-    ),
-    (
-        emojis::Group::TravelAndPlaces,
-        "travel",
-        "partials-reaction-cat-travel",
-        "✈️",
-    ),
-    (
-        emojis::Group::Activities,
-        "activities",
-        "partials-reaction-cat-activities",
-        "⚽",
-    ),
-    (
-        emojis::Group::Objects,
-        "objects",
-        "partials-reaction-cat-objects",
-        "💡",
-    ),
-    (
-        emojis::Group::Symbols,
-        "symbols",
-        "partials-reaction-cat-symbols",
-        "🔣",
-    ),
-    (
-        emojis::Group::Flags,
-        "flags",
-        "partials-reaction-cat-flags",
-        "🚩",
-    ),
-];
-
 /// LC-389: build one react button for a Unicode emoji. The markup is byte-for-
 /// byte the LC-384 shape (same `data-lc-emoji-name` filter hook, same
 /// `hx-post`/`hx-target`/`hx-swap` the LC-288 recorder + close-on-react JS key
@@ -213,7 +151,7 @@ pub async fn get_picker(
     // build is a single allocation rather than a growth cascade.
     let mut tabs = String::new();
     let mut sections = String::with_capacity(400 * 1024);
-    for (group, slug, key, tab_glyph) in EMOJI_GROUPS {
+    for (group, slug, key, tab_glyph) in crate::emoji_catalog::GROUPS {
         let label = attr_escape(&crate::i18n::translate_current(key));
         tabs.push_str(&format!(
             r##"<button type="button" data-lc-emoji-tab="{slug}" aria-label="{label}" title="{label}" class="lc-emoji-tab">{tab_glyph}</button>"##,
@@ -222,16 +160,9 @@ pub async fn get_picker(
             r##"<section class="lc-emoji-section" data-lc-emoji-cat="{slug}"><div class="lc-emoji-cat-label">{label}</div><div class="lc-emoji-cat-grid">"##,
         ));
         for emoji in group.emojis() {
-            // Keyword string: human name first, then every shortcode (so the
-            // filter finds "+1" / "thumbsup" / "thumbs up"). Lowercased so the
-            // case-insensitive LC-274 substring match needs no per-keystroke
-            // work, attribute-escaped against a stray name with a quote.
-            let mut name = emoji.name().to_string();
-            for sc in emoji.shortcodes() {
-                name.push(' ');
-                name.push_str(sc);
-            }
-            let name = attr_escape(&name.to_ascii_lowercase());
+            // Keyword string (name + every shortcode) is shared with the
+            // composer picker, attribute-escaped against a stray quote.
+            let name = attr_escape(&crate::emoji_catalog::keywords(emoji));
             push_unicode_button(&mut sections, message_id, emoji.as_str(), &name);
         }
         sections.push_str("</div></section>");
