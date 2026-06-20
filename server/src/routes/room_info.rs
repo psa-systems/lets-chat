@@ -196,16 +196,19 @@ pub async fn get_page(
     let can_edit_wiki =
         db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role).await?;
     let current_enclave = super::enclave_for_room(&state, room_id).await?;
-    let can_manage_overrides = {
-        let er = if let Some(eid) = current_enclave {
-            db::enclave::get_membership(&state.chat, eid, &user.id)
-                .await?
-                .map(|m| m.role)
-        } else {
-            None
-        };
-        crate::perms::room_can_manage_overrides(er, &user.role)
+    let enclave_role = if let Some(eid) = current_enclave {
+        db::enclave::get_membership(&state.chat, eid, &user.id)
+            .await?
+            .map(|m| m.role)
+    } else {
+        None
     };
+    let can_manage_overrides = crate::perms::room_can_manage_overrides(enclave_role, &user.role);
+    // LC-400: enclave owner/admin (or site admin) can delete the room from this
+    // page. The delete-room affordance was orphaned when LC-336 removed the
+    // enclave landing menu; this restores it on the room's own info page, gated
+    // by the same `enclave_can_manage` that `post_delete_room` enforces.
+    let can_manage = crate::perms::enclave_can_manage(enclave_role, &user.role);
 
     // Pinned rows only when the pinned tab is active. Cheap to skip
     // otherwise.
@@ -263,6 +266,8 @@ pub async fn get_page(
         wiki_updated_by_label,
         can_edit_wiki,
         can_manage_overrides,
+        can_manage,
+        enclave_id: current_enclave,
         pinned: &pinned,
         files: &files,
         files_kind,
