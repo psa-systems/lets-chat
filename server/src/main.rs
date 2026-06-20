@@ -132,6 +132,19 @@ async fn main() {
         }
     };
 
+    // LC-393 Phase 3: optional server-side STT. Enabled by LETS_CHAT_STT_URL;
+    // when unset, transcription stays on the in-browser Web Speech engine.
+    let stt_client: Option<std::sync::Arc<dyn lets_chat::stt::SttClient>> =
+        match lets_chat::stt::SttConfig::from_env() {
+            Some(cfg) => {
+                tracing::info!(target: "stt", url = %cfg.url, model = %cfg.model, "server-side STT enabled");
+                Some(std::sync::Arc::new(lets_chat::stt::ReqwestSttClient::new(
+                    cfg,
+                )))
+            }
+            None => None,
+        };
+
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
@@ -155,6 +168,7 @@ async fn main() {
         ice_servers,
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso,
+        stt_client,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

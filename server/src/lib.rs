@@ -29,6 +29,7 @@ pub mod routes;
 pub mod scheduled;
 pub mod ssrf;
 pub mod state;
+pub mod stt;
 pub mod uploads;
 pub mod version;
 pub mod views;

@@ -41,6 +41,28 @@ async fn post(app: &Router, sess: &str, uri: &str, body: Option<&str>) -> (Statu
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+async fn post_raw(
+    app: &Router,
+    sess: &str,
+    uri: &str,
+    body: &[u8],
+    content_type: &str,
+) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={sess}"))
+        .header(header::CONTENT_TYPE, content_type)
+        .body(Body::from(body.to_vec()))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
     let req = Request::builder()
         .method(Method::GET)
@@ -70,6 +92,10 @@ struct Setup {
 }
 
 async fn setup() -> Setup {
+    setup_with_stt(None).await
+}
+
+async fn setup_with_stt(stt_client: Option<Arc<dyn lets_chat::stt::SttClient>>) -> Setup {
     ensure_tempdir();
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
@@ -134,6 +160,7 @@ async fn setup() -> Setup {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client,
     };
     Setup {
         app: routes::build_router(state),
@@ -324,6 +351,79 @@ async fn segments_persist_and_render_gated() {
     assert!(page.contains("general kenobi"));
     let (st, _) = get(&s.app, &s.outsider_session, &format!("/transcripts/{tid}")).await;
     assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn server_stt_audio_records_segment() {
+    // Phase 3: with a server STT client configured, an audio clip POSTed to
+    // /audio is transcribed and stored as a segment (here via a mock engine).
+    let mock: Arc<dyn lets_chat::stt::SttClient> = Arc::new(lets_chat::stt::MockSttClient {
+        canned: "mock transcription".to_string(),
+    });
+    let s = setup_with_stt(Some(mock)).await;
+
+    // Bob joins the voice channel and opens a session.
+    let (conn, _rx, _) = s.hub.connect(&s.b_id, "bob");
+    s.hub.voice_join(conn, s.voice_room);
+    let (_, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.voice_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+
+    // POST an audio clip; the mock engine returns the canned text, stored as a
+    // segment attributed to bob.
+    let (st, _) = post_raw(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"fake-opus-bytes",
+        "audio/webm",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(segs[0].text, "mock transcription");
+    assert_eq!(segs[0].user_id, s.b_id);
+
+    // A non-participant still cannot push audio.
+    let (st, _) = post_raw(
+        &s.app,
+        &s.outsider_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"x",
+        "audio/webm",
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn audio_rejected_when_server_stt_disabled() {
+    // Default setup has no STT client: /audio is 400 (clients only POST audio
+    // when /call/config reports sttServer=true).
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    let (st, _) = post_raw(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"audio",
+        "audio/webm",
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

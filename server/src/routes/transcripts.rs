@@ -117,6 +117,35 @@ async fn broadcast_to_members(
     }
 }
 
+/// Store one final speech result (trimmed, length-capped in the db layer) and
+/// fan it out as an attributed live caption. Shared by the browser-text path
+/// (`segment`) and the server-STT path (`audio`). A blank result is a no-op.
+async fn record_and_broadcast(
+    state: &AppState,
+    room: &Room,
+    transcript_id: i64,
+    user: &User,
+    text: &str,
+) -> Result<(), AppError> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed).await?;
+    let speaker = label_for(state, &user.id).await;
+    let body = trimmed.to_string();
+    broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
+        room_id: room.id,
+        to_user_id: to,
+        transcript_id,
+        speaker_id: user.id.clone(),
+        speaker_name: speaker.clone(),
+        text: body.clone(),
+    })
+    .await;
+    Ok(())
+}
+
 /// POST /call/{room_id}/transcript/start
 /// Open (or join) the call's transcription session and notify both members.
 pub async fn start(
@@ -159,22 +188,55 @@ pub async fn segment(
     require_participant(&state, &user, &room).await?;
     // A late segment after the session closed is benign - drop it silently so
     // the client never has to special-case the end race.
-    let trimmed = text.trim();
-    if session.status != "active" || trimmed.is_empty() {
+    if session.status != "active" {
         return Ok(Html(String::new()));
     }
-    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed).await?;
-    let speaker = label_for(&state, &user.id).await;
-    let body = trimmed.to_string();
-    broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptSegment {
-        room_id: room.id,
-        to_user_id: to,
-        transcript_id,
-        speaker_id: user.id.clone(),
-        speaker_name: speaker.clone(),
-        text: body.clone(),
-    })
-    .await;
+    record_and_broadcast(&state, &room, transcript_id, &user, &text).await?;
+    Ok(Html(String::new()))
+}
+
+/// POST /call/transcript/{id}/audio
+/// LC-393 Phase 3: server-side STT. Accepts one short audio clip (raw body, the
+/// browser's MediaRecorder webm/opus), forwards it to the operator's configured
+/// STT endpoint, and records the returned text as a segment + live caption -
+/// same persistence/broadcast path as `segment`, just a different producer.
+/// Gated to participants; 400 when server STT is not configured.
+pub async fn audio(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_participant(&state, &user, &room).await?;
+    let Some(stt) = state.stt_client.clone() else {
+        return Err(AppError::BadRequest(
+            "server-side transcription is not configured".into(),
+        ));
+    };
+    // Late clip after the session closed, or an empty body: drop silently.
+    if session.status != "active" || body.is_empty() {
+        return Ok(Html(String::new()));
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("audio/webm")
+        .to_string();
+    // A transcription failure (engine down / bad clip) must not fail the call:
+    // log and drop this clip so capture keeps running.
+    let text = match stt.transcribe(body.to_vec(), &content_type).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!(error = %e, "stt transcription failed; dropping clip");
+            return Ok(Html(String::new()));
+        }
+    };
+    record_and_broadcast(&state, &room, transcript_id, &user, &text).await?;
     Ok(Html(String::new()))
 }
 
