@@ -148,7 +148,7 @@ pub async fn get_picker(
     for (e, name) in &unicode_defaults {
         let encoded = percent_encoding::utf8_percent_encode(e, percent_encoding::NON_ALPHANUMERIC);
         buttons.push_str(&format!(
-            r##"<button data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="text-base">{e}</button>"##,
+            r##"<button data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="lc-emoji-cell">{e}</button>"##,
         ));
     }
 
@@ -160,7 +160,7 @@ pub async fn get_picker(
         // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
         // so it is safe to inline into the markup without escaping.
         buttons.push_str(&format!(
-            r##"<button data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="text-base" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
+            r##"<button data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="lc-emoji-cell" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
             id = message_id,
             enc = encoded,
             code = emoji.shortcode,
@@ -175,14 +175,22 @@ pub async fn get_picker(
     // LC-288: empty recent-emoji row; the layout IIFE fills it from localStorage
     // when the picker opens (hidden when there is no history).
     let recent_label = attr_escape(&crate::i18n::translate_current("partials-reaction-recent"));
+    // LC-384: the picker is now a floating card rendered into the fixed-position
+    // #lc-reaction-popover host (positioned by the layout.html LC-384 script), so
+    // it no longer carries inline-flow / width-pinning classes. The id MUST stay
+    // `picker-{id}` - the LC-288 recent-row JS derives the message id from it and
+    // the LC-274 filter keys on `[id^="picker-"]`. The close `x` dismisses the
+    // host client-side (data-lc-reaction-close); the old hx-get .../cancel inline
+    // restore is gone.
+    let close_label = attr_escape(&crate::i18n::translate_current("reminders-close"));
     let body = format!(
-        r##"<div id="picker-{message_id}" class="inline-flex flex-col gap-1 rounded border border-border bg-surface-elevated p-1 shadow">
-  <div class="flex items-center gap-1">
-    <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="w-32 rounded border border-border px-1 py-0.5 text-xs">
-    <button hx-get="/messages/{message_id}/reactions/cancel" hx-target="#picker-{message_id}" hx-swap="outerHTML" class="text-xs text-content-muted hover:text-content px-1" aria-label="Close">×</button>
+        r##"<div id="picker-{message_id}" class="w-64 rounded-lg border border-border bg-surface-elevated shadow-lg overflow-hidden">
+  <div class="flex items-center gap-1 p-2 border-b border-border">
+    <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="flex-1 min-w-0 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+    <button type="button" data-lc-reaction-close aria-label="{close_label}" class="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md text-content-muted hover:bg-surface-sunken hover:text-content">&times;</button>
   </div>
-  <div data-lc-emoji-recent data-lc-recent-label="{recent_label}" class="hidden flex flex-wrap gap-1 items-center w-56 text-xs text-content-muted"></div>
-  <div data-lc-emoji-grid class="flex flex-wrap gap-1 max-h-40 overflow-y-auto w-56">{buttons}</div>
+  <div data-lc-emoji-recent data-lc-recent-label="{recent_label}" class="hidden flex flex-wrap items-center gap-1 px-2 py-1.5 text-xs text-content-muted border-b border-border"></div>
+  <div data-lc-emoji-grid class="flex flex-wrap gap-0.5 max-h-44 overflow-y-auto p-2">{buttons}</div>
 </div>"##,
     );
     Ok(axum::response::Html(body).into_response())
