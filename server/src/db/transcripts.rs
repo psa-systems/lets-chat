@@ -153,17 +153,39 @@ pub struct TranscriptListRow {
 /// with the room + a segment count. The caller filters by per-room access (the
 /// archive page gates each row with `is_room_accessible`), so this stays a
 /// simple bounded scan rather than encoding the access rules in SQL.
-pub async fn list_recent(pool: &SqlitePool, limit: i64) -> sqlx::Result<Vec<TranscriptListRow>> {
-    let rows = sqlx::query(
-        "SELECT t.id, t.room_id, t.started_at, t.ended_at, t.status, \
+///
+/// LC-395: when `query` is `Some`, restrict to transcripts containing a segment
+/// matching it (case-insensitive, LIKE-escaped) - the archive search.
+pub async fn list_recent(
+    pool: &SqlitePool,
+    query: Option<&str>,
+    limit: i64,
+) -> sqlx::Result<Vec<TranscriptListRow>> {
+    let base = "SELECT t.id, t.room_id, t.started_at, t.ended_at, t.status, \
                 r.name AS room_name, r.room_type, r.is_voice, \
                 (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) AS segment_count \
-         FROM call_transcripts t JOIN rooms r ON r.id = t.room_id \
-         ORDER BY t.id DESC LIMIT ?",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
+         FROM call_transcripts t JOIN rooms r ON r.id = t.room_id";
+    let pattern = query.map(|q| {
+        let escaped = q
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        format!("%{escaped}%")
+    });
+    let sql = if pattern.is_some() {
+        format!(
+            "{base} WHERE EXISTS (SELECT 1 FROM transcript_segments s \
+             WHERE s.transcript_id = t.id AND s.text LIKE ? ESCAPE '\\' COLLATE NOCASE) \
+             ORDER BY t.id DESC LIMIT ?"
+        )
+    } else {
+        format!("{base} ORDER BY t.id DESC LIMIT ?")
+    };
+    let mut q = sqlx::query(&sql);
+    if let Some(p) = &pattern {
+        q = q.bind(p);
+    }
+    let rows = q.bind(limit).fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|row| TranscriptListRow {

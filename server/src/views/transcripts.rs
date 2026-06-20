@@ -39,6 +39,8 @@ pub struct TranscriptIndexPage<'a> {
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
     pub rows: Vec<TranscriptIndexRow>,
+    /// LC-395: the current search query (echoed into the search box).
+    pub query: String,
 }
 
 /// LC-393: the saved call-transcript page. Carries the standard sidebar chrome
