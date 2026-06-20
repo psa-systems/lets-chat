@@ -16,6 +16,29 @@
     </div>
   </header>
   <div class="flex-1 overflow-y-auto px-4 py-3">
+    {# LC-396: AI summary / action items, only when an LLM endpoint is configured. #}
+    {% if llm_available && !lines.is_empty() %}
+    <div class="mx-auto max-w-2xl mb-4 rounded-md border border-border bg-surface-sunken px-3 py-2">
+      <div class="lc-section-label mb-1">{{ "transcript-summary-heading"|t }}</div>
+      <div id="lc-transcript-summary">
+        {% if let Some(html) = summary_html.as_ref() %}
+        <div class="lc-md text-content">{{ html|safe }}</div>
+        <button type="button"
+                hx-post="/transcripts/{{ transcript_id }}/summary"
+                hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-regenerate"|t }}</button>
+        {% else %}
+        <button type="button"
+                hx-post="/transcripts/{{ transcript_id }}/summary"
+                hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-generate"|t }}</button>
+        <span class="lc-caption text-content-subtle htmx-indicator ml-2">{{ "transcript-summary-working"|t }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
     {% if lines.is_empty() %}
     <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
     {% else %}
