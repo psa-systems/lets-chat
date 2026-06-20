@@ -14,10 +14,14 @@
      (`group-hover` on the message row) plus `group-focus-within` so keyboard
      users tabbing into the row can still reach it - and so it reserves no
      vertical space under every message at rest. #}
+  {# LC-384: opens the floating picker into the shared #lc-reaction-popover host
+     (positioned by the layout.html script) instead of swapping inline in place,
+     so it no longer reflows the conversation. #}
   <button
+    data-lc-reaction-open
     hx-get="/messages/{{ message_id }}/reactions/picker"
-    hx-target="this"
-    hx-swap="outerHTML"
+    hx-target="#lc-reaction-popover"
+    hx-swap="innerHTML"
     aria-label="{{ "partials-reaction-add"|t }}"
     data-lc-tip="{{ "partials-reaction-add"|t }}" data-lc-tip-pos="top"
     aria-haspopup="dialog"
