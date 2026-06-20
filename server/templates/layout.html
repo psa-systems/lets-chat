@@ -126,6 +126,9 @@
   {% include "poll_modal.html" %}
   {% include "shortcuts_modal.html" %}
   {% include "switcher_modal.html" %}
+  {# LC-400: add-room modal in the persistent shell so a live sidebar OOB swap
+     cannot clobber it mid-typing (the `+` button opens it). #}
+  {% include "add_room_modal.html" %}
   {% include "lightbox_modal.html" %}
   <div id="lc-mention-counts" class="hidden"
        data-base-title="lets-chat"
