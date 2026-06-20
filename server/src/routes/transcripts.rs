@@ -12,7 +12,8 @@
 
 use std::collections::HashMap;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
+use axum::response::{IntoResponse, Response};
 use axum::Form;
 use axum::Json;
 use serde::Deserialize;
@@ -375,13 +376,21 @@ async fn post_saved_message(state: &AppState, room: &Room, transcript_id: i64) {
 pub async fn index(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    Query(IndexQuery { q }): Query<IndexQuery>,
 ) -> Result<Html, AppError> {
     // Scan recent transcripts, then keep the ones the viewer can access (cap the
-    // rendered list so a busy instance stays bounded).
+    // rendered list so a busy instance stays bounded). LC-395: an optional `q`
+    // restricts to transcripts containing a matching segment.
     const SCAN: i64 = 300;
     const SHOW: usize = 100;
     let is_admin = user.role == "admin";
-    let candidates = db::transcripts::list_recent(&state.chat, SCAN).await?;
+    let query = q.unwrap_or_default().trim().to_string();
+    let search = if query.is_empty() {
+        None
+    } else {
+        Some(query.as_str())
+    };
+    let candidates = db::transcripts::list_recent(&state.chat, search, SCAN).await?;
 
     let mut rows: Vec<TranscriptIndexRow> = Vec::new();
     for c in candidates {
@@ -446,6 +455,7 @@ pub async fn index(
         switcher: &switcher,
         asset_version: &state.asset_version,
         rows,
+        query,
     })
 }
 
@@ -509,4 +519,144 @@ pub async fn show(
         ended: session.status != "active",
         lines,
     })
+}
+
+#[derive(Deserialize)]
+pub struct IndexQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ExportQuery {
+    #[serde(default)]
+    pub format: Option<String>,
+}
+
+/// Parse a `datetime('now')` string ("%Y-%m-%d %H:%M:%S").
+fn parse_dt(s: &str) -> Option<chrono::NaiveDateTime> {
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
+}
+
+/// Seconds -> "HH:MM:SS".
+fn fmt_clock(secs: f64) -> String {
+    let total = secs.max(0.0) as u64;
+    format!(
+        "{:02}:{:02}:{:02}",
+        total / 3600,
+        (total % 3600) / 60,
+        total % 60
+    )
+}
+
+/// Seconds -> WebVTT "HH:MM:SS.mmm".
+fn fmt_vtt(secs: f64) -> String {
+    let s = secs.max(0.0);
+    let total = s as u64;
+    let ms = ((s - total as f64) * 1000.0).round() as u64;
+    format!(
+        "{:02}:{:02}:{:02}.{:03}",
+        total / 3600,
+        (total % 3600) / 60,
+        total % 60,
+        ms
+    )
+}
+
+/// GET /transcripts/{id}/export?format=txt|vtt
+/// LC-395: download a saved transcript as plain text or WebVTT. Gated like the
+/// transcript page; served as an attachment.
+pub async fn export(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+    Query(ExportQuery { format }): Query<ExportQuery>,
+) -> Result<Response, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
+
+    // Resolve speaker labels (cache) and each segment's offset from the call
+    // start, in seconds.
+    let start = parse_dt(&session.started_at);
+    let mut names: HashMap<String, String> = HashMap::new();
+    let mut lines: Vec<(f64, String, String)> = Vec::with_capacity(segments.len());
+    for s in &segments {
+        let name = match names.get(&s.user_id) {
+            Some(n) => n.clone(),
+            None => {
+                let n = label_for(&state, &s.user_id).await;
+                names.insert(s.user_id.clone(), n.clone());
+                n
+            }
+        };
+        let off = match (start, parse_dt(&s.spoken_at)) {
+            (Some(a), Some(b)) => (b - a).num_milliseconds().max(0) as f64 / 1000.0,
+            _ => 0.0,
+        };
+        lines.push((off, name, s.text.clone()));
+    }
+
+    let vtt = format.as_deref() == Some("vtt");
+    let (body, content_type, ext) = if vtt {
+        (build_vtt(&lines), "text/vtt; charset=utf-8", "vtt")
+    } else {
+        (
+            build_txt(&room.name, &session.started_at, &lines),
+            "text/plain; charset=utf-8",
+            "txt",
+        )
+    };
+    let headers = [
+        (axum::http::header::CONTENT_TYPE, content_type.to_string()),
+        (
+            axum::http::header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"transcript-{transcript_id}.{ext}\""),
+        ),
+    ];
+    Ok((headers, body).into_response())
+}
+
+/// Plain-text transcript: a header then `HH:MM:SS  Speaker: text` per line.
+fn build_txt(room_name: &str, started_at: &str, lines: &[(f64, String, String)]) -> String {
+    let mut out = format!("Call transcript - {room_name} - {started_at}\n\n");
+    for (off, speaker, text) in lines {
+        out.push_str(&format!("{}  {}: {}\n", fmt_clock(*off), speaker, text));
+    }
+    out
+}
+
+/// WebVTT transcript. Cue times are forced monotonic (the stored timestamps are
+/// only second-resolution, so several segments can share an offset): each cue
+/// starts at `max(real_offset, prev_end)` and ends at the next cue's start (last
+/// gets a short tail), guaranteeing valid, ordered, non-zero-length cues.
+fn build_vtt(lines: &[(f64, String, String)]) -> String {
+    let mut out = String::from("WEBVTT\n\n");
+    let mut cursor = 0.0_f64;
+    for (i, (off, speaker, text)) in lines.iter().enumerate() {
+        let start = off.max(cursor);
+        let next = lines.get(i + 1).map(|(o, _, _)| *o).unwrap_or(start + 3.0);
+        let end = next.max(start + 2.0);
+        cursor = end;
+        // Escape the VTT-significant characters in the cue payload.
+        let safe = text
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        let safe_speaker = speaker
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        out.push_str(&format!(
+            "{} --> {}\n<v {}>{}\n\n",
+            fmt_vtt(start),
+            fmt_vtt(end),
+            safe_speaker,
+            safe
+        ));
+    }
+    out
 }
