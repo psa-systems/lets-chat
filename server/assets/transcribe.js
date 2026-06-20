@@ -189,12 +189,33 @@
       alert(msg);
       return;
     }
-    // The TranscriptStarted bus event (to us, too) drives the banner + capture,
-    // so this POST only needs to open the session server-side.
+    // LC-396: drive OUR OWN UI directly from the response (it returns
+    // {transcript_id}) - do NOT depend on receiving our own TranscriptStarted
+    // event back over the WebSocket. That self-echo was an extra, fragile hop
+    // and when it didn't arrive the starter saw nothing at all (notably on 1:1
+    // calls). The #lc-transcript-bus event still drives the OTHER participants;
+    // the two paths are idempotent (capture guards on `capturing`, the banner
+    // toggle is a no-op when already shown). Failures are surfaced, not swallowed.
     fetch('/call/' + room + '/transcript/start', {
       method: 'POST',
       credentials: 'same-origin'
-    }).catch(function () {});
+    }).then(function (r) {
+      if (!r.ok) {
+        try { console.warn('lets-chat: transcription start failed', r.status); } catch (e) {}
+        alert('Could not start transcription (error ' + r.status + ').');
+        return null;
+      }
+      return r.json();
+    }).then(function (j) {
+      if (j && j.transcript_id != null) {
+        transcriptId = parseInt(j.transcript_id, 10);
+        showBanner(true);
+        setToggle(true);
+        startLocalCapture();
+      }
+    }).catch(function () {
+      alert('Could not start transcription (network error).');
+    });
   }
   function endSession() {
     var id = transcriptId;
