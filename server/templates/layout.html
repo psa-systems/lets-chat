@@ -848,8 +848,8 @@ document.body.addEventListener('click', function(e){
 // This positions the host next to the trigger - fixed positioning escapes the
 // #messages overflow clip, so the picker floats above the conversation rather
 // than reflowing it. One host = single-open; dismiss on outside-click / Escape
-// / a react / scroll of the list. Permanent + delegated (the picker is
-// htmx-swapped in/out of the persistent host).
+// / a react (NOT on scroll/resize - see the fixup note below). Permanent +
+// delegated (the picker is htmx-swapped in/out of the persistent host).
 (function(){
   var trigger = null;
   function host(){ return document.getElementById('lc-reaction-popover'); }
@@ -902,20 +902,21 @@ document.body.addEventListener('click', function(e){
     if (e.target === h || (h.contains && h.contains(e.target))) {
       place();
       var f = h.querySelector('[data-lc-emoji-filter]');
-      if (f) f.focus();
+      // preventScroll so focusing the filter never scrolls an ancestor.
+      if (f) { try { f.focus({ preventScroll: true }); } catch (e2) { f.focus(); } }
     }
   });
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && open()) { var t = trigger; hide(); if (t) t.focus(); }
   });
-  window.addEventListener('resize', hide);
-  // Close on a scroll of the message list (the anchored trigger moved), but not
-  // on a scroll inside the picker's own emoji grid.
-  document.addEventListener('scroll', function(e){
-    if (!open()) return;
-    if (e.target && host().contains && host().contains(e.target)) return;
-    hide();
-  }, true);
+  // LC-384 fixup: deliberately NO scroll/resize auto-dismiss. The earlier version
+  // closed on any document scroll (capture) and on resize, which fired on stray
+  // trackpad scrolls, the filter-input focus, and the mobile keyboard - so the
+  // picker vanished the moment the pointer reached into it. The popover is fixed
+  // and anchored at open time (the add-reaction trigger is hover-revealed, so it
+  // collapses to display:none once the pointer leaves the row and can no longer
+  // be re-measured); it stays put and closes only on outside-click / Escape / a
+  // react. A list scroll lets it drift slightly, harmless for the interaction.
 })();
 </script>
 <script>
