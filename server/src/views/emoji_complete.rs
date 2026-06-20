@@ -59,13 +59,27 @@ pub struct EmojiPopoverFragment<'a> {
     pub results: &'a [EmojiSuggestion],
 }
 
-/// LC-316: the composer emoji picker panel - a browse-and-click grid of popular
-/// Unicode emojis plus the room's custom emojis, filtered client-side (LC-274)
-/// and inserted at the textarea cursor. Full-Unicode search-by-typing is the
-/// `:shortcode:` autocomplete's job (LC-296); this is the click surface.
+/// LC-389: one labeled category in the composer picker - a section header + a
+/// grid of click-to-insert buttons. `slug` is the `data-lc-emoji-cat` /
+/// `data-lc-emoji-tab` hook (shared with the reaction picker's JS); `label` is
+/// already translated; `tab_glyph` is the strip icon that scrolls to it.
+pub struct EmojiCategory {
+    pub slug: &'static str,
+    pub label: String,
+    pub tab_glyph: &'static str,
+    pub suggestions: Vec<EmojiSuggestion>,
+}
+
+/// LC-316 / LC-389: the composer emoji picker panel. Originally a small "popular"
+/// grid (LC-316); LC-389 expands it to the full `emojis`-crate set organized
+/// into the eight standard categories (browsable via the tab strip + scroll)
+/// plus the room's custom emojis, matching the reaction picker. Filtered
+/// client-side (LC-274 + the LC-389 section-collapse) and inserted at the
+/// textarea cursor; the `:shortcode:` autocomplete (LC-296) remains the
+/// search-by-typing surface.
 #[derive(Template)]
 #[template(path = "partials/emoji_picker.html")]
 pub struct EmojiPickerFragment {
     pub room_id: i64,
-    pub suggestions: Vec<EmojiSuggestion>,
+    pub categories: Vec<EmojiCategory>,
 }
