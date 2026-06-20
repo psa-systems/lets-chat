@@ -69,6 +69,26 @@
 
   {% include "room/nickname_section.html" %}
 
+  {# LC-400: delete-room affordance. The enclave landing menu that used to host
+     room management was removed in LC-336, orphaning the delete route; this
+     restores it on the room's own info page. Gated by `can_manage`
+     (enclave_can_manage), the same role `post_delete_room` enforces. Native
+     POST so the handler's redirect (out of the now-deleted room) runs as a full
+     navigation; the JS confirm guards the destructive action. #}
+  {% if can_manage %}{% if let Some(eid) = enclave_id %}
+  <section class="space-y-2 border-t border-border pt-4">
+    <h2 class="font-semibold text-danger">{{ "room-info-danger-heading"|t }}</h2>
+    <form method="post" action="/enclave/{{ eid }}/rooms/{{ room.id }}/delete"
+          data-lc-confirm="{{ "room-info-delete-room-confirm"|t }}"
+          onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
+      <button type="submit"
+              class="rounded border border-danger text-danger hover:bg-danger hover:text-danger-content text-sm px-3 py-1">
+        {{ "room-info-delete-room"|t }}
+      </button>
+    </form>
+  </section>
+  {% endif %}{% endif %}
+
   {% else if active_tab == "pinned" %}
 
   <section class="space-y-3">
