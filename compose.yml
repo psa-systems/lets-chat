@@ -12,6 +12,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
+    # Only the basics are set inline. The required Bunyip SSO vars and all
+    # optional features (SMTP mail, server-side call transcription via
+    # LETS_CHAT_STT_URL, AI transcript summaries via LETS_CHAT_LLM_URL, ...) are
+    # supplied via an env file - copy .env.standalone (or .env.saas), fill it in,
+    # and add `env_file: [.env.standalone]` here (or run with `--env-file`).
     environment:
       RUST_LOG: lets_chat=info
       LETS_CHAT_DATA_DIR: /data
