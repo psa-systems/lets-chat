@@ -1344,13 +1344,15 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     width: 1.25rem;
 }
 
-/* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
-   (inset shadow follows the rounded corners) for a strong, scannable active
-   state without a layout-shifting border. Paired in the row templates with a
-   bold-unread / muted-room treatment driven by per-row conditionals. */
+/* LC-371 / LC-381: active sidebar room / DM row. LC-381 lightens the prior
+   full soft-accent fill (which read heavy in-room) to a neutral raised surface
+   plus an accent left bar and accent-colored, bold label - a clear but quiet
+   active state. The inset shadow bar follows the rounded corners and shifts no
+   layout. Paired in the row templates with a bold-unread / muted-room treatment
+   driven by per-row conditionals. */
 .lc-room-row-active {
-    background-color: var(--accent-surface);
-    color: var(--accent-surface-content);
+    background-color: var(--surface-elevated);
+    color: var(--accent);
     font-weight: 600;
     box-shadow: inset 3px 0 0 0 var(--accent);
 }
