@@ -819,7 +819,18 @@ pub async fn post_message(
     // every connection via the WS hub, and hx-on::after-request clears the
     // textarea + disables the send button based on `event.detail.successful`
     // (true for any 2xx including 204).
-    Ok(StatusCode::NO_CONTENT.into_response())
+    //
+    // LC-382: carry the new message id in a header so the composer's WS-miss
+    // watchdog can, if the WS NewMessage broadcast is missed, fetch this exact
+    // message (GET /messages/{id}) and swap it into its stuck optimistic
+    // placeholder *in place* - no full-list reload, no scroll jump.
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-lc-message-id"),
+        axum::http::HeaderValue::from_str(&new_id.to_string())
+            .expect("decimal message id is a valid header value"),
+    );
+    Ok(response)
 }
 
 /// LC-341: the fully-gated Coyote Mode decision + action, extracted from
