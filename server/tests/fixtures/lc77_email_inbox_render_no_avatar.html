@@ -131,10 +131,12 @@
     <div id="reactions-1" class="flex flex-wrap gap-1 items-center">
   
   
+  
   <button
+    data-lc-reaction-open
     hx-get="/messages/1/reactions/picker"
-    hx-target="this"
-    hx-swap="outerHTML"
+    hx-target="#lc-reaction-popover"
+    hx-swap="innerHTML"
     aria-label="Add reaction"
     data-lc-tip="Add reaction" data-lc-tip-pos="top"
     aria-haspopup="dialog"

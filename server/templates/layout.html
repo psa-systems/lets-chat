@@ -127,6 +127,12 @@
   <div id="lc-forward-modal"></div>
   {# LC-334: singleton slot for the report-a-message modal. #}
   <div id="lc-report-modal"></div>
+  {# LC-384: singleton, fixed-position host for the reaction emoji picker. The
+     add-reaction button loads the picker (htmx) in here; the LC-384 script
+     positions it next to the trigger - fixed positioning escapes the #messages
+     overflow clip, so the picker floats above the conversation instead of
+     reflowing it. Single host = inherently single-open. #}
+  <div id="lc-reaction-popover" role="dialog" aria-label="{{ "partials-reaction-add"|t }}" class="fixed z-50 hidden"></div>
 </div>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser
@@ -833,6 +839,83 @@ document.body.addEventListener('click', function(e){
     var row = e.target.closest && e.target.closest('[data-lc-quick-react]');
     if (row) fillQuick(row);
   });
+})();
+</script>
+<script>
+// LC-384: reaction emoji-picker popover. The add-reaction button (LC-377,
+// [data-lc-reaction-open]) loads the picker (reactions::get_picker) into the
+// shared fixed-position host #lc-reaction-popover instead of swapping inline.
+// This positions the host next to the trigger - fixed positioning escapes the
+// #messages overflow clip, so the picker floats above the conversation rather
+// than reflowing it. One host = single-open; dismiss on outside-click / Escape
+// / a react / scroll of the list. Permanent + delegated (the picker is
+// htmx-swapped in/out of the persistent host).
+(function(){
+  var trigger = null;
+  function host(){ return document.getElementById('lc-reaction-popover'); }
+  function open(){ var h = host(); return h && !h.classList.contains('hidden'); }
+  function hide(){
+    var h = host(); if (!h) return;
+    h.classList.add('hidden');
+    h.replaceChildren();
+    trigger = null;
+  }
+  function place(){
+    var h = host(); if (!h || !trigger) return;
+    var GAP = 6, MARGIN = 8;
+    h.style.visibility = 'hidden';
+    h.classList.remove('hidden');
+    var r = trigger.getBoundingClientRect();
+    var hr = h.getBoundingClientRect();
+    // Prefer below the trigger; flip above when it would overflow the viewport.
+    var top = r.bottom + GAP;
+    if (top + hr.height > window.innerHeight - MARGIN && r.top - GAP - hr.height > MARGIN) {
+      top = r.top - GAP - hr.height;
+    }
+    var left = Math.max(MARGIN, Math.min(r.left, window.innerWidth - hr.width - MARGIN));
+    top = Math.max(MARGIN, Math.min(top, window.innerHeight - hr.height - MARGIN));
+    h.style.left = Math.round(left) + 'px';
+    h.style.top = Math.round(top) + 'px';
+    h.style.visibility = 'visible';
+  }
+  // Capture which button opened the picker (runs before htmx fires the swap).
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-lc-reaction-open]');
+    if (t) { trigger = t; return; }
+    // A react inside the picker (grid / recent button) closes it after the post.
+    if (open() && e.target.closest && e.target.closest('#lc-reaction-popover [hx-post*="/reactions/"]')) {
+      setTimeout(hide, 0);
+      return;
+    }
+    // Explicit close affordance.
+    if (open() && e.target.closest && e.target.closest('[data-lc-reaction-close]')) {
+      var c = trigger; hide(); if (c) c.focus();
+      return;
+    }
+    // Outside click.
+    if (open() && !host().contains(e.target)) hide();
+  });
+  // Position + focus the filter once the picker has settled into the host.
+  document.body.addEventListener('htmx:afterSettle', function(e){
+    var h = host();
+    if (!h || !e || !e.target) return;
+    if (e.target === h || (h.contains && h.contains(e.target))) {
+      place();
+      var f = h.querySelector('[data-lc-emoji-filter]');
+      if (f) f.focus();
+    }
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && open()) { var t = trigger; hide(); if (t) t.focus(); }
+  });
+  window.addEventListener('resize', hide);
+  // Close on a scroll of the message list (the anchored trigger moved), but not
+  // on a scroll inside the picker's own emoji grid.
+  document.addEventListener('scroll', function(e){
+    if (!open()) return;
+    if (e.target && host().contains && host().contains(e.target)) return;
+    hide();
+  }, true);
 })();
 </script>
 <script>

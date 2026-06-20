@@ -1419,6 +1419,24 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     color: var(--danger);
 }
 
+/* LC-384: emoji-picker grid cell. Consistent square cells with a sunken hover,
+   for both the reaction picker (reactions::get_picker) and parity with the
+   composer picker. */
+.lc-emoji-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.875rem;
+    border-radius: 0.375rem;
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.lc-emoji-cell:hover {
+    background-color: var(--surface-sunken);
+}
+
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
    never fires in some browsers), keeps scroll behaviour instant. Tailwind's
