@@ -1780,6 +1780,19 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 }
 .lc-voice-mute-badge svg { height: 0.875rem; width: 0.875rem; }
 .lc-voice-tile[data-muted="true"] .lc-voice-mute-badge { display: inline-flex; }
+/* LC-410: per-peer connection-quality glyph, inside the name pill. Hidden
+   until the tile gets a data-quality (never on the self tile). Recoloured per
+   state; "reconnecting" pulses. */
+.lc-voice-quality { display: none; line-height: 0; flex: none; }
+.lc-voice-tile[data-quality] .lc-voice-quality { display: inline-flex; }
+.lc-voice-quality svg { height: 0.875rem; width: 0.875rem; }
+.lc-voice-tile[data-quality="good"] .lc-voice-quality { color: var(--success); }
+.lc-voice-tile[data-quality="degraded"] .lc-voice-quality { color: var(--warning); }
+.lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality {
+    color: var(--warning);
+    animation: lc-rec-pulse 1.4s ease-in-out infinite;
+}
+.lc-voice-tile[data-quality="failed"] .lc-voice-quality { color: var(--danger); }
 /* "Waiting for others" empty state when joined but alone */
 .lc-voice-waiting {
     grid-column: 1 / -1;
@@ -1959,7 +1972,8 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     50% { opacity: 0.3; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lc-rec-dot, .lc-transcript-rec { animation: none; }
+    .lc-rec-dot, .lc-transcript-rec,
+    .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
 }
 
 /* ---- LC-409: mobile / responsive call pass ----------------------------- */
