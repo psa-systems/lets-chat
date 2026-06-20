@@ -26,17 +26,19 @@ fn not_follow_up_when_different_user() {
 
 #[test]
 fn not_follow_up_when_gap_exceeds_window() {
+    // LC-387: window is now 15 minutes; a 16-minute gap breaks the group.
     assert!(!is_follow_up_of(
         Some(("alice", "2026-05-04 12:00:00")),
-        ("alice", "2026-05-04 12:06:00"),
+        ("alice", "2026-05-04 12:16:00"),
     ));
 }
 
 #[test]
 fn follow_up_at_exact_window_boundary() {
+    // LC-387: 15 minutes exactly is still a follow-up (inclusive boundary).
     assert!(is_follow_up_of(
         Some(("alice", "2026-05-04 12:00:00")),
-        ("alice", "2026-05-04 12:05:00"),
+        ("alice", "2026-05-04 12:15:00"),
     ));
 }
 
@@ -46,8 +48,18 @@ fn not_follow_up_when_no_prior() {
 }
 
 #[test]
-fn window_is_five_minutes() {
-    assert_eq!(MESSAGE_GROUPING_WINDOW_SECONDS, 300);
+fn window_is_fifteen_minutes() {
+    assert_eq!(MESSAGE_GROUPING_WINDOW_SECONDS, 900);
+}
+
+#[test]
+fn not_follow_up_across_day_boundary() {
+    // LC-387: same author, only 4 minutes apart, but a UTC day change forces a
+    // fresh header so the message never renders headerless under the day divider.
+    assert!(!is_follow_up_of(
+        Some(("alice", "2026-05-04 23:58:00")),
+        ("alice", "2026-05-05 00:02:00"),
+    ));
 }
 
 #[tokio::test]
