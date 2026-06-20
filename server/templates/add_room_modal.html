@@ -1,0 +1,89 @@
+{# LC-400: "Add room" modal. Lives in the persistent shell (layout.html),
+   OUTSIDE the live-swapped #sidebar / #sidebar-nav region, so a WebSocket
+   sidebar OOB swap (EnclaveRoomAdded etc.) can no longer destroy the open form
+   and the half-typed name mid-typing - the bug that made the second room in an
+   enclave impossible to create after LC-336 moved create-chat into the live
+   sidebar nav. The sidebar `+` button opens it via window.__lcOpenAddRoom().
+
+   Native POST (no fetch): a full-page submit preserves the existing
+   post_create_room behavior - the redirect into the created room and the
+   duplicate-name flash both keep working unchanged. Gated identically to the
+   `+` button (enclave context + manage rights). #}
+{% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
+<div data-lc-addroom-modal
+     class="hidden modal-backdrop"
+     role="dialog" aria-modal="true" aria-labelledby="lc-addroom-title" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-addroom-title" class="text-lg font-semibold">{{ "sidebar-room-add"|t }}</h2>
+      <button type="button" data-lc-addroom-close aria-label="{{ "action-cancel"|t }}"
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <form method="post" action="/enclave/{{ eid }}/rooms" class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "sidebar-room-add"|t }}</span>
+        <input name="name" data-lc-addroom-name placeholder="{{ "enclave-new-room-placeholder"|t }}"
+               maxlength="100" required autocomplete="off"
+               class="rounded border border-border-strong px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "enclave-room-kind-text"|t }} / {{ "enclave-room-kind-voice"|t }}</span>
+        <select name="kind" class="rounded border border-border-strong px-2 py-1">
+          <option value="text">{{ "enclave-room-kind-text"|t }}</option>
+          <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "enclave-room-type-public"|t }} / {{ "enclave-room-type-private"|t }}</span>
+        <select name="room_type" class="rounded border border-border-strong px-2 py-1">
+          <option value="public">{{ "enclave-room-type-public"|t }}</option>
+          <option value="private">{{ "enclave-room-type-private"|t }}</option>
+        </select>
+      </label>
+      <div class="flex justify-end gap-2 mt-1">
+        <button type="button" data-lc-addroom-cancel
+                class="rounded px-3 py-1 text-sm text-content-muted hover:bg-surface-sunken">{{ "action-cancel"|t }}</button>
+        <button type="submit"
+                class="rounded bg-accent px-3 py-1 text-sm text-accent-content hover:bg-accent-hover">{{ "enclave-add-room"|t }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-addroom-modal]');
+  if (!modal) return;
+  var form = modal.querySelector('form');
+  var nameInput = modal.querySelector('[data-lc-addroom-name]');
+  var opener = null;
+  var trap = null;
+
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  modal.querySelector('[data-lc-addroom-close]').addEventListener('click', close);
+  modal.querySelector('[data-lc-addroom-cancel]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+
+  // The submit is a native full-page POST; no preventDefault. The page
+  // navigates to post_create_room's redirect, which lands the user in the new
+  // room and re-renders a fresh sidebar that includes it.
+  window.__lcOpenAddRoom = function(){
+    opener = document.activeElement;
+    form.reset();
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { nameInput.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  };
+})();
+</script>
+{% endif %}{% endif %}
