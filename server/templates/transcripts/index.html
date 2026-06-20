@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "transcript-index-title"|t }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+    <h1 class="lc-h2 truncate">{{ "transcript-index-heading"|t }}</h1>
+  </header>
+  <div class="flex-1 overflow-y-auto px-4 py-3">
+    {% if rows.is_empty() %}
+    <p class="lc-body text-content-muted">{{ "transcript-index-empty"|t }}</p>
+    {% else %}
+    <div class="mx-auto max-w-2xl space-y-1.5">
+      {% for r in rows %}
+      <a href="/transcripts/{{ r.id }}"
+         class="flex items-center gap-3 rounded-md border border-border bg-surface-elevated px-3 py-2 hover:bg-surface-sunken">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline gap-2">
+            <span class="lc-body font-medium text-content truncate">{{ r.title }}</span>
+            <span class="lc-caption text-content-subtle">{{ r.kind_label }}</span>
+            {% if !r.ended %}<span class="lc-caption text-danger">{{ "transcript-in-progress"|t }}</span>{% endif %}
+          </div>
+          <div class="lc-small text-content-muted tabular-nums">{{ r.started_at }} &middot; {{ r.segment_count }} {{ "transcript-lines"|t }}</div>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4 shrink-0 text-content-subtle">
+          <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
+        </svg>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -40,6 +40,13 @@ transcript-toggle = Transcribe
 transcript-toggle-on = Stop transcription
 transcript-banner = This call is being transcribed
 transcript-unsupported = Live transcription is not supported in this browser.
+# LC-394: transcripts archive
+transcript-index-title = Transcripts
+transcript-index-heading = Call transcripts
+transcript-index-empty = No call transcripts yet. Turn on transcription during a call to save one here.
+transcript-kind-dm = Direct call
+transcript-kind-voice = Voice channel
+transcript-lines = lines
 
 ## Activity page
 activity-page-title = Activity

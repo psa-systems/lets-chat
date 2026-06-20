@@ -135,6 +135,51 @@ pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Resul
         .collect())
 }
 
+/// A transcript joined with its room, for the archive list.
+#[derive(Debug, Clone)]
+pub struct TranscriptListRow {
+    pub id: i64,
+    pub room_id: i64,
+    pub room_name: String,
+    pub room_type: String,
+    pub is_voice: bool,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub status: String,
+    pub segment_count: i64,
+}
+
+/// LC-394: the most recent transcripts across all rooms (newest first), joined
+/// with the room + a segment count. The caller filters by per-room access (the
+/// archive page gates each row with `is_room_accessible`), so this stays a
+/// simple bounded scan rather than encoding the access rules in SQL.
+pub async fn list_recent(pool: &SqlitePool, limit: i64) -> sqlx::Result<Vec<TranscriptListRow>> {
+    let rows = sqlx::query(
+        "SELECT t.id, t.room_id, t.started_at, t.ended_at, t.status, \
+                r.name AS room_name, r.room_type, r.is_voice, \
+                (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) AS segment_count \
+         FROM call_transcripts t JOIN rooms r ON r.id = t.room_id \
+         ORDER BY t.id DESC LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| TranscriptListRow {
+            id: row.get("id"),
+            room_id: row.get("room_id"),
+            room_name: row.get("room_name"),
+            room_type: row.get("room_type"),
+            is_voice: row.get::<i64, _>("is_voice") != 0,
+            started_at: row.get("started_at"),
+            ended_at: row.get("ended_at"),
+            status: row.get("status"),
+            segment_count: row.get("segment_count"),
+        })
+        .collect())
+}
+
 /// Close a session. Returns `true` only when this call actually transitioned an
 /// active session to ended (so the caller posts the "transcript saved" notice
 /// exactly once even if both an explicit /end and the disconnect backstop race).

@@ -427,6 +427,43 @@ async fn audio_rejected_when_server_stt_disabled() {
 }
 
 #[tokio::test]
+async fn archive_lists_only_accessible_transcripts() {
+    let s = setup().await;
+    // alice opens + ends a transcript in the alice-bob DM.
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // A member sees her transcript in the archive (links to the full view).
+    let (st, page) = get(&s.app, &s.a_session, "/transcripts").await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        page.contains(&format!("/transcripts/{tid}")),
+        "member sees her transcript in the archive"
+    );
+
+    // A non-member's archive never lists it.
+    let (st, page) = get(&s.app, &s.outsider_session, "/transcripts").await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        !page.contains(&format!("/transcripts/{tid}")),
+        "non-member must not see another DM's transcript in the archive"
+    );
+}
+
+#[tokio::test]
 async fn segment_text_is_length_capped() {
     let s = setup().await;
     let (_, body) = post(
