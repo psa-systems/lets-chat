@@ -821,7 +821,7 @@ async fn render_dm_read(
 /// - Else, if the message was authored by someone other than the viewer,
 ///   render an unread-badge bump for the sidebar.
 /// - Otherwise (own message, no open subscription), render nothing.
-async fn render_new_message_or_bump(
+pub async fn render_new_message_or_bump(
     state: &AppState,
     message: &models::Message,
     // LC-230: optimistic-echo dedupe id; rendered as `data-lc-client-id` on
@@ -840,38 +840,42 @@ async fn render_new_message_or_bump(
         return None;
     }
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
-    if is_subscribed {
-        // The viewer has the room open in the foreground, so the message is
-        // effectively read on arrival. Advance their last-read watermark and
-        // broadcast a DmRead so the author sees a live "Seen" update (in DMs)
-        // and any other tabs of this user clear their sidebar badge. Skip
-        // when the viewer authored the message - their own send path already
-        // re-marks read state.
-        if message.user_id != viewer.id {
-            if let Ok(read_at) =
-                db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
-            {
-                db::mentions::mark_mentions_read_for_room(
-                    &state.chat,
-                    &viewer.id,
-                    message.room_id,
-                    message.id,
-                )
-                .await
-                .ok();
-                let event = ChatEvent::DmRead {
-                    room_id: message.room_id,
-                    user_id: viewer.id.clone(),
-                    last_read_message_id: message.id,
-                    read_at,
-                };
-                state.hub.broadcast_to_room(message.room_id, &event);
-            }
-        }
+    // LC-397: the author ALWAYS receives their own message echo (carrying the
+    // client_id) so the optimistic placeholder is reconciled even if THIS
+    // connection's room subscription has not registered yet. That gap is what
+    // left enclave-room sends stuck on "Sending..." while DMs were instant: the
+    // author was a broadcast recipient but, not (yet) in `subscribed`, fell to
+    // the old author `return None` and got no echo. The echo is an id-keyed OOB
+    // swap into #messages, so it self-limits to the tab actually viewing the
+    // room; tabs elsewhere drop it harmlessly.
+    if message.user_id == viewer.id {
         return render_new_message(state, message, client_id, viewer).await;
     }
-    if message.user_id == viewer.id {
-        return None;
+    if is_subscribed {
+        // The viewer (a non-author) has the room open in the foreground, so the
+        // message is effectively read on arrival. Advance their last-read
+        // watermark and broadcast a DmRead so the author sees a live "Seen"
+        // update (in DMs) and any other tabs of this user clear their badge.
+        if let Ok(read_at) =
+            db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
+        {
+            db::mentions::mark_mentions_read_for_room(
+                &state.chat,
+                &viewer.id,
+                message.room_id,
+                message.id,
+            )
+            .await
+            .ok();
+            let event = ChatEvent::DmRead {
+                room_id: message.room_id,
+                user_id: viewer.id.clone(),
+                last_read_message_id: message.id,
+                read_at,
+            };
+            state.hub.broadcast_to_room(message.room_id, &event);
+        }
+        return render_new_message(state, message, None, viewer).await;
     }
     // Muted rooms suppress the sidebar unread bump for background recipients.
     // The foreground branch above is intentionally left untouched: viewers
