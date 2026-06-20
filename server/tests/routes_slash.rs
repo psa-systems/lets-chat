@@ -70,6 +70,7 @@ async fn app() -> TestApp {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
     };
     // Room in an enclave Alice owns; add Bob as a member too.
     let eid = db::enclave::create_enclave(&chat, "Acme", None, &alice)
