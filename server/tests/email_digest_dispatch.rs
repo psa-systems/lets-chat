@@ -124,6 +124,7 @@ async fn build_harness() -> Harness {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
     };
     Harness {
         state,

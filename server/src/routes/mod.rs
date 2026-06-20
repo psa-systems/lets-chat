@@ -1343,6 +1343,10 @@ pub fn build_router(state: AppState) -> Router {
             post(transcripts::segment),
         )
         .route(
+            "/call/transcript/{transcript_id}/audio",
+            post(transcripts::audio),
+        )
+        .route(
             "/call/transcript/{transcript_id}/end",
             post(transcripts::end),
         )

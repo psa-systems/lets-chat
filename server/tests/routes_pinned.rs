@@ -76,6 +76,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
     };
     let app = routes::build_router(state);
     TestApp {
