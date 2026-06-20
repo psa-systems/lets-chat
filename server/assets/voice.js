@@ -98,6 +98,14 @@
     screen.appendChild(screenLabel);
     var name = document.createElement('span');
     name.className = 'lc-voice-name';
+    // LC-410: per-peer connection-quality glyph. Hidden until the tile gets a
+    // data-quality (set by the quality monitor); never set on the self tile,
+    // which has no peer connection. Signal bars, recoloured by CSS per state.
+    var quality = document.createElement('span');
+    quality.className = 'lc-voice-quality';
+    quality.setAttribute('data-lc-voice-quality', '');
+    quality.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="12" width="3" height="6" rx="1"/><rect x="8.5" y="8" width="3" height="10" rx="1"/><rect x="15" y="3" width="3" height="15" rx="1"/></svg>';
+    name.appendChild(quality);
     var nameText = document.createElement('span');
     nameText.className = 'lc-voice-name-text';
     nameText.textContent = label;
@@ -321,6 +329,73 @@
     });
   }
 
+  // ---- connection-quality monitor (LC-410) ---------------------------
+  // Per-remote-peer health from RTCPeerConnection.connectionState refined by a
+  // periodic getStats (packet loss + RTT). The tile carries data-quality
+  // (good | degraded | reconnecting | failed); CSS draws the coloured signal
+  // glyph. connectionstatechange updates immediately; the loop polls stats.
+  var qualityLoop = 0;
+  var QUALITY_LABEL = {
+    good: 'connGood', degraded: 'connDegraded',
+    reconnecting: 'connReconnecting', failed: 'connFailed',
+  };
+  function setQuality(userId, qval) {
+    var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (!t || t.getAttribute('data-quality') === qval) return;
+    t.setAttribute('data-quality', qval);
+    var el = t.querySelector('[data-lc-voice-quality]');
+    if (el) {
+      var label = window.__lcS(QUALITY_LABEL[qval] || 'connGood', qval);
+      el.setAttribute('title', label);
+      el.setAttribute('aria-label', label);
+    }
+  }
+  // Map a non-connected RTCPeerConnection state to a quality bucket.
+  function stateQuality(state) {
+    if (state === 'failed') return 'failed';
+    if (state === 'disconnected' || state === 'connecting' || state === 'checking') return 'reconnecting';
+    return null; // 'new' / 'closed' -> leave as-is
+  }
+  function applyConnectionState(userId, state) {
+    if (state === 'connected') { setQuality(userId, 'good'); return; } // refined by stats
+    var q = stateQuality(state);
+    if (q) setQuality(userId, q);
+  }
+  function pollQuality() {
+    Object.keys(peers).forEach(function (uid) {
+      var p = peers[uid];
+      if (!p || !p.pc) return;
+      var state = p.pc.connectionState;
+      if (state !== 'connected') { applyConnectionState(uid, state); return; }
+      p.pc.getStats().then(function (report) {
+        var lost = 0, recv = 0, rtt = null;
+        report.forEach(function (s) {
+          if (s.type === 'inbound-rtp') {
+            if (typeof s.packetsLost === 'number') lost += s.packetsLost;
+            if (typeof s.packetsReceived === 'number') recv += s.packetsReceived;
+          } else if (s.type === 'candidate-pair' && s.nominated &&
+                     typeof s.currentRoundTripTime === 'number') {
+            rtt = s.currentRoundTripTime;
+          }
+        });
+        var prev = p.qstats || { lost: 0, recv: 0 };
+        var dLost = Math.max(0, lost - prev.lost);
+        var dRecv = Math.max(0, recv - prev.recv);
+        p.qstats = { lost: lost, recv: recv };
+        var lossRatio = (dLost + dRecv) > 0 ? dLost / (dLost + dRecv) : 0;
+        var degraded = lossRatio > 0.03 || (rtt != null && rtt > 0.35);
+        setQuality(uid, degraded ? 'degraded' : 'good');
+      }).catch(function () {});
+    });
+  }
+  function startQuality() {
+    if (qualityLoop) return;
+    qualityLoop = setInterval(pollQuality, 3000);
+  }
+  function stopQuality() {
+    if (qualityLoop) { clearInterval(qualityLoop); qualityLoop = 0; }
+  }
+
   // ---- media ---------------------------------------------------------
   function getMedia(withVideo) {
     // LC-144: honor the user's pinned mic/camera via the shared module.
@@ -391,7 +466,9 @@
       // VoiceLeft event, which the server sends reliably on both a clean
       // leave and a disconnect. (The 1:1 DM call in call.js does tear down
       // on connection failure - that is correct there, but not for a mesh.)
-      if (p.pc === pc && pc.connectionState === 'failed') {
+      if (p.pc !== pc) return;
+      applyConnectionState(userId, pc.connectionState); // LC-410: live quality
+      if (pc.connectionState === 'failed') {
         console.warn('voice: connection to', userId, 'failed; awaiting VoiceLeft');
       }
     };
@@ -502,6 +579,7 @@
       showJoinedUi(true);
       createTile(cfg.selfId, cfg.selfName, true);
       startSpeaking();
+      startQuality();
       var sv = tileVideo(cfg.selfId);
       // Re-assign (null first) so the <video> re-renders with the changed
       // track set - assigning the same stream object can be a no-op.
@@ -523,6 +601,7 @@
     selfMuted = false;
     selfSharing = false;
     stopSpeaking();
+    stopQuality();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
     stopScreen();
