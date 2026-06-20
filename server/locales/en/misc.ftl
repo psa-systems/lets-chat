@@ -31,6 +31,16 @@ search-saved-remove = Remove saved search
 people-no-results = No matching people.
 people-you = (you)
 
+## LC-393: call transcription
+transcript-page-title = Call transcript
+transcript-heading = Call transcript
+transcript-in-progress = in progress
+transcript-empty = No speech was captured.
+transcript-toggle = Transcribe
+transcript-toggle-on = Stop transcription
+transcript-banner = This call is being transcribed
+transcript-unsupported = Live transcription is not supported in this browser.
+
 ## Activity page
 activity-page-title = Activity
 activity-heading = Activity

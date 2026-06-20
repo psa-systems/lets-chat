@@ -77,6 +77,7 @@ mod slash;
 mod starred_rooms;
 mod status;
 mod switcher;
+mod transcripts;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -1335,6 +1336,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
         .route("/call/config", get(call::get_config))
+        // LC-393: call transcription (Phase 1, DM calls).
+        .route("/call/{room_id}/transcript/start", post(transcripts::start))
+        .route(
+            "/call/transcript/{transcript_id}/segment",
+            post(transcripts::segment),
+        )
+        .route(
+            "/call/transcript/{transcript_id}/end",
+            post(transcripts::end),
+        )
+        .route("/transcripts/{transcript_id}", get(transcripts::show))
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
         .route("/branding/logo", get(branding::get_global_logo))
