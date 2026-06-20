@@ -67,3 +67,6 @@ js-device-dialog-title = Dispositivos de llamada
 js-device-close = Cerrar
 js-device-permission-hint = Permite el acceso al micrófono o la cámara para ver los nombres de los dispositivos.
 js-device-show-names = Mostrar nombres de dispositivos
+
+js-voice-you = Tú
+js-voice-waiting = Esperando a que se unan otros...

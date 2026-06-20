@@ -60,39 +60,80 @@
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
 
+  // LC-402: build a participant tile. Theme-token styling lives in main.css
+  // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
   function createTile(userId, label, isSelf) {
     var g = grid();
     if (!g) return;
     if (g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]')) return;
     var tile = document.createElement('div');
     tile.setAttribute('data-lc-voice-tile', userId);
-    tile.className = 'relative overflow-hidden rounded-lg bg-slate-800';
-    // Inline aspect-ratio rather than the `aspect-video` utility: every child
-    // is absolutely positioned, so the tile has no in-flow content to give
-    // it height - without an explicit ratio it collapses to a sliver.
-    tile.style.aspectRatio = '16 / 9';
-    tile.style.minHeight = '140px';
+    tile.className = 'lc-voice-tile';
     var video = document.createElement('video');
     video.setAttribute('data-lc-voice-video', '');
     video.autoplay = true;
     video.playsInline = true;
     if (isSelf) video.muted = true;
-    video.className = 'absolute inset-0 h-full w-full object-cover';
     video.style.display = 'none';
     // Shown whenever this participant has no live camera track - including
     // for users on the default avatar, since /avatars/{id} always resolves.
     var avatar = document.createElement('img');
     avatar.setAttribute('data-lc-voice-avatar', '');
+    avatar.className = 'lc-voice-avatar';
     avatar.src = '/avatars/' + encodeURIComponent(userId);
     avatar.alt = label;
-    avatar.className = 'absolute inset-0 m-auto h-20 w-20 rounded-full object-cover';
+    // Mute indicator, revealed via [data-muted] on the tile.
+    var mute = document.createElement('span');
+    mute.className = 'lc-voice-mute-badge';
+    mute.setAttribute('aria-hidden', 'true');
+    mute.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 01-.13.87L7.13 4.13A3 3 0 017 4z"/><path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 002.62 4.96l1.1-1.1A4.5 4.5 0 015.5 9.5z"/><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 10-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-2.3-2.3A5.98 5.98 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-.84 2.62l-1.1-1.1c.28-.46.44-1 .44-1.52V9.4l-1.5-1.5v.1l-2.9-2.9L3.28 2.22zM10 16.5a6 6 0 003-.8l-1.13-1.13a4.5 4.5 0 01-4.62-1.08l-1.06 1.06A6 6 0 0010 16.5z" clip-rule="evenodd"/></svg>';
     var name = document.createElement('span');
-    name.className = 'absolute bottom-1 left-1 z-10 rounded bg-black/60 px-2 py-0.5 text-sm text-white';
-    name.textContent = label;
+    name.className = 'lc-voice-name';
+    var nameText = document.createElement('span');
+    nameText.className = 'lc-voice-name-text';
+    nameText.textContent = label;
+    name.appendChild(nameText);
+    if (isSelf) {
+      var you = document.createElement('span');
+      you.className = 'lc-voice-you';
+      you.textContent = window.__lcS('voiceYou', 'You');
+      name.appendChild(you);
+    }
     tile.appendChild(video);
     tile.appendChild(avatar);
+    tile.appendChild(mute);
     tile.appendChild(name);
     g.appendChild(tile);
+    updateWaiting();
+  }
+
+  // LC-402: "Waiting for others" placeholder while joined but alone.
+  function updateWaiting() {
+    var g = grid();
+    if (!g) return;
+    var tiles = g.querySelectorAll('[data-lc-voice-tile]').length;
+    var w = g.querySelector('[data-lc-voice-waiting]');
+    if (joined && tiles <= 1) {
+      if (!w) {
+        w = document.createElement('div');
+        w.setAttribute('data-lc-voice-waiting', '');
+        w.className = 'lc-voice-waiting';
+        w.textContent = window.__lcS('voiceWaiting', 'Waiting for others to join...');
+        g.appendChild(w);
+      }
+    } else if (w) {
+      w.remove();
+    }
+  }
+
+  // LC-402: participant-count chip in the header.
+  function updateCount() {
+    var chip = q('[data-lc-voice-count]');
+    if (!chip) return;
+    var n = Object.keys(participants).length;
+    var nEl = chip.querySelector('[data-lc-voice-count-n]');
+    if (nEl) nEl.textContent = String(n);
+    chip.classList.toggle('hidden', !(joined && n > 0));
   }
 
   // Show the camera feed when this participant has a live video track,
@@ -128,6 +169,7 @@
   function removeTile(userId) {
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
+    updateWaiting();
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
@@ -142,6 +184,10 @@
     toggle(q('[data-lc-voice-screen]'), on);
     toggle(q('[data-lc-voice-leave]'), on);
     toggle(q('[data-lc-transcribe-toggle]'), on); // LC-393 Phase 2
+    toggle(q('[data-lc-voice-sep]'), on);              // LC-402 control grouping
+    toggle(q('[data-lc-transcript-panel-toggle]'), on); // LC-402 transcript drawer
+    updateCount();
+    updateWaiting();
   }
   function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
 
@@ -168,6 +214,7 @@
     var names = preview.querySelector('[data-lc-voice-preview-names]');
     if (!empty || !list || !names) return;
     var ids = Object.keys(participants);
+    updateCount(); // LC-402
     if (ids.length === 0) {
       empty.classList.remove('hidden');
       list.classList.add('hidden');
@@ -179,11 +226,79 @@
     names.replaceChildren();
     ids.forEach(function (uid, idx) {
       var span = document.createElement('span');
-      span.className = 'font-medium text-slate-700';
+      span.className = 'font-medium text-content';
       span.setAttribute('data-lc-voice-preview-name', uid);
       span.textContent = participants[uid] || uid;
       names.appendChild(span);
       if (idx < ids.length - 1) names.appendChild(document.createTextNode(', '));
+    });
+  }
+
+  // ---- active-speaker detection (LC-402) -----------------------------
+  // A single polling loop taps each tile's audio through a Web Audio analyser
+  // and toggles data-speaking on the tile (CSS draws the highlight ring). Fully
+  // self-contained and feature-detected so it can never break the call.
+  var audioCtx = null;
+  var analysers = {};   // MediaStream.id -> { an, data, src }
+  var speakLoop = 0;
+  function ensureAudioCtx() {
+    if (audioCtx) return audioCtx;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { audioCtx = new AC(); } catch (e) { audioCtx = null; }
+    return audioCtx;
+  }
+  function analyserFor(stream) {
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return null;
+    if (analysers[stream.id]) return analysers[stream.id];
+    var ctx = ensureAudioCtx();
+    if (!ctx) return null;
+    try {
+      var src = ctx.createMediaStreamSource(stream);
+      var an = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an); // tap only - not connected to destination, so no echo
+      analysers[stream.id] = { an: an, data: new Uint8Array(an.frequencyBinCount), src: src };
+      return analysers[stream.id];
+    } catch (e) { return null; }
+  }
+  function levelOf(stream) {
+    var a = analyserFor(stream);
+    if (!a) return 0;
+    a.an.getByteFrequencyData(a.data);
+    var sum = 0;
+    for (var i = 0; i < a.data.length; i++) sum += a.data[i];
+    return sum / a.data.length; // 0..255
+  }
+  function pollSpeaking() {
+    var g = grid();
+    if (!g) return;
+    var tiles = g.querySelectorAll('[data-lc-voice-tile]');
+    for (var i = 0; i < tiles.length; i++) {
+      var tile = tiles[i];
+      var isSelf = cfg && tile.getAttribute('data-lc-voice-tile') === cfg.selfId;
+      var v = tile.querySelector('[data-lc-voice-video]');
+      var stream = isSelf ? localStream : (v && v.srcObject);
+      var speaking = false;
+      if (stream && tile.getAttribute('data-muted') !== 'true') speaking = levelOf(stream) > 18;
+      tile.setAttribute('data-speaking', speaking ? 'true' : 'false');
+    }
+  }
+  function startSpeaking() {
+    var ctx = ensureAudioCtx();
+    if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    if (speakLoop) return;
+    speakLoop = setInterval(pollSpeaking, 250);
+  }
+  function stopSpeaking() {
+    if (speakLoop) { clearInterval(speakLoop); speakLoop = 0; }
+    Object.keys(analysers).forEach(function (id) {
+      try { analysers[id].src.disconnect(); } catch (e) {}
+    });
+    analysers = {};
+    var g = grid();
+    if (g) Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
+      t.removeAttribute('data-speaking');
     });
   }
 
@@ -364,7 +479,8 @@
       // VoiceJoined echoes back; the roster event will overwrite this.
       participants[cfg.selfId] = cfg.selfName;
       showJoinedUi(true);
-      createTile(cfg.selfId, cfg.selfName + ' (you)', true);
+      createTile(cfg.selfId, cfg.selfName, true);
+      startSpeaking();
       var sv = tileVideo(cfg.selfId);
       // Re-assign (null first) so the <video> re-renders with the changed
       // track set - assigning the same stream object can be a no-op.
@@ -383,6 +499,7 @@
 
   function leave() {
     if (!joined) return;
+    stopSpeaking();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
     stopScreen();
@@ -413,23 +530,32 @@
     if (!localStream) return;
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
+    var muted = !on;
     var btn = q('[data-lc-voice-mute]');
-    if (btn) btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
+    if (btn) {
+      btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
+      btn.setAttribute('aria-pressed', muted ? 'true' : 'false'); // LC-402 on/off state
+    }
+    // LC-402: reflect our own mute on our tile.
+    var tile = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(cfg.selfId) + '"]');
+    if (tile) tile.setAttribute('data-muted', muted ? 'true' : 'false');
   }
 
   function setCameraBtn() {
     var btn = q('[data-lc-voice-camera]');
     if (!btn) return;
     btn.textContent = hasLocalCamera() ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
+    btn.setAttribute('aria-pressed', hasLocalCamera() ? 'true' : 'false'); // LC-402 on/off state
     // While the screen-share track owns the video sender on every peer,
-    // toggling the camera would race for the same outgoing slot. The
-    // `disabled:*` classes on the button render the disabled affordance.
+    // toggling the camera would race for the same outgoing slot.
     if (isSharingScreen()) btn.setAttribute('disabled', '');
     else btn.removeAttribute('disabled');
   }
   function setScreenBtn() {
     var btn = q('[data-lc-voice-screen]');
-    if (btn) btn.textContent = isSharingScreen() ? 'Stop sharing' : 'Share screen';
+    if (!btn) return;
+    btn.textContent = isSharingScreen() ? 'Stop sharing' : 'Share screen';
+    btn.setAttribute('aria-pressed', isSharingScreen() ? 'true' : 'false'); // LC-402 on/off state
   }
 
   // Camera on/off mid-call: acquire or release the video track and add it to

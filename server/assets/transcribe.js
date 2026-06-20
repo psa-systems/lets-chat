@@ -50,18 +50,46 @@
   }
 
   // ---- UI state ---------------------------------------------------------
+  // LC-402: "active" UI = the recording pill (awareness) + the transcript
+  // drawer. They were one toggle before; split so the drawer can be closed /
+  // reopened independently while a session stays live.
   function showBanner(on) {
     var b = q('[data-lc-transcript-banner]');
+    if (b) {
+      b.classList.toggle('hidden', !on);
+      b.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+    showPanel(on);
+  }
+  function showPanel(on) {
     var w = q('[data-lc-caption-wrap]');
-    [b, w].forEach(function (el) {
-      if (!el) return;
-      el.classList.toggle('hidden', !on);
-      el.setAttribute('aria-hidden', on ? 'false' : 'true');
-    });
+    if (w) {
+      w.classList.toggle('hidden', !on);
+      w.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+    document.body.classList.toggle('lc-transcript-open', !!on);
+    var pt = q('[data-lc-transcript-panel-toggle]');
+    if (pt) pt.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) scrollToLive();
   }
   function setToggle(on) {
     var t = q('[data-lc-transcribe-toggle]');
     if (t) t.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  // ---- caption scroll / jump-to-live (LC-402) ---------------------------
+  function transcriptBody() { return q('[data-lc-transcript-body]'); }
+  function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 48; }
+  function scrollToLive() {
+    var el = transcriptBody();
+    if (el) el.scrollTop = el.scrollHeight;
+    document.body.classList.remove('lc-transcript-scrolled');
+  }
+  function onNewCaptions() {
+    var el = transcriptBody();
+    if (!el) return;
+    if (nearBottom(el)) scrollToLive();
+    else document.body.classList.add('lc-transcript-scrolled');
   }
 
   // ---- segment POST -----------------------------------------------------
@@ -265,11 +293,58 @@
   if (bus && window.MutationObserver) {
     new MutationObserver(drainBus).observe(bus, { childList: true });
   }
-  // Belt-and-braces: also drain + autoscroll after each WS frame settles.
-  document.body.addEventListener('htmx:wsAfterMessage', function () {
-    drainBus();
-    var w = q('[data-lc-caption-wrap]');
-    if (w) w.scrollTop = w.scrollHeight;
+  // Belt-and-braces: also drain after each WS frame settles. Caption
+  // grouping/timestamping + jump-to-live are handled by the observer below.
+  document.body.addEventListener('htmx:wsAfterMessage', drainBus);
+
+  // ---- caption decoration: timestamp + speaker grouping (LC-402) --------
+  // Each line arrives as server-rendered HTML (ws/transcript_segment.html) with
+  // an empty .lc-cap-time and a data-lc-speaker. Stamp the local receipt time
+  // and collapse consecutive lines from one speaker (CSS hides the repeat head).
+  function decorateLine(line) {
+    if (!line || line.nodeType !== 1 || !line.classList.contains('lc-cap-line')) return;
+    if (line.getAttribute('data-lc-decorated')) return;
+    line.setAttribute('data-lc-decorated', '1');
+    var t = line.querySelector('.lc-cap-time');
+    if (t && !t.textContent) {
+      try {
+        t.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {}
+    }
+    var prev = line.previousElementSibling;
+    if (prev && prev.classList.contains('lc-cap-line') &&
+        prev.getAttribute('data-lc-speaker') === line.getAttribute('data-lc-speaker')) {
+      line.classList.add('lc-cap-cont');
+    }
+  }
+  var log = document.getElementById('lc-caption-log');
+  if (log && window.MutationObserver) {
+    // Decorate anything already present, then watch for appended lines.
+    Array.prototype.forEach.call(log.querySelectorAll('.lc-cap-line'), decorateLine);
+    new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        Array.prototype.forEach.call(muts[i].addedNodes, decorateLine);
+      }
+      onNewCaptions();
+    }).observe(log, { childList: true });
+  }
+  // Track scroll position so the jump-to-live affordance reveals when scrolled up.
+  document.addEventListener('scroll', function (e) {
+    var el = transcriptBody();
+    if (!el || e.target !== el) return;
+    document.body.classList.toggle('lc-transcript-scrolled', !nearBottom(el));
+  }, true);
+
+  // ---- transcript drawer controls (LC-402) ------------------------------
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    if (e.target.closest('[data-lc-transcript-close]')) { showPanel(false); return; }
+    if (e.target.closest('[data-lc-jump-live]')) { scrollToLive(); return; }
+    var pt = e.target.closest('[data-lc-transcript-panel-toggle]');
+    if (pt) {
+      var w = q('[data-lc-caption-wrap]');
+      showPanel(!w || w.classList.contains('hidden'));
+    }
   });
 
   // ---- call lifecycle ---------------------------------------------------
