@@ -30,6 +30,13 @@
             class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "voice-start-video"|t }}</button>
     <button type="button" data-lc-voice-screen
             class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">{{ "voice-share-screen"|t }}</button>
+    {# LC-393 Phase 2: transcription toggle for the channel. Hidden until joined
+       (voice.js toggles it); data-lc-room tells transcribe.js which room to open
+       a session for. Disabled with the unsupported note where SpeechRecognition
+       is missing. #}
+    <button type="button" data-lc-transcribe-toggle data-lc-room="{{ room.id }}"
+            aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}"
+            class="hidden rounded bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 aria-pressed:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "transcript-toggle"|t }}</button>
     <button type="button" data-lc-voice-leave
             class="hidden rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">{{ "voice-leave"|t }}</button>
   </header>

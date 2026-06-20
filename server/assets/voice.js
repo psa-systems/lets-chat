@@ -141,6 +141,7 @@
     toggle(q('[data-lc-voice-camera]'), on);
     toggle(q('[data-lc-voice-screen]'), on);
     toggle(q('[data-lc-voice-leave]'), on);
+    toggle(q('[data-lc-transcribe-toggle]'), on); // LC-393 Phase 2
   }
   function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
 
@@ -371,6 +372,10 @@
       updateTileMedia(cfg.selfId);
       setCameraBtn();
       wsSend({ type: 'voice_join', room_id: cfg.roomId });
+      // LC-393 Phase 2: publish the channel room so transcribe.js can open a
+      // transcription session, and signal that we are in a live call.
+      window.__lcVoiceRoom = cfg.roomId;
+      try { document.dispatchEvent(new CustomEvent('lc:voice-joined')); } catch (e) {}
     }).catch(function () {
       alert(window.__lcS('callNoMic', 'Could not access your microphone.'));
     });
@@ -398,6 +403,10 @@
     if (cfg) delete participants[cfg.selfId];
     renderPreview();
     showJoinedUi(false);
+    // LC-393 Phase 2: we left the channel - transcribe.js stops our local
+    // capture (the session itself continues for whoever is still here).
+    window.__lcVoiceRoom = null;
+    try { document.dispatchEvent(new CustomEvent('lc:voice-left')); } catch (e) {}
   }
 
   function toggleMute() {
