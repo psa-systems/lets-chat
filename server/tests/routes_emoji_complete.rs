@@ -194,13 +194,17 @@ async fn non_member_is_forbidden() {
 }
 
 #[tokio::test]
-async fn picker_lists_popular_unicode_and_custom_with_insert_hooks() {
+async fn picker_lists_unicode_and_custom_with_insert_hooks() {
     let s = setup().await;
     let (status, body) = picker(&s.app, &s.member_session, s.general_room).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
-    // Popular unicode (tada) and the seeded custom emoji both appear, each with
-    // an insert hook + a filter token; the filter input is the LC-274 one.
-    assert!(body.contains("\u{1F389}"), "no popular tada glyph: {body}");
+    // LC-389: the picker now ships the full categorized Unicode set plus the
+    // seeded custom emoji, each with an insert hook + a filter token; the filter
+    // input is the LC-274 one. tada is one representative glyph from the set.
+    assert!(
+        body.contains("\u{1F389}"),
+        "no tada glyph in full set: {body}"
+    );
     assert!(
         body.contains("data-lc-emoji-insert=\":partyblob:\""),
         "custom emoji insert hook missing: {body}"
@@ -212,6 +216,20 @@ async fn picker_lists_popular_unicode_and_custom_with_insert_hooks() {
     assert!(
         body.contains("data-lc-emoji-name="),
         "no filter tokens: {body}"
+    );
+    // LC-389: categorized - the tab strip + at least the first section render,
+    // and the Custom section appears because general_room's enclave has one.
+    assert!(
+        body.contains("data-lc-emoji-tabs"),
+        "no category tab strip: {body}"
+    );
+    assert!(
+        body.contains("data-lc-emoji-cat=\"smileys\""),
+        "no smileys category section: {body}"
+    );
+    assert!(
+        body.contains("data-lc-emoji-cat=\"custom\""),
+        "no custom category section: {body}"
     );
 }
 
