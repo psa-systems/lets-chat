@@ -19,7 +19,7 @@
      On/off state rides aria-pressed; Leave is danger-styled, Transcribe is the
      "recording" toggle that pairs with the live pill + drawer header. #}
   <header class="lc-callbar">
-    <div class="flex min-w-0 items-center gap-2">
+    <div class="lc-callbar-title flex min-w-0 items-center gap-2">
       <h1 class="truncate font-semibold">{{ room.name }}</h1>
       <span class="rounded bg-surface-sunken px-1.5 text-xs font-medium uppercase tracking-wide text-content-muted">{{ "voice-badge"|t }}</span>
       <span data-lc-voice-count class="lc-voice-countchip hidden rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-content-muted" aria-label="{{ "voice-in-call"|t }}">
@@ -29,8 +29,12 @@
         <span data-lc-voice-count-n>0</span>
       </span>
     </div>
-    <div class="flex-1"></div>
+    <div class="lc-callbar-spacer flex-1"></div>
 
+    {# LC-409: the two control clusters live in one wrapper so the mobile layout
+       can stack the title above a single horizontally-scrollable control row
+       instead of wrapping buttons into several cramped lines. #}
+    <div class="lc-callbar-controls">
     <div class="lc-callbar-group">
       <button type="button" data-lc-open-devices title="{{ "voice-devices"|t }}" aria-label="{{ "voice-choose-devices"|t }}"
               class="lc-cbtn">
@@ -61,6 +65,7 @@
               class="hidden lc-cbtn">{{ "voice-transcript-panel"|t }}</button>
       <button type="button" data-lc-voice-leave
               class="hidden lc-cbtn lc-cbtn--leave">{{ "voice-leave"|t }}</button>
+    </div>
     </div>
   </header>
 
