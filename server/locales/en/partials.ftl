@@ -99,6 +99,17 @@ partials-poll-closes = closes
 partials-reaction-add = Add reaction
 partials-reaction-filter = Filter emoji
 partials-reaction-recent = Recent
+# LC-389: emoji-picker category labels (tab + section heading).
+partials-reaction-cat-smileys = Smileys & Emotion
+partials-reaction-cat-people = People & Body
+partials-reaction-cat-nature = Animals & Nature
+partials-reaction-cat-food = Food & Drink
+partials-reaction-cat-travel = Travel & Places
+partials-reaction-cat-activities = Activities
+partials-reaction-cat-objects = Objects
+partials-reaction-cat-symbols = Symbols
+partials-reaction-cat-flags = Flags
+partials-reaction-cat-custom = Custom
 
 ## Room header
 partials-room-info-title = View room info, description, and wiki
