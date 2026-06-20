@@ -92,10 +92,17 @@ struct Setup {
 }
 
 async fn setup() -> Setup {
-    setup_with_stt(None).await
+    setup_with_clients(None, None).await
 }
 
 async fn setup_with_stt(stt_client: Option<Arc<dyn lets_chat::stt::SttClient>>) -> Setup {
+    setup_with_clients(stt_client, None).await
+}
+
+async fn setup_with_clients(
+    stt_client: Option<Arc<dyn lets_chat::stt::SttClient>>,
+    llm_client: Option<Arc<dyn lets_chat::llm::LlmClient>>,
+) -> Setup {
     ensure_tempdir();
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
@@ -161,6 +168,7 @@ async fn setup_with_stt(stt_client: Option<Arc<dyn lets_chat::stt::SttClient>>) 
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
         stt_client,
+        llm_client,
     };
     Setup {
         app: routes::build_router(state),
@@ -461,6 +469,86 @@ async fn archive_lists_only_accessible_transcripts() {
         !page.contains(&format!("/transcripts/{tid}")),
         "non-member must not see another DM's transcript in the archive"
     );
+}
+
+#[tokio::test]
+async fn summary_generates_stores_and_gates() {
+    let mock: Arc<dyn lets_chat::llm::LlmClient> = Arc::new(lets_chat::llm::MockLlmClient {
+        canned: "## Summary\nThey discussed the roadmap.\n\n## Action items\n- Ship it".to_string(),
+    });
+    let s = setup_with_clients(None, Some(mock)).await;
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=lets+talk+roadmap"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Member generates the summary; the rendered markdown comes back + is stored.
+    let (st, frag) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/summary"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(frag.contains("Action items"), "summary fragment: {frag}");
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert!(t.summary.unwrap().contains("roadmap"), "summary persisted");
+
+    // The transcript page now shows the stored summary.
+    let (st, page) = get(&s.app, &s.a_session, &format!("/transcripts/{tid}")).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(page.contains("They discussed the roadmap"));
+
+    // Non-member cannot summarize.
+    let (st, _) = post(
+        &s.app,
+        &s.outsider_session,
+        &format!("/transcripts/{tid}/summary"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn summary_rejected_when_llm_disabled() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/summary"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

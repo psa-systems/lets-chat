@@ -22,6 +22,8 @@ pub struct Transcript {
     pub started_at: String,
     pub ended_at: Option<String>,
     pub status: String,
+    /// LC-396: cached LLM summary (markdown), `None` until generated.
+    pub summary: Option<String>,
 }
 
 /// One stored speech result.
@@ -42,6 +44,7 @@ fn map_transcript(row: &sqlx::sqlite::SqliteRow) -> Transcript {
         started_at: row.get("started_at"),
         ended_at: row.get("ended_at"),
         status: row.get("status"),
+        summary: row.get("summary"),
     }
 }
 
@@ -51,7 +54,7 @@ pub async fn open_session_for_room(
     room_id: i64,
 ) -> sqlx::Result<Option<Transcript>> {
     let row = sqlx::query(
-        "SELECT id, room_id, started_by, started_at, ended_at, status \
+        "SELECT id, room_id, started_by, started_at, ended_at, status, summary \
          FROM call_transcripts WHERE room_id = ? AND status = 'active' \
          ORDER BY id DESC LIMIT 1",
     )
@@ -84,13 +87,28 @@ pub async fn start_session(
 /// Fetch a session by id.
 pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<Transcript>> {
     let row = sqlx::query(
-        "SELECT id, room_id, started_by, started_at, ended_at, status \
+        "SELECT id, room_id, started_by, started_at, ended_at, status, summary \
          FROM call_transcripts WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
     .await?;
     Ok(row.as_ref().map(map_transcript))
+}
+
+/// LC-396: cap on a stored summary. It is rendered through the markdown
+/// pipeline (LC-153), so the input must be bounded on the write path.
+pub const MAX_SUMMARY_CHARS: usize = 16_000;
+
+/// Store (or replace) a transcript's LLM summary, truncated to the cap.
+pub async fn set_summary(pool: &SqlitePool, id: i64, summary: &str) -> sqlx::Result<()> {
+    let capped: String = summary.chars().take(MAX_SUMMARY_CHARS).collect();
+    sqlx::query("UPDATE call_transcripts SET summary = ? WHERE id = ?")
+        .bind(&capped)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map(|_| ())
 }
 
 /// Append a final speech result. Text is truncated to [`MAX_SEGMENT_CHARS`] on

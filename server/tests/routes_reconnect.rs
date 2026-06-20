@@ -70,6 +70,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
         stt_client: None,
+        llm_client: None,
     };
     (routes::build_router(state), session)
 }

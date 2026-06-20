@@ -1,0 +1,11 @@
+{# LC-396: rendered transcript summary + a regenerate button. Swapped into
+   #lc-transcript-summary after POST /transcripts/{id}/summary, and also included
+   by the transcript page when a cached summary already exists. #}
+<div class="lc-md text-content">{{ summary_html|safe }}</div>
+<button type="button"
+        hx-post="/transcripts/{{ transcript_id }}/summary"
+        hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+        hx-disabled-elt="this"
+        class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+  {{ "transcript-summary-regenerate"|t }}
+</button>

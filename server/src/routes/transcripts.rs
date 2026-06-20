@@ -491,6 +491,13 @@ pub async fn show(
         });
     }
 
+    // LC-396: render the cached summary markdown (if any) to HTML.
+    let summary_html = session
+        .summary
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(|md| crate::views::markdown::render(md, &[], &[]));
+
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -518,6 +525,70 @@ pub async fn show(
         started_at: session.started_at,
         ended: session.status != "active",
         lines,
+        llm_available: state.llm_available(),
+        summary_html,
+    })
+}
+
+/// POST /transcripts/{id}/summary
+/// LC-396: generate (or regenerate) the transcript's LLM summary, store it, and
+/// return the rendered summary fragment. Gated like the transcript page; 400
+/// when no LLM endpoint is configured.
+pub async fn summary(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    let Some(llm) = state.llm_client.clone() else {
+        return Err(AppError::BadRequest(
+            "transcript summarization is not configured".into(),
+        ));
+    };
+
+    // Build the transcript text (Speaker: text per line), bounded so the prompt
+    // stays a reasonable size for the model.
+    const MAX_PROMPT_CHARS: usize = 48_000;
+    let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
+    let mut names: HashMap<String, String> = HashMap::new();
+    let mut text = String::new();
+    for s in &segments {
+        let name = match names.get(&s.user_id) {
+            Some(n) => n.clone(),
+            None => {
+                let n = label_for(&state, &s.user_id).await;
+                names.insert(s.user_id.clone(), n.clone());
+                n
+            }
+        };
+        text.push_str(&name);
+        text.push_str(": ");
+        text.push_str(&s.text);
+        text.push('\n');
+        if text.len() >= MAX_PROMPT_CHARS {
+            break;
+        }
+    }
+    if text.trim().is_empty() {
+        return Err(AppError::BadRequest("transcript is empty".into()));
+    }
+
+    let md = match llm.summarize(&text).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript summarization failed");
+            return Err(AppError::BadRequest("summarization failed".into()));
+        }
+    };
+    db::transcripts::set_summary(&state.chat, transcript_id, &md).await?;
+    let summary_html = crate::views::markdown::render(&md, &[], &[]);
+    html(&crate::views::transcripts::TranscriptSummaryFragment {
+        transcript_id,
+        summary_html,
     })
 }
 

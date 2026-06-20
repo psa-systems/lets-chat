@@ -15,6 +15,7 @@ pub mod http_client;
 pub mod i18n;
 pub mod last_visited;
 pub mod links;
+pub mod llm;
 pub mod mail;
 pub mod models;
 /// LC-22: "Log in with Bunyip" SSO client.
