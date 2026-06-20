@@ -255,6 +255,7 @@
     peerName = null;
     // LC-393: the call is over - let transcribe.js finalize any open session.
     window.__lcCallRoom = null;
+    var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.removeAttribute('data-lc-room');
     try { document.dispatchEvent(new CustomEvent('lc:call-ended')); } catch (e) {}
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
@@ -454,6 +455,10 @@
         // LC-393: publish the active call's room so transcribe.js can open a
         // transcription session, and signal that a call is live.
         window.__lcCallRoom = roomId;
+        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
+        // the room the same robust way the voice toggle does (not just via the
+        // __lcCallRoom global).
+        var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
         try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         // The server resolves glare; if an invite arrived while we were
         // acquiring media the phase has already flipped to 'incoming'.
@@ -493,6 +498,10 @@
         // LC-393: publish the active call's room so transcribe.js can open a
         // transcription session, and signal that a call is live.
         window.__lcCallRoom = roomId;
+        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
+        // the room the same robust way the voice toggle does (not just via the
+        // __lcCallRoom global).
+        var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
         try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         setStatus(window.__lcS('callConnecting', 'Connecting...'));
         signal('accept');

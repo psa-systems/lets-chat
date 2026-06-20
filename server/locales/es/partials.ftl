@@ -15,6 +15,7 @@ sidebar-unread-only = Solo no leídos
 sidebar-link-activity = Actividad
 sidebar-link-saved = Guardados
 sidebar-link-scheduled = Programados
+sidebar-link-transcripts = Transcripciones
 sidebar-link-settings = Ajustes
 sidebar-link-shortcuts = Atajos de teclado
 sidebar-toggle-theme = Cambiar tema

@@ -12,6 +12,35 @@ pub struct TranscriptLine {
     pub spoken_at: String,
 }
 
+/// LC-394: one row on the transcripts archive page.
+pub struct TranscriptIndexRow {
+    pub id: i64,
+    /// Headline: the DM peer's name, or the voice channel's name.
+    pub title: String,
+    /// Sub-line: "Direct call" or "Voice channel".
+    pub kind_label: String,
+    pub started_at: String,
+    pub ended: bool,
+    pub segment_count: i64,
+}
+
+/// LC-394: the transcripts archive (every transcript the viewer can access).
+#[derive(Template)]
+#[template(path = "transcripts/index.html")]
+pub struct TranscriptIndexPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub rows: Vec<TranscriptIndexRow>,
+}
+
 /// LC-393: the saved call-transcript page. Carries the standard sidebar chrome
 /// (via `routes::load_chrome`) plus the transcript body.
 #[derive(Template)]
