@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "transcript-page-title"|t }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+    <div class="min-w-0">
+      <h1 class="lc-h2 truncate">{{ "transcript-heading"|t }}</h1>
+      <p class="lc-small text-content-muted truncate">{{ room_name }} &middot; {{ started_at }}{% if !ended %} &middot; {{ "transcript-in-progress"|t }}{% endif %}</p>
+    </div>
+  </header>
+  <div class="flex-1 overflow-y-auto px-4 py-3">
+    {% if lines.is_empty() %}
+    <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
+    {% else %}
+    <div class="mx-auto max-w-2xl space-y-2">
+      {% for line in lines %}
+      <div class="rounded-md border border-border bg-surface-elevated px-3 py-2">
+        <div class="flex items-baseline gap-2">
+          <span class="lc-small font-medium text-content">{{ line.speaker_name }}</span>
+          <span class="lc-caption text-content-subtle tabular-nums">{{ line.spoken_at }}</span>
+        </div>
+        <p class="lc-body text-content mt-0.5 whitespace-pre-wrap break-words">{{ line.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -31,6 +31,16 @@ search-saved-remove = Quitar búsqueda guardada
 people-no-results = No hay personas coincidentes.
 people-you = (tú)
 
+## LC-393: transcripción de llamadas
+transcript-page-title = Transcripción de la llamada
+transcript-heading = Transcripción de la llamada
+transcript-in-progress = en curso
+transcript-empty = No se capturó ningún audio.
+transcript-toggle = Transcribir
+transcript-toggle-on = Detener transcripción
+transcript-banner = Esta llamada se está transcribiendo
+transcript-unsupported = La transcripción en vivo no es compatible con este navegador.
+
 ## Activity page
 activity-page-title = Actividad
 activity-heading = Actividad
