@@ -253,6 +253,9 @@
     roomId = null;
     peerId = null;
     peerName = null;
+    // LC-393: the call is over - let transcribe.js finalize any open session.
+    window.__lcCallRoom = null;
+    try { document.dispatchEvent(new CustomEvent('lc:call-ended')); } catch (e) {}
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
@@ -448,6 +451,10 @@
         setCameraBtn();
         show(q('[data-lc-call-active]'));
         installDialogTrap(q('[data-lc-call-active]'));
+        // LC-393: publish the active call's room so transcribe.js can open a
+        // transcription session, and signal that a call is live.
+        window.__lcCallRoom = roomId;
+        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         // The server resolves glare; if an invite arrived while we were
         // acquiring media the phase has already flipped to 'incoming'.
         // Honor that: we are now the callee.
@@ -483,6 +490,10 @@
         setCameraBtn();
         show(q('[data-lc-call-active]'));
         installDialogTrap(q('[data-lc-call-active]'));
+        // LC-393: publish the active call's room so transcribe.js can open a
+        // transcription session, and signal that a call is live.
+        window.__lcCallRoom = roomId;
+        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         setStatus(window.__lcS('callConnecting', 'Connecting...'));
         signal('accept');
         incoming = null;

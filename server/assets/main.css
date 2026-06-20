@@ -1510,6 +1510,20 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     display: none;
 }
 
+/* LC-393: live call-caption lines, appended into #lc-caption-log over the call
+   video. White text on the gradient scrim; the speaker is bolded. */
+.lc-cap-line {
+    color: #fff;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.lc-cap-speaker {
+    font-weight: 600;
+    margin-right: 0.375rem;
+    opacity: 0.85;
+}
+
 /* LC-389: full categorized reaction picker. The scroll container holds labeled
    category sections; each section is an 8-column grid of .lc-emoji-cell. The
    sticky label keeps the current category visible while scrolling. */

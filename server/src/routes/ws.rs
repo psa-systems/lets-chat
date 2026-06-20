@@ -20,8 +20,8 @@ use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, CallSignalFragment, EditedMessageFragment, MentionClearedFragment,
     MentionedFragment, NewMessageFragment, ReactionUpdateFragment, ReminderFragment,
-    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment,
-    VoiceEventFragment,
+    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
+    TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -520,6 +520,19 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_voice_event(&e)
                                 }
+                                // LC-393: call-transcription control + captions,
+                                // per-recipient like the call/voice signals.
+                                ChatEvent::TranscriptStarted { to_user_id, .. }
+                                | ChatEvent::TranscriptEnded { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_transcript_control(&e)
+                                }
+                                ChatEvent::TranscriptSegment { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_transcript_segment(&e)
+                                }
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -648,6 +661,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // still handles the OS side; this only finalizes the audit row.
         let _ =
             db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect").await;
+        // LC-393 backstop: a hard drop never sends /end, so finalize any
+        // transcription session this user started (close + notify + post the
+        // saved notice). Idempotent against a peer's explicit /end.
+        super::transcripts::finalize_open_for_user(&state, &uid).await;
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
             status: "offline".to_string(),
@@ -1386,6 +1403,40 @@ fn render_call_signal(event: &ChatEvent) -> Option<String> {
     }
     .render()
     .ok()
+}
+
+/// LC-393: render a transcription start/end control event into the
+/// `#lc-transcript-bus` fragment the browser's transcribe.js drains.
+fn render_transcript_control(event: &ChatEvent) -> Option<String> {
+    let (kind, transcript_id, by): (&str, i64, &str) = match event {
+        ChatEvent::TranscriptStarted {
+            transcript_id,
+            started_by_name,
+            ..
+        } => ("started", *transcript_id, started_by_name.as_str()),
+        ChatEvent::TranscriptEnded { transcript_id, .. } => ("ended", *transcript_id, ""),
+        _ => return None,
+    };
+    TranscriptControlFragment {
+        kind,
+        transcript_id,
+        started_by_name: by,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-393: render one live caption line into the visible `#lc-caption-log`.
+fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::TranscriptSegment {
+        speaker_name, text, ..
+    } = event
+    else {
+        return None;
+    };
+    TranscriptSegmentFragment { speaker_name, text }
+        .render()
+        .ok()
 }
 
 /// Validate and relay one WebRTC call signal to the other member of a DM

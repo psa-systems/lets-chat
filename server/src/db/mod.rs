@@ -45,6 +45,7 @@ pub mod sidebar_categories;
 pub mod slash;
 pub mod starred_rooms;
 pub mod thread_followers;
+pub mod transcripts;
 pub mod uploads;
 pub mod user_groups;
 pub mod vapid;
