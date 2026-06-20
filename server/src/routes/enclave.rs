@@ -1094,7 +1094,13 @@ pub async fn post_create_room(
             room_id,
         },
     );
-    Ok(Redirect::to(&format!("/enclave/{id}")))
+    // LC-400: land the creator directly in the new room. Redirecting to
+    // `/enclave/{id}` instead bounced through `get_landing`, which opens the
+    // user's last-visited / first openable room (not the one just created), so
+    // creating a room felt like a no-op. The creator can always open the new
+    // room: a public room is openable to every enclave member, and a private
+    // room added the creator as a member just above.
+    Ok(Redirect::to(&format!("/room/{room_id}")))
 }
 
 #[derive(Deserialize)]
