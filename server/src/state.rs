@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 use crate::auth::LastSeenLedger;
 use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
+use crate::llm::LlmClient;
 use crate::mail::Mailer;
 use crate::oidc::BunyipSsoClient;
 use crate::push::{ApnsClient, FcmClient, PushClient};
@@ -79,6 +80,10 @@ pub struct AppState {
     /// the `/call/transcript/{id}/audio` route forwards them here. `None`
     /// (default) keeps transcription on the in-browser Web Speech engine.
     pub stt_client: Option<Arc<dyn SttClient>>,
+    /// LC-396: optional LLM for transcript summaries. `Some` when
+    /// `LETS_CHAT_LLM_URL` is set; gates the "Summarize" action on the
+    /// transcript page. `None` (default) hides it.
+    pub llm_client: Option<Arc<dyn LlmClient>>,
 }
 
 impl AppState {
@@ -96,6 +101,10 @@ impl AppState {
     /// clients use the server engine (audio upload) instead of the browser one.
     pub fn stt_available(&self) -> bool {
         self.stt_client.is_some()
+    }
+    /// LC-396: true when an LLM endpoint is configured (transcript summaries).
+    pub fn llm_available(&self) -> bool {
+        self.llm_client.is_some()
     }
     /// Whether session and pending-auth cookies should carry the `Secure`
     /// attribute. WebKit2GTK (Tauri desktop on Linux) and Safari reject
