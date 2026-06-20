@@ -856,9 +856,42 @@ math {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 3rem;
-    background: linear-gradient(to bottom, transparent, var(--surface));
+    height: 4rem;
+    /* Smoother two-stop fade so the cut reads as an intentional fade, not a hard
+       crop. Fades to --surface (the message-list background). */
+    background: linear-gradient(to bottom, transparent, var(--surface) 85%);
     pointer-events: none;
+}
+
+/* LC-385: long-message expand/collapse toggle. A quiet inline control with a
+   rotating CSS-triangle chevron; the chevron is a ::before (a border triangle,
+   not glyph content) so auto_scroll.html keeps setting textContent for the
+   label without wiping it, and screen readers do not announce the marker. */
+.lc-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-collapse-toggle:hover {
+    color: var(--content);
+}
+.lc-collapse-toggle::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    transition: transform 0.15s ease;
+}
+.lc-collapse-toggle.lc-collapse-open::before {
+    transform: rotate(180deg);
 }
 
 /* LC-262: image lightbox. The full image is constrained to the viewport and
