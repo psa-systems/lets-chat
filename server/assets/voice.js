@@ -179,13 +179,13 @@
     }
     video.style.display = hasVideo ? '' : 'none';
     avatar.style.display = hasVideo ? 'none' : '';
-    // LC-408 fix: a remote screen share always carries a live video track, so a
-    // remote tile with no video can no longer be sharing. Clear a stale pin as
-    // a fallback for a dropped/missed voice_screen=false signal, so the stage
-    // never gets stuck. (Self is handled explicitly by announceScreen.)
-    if (!hasVideo && cfg && userId !== cfg.selfId && t.hasAttribute('data-screen')) {
-      t.removeAttribute('data-screen');
-    }
+    // NOTE: do NOT clear data-screen here based on `hasVideo`. The screen-share
+    // pin is owned solely by the explicit voice_screen signal (applyScreen). On
+    // the RECEIVER the voice_screen=true signal lands before the screen video
+    // track is live, and this fn runs from ontrack/onmute during that window -
+    // clearing the pin here wiped it and the stage never engaged for peers
+    // (LC-408 receiver-pin bug). Stop is handled by voice_screen=false; a
+    // crashed sharer is handled by VoiceLeft removing the tile.
   }
   function tileVideo(userId) {
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
