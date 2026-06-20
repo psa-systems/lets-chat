@@ -64,6 +64,9 @@ pub(crate) mod room;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
+// LC-397: expose the per-recipient new-message render so the optimistic-echo
+// test can assert the author always gets their own echo, even unsubscribed.
+pub use ws::render_new_message_or_bump;
 mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
