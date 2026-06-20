@@ -115,10 +115,86 @@ pub async fn toggle_reaction(
     html(&fragment)
 }
 
+/// LC-389: the eight standard Unicode emoji categories, in `emojis::Group`
+/// order, each with a stable slug (the tab/section hook), an i18n key for its
+/// label, and a representative glyph for its tab. `Group::emojis()` yields the
+/// group's members in Unicode order, so the rendered grid matches every other
+/// emoji UI the user has seen.
+const EMOJI_GROUPS: &[(emojis::Group, &str, &str, &str)] = &[
+    (
+        emojis::Group::SmileysAndEmotion,
+        "smileys",
+        "partials-reaction-cat-smileys",
+        "😀",
+    ),
+    (
+        emojis::Group::PeopleAndBody,
+        "people",
+        "partials-reaction-cat-people",
+        "👋",
+    ),
+    (
+        emojis::Group::AnimalsAndNature,
+        "nature",
+        "partials-reaction-cat-nature",
+        "🐻",
+    ),
+    (
+        emojis::Group::FoodAndDrink,
+        "food",
+        "partials-reaction-cat-food",
+        "🍔",
+    ),
+    (
+        emojis::Group::TravelAndPlaces,
+        "travel",
+        "partials-reaction-cat-travel",
+        "✈️",
+    ),
+    (
+        emojis::Group::Activities,
+        "activities",
+        "partials-reaction-cat-activities",
+        "⚽",
+    ),
+    (
+        emojis::Group::Objects,
+        "objects",
+        "partials-reaction-cat-objects",
+        "💡",
+    ),
+    (
+        emojis::Group::Symbols,
+        "symbols",
+        "partials-reaction-cat-symbols",
+        "🔣",
+    ),
+    (
+        emojis::Group::Flags,
+        "flags",
+        "partials-reaction-cat-flags",
+        "🚩",
+    ),
+];
+
+/// LC-389: build one react button for a Unicode emoji. The markup is byte-for-
+/// byte the LC-384 shape (same `data-lc-emoji-name` filter hook, same
+/// `hx-post`/`hx-target`/`hx-swap` the LC-288 recorder + close-on-react JS key
+/// on), so expanding the set needed no JS change. `name` is the search keyword
+/// string (human name + every shortcode), attribute-escaped.
+fn push_unicode_button(buf: &mut String, message_id: i64, glyph: &str, name: &str) {
+    let encoded = percent_encoding::utf8_percent_encode(glyph, percent_encoding::NON_ALPHANUMERIC);
+    buf.push_str(&format!(
+        r##"<button type="button" data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="lc-emoji-cell">{glyph}</button>"##,
+    ));
+}
+
 /// GET /messages/:message_id/reactions/picker
-/// Return an inline emoji picker that replaces the `+` button. The picker
-/// surfaces a small unicode default set plus every custom emoji defined in
-/// the message's enclave (DMs and non-enclave rooms see unicode only).
+/// Return the floating emoji picker. LC-389: the full Unicode set organized
+/// into the eight standard categories (browsable via the tab strip + scroll)
+/// plus the message's enclave custom emojis. The LC-274 filter searches name +
+/// shortcodes across the whole set; the LC-288 recent row sits on top. DMs and
+/// non-enclave rooms see the Unicode set without a Custom section.
 pub async fn get_picker(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -133,39 +209,63 @@ pub async fn get_picker(
         .ok_or(AppError::NotFound)?;
     require_room_access(&state, &user, m.room_id).await?;
 
-    // LC-274: searchable keyword tokens for the unicode defaults so the filter
-    // can find them by name (the glyph itself is not typeable). Custom emojis
-    // are matched on their shortcode below.
-    let unicode_defaults = [
-        ("👍", "thumbsup +1 like"),
-        ("❤", "heart love"),
-        ("😂", "joy laugh lol"),
-        ("🎉", "tada party celebrate"),
-        ("😮", "wow open_mouth surprised"),
-        ("😢", "cry sad"),
-    ];
-    let mut buttons = String::new();
-    for (e, name) in &unicode_defaults {
-        let encoded = percent_encoding::utf8_percent_encode(e, percent_encoding::NON_ALPHANUMERIC);
-        buttons.push_str(&format!(
-            r##"<button data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="lc-emoji-cell">{e}</button>"##,
+    // LC-389: render the full set once per open. ~1900 buttons; reserve so the
+    // build is a single allocation rather than a growth cascade.
+    let mut tabs = String::new();
+    let mut sections = String::with_capacity(400 * 1024);
+    for (group, slug, key, tab_glyph) in EMOJI_GROUPS {
+        let label = attr_escape(&crate::i18n::translate_current(key));
+        tabs.push_str(&format!(
+            r##"<button type="button" data-lc-emoji-tab="{slug}" aria-label="{label}" title="{label}" class="lc-emoji-tab">{tab_glyph}</button>"##,
         ));
+        sections.push_str(&format!(
+            r##"<section class="lc-emoji-section" data-lc-emoji-cat="{slug}"><div class="lc-emoji-cat-label">{label}</div><div class="lc-emoji-cat-grid">"##,
+        ));
+        for emoji in group.emojis() {
+            // Keyword string: human name first, then every shortcode (so the
+            // filter finds "+1" / "thumbsup" / "thumbs up"). Lowercased so the
+            // case-insensitive LC-274 substring match needs no per-keystroke
+            // work, attribute-escaped against a stray name with a quote.
+            let mut name = emoji.name().to_string();
+            for sc in emoji.shortcodes() {
+                name.push(' ');
+                name.push_str(sc);
+            }
+            let name = attr_escape(&name.to_ascii_lowercase());
+            push_unicode_button(&mut sections, message_id, emoji.as_str(), &name);
+        }
+        sections.push_str("</div></section>");
     }
 
-    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
-    for emoji in &emojis {
-        let key = format!(":{}:", emoji.shortcode);
-        let encoded =
-            percent_encoding::utf8_percent_encode(&key, percent_encoding::NON_ALPHANUMERIC);
-        // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
-        // so it is safe to inline into the markup without escaping.
-        buttons.push_str(&format!(
-            r##"<button data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="lc-emoji-cell" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
-            id = message_id,
-            enc = encoded,
-            code = emoji.shortcode,
-            eid = emoji.id,
+    // LC-389: per-enclave custom emojis as their own trailing section + tab.
+    // Message-specific image buttons, unchanged from LC-384 (the LC-288 recorder
+    // deliberately skips `:shortcode:` reactions, so these stay out of Recent).
+    let custom = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    if !custom.is_empty() {
+        let label = attr_escape(&crate::i18n::translate_current(
+            "partials-reaction-cat-custom",
         ));
+        tabs.push_str(&format!(
+            r##"<button type="button" data-lc-emoji-tab="custom" aria-label="{label}" title="{label}" class="lc-emoji-tab">⭐</button>"##,
+        ));
+        sections.push_str(&format!(
+            r##"<section class="lc-emoji-section" data-lc-emoji-cat="custom"><div class="lc-emoji-cat-label">{label}</div><div class="lc-emoji-cat-grid">"##,
+        ));
+        for emoji in &custom {
+            let key = format!(":{}:", emoji.shortcode);
+            let encoded =
+                percent_encoding::utf8_percent_encode(&key, percent_encoding::NON_ALPHANUMERIC);
+            // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
+            // so it is safe to inline into the markup without escaping.
+            sections.push_str(&format!(
+                r##"<button type="button" data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="lc-emoji-cell" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
+                id = message_id,
+                enc = encoded,
+                code = emoji.shortcode,
+                eid = emoji.id,
+            ));
+        }
+        sections.push_str("</div></section>");
     }
 
     // LC-274: localized filter placeholder, attribute-escaped (translations are
@@ -175,22 +275,21 @@ pub async fn get_picker(
     // LC-288: empty recent-emoji row; the layout IIFE fills it from localStorage
     // when the picker opens (hidden when there is no history).
     let recent_label = attr_escape(&crate::i18n::translate_current("partials-reaction-recent"));
-    // LC-384: the picker is now a floating card rendered into the fixed-position
-    // #lc-reaction-popover host (positioned by the layout.html LC-384 script), so
-    // it no longer carries inline-flow / width-pinning classes. The id MUST stay
-    // `picker-{id}` - the LC-288 recent-row JS derives the message id from it and
-    // the LC-274 filter keys on `[id^="picker-"]`. The close `x` dismisses the
-    // host client-side (data-lc-reaction-close); the old hx-get .../cancel inline
-    // restore is gone.
+    // LC-384: the picker is a floating card rendered into the fixed-position
+    // #lc-reaction-popover host (positioned by the layout.html LC-384 script).
+    // The id MUST stay `picker-{id}` - the LC-288 recent-row JS derives the
+    // message id from it and the LC-274 filter keys on `[id^="picker-"]`. The
+    // close `x` dismisses the host client-side (data-lc-reaction-close).
     let close_label = attr_escape(&crate::i18n::translate_current("reminders-close"));
     let body = format!(
-        r##"<div id="picker-{message_id}" class="w-64 rounded-lg border border-border bg-surface-elevated shadow-lg overflow-hidden">
+        r##"<div id="picker-{message_id}" class="w-72 rounded-lg border border-border bg-surface-elevated shadow-lg overflow-hidden">
   <div class="flex items-center gap-1 p-2 border-b border-border">
     <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="flex-1 min-w-0 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
     <button type="button" data-lc-reaction-close aria-label="{close_label}" class="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md text-content-muted hover:bg-surface-sunken hover:text-content">&times;</button>
   </div>
   <div data-lc-emoji-recent data-lc-recent-label="{recent_label}" class="hidden flex flex-wrap items-center gap-1 px-2 py-1.5 text-xs text-content-muted border-b border-border"></div>
-  <div data-lc-emoji-grid class="flex flex-wrap gap-0.5 max-h-44 overflow-y-auto p-2">{buttons}</div>
+  <div data-lc-emoji-tabs class="lc-emoji-tabs">{tabs}</div>
+  <div data-lc-emoji-grid class="lc-emoji-scroll">{sections}</div>
 </div>"##,
     );
     Ok(axum::response::Html(body).into_response())
