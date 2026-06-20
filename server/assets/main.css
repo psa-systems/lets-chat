@@ -1606,6 +1606,15 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     color: var(--content);
     padding: 0.5rem 1rem;
 }
+/* LC-412: bottom tray variant for the 1:1 call modal - the bar sits under the
+   video, so the divider is on top and the clusters centre. */
+.lc-callbar--bottom {
+    flex: none;
+    justify-content: center;
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    padding: 0.625rem 1rem;
+}
 .lc-callbar-group {
     display: inline-flex;
     align-items: center;
@@ -1987,6 +1996,13 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
         flex-wrap: nowrap;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
+    }
+    /* LC-412: the 1:1 modal bar has no title row to stack, so keep it a centred
+       wrapping row of controls rather than a column. */
+    .lc-callbar--bottom {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
     }
     .lc-callbar-spacer { display: none; }
     .lc-callbar-controls {

@@ -77,25 +77,40 @@
           {{ "call-control-uipi"|t }}
         </div>
       </div>
-      <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
-        <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-mute"|t }}</button>
-        <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "call-start-video"|t }}</button>
-        <button type="button" data-lc-call-screen aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-share-screen"|t }}</button>
-        {# LC-393: transcription toggle. Disabled + titled with the unsupported
-           note by transcribe.js when the browser has no SpeechRecognition. #}
-        <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 aria-pressed:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "transcript-toggle"|t }}</button>
-        {# LC-184: controller-side "Request control" affordance. Hidden until the
-           peer's video is live; toggles to "Stop controlling" while active.
-           Server enforces the verified-email + block gate at the relay, so a
-           dropped request never produces a grant (the requesting state times
-           out client-side). #}
-        <button type="button" data-lc-control-request aria-pressed="false" class="hidden rounded-full bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500">{{ "call-request-control"|t }}</button>
-        <button type="button" data-lc-open-devices title="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-            <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-          </svg>
-        </button>
-        <button type="button" data-lc-call-hangup class="rounded-full bg-red-600 px-6 py-2 text-sm font-medium text-white hover:bg-red-700">{{ "call-hang-up"|t }}</button>
+      {# LC-412: 1:1 call control bar, on the same .lc-cbtn token system as the
+         enclave voice page (LC-402). Two clusters - media controls (devices /
+         Mute / video / screen) and session actions (Transcribe / Transcript
+         panel / request-control / Hang up) - split by a divider. Mute/video/
+         screen carry aria-pressed on/off; Transcribe is the danger "recording"
+         toggle tied to the pill + drawer; Hang up is danger. call.js drives
+         these by their data-lc-* hooks, so the restyle is transparent to it. #}
+      <div class="lc-callbar lc-callbar--bottom">
+        <div class="lc-callbar-group">
+          <button type="button" data-lc-open-devices title="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="lc-cbtn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+          <button type="button" data-lc-call-mute aria-pressed="false" class="lc-cbtn">{{ "call-mute"|t }}</button>
+          <button type="button" data-lc-call-camera aria-pressed="false" class="lc-cbtn">{{ "call-start-video"|t }}</button>
+          <button type="button" data-lc-call-screen aria-pressed="false" class="lc-cbtn">{{ "call-share-screen"|t }}</button>
+        </div>
+        <div class="lc-callbar-sep"></div>
+        <div class="lc-callbar-group">
+          {# LC-393: transcription toggle. Disabled + titled with the unsupported
+             note by transcribe.js when the browser has no SpeechRecognition. #}
+          <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" class="lc-cbtn lc-cbtn--rec"><span class="lc-rec-dot" aria-hidden="true"></span>{{ "transcript-toggle"|t }}</button>
+          {# LC-412: reopen the transcript drawer after closing it (it auto-opens
+             when a session starts). transcribe.js handles the click + close. #}
+          <button type="button" data-lc-transcript-panel-toggle aria-pressed="false" title="{{ "voice-transcript-panel"|t }}" aria-label="{{ "voice-transcript-panel"|t }}" class="lc-cbtn">{{ "voice-transcript-panel"|t }}</button>
+          {# LC-184: controller-side "Request control" affordance. Hidden until the
+             peer's video is live; toggles to "Stop controlling" while active.
+             Server enforces the verified-email + block gate at the relay, so a
+             dropped request never produces a grant (the requesting state times
+             out client-side). #}
+          <button type="button" data-lc-control-request aria-pressed="false" class="hidden lc-cbtn">{{ "call-request-control"|t }}</button>
+          <button type="button" data-lc-call-hangup class="lc-cbtn lc-cbtn--leave">{{ "call-hang-up"|t }}</button>
+        </div>
       </div>
     </div>
     {# LC-186: persistent active-control banner shown to the sharer for the whole
