@@ -34,6 +34,7 @@
   // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
   // this map so it never lies about who is on the line.
   var participants = {};  // user_id -> label
+  var selfMuted = false;  // LC-402: our own mic state, broadcast to the channel
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -475,6 +476,7 @@
     getMedia(false).then(function (stream) {
       localStream = stream;
       joined = true;
+      selfMuted = false; // LC-402: fresh session starts unmuted
       // Record ourselves so the preview is correct if we leave before any
       // VoiceJoined echoes back; the roster event will overwrite this.
       participants[cfg.selfId] = cfg.selfName;
@@ -499,6 +501,7 @@
 
   function leave() {
     if (!joined) return;
+    selfMuted = false;
     stopSpeaking();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
@@ -531,14 +534,23 @@
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var muted = !on;
+    selfMuted = muted;
     var btn = q('[data-lc-voice-mute]');
     if (btn) {
       btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
       btn.setAttribute('aria-pressed', muted ? 'true' : 'false'); // LC-402 on/off state
     }
-    // LC-402: reflect our own mute on our tile.
-    var tile = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(cfg.selfId) + '"]');
-    if (tile) tile.setAttribute('data-muted', muted ? 'true' : 'false');
+    // LC-402: reflect our own mute on our tile and tell the channel so peers
+    // light the mute indicator on our remote tile too.
+    applyMute(cfg.selfId, muted);
+    wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: muted });
+  }
+
+  // LC-402: set the mute indicator on a participant's tile (self or remote).
+  function applyMute(userId, muted) {
+    if (!userId) return;
+    var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (t) t.setAttribute('data-muted', muted ? 'true' : 'false');
   }
 
   function setCameraBtn() {
@@ -786,13 +798,22 @@
       renderPreview();
       // Someone joined after us; they will offer, we answer. Skip when the
       // event is about us (we already created our own tile in join()).
-      if (joined && userId !== cfg.selfId) addPeer(userId, username, false);
+      if (joined && userId !== cfg.selfId) {
+        addPeer(userId, username, false);
+        // LC-402: a fresh joiner has no record of our current mic state, so if
+        // we are muted re-announce it (broadcast_to_room reaches them too).
+        if (selfMuted) wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: true });
+      }
       return;
     }
     if (kind === 'left') {
       if (userId) delete participants[userId];
       renderPreview();
       removePeer(userId);
+      return;
+    }
+    if (kind === 'mute') { // LC-402: a peer toggled their mic
+      applyMute(userId, payload === '1');
       return;
     }
     if (!joined) return;

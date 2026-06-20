@@ -379,6 +379,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceLeft { .. }
         | ChatEvent::VoiceRoster { .. }
         | ChatEvent::VoiceSignal { .. }
+        | ChatEvent::VoiceMuteChanged { .. }
         // LC-393: transcription control + captions are rendered per recipient
         // in the WS send task (to_user_id targeting), like the call signals.
         | ChatEvent::TranscriptStarted { .. }
