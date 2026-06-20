@@ -40,6 +40,13 @@ transcript-toggle = Transcribir
 transcript-toggle-on = Detener transcripción
 transcript-banner = Esta llamada se está transcribiendo
 transcript-unsupported = La transcripción en vivo no es compatible con este navegador.
+# LC-394: archivo de transcripciones
+transcript-index-title = Transcripciones
+transcript-index-heading = Transcripciones de llamadas
+transcript-index-empty = Aún no hay transcripciones. Activa la transcripción durante una llamada para guardarla aquí.
+transcript-kind-dm = Llamada directa
+transcript-kind-voice = Canal de voz
+transcript-lines = líneas
 
 ## Activity page
 activity-page-title = Actividad

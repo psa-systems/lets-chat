@@ -23,7 +23,9 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
-use crate::views::transcripts::{TranscriptLine, TranscriptPage};
+use crate::views::transcripts::{
+    TranscriptIndexPage, TranscriptIndexRow, TranscriptLine, TranscriptPage,
+};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -363,6 +365,88 @@ async fn post_saved_message(state: &AppState, room: &Room, transcript_id: i64) {
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
         tracing::warn!(error = %e, "failed to broadcast transcript-saved message");
     }
+}
+
+/// GET /transcripts
+/// LC-394: the archive of every transcript the viewer can access (DM calls +
+/// voice channels they belong to), newest first. Each candidate is gated with
+/// the same `is_room_accessible` check the single-transcript page uses, so no
+/// transcript from a room the viewer cannot see is ever listed.
+pub async fn index(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Html, AppError> {
+    // Scan recent transcripts, then keep the ones the viewer can access (cap the
+    // rendered list so a busy instance stays bounded).
+    const SCAN: i64 = 300;
+    const SHOW: usize = 100;
+    let is_admin = user.role == "admin";
+    let candidates = db::transcripts::list_recent(&state.chat, SCAN).await?;
+
+    let mut rows: Vec<TranscriptIndexRow> = Vec::new();
+    for c in candidates {
+        if rows.len() >= SHOW {
+            break;
+        }
+        if !db::chat::is_room_accessible(&state.chat, c.room_id, &user.id, is_admin).await? {
+            continue;
+        }
+        // DM: headline the peer (the other member); voice: the channel name.
+        let (title, kind_label) = if c.room_type == "dm" {
+            let members = db::chat::list_room_member_ids(&state.chat, c.room_id)
+                .await
+                .unwrap_or_default();
+            let peer = members.into_iter().find(|m| m != &user.id);
+            let title = match peer {
+                Some(pid) => label_for(&state, &pid).await,
+                None => crate::i18n::translate_current("transcript-kind-dm"),
+            };
+            (title, crate::i18n::translate_current("transcript-kind-dm"))
+        } else {
+            let name = if c.room_name.trim().is_empty() {
+                crate::i18n::translate_current("transcript-kind-voice")
+            } else {
+                c.room_name.clone()
+            };
+            (
+                name,
+                crate::i18n::translate_current("transcript-kind-voice"),
+            )
+        };
+        rows.push(TranscriptIndexRow {
+            id: c.id,
+            title,
+            kind_label,
+            started_at: c.started_at,
+            ended: c.status != "active",
+            segment_count: c.segment_count,
+        });
+    }
+
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+
+    html(&TranscriptIndexPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        rows,
+    })
 }
 
 /// GET /transcripts/{id}

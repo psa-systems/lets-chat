@@ -1350,6 +1350,7 @@ pub fn build_router(state: AppState) -> Router {
             "/call/transcript/{transcript_id}/end",
             post(transcripts::end),
         )
+        .route("/transcripts", get(transcripts::index))
         .route("/transcripts/{transcript_id}", get(transcripts::show))
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
