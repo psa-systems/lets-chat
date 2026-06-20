@@ -47,6 +47,8 @@
         btn.addEventListener('click', function () {
           var collapsed = body.classList.toggle('lc-collapsible');
           btn.textContent = collapsed ? btn.getAttribute('data-lc-more') : btn.getAttribute('data-lc-less');
+          // LC-385: rotate the chevron (CSS ::before) to reflect expanded state.
+          btn.classList.toggle('lc-collapse-open', !collapsed);
         });
       })(nodes[i]);
     }
