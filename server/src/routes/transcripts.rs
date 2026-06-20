@@ -1,10 +1,14 @@
-//! LC-393: call transcription endpoints (Phase 1, 1:1 DM calls).
+//! LC-393: call transcription endpoints. Phase 1 covered 1:1 DM calls; Phase 2
+//! adds enclave voice channels (N participants).
 //!
 //! Calls are P2P (the server never sees audio), so each participant's browser
 //! transcribes its OWN mic and POSTs final segments here. The server stores
-//! them, broadcasts attributed live captions to both members, and on hangup
-//! finalizes the session + drops a linked "transcript saved" notice in the DM.
-//! All endpoints are gated to DM members; transcription is DM-only for now.
+//! them, broadcasts attributed live captions to the call's participants, and on
+//! hangup finalizes the session + drops a linked "transcript saved" notice in
+//! the room. The mutating endpoints (start/segment/end) are gated to active
+//! participants: a DM member, or - for a voice channel - a user currently joined
+//! to the channel (so a room member who never joined can neither start nor be
+//! auto-captured). Live events are scoped to the actual participants.
 
 use std::collections::HashMap;
 
@@ -34,34 +38,80 @@ async fn label_for(state: &AppState, user_id: &str) -> String {
     }
 }
 
-/// Gate: the room must be a DM the caller belongs to. 404 the room first so a
-/// non-member cannot distinguish "no such room" from "no access" (cf. the
-/// reaction-picker gate). Transcription is DM-only in Phase 1.
-async fn require_dm_member(state: &AppState, user: &User, room_id: i64) -> Result<Room, AppError> {
+/// Fetch the room and confirm it is a call-capable surface: a DM (1:1 calls,
+/// LC-393 Phase 1) or a voice channel (`is_voice`, Phase 2). 404 anything else
+/// so a non-call room is indistinguishable from "no such room".
+async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppError> {
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if room.room_type != "dm" {
+    if room.room_type != "dm" && !room.is_voice {
         return Err(AppError::NotFound);
-    }
-    if !db::chat::is_room_member(&state.chat, room_id, &user.id).await? {
-        return Err(AppError::Forbidden);
     }
     Ok(room)
 }
 
-/// Broadcast a per-recipient transcript event to every member of `room_id`
-/// (mirrors the call/voice signals: one event per member, `to_user_id` set, the
-/// WS send task renders only for that recipient).
+/// Gate for mutating the live session (start / segment / end): the caller must
+/// be an active PARTICIPANT, not merely able to see the room. A DM member is a
+/// participant; for a voice channel the caller must currently be joined to the
+/// channel (so a room member who never joined cannot start transcription and
+/// silently auto-capture everyone who did).
+async fn require_participant(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
+    let ok = if room.is_voice {
+        state
+            .hub
+            .voice_room_users(room.id)
+            .iter()
+            .any(|u| u == &user.id)
+    } else {
+        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
+/// Gate for reading a saved transcript: room access (a member can review it
+/// after the fact, even once they've left a voice channel).
+async fn require_access(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
+    let ok = if room.room_type == "dm" {
+        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
+    } else {
+        let is_admin = user.role == "admin";
+        db::chat::is_room_accessible(&state.chat, room.id, &user.id, is_admin).await?
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
+/// The set of users who should receive this call's live transcript events: the
+/// voice channel's current participants for a voice room, else the DM's members.
+/// Scoping voice broadcasts to actual participants is what keeps a room member
+/// who never joined from being auto-captured.
+async fn recipients(state: &AppState, room: &Room) -> Vec<String> {
+    if room.is_voice {
+        state.hub.voice_room_users(room.id)
+    } else {
+        db::chat::list_room_member_ids(&state.chat, room.id)
+            .await
+            .unwrap_or_default()
+    }
+}
+
+/// Broadcast a per-recipient transcript event to each call participant (one
+/// event per recipient, `to_user_id` set, the WS send task renders only for
+/// that recipient - mirrors the call/voice signals).
 async fn broadcast_to_members(
     state: &AppState,
-    room_id: i64,
+    room: &Room,
     make_event: impl Fn(String) -> ChatEvent,
 ) {
-    let members = db::chat::list_room_member_ids(&state.chat, room_id)
-        .await
-        .unwrap_or_default();
-    for m in members {
+    for m in recipients(state, room).await {
         let event = make_event(m.clone());
         state.hub.broadcast_to_user(&m, &event);
     }
@@ -74,11 +124,12 @@ pub async fn start(
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    require_dm_member(&state, &user, room_id).await?;
+    let room = fetch_call_room(&state, room_id).await?;
+    require_participant(&state, &user, &room).await?;
     let session = db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
     let by = label_for(&state, &user.id).await;
     let tid = session.id;
-    broadcast_to_members(&state, room_id, |to| ChatEvent::TranscriptStarted {
+    broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptStarted {
         room_id,
         to_user_id: to,
         transcript_id: tid,
@@ -104,7 +155,8 @@ pub async fn segment(
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let room = require_dm_member(&state, &user, session.room_id).await?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_participant(&state, &user, &room).await?;
     // A late segment after the session closed is benign - drop it silently so
     // the client never has to special-case the end race.
     let trimmed = text.trim();
@@ -114,7 +166,7 @@ pub async fn segment(
     db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed).await?;
     let speaker = label_for(&state, &user.id).await;
     let body = trimmed.to_string();
-    broadcast_to_members(&state, room.id, |to| ChatEvent::TranscriptSegment {
+    broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptSegment {
         room_id: room.id,
         to_user_id: to,
         transcript_id,
@@ -137,7 +189,8 @@ pub async fn end(
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let room = require_dm_member(&state, &user, session.room_id).await?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_participant(&state, &user, &room).await?;
     finalize(&state, &room, transcript_id).await;
     Ok(Html(String::new()))
 }
@@ -149,7 +202,7 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     let transitioned = db::transcripts::end_session(&state.chat, transcript_id)
         .await
         .unwrap_or(false);
-    broadcast_to_members(state, room.id, |to| ChatEvent::TranscriptEnded {
+    broadcast_to_members(state, room, |to| ChatEvent::TranscriptEnded {
         room_id: room.id,
         to_user_id: to,
         transcript_id,
@@ -157,6 +210,19 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     .await;
     if transitioned {
         post_saved_message(state, room, transcript_id).await;
+    }
+}
+
+/// LC-393 Phase 2 backstop: when a voice channel empties, finalize any session
+/// still open for it (save + post the notice) - the equivalent of the per-user
+/// disconnect backstop for the shared-channel case.
+pub async fn finalize_open_for_room(state: &AppState, room_id: i64) {
+    let Ok(Some(session)) = db::transcripts::open_session_for_room(&state.chat, room_id).await
+    else {
+        return;
+    };
+    if let Ok(room) = fetch_call_room(state, room_id).await {
+        finalize(state, &room, session.id).await;
     }
 }
 
@@ -172,7 +238,7 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
             if let Ok(Some(room)) = db::chat::get_room(&state.chat, session.room_id).await {
                 // end_session already transitioned (it's in `closed`), so just
                 // broadcast end + post the notice.
-                broadcast_to_members(state, room.id, |to| ChatEvent::TranscriptEnded {
+                broadcast_to_members(state, &room, |to| ChatEvent::TranscriptEnded {
                     room_id: room.id,
                     to_user_id: to,
                     transcript_id: tid,
@@ -247,7 +313,8 @@ pub async fn show(
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let room = require_dm_member(&state, &user, session.room_id).await?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
     let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
 
     let mut names: HashMap<String, String> = HashMap::new();

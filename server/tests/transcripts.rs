@@ -59,11 +59,14 @@ async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
 struct Setup {
     app: Router,
     chat: sqlx::SqlitePool,
+    hub: Arc<Hub>,
     a_session: String,
     b_session: String,
+    b_id: String,
     outsider_session: String,
     dm_room: i64,
     public_room: i64,
+    voice_room: i64,
 }
 
 async fn setup() -> Setup {
@@ -95,16 +98,28 @@ async fn setup() -> Setup {
     // A non-DM room alice belongs to (General = room 1 from backfill is public).
     let public_room = 1;
 
+    // A public voice channel (Phase 2). is_voice gates it as call-capable;
+    // participation is tracked by the hub, not room_members.
+    let voice_room = db::chat::create_room(&chat, "voicechan", None, "public", None, None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE rooms SET is_voice = 1 WHERE id = ?")
+        .bind(voice_room)
+        .execute(&chat)
+        .await
+        .unwrap();
+
     let a_session = db::auth::create_session(&auth, &a).await.unwrap();
     let b_session = db::auth::create_session(&auth, &b).await.unwrap();
     let outsider_session = db::auth::create_session(&auth, &outsider).await.unwrap();
 
+    let hub = Arc::new(Hub::new());
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         auth,
         chat: chat.clone(),
         settings,
-        hub: Arc::new(Hub::new()),
+        hub: hub.clone(),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
@@ -123,11 +138,14 @@ async fn setup() -> Setup {
     Setup {
         app: routes::build_router(state),
         chat,
+        hub,
         a_session,
         b_session,
+        b_id: b,
         outsider_session,
         dm_room,
         public_room,
+        voice_room,
     }
 }
 
@@ -182,6 +200,72 @@ async fn member_starts_session_outsider_forbidden_nondm_404() {
     )
     .await;
     assert_eq!(st4, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn voice_channel_participant_transcribes_nonparticipant_forbidden() {
+    let s = setup().await;
+
+    // A voice channel is call-capable (passes the room gate), but a user who is
+    // not currently joined to the channel cannot start - so a room member can't
+    // silently auto-capture everyone who did join.
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.voice_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN, "non-participant cannot start");
+
+    // Register bob as a live participant in the channel (what the WS voice_join
+    // does), then he can start + post.
+    let (conn, _rx, _) = s.hub.connect(&s.b_id, "bob");
+    s.hub.voice_join(conn, s.voice_room);
+
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.voice_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "joined participant starts: {body}");
+    let tid = parse_id(&body);
+
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=voice+hello"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(segs[0].text, "voice hello");
+
+    // Carol, not a channel participant, cannot post a segment.
+    let (st, _) = post(
+        &s.app,
+        &s.outsider_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=nope"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+
+    // A participant ends the session for the whole channel; transcript saved.
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert_eq!(t.status, "ended");
 }
 
 #[tokio::test]

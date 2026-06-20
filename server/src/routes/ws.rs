@@ -1847,6 +1847,15 @@ fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     // participants preview stays accurate.
     let left = ChatEvent::VoiceLeft { room_id, user_id };
     state.hub.broadcast_to_room(room_id, &left);
+    // LC-393 Phase 2: if that was the last participant, finalize any open
+    // transcription session for the channel (save + post the notice). Spawned
+    // because this fn is sync; AppState is cheap to clone (Arc-backed).
+    if state.hub.voice_room_users(room_id).is_empty() {
+        let st = state.clone();
+        tokio::spawn(async move {
+            super::transcripts::finalize_open_for_room(&st, room_id).await;
+        });
+    }
 }
 
 /// Relay one mesh signal (offer/answer/ice) to a specific peer in the same
