@@ -722,6 +722,10 @@ document.body.addEventListener('click', function(e){
 // picker's emoji buttons by case-insensitive substring against each button's
 // data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
 // ephemeral (htmx-swapped in/out), so a single permanent listener suffices.
+// LC-389: the grid is now categorized (~1900 cells across labeled sections).
+// While a query is active, hide the category tab strip and collapse any section
+// with no surviving cell so results read as one flat list; clearing the query
+// restores the browsable category view.
 (function(){
   document.addEventListener('input', function(e){
     var input = e.target;
@@ -730,11 +734,39 @@ document.body.addEventListener('click', function(e){
     var grid = picker && picker.querySelector('[data-lc-emoji-grid]');
     if (!grid) return;
     var q = input.value.trim().toLowerCase();
+    var searching = q !== '';
     var btns = grid.querySelectorAll('[data-lc-emoji-name]');
     for (var i = 0; i < btns.length; i++) {
       var name = (btns[i].getAttribute('data-lc-emoji-name') || '').toLowerCase();
-      btns[i].hidden = q !== '' && name.indexOf(q) === -1;
+      btns[i].hidden = searching && name.indexOf(q) === -1;
     }
+    var secs = grid.querySelectorAll('[data-lc-emoji-cat]');
+    for (var j = 0; j < secs.length; j++) {
+      secs[j].hidden = searching && !secs[j].querySelector('[data-lc-emoji-name]:not([hidden])');
+    }
+    var tabs = picker.querySelector('[data-lc-emoji-tabs]');
+    if (tabs) tabs.hidden = searching;
+  });
+})();
+</script>
+<script>
+// LC-389: category tab strip. Clicking a tab scrolls the grid to that section.
+// Delegated + permanent like the filter; the picker is htmx-swapped in/out.
+// Scroll the grid's own scrollTop (not scrollIntoView) so only the picker's
+// internal scroll container moves, never an ancestor / the page.
+(function(){
+  document.addEventListener('click', function(e){
+    var tab = e.target.closest && e.target.closest('[data-lc-emoji-tab]');
+    if (!tab) return;
+    var picker = tab.closest('[id^="picker-"]');
+    var grid = picker && picker.querySelector('[data-lc-emoji-grid]');
+    if (!grid) return;
+    var cat = tab.getAttribute('data-lc-emoji-tab');
+    var sec = grid.querySelector('[data-lc-emoji-cat="' + cat + '"]');
+    if (sec) grid.scrollTop = sec.offsetTop - grid.offsetTop;
+    var all = picker.querySelectorAll('[data-lc-emoji-tab]');
+    for (var i = 0; i < all.length; i++) all[i].removeAttribute('data-lc-active');
+    tab.setAttribute('data-lc-active', '');
   });
 })();
 </script>
