@@ -239,9 +239,11 @@
        it on render and, only when it overflows the threshold, adds the clamp
        and reveals this toggle. #}
     <div data-lc-collapse class="lc-md leading-snug">{{ message.body_html()|safe }}</div>
+    {# LC-385: quiet expand/collapse control with a rotating chevron (CSS ::before
+       so auto_scroll.html can keep setting textContent for the label). #}
     <button type="button" data-lc-collapse-toggle hidden
       data-lc-more="{{ "room-msg-show-more"|t }}" data-lc-less="{{ "room-msg-show-less"|t }}"
-      class="mt-1 text-xs text-accent hover:underline">{{ "room-msg-show-more"|t }}</button>
+      class="lc-collapse-toggle">{{ "room-msg-show-more"|t }}</button>
     {% if let Some(u) = message.first_url_encoded() %}
     <div class="mt-1" hx-get="/api/unfurl?url={{ u }}" hx-trigger="load once" hx-swap="innerHTML"></div>
     {% endif %}
