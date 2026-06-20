@@ -28,6 +28,9 @@
   {# LC-183/184: remote-control consent signals (request/grant/deny/revoke) are
      rendered here as data-lc-control-event nodes; call.js consumes + drains. #}
   <div id="lc-control-bus" class="hidden"></div>
+  {# LC-393: transcription control events (started/ended) land here as
+     data-lc-transcript-event nodes; transcribe.js consumes + drains them. #}
+  <div id="lc-transcript-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
     <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
          role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
@@ -53,6 +56,18 @@
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
         <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
+        {# LC-393: consent banner shown to BOTH parties whenever transcription is
+           on, plus the live caption panel. #lc-caption-log is the OOB target the
+           server appends caption lines into (ws/transcript_segment.html). #}
+        <div data-lc-transcript-banner aria-hidden="true" role="status"
+             class="hidden absolute left-1/2 top-16 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
+          <span class="inline-block h-2 w-2 rounded-full bg-red-500"></span>
+          <span>{{ "transcript-banner"|t }}</span>
+        </div>
+        <div data-lc-caption-wrap aria-hidden="true"
+             class="hidden absolute inset-x-0 bottom-0 z-10 max-h-40 overflow-y-auto bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
+          <div id="lc-caption-log" class="mx-auto max-w-2xl space-y-1"></div>
+        </div>
         {# LC-184: remote-control grant/deny prompt. Shown to the screen-sharer
            when a verified peer requests control. Non-modal (the active-call
            focus trap stays owned by the dialog) but visually prominent. #}
@@ -78,6 +93,9 @@
         <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-mute"|t }}</button>
         <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "call-start-video"|t }}</button>
         <button type="button" data-lc-call-screen aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-share-screen"|t }}</button>
+        {# LC-393: transcription toggle. Disabled + titled with the unsupported
+           note by transcribe.js when the browser has no SpeechRecognition. #}
+        <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 aria-pressed:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "transcript-toggle"|t }}</button>
         {# LC-184: controller-side "Request control" affordance. Hidden until the
            peer's video is live; toggles to "Stop controlling" while active.
            Server enforces the verified-email + block gate at the relay, so a

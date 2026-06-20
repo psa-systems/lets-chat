@@ -364,6 +364,34 @@ pub enum ChatEvent {
         kind: String,
         payload: Option<String>,
     },
+    /// LC-393: call transcription turned ON for a DM call. Broadcast to each
+    /// member (mirrors `CallSignal`'s per-recipient `to_user_id` targeting) so
+    /// both see the consent banner and their client starts capturing their own
+    /// mic. `transcript_id` is the open session the clients post segments to.
+    TranscriptStarted {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+        started_by_name: String,
+    },
+    /// LC-393: one finalized speech result, broadcast to each member as a live
+    /// caption line. `speaker_id`/`speaker_name` attribute it (the speaker is
+    /// whoever's browser produced it - each transcribes only its own mic).
+    TranscriptSegment {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+        speaker_id: String,
+        speaker_name: String,
+        text: String,
+    },
+    /// LC-393: transcription turned OFF (hangup / toggle / disconnect backstop).
+    /// Clears the banner + stops the client's local capture.
+    TranscriptEnded {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+    },
 }
 
 /// Control frames sent from client to server.
