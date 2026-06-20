@@ -1611,6 +1611,13 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     align-items: center;
     gap: 0.375rem;
 }
+/* LC-409: wrapper around both control clusters - one flex row on desktop, a
+   horizontally-scrollable row under the title on mobile (see the media query). */
+.lc-callbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 .lc-callbar-sep {
     align-self: stretch;
     width: 1px;
@@ -1848,9 +1855,6 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 }
 .lc-transcript.hidden { display: none; }
 body.lc-transcript-open #lc-voice-root { padding-right: 20rem; }
-@media (max-width: 640px) {
-    body.lc-transcript-open #lc-voice-root { padding-right: 0; }
-}
 .lc-transcript-head {
     display: flex;
     align-items: center;
@@ -1952,6 +1956,63 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
     .lc-rec-dot, .lc-transcript-rec { animation: none; }
+}
+
+/* ---- LC-409: mobile / responsive call pass ----------------------------- */
+@media (max-width: 640px) {
+    /* Control bar: title on its own row, the two control clusters in one
+       horizontally-scrollable row beneath it - instead of wrapping into
+       several cramped lines. */
+    .lc-callbar {
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+    .lc-callbar-spacer { display: none; }
+    .lc-callbar-controls {
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding-bottom: 0.125rem;
+    }
+    /* Keep each button at full label width and scroll the row, don't squash. */
+    .lc-callbar-controls .lc-cbtn,
+    .lc-callbar-controls .lc-callbar-group,
+    .lc-callbar-controls .lc-callbar-sep { flex: none; }
+    /* Comfortable touch target. */
+    .lc-cbtn { min-height: 2.5rem; }
+
+    /* Participant grid: tighter gutters; clear the iOS home indicator. */
+    .lc-voice-grid {
+        gap: 0.75rem;
+        padding: 0.75rem;
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+
+    /* Transcript drawer becomes a bottom sheet: full width, anchored to the
+       bottom, so it never covers the controls and respects the home-bar inset.
+       (The right-padding reservation on #lc-voice-root is dropped here.) */
+    body.lc-transcript-open #lc-voice-root { padding-right: 0; }
+    .lc-transcript {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 62vh;
+        max-height: 80vh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 0.875rem 0.875rem 0 0;
+        box-shadow: 0 -10px 28px -14px rgba(0, 0, 0, 0.5);
+    }
+    .lc-transcript-body {
+        padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
 }
 
 /* LC-389: full categorized reaction picker. The scroll container holds labeled
