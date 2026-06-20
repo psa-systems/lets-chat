@@ -71,3 +71,7 @@ js-device-show-names = Mostrar nombres de dispositivos
 js-voice-you = Tú
 js-voice-waiting = Esperando a que se unan otros...
 js-voice-presenting = Presentando
+js-conn-good = Conexión: buena
+js-conn-degraded = Conexión: degradada
+js-conn-reconnecting = Reconectando...
+js-conn-failed = Conexión perdida
