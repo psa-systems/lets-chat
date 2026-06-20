@@ -71,6 +71,10 @@ enum ClientFrame {
         #[serde(default)]
         payload: Option<String>,
     },
+    /// LC-402: a voice participant toggled their mic; broadcast to the channel
+    /// so peers can show the mute indicator on that participant's tile.
+    #[serde(rename = "voice_mute")]
+    VoiceMute { room_id: i64, muted: bool },
 }
 
 /// Recognized `kind` discriminators for a call signal. Anything else is
@@ -511,9 +515,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_control_signal(&e)
                                 }
-                                ChatEvent::VoiceJoined { .. } | ChatEvent::VoiceLeft { .. } => {
-                                    render_voice_event(&e)
-                                }
+                                ChatEvent::VoiceJoined { .. }
+                                | ChatEvent::VoiceLeft { .. }
+                                | ChatEvent::VoiceMuteChanged { .. } => render_voice_event(&e),
                                 ChatEvent::VoiceRoster { to_user_id, .. }
                                 | ChatEvent::VoiceSignal { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
@@ -644,6 +648,20 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 &kind,
                                 payload,
                             );
+                        }
+                        ClientFrame::VoiceMute { room_id, muted } => {
+                            // Only a participant of the channel may announce mute
+                            // state, and only to that channel's subscribers.
+                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                                state.hub.broadcast_to_room(
+                                    room_id,
+                                    &ChatEvent::VoiceMuteChanged {
+                                        room_id,
+                                        user_id: user.id.clone(),
+                                        muted,
+                                    },
+                                );
+                            }
                         }
                     }
                 }
@@ -1789,6 +1807,20 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             username: from_name,
             peers_json: "",
             payload: payload.as_deref(),
+        }
+        .render()
+        .ok(),
+        ChatEvent::VoiceMuteChanged {
+            room_id,
+            user_id,
+            muted,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "mute",
+            user_id,
+            username: "",
+            peers_json: "",
+            payload: Some(if *muted { "1" } else { "0" }),
         }
         .render()
         .ok(),

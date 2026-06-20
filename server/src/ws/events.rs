@@ -364,6 +364,16 @@ pub enum ChatEvent {
         kind: String,
         payload: Option<String>,
     },
+    /// LC-402: a voice participant toggled their microphone. Broadcast to the
+    /// whole room (like `VoiceJoined`) so every other client shows the mute
+    /// indicator on that participant's tile. Active-speaker state is detected
+    /// locally from each peer's received audio, so only this discrete mute flag
+    /// needs propagating over the wire.
+    VoiceMuteChanged {
+        room_id: i64,
+        user_id: String,
+        muted: bool,
+    },
     /// LC-393: call transcription turned ON for a DM call. Broadcast to each
     /// member (mirrors `CallSignal`'s per-recipient `to_user_id` targeting) so
     /// both see the consent banner and their client starts capturing their own
