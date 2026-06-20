@@ -1693,6 +1693,10 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     align-content: start;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
+/* LC-408 fix: the grid's shown/hidden state is a class, NOT an inline
+   `display`. An inline `display:grid` would beat the stylesheet and stop the
+   screen-share stage rule below from switching the container to flex. */
+.lc-voice-grid.lc-voice-grid--hidden { display: none; }
 /* Alone in the call (the waiting placeholder is present): keep the lone self
    tile a sensible size instead of ballooning to the full row width. */
 .lc-voice-grid:has(.lc-voice-waiting) {

@@ -171,6 +171,13 @@
     }
     video.style.display = hasVideo ? '' : 'none';
     avatar.style.display = hasVideo ? 'none' : '';
+    // LC-408 fix: a remote screen share always carries a live video track, so a
+    // remote tile with no video can no longer be sharing. Clear a stale pin as
+    // a fallback for a dropped/missed voice_screen=false signal, so the stage
+    // never gets stuck. (Self is handled explicitly by announceScreen.)
+    if (!hasVideo && cfg && userId !== cfg.selfId && t.hasAttribute('data-screen')) {
+      t.removeAttribute('data-screen');
+    }
   }
   function tileVideo(userId) {
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
@@ -187,7 +194,9 @@
     var preview = q('[data-lc-voice-preview]');
     var g = grid();
     if (preview) preview.style.display = on ? 'none' : '';
-    if (g) g.style.display = on ? 'grid' : 'none';
+    // LC-408: class toggle, not inline display, so the screen-share stage CSS
+    // (which switches the grid to flex) is not overridden by an inline style.
+    if (g) g.classList.toggle('lc-voice-grid--hidden', !on);
     toggle(q('[data-lc-voice-join]'), !on);
     toggle(q('[data-lc-voice-mute]'), on);
     toggle(q('[data-lc-voice-camera]'), on);
@@ -848,6 +857,10 @@
     }
     if (kind === 'screen') { // LC-408: a peer started/stopped screen-sharing
       applyScreen(userId, payload === '1');
+      // Nudge the camera-vs-avatar swap: on stop the peer often drops their
+      // video track, and re-evaluating here reverts the frozen last frame even
+      // if the track's own onmute/onremovetrack was missed.
+      updateTileMedia(userId);
       return;
     }
     if (!joined) return;
