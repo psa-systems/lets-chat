@@ -53,6 +53,11 @@ transcript-search-empty = No transcripts match your search.
 transcript-download = Download
 transcript-download-txt = Text (.txt)
 transcript-download-vtt = WebVTT (.vtt)
+# LC-396: AI summary
+transcript-summary-heading = AI summary
+transcript-summary-generate = Summarize
+transcript-summary-regenerate = Regenerate
+transcript-summary-working = Summarizing...
 
 ## Activity page
 activity-page-title = Activity

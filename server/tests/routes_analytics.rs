@@ -78,6 +78,7 @@ async fn make_app(username: &str, role: &str) -> Harness {
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
         stt_client: None,
+        llm_client: None,
     };
     Harness {
         app: routes::build_router(state),

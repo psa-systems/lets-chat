@@ -145,6 +145,18 @@ async fn main() {
             None => None,
         };
 
+    // LC-396: optional LLM for transcript summaries. Enabled by LETS_CHAT_LLM_URL.
+    let llm_client: Option<std::sync::Arc<dyn lets_chat::llm::LlmClient>> =
+        match lets_chat::llm::LlmConfig::from_env() {
+            Some(cfg) => {
+                tracing::info!(target: "llm", url = %cfg.url, model = %cfg.model, "transcript summaries enabled");
+                Some(std::sync::Arc::new(lets_chat::llm::ReqwestLlmClient::new(
+                    cfg,
+                )))
+            }
+            None => None,
+        };
+
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
@@ -169,6 +181,7 @@ async fn main() {
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso,
         stt_client,
+        llm_client,
     };
 
     if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {

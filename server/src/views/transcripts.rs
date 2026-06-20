@@ -63,4 +63,17 @@ pub struct TranscriptPage<'a> {
     pub started_at: String,
     pub ended: bool,
     pub lines: Vec<TranscriptLine>,
+    /// LC-396: true when an LLM endpoint is configured (shows the Summarize UI).
+    pub llm_available: bool,
+    /// LC-396: the rendered (markdown -> HTML) summary, if one exists.
+    pub summary_html: Option<String>,
+}
+
+/// LC-396: the htmx response after generating a summary - the rendered summary
+/// + a regenerate button, swapped into `#lc-transcript-summary`.
+#[derive(Template)]
+#[template(path = "transcripts/summary_fragment.html")]
+pub struct TranscriptSummaryFragment {
+    pub transcript_id: i64,
+    pub summary_html: String,
 }
