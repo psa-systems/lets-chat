@@ -1787,12 +1787,21 @@
 
   ta.addEventListener('input', schedule);
   ta.addEventListener('scroll', syncScroll);
+  // A successful send clears the textarea via `ta.value = ''` in the form's
+  // hx-on::after-request handler - a programmatic value change fires NO 'input'
+  // event, so without this the backdrop kept showing the just-sent text until a
+  // reload. The Retry-restore path sets ta.value the same way. Re-render on
+  // every form htmx:afterRequest (rAF-coalesced, so it reads the post-clear /
+  // post-restore value); harmless extra renders on the draft PUT / autocomplete
+  // ajax that also bubble here.
+  form.addEventListener('htmx:afterRequest', schedule);
   render(); // initial: restored draft (LC-64) or empty
 
   function teardown(){
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     ta.removeEventListener('input', schedule);
     ta.removeEventListener('scroll', syncScroll);
+    form.removeEventListener('htmx:afterRequest', schedule);
   }
   var root2 = document.currentScript.closest('[data-lc-cleanup-root]') || form;
   root2.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
