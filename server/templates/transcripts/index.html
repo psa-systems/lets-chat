@@ -4,12 +4,20 @@
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
-  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-3">
     <h1 class="lc-h2 truncate">{{ "transcript-index-heading"|t }}</h1>
+    {# LC-395: search the archive by transcript content. #}
+    <form action="/transcripts" method="get" class="relative shrink-0" autocomplete="off">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-content-subtle">
+        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+      </svg>
+      <input name="q" value="{{ query }}" placeholder="{{ "transcript-search-placeholder"|t }}" aria-label="{{ "transcript-search-placeholder"|t }}"
+             class="w-56 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+    </form>
   </header>
   <div class="flex-1 overflow-y-auto px-4 py-3">
     {% if rows.is_empty() %}
-    <p class="lc-body text-content-muted">{{ "transcript-index-empty"|t }}</p>
+    <p class="lc-body text-content-muted">{% if query.is_empty() %}{{ "transcript-index-empty"|t }}{% else %}{{ "transcript-search-empty"|t }}{% endif %}</p>
     {% else %}
     <div class="mx-auto max-w-2xl space-y-1.5">
       {% for r in rows %}

@@ -464,6 +464,110 @@ async fn archive_lists_only_accessible_transcripts() {
 }
 
 #[tokio::test]
+async fn export_txt_and_vtt() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello+world"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // txt export contains the line; member only.
+    let (st, txt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=txt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(txt.contains("hello world"), "txt export body: {txt}");
+
+    // vtt export is a valid WebVTT with a cue + the text.
+    let (st, vtt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=vtt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        vtt.starts_with("WEBVTT"),
+        "vtt must start with WEBVTT: {vtt}"
+    );
+    assert!(vtt.contains("-->"), "vtt must have a cue timing: {vtt}");
+    assert!(vtt.contains("hello world"));
+
+    // Non-member cannot export.
+    let (st, _) = get(
+        &s.app,
+        &s.outsider_session,
+        &format!("/transcripts/{tid}/export?format=txt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn archive_search_filters_by_content() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=quarterly+roadmap+review"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Matching query lists it.
+    let (st, page) = get(&s.app, &s.a_session, "/transcripts?q=roadmap").await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        page.contains(&format!("/transcripts/{tid}")),
+        "matching search lists the transcript"
+    );
+
+    // Non-matching query does not.
+    let (st, page) = get(&s.app, &s.a_session, "/transcripts?q=zzzznope").await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        !page.contains(&format!("/transcripts/{tid}")),
+        "non-matching search excludes it"
+    );
+}
+
+#[tokio::test]
 async fn segment_text_is_length_capped() {
     let s = setup().await;
     let (_, body) = post(

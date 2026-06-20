@@ -9,6 +9,11 @@
       <h1 class="lc-h2 truncate">{{ "transcript-heading"|t }}</h1>
       <p class="lc-small text-content-muted truncate">{{ room_name }} &middot; {{ started_at }}{% if !ended %} &middot; {{ "transcript-in-progress"|t }}{% endif %}</p>
     </div>
+    {# LC-395: download as text / WebVTT. #}
+    <div class="flex shrink-0 items-center gap-2">
+      <a href="/transcripts/{{ transcript_id }}/export?format=txt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-txt"|t }}</a>
+      <a href="/transcripts/{{ transcript_id }}/export?format=vtt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-vtt"|t }}</a>
+    </div>
   </header>
   <div class="flex-1 overflow-y-auto px-4 py-3">
     {% if lines.is_empty() %}
