@@ -1499,6 +1499,16 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-emoji-cell:hover {
     background-color: var(--surface-sunken);
 }
+/* LC-391: the filter hides non-matching cells (and the tab strip) via the
+   [hidden] attribute, but the author display rules above (.lc-emoji-cell ->
+   inline-flex, .lc-emoji-tabs -> flex) override the UA [hidden]{display:none}
+   regardless of specificity, so without these the filter looked dead. The
+   attribute-qualified selector (0,2,0) beats the bare class (0,1,0); no
+   !important needed. Sections already hide (default block display). */
+.lc-emoji-cell[hidden],
+.lc-emoji-tabs[hidden] {
+    display: none;
+}
 
 /* LC-389: full categorized reaction picker. The scroll container holds labeled
    category sections; each section is an 8-column grid of .lc-emoji-cell. The
