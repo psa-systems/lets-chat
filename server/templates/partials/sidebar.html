@@ -49,6 +49,19 @@
     // the shared results popover; search.js handles keyboard nav unchanged.
     if (window.__lcSearchTabsWired) return;
     window.__lcSearchTabsWired = true;
+    // LC-392: htmx resolves an element's request verb+path ONCE at process time
+    // and binds them into the trigger closure; it does not re-read hx-get per
+    // fire. So setAttribute('hx-get', ...) below does NOT redirect the input's
+    // own debounced input/focus/Enter triggers - they keep hitting /search. We
+    // track the active mode and rewrite the path in htmx:configRequest (fires
+    // before every request), which DOES take effect, scoped to this input so
+    // other /search callers are untouched.
+    var currentMode = 'messages';
+    document.body.addEventListener('htmx:configRequest', function(e){
+      var d = e && e.detail;
+      if (!d || !d.elt || d.elt.id !== 'sidebar-search-input') return;
+      if (currentMode === 'people') d.path = '/users/search';
+    });
     document.addEventListener('click', function(e){
       var tab = e.target.closest && e.target.closest('[data-lc-search-tab]');
       if (!tab) return;
@@ -57,6 +70,7 @@
       var input = region.querySelector('[data-lc-search]');
       if (!input) return;
       var mode = tab.getAttribute('data-lc-search-tab');
+      currentMode = mode;
       region.querySelectorAll('[data-lc-search-tab]').forEach(function(b){
         b.setAttribute('aria-pressed', b === tab ? 'true' : 'false');
       });
