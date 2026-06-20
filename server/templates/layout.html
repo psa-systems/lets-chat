@@ -779,15 +779,38 @@ document.body.addEventListener('click', function(e){
 (function(){
   var KEY = 'lc-recent-emoji';
   var CAP = 12;
+  // Some emoji render as a text-style glyph unless followed by VS-16 (U+FE0F).
+  // The grid emits the fully-qualified form (e.g. heart = U+2764 U+FE0F) while
+  // older MRU entries and the quick-bar defaults stored the bare code point, so
+  // a Recent entry could render text-style/tofu or fail to dedupe against the
+  // grid. Canonicalize the known bare emoji-presentation code points to one form
+  // so every source agrees (LC-390).
+  var VS16 = '❤✊✋✌☝☺☹☕☘✂✈⚠♠♣♥♦';
+  function canon(g){
+    if (typeof g !== 'string' || !g) return g;
+    if (g.length === 1 && VS16.indexOf(g) !== -1) return g + '️';
+    return g;
+  }
   function read(){
-    try { var a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; }
-    catch (e) { return []; }
+    var a;
+    try { a = JSON.parse(localStorage.getItem(KEY)); } catch (e) { return []; }
+    if (!Array.isArray(a)) return [];
+    // Canonicalize + dedupe so legacy bare-codepoint entries collapse onto the
+    // qualified form rather than lingering as a separate, text-style entry.
+    var out = [], seen = {};
+    for (var i = 0; i < a.length; i++) {
+      var g = canon(a[i]);
+      if (g && !seen[g]) { seen[g] = 1; out.push(g); }
+    }
+    return out;
   }
   function record(glyph){
+    glyph = canon(glyph);
     var a = read().filter(function(g){ return g !== glyph; });
     a.unshift(glyph);
     if (a.length > CAP) a = a.slice(0, CAP);
     try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {}
+    scan(); // same-tab: refresh any open Recent row immediately (LC-390)
   }
   // Record on any reaction POST (picker buttons, existing pills, recent
   // buttons). cancel/open use hx-get, so they never match.
@@ -801,14 +824,24 @@ document.body.addEventListener('click', function(e){
     if (!emoji || /^:.*:$/.test(emoji)) return; // skip custom shortcodes
     record(emoji);
   });
-  function fill(box){
-    if (box.getAttribute('data-lc-recent-done')) return;
-    box.setAttribute('data-lc-recent-done', '1');
+  // Idempotent rebuild: re-render the row from the CURRENT MRU on every scan,
+  // skipping the work only when this box's rendered set is unchanged (signature
+  // = the joined glyph list) so the scan firing on unrelated afterSettle events
+  // (WS / sidebar swaps) never duplicates buttons. Because a changed MRU always
+  // refills, the row self-heals after a react without depending on a freshly-
+  // fetched picker fragment. Replaces the old one-shot data-lc-recent-done guard
+  // (LC-390), which froze the row at the MRU captured when the picker opened, so
+  // a later react was not reflected until a full page reload.
+  function render(box){
     var picker = box.closest('[id^="picker-"]');
     if (!picker) return;
     var mid = picker.id.slice('picker-'.length);
     var recents = read();
-    if (!recents.length) return;
+    var sig = recents.join(' ');
+    if (box.getAttribute('data-lc-recent-sig') === sig) return;
+    box.setAttribute('data-lc-recent-sig', sig);
+    box.replaceChildren();
+    if (!recents.length) { box.classList.add('hidden'); return; }
     var label = box.getAttribute('data-lc-recent-label');
     if (label) {
       var s = document.createElement('span');
@@ -830,9 +863,11 @@ document.body.addEventListener('click', function(e){
     if (window.htmx) window.htmx.process(box);
   }
   function scan(){
-    document.querySelectorAll('[data-lc-emoji-recent]:not([data-lc-recent-done])').forEach(fill);
+    document.querySelectorAll('[data-lc-emoji-recent]').forEach(render);
   }
   document.body.addEventListener('htmx:afterSettle', scan);
+  // Cross-tab: another tab reacting (or clearing) refreshes this tab's open row.
+  window.addEventListener('storage', function(e){ if (!e || e.key === null || e.key === KEY) scan(); });
   scan();
 
   // LC-302: quick-reaction hover bar. On first hover of a message row, fill its
@@ -840,7 +875,9 @@ document.body.addEventListener('click', function(e){
   // default set when empty). Each button is the SAME hx-post the picker emits,
   // so the recorder above also records quick-react clicks. Lazy per-row fill
   // keeps large rooms from processing every message on load.
-  var DEFAULTS = ['\u{1F44D}', '\u{2764}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
+  // Fully-qualified glyphs (heart carries VS-16) so quick-react defaults match
+  // the grid + canon() and never seed a text-style Recent entry (LC-390).
+  var DEFAULTS = ['\u{1F44D}', '\u{2764}\u{FE0F}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
   var QCAP = 5;
   function fillQuick(row){
     var bar = row.querySelector('[data-lc-quick-bar]');
