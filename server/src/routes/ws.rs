@@ -75,6 +75,10 @@ enum ClientFrame {
     /// so peers can show the mute indicator on that participant's tile.
     #[serde(rename = "voice_mute")]
     VoiceMute { room_id: i64, muted: bool },
+    /// LC-408: a voice participant started/stopped screen-sharing; broadcast so
+    /// peers can pin that participant's tile to the stage.
+    #[serde(rename = "voice_screen")]
+    VoiceScreen { room_id: i64, sharing: bool },
 }
 
 /// Recognized `kind` discriminators for a call signal. Anything else is
@@ -517,7 +521,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                                 ChatEvent::VoiceJoined { .. }
                                 | ChatEvent::VoiceLeft { .. }
-                                | ChatEvent::VoiceMuteChanged { .. } => render_voice_event(&e),
+                                | ChatEvent::VoiceMuteChanged { .. }
+                                | ChatEvent::VoiceScreenChanged { .. } => render_voice_event(&e),
                                 ChatEvent::VoiceRoster { to_user_id, .. }
                                 | ChatEvent::VoiceSignal { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
@@ -659,6 +664,20 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         room_id,
                                         user_id: user.id.clone(),
                                         muted,
+                                    },
+                                );
+                            }
+                        }
+                        ClientFrame::VoiceScreen { room_id, sharing } => {
+                            // Same gate as mute: only a channel participant may
+                            // announce, and only to that channel's subscribers.
+                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                                state.hub.broadcast_to_room(
+                                    room_id,
+                                    &ChatEvent::VoiceScreenChanged {
+                                        room_id,
+                                        user_id: user.id.clone(),
+                                        sharing,
                                     },
                                 );
                             }
@@ -1821,6 +1840,20 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             username: "",
             peers_json: "",
             payload: Some(if *muted { "1" } else { "0" }),
+        }
+        .render()
+        .ok(),
+        ChatEvent::VoiceScreenChanged {
+            room_id,
+            user_id,
+            sharing,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "screen",
+            user_id,
+            username: "",
+            peers_json: "",
+            payload: Some(if *sharing { "1" } else { "0" }),
         }
         .render()
         .ok(),

@@ -1780,6 +1780,53 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     font-size: 0.875rem;
 }
 
+/* ---- Screen-share stage (LC-408) --------------------------------------- */
+/* When any tile is a screen share, reshape the grid into a flexbox "stage":
+   the sharing tile spans the full width (forcing a wrap) and the rest flow
+   below as a centered filmstrip of small tiles. Placed after the grid rules so
+   it wins; the :has() toggles automatically when voice.js sets data-screen. */
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-content: flex-start;
+    justify-content: center;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+    flex: 1 1 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 70vh;
+    background: #0b0c0f; /* shared screens read best on a neutral-dark stage */
+}
+/* Don't crop the shared screen - letterbox it instead. */
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
+    object-fit: contain;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
+    flex: 0 0 clamp(120px, 16vw, 196px);
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
+/* "Presenting" badge, shown on a tile that is the active screen share. */
+.lc-voice-screen-badge {
+    display: none;
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.375rem;
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0.125rem 0.4rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+.lc-voice-screen-badge svg { height: 0.8125rem; width: 0.8125rem; }
+.lc-voice-tile[data-screen] .lc-voice-screen-badge { display: inline-flex; }
+
 /* ---- Transcript drawer -------------------------------------------------- */
 /* Fixed right-hand drawer, used by BOTH the voice page and the 1:1 call modal.
    On the voice page #lc-voice-root reserves space for it (below) so tiles are

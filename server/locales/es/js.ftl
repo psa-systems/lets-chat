@@ -70,3 +70,4 @@ js-device-show-names = Mostrar nombres de dispositivos
 
 js-voice-you = Tú
 js-voice-waiting = Esperando a que se unan otros...
+js-voice-presenting = Presentando
