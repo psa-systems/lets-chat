@@ -10,7 +10,13 @@
   <div class="lc-header-actions">
     {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
        search.js combobox nav; results are jump links to #msg-{id} in-room. #}
+    {# LC-388: search field aligned to the .lc-header-action height (h-8) with a
+       leading magnifier + token focus ring, so it sits on one baseline with the
+       icon actions and the notify pill. #}
     <form class="relative" autocomplete="off" onsubmit="return false">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-content-subtle">
+        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+      </svg>
       <input
         name="q"
         placeholder="{{ "partials-room-search-placeholder"|t }}"
@@ -25,7 +31,7 @@
         aria-expanded="false"
         aria-controls="lc-room-search-results"
         aria-autocomplete="list"
-        class="w-44 rounded border border-border px-2 py-1 text-xs">
+        class="w-48 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
       <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
     </form>
     {# LC-325: jump-to-date. The full room history is already in #messages, so
@@ -59,11 +65,21 @@
     </div>
     <a href="/room/{{ room.id }}/info"
        class="lc-header-action"
-       data-lc-tip="{{ "partials-room-info-docs-title"|t }}" data-lc-tip-pos="bottom">{{ "partials-room-info"|t }}</a>
+       data-lc-tip="{{ "partials-room-info-docs-title"|t }}" data-lc-tip-pos="bottom">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "partials-room-info"|t }}</span>
+    </a>
     {% if can_manage_overrides %}
     <a href="/room/{{ room.id }}/moderators"
        class="lc-header-action"
-       data-lc-tip="{{ "partials-room-moderators-title"|t }}" data-lc-tip-pos="bottom">{{ "partials-room-moderators"|t }}</a>
+       data-lc-tip="{{ "partials-room-moderators-title"|t }}" data-lc-tip-pos="bottom">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "partials-room-moderators"|t }}</span>
+    </a>
     {% endif %}
     {% include "room/notify_dropdown.html" %}
   </div>
