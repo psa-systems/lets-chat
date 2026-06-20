@@ -47,6 +47,12 @@ transcript-index-empty = No call transcripts yet. Turn on transcription during a
 transcript-kind-dm = Direct call
 transcript-kind-voice = Voice channel
 transcript-lines = lines
+# LC-395: search + export
+transcript-search-placeholder = Search transcripts...
+transcript-search-empty = No transcripts match your search.
+transcript-download = Download
+transcript-download-txt = Text (.txt)
+transcript-download-vtt = WebVTT (.vtt)
 
 ## Activity page
 activity-page-title = Activity
