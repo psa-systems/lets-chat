@@ -111,6 +111,10 @@ partials-room-moderators = Moderators
 partials-room-jumpdate-title = Jump to date
 partials-room-jumpdate-label = Jump to date
 partials-room-jumpdate-none = No messages on or after that date.
+partials-room-jumpdate-today = Today
+partials-room-jumpdate-clear = Clear
+partials-room-jumpdate-prev = Previous month
+partials-room-jumpdate-next = Next month
 
 ## Message list (LC-242 jump-to-latest pill)
 # %n% is replaced with the live message count in JS (partials/auto_scroll.html).
