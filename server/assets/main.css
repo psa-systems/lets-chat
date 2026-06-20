@@ -1407,6 +1407,84 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     width: 1.25rem;
 }
 
+/* LC-399: live markdown highlight overlay for the composer. The .lc-mdback
+   backdrop renders the styled text and the box chrome; the .lc-mdinput textarea
+   sits on top transparent (text + background) with a visible caret. The two
+   MUST share identical box metrics - font, line-height, padding, border width,
+   wrapping - or the highlight drifts from the caret, so every metric below is
+   set on both and only colour / weight / decoration / background ever differs
+   between a token and plain text (changing glyph advance would desync). */
+.lc-mdwrap {
+    position: relative;
+    display: block;
+}
+.lc-mdback,
+.lc-mdinput {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: normal;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-height: 10rem;
+}
+.lc-mdback {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--surface-elevated);
+    color: var(--content);
+    border-color: transparent;
+}
+.lc-mdinput {
+    position: relative;
+    z-index: 1;
+    display: block;
+    resize: none;
+    overflow-y: auto;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--content);
+}
+.lc-mdinput:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.lc-mdinput::placeholder {
+    color: var(--content-muted);
+    opacity: 1;
+}
+/* When the LC-276 preview pane is shown the textarea gets `hidden`; collapse the
+   whole overlay so the preview pane (its flex sibling) takes the slot. */
+.lc-mdwrap:has(> .lc-mdinput.hidden) {
+    display: none;
+}
+/* Token styling. Colour / weight / decoration / background only. */
+.lc-mdback .lc-mdm { color: var(--content-muted); opacity: 0.55; }
+.lc-mdback strong { font-weight: 600; color: var(--content); }
+.lc-mdback em { font-style: italic; }
+.lc-mdback del { text-decoration: line-through; color: var(--content-muted); }
+.lc-mdback .lc-mdcode {
+    background: var(--surface-sunken);
+    border-radius: 0.25rem;
+    color: var(--content);
+}
+.lc-mdback .lc-mdh { font-weight: 700; color: var(--content); }
+.lc-mdback .lc-mdq { color: var(--content-muted); font-style: italic; }
+.lc-mdback .lc-mdlink { color: var(--accent); }
+.lc-mdback .lc-mdurl { color: var(--content-muted); text-decoration: underline; }
+
 /* LC-371 / LC-381: active sidebar room / DM row. LC-381 lightens the prior
    full soft-accent fill (which read heavy in-room) to a neutral raised surface
    plus an accent left bar and accent-colored, bold label - a clear but quiet
