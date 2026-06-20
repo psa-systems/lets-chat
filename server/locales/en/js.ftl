@@ -72,3 +72,4 @@ js-device-show-names = Show device names
 
 js-voice-you = You
 js-voice-waiting = Waiting for others to join...
+js-voice-presenting = Presenting

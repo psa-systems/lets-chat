@@ -374,6 +374,17 @@ pub enum ChatEvent {
         user_id: String,
         muted: bool,
     },
+    /// LC-408: a voice participant started or stopped sharing their screen.
+    /// Broadcast to the room so every client pins that participant's tile to
+    /// the stage (and drops it back to the even grid when sharing ends). The
+    /// screen video already rides the participant's normal video track; this is
+    /// only the discrete "is this tile a screen share" flag the receiver cannot
+    /// otherwise infer.
+    VoiceScreenChanged {
+        room_id: i64,
+        user_id: String,
+        sharing: bool,
+    },
     /// LC-393: call transcription turned ON for a DM call. Broadcast to each
     /// member (mirrors `CallSignal`'s per-recipient `to_user_id` targeting) so
     /// both see the consent banner and their client starts capturing their own

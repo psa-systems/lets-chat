@@ -35,6 +35,7 @@
   // this map so it never lies about who is on the line.
   var participants = {};  // user_id -> label
   var selfMuted = false;  // LC-402: our own mic state, broadcast to the channel
+  var selfSharing = false; // LC-408: our own screen-share state, broadcast too
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -88,6 +89,13 @@
     mute.className = 'lc-voice-mute-badge';
     mute.setAttribute('aria-hidden', 'true');
     mute.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 01-.13.87L7.13 4.13A3 3 0 017 4z"/><path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 002.62 4.96l1.1-1.1A4.5 4.5 0 015.5 9.5z"/><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 10-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-2.3-2.3A5.98 5.98 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-.84 2.62l-1.1-1.1c.28-.46.44-1 .44-1.52V9.4l-1.5-1.5v.1l-2.9-2.9L3.28 2.22zM10 16.5a6 6 0 003-.8l-1.13-1.13a4.5 4.5 0 01-4.62-1.08l-1.06 1.06A6 6 0 0010 16.5z" clip-rule="evenodd"/></svg>';
+    // LC-408: "presenting" badge, revealed via [data-screen] on the tile.
+    var screen = document.createElement('span');
+    screen.className = 'lc-voice-screen-badge';
+    screen.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4a2 2 0 00-2 2v6a2 2 0 002 2h5v2H6a1 1 0 100 2h8a1 1 0 100-2h-2v-2h5a2 2 0 002-2V6a2 2 0 00-2-2H3z"/></svg>';
+    var screenLabel = document.createElement('span');
+    screenLabel.textContent = window.__lcS('voicePresenting', 'Presenting');
+    screen.appendChild(screenLabel);
     var name = document.createElement('span');
     name.className = 'lc-voice-name';
     var nameText = document.createElement('span');
@@ -103,6 +111,7 @@
     tile.appendChild(video);
     tile.appendChild(avatar);
     tile.appendChild(mute);
+    tile.appendChild(screen);
     tile.appendChild(name);
     g.appendChild(tile);
     updateWaiting();
@@ -477,6 +486,7 @@
       localStream = stream;
       joined = true;
       selfMuted = false; // LC-402: fresh session starts unmuted
+      selfSharing = false; // LC-408
       // Record ourselves so the preview is correct if we leave before any
       // VoiceJoined echoes back; the roster event will overwrite this.
       participants[cfg.selfId] = cfg.selfName;
@@ -502,6 +512,7 @@
   function leave() {
     if (!joined) return;
     selfMuted = false;
+    selfSharing = false;
     stopSpeaking();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
@@ -551,6 +562,22 @@
     if (!userId) return;
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.setAttribute('data-muted', muted ? 'true' : 'false');
+  }
+
+  // LC-408: pin/unpin a participant's tile as the screen-share stage (the CSS
+  // `:has([data-screen])` grid rule reshapes the layout when any tile is set).
+  function applyScreen(userId, sharing) {
+    if (!userId) return;
+    var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (!t) return;
+    if (sharing) t.setAttribute('data-screen', 'true');
+    else t.removeAttribute('data-screen');
+  }
+  // Mark our own tile and tell the channel so peers pin our share too.
+  function announceScreen(sharing) {
+    selfSharing = !!sharing;
+    applyScreen(cfg.selfId, selfSharing);
+    wsSend({ type: 'voice_screen', room_id: cfg.roomId, sharing: selfSharing });
   }
 
   function setCameraBtn() {
@@ -690,6 +717,7 @@
       updateTileMedia(cfg.selfId);
       setCameraBtn();
       setScreenBtn();
+      announceScreen(true); // LC-408: pin our tile + tell peers
       // Swap every existing peer's outgoing video slot to the screen track
       // while the camera is still alive (replaceTrack must not race a stop).
       // After all peers settle, drop the camera.
@@ -722,6 +750,7 @@
   // with null tracks so each peer's tile drops back to the avatar.
   function endScreenShare() {
     if (!isSharingScreen()) return;
+    announceScreen(false); // LC-408: unpin our tile + tell peers
     var oldScreen = screenTrack;
     var wantCamera = restoreCameraAfterShare;
     // Remove the screen track from localStream first so the self tile reflects
@@ -800,9 +829,10 @@
       // event is about us (we already created our own tile in join()).
       if (joined && userId !== cfg.selfId) {
         addPeer(userId, username, false);
-        // LC-402: a fresh joiner has no record of our current mic state, so if
-        // we are muted re-announce it (broadcast_to_room reaches them too).
+        // LC-402/408: a fresh joiner has no record of our current mic / screen
+        // state, so re-announce whatever is active (broadcast reaches them too).
         if (selfMuted) wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: true });
+        if (selfSharing) wsSend({ type: 'voice_screen', room_id: cfg.roomId, sharing: true });
       }
       return;
     }
@@ -814,6 +844,10 @@
     }
     if (kind === 'mute') { // LC-402: a peer toggled their mic
       applyMute(userId, payload === '1');
+      return;
+    }
+    if (kind === 'screen') { // LC-408: a peer started/stopped screen-sharing
+      applyScreen(userId, payload === '1');
       return;
     }
     if (!joined) return;
