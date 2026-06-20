@@ -1588,18 +1588,323 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     display: none;
 }
 
-/* LC-393: live call-caption lines, appended into #lc-caption-log over the call
-   video. White text on the gradient scrim; the speaker is bolded. */
-.lc-cap-line {
-    color: #fff;
-    font-size: 0.875rem;
-    line-height: 1.4;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+/* ============================================================================
+   LC-402: in-call (voice/video) UI design system. Theme-token driven so the
+   call surface follows light / dark / high-contrast like the rest of the app.
+   JS (voice.js / call.js / transcribe.js) targets data-lc-* hooks and element
+   ids, never these classes, so styling here is free to change.
+   ============================================================================ */
+
+/* ---- Control bar -------------------------------------------------------- */
+.lc-callbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    padding: 0.5rem 1rem;
 }
+.lc-callbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+.lc-callbar-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: 0.125rem 0.25rem;
+    background: var(--border);
+}
+/* base call control button */
+.lc-cbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--content);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.lc-cbtn:hover { background: var(--surface-sunken); }
+.lc-cbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-cbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lc-cbtn svg { height: 1rem; width: 1rem; }
+/* main.css loads after tailwind-built.css, so without this the .lc-cbtn display
+   would win over the .hidden utility the call JS toggles (cf. LC-391). */
+.lc-cbtn.hidden { display: none; }
+.lc-voice-countchip { display: inline-flex; align-items: center; gap: 0.25rem; }
+.lc-voice-countchip.hidden { display: none; }
+/* generic toggle on-state (Mute active, video on, screen sharing) */
+.lc-cbtn[aria-pressed="true"] {
+    background: var(--accent-surface);
+    border-color: var(--accent);
+    color: var(--accent-surface-content);
+}
+/* primary: Join */
+.lc-cbtn--join {
+    background: var(--success);
+    border-color: var(--success);
+    color: var(--success-content);
+}
+.lc-cbtn--join:hover { background: var(--success); filter: brightness(0.94); }
+/* destructive: Leave / Hang up */
+.lc-cbtn--leave {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--danger-content);
+}
+.lc-cbtn--leave:hover { background: var(--danger); filter: brightness(0.94); }
+/* Transcribe: when active it is "recording" - danger-tinted and paired with
+   the live pill, so the on-state is unmistakable. */
+.lc-cbtn--rec[aria-pressed="true"] {
+    background: var(--danger-surface);
+    border-color: var(--danger-border);
+    color: var(--danger-content);
+}
+.lc-rec-dot {
+    display: none;
+    height: 0.5rem;
+    width: 0.5rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--danger);
+}
+.lc-cbtn--rec[aria-pressed="true"] .lc-rec-dot { display: inline-block; animation: lc-rec-pulse 1.6s ease-in-out infinite; }
+
+/* ---- Participant grid --------------------------------------------------- */
+.lc-voice-grid {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+/* Alone in the call (the waiting placeholder is present): keep the lone self
+   tile a sensible size instead of ballooning to the full row width. */
+.lc-voice-grid:has(.lc-voice-waiting) {
+    grid-template-columns: minmax(0, 480px);
+    justify-content: center;
+}
+.lc-voice-tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: var(--surface-sunken);
+    border: 2px solid transparent;
+    aspect-ratio: 16 / 9;
+    min-height: 140px;
+}
+/* active-speaker highlight (voice.js toggles data-speaking via an analyser) */
+.lc-voice-tile[data-speaking="true"] {
+    border-color: var(--success);
+    box-shadow: 0 0 0 3px var(--success-surface);
+}
+.lc-voice-tile video {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+}
+.lc-voice-avatar {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    height: 5rem;
+    width: 5rem;
+    border-radius: 9999px;
+    object-fit: cover;
+}
+.lc-voice-name {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: calc(100% - 1rem);
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-voice-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lc-voice-you {
+    flex: none;
+    border-radius: 0.25rem;
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0 0.25rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.lc-voice-mute-badge {
+    display: none;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    height: 1.5rem;
+    width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: var(--danger-content);
+}
+.lc-voice-mute-badge svg { height: 0.875rem; width: 0.875rem; }
+.lc-voice-tile[data-muted="true"] .lc-voice-mute-badge { display: inline-flex; }
+/* "Waiting for others" empty state when joined but alone */
+.lc-voice-waiting {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 6rem;
+    color: var(--content-muted);
+    font-size: 0.875rem;
+}
+
+/* ---- Transcript drawer -------------------------------------------------- */
+/* Fixed right-hand drawer, used by BOTH the voice page and the 1:1 call modal.
+   On the voice page #lc-voice-root reserves space for it (below) so tiles are
+   never covered; over the fullscreen 1:1 modal it simply overlays the right. */
+.lc-transcript {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 62;
+    display: flex;
+    flex-direction: column;
+    width: 20rem;
+    max-width: 85vw;
+    border-left: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
+}
+.lc-transcript.hidden { display: none; }
+body.lc-transcript-open #lc-voice-root { padding-right: 20rem; }
+@media (max-width: 640px) {
+    body.lc-transcript-open #lc-voice-root { padding-right: 0; }
+}
+.lc-transcript-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.625rem 0.75rem;
+}
+.lc-transcript-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+.lc-transcript-rec {
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 9999px;
+    background: var(--danger);
+    animation: lc-rec-pulse 1.6s ease-in-out infinite;
+}
+.lc-transcript-close {
+    margin-left: auto;
+    display: inline-flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-transcript-close:hover { background: var(--surface-sunken); color: var(--content); }
+.lc-transcript-body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
+}
+#lc-caption-log { display: flex; flex-direction: column; gap: 0.5rem; }
+/* "Jump to live" affordance, revealed when the user scrolls up off the bottom. */
+.lc-transcript-jump {
+    position: sticky;
+    bottom: 0;
+    align-self: center;
+    display: none;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    border-radius: 9999px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+}
+body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
+
+/* ---- Transcript lines (grouped by speaker, speaker + time + text) ------- */
+/* LC-402: re-homed from the old dark bottom scrim into the themed drawer, so
+   colours come from tokens. Consecutive lines from one speaker are grouped:
+   transcribe.js adds .lc-cap-cont to repeats, hiding the speaker header. */
+.lc-cap-line {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--content);
+}
+.lc-cap-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+.lc-cap-line.lc-cap-cont .lc-cap-head { display: none; }
+.lc-cap-line.lc-cap-cont { margin-top: -0.25rem; }
 .lc-cap-speaker {
     font-weight: 600;
-    margin-right: 0.375rem;
-    opacity: 0.85;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-cap-time {
+    font-size: 0.6875rem;
+    color: var(--content-subtle);
+    font-variant-numeric: tabular-nums;
+}
+.lc-cap-text {
+    display: block;
+    color: var(--content-muted);
+    padding-left: 0.125rem;
+}
+
+@keyframes lc-rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lc-rec-dot, .lc-transcript-rec { animation: none; }
 }
 
 /* LC-389: full categorized reaction picker. The scroll container holds labeled

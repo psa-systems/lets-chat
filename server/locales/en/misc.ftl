@@ -86,3 +86,7 @@ voice-empty-prefix = No one is in this voice channel yet. Click
 voice-empty-join = Join voice
 voice-empty-suffix = to start.
 voice-currently-here = Currently here:
+voice-transcript-panel = Transcript
+voice-transcript-close = Close transcript
+voice-jump-live = Jump to live
+voice-in-call = In call

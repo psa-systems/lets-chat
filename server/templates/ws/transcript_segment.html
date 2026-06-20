@@ -1,6 +1,14 @@
+{# LC-402: a live transcript line, OOB-appended into the drawer's #lc-caption-log.
+   data-lc-speaker lets transcribe.js group consecutive lines from one speaker
+   (it adds .lc-cap-cont to repeats, hiding the header). The timestamp is filled
+   in client-side on append (.lc-cap-time) since the segment event carries no
+   wall-clock time. #}
 <div id="lc-caption-log" hx-swap-oob="beforeend">
-  <div class="lc-cap-line">
-    <span class="lc-cap-speaker">{{ speaker_name }}</span>
+  <div class="lc-cap-line" data-lc-speaker="{{ speaker_name }}">
+    <div class="lc-cap-head">
+      <span class="lc-cap-speaker">{{ speaker_name }}</span>
+      <span class="lc-cap-time"></span>
+    </div>
     <span class="lc-cap-text">{{ text }}</span>
   </div>
 </div>
