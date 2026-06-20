@@ -62,6 +62,14 @@ pub struct RoomInfoPage<'a> {
     /// True when the viewer is allowed to grant/revoke per-room role
     /// overrides (LC-84). Drives the description edit affordance.
     pub can_manage_overrides: bool,
+    /// LC-400: true when the viewer is an enclave owner/admin (or site admin),
+    /// i.e. `enclave_can_manage`. Drives the "Delete room" affordance, gated to
+    /// the same role `post_delete_room` requires.
+    pub can_manage: bool,
+    /// LC-400: the room's enclave id, used to build the delete-room POST target
+    /// `/enclave/{enclave_id}/rooms/{room_id}/delete`. `None` for DMs / rooms
+    /// with no enclave (the delete affordance is hidden then).
+    pub enclave_id: Option<i64>,
     /// Pinned messages for the "Pinned" tab. Empty for the docs tab.
     pub pinned: &'a [PinnedListRow],
     /// LC-87: file rows for the "Files" tab. Empty for other tabs.

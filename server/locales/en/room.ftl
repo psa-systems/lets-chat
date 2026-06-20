@@ -336,3 +336,6 @@ room-thread-following = Following
 room-thread-following-title = You are following this thread. Click to stop notifications.
 room-thread-reply-placeholder = Reply...
 room-thread-send-reply = Send reply
+room-info-danger-heading = Danger zone
+room-info-delete-room = Delete room
+room-info-delete-room-confirm = Delete this room and all of its messages? This cannot be undone.
