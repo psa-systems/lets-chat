@@ -56,18 +56,6 @@
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
         <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
-        {# LC-393: consent banner shown to BOTH parties whenever transcription is
-           on, plus the live caption panel. #lc-caption-log is the OOB target the
-           server appends caption lines into (ws/transcript_segment.html). #}
-        <div data-lc-transcript-banner aria-hidden="true" role="status"
-             class="hidden absolute left-1/2 top-16 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
-          <span class="inline-block h-2 w-2 rounded-full bg-red-500"></span>
-          <span>{{ "transcript-banner"|t }}</span>
-        </div>
-        <div data-lc-caption-wrap aria-hidden="true"
-             class="hidden absolute inset-x-0 bottom-0 z-10 max-h-40 overflow-y-auto bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
-          <div id="lc-caption-log" class="mx-auto max-w-2xl space-y-1"></div>
-        </div>
         {# LC-184: remote-control grant/deny prompt. Shown to the screen-sharer
            when a verified peer requests control. Non-modal (the active-call
            focus trap stays owned by the dialog) but visually prominent. #}
@@ -119,6 +107,20 @@
       <button type="button" data-lc-control-stop class="rounded bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">{{ "call-stop-control"|t }}</button>
       <span class="text-xs text-red-100">{{ "call-stop-control-hint"|t }}</span>
     </div>
+  </div>
+  {# LC-393: shared transcription consent banner + live caption panel, used by
+     BOTH 1:1 calls and enclave voice channels. Standalone + fixed (z above the
+     call overlay) so it works whether or not the fullscreen call dialog is up;
+     transcribe.js reveals it whenever a session is active. #lc-caption-log is
+     the OOB target the server appends caption lines into. #}
+  <div data-lc-transcript-banner aria-hidden="true" role="status"
+       class="hidden fixed left-1/2 top-3 z-[61] -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/80 px-3 py-1 text-xs text-white shadow-lg">
+    <span class="inline-block h-2 w-2 rounded-full bg-red-500"></span>
+    <span>{{ "transcript-banner"|t }}</span>
+  </div>
+  <div data-lc-caption-wrap aria-hidden="true"
+       class="hidden fixed inset-x-0 bottom-0 z-[61] max-h-40 overflow-y-auto bg-gradient-to-t from-black/85 to-transparent px-4 pb-4 pt-6">
+    <div id="lc-caption-log" class="mx-auto max-w-2xl space-y-1"></div>
   </div>
   {% include "scheduled_modal.html" %}
   {% include "poll_modal.html" %}

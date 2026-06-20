@@ -85,12 +85,16 @@
   }
 
   // ---- session control --------------------------------------------------
-  function startSession() {
-    var room = window.__lcCallRoom;
+  // The room comes from the clicked toggle's data-lc-room (voice channel, where
+  // the room is static + server-rendered), else the active 1:1 call / voice room
+  // published by call.js / voice.js.
+  function startSession(toggleEl) {
+    var room = (toggleEl && toggleEl.getAttribute('data-lc-room')) ||
+      window.__lcCallRoom || window.__lcVoiceRoom;
     if (room == null) return;
     if (!SR) {
-      var t = q('[data-lc-transcribe-toggle]');
-      var msg = (t && t.getAttribute('data-lc-unsupported')) || 'Live transcription is not supported in this browser.';
+      var msg = (toggleEl && toggleEl.getAttribute('data-lc-unsupported')) ||
+        'Live transcription is not supported in this browser.';
       alert(msg);
       return;
     }
@@ -119,7 +123,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-lc-transcribe-toggle]');
     if (!t) return;
-    if (transcriptId == null) startSession(); else endSession();
+    if (transcriptId == null) startSession(t); else endSession();
   });
 
   // ---- transcript control bus (started / ended) -------------------------
@@ -157,16 +161,29 @@
   });
 
   // ---- call lifecycle ---------------------------------------------------
-  // call.js dispatches these (LC-393 hooks).
+  // Disable every transcription toggle when the browser has no SpeechRecognition.
+  function disableIfUnsupported() {
+    if (SR) return;
+    var toggles = document.querySelectorAll('[data-lc-transcribe-toggle]');
+    for (var i = 0; i < toggles.length; i++) {
+      toggles[i].disabled = true;
+      toggles[i].title = toggles[i].getAttribute('data-lc-unsupported') || '';
+    }
+  }
+
+  // 1:1 call ended (call.js): finalize the session for everyone.
   document.addEventListener('lc:call-ended', function () {
     if (transcriptId != null) endSession();
     else { stopCapture(); showBanner(false); setToggle(false); }
   });
-  document.addEventListener('lc:call-active', function () {
-    var t = q('[data-lc-transcribe-toggle]');
-    if (t && !SR) {
-      t.disabled = true;
-      t.title = t.getAttribute('data-lc-unsupported') || '';
-    }
+  // Left a voice channel (voice.js): stop OUR capture + reset local UI, but do
+  // NOT /end - the shared session continues for whoever is still in the channel.
+  document.addEventListener('lc:voice-left', function () {
+    transcriptId = null;
+    stopCapture();
+    showBanner(false);
+    setToggle(false);
   });
+  document.addEventListener('lc:call-active', disableIfUnsupported);
+  document.addEventListener('lc:voice-joined', disableIfUnsupported);
 })();
