@@ -90,21 +90,21 @@
          .lc-cbtn-label text; the restyle is transparent to it. #}
       <div class="lc-callbar lc-callbar--bottom">
         <div class="lc-callbar-group">
-          <button type="button" data-lc-open-devices title="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="lc-cbtn lc-cbtn--icon">
+          <button type="button" data-lc-open-devices data-lc-tip="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="lc-cbtn lc-cbtn--icon">
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
             </svg></span>
           </button>
-          <button type="button" data-lc-call-mute aria-pressed="false" aria-label="{{ "call-mute"|t }}" title="{{ "call-mute"|t }}" class="lc-cbtn">
+          <button type="button" data-lc-call-mute aria-pressed="false" aria-label="{{ "call-mute"|t }}" data-lc-tip="{{ "call-mute"|t }}" class="lc-cbtn">
             <span class="lc-cbtn-ico lc-cbtn-ico--off" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/></svg></span>
             <span class="lc-cbtn-ico lc-cbtn-ico--on" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 01-.13.87L7.13 4.13A3 3 0 017 4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 1.36.453 2.616 1.216 3.624l1.1-1.1A4.48 4.48 0 015.5 10v-.357z"/><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 10-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-2.3-2.3A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10c0 .886-.256 1.713-.698 2.41l-1.1-1.1c.19-.41.298-.866.298-1.346V9.4l-2.4-2.4 2.9 2.9-3.1-3.1L3.28 2.22zm6.97 13.734V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546a6.02 6.02 0 01-1.5 0z" clip-rule="evenodd"/></svg></span>
             <span class="lc-cbtn-label">{{ "call-mute"|t }}</span>
           </button>
-          <button type="button" data-lc-call-camera aria-pressed="false" aria-label="{{ "call-start-video"|t }}" title="{{ "call-start-video"|t }}" class="lc-cbtn">
+          <button type="button" data-lc-call-camera aria-pressed="false" aria-label="{{ "call-start-video"|t }}" data-lc-tip="{{ "call-start-video"|t }}" class="lc-cbtn">
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v1.4l3.2-2.133A.75.75 0 0118 4.89v10.22a.75.75 0 01-1.8.623L13 13.6V15a2 2 0 01-2 2H4a2 2 0 01-2-2V5z"/></svg></span>
             <span class="lc-cbtn-label">{{ "call-start-video"|t }}</span>
           </button>
-          <button type="button" data-lc-call-screen aria-pressed="false" aria-label="{{ "call-share-screen"|t }}" title="{{ "call-share-screen"|t }}" class="lc-cbtn">
+          <button type="button" data-lc-call-screen aria-pressed="false" aria-label="{{ "call-share-screen"|t }}" data-lc-tip="{{ "call-share-screen"|t }}" class="lc-cbtn">
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 014.25 2h11.5A2.25 2.25 0 0118 4.25v8.5A2.25 2.25 0 0115.75 15h-3.105l.347 1.736.94.313a.75.75 0 01-.237 1.461H6.305a.75.75 0 01-.237-1.461l.94-.313L7.355 15H4.25A2.25 2.25 0 012 12.75v-8.5zm8.75.75a.75.75 0 00-1.5 0v2.69L8.03 6.22a.75.75 0 00-1.06 1.06l2.5 2.5a.75.75 0 001.06 0l2.5-2.5a.75.75 0 10-1.06-1.06L10.75 7.69V5z" clip-rule="evenodd"/></svg></span>
             <span class="lc-cbtn-label">{{ "call-share-screen"|t }}</span>
           </button>
@@ -113,13 +113,13 @@
         <div class="lc-callbar-group">
           {# LC-393: transcription toggle. Disabled + titled with the unsupported
              note by transcribe.js when the browser has no SpeechRecognition. #}
-          <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" aria-label="{{ "transcript-toggle"|t }}" title="{{ "transcript-toggle"|t }}" class="lc-cbtn lc-cbtn--rec">
+          <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" aria-label="{{ "voice-transcribe-tip"|t }}" data-lc-tip="{{ "voice-transcribe-tip"|t }}" class="lc-cbtn lc-cbtn--rec">
             <span class="lc-cbtn-ico lc-rec-glyph" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle class="lc-rec-core" cx="10" cy="10" r="3.25" fill="currentColor"/></svg></span>
             <span class="lc-cbtn-label">{{ "transcript-toggle"|t }}</span>
           </button>
           {# LC-412: reopen the transcript drawer after closing it (it auto-opens
              when a session starts). transcribe.js handles the click + close. #}
-          <button type="button" data-lc-transcript-panel-toggle aria-pressed="false" title="{{ "voice-transcript-panel"|t }}" aria-label="{{ "voice-transcript-panel"|t }}" class="lc-cbtn">
+          <button type="button" data-lc-transcript-panel-toggle aria-pressed="false" data-lc-tip="{{ "voice-transcript-tip"|t }}" aria-label="{{ "voice-transcript-tip"|t }}" class="lc-cbtn">
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
             <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
           </button>
@@ -128,7 +128,7 @@
           <button type="button" data-lc-control-request aria-pressed="false" class="hidden lc-cbtn"><span class="lc-cbtn-label">{{ "call-request-control"|t }}</span></button>
         </div>
         <div class="lc-callbar-group lc-callbar-group--end">
-          <button type="button" data-lc-call-hangup aria-label="{{ "call-hang-up"|t }}" title="{{ "call-hang-up"|t }}" class="lc-cbtn lc-cbtn--leave">
+          <button type="button" data-lc-call-hangup aria-label="{{ "call-hang-up"|t }}" data-lc-tip="{{ "call-hang-up"|t }}" class="lc-cbtn lc-cbtn--leave">
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 4c-2.4 0-4.69.42-6.81 1.19a2.25 2.25 0 00-1.45 2.5l.2 1.2a1.75 1.75 0 001.62 1.46l2.06.14a1.75 1.75 0 001.78-1.16l.3-.86a.75.75 0 01.5-.47 11.2 11.2 0 013.6 0 .75.75 0 01.5.47l.3.86a1.75 1.75 0 001.78 1.16l2.06-.14a1.75 1.75 0 001.62-1.46l.2-1.2a2.25 2.25 0 00-1.45-2.5A20.9 20.9 0 0010 4z" clip-rule="evenodd"/></svg></span>
             <span class="lc-cbtn-label">{{ "call-hang-up"|t }}</span>
           </button>
