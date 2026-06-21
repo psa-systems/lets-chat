@@ -80,3 +80,4 @@ js-conn-good = Connection: good
 js-conn-degraded = Connection: degraded
 js-conn-reconnecting = Reconnecting...
 js-conn-failed = Connection lost
+js-settings-save-error = Could not save. Please try again.

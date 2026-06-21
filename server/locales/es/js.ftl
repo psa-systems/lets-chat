@@ -78,3 +78,4 @@ js-conn-good = Conexión: buena
 js-conn-degraded = Conexión: degradada
 js-conn-reconnecting = Reconectando...
 js-conn-failed = Conexión perdida
+js-settings-save-error = No se pudo guardar. Inténtalo de nuevo.
