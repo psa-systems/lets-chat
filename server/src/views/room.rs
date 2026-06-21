@@ -284,6 +284,17 @@ impl MessageView {
         )
     }
 
+    /// LC-434: inline HTML for a system / call-event body. These are
+    /// server-authored, so the only markup is an optional single `[label](url)`
+    /// link (the transcript-saved notice) with an internal `url`; everything
+    /// else is escaped plain text. Rendering it inline (not through full
+    /// markdown) keeps the one-line event row free of the block `<p>` wrapper
+    /// and turns the transcript link into a real anchor instead of literal
+    /// `[text](url)`.
+    pub fn system_html(&self) -> String {
+        render_system_inline(&self.body)
+    }
+
     /// LC-284: true when this message directly `@`-mentions the viewer, so the
     /// template can highlight it. The resolved mention set is already loaded for
     /// chip rendering, so this is a cheap membership check (no extra query).
@@ -325,6 +336,34 @@ pub(crate) fn html_escape(s: &str) -> String {
         }
     }
     out
+}
+
+/// LC-434: render a server-authored system-event body inline. Recognizes a
+/// single leading `[label](url)` markdown link with an internal (`/...`) `url`
+/// and emits a real anchor; any other body is escaped plain text. Server-only
+/// input, but the url is still gated to internal paths and both parts are
+/// HTML-escaped so a future event body can never inject markup.
+pub(crate) fn render_system_inline(body: &str) -> String {
+    if let Some(rest) = body.strip_prefix('[') {
+        if let Some(close) = rest.find("](") {
+            let label = &rest[..close];
+            let after = &rest[close + 2..];
+            if let Some(end) = after.find(')') {
+                let url = &after[..end];
+                let trailing = &after[end + 1..];
+                // Internal paths only ("/x", not "//host" or "javascript:").
+                if url.starts_with('/') && !url.starts_with("//") {
+                    return format!(
+                        "<a href=\"{}\" class=\"lc-sysevent-link\">{}</a>{}",
+                        html_escape(url),
+                        html_escape(label),
+                        html_escape(trailing),
+                    );
+                }
+            }
+        }
+    }
+    html_escape(body)
 }
 
 pub(crate) fn linkify_body(
@@ -704,6 +743,34 @@ mod tests {
     #[test]
     fn to_iso_utc_converts_sqlite_datetime() {
         assert_eq!(to_iso_utc("2026-06-15 14:23:01"), "2026-06-15T14:23:01Z");
+    }
+
+    #[test]
+    fn system_inline_parses_transcript_link() {
+        let out = render_system_inline("[\u{1F4DD} Call transcript saved](/transcripts/47)");
+        assert_eq!(
+            out,
+            "<a href=\"/transcripts/47\" class=\"lc-sysevent-link\">\u{1F4DD} Call transcript saved</a>"
+        );
+    }
+
+    #[test]
+    fn system_inline_plain_text_is_escaped() {
+        assert_eq!(render_system_inline("started a call."), "started a call.");
+        // No anchor, and any markup is escaped (server-authored, but defensive).
+        assert_eq!(render_system_inline("a <b> & c"), "a &lt;b&gt; &amp; c");
+    }
+
+    #[test]
+    fn system_inline_rejects_external_link() {
+        // Only internal `/...` destinations become anchors; a scheme/host link
+        // is left as escaped literal text.
+        let out = render_system_inline("[x](https://evil.test)");
+        assert!(!out.contains("<a "), "external link must not anchor: {out}");
+        assert!(
+            out.contains("&gt;") || out.contains("[x]"),
+            "escaped: {out}"
+        );
     }
 
     #[test]
