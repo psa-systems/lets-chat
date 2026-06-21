@@ -240,7 +240,8 @@
     var names = root.querySelectorAll('[data-lc-voice-preview-name]');
     Array.prototype.forEach.call(names, function (el) {
       var uid = el.getAttribute('data-lc-voice-preview-name');
-      if (uid) participants[uid] = el.textContent || uid;
+      // LC-416: chips carry the label in data-lc-label (was the text node).
+      if (uid) participants[uid] = el.getAttribute('data-lc-label') || (el.textContent || '').trim() || uid;
     });
   }
 
@@ -253,6 +254,7 @@
     var empty = preview.querySelector('[data-lc-voice-preview-empty]');
     var list = preview.querySelector('[data-lc-voice-preview-list]');
     var names = preview.querySelector('[data-lc-voice-preview-names]');
+    var heading = preview.querySelector('[data-lc-voice-preview-heading]');
     if (!empty || !list || !names) return;
     var ids = Object.keys(participants);
     updateCount(); // LC-402
@@ -264,14 +266,33 @@
     }
     empty.classList.add('hidden');
     list.classList.remove('hidden');
+    // LC-416: heading templates come from the server-rendered data attrs, so
+    // there is no separate JS i18n catalog to keep in step.
+    if (heading) {
+      if (ids.length === 1) {
+        heading.textContent = preview.getAttribute('data-lc-lobby-one') || '';
+      } else {
+        heading.textContent = ids.length + ' ' + (preview.getAttribute('data-lc-lobby-other') || '');
+      }
+    }
+    // LC-416: rebuild the avatar chips (same structure the server renders).
     names.replaceChildren();
-    ids.forEach(function (uid, idx) {
-      var span = document.createElement('span');
-      span.className = 'font-medium text-content';
-      span.setAttribute('data-lc-voice-preview-name', uid);
-      span.textContent = participants[uid] || uid;
-      names.appendChild(span);
-      if (idx < ids.length - 1) names.appendChild(document.createTextNode(', '));
+    ids.forEach(function (uid) {
+      var label = participants[uid] || uid;
+      var chip = document.createElement('span');
+      chip.className = 'lc-voice-lobby-chip';
+      chip.setAttribute('data-lc-voice-preview-name', uid);
+      chip.setAttribute('data-lc-label', label);
+      var img = document.createElement('img');
+      img.className = 'lc-voice-lobby-avatar';
+      img.src = '/avatars/' + encodeURIComponent(uid);
+      img.alt = label;
+      var nm = document.createElement('span');
+      nm.className = 'lc-voice-lobby-name';
+      nm.textContent = label;
+      chip.appendChild(img);
+      chip.appendChild(nm);
+      names.appendChild(chip);
     });
   }
 
