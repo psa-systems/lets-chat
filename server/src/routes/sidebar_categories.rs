@@ -259,7 +259,7 @@ pub(crate) async fn render_sidebar_fragment(
     user: &User,
     headers: &HeaderMap,
 ) -> Result<Html, AppError> {
-    let current_enclave = current_enclave_from_headers(state, headers).await;
+    let current_enclave = super::current_enclave_for_sidebar(state, headers).await;
     render_sidebar_with_enclave(state, user, current_enclave).await
 }
 
@@ -267,11 +267,11 @@ pub(crate) async fn render_sidebar_fragment(
 /// context.
 ///
 /// The enclave-scoped category mutations pass their authoritative path
-/// `enclave_id` here rather than re-deriving the current enclave from the
-/// `HX-Current-URL` header. The header parser (`current_enclave_from_headers`)
-/// only understands `/enclave/{id}` and `/room/{id}` URLs and returns `None`
-/// for anything else (or if the header is absent / stripped by a proxy / a WS
-/// swap raced the submit). A `None` re-render collapses the sidebar to its
+/// `enclave_id` here rather than re-deriving the current enclave from request
+/// headers (`super::current_enclave_for_sidebar`). The URL fallback in that
+/// resolver only understands `/enclave/{id}` and `/room/{id}` URLs and returns
+/// `None` for anything else (or if the header is absent / stripped by a proxy /
+/// a WS swap raced the submit). A `None` re-render collapses the sidebar to its
 /// DM-only shape - which has no categories and no add-category form - so the
 /// just-created category and the input both vanished and the user saw "nothing
 /// happened" (LC-415). The path `enclave_id` is the enclave the form was
@@ -301,24 +301,6 @@ pub(crate) async fn render_sidebar_with_enclave(
         sidebar_peers: &sidebar_peers,
     };
     html(&fragment)
-}
-
-async fn current_enclave_from_headers(state: &AppState, headers: &HeaderMap) -> Option<i64> {
-    let raw = headers
-        .get("HX-Current-URL")
-        .or_else(|| headers.get(axum::http::header::REFERER))?
-        .to_str()
-        .ok()?;
-    let url = url::Url::parse(raw).ok()?;
-    let mut segs = url.path_segments()?;
-    match segs.next()? {
-        "enclave" => segs.next()?.parse::<i64>().ok(),
-        "room" => {
-            let room_id = segs.next()?.parse::<i64>().ok()?;
-            super::enclave_for_room(state, room_id).await.ok().flatten()
-        }
-        _ => None,
-    }
 }
 
 async fn broadcast_refresh(state: &AppState, enclave_id: i64) -> Result<(), AppError> {
