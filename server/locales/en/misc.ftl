@@ -90,3 +90,6 @@ voice-transcript-panel = Transcript
 voice-transcript-close = Close transcript
 voice-jump-live = Jump to live
 voice-in-call = In call
+transcript-open = Open
+transcript-copy = Copy
+transcript-copied = Copied
