@@ -94,7 +94,9 @@ pub struct SettingsFeedback {
     pub message: String,
     pub toast_only: bool,
     pub reset_avatar: bool,
-    pub avatar_letter: String,
+    /// LC-432: when `reset_avatar`, the `/avatars/{id}?v=...` URL the OOB swap
+    /// points the single preview `<img>` back to (the generated default).
+    pub avatar_src: String,
 }
 
 impl SettingsFeedback {
@@ -104,7 +106,7 @@ impl SettingsFeedback {
             message,
             toast_only: false,
             reset_avatar: false,
-            avatar_letter: String::new(),
+            avatar_src: String::new(),
         }
     }
     pub fn err(message: String) -> Self {
@@ -113,7 +115,7 @@ impl SettingsFeedback {
             message,
             toast_only: false,
             reset_avatar: false,
-            avatar_letter: String::new(),
+            avatar_src: String::new(),
         }
     }
     pub fn toast_only_ok(message: String) -> Self {
@@ -122,16 +124,16 @@ impl SettingsFeedback {
             message,
             toast_only: true,
             reset_avatar: false,
-            avatar_letter: String::new(),
+            avatar_src: String::new(),
         }
     }
-    pub fn ok_reset_avatar(message: String, avatar_letter: String) -> Self {
+    pub fn ok_reset_avatar(message: String, avatar_src: String) -> Self {
         Self {
             ok: true,
             message,
             toast_only: false,
             reset_avatar: true,
-            avatar_letter,
+            avatar_src,
         }
     }
 }
