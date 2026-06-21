@@ -78,32 +78,52 @@
   function avatarInit(root) {
     var input = root.querySelector('[data-lc-avatar-input]');
     if (!input) return;
+    // LC-432: one preview <img> (no fallback circle); the native input is
+    // sr-only, so we report the chosen filename ourselves.
     var preview = root.querySelector('[data-lc-avatar-preview]');
     var pending = root.querySelector('[data-lc-avatar-pending]');
+    var filename = root.querySelector('[data-lc-avatar-filename]');
+    var noFile = input.getAttribute('data-lc-no-file') || '';
     var form = input.closest('form');
 
     input.addEventListener('change', function () {
       var file = input.files && input.files[0];
-      if (!file) return;
-      if (preview) {
-        var url = URL.createObjectURL(file);
-        preview.src = url;
-        preview.classList.remove('hidden');
-        var fb = root.querySelector('[data-lc-avatar-fallback]');
-        if (fb) fb.classList.add('hidden');
-      }
+      if (!file) { if (filename) filename.textContent = noFile; return; }
+      if (preview) preview.src = URL.createObjectURL(file);
+      if (filename) filename.textContent = file.name;
       if (pending) pending.hidden = false;
     });
 
-    // Clear the "not applied yet" hint once the profile form saves OK.
+    // Clear the "not applied yet" hint + filename once the profile form saves OK.
     if (form) {
       form.addEventListener('htmx:afterRequest', function (e) {
         if (e.detail && e.detail.successful) {
           if (pending) pending.hidden = true;
+          if (filename) filename.textContent = noFile;
           try { input.value = ''; } catch (err) {}
         }
       });
     }
+  }
+
+  // LC-432: the inline per-form status should not linger. Auto-clear it a few
+  // seconds after it lands, and clear it the moment the user edits the form
+  // again. (The toast already self-dismisses.)
+  function statusInit() {
+    var TIMEOUT = 4500;
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+      var slot = e.target;
+      if (!slot || !slot.classList || !slot.classList.contains('lc-set-status')) return;
+      if (!slot.textContent.trim()) return;
+      clearTimeout(slot._lcClear);
+      slot._lcClear = setTimeout(function () { slot.replaceChildren(); }, TIMEOUT);
+    });
+    document.addEventListener('input', function (e) {
+      var form = e.target.closest && e.target.closest('form');
+      if (!form) return;
+      var slot = form.querySelector('.lc-set-status');
+      if (slot && slot.textContent) { clearTimeout(slot._lcClear); slot.replaceChildren(); }
+    });
   }
 
   // Slow / navigating actions that can't return an htmx status fragment: give
@@ -137,6 +157,9 @@
     avatarInit(root);
     actionsInit(root);
   }
+
+  // Document-level status listeners: registered once (init() can re-run).
+  statusInit();
 
   if (document.readyState !== 'loading') init();
   else document.addEventListener('DOMContentLoaded', init);

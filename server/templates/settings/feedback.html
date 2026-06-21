@@ -5,5 +5,5 @@
 {%- endif -%}
 <div hx-swap-oob="beforeend:#lc-toast-region"><div class="lc-toast lc-toast--{% if ok %}ok{% else %}err{% endif %}" role="status" data-lc-toast><span class="lc-toast-ico" aria-hidden="true">{% if ok %}&#10003;{% else %}!{% endif %}</span><span class="lc-toast-msg">{{ message }}</span><button type="button" class="lc-toast-close" data-lc-toast-close aria-label="{{ "action-dismiss"|t }}">&times;</button></div></div>
 {%- if reset_avatar -%}
-<div id="lc-set-avatar-wrap" hx-swap-oob="true"><img data-lc-avatar-preview alt="" class="lc-set-avatar hidden"><div class="lc-set-avatar-fallback" data-lc-avatar-fallback>{{ avatar_letter }}</div></div>
+<img id="lc-set-avatar-img" hx-swap-oob="true" data-lc-avatar-preview alt="" src="{{ avatar_src }}" class="lc-set-avatar">
 {%- endif -%}

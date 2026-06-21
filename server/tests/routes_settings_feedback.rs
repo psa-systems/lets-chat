@@ -75,6 +75,31 @@ async fn hx_request_returns_status_fragment_and_toast() {
 }
 
 #[tokio::test]
+async fn avatar_delete_hx_returns_single_oob_image_reset() {
+    let (app, session) = setup().await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/settings/avatar/delete")
+        .header(header::COOKIE, format!("session={session}"))
+        .header("HX-Request", "true")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    // LC-432: a single preview <img> is OOB-swapped back to the avatar URL -
+    // no second placeholder element.
+    assert!(
+        body.contains("id=\"lc-set-avatar-img\"") && body.contains("hx-swap-oob"),
+        "missing oob avatar reset: {body}"
+    );
+    assert!(
+        !body.contains("lc-set-avatar-fallback"),
+        "should not render a second avatar placeholder: {body}"
+    );
+}
+
+#[tokio::test]
 async fn non_hx_request_still_redirects() {
     let (app, session) = setup().await;
     let req = Request::builder()
