@@ -6,400 +6,436 @@
 <header class="border-b border-border px-4 py-2">
   <h1 class="font-semibold">{{ "settings-heading"|t }}</h1>
 </header>
-<div class="flex-1 overflow-y-auto">
-{# LC-345: sticky in-page section nav. Plain anchor links jump to the
-   <section> groups below; `scroll-mt-*` on each section offsets the sticky
-   bar so the heading is not hidden under it. No JS. #}
-<nav aria-label="{{ "settings-sections-nav"|t }}" class="sticky top-0 z-10 bg-surface border-b border-border px-6 py-2 flex gap-4 overflow-x-auto text-sm">
-  <a href="#settings-sec-profile" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-profile"|t }}</a>
-  <a href="#settings-sec-appearance" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-appearance"|t }}</a>
-  <a href="#settings-sec-notifications" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-notifications"|t }}</a>
-  <a href="#settings-sec-privacy" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-privacy"|t }}</a>
-  <a href="#settings-sec-account" class="whitespace-nowrap shrink-0 text-content-muted hover:text-content hover:underline">{{ "settings-section-account"|t }}</a>
-</nav>
-<div class="p-6 max-w-xl space-y-12">
-  {% if saved %}
-  <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-saved"|t }}</div>
-  {% endif %}
-  {# LC-356: inline error flash for the profile / delete-account forms. #}
-  {% if let Some(e) = error.as_ref() %}
-  <div class="p-2 bg-danger-surface border border-danger-border text-danger-surface-content text-sm rounded" role="alert">{{ e }}</div>
-  {% endif %}
+{# LC-426: tabbed two-column settings. settings.js makes the tabs real
+   (show one panel at a time, hash + sessionStorage synced); every form posts
+   via htmx and swaps a status fragment into its slot + a toast. Progressive
+   enhancement: with no JS the panels all show and the forms full-page submit. #}
+<div class="flex-1 overflow-y-auto" data-lc-settings>
+  {# Progressive enhancement: with JS the non-active panels carry `hidden` and
+     the tabs switch them. Without JS, reveal every panel (one long page) and
+     drop the now-inert tab rail. #}
+  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
+  <div class="lc-set-shell">
+    <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "settings-sections-nav"|t }}">
+      <button type="button" role="tab" id="lc-tab-profile" data-lc-tab="profile" aria-controls="lc-panel-profile" aria-selected="true" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+        <span>{{ "settings-section-profile"|t }}</span>
+      </button>
+      <button type="button" role="tab" id="lc-tab-appearance" data-lc-tab="appearance" aria-controls="lc-panel-appearance" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 1.5 1.5 0 001.06-2.56.5.5 0 01.35-.85H13a5 5 0 005-5c0-3.59-3.36-6.59-8-5.59zM5.5 11a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg>
+        <span>{{ "settings-section-appearance"|t }}</span>
+      </button>
+      <button type="button" role="tab" id="lc-tab-notifications" data-lc-tab="notifications" aria-controls="lc-panel-notifications" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.9 32.9 0 003.256.508 3.5 3.5 0 006.972 0 32.9 32.9 0 003.256-.508.75.75 0 00.515-1.076A11.45 11.45 0 0116 8a6 6 0 00-6-6zm0 14.5a2 2 0 01-1.95-1.557 33 33 0 003.9 0A2 2 0 0110 16.5z" clip-rule="evenodd"/></svg>
+        <span>{{ "settings-section-notifications"|t }}</span>
+      </button>
+      <button type="button" role="tab" id="lc-tab-privacy" data-lc-tab="privacy" aria-controls="lc-panel-privacy" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.43.105.86.105 1.299 0 5.628-3.808 10.36-8.97 11.749a.53.53 0 01-.276 0C4.808 17.057 1 12.325 1 6.7c0-.439.036-.87.105-1.3a.5.5 0 01.48-.425 11.947 11.947 0 007.076-2.738zM10 14a1 1 0 100-2 1 1 0 000 2zm0-7a1 1 0 00-1 1v2a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        <span>{{ "settings-section-privacy"|t }}</span>
+      </button>
+      <button type="button" role="tab" id="lc-tab-account" data-lc-tab="account" aria-controls="lc-panel-account" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 3a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H3zm0 4h14v8H3V7z"/></svg>
+        <span>{{ "settings-section-account"|t }}</span>
+      </button>
+    </nav>
 
-  <section id="settings-sec-profile" class="space-y-8 scroll-mt-16">
-    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-profile"|t }}</h2>
+    <div class="lc-set-main">
+      {# No-JS fallback flash (JS submits get a toast + inline status instead of
+         a redirect, so these only show on a full-page POST without htmx). #}
+      {% if saved %}<div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "settings-saved"|t }}</div>{% endif %}
+      {% if let Some(e) = error.as_ref() %}<div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ e }}</div>{% endif %}
+      {% if session_revoked %}<div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "settings-session-revoked"|t }}</div>{% endif %}
+      {# ===== Profile ===== #}
+      <section id="lc-panel-profile" role="tabpanel" aria-labelledby="lc-tab-profile" data-lc-tabpanel="profile" class="lc-set-panel">
+        <h2 class="lc-set-panel-title">{{ "settings-section-profile"|t }}</h2>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-account"|t }}</h2>
-    <dl class="text-sm text-content-muted space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-username"|t }}</dt><dd>{{ user.username }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-role"|t }}</dt><dd>{{ user.role }}</dd></div>
-    </dl>
-  </div>
-
-  <form method="post" action="/settings/profile" enctype="multipart/form-data" class="space-y-4">
-    <h2 class="font-medium">{{ "settings-profile"|t }}</h2>
-    <div class="flex items-start gap-4">
-      <div class="shrink-0">
-        <span class="relative inline-block"{% if let Some(t) = user.custom_status.as_ref() %} title="{{ t }}"{% endif %}>
-          {% if user.avatar_ext.is_some() %}
-          <img src="/avatars/{{ user.id }}?v={{ avatar_version }}" alt="Avatar" class="h-16 w-16 rounded-full object-cover border border-border">
-          {% else %}
-          <div class="h-16 w-16 rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold text-xl">{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-          {% endif %}
-          <span data-user-status="{{ user.id }}" aria-label="{% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else if user.status == "offline" %}{{ "settings-presence-offline"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-4 w-4 rounded-full ring-2 ring-surface-elevated {% if user.status == "dnd" %}bg-danger{% else if user.status == "idle" || user.status == "away" %}bg-warning{% else if user.status == "offline" %}bg-content-subtle{% else %}bg-success{% endif %}"></span>
-        </span>
-        <div class="text-xs text-content-muted mt-1">{{ "settings-status-label"|t }} {% if user.status == "dnd" %}{{ "settings-presence-dnd"|t }}{% else if user.status == "idle" || user.status == "away" %}{{ "settings-presence-away"|t }}{% else %}{{ "settings-presence-online"|t }}{% endif %}{% if let Some(t) = user.custom_status.as_ref() %} - {{ t }}{% endif %}</div>
-      </div>
-      <div class="flex-1 space-y-2">
-        <label class="block text-sm">
-          <span class="text-content-muted">{{ "settings-profile-picture"|t }}</span>
-          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block mt-1 text-sm">
-          <span class="text-xs text-content-muted">{{ "settings-avatar-formats"|t }}</span>
-        </label>
-      </div>
-    </div>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-display-name"|t }}</span>
-      <input type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
-    </label>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-email"|t }}</span>
-      <input type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}" class="mt-1 block w-full border rounded px-2 py-1">
-      <span class="text-xs text-content-muted">{{ "settings-email-help"|t }}</span>
-    </label>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "settings-bio"|t }}</span>
-      <textarea name="bio" maxlength="500" rows="3" class="mt-1 block w-full border rounded px-2 py-1">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
-    </label>
-    <div class="flex items-center gap-2">
-      <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-save-profile"|t }}</button>
-      {% if user.avatar_ext.is_some() %}
-      <button type="submit" form="avatar-delete-form" class="text-sm text-danger hover:underline">{{ "settings-remove-avatar"|t }}</button>
-      {% endif %}
-    </div>
-  </form>
-  {% if user.avatar_ext.is_some() %}
-  <form id="avatar-delete-form" method="post" action="/settings/avatar/delete" class="hidden"></form>
-  {% endif %}
-  </section>
-
-  <section id="settings-sec-appearance" class="space-y-8 scroll-mt-16">
-    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-appearance"|t }}</h2>
-
-  {# LC-100: UI language picker. Saving redirects with ?saved=1. #}
-  <form method="post" action="/settings/language" class="space-y-2">
-    <h2 class="font-medium">{{ "settings-language"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "settings-language-help"|t }}</p>
-    <select name="locale" aria-label="{{ "settings-language"|t }}" class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      {% for l in locales %}
-      <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-language-save"|t }}</button>
-  </form>
-
-  {# LC-191: theme picker. The inline onchange applies instantly via
-     window.__lcSetTheme (base.html bootstrap) + remembers on this device; the
-     form POST persists server-side and the locale middleware syncs the cookie. #}
-  <form method="post" action="/settings/appearance" class="space-y-2">
-    <h2 class="font-medium">{{ "settings-appearance"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "settings-appearance-help"|t }}</p>
-    <select name="theme" aria-label="{{ "settings-appearance"|t }}" onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
-      <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
-      <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
-      <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
-      <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
-    </select>
-    <label class="block text-sm text-content-muted">{{ "settings-density"|t }}</label>
-    <select name="density" aria-label="{{ "settings-density"|t }}" onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
-      <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
-    </select>
-    {# LC-327: message text size. Purely device-local (localStorage), so it is
-       NOT submitted with the theme/density POST - no `name`, no server column.
-       __lcSetTextSize (base.html bootstrap) persists + applies on change; the
-       script below initializes the selected option from localStorage since the
-       server cannot render the selected state for a device-local pref. #}
-    <label class="block text-sm text-content-muted" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>
-    <select id="lc-textsize-select" onchange="window.__lcSetTextSize&&window.__lcSetTextSize(this.value)"
-            class="block w-full max-w-xs border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="small">{{ "textsize-small"|t }}</option>
-      <option value="normal">{{ "textsize-normal"|t }}</option>
-      <option value="large">{{ "textsize-large"|t }}</option>
-    </select>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "settings-appearance-save"|t }}</button>
-  </form>
-  <script>
-    (function () {
-      var s = document.getElementById("lc-textsize-select");
-      if (!s) return;
-      try { s.value = localStorage.getItem("lc-textsize") || "normal"; } catch (e) {}
-    })();
-  </script>
-  </section>
-
-  <section id="settings-sec-notifications" class="space-y-8 scroll-mt-16">
-    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-notifications"|t }}</h2>
-
-  <form method="post" action="/settings" class="space-y-4">
-    <h2 class="font-medium">{{ "settings-preferences"|t }}</h2>
-    <label class="flex items-center gap-2 cursor-pointer">
-      <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
-      <span>{{ "settings-pref-read-receipts"|t }}</span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="is_profile_public" value="1" class="mt-0.5" {% if user.is_profile_public %}checked{% endif %}>
-      <span>
-        {{ "settings-pref-public-profile"|t }}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-public-profile-help"|t }}</span>
-      </span>
-    </label>
-    <label class="flex items-center gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
-      <span>{{ "settings-pref-browser-notify"|t }}</span>
-    </label>
-    <label class="flex items-center gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
-      <span>{{ "settings-pref-sound"|t }}</span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_push_enabled" value="1" class="mt-0.5"
-        {% if user.notify_push_enabled %}checked{% endif %}
-        {% if !push_available %}disabled{% endif %}>
-      <span>
-        {{ "settings-pref-push"|t }}
-        {% if !push_available %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>
-        {% else %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-push-available"|t }}</span>
-        {% endif %}
-      </span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_email_digest_enabled" value="1" class="mt-0.5"
-        {% if user.notify_email_digest_enabled %}checked{% endif %}
-        {% if !email_available %}disabled{% endif %}>
-      <span>
-        {{ "settings-pref-email-digest"|t }}
-        {% if !email_available %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
-        {% else %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-email-digest-help"|t }}</span>
-        {% endif %}
-      </span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_login_alerts_enabled" value="1" class="mt-0.5"
-        {% if user.notify_login_alerts_enabled %}checked{% endif %}
-        {% if !email_available %}disabled{% endif %}>
-      <span>
-        {{ "settings-pref-login-alerts"|t }}
-        {% if !email_available %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
-        {% else %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-login-alerts-help"|t }}</span>
-        {% endif %}
-      </span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="notify_email_activity_enabled" value="1" class="mt-0.5"
-        {% if user.notify_email_activity_enabled %}checked{% endif %}
-        {% if !email_available %}disabled{% endif %}>
-      <span>
-        {{ "settings-pref-email-activity"|t }}
-        {% if !email_available %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-email-unavailable"|t }}</span>
-        {% else %}
-        <span class="block text-xs text-content-muted">{{ "settings-pref-email-activity-help"|t }}</span>
-        {% endif %}
-      </span>
-    </label>
-    <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-save-preferences"|t }}</button>
-  </form>
-
-  {# LC-304: highlight words. Lives outside the prefs <form> above because the
-     chip add/remove are their own HTMX posts. at_cap is bound here so the
-     shared keyword_list partial (also rendered standalone by the endpoints)
-     has the same context on the initial page render. #}
-  <div class="space-y-2 border-t border-border pt-6">
-    <h2 class="font-medium">{{ "settings-keyword-heading"|t }}</h2>
-    <p class="text-xs text-content-muted">{{ "settings-keyword-help"|t }}</p>
-    {% let at_cap = keywords.len() >= 25 %}
-    {% include "partials/keyword_list.html" %}
-  </div>
-
-  <div class="space-y-4 border-t border-border pt-6">
-    <div class="flex items-center gap-2">
-      <h2 class="font-medium">{{ "settings-dnd-heading"|t }}</h2>
-      {% if dnd_active %}
-      <span class="rounded bg-danger-surface px-1.5 py-0.5 text-xs font-medium text-danger">{{ "settings-dnd-active"|t }}</span>
-      {% endif %}
-    </div>
-    <p class="text-xs text-content-muted">{{ "settings-dnd-explain"|t }}</p>
-
-    <div class="space-y-2">
-      <h3 class="text-sm font-medium">{{ "settings-dnd-pause-heading"|t }}</h3>
-      {% if dnd_paused_until != "" %}
-      <p class="text-xs text-content-muted">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
-      <form method="post" action="/settings/dnd/resume">
-        <button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-resume"|t }}</button>
-      </form>
-      {% else %}
-      <div class="flex flex-wrap gap-2">
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-30-minutes"|t }}</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-2-hours"|t }}</button></form>
-        <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-8-hours"|t }}</button></form>
-        <form method="post" action="/settings/dnd/pause" class="flex items-center gap-1">
-          <input type="number" name="minutes" min="1" max="10080" value="60" class="w-20 rounded border border-border-strong px-2 py-1 text-sm" aria-label="{{ "settings-dnd-pause-minutes"|t }}">
-          <button type="submit" class="rounded bg-surface-sunken px-3 py-1.5 text-sm hover:bg-surface-sunken">{{ "settings-dnd-min"|t }}</button>
-        </form>
-      </div>
-      {% endif %}
-    </div>
-
-    <form method="post" action="/settings/dnd" class="space-y-3">
-      <h3 class="text-sm font-medium">{{ "settings-dnd-schedule-heading"|t }}</h3>
-      <label class="block text-sm">
-        <span class="block text-xs text-content-muted">{{ "settings-dnd-timezone"|t }}</span>
-        <select name="timezone" class="mt-1 w-full max-w-xs rounded border border-border-strong px-2 py-1 text-sm">
-          <option value="" {% if dnd_timezone == "" %}selected{% endif %}>{{ "settings-dnd-off"|t }}</option>
-          {% for tz in timezones %}
-          <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <div class="grid grid-cols-2 gap-3 max-w-md">
-        <label class="block text-sm">
-          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekday-start"|t }}</span>
-          <input type="time" name="weekday_start" value="{{ dnd_weekday_start }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
-        </label>
-        <label class="block text-sm">
-          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekday-end"|t }}</span>
-          <input type="time" name="weekday_end" value="{{ dnd_weekday_end }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
-        </label>
-        <label class="block text-sm">
-          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekend-start"|t }}</span>
-          <input type="time" name="weekend_start" value="{{ dnd_weekend_start }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
-        </label>
-        <label class="block text-sm">
-          <span class="block text-xs text-content-muted">{{ "settings-dnd-weekend-end"|t }}</span>
-          <input type="time" name="weekend_end" value="{{ dnd_weekend_end }}" class="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm">
-        </label>
-      </div>
-      <p class="text-xs text-content-muted">{{ "settings-dnd-schedule-help"|t }}</p>
-      <button type="submit" class="bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-dnd-save-schedule"|t }}</button>
-    </form>
-  </div>
-  </section>
-
-  <section id="settings-sec-privacy" class="space-y-8 scroll-mt-16">
-    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-privacy"|t }}</h2>
-
-  {# LC-22 cutover: password change form deleted. Bunyip owns credentials. #}
-
-  <div class="space-y-3">
-    <h2 class="font-medium">{{ "settings-active-sessions"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "settings-sessions-help"|t }}</p>
-    {% if session_revoked %}
-    <div class="p-2 bg-success-surface border border-success-border text-success-surface-content text-sm rounded">{{ "settings-session-revoked"|t }}</div>
-    {% endif %}
-    <ul class="divide-y border rounded">
-      {% for s in sessions %}
-      <li class="flex items-start justify-between gap-4 px-3 py-2 text-sm">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="font-medium">{{ s.label }}</span>
-            {% if s.is_current %}
-            <span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-accent-surface text-accent-surface-content">{{ "settings-this-device"|t }}</span>
-            {% endif %}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-account"|t }}</h3>
           </div>
-          <div class="text-xs text-content-muted mt-0.5">
-            {{ "settings-last-seen"|t }} {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} {{ "settings-from"|t }} {{ ip }}{% endif %}
-          </div>
-          <div class="text-xs text-content-subtle">{{ "settings-signed-in"|t }} {{ s.created }} UTC</div>
+          <dl class="lc-set-defs">
+            <div><dt>{{ "settings-username"|t }}</dt><dd>{{ user.username }}</dd></div>
+            <div><dt>{{ "settings-role"|t }}</dt><dd>{{ user.role }}</dd></div>
+          </dl>
         </div>
-        {% if s.is_current %}
-        <button type="button" disabled class="px-2 py-1 text-xs border rounded text-content-subtle cursor-not-allowed">{{ "action-revoke"|t }}</button>
-        {% else %}
-        <form method="post" action="/settings/sessions/{{ s.id }}/revoke">
-          <button type="submit" class="px-2 py-1 text-xs border rounded text-danger border-danger-border hover:bg-danger-surface">{{ "action-revoke"|t }}</button>
-        </form>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-privacy"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      <a href="/settings/blocked" class="text-accent hover:underline">{{ "settings-manage-blocked"|t }}</a>
-    </p>
-  </div>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-profile"|t }}</h3>
+          </div>
+          <form method="post" action="/settings/profile" enctype="multipart/form-data"
+                hx-post="/settings/profile" hx-encoding="multipart/form-data"
+                hx-target="#st-profile" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]"
+                class="lc-set-form">
+            <div class="lc-set-avatar-row">
+              <div id="lc-set-avatar-wrap">
+                <img id="lc-set-avatar-img" data-lc-avatar-preview alt="{{ "settings-profile-picture"|t }}"
+                     {% if user.avatar_ext.is_some() %}src="/avatars/{{ user.id }}?v={{ avatar_version }}"{% endif %}
+                     class="lc-set-avatar{% if user.avatar_ext.is_none() %} hidden{% endif %}">
+                <div class="lc-set-avatar-fallback{% if user.avatar_ext.is_some() %} hidden{% endif %}" data-lc-avatar-fallback>{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="lc-set-field">
+                  <label class="lc-set-label" for="lc-avatar-input">{{ "settings-profile-picture"|t }}</label>
+                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block text-sm text-content file:mr-2 file:rounded-md file:border file:border-border file:bg-surface-elevated file:px-2 file:py-1 file:text-sm file:text-content hover:file:bg-surface-sunken">
+                  <p class="lc-set-help">{{ "settings-avatar-formats"|t }}</p>
+                  <p data-lc-avatar-pending hidden class="lc-set-help lc-set-pending">{{ "settings-avatar-pending"|t }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-display-name">{{ "settings-display-name"|t }}</label>
+              <input id="lc-display-name" class="input" type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}">
+            </div>
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-email">{{ "settings-email"|t }}</label>
+              <input id="lc-email" class="input" type="email" name="email" maxlength="254" value="{% if let Some(e) = email.as_ref() %}{{ e }}{% endif %}">
+              <p class="lc-set-help">{{ "settings-email-help"|t }}</p>
+            </div>
+            <div class="lc-set-field">
+              <label class="lc-set-label" for="lc-bio">{{ "settings-bio"|t }}</label>
+              <textarea id="lc-bio" class="input" name="bio" maxlength="500" rows="3">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-save-profile"|t }}</span></button>
+              {% if user.avatar_ext.is_some() %}
+              {# Associated with the sibling form below (forms can't nest); works
+                 with htmx and as a plain submit. #}
+              <button type="submit" form="lc-avatar-del-form" class="btn btn-ghost btn-sm text-danger"
+                      onclick="return confirm('{{ "settings-remove-avatar-confirm"|t }}');">{{ "settings-remove-avatar"|t }}</button>
+              {% endif %}
+              <span id="st-profile" class="lc-set-status" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+          {% if user.avatar_ext.is_some() %}
+          <form id="lc-avatar-del-form" method="post" action="/settings/avatar/delete"
+                hx-post="/settings/avatar/delete" hx-target="#st-profile" hx-swap="innerHTML"
+                hx-disabled-elt="find button" class="hidden"></form>
+          {% endif %}
+        </div>
+      </section>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-api-tokens-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      <a href="/settings/api-tokens" class="text-accent hover:underline">{{ "settings-manage-api-tokens"|t }}</a>
-      {{ "settings-api-tokens-help"|t }}
-    </p>
-  </div>
-  </section>
+      {# ===== Appearance ===== #}
+      <section id="lc-panel-appearance" role="tabpanel" aria-labelledby="lc-tab-appearance" data-lc-tabpanel="appearance" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-appearance"|t }}</h2>
 
-  <section id="settings-sec-account" class="space-y-8 scroll-mt-16">
-    <h2 class="text-lg font-semibold border-b border-border pb-1">{{ "settings-section-account"|t }}</h2>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-language"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-language-help"|t }}</p>
+          </div>
+          <form method="post" action="/settings/language"
+                hx-post="/settings/language" hx-target="#st-language" hx-swap="innerHTML"
+                hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-locale">{{ "settings-language"|t }}</label>
+              <select id="lc-locale" class="input" name="locale" aria-label="{{ "settings-language"|t }}">
+                {% for l in locales %}
+                <option value="{{ l.code }}"{% if l.selected %} selected{% endif %}>{{ l.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-language-save"|t }}</span></button>
+              <span id="st-language" class="lc-set-status" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-storage-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      {% if let Some(q) = storage_quota_display %}
-      {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-of-quota"|t }} <span class="font-mono">{{ q }}</span> {{ "settings-storage-quota-suffix"|t }}
-      {% else %}
-      {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-no-quota"|t }}
-      {% endif %}
-    </p>
-  </div>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-appearance"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-appearance-help"|t }}</p>
+          </div>
+          <form method="post" action="/settings/appearance"
+                hx-post="/settings/appearance" hx-target="#st-appearance" hx-swap="innerHTML"
+                hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-theme">{{ "settings-appearance"|t }}</label>
+              <select id="lc-theme" class="input" name="theme" aria-label="{{ "settings-appearance"|t }}"
+                      onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)">
+                <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
+                <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
+                <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
+                <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
+                <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
+              </select>
+            </div>
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-density">{{ "settings-density"|t }}</label>
+              <select id="lc-density" class="input" name="density" aria-label="{{ "settings-density"|t }}"
+                      onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)">
+                <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
+                <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
+              </select>
+            </div>
+            {# LC-327: device-local text size (localStorage), not submitted. #}
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>
+              <select id="lc-textsize-select" class="input" aria-label="{{ "settings-textsize"|t }}"
+                      onchange="window.__lcSetTextSize&&window.__lcSetTextSize(this.value)">
+                <option value="small">{{ "textsize-small"|t }}</option>
+                <option value="normal">{{ "textsize-normal"|t }}</option>
+                <option value="large">{{ "textsize-large"|t }}</option>
+              </select>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-appearance-save"|t }}</span></button>
+              <span id="st-appearance" class="lc-set-status" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
+        <script>
+          (function () {
+            var s = document.getElementById("lc-textsize-select");
+            if (!s) return;
+            try { s.value = localStorage.getItem("lc-textsize") || "normal"; } catch (e) {}
+          })();
+        </script>
+      </section>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-your-data-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      {{ "settings-your-data-help"|t }}
-    </p>
-    <p class="mt-2">
-      <a href="/settings/export-data" class="inline-block bg-accent text-accent-content px-4 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "settings-download-data"|t }}</a>
-    </p>
-  </div>
+      {# ===== Notifications & Activity ===== #}
+      <section id="lc-panel-notifications" role="tabpanel" aria-labelledby="lc-tab-notifications" data-lc-tabpanel="notifications" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-notifications"|t }}</h2>
 
-  <div class="rounded border border-danger-border bg-danger-surface p-4 space-y-3">
-    <h2 class="font-medium text-danger">{{ "settings-delete-account-heading"|t }}</h2>
-    <p class="text-sm text-danger">
-      {{ "settings-delete-account-explain"|t }}
-    </p>
-    <form method="post" action="/settings/delete-account" class="space-y-3">
-      {# LC-22 cutover: no password field. Account deletion just needs the
-         confirm phrase + signed-in session; Bunyip owns credentials. #}
-      <label class="block text-sm">
-        <span class="text-danger">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</span>
-        <input type="text" name="confirm_phrase" required autocomplete="off" class="mt-1 block w-full border border-danger-border rounded px-2 py-1">
-      </label>
-      <button type="submit" class="bg-danger text-danger-content px-4 py-1.5 rounded text-sm hover:bg-danger" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');">{{ "settings-delete-account-button"|t }}</button>
-    </form>
-  </div>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-preferences"|t }}</h3>
+          </div>
+          <form method="post" action="/settings"
+                hx-post="/settings" hx-target="#st-prefs" hx-swap="innerHTML"
+                hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+            <label class="lc-toggle">
+              <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-read-receipts"|t }}</span></span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="is_profile_public" value="1" {% if user.is_profile_public %}checked{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-public-profile"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-public-profile-help"|t }}</span></span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-browser-notify"|t }}</span></span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-sound"|t }}</span></span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_push_enabled" value="1" {% if user.notify_push_enabled %}checked{% endif %}{% if !push_available %} disabled{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-push"|t }}</span>{% if !push_available %}<span class="lc-toggle-desc">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-push-available"|t }}</span>{% endif %}</span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_email_digest_enabled" value="1" {% if user.notify_email_digest_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-digest"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-digest-help"|t }}</span>{% endif %}</span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_login_alerts_enabled" value="1" {% if user.notify_login_alerts_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-login-alerts"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-login-alerts-help"|t }}</span>{% endif %}</span>
+            </label>
+            <label class="lc-toggle">
+              <input type="checkbox" name="notify_email_activity_enabled" value="1" {% if user.notify_email_activity_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-activity"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-activity-help"|t }}</span>{% endif %}</span>
+            </label>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-save-preferences"|t }}</span></button>
+              <span id="st-prefs" class="lc-set-status" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
 
-  <div>
-    <h2 class="font-medium mb-2">{{ "settings-about-heading"|t }}</h2>
-    <dl class="text-sm text-content-muted space-y-1">
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-version"|t }}</dt><dd>{{ app_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-release"|t }}</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
-      <div class="flex gap-2"><dt class="w-32 text-content-muted">{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
-    </dl>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-keyword-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-keyword-help"|t }}</p>
+          </div>
+          {% let at_cap = keywords.len() >= 25 %}
+          {% include "partials/keyword_list.html" %}
+        </div>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <div class="flex items-center gap-2">
+              <h3 class="lc-set-card-title">{{ "settings-dnd-heading"|t }}</h3>
+              {% if dnd_active %}<span class="rounded bg-danger-surface px-1.5 py-0.5 text-xs font-medium text-danger">{{ "settings-dnd-active"|t }}</span>{% endif %}
+            </div>
+            <p class="lc-set-card-desc">{{ "settings-dnd-explain"|t }}</p>
+          </div>
+
+          <div class="lc-set-form">
+            <div class="lc-set-field">
+              <span class="lc-set-label">{{ "settings-dnd-pause-heading"|t }}</span>
+              {% if dnd_paused_until != "" %}
+              <p class="lc-set-help">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
+              <form method="post" action="/settings/dnd/resume">
+                <button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-resume"|t }}</button>
+              </form>
+              {% else %}
+              <div class="flex flex-wrap items-center gap-2">
+                <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="30"><button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-30-minutes"|t }}</button></form>
+                <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="120"><button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-2-hours"|t }}</button></form>
+                <form method="post" action="/settings/dnd/pause"><input type="hidden" name="minutes" value="480"><button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-8-hours"|t }}</button></form>
+                <form method="post" action="/settings/dnd/pause" class="flex items-center gap-1">
+                  <input type="number" name="minutes" min="1" max="10080" value="60" class="input w-20" aria-label="{{ "settings-dnd-pause-minutes"|t }}">
+                  <button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-min"|t }}</button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+
+            <form method="post" action="/settings/dnd"
+                  hx-post="/settings/dnd" hx-target="#st-dnd" hx-swap="innerHTML"
+                  hx-disabled-elt="find button[type=submit]" class="lc-set-form border-t border-border pt-4">
+              <span class="lc-set-label">{{ "settings-dnd-schedule-heading"|t }}</span>
+              <div class="lc-set-field lc-set-field--narrow">
+                <label class="lc-set-help" for="lc-dnd-tz">{{ "settings-dnd-timezone"|t }}</label>
+                <select id="lc-dnd-tz" class="input" name="timezone">
+                  <option value="" {% if dnd_timezone == "" %}selected{% endif %}>{{ "settings-dnd-off"|t }}</option>
+                  {% for tz in timezones %}
+                  <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="lc-set-timegrid">
+                <div class="lc-set-field">
+                  <label class="lc-set-help" for="lc-wd-start">{{ "settings-dnd-weekday-start"|t }}</label>
+                  <input id="lc-wd-start" class="input" type="time" name="weekday_start" value="{{ dnd_weekday_start }}">
+                </div>
+                <div class="lc-set-field">
+                  <label class="lc-set-help" for="lc-wd-end">{{ "settings-dnd-weekday-end"|t }}</label>
+                  <input id="lc-wd-end" class="input" type="time" name="weekday_end" value="{{ dnd_weekday_end }}">
+                </div>
+                <div class="lc-set-field">
+                  <label class="lc-set-help" for="lc-we-start">{{ "settings-dnd-weekend-start"|t }}</label>
+                  <input id="lc-we-start" class="input" type="time" name="weekend_start" value="{{ dnd_weekend_start }}">
+                </div>
+                <div class="lc-set-field">
+                  <label class="lc-set-help" for="lc-we-end">{{ "settings-dnd-weekend-end"|t }}</label>
+                  <input id="lc-we-end" class="input" type="time" name="weekend_end" value="{{ dnd_weekend_end }}">
+                </div>
+              </div>
+              <p class="lc-set-help">{{ "settings-dnd-schedule-help"|t }}</p>
+              <div class="lc-set-actions">
+                <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-dnd-save-schedule"|t }}</span></button>
+                <span id="st-dnd" class="lc-set-status" role="status" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {# ===== Privacy & Security ===== #}
+      <section id="lc-panel-privacy" role="tabpanel" aria-labelledby="lc-tab-privacy" data-lc-tabpanel="privacy" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-privacy"|t }}</h2>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-active-sessions"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-sessions-help"|t }}</p>
+          </div>
+          <div class="lc-set-sessions">
+            {% for s in sessions %}
+            <div class="lc-set-session">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-sm">{{ s.label }}</span>
+                  {% if s.is_current %}<span class="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-accent-surface text-accent-surface-content">{{ "settings-this-device"|t }}</span>{% endif %}
+                </div>
+                <div class="text-xs text-content-muted mt-0.5">{{ "settings-last-seen"|t }} {{ s.last_seen }} UTC{% if let Some(ip) = s.ip.as_ref() %} {{ "settings-from"|t }} {{ ip }}{% endif %}</div>
+                <div class="text-xs text-content-subtle">{{ "settings-signed-in"|t }} {{ s.created }} UTC</div>
+              </div>
+              {% if s.is_current %}
+              <button type="button" disabled class="btn btn-secondary btn-sm opacity-60 cursor-not-allowed">{{ "action-revoke"|t }}</button>
+              {% else %}
+              <form method="post" action="/settings/sessions/{{ s.id }}/revoke"
+                    hx-post="/settings/sessions/{{ s.id }}/revoke" hx-target="closest .lc-set-session"
+                    hx-swap="outerHTML" hx-disabled-elt="find button">
+                <button type="submit" class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface">{{ "action-revoke"|t }}</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-privacy"|t }}</h3>
+          </div>
+          <a href="/settings/blocked" class="btn btn-secondary btn-sm">{{ "settings-manage-blocked"|t }}</a>
+        </div>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-api-tokens-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-api-tokens-help"|t }}</p>
+          </div>
+          <a href="/settings/api-tokens" class="btn btn-secondary btn-sm">{{ "settings-manage-api-tokens"|t }}</a>
+        </div>
+      </section>
+
+      {# ===== Data & Account ===== #}
+      <section id="lc-panel-account" role="tabpanel" aria-labelledby="lc-tab-account" data-lc-tabpanel="account" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-account"|t }}</h2>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-storage-heading"|t }}</h3>
+          </div>
+          <p class="text-sm text-content-muted">
+            {% if let Some(q) = storage_quota_display %}
+            {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-of-quota"|t }} <span class="font-mono">{{ q }}</span> {{ "settings-storage-quota-suffix"|t }}
+            {% else %}
+            {{ "settings-storage-using"|t }} <span class="font-mono">{{ storage_usage_display }}</span> {{ "settings-storage-no-quota"|t }}
+            {% endif %}
+          </p>
+        </div>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-your-data-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-your-data-help"|t }}</p>
+          </div>
+          <a href="/settings/export-data" data-lc-download-data data-lc-downloading="{{ "settings-data-preparing"|t }}" class="btn btn-primary">{{ "settings-download-data"|t }}</a>
+        </div>
+
+        <div class="card lc-set-card lc-set-card--danger">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title text-danger">{{ "settings-delete-account-heading"|t }}</h3>
+            <p class="lc-set-card-desc text-danger">{{ "settings-delete-account-explain"|t }}</p>
+          </div>
+          <form method="post" action="/settings/delete-account" data-lc-delete-form class="lc-set-form">
+            <div class="lc-set-field">
+              <label class="lc-set-label text-danger" for="lc-del-confirm">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</label>
+              <input id="lc-del-confirm" class="input border-danger-border" type="text" name="confirm_phrase" required autocomplete="off">
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-danger" data-lc-working="{{ "settings-deleting"|t }}" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span data-lc-btn-label>{{ "settings-delete-account-button"|t }}</span></button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-about-heading"|t }}</h3>
+          </div>
+          <dl class="lc-set-defs">
+            <div><dt>{{ "settings-about-version"|t }}</dt><dd>{{ app_version }}</dd></div>
+            <div><dt>{{ "settings-about-release"|t }}</dt><dd class="font-mono text-xs">{{ git_version }}</dd></div>
+            <div><dt>{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
+            <div><dt>{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
+          </dl>
+        </div>
+      </section>
+    </div>
   </div>
-  </section>
-</div>
 </div>
 {% endblock %}

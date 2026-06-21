@@ -1,4 +1,5 @@
 use axum::extract::{Multipart, Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
@@ -40,6 +41,49 @@ pub struct SettingsQuery {
 pub(crate) fn settings_error_redirect(msg: &str) -> Response {
     let encoded: String = url::form_urlencoded::byte_serialize(msg.as_bytes()).collect();
     Redirect::to(&format!("/settings?error={encoded}")).into_response()
+}
+
+/// LC-426: true when the request was issued by htmx (so a form handler should
+/// return a small status fragment instead of a full-page redirect).
+fn is_hx(headers: &HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+}
+
+/// LC-426: HX-aware success. Returns the rendered feedback fragment for an htmx
+/// request, or `None` so the caller falls back to its full-page redirect
+/// (progressive enhancement for a no-JS submit).
+fn hx_feedback(
+    headers: &HeaderMap,
+    fb: crate::views::settings::SettingsFeedback,
+) -> Option<Result<Response, AppError>> {
+    if !is_hx(headers) {
+        return None;
+    }
+    Some(html(&fb).map(IntoResponse::into_response))
+}
+
+/// LC-426: HX-aware error. An error status fragment for htmx, else the existing
+/// `?error=` redirect. `msg` is always a fixed server-side string.
+fn settings_error(headers: &HeaderMap, msg: &str) -> Response {
+    if is_hx(headers) {
+        match html(&crate::views::settings::SettingsFeedback::err(
+            msg.to_string(),
+        )) {
+            Ok(h) => h.into_response(),
+            Err(_) => settings_error_redirect(msg),
+        }
+    } else {
+        settings_error_redirect(msg)
+    }
+}
+
+/// LC-426: the avatar letter-fallback glyph (first char of the username, or `?`).
+fn avatar_letter(user: &crate::models::User) -> String {
+    user.username
+        .chars()
+        .next()
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "?".to_string())
 }
 
 /// LC-347: cache-buster for the avatar preview `<img>`. The avatar route serves
@@ -254,14 +298,26 @@ pub async fn post_keyword_add(
     axum::Form(form): axum::Form<KeywordForm>,
 ) -> Result<Html, AppError> {
     let word = form.word.trim();
+    let mut added = false;
     if !word.is_empty()
         && word.chars().count() <= db::notification_keywords::MAX_KEYWORD_LEN
         && db::notification_keywords::count(&state.auth, &user.id).await?
             < db::notification_keywords::MAX_KEYWORDS_PER_USER as i64
     {
         db::notification_keywords::add(&state.auth, &user.id, word).await?;
+        added = true;
     }
-    keyword_list_fragment(&state, &user.id).await
+    // LC-426: the chip appears immediately (the swap), but pop a confirmation
+    // toast too so it matches the rest of the page. OOB block rides along with
+    // the re-rendered list. Removal is left to the visible chip disappearing.
+    let mut frag = keyword_list_fragment(&state, &user.id).await?;
+    if added {
+        let toast = html(&crate::views::settings::SettingsFeedback::toast_only_ok(
+            crate::i18n::translate_current("settings-fb-keyword-added"),
+        ))?;
+        frag.0.push_str(&toast.0);
+    }
+    Ok(frag)
 }
 
 /// POST /settings/keywords/delete - remove a highlight word. Returns the
@@ -433,6 +489,7 @@ pub async fn post_session_revoke(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(session_id): Path<String>,
+    headers: HeaderMap,
     current: Option<axum::extract::Extension<CurrentSessionId>>,
 ) -> Result<Response, AppError> {
     if let Some(axum::extract::Extension(CurrentSessionId(cur))) = current {
@@ -445,6 +502,16 @@ pub async fn post_session_revoke(
     let removed = db::auth::delete_session_for_user(&state.auth, &session_id, &user.id).await?;
     if removed {
         state.last_seen_ledger.remove(&session_id);
+    }
+    // LC-426: htmx targets the row (outerHTML); the toast-only fragment removes
+    // it (empty main content) and pops a confirmation toast.
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::toast_only_ok(crate::i18n::translate_current(
+            "settings-fb-session-revoked",
+        )),
+    ) {
+        return r;
     }
     Ok(Redirect::to("/settings?session_revoked=1").into_response())
 }
@@ -462,8 +529,9 @@ pub struct LanguageForm {
 pub async fn post_language(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<LanguageForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Response, AppError> {
     let code = form.locale.trim();
     let to_set = if !code.is_empty() && crate::i18n::is_supported(code) {
         Some(code)
@@ -471,7 +539,15 @@ pub async fn post_language(
         None
     };
     db::auth::set_user_locale(&state.auth, &user.id, to_set).await?;
-    Ok(Redirect::to("/settings?saved=1"))
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
+            "settings-fb-saved",
+        )),
+    ) {
+        return r;
+    }
+    Ok(Redirect::to("/settings?saved=1").into_response())
 }
 
 #[derive(serde::Deserialize)]
@@ -490,8 +566,9 @@ pub struct AppearanceForm {
 pub async fn post_appearance(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<AppearanceForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Response, AppError> {
     let theme = match form.theme.trim() {
         t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
         _ => "system",
@@ -502,7 +579,15 @@ pub async fn post_appearance(
     };
     db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
     db::auth::set_user_density(&state.auth, &user.id, Some(density)).await?;
-    Ok(Redirect::to("/settings?saved=1"))
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
+            "settings-fb-saved",
+        )),
+    ) {
+        return r;
+    }
+    Ok(Redirect::to("/settings?saved=1").into_response())
 }
 
 #[derive(serde::Deserialize)]
@@ -540,6 +625,7 @@ pub async fn post_theme(
 pub async fn post_settings(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<SettingsForm>,
 ) -> Result<Response, AppError> {
     let enabled = form.read_receipts_enabled.is_some();
@@ -571,6 +657,14 @@ pub async fn post_settings(
     let email_activity = form.notify_email_activity_enabled.is_some() && state.mail_available();
     db::auth::set_notify_email_activity_enabled(&state.auth, &user.id, email_activity).await?;
 
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
+            "settings-fb-saved",
+        )),
+    ) {
+        return r;
+    }
     Ok(Redirect::to("/settings").into_response())
 }
 
@@ -611,6 +705,7 @@ fn parse_window(start: &str, end: &str) -> Option<dnd::Window> {
 pub async fn post_dnd_schedule(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<DndScheduleForm>,
 ) -> Result<Response, AppError> {
     let tz = form.timezone.trim();
@@ -636,6 +731,14 @@ pub async fn post_dnd_schedule(
         }
     };
     db::auth::set_dnd_schedule(&state.auth, &user.id, schedule_json.as_deref()).await?;
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
+            "settings-fb-saved",
+        )),
+    ) {
+        return r;
+    }
     Ok(Redirect::to("/settings").into_response())
 }
 
@@ -670,6 +773,7 @@ pub async fn post_dnd_resume(
 pub async fn post_profile(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Result<Response, AppError> {
     let mut display_name: Option<String> = None;
@@ -677,6 +781,7 @@ pub async fn post_profile(
     let mut avatar_bytes: Option<Vec<u8>> = None;
     let mut email_present = false;
     let mut email: Option<String> = None;
+    let mut avatar_saved = false; // LC-426: drives the "picture updated" message
 
     while let Some(field) = multipart
         .next_field()
@@ -691,9 +796,10 @@ pub async fn post_profile(
                     .map_err(|e| AppError::BadRequest(format!("display_name: {e}")))?;
                 let trimmed = v.trim();
                 if trimmed.chars().count() > MAX_DISPLAY_NAME_CHARS {
-                    return Ok(settings_error_redirect(&format!(
-                        "Display name exceeds {MAX_DISPLAY_NAME_CHARS} characters."
-                    )));
+                    return Ok(settings_error(
+                        &headers,
+                        &format!("Display name exceeds {MAX_DISPLAY_NAME_CHARS} characters."),
+                    ));
                 }
                 display_name = if trimmed.is_empty() {
                     None
@@ -708,9 +814,10 @@ pub async fn post_profile(
                     .map_err(|e| AppError::BadRequest(format!("bio: {e}")))?;
                 let trimmed = v.trim();
                 if trimmed.chars().count() > MAX_BIO_CHARS {
-                    return Ok(settings_error_redirect(&format!(
-                        "Bio exceeds {MAX_BIO_CHARS} characters."
-                    )));
+                    return Ok(settings_error(
+                        &headers,
+                        &format!("Bio exceeds {MAX_BIO_CHARS} characters."),
+                    ));
                 }
                 bio = if trimmed.is_empty() {
                     None
@@ -729,12 +836,13 @@ pub async fn post_profile(
                     email = None;
                 } else {
                     if trimmed.chars().count() > MAX_EMAIL_CHARS {
-                        return Ok(settings_error_redirect(&format!(
-                            "Email exceeds {MAX_EMAIL_CHARS} characters."
-                        )));
+                        return Ok(settings_error(
+                            &headers,
+                            &format!("Email exceeds {MAX_EMAIL_CHARS} characters."),
+                        ));
                     }
                     if !looks_like_email(trimmed) {
-                        return Ok(settings_error_redirect("Email address is not valid."));
+                        return Ok(settings_error(&headers, "Email address is not valid."));
                     }
                     email = Some(trimmed.to_string());
                 }
@@ -748,7 +856,7 @@ pub async fn post_profile(
                     continue;
                 }
                 if bytes.len() > MAX_AVATAR_BYTES {
-                    return Ok(settings_error_redirect("Avatar image exceeds 1 MiB."));
+                    return Ok(settings_error(&headers, "Avatar image exceeds 1 MiB."));
                 }
                 avatar_bytes = Some(bytes.to_vec());
             }
@@ -767,7 +875,8 @@ pub async fn post_profile(
     if email_present {
         if let Err(e) = db::auth::set_user_email(&state.auth, &user.id, email.as_deref()).await {
             if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
-                return Ok(settings_error_redirect(
+                return Ok(settings_error(
+                    &headers,
                     "That email address is already in use.",
                 ));
             }
@@ -780,7 +889,8 @@ pub async fn post_profile(
 
     if let Some(bytes) = avatar_bytes {
         let Some(new_ext) = sniff_image_ext(&bytes) else {
-            return Ok(settings_error_redirect(
+            return Ok(settings_error(
+                &headers,
                 "Avatar must be a PNG, JPEG, or WebP image.",
             ));
         };
@@ -800,6 +910,7 @@ pub async fn post_profile(
             }
         }
         db::auth::set_user_avatar_ext(&state.auth, &user.id, Some(new_ext)).await?;
+        avatar_saved = true;
     }
 
     // LC-173: refresh the editor's sidebar self block (avatar + name) in every
@@ -814,8 +925,20 @@ pub async fn post_profile(
         },
     );
 
-    // LC-347: flash "Saved." on return (mirrors post_language / post_appearance)
-    // so the user gets explicit confirmation the profile + avatar were saved.
+    // LC-426: confirm inline + toast. A picture change gets its own message so
+    // the upload (which has no other on-page confirmation) is unmistakable.
+    let key = if avatar_saved {
+        "settings-fb-avatar"
+    } else {
+        "settings-fb-profile"
+    };
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(key)),
+    ) {
+        return r;
+    }
+    // LC-347: flash "Saved." on the full-page (no-JS) return.
     Ok(Redirect::to("/settings?saved=1").into_response())
 }
 
@@ -927,12 +1050,30 @@ async fn render_blocked_list(
 pub async fn post_avatar_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     if let Some(ext) = user.avatar_ext.as_deref() {
         let path = db::avatars_dir().join(format!("{}.{}", user.id, ext));
         let _ = tokio::fs::remove_file(path).await;
     }
     db::auth::set_user_avatar_ext(&state.auth, &user.id, None).await?;
+    // LC-173: refresh the editor's other tabs (sidebar self block).
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::UserProfileChanged {
+            user_id: user.id.clone(),
+        },
+    );
+    // LC-426: confirm + revert the on-page avatar preview to the letter fallback.
+    if let Some(r) = hx_feedback(
+        &headers,
+        crate::views::settings::SettingsFeedback::ok_reset_avatar(
+            crate::i18n::translate_current("settings-fb-avatar-removed"),
+            avatar_letter(&user),
+        ),
+    ) {
+        return r;
+    }
     Ok(Redirect::to("/settings").into_response())
 }
 
