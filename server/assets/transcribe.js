@@ -59,7 +59,63 @@
       b.classList.toggle('hidden', !on);
       b.setAttribute('aria-hidden', on ? 'false' : 'true');
     }
+    // LC-411: the in-call open/copy/download actions track the session. By the
+    // time showBanner runs, transcriptId is already set (start) or null (stop).
+    if (on && transcriptId != null) setActions(transcriptId); else hideActions();
     showPanel(on);
+  }
+  // LC-411: point the drawer's action links at the live transcript and reveal
+  // them. Every participant can open/download the saved record, not just the
+  // initiator; the server access-gates /transcripts/{id} to call participants.
+  function setActions(id) {
+    var box = q('[data-lc-transcript-actions]');
+    if (!box || id == null) return;
+    var base = '/transcripts/' + encodeURIComponent(id);
+    var open = box.querySelector('[data-lc-transcript-open]');
+    var txt = box.querySelector('[data-lc-transcript-dl-txt]');
+    var vtt = box.querySelector('[data-lc-transcript-dl-vtt]');
+    if (open) open.setAttribute('href', base);
+    if (txt) txt.setAttribute('href', base + '/export?format=txt');
+    if (vtt) vtt.setAttribute('href', base + '/export?format=vtt');
+    box.removeAttribute('hidden');
+  }
+  function hideActions() {
+    var box = q('[data-lc-transcript-actions]');
+    if (box) box.setAttribute('hidden', '');
+  }
+  // Copy the visible captions (speaker: text per line) to the clipboard.
+  function copyTranscript(btn) {
+    var log = document.getElementById('lc-caption-log');
+    if (!log) return;
+    var out = [];
+    Array.prototype.forEach.call(log.querySelectorAll('.lc-cap-line'), function (line) {
+      var sp = line.querySelector('.lc-cap-speaker');
+      var tx = line.querySelector('.lc-cap-text');
+      var speaker = sp ? sp.textContent.trim() : '';
+      var text = tx ? tx.textContent.trim() : '';
+      out.push(speaker ? (speaker + ': ' + text) : text);
+    });
+    var blob = out.join('\n');
+    function flash() {
+      if (!btn) return;
+      var copied = btn.getAttribute('data-lc-copied') || 'Copied';
+      var label = btn.getAttribute('data-lc-label') || btn.textContent;
+      btn.textContent = copied;
+      setTimeout(function () { btn.textContent = label; }, 1500);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(blob).then(flash).catch(function () {});
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = blob;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        flash();
+      } catch (e) {}
+    }
   }
   function showPanel(on) {
     var w = q('[data-lc-caption-wrap]');
@@ -340,6 +396,8 @@
     if (!e.target.closest) return;
     if (e.target.closest('[data-lc-transcript-close]')) { showPanel(false); return; }
     if (e.target.closest('[data-lc-jump-live]')) { scrollToLive(); return; }
+    var copy = e.target.closest('[data-lc-transcript-copy]');
+    if (copy) { copyTranscript(copy); return; } // LC-411
     var pt = e.target.closest('[data-lc-transcript-panel-toggle]');
     if (pt) {
       var w = q('[data-lc-caption-wrap]');
