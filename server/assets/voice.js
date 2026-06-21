@@ -62,6 +62,14 @@
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
 
+  // LC-416: control buttons are now icon + .lc-cbtn-label; set the label span so
+  // the leading icon survives (fall back to the button for any plain-text one).
+  function setLabel(btn, text) {
+    if (!btn) return;
+    var l = btn.querySelector('.lc-cbtn-label');
+    if (l) l.textContent = text; else btn.textContent = text;
+  }
+
   // LC-402: build a participant tile. Theme-token styling lives in main.css
   // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
   function createTile(userId, label, isSelf) {
@@ -106,6 +114,12 @@
     quality.setAttribute('data-lc-voice-quality', '');
     quality.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="12" width="3" height="6" rx="1"/><rect x="8.5" y="8" width="3" height="10" rx="1"/><rect x="15" y="3" width="3" height="15" rx="1"/></svg>';
     name.appendChild(quality);
+    // LC-416: animated active-speaker equalizer (CSS shows it on data-speaking).
+    var speaking = document.createElement('span');
+    speaking.className = 'lc-voice-speaking';
+    speaking.setAttribute('aria-hidden', 'true');
+    speaking.innerHTML = '<i></i><i></i><i></i>';
+    name.appendChild(speaking);
     var nameText = document.createElement('span');
     nameText.className = 'lc-voice-name-text';
     nameText.textContent = label;
@@ -614,7 +628,7 @@
     if (g) g.replaceChildren();
     joined = false;
     var ss = q('[data-lc-voice-screen]');
-    if (ss) ss.textContent = window.__lcS('callShareScreen', 'Share screen');
+    if (ss) { setLabel(ss, window.__lcS('callShareScreen', 'Share screen')); ss.setAttribute('aria-pressed', 'false'); }
     // Drop ourselves from the participants map and re-render the preview
     // before un-hiding it. Otherwise the leaver would see whatever was
     // server-rendered at page load, which is often "no one is here yet" even
@@ -636,7 +650,7 @@
     selfMuted = muted;
     var btn = q('[data-lc-voice-mute]');
     if (btn) {
-      btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
+      setLabel(btn, on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute'));
       btn.setAttribute('aria-pressed', muted ? 'true' : 'false'); // LC-402 on/off state
     }
     // LC-402: reflect our own mute on our tile and tell the channel so peers
@@ -671,7 +685,7 @@
   function setCameraBtn() {
     var btn = q('[data-lc-voice-camera]');
     if (!btn) return;
-    btn.textContent = hasLocalCamera() ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
+    setLabel(btn, hasLocalCamera() ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video'));
     btn.setAttribute('aria-pressed', hasLocalCamera() ? 'true' : 'false'); // LC-402 on/off state
     // While the screen-share track owns the video sender on every peer,
     // toggling the camera would race for the same outgoing slot.
@@ -681,7 +695,7 @@
   function setScreenBtn() {
     var btn = q('[data-lc-voice-screen]');
     if (!btn) return;
-    btn.textContent = isSharingScreen() ? 'Stop sharing' : 'Share screen';
+    setLabel(btn, isSharingScreen() ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
     btn.setAttribute('aria-pressed', isSharingScreen() ? 'true' : 'false'); // LC-402 on/off state
   }
 
