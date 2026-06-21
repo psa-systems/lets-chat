@@ -53,12 +53,11 @@
   // LC-402: "active" UI = the recording pill (awareness) + the transcript
   // drawer. They were one toggle before; split so the drawer can be closed /
   // reopened independently while a session stays live.
+  // LC-416: the floating "being transcribed" pill was removed (it overlapped the
+  // header and duplicated the Transcribe toggle's red recording state). Recording
+  // awareness now lives in that toggle (setToggle) + the drawer header dot, so
+  // this only drives the drawer + its action links now.
   function showBanner(on) {
-    var b = q('[data-lc-transcript-banner]');
-    if (b) {
-      b.classList.toggle('hidden', !on);
-      b.setAttribute('aria-hidden', on ? 'false' : 'true');
-    }
     // LC-411: the in-call open/copy/download actions track the session. By the
     // time showBanner runs, transcriptId is already set (start) or null (stop).
     if (on && transcriptId != null) setActions(transcriptId); else hideActions();

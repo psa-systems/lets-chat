@@ -110,6 +110,13 @@
   function show(el) { if (el) { el.classList.remove('hidden'); el.setAttribute('aria-hidden', 'false'); } }
   function hide(el) { if (el) { el.classList.add('hidden'); el.setAttribute('aria-hidden', 'true'); } }
   function setStatus(text) { var s = q('[data-lc-call-status]'); if (s) s.textContent = text; }
+  // LC-416: control buttons are icon + .lc-cbtn-label; update the label span so
+  // the leading icon survives (fall back to the button for plain-text ones).
+  function setLabel(btn, text) {
+    if (!btn) return;
+    var l = btn.querySelector('.lc-cbtn-label');
+    if (l) l.textContent = text; else btn.textContent = text;
+  }
 
   // ---- focus trap (modal dialog discipline) -------------------------
   // Exactly one trap is active at a time. installDialogTrap migrates from
@@ -192,7 +199,7 @@
     var btn = q('[data-lc-call-camera]');
     if (!btn) return;
     var on = hasLocalCamera();
-    btn.textContent = on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
+    setLabel(btn, on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     // While the screen-share track owns the video sender, toggling the camera
     // would race for the same outgoing slot. The `disabled:*` classes on the
@@ -204,7 +211,7 @@
     var btn = q('[data-lc-call-screen]');
     if (!btn) return;
     var on = isSharingScreen();
-    btn.textContent = on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen');
+    setLabel(btn, on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
@@ -262,15 +269,15 @@
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
     var lv = q('[data-lc-local-video]'); if (lv) lv.srcObject = null;
     var mute = q('[data-lc-call-mute]');
-    if (mute) { mute.textContent = window.__lcS('callMute', 'Mute'); mute.setAttribute('aria-pressed', 'false'); }
+    if (mute) { setLabel(mute, window.__lcS('callMute', 'Mute')); mute.setAttribute('aria-pressed', 'false'); }
     var cam = q('[data-lc-call-camera]');
     if (cam) {
-      cam.textContent = window.__lcS('callStartVideo', 'Start video');
+      setLabel(cam, window.__lcS('callStartVideo', 'Start video'));
       cam.setAttribute('aria-pressed', 'false');
       cam.removeAttribute('disabled');
     }
     var ss = q('[data-lc-call-screen]');
-    if (ss) { ss.textContent = window.__lcS('callShareScreen', 'Share screen'); ss.setAttribute('aria-pressed', 'false'); }
+    if (ss) { setLabel(ss, window.__lcS('callShareScreen', 'Share screen')); ss.setAttribute('aria-pressed', 'false'); }
     setRequestBtn();  // phase is now idle -> hides the control affordance
     disposeDialogTrap();
   }
@@ -539,7 +546,7 @@
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-call-mute]');
     if (btn) {
-      btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
+      setLabel(btn, on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute'));
       // aria-pressed="true" means "currently muted" (the toggle is on).
       // Mirrors the visual: button reads "Unmute" exactly when muted.
       btn.setAttribute('aria-pressed', on ? 'false' : 'true');
@@ -849,13 +856,13 @@
     if (phase === 'idle' || !remoteVideoOn) { hide(btn); if (uipi) hide(uipi); return; }
     show(btn);
     if (controlPhase === 'controlling') {
-      btn.textContent = window.__lcS('callStopControlling', 'Stop controlling');
+      setLabel(btn, window.__lcS('callStopControlling', 'Stop controlling'));
       btn.setAttribute('aria-pressed', 'true');
     } else if (controlPhase === 'requesting') {
-      btn.textContent = window.__lcS('callRequesting', 'Requesting...');
+      setLabel(btn, window.__lcS('callRequesting', 'Requesting...'));
       btn.setAttribute('aria-pressed', 'false');
     } else {
-      btn.textContent = window.__lcS('callRequestControl', 'Request control');
+      setLabel(btn, window.__lcS('callRequestControl', 'Request control'));
       btn.setAttribute('aria-pressed', 'false');
     }
     // UIPI hint (LC-186): surface that some windows can't be driven so the
