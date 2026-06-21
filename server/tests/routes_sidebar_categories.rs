@@ -105,6 +105,30 @@ async fn send(app: &Router, sess: &str, method: Method, uri: &str, body: &str) -
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+/// Like `send`, but returns the rendered response body too. Deliberately sends
+/// NO `HX-Current-URL` header so the re-render cannot lean on it.
+async fn send_body(
+    app: &Router,
+    sess: &str,
+    method: Method,
+    uri: &str,
+    body: &str,
+) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), 2_000_000)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
 async fn category_count(chat: &SqlitePool, enclave_id: i64) -> i64 {
     let row = sqlx::query("SELECT COUNT(*) AS n FROM room_categories WHERE enclave_id = ?")
         .bind(enclave_id)
@@ -135,6 +159,35 @@ async fn admin_creates_category() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(category_count(&t.chat, 1).await, 1);
+}
+
+/// LC-415 regression: the re-rendered sidebar fragment must contain the new
+/// category (and the add-category form) even when the request carries NO
+/// `HX-Current-URL` header. The handler derives the enclave from its path
+/// `enclave_id`, not the header; before the fix it fell back to the header,
+/// got `None`, and returned the DM-only sidebar - so the category and the
+/// add-form vanished and the user saw "nothing happened".
+#[tokio::test]
+async fn create_response_includes_category_without_hx_header() {
+    let t = app().await;
+    let (status, body) = send_body(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        "/enclave/1/sidebar/categories",
+        "name=WorkZebra",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(category_count(&t.chat, 1).await, 1);
+    assert!(
+        body.contains("WorkZebra"),
+        "re-rendered sidebar must show the just-created category"
+    );
+    assert!(
+        body.contains("/enclave/1/sidebar/categories"),
+        "re-rendered sidebar must still carry the enclave-scoped add-category form"
+    );
 }
 
 #[tokio::test]
