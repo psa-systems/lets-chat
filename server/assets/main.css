@@ -1708,13 +1708,18 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     color: var(--danger-content);
 }
 .lc-cbtn--leave:hover { background: var(--danger); filter: brightness(0.94); }
-/* Transcribe: when active it is "recording" - danger-tinted and paired with
-   the live pill, so the on-state is unmistakable. */
+/* Transcribe: idle is the quiet neutral .lc-cbtn; when recording it is an
+   affirmative, saturated "on" - a solid red fill (the same solid --danger /
+   --danger-content pairing as Leave, so it reads as live, not disabled, in
+   every theme) with the record glyph's core pulsing. LC-416 follow-up: the old
+   pale --danger-surface fill read as a hover-ghost / disabled control, putting
+   the strongest emphasis on the inactive buttons instead of the live one. */
 .lc-cbtn--rec[aria-pressed="true"] {
-    background: var(--danger-surface);
-    border-color: var(--danger-border);
+    background: var(--danger);
+    border-color: var(--danger);
     color: var(--danger-content);
 }
+.lc-cbtn--rec[aria-pressed="true"]:hover { background: var(--danger); filter: brightness(0.94); }
 /* LC-416: Transcribe uses a record glyph (ring + core). Off-state inherits the
    button text colour; the active (recording) state recolours via lc-cbtn--rec
    above and the inner core pulses, so the toggle reads as a live record button
