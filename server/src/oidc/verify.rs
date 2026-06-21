@@ -23,6 +23,12 @@ pub struct IdTokenClaims {
     pub name: Option<String>,
     #[serde(default)]
     pub email_verified: Option<bool>,
+    /// LC-413: Bunyip's platform role (`admin` or `subscriber`). We mirror
+    /// `admin` into the lets-chat `users.role` column so a Bunyip admin is
+    /// also a lets-chat admin without a manual promotion step. Optional so a
+    /// pre-claim Bunyip id_token still verifies.
+    #[serde(default)]
+    pub bunyip_role: Option<String>,
 }
 
 /// `aud` can be either a string or an array of strings per RFC 7519. We
