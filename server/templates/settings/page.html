@@ -85,9 +85,17 @@
                     <label for="lc-avatar-input" class="btn btn-secondary btn-sm">{{ "settings-choose-image"|t }}</label>
                     <span data-lc-avatar-filename class="lc-set-help">{{ "settings-no-file"|t }}</span>
                   </div>
-                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="sr-only" data-lc-no-file="{{ "settings-no-file"|t }}">
+                  {# LC-439: client-side limits mirror the server (1 MiB + sniffed
+                     PNG/JPEG/WebP) so an oversized/wrong-type pick is rejected
+                     before save with the inline error below, never silently. #}
+                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="sr-only"
+                         data-lc-no-file="{{ "settings-no-file"|t }}"
+                         data-lc-max-bytes="1048576"
+                         data-lc-err-size="{{ "settings-avatar-err-size"|t }}"
+                         data-lc-err-type="{{ "settings-avatar-err-type"|t }}">
                   <p class="lc-set-help">{{ "settings-avatar-formats"|t }}</p>
                   <p data-lc-avatar-pending hidden class="lc-set-help lc-set-pending">{{ "settings-avatar-pending"|t }}</p>
+                  <p data-lc-avatar-error hidden role="alert" class="lc-set-error"></p>
                 </div>
               </div>
             </div>
