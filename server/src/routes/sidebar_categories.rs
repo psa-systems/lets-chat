@@ -96,14 +96,13 @@ pub async fn post_create(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(enclave_id): Path<i64>,
-    headers: HeaderMap,
     Form(form): Form<CreateCategoryForm>,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
     let name = validate_name(&form.name)?;
     db::sidebar_categories::create_category(&state.chat, enclave_id, &name).await?;
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// PATCH /enclave/{id}/sidebar/categories/{cat_id}
@@ -111,7 +110,6 @@ pub async fn patch_category(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, category_id)): Path<(i64, i64)>,
-    headers: HeaderMap,
     Form(form): Form<RenameCategoryForm>,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
@@ -123,7 +121,7 @@ pub async fn patch_category(
         return Err(AppError::NotFound);
     }
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// DELETE /enclave/{id}/sidebar/categories/{cat_id}
@@ -131,7 +129,6 @@ pub async fn delete_category(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, category_id)): Path<(i64, i64)>,
-    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
     let n = db::sidebar_categories::delete_category(&state.chat, enclave_id, category_id).await?;
@@ -139,7 +136,7 @@ pub async fn delete_category(
         return Err(AppError::NotFound);
     }
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// PATCH /enclave/{id}/sidebar/categories/{cat_id}/rooms/{room_id}
@@ -147,14 +144,13 @@ pub async fn patch_room_assignment(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, category_id, room_id)): Path<(i64, i64, i64)>,
-    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
     assert_category_in_enclave(&state, enclave_id, category_id).await?;
     assert_room_in_enclave(&state, enclave_id, room_id).await?;
     db::sidebar_categories::assign_room(&state.chat, room_id, category_id).await?;
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// DELETE /enclave/{id}/sidebar/categories/rooms/{room_id}
@@ -162,13 +158,12 @@ pub async fn delete_room_assignment(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, room_id)): Path<(i64, i64)>,
-    headers: HeaderMap,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
     assert_room_in_enclave(&state, enclave_id, room_id).await?;
     db::sidebar_categories::unassign_room(&state.chat, room_id).await?;
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// PATCH /enclave/{id}/sidebar/categories/positions
@@ -176,14 +171,13 @@ pub async fn patch_category_positions(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(enclave_id): Path<i64>,
-    headers: HeaderMap,
     Form(form): Form<PositionsForm>,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
     let ids = form.parsed_ids()?;
     db::sidebar_categories::set_category_positions(&state.chat, enclave_id, &ids).await?;
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// PATCH /enclave/{id}/sidebar/categories/{cat_id}/positions
@@ -191,7 +185,6 @@ pub async fn patch_room_positions(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, category_id)): Path<(i64, i64)>,
-    headers: HeaderMap,
     Form(form): Form<PositionsForm>,
 ) -> Result<Html, AppError> {
     require_enclave_manage(&state, &user, enclave_id).await?;
@@ -202,7 +195,7 @@ pub async fn patch_room_positions(
     }
     db::sidebar_categories::set_room_positions(&state.chat, category_id, &ids).await?;
     broadcast_refresh(&state, enclave_id).await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 /// PATCH /sidebar/categories/{cat_id}/collapse - per-user fold/unfold.
@@ -211,7 +204,6 @@ pub async fn patch_collapse(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(category_id): Path<i64>,
-    headers: HeaderMap,
     Form(form): Form<CollapseForm>,
 ) -> Result<Html, AppError> {
     let enclave_id = db::sidebar_categories::enclave_of_category(&state.chat, category_id)
@@ -229,7 +221,7 @@ pub async fn patch_collapse(
         form.collapsed.is_some(),
     )
     .await?;
-    render_sidebar_fragment(&state, &user, &headers).await
+    render_sidebar_with_enclave(&state, &user, Some(enclave_id)).await
 }
 
 async fn assert_category_in_enclave(
@@ -257,13 +249,38 @@ async fn assert_room_in_enclave(
 }
 
 // LC-250: reused by `routes::read_all` to return the re-rendered sidebar after
-// "mark all as read", enclave-aware via the HX-Current-URL header.
+// "mark all as read", enclave-aware via the HX-Current-URL header. Used only by
+// routes that have NO enclave in their own path (read-all, mark-room-read);
+// the enclave-scoped category mutations below call
+// `render_sidebar_with_enclave` with their authoritative path `enclave_id`
+// instead - see that function's note for why the header is not enough.
 pub(crate) async fn render_sidebar_fragment(
     state: &AppState,
     user: &User,
     headers: &HeaderMap,
 ) -> Result<Html, AppError> {
     let current_enclave = current_enclave_from_headers(state, headers).await;
+    render_sidebar_with_enclave(state, user, current_enclave).await
+}
+
+/// Re-render the whole-sidebar OOB fragment for `user` in an explicit enclave
+/// context.
+///
+/// The enclave-scoped category mutations pass their authoritative path
+/// `enclave_id` here rather than re-deriving the current enclave from the
+/// `HX-Current-URL` header. The header parser (`current_enclave_from_headers`)
+/// only understands `/enclave/{id}` and `/room/{id}` URLs and returns `None`
+/// for anything else (or if the header is absent / stripped by a proxy / a WS
+/// swap raced the submit). A `None` re-render collapses the sidebar to its
+/// DM-only shape - which has no categories and no add-category form - so the
+/// just-created category and the input both vanished and the user saw "nothing
+/// happened" (LC-415). The path `enclave_id` is the enclave the form was
+/// rendered in, so it is always the correct context for the re-render.
+pub(crate) async fn render_sidebar_with_enclave(
+    state: &AppState,
+    user: &User,
+    current_enclave: Option<i64>,
+) -> Result<Html, AppError> {
     let (
         sidebar_categories,
         sidebar_starred_rooms,
