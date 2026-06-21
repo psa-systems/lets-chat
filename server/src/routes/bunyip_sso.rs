@@ -144,6 +144,13 @@ pub async fn get_callback(
         }
     };
 
+    if let Err(e) =
+        mirror_bunyip_admin_role(&state, &user_id, id_claims.bunyip_role.as_deref()).await
+    {
+        tracing::error!(target: "bunyip_sso", error = %e, user_id = %user_id, "bunyip_role mirror failed");
+        return Redirect::to("/login?sso_error=internal").into_response();
+    }
+
     let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
     let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
     let token = match db::auth::create_session_with_origin(
@@ -261,6 +268,50 @@ fn sanitize_username(s: &str) -> String {
     }
     out.truncate(64);
     out
+}
+
+/// LC-413: mirror Bunyip's platform role onto the lets-chat row.
+///
+/// Bunyip is the source of truth for the top role. The Bunyip
+/// `admin` claim grants the lets-chat `admin` role; the
+/// `subscriber` claim (or any unknown future value) demotes a stale
+/// local `admin` back down to `user`. The intermediate `moderator`
+/// role is a lets-chat-internal grant and stays untouched in both
+/// directions; only the admin/user mirror runs here.
+///
+/// The first-user-to-admin promotion (`promote_if_first_user`) still
+/// runs in the auto-provision path so a brand-new deployment whose
+/// only user is a Bunyip subscriber still ends up with an admin.
+/// This reconcile runs AFTER the promotion, so a Bunyip subscriber
+/// who was promoted on first sign-in stays admin; a returning
+/// subscriber who was never an admin stays a user; only the
+/// admin-then-demoted case downgrades, which is intentional.
+async fn mirror_bunyip_admin_role(
+    state: &AppState,
+    user_id: &str,
+    bunyip_role: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    let current = db::auth::get_user_role(&state.auth, user_id).await?;
+    let current = current.as_deref().unwrap_or("user");
+    let desired = match bunyip_role {
+        Some("admin") => Some("admin"),
+        _ if current == "admin" => Some("user"),
+        _ => None,
+    };
+    if let Some(next) = desired {
+        if next != current {
+            tracing::info!(
+                target: "bunyip_sso",
+                user_id = %user_id,
+                from = %current,
+                to = %next,
+                bunyip_role = ?bunyip_role,
+                "mirroring lets-chat role from Bunyip claim"
+            );
+            db::auth::set_user_role(&state.auth, user_id, next).await?;
+        }
+    }
+    Ok(())
 }
 
 /// First-non-bot user gets the admin role. Mirrors the prior password-path
