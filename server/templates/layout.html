@@ -32,14 +32,18 @@
      data-lc-transcript-event nodes; transcribe.js consumes + drains them. #}
   <div id="lc-transcript-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
+    {# LC-437: incoming-call dialog. Themed via tokens (works in dark); shows the
+       caller's avatar for recognition. call.js installs a focus trap on show and
+       Escape declines (keyboard-dismissable). #}
     <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
          role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
-      <div class="w-80 rounded-lg bg-white p-6 text-center shadow-xl">
-        <div id="lc-call-incoming-title" class="text-sm text-slate-500">{{ "call-incoming"|t }}</div>
-        <div data-lc-call-incoming-name class="mt-1 text-lg font-semibold"></div>
+      <div class="w-80 rounded-lg bg-surface-elevated p-6 text-center shadow-xl">
+        <div id="lc-call-incoming-title" class="text-sm text-content-muted">{{ "call-incoming"|t }}</div>
+        <img data-lc-call-incoming-avatar alt="" src="" class="mx-auto mt-3 h-16 w-16 rounded-full border border-border object-cover">
+        <div data-lc-call-incoming-name class="mt-2 text-lg font-semibold text-content"></div>
         <div class="mt-5 flex justify-center gap-3">
-          <button type="button" data-lc-call-accept class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">{{ "call-accept"|t }}</button>
-          <button type="button" data-lc-call-decline class="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">{{ "call-decline"|t }}</button>
+          <button type="button" data-lc-call-accept class="rounded bg-success px-4 py-2 text-sm font-medium text-success-content hover:opacity-90">{{ "call-accept"|t }}</button>
+          <button type="button" data-lc-call-decline class="rounded bg-danger px-4 py-2 text-sm font-medium text-danger-content hover:opacity-90">{{ "call-decline"|t }}</button>
         </div>
       </div>
     </div>

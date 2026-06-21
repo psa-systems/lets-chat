@@ -5,12 +5,15 @@ use crate::models::{Reaction, Room, SearchResult};
 /// Two messages from the same author within this window are visually grouped:
 /// the second is rendered as a "follow-up" (no username/timestamp header).
 ///
-/// LC-387: widened from 5 to 15 minutes so a normal back-and-forth burst from
-/// one author (the kind that reads as a single turn) groups under one header
-/// instead of repeating the avatar + name + timestamp every few minutes. The
-/// follow-up still surfaces its own HH:MM on row hover (LC-377), and a UTC day
-/// change still forces a fresh header (the same-day check below).
-pub const MESSAGE_GROUPING_WINDOW_SECONDS: i64 = 900;
+/// LC-387 widened this to 15 min; LC-435 narrows it to 5 min. 15 min bundled
+/// messages sent far apart under one header, so a single visual group stretched
+/// across a real time gap and the spacing read as random. At 5 min a rapid
+/// burst still groups tightly, but a same-author message sent minutes/hours
+/// later breaks into a fresh block with its own header + avatar + timestamp -
+/// giving time-separated messages a clear anchor. The follow-up still surfaces
+/// its own HH:MM on row hover (LC-377), and a UTC day change still forces a
+/// fresh header (the same-day check below). Shared by the room + DM render.
+pub const MESSAGE_GROUPING_WINDOW_SECONDS: i64 = 300;
 
 /// Pure predicate: would `(curr_user, curr_created_at)` render as a follow-up
 /// of the immediately-prior message `(prev_user, prev_created_at)`?
