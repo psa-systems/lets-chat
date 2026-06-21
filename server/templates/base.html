@@ -305,6 +305,8 @@
   <script src="/assets/sidebar_dnd.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_jump.js?v={{ asset_version }}" defer></script>
   <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/toast.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/settings.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-ext="response-targets" class="h-screen overflow-hidden bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
@@ -318,5 +320,8 @@
     {{ "a11y-skip-to-content"|t }}
   </a>
   {% block body %}{% endblock %}
+  {# LC-426: global toast region. Forms swap a success/error toast here via
+     hx-swap-oob="beforeend:#lc-toast-region"; toast.js auto-dismisses them. #}
+  <div id="lc-toast-region" class="lc-toast-region" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>
