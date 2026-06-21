@@ -30,6 +30,15 @@ pub fn new_last_seen_ledger() -> LastSeenLedger {
 
 pub const SESSION_COOKIE: &str = "session";
 
+/// LC-414: the name of the Bunyip-as-OP access-token cookie. Bunyip sets
+/// this on its shared eTLD+1 cookie domain (`COOKIE_DOMAIN=.example.com`)
+/// so siblings under the same apex see it on every request. When a
+/// browser signs into Bunyip as a different user, this cookie rotates
+/// to that user's `at+jwt`; we read its `sub` claim to detect the
+/// identity swap and drop a stale lets-chat session before any handler
+/// runs. The cookie is HttpOnly server-side but readable by the server.
+const BUNYIP_ACCESS_TOKEN_COOKIE: &str = "access_token";
+
 /// Extract a short identity string for a session row from request headers.
 /// Returns `(user_agent, client_ip)`. Both are truncated to keep DB rows
 /// small and to defend against pathological headers from clients we don't
@@ -111,6 +120,50 @@ pub async fn inject_user(
         },
         None => None,
     };
+
+    // LC-414: identity-swap defence. If a Bunyip `access_token` cookie
+    // rides this request (shared eTLD+1 cookie domain) AND its `sub`
+    // disagrees with the lets-chat session's stored `bunyip_sub`, the
+    // browser has signed into Bunyip as a different user since the
+    // lets-chat session was minted. Drop the lets-chat session and skip
+    // user injection so the next handler resolves an anonymous request
+    // and redirects through `/auth/bunyip/start`. The cookie is absent
+    // in dev (no shared cookie domain) and on a never-Bunyip-cookied
+    // browser; both are tolerated as "best-effort" no-ops so we never
+    // log a real user out spuriously.
+    let identity_drifted = match (user.as_ref(), jar.get(BUNYIP_ACCESS_TOKEN_COOKIE)) {
+        (Some(u), Some(c)) => {
+            match db::auth::get_user_bunyip_sub(&state.auth, &u.id).await {
+                Ok(Some(stored_sub)) => match peek_jwt_sub(c.value()) {
+                    Some(cookie_sub) if cookie_sub != stored_sub => true,
+                    // A malformed Bunyip cookie is not a swap signal:
+                    // the user may have a Bunyip cookie from an
+                    // unrelated app on the same apex. Leave the session
+                    // alone in that case.
+                    _ => false,
+                },
+                // The local row predates LC-22 and has no `bunyip_sub`
+                // to compare against, or the lookup failed transiently.
+                // Don't act on this signal in either case.
+                _ => false,
+            }
+        }
+        _ => false,
+    };
+
+    if identity_drifted {
+        if let Some(t) = token.as_deref() {
+            tracing::info!(
+                target: "auth",
+                "LC-414: Bunyip identity changed under live lets-chat session; revoking",
+            );
+            if let Err(e) = db::auth::delete_session(&state.auth, t).await {
+                tracing::warn!(target: "auth", error = %e, "session revoke failed");
+            }
+        }
+        return next.run(req).await;
+    }
+
     if let (Some(u), Some(t)) = (user, token) {
         req.extensions_mut().insert(u);
         if should_touch_last_seen(&state.last_seen_ledger, &t) {
@@ -119,6 +172,29 @@ pub async fn inject_user(
         req.extensions_mut().insert(CurrentSessionId(t));
     }
     next.run(req).await
+}
+
+/// LC-414: extract the `sub` claim from a Bunyip-issued `at+jwt` without
+/// verifying its signature. We do NOT trust this value for authorization:
+/// the lets-chat session cookie is the auth source, and an attacker who
+/// could mint a fake Bunyip cookie would not gain lets-chat access from
+/// this read - they could only force a logout of the legitimate user (DoS).
+/// Crossing into JWKS verification per request was deliberately not done
+/// here: the JWKS round-trip is amortised in the SSO callback path and
+/// the boot client, not on every authed request. Unverified peek + signal
+/// to drop the session is the right cost / value point for an identity
+/// drift detector.
+fn peek_jwt_sub(token: &str) -> Option<String> {
+    use base64::Engine as _;
+    let mut parts = token.split('.');
+    // header.payload.signature - we care only about payload.
+    let _header = parts.next()?;
+    let payload_b64 = parts.next()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload_b64)
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("sub").and_then(|s| s.as_str()).map(str::to_string)
 }
 
 /// LC-100: resolve the request's UI locale and run the rest of the request
