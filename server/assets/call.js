@@ -35,6 +35,8 @@
   var ignoreOffer = false;
   var incoming = null;        // { fromId, fromName, withVideo } while invite is ringing
   var pendingCandidates = [];
+  var noAnswerTimer = null;   // LC-438: auto-ends a ringing outgoing call with "No answer"
+  var NO_ANSWER_MS = 45000;
 
   // Screen-share state. While sharing, screenTrack is the live display capture
   // and replaces the camera in the peer connection's video sender. cameraTrack
@@ -110,6 +112,13 @@
   function show(el) { if (el) { el.classList.remove('hidden'); el.setAttribute('aria-hidden', 'false'); } }
   function hide(el) { if (el) { el.classList.add('hidden'); el.setAttribute('aria-hidden', 'true'); } }
   function setStatus(text) { var s = q('[data-lc-call-status]'); if (s) s.textContent = text; }
+  // LC-438: a localized toast (key+fallback via __lcS, %name% substituted), for
+  // the call end-states that would otherwise be silent once the modal closes.
+  function lcToast(kind, key, fallback, name) {
+    if (!window.__lcToast) return;
+    var msg = (window.__lcS ? window.__lcS(key, fallback) : fallback).replace('%name%', name || '');
+    window.__lcToast(kind, msg);
+  }
   // LC-416: control buttons are icon + .lc-cbtn-label; update the label span so
   // the leading icon survives (fall back to the button for plain-text ones).
   function setLabel(btn, text) {
@@ -153,11 +162,14 @@
   }
 
   function setRemoteAvatar() {
-    var av = q('[data-lc-remote-avatar]');
-    if (av && peerId != null) {
-      av.setAttribute('src', '/avatars/' + peerId);
+    if (peerId == null) return;
+    var src = '/avatars/' + peerId;
+    // The active-call avatar plus the LC-437 incoming-call dialog avatar.
+    [q('[data-lc-remote-avatar]'), q('[data-lc-call-incoming-avatar]')].forEach(function (av) {
+      if (!av) return;
+      av.setAttribute('src', src);
       av.setAttribute('alt', peerName || '');
-    }
+    });
   }
 
   function hasLocalVideo() {
@@ -238,6 +250,7 @@
     restoreCameraAfterShare = false;
   }
   function teardown() {
+    clearNoAnswer(); // LC-438
     // Remote control rides the pc; ending the call ends any control session.
     // Detach capture and disarm the injector before the pc (and its channel)
     // go away, so no held key/button is left dangling. As the sharer, signal
@@ -425,12 +438,25 @@
   }
 
   // ---- call lifecycle ----------------------------------------------
+  function clearNoAnswer() {
+    if (noAnswerTimer) { clearTimeout(noAnswerTimer); noAnswerTimer = null; }
+  }
   function becomeCaller() {
     phase = 'outgoing';
     polite = false;
     hide(q('[data-lc-call-incoming]'));
     setStatus(window.__lcS('callCalling', 'Calling %name%...').replace('%name%', peerName || ''));
     signal('invite', hasLocalVideo() ? 'video' : 'audio');
+    // LC-438: don't ring forever. If still unanswered, end it as "No answer"
+    // (signals 'cancel', so the callee gets a missed-call record + toast).
+    clearNoAnswer();
+    noAnswerTimer = setTimeout(function () {
+      if (phase !== 'outgoing') return;
+      setStatus(window.__lcS('callNoAnswer', 'No answer'));
+      lcToast('err', 'callNoAnswer', 'No answer', '');
+      signal('cancel');
+      setTimeout(teardown, 1200);
+    }, NO_ANSWER_MS);
   }
 
   function becomeCallee() {
@@ -534,6 +560,7 @@
 
   function onAccept() {
     if (phase !== 'outgoing') return;
+    clearNoAnswer(); // LC-438: answered in time
     phase = 'connecting';
     setStatus(window.__lcS('callConnecting', 'Connecting...'));
     createPc();
@@ -1074,10 +1101,21 @@
         onAccept();
         break;
       case 'reject':
-        if (phase === 'outgoing') { setStatus(window.__lcS('callDeclined', 'Call declined')); setTimeout(teardown, 1200); }
+        // LC-438: the callee declined. Tell the caller clearly (toast + status)
+        // instead of the call just vanishing; the thread also gets a record.
+        if (phase === 'outgoing') {
+          setStatus(window.__lcS('callDeclined', 'Call declined'));
+          lcToast('err', 'callDeclinedBy', '%name% declined the call', peerName);
+          setTimeout(teardown, 1200);
+        }
         break;
       case 'cancel':
-        if (phase === 'incoming') teardown();
+        // LC-438: the caller hung up before we answered - surface it as a
+        // missed call so the dismissed ring is never silent.
+        if (phase === 'incoming') {
+          lcToast('err', 'callMissedFrom', 'Missed call from %name%', peerName);
+          teardown();
+        }
         break;
       case 'hangup':
         if (phase !== 'idle') { setStatus(window.__lcS('callEnded', 'Call ended')); setTimeout(teardown, 800); }
@@ -1147,6 +1185,13 @@
     if (t.closest('[data-lc-control-grant]')) { grantControl(); return; }
     if (t.closest('[data-lc-control-deny]')) { denyControl(); return; }
     if (t.closest('[data-lc-control-stop]')) { revokeAsSharer(); return; }
+  });
+
+  // LC-437: Escape declines a ringing incoming call (keyboard-dismissable).
+  // Scoped to the incoming phase so it never interferes with the in-call remote
+  // control keydown capture.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && phase === 'incoming') { e.preventDefault(); declineCall(); }
   });
 
   function onReady(fn) {
