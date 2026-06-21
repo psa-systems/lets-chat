@@ -1730,11 +1730,19 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 }
 
 /* ---- Participant grid --------------------------------------------------- */
+/* LC-416 follow-up: cap each cell to a bounded max (not 1fr) and centre the
+   row. With a 1fr max the 2-up case ballooned to two huge edge-to-edge tiles
+   (the right one hard against the viewport), which read as unbalanced. A
+   bounded max keeps tiles a sensible size and `justify-content: center` keeps
+   even gutters on both sides for 1 / 2 / 3+; tracks still shrink toward the min
+   when many participants are present, so cells stay equal-width and nothing
+   overflows. */
 .lc-voice-grid {
     display: grid;
     gap: 1rem;
     align-content: start;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 480px));
 }
 /* LC-408 fix: the grid's shown/hidden state is a class, NOT an inline
    `display`. An inline `display:grid` would beat the stylesheet and stop the
@@ -1867,6 +1875,75 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     min-height: 6rem;
     color: var(--content-muted);
     font-size: 0.875rem;
+}
+
+/* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
+/* Shown before joining: previews who is already here as avatar chips, with a
+   heading + primary Join CTA, or an empty state. voice.js hides the whole
+   region (inline display:none) once joined, so the in-call grid takes over. */
+.lc-voice-lobby {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+}
+.lc-voice-lobby-empty,
+.lc-voice-lobby-active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+}
+/* main.css loads after tailwind-built.css, so the flex above would beat the
+   .hidden utility voice.js toggles; restore it explicitly (cf. LC-391). */
+.lc-voice-lobby-empty.hidden,
+.lc-voice-lobby-active.hidden { display: none; }
+.lc-voice-lobby-empty-ico {
+    display: inline-flex;
+    height: 3rem;
+    width: 3rem;
+    color: var(--content-subtle);
+}
+.lc-voice-lobby-empty-ico svg { height: 3rem; width: 3rem; }
+.lc-voice-lobby-title { font-size: 1.125rem; font-weight: 600; color: var(--content); }
+.lc-voice-lobby-sub { font-size: 0.875rem; color: var(--content-muted); }
+.lc-voice-lobby-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    max-width: 40rem;
+}
+.lc-voice-lobby-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    width: 5rem;
+}
+.lc-voice-lobby-avatar {
+    height: 3.5rem;
+    width: 3.5rem;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 2px solid var(--border);
+    background: var(--surface-sunken);
+}
+.lc-voice-lobby-name {
+    max-width: 5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+.lc-voice-lobby-join {
+    font-size: 0.9375rem;
+    padding: 0.5rem 1.25rem;
 }
 
 /* ---- Screen-share stage (LC-408) --------------------------------------- */
