@@ -90,3 +90,6 @@ voice-transcript-panel = Transcripción
 voice-transcript-close = Cerrar transcripción
 voice-jump-live = Ir a lo último
 voice-in-call = En llamada
+transcript-open = Abrir
+transcript-copy = Copiar
+transcript-copied = Copiado
