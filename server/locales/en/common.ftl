@@ -160,6 +160,17 @@ settings-section-notifications = Notifications & Activity
 settings-section-privacy = Privacy & Security
 settings-section-account = Data & Account
 settings-saved = Saved.
+# LC-426: per-action feedback (inline status + toast)
+settings-fb-saved = Saved
+settings-fb-profile = Profile saved
+settings-fb-avatar = Profile picture updated
+settings-fb-avatar-removed = Profile picture removed
+settings-fb-session-revoked = Session revoked
+settings-fb-keyword-added = Highlight word added
+settings-avatar-pending = Not applied yet - click Save profile
+settings-remove-avatar-confirm = Remove your profile picture?
+settings-data-preparing = Preparing your data...
+settings-deleting = Deleting...
 settings-account = Account
 settings-username = Username
 settings-role = Role
