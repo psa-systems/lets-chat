@@ -25,6 +25,7 @@ struct TestApp {
     app: Router,
     admin_session: String,
     member_session: String,
+    admin_id: String,
     member_id: String,
     auth: SqlitePool,
     chat: SqlitePool,
@@ -88,6 +89,7 @@ async fn app() -> TestApp {
         app,
         admin_session,
         member_session,
+        admin_id,
         member_id,
         auth: auth_for_test,
         chat: chat_for_test,
@@ -187,6 +189,90 @@ async fn create_response_includes_category_without_hx_header() {
     assert!(
         body.contains("/enclave/1/sidebar/categories"),
         "re-rendered sidebar must still carry the enclave-scoped add-category form"
+    );
+}
+
+/// LC-415 hardening: the whole-sidebar re-render routes with NO authoritative
+/// enclave in their path (read-all, star toggle/reorder, mark-unread) keep the
+/// viewer's current-enclave context via the explicit `X-LC-Current-Enclave`
+/// header that live.js sends from the rendered `#sidebar-nav-{id}`. Exercise it
+/// through `/read-all`: with the header the enclave sidebar (category +
+/// add-form) survives the re-render; with no context header at all it falls
+/// back to the DM-only shape (the control that proves the header is what
+/// preserved it).
+#[tokio::test]
+async fn read_all_preserves_enclave_via_explicit_header() {
+    let t = app().await;
+    db::sidebar_categories::create_category(&t.chat, 1, "WorkZebra")
+        .await
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/read-all")
+        .header(header::COOKIE, format!("session={}", t.admin_session))
+        .header("X-LC-Current-Enclave", "1")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = String::from_utf8_lossy(
+        &axum::body::to_bytes(res.into_body(), 2_000_000)
+            .await
+            .unwrap(),
+    )
+    .to_string();
+    assert!(
+        body.contains("WorkZebra"),
+        "explicit X-LC-Current-Enclave header must preserve enclave context"
+    );
+    assert!(
+        body.contains("/enclave/1/sidebar/categories"),
+        "enclave add-category form present after read-all"
+    );
+
+    // Control: no context header of any kind -> DM-only sidebar.
+    let (status, body2) = send_body(&t.app, &t.admin_session, Method::POST, "/read-all", "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body2.contains("WorkZebra"),
+        "with no current-enclave signal the re-render is the DM-only sidebar"
+    );
+}
+
+/// LC-415 hardening: a crafted `X-LC-Current-Enclave` for an enclave the viewer
+/// is not a member of must NOT leak that enclave's category names. `member` is
+/// only in the General enclave (id 1); pointing the header at a foreign enclave
+/// the admin created falls back to the DM-only sidebar.
+#[tokio::test]
+async fn spoofed_current_enclave_header_does_not_leak_categories() {
+    let t = app().await;
+    // A second enclave the `member` user is NOT in, owned by `admin`.
+    let other = db::enclave::create_enclave(&t.chat, "Secret", None, &t.admin_id)
+        .await
+        .unwrap();
+    db::sidebar_categories::create_category(&t.chat, other, "TopSecretCat")
+        .await
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/read-all")
+        .header(header::COOKIE, format!("session={}", t.member_session))
+        .header("X-LC-Current-Enclave", other.to_string())
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = String::from_utf8_lossy(
+        &axum::body::to_bytes(res.into_body(), 2_000_000)
+            .await
+            .unwrap(),
+    )
+    .to_string();
+    assert!(
+        !body.contains("TopSecretCat"),
+        "non-member must not see a spoofed enclave's category names"
     );
 }
 
