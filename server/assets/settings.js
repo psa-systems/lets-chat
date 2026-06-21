@@ -83,12 +83,45 @@
     var preview = root.querySelector('[data-lc-avatar-preview]');
     var pending = root.querySelector('[data-lc-avatar-pending]');
     var filename = root.querySelector('[data-lc-avatar-filename]');
+    var errEl = root.querySelector('[data-lc-avatar-error]');
     var noFile = input.getAttribute('data-lc-no-file') || '';
     var form = input.closest('form');
+    var saveBtn = form && form.querySelector('button[type="submit"]');
+    // LC-439: validate BEFORE preview/save so an oversized/wrong-type file is
+    // rejected with a clear message instead of silently failing on Save.
+    var MAX = parseInt(input.getAttribute('data-lc-max-bytes'), 10) || 1048576;
+    var TYPES = { 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1 };
+
+    function showError(msg) {
+      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
+      if (saveBtn) saveBtn.disabled = true; // block save while the pick is invalid
+    }
+    function clearError() {
+      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+      if (saveBtn) saveBtn.disabled = false;
+    }
 
     input.addEventListener('change', function () {
       var file = input.files && input.files[0];
-      if (!file) { if (filename) filename.textContent = noFile; return; }
+      if (!file) { if (filename) filename.textContent = noFile; clearError(); return; }
+      // Wrong type (the OS dialog can ignore `accept`). Only reject a known-bad
+      // MIME; an empty type passes here and the server's byte-sniff is the gate.
+      if (file.type && !TYPES[file.type]) {
+        if (filename) filename.textContent = file.name;
+        if (pending) pending.hidden = true;
+        showError(input.getAttribute('data-lc-err-type') || 'Unsupported format - use PNG, JPEG, or WebP.');
+        try { input.value = ''; } catch (e) {} // drop the bad pick so Save can't submit it
+        return;
+      }
+      if (file.size > MAX) {
+        if (filename) filename.textContent = file.name;
+        if (pending) pending.hidden = true;
+        showError(input.getAttribute('data-lc-err-size') || 'Image must be under 1 MiB.');
+        try { input.value = ''; } catch (e) {}
+        return;
+      }
+      // Valid: preview + mark not-yet-saved.
+      clearError();
       if (preview) preview.src = URL.createObjectURL(file);
       if (filename) filename.textContent = file.name;
       if (pending) pending.hidden = false;
@@ -100,10 +133,40 @@
         if (e.detail && e.detail.successful) {
           if (pending) pending.hidden = true;
           if (filename) filename.textContent = noFile;
+          clearError();
           try { input.value = ''; } catch (err) {}
         }
       });
     }
+  }
+
+  // LC-439: never-silent guarantee. If any settings form's htmx request errors
+  // (non-2xx like a 413 body cap, a 500, or a network drop), htmx would
+  // otherwise swap nothing. Surface a generic error in that form's status slot
+  // plus a toast so a Save can never complete with no feedback.
+  function errorNetInit() {
+    function onErr(e) {
+      var src = (e.detail && e.detail.elt) || e.target;
+      var form = src && src.closest && src.closest('form');
+      var slot = form && form.querySelector('.lc-set-status');
+      var msg = (window.__lcS && window.__lcS('settingsSaveError', 'Could not save. Please try again.'))
+        || 'Could not save. Please try again.';
+      if (slot) {
+        slot.replaceChildren();
+        var wrap = document.createElement('span');
+        wrap.className = 'lc-status lc-status--err';
+        var ico = document.createElement('span');
+        ico.className = 'lc-status-ico';
+        ico.setAttribute('aria-hidden', 'true');
+        ico.textContent = '!';
+        wrap.appendChild(ico);
+        wrap.appendChild(document.createTextNode(msg));
+        slot.appendChild(wrap);
+      }
+      if (window.__lcToast) window.__lcToast('err', msg);
+    }
+    document.body.addEventListener('htmx:responseError', onErr);
+    document.body.addEventListener('htmx:sendError', onErr);
   }
 
   // LC-432: the inline per-form status should not linger. Auto-clear it a few
@@ -160,6 +223,7 @@
 
   // Document-level status listeners: registered once (init() can re-run).
   statusInit();
+  errorNetInit();
 
   if (document.readyState !== 'loading') init();
   else document.addEventListener('DOMContentLoaded', init);

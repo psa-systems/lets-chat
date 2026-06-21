@@ -2411,6 +2411,9 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
 .lc-set-field.lc-set-field--narrow { max-width: 22rem; }
 .lc-set-label { font-size: 0.8125rem; font-weight: 500; color: var(--content); }
 .lc-set-help { font-size: 0.75rem; color: var(--content-muted); }
+/* LC-439: inline field validation error (avatar size/type). */
+.lc-set-error { font-size: 0.75rem; font-weight: 500; color: var(--danger); }
+.lc-set-error[hidden] { display: none; }
 textarea.input { min-height: 4.5rem; resize: vertical; }
 
 /* Action row: submit button + inline status, with a spinner inside the button. */

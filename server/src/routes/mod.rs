@@ -1361,7 +1361,14 @@ pub fn build_router(state: AppState) -> Router {
             "/settings/blocked",
             get(settings::get_blocked_list).post(settings::post_block_by_username),
         )
-        .route("/settings/profile", post(settings::post_profile))
+        // LC-439: lift the default ~2 MiB body cap so the handler's own 1 MiB
+        // avatar check runs and returns a visible error fragment, instead of a
+        // typical >2 MiB photo being 413'd by the body-limit layer (which htmx
+        // silently ignores). The handler still rejects anything over 1 MiB.
+        .route(
+            "/settings/profile",
+            post(settings::post_profile).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         // LC-72: API-token management - available in both standalone and saas.
         .route(
             "/settings/api-tokens",
