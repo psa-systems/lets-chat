@@ -68,16 +68,24 @@
                 hx-target="#st-profile" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]"
                 class="lc-set-form">
             <div class="lc-set-avatar-row">
-              <div id="lc-set-avatar-wrap">
-                <img id="lc-set-avatar-img" data-lc-avatar-preview alt="{{ "settings-profile-picture"|t }}"
-                     {% if user.avatar_ext.is_some() %}src="/avatars/{{ user.id }}?v={{ avatar_version }}"{% endif %}
-                     class="lc-set-avatar{% if user.avatar_ext.is_none() %} hidden{% endif %}">
-                <div class="lc-set-avatar-fallback{% if user.avatar_ext.is_some() %} hidden{% endif %}" data-lc-avatar-fallback>{% if let Some(c) = user.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-              </div>
+              {# LC-432: ONE preview element. /avatars/{id} always resolves (it
+                 serves a generated initial-on-color SVG when there is no custom
+                 avatar), so a single <img> covers both the default and the
+                 chosen/saved image - no second placeholder circle. #}
+              <img id="lc-set-avatar-img" data-lc-avatar-preview alt="{{ "settings-profile-picture"|t }}"
+                   src="/avatars/{{ user.id }}?v={{ avatar_version }}" class="lc-set-avatar">
               <div class="flex-1 min-w-0">
                 <div class="lc-set-field">
-                  <label class="lc-set-label" for="lc-avatar-input">{{ "settings-profile-picture"|t }}</label>
-                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="block text-sm text-content file:mr-2 file:rounded-md file:border file:border-border file:bg-surface-elevated file:px-2 file:py-1 file:text-sm file:text-content hover:file:bg-surface-sunken">
+                  <span class="lc-set-label">{{ "settings-profile-picture"|t }}</span>
+                  {# LC-432: the native file input is sr-only (a styled <label>
+                     opens it), so the browser's "No file chosen" chrome + its
+                     stray native tooltip never render. Our own filename text
+                     reports the selection. #}
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label for="lc-avatar-input" class="btn btn-secondary btn-sm">{{ "settings-choose-image"|t }}</label>
+                    <span data-lc-avatar-filename class="lc-set-help">{{ "settings-no-file"|t }}</span>
+                  </div>
+                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="sr-only" data-lc-no-file="{{ "settings-no-file"|t }}">
                   <p class="lc-set-help">{{ "settings-avatar-formats"|t }}</p>
                   <p data-lc-avatar-pending hidden class="lc-set-help lc-set-pending">{{ "settings-avatar-pending"|t }}</p>
                 </div>
@@ -96,15 +104,17 @@
               <label class="lc-set-label" for="lc-bio">{{ "settings-bio"|t }}</label>
               <textarea id="lc-bio" class="input" name="bio" maxlength="500" rows="3">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
             </div>
+            {# LC-432: status sits immediately after Save (so it clearly belongs
+               to the save), Remove avatar is pushed to the far right. #}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-save-profile"|t }}</span></button>
+              <span id="st-profile" class="lc-set-status" role="status" aria-live="polite"></span>
               {% if user.avatar_ext.is_some() %}
               {# Associated with the sibling form below (forms can't nest); works
                  with htmx and as a plain submit. #}
-              <button type="submit" form="lc-avatar-del-form" class="btn btn-ghost btn-sm text-danger"
+              <button type="submit" form="lc-avatar-del-form" class="btn btn-ghost btn-sm text-danger lc-set-actions-end"
                       onclick="return confirm('{{ "settings-remove-avatar-confirm"|t }}');">{{ "settings-remove-avatar"|t }}</button>
               {% endif %}
-              <span id="st-profile" class="lc-set-status" role="status" aria-live="polite"></span>
             </div>
           </form>
           {% if user.avatar_ext.is_some() %}

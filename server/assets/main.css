@@ -2380,6 +2380,9 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     gap: 0.75rem;
     padding-top: 0.25rem;
 }
+/* LC-432: push a trailing action (Remove avatar) to the far right so the status
+   stays anchored next to Save. */
+.lc-set-actions-end { margin-left: auto; }
 .lc-set-actions .lc-spinner.htmx-indicator { display: none; }
 .htmx-request .lc-spinner.htmx-indicator { display: inline-block; }
 /* Inline per-form status, swapped in by the server fragment. */
