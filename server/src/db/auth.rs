@@ -1449,6 +1449,22 @@ pub async fn get_user_role(
         .await
 }
 
+/// LC-414: read the `bunyip_sub` stamped on a user row so the per-request
+/// identity-swap check can compare it against the `sub` claim of any
+/// Bunyip `access_token` cookie that rides the request. A `NULL` return
+/// is a leftover pre-cutover row; post-LC-22 the column is `NOT NULL`,
+/// so the swap check just no-ops on that row.
+pub async fn get_user_bunyip_sub(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT bunyip_sub FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map(|opt: Option<Option<String>>| opt.flatten())
+}
+
 /// LC-22: create a fresh lets-chat user row from a verified Bunyip identity.
 ///
 /// `password_hash` is written as the empty string (the cutover sentinel - see
