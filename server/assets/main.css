@@ -1605,6 +1605,10 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     background: var(--surface-elevated);
     color: var(--content);
     padding: 0.5rem 1rem;
+    /* LC-416: a query container so the control buttons can drop their labels to
+       icon-only when the bar itself is narrow - notably while the transcript
+       drawer reserves width - instead of overflowing / overlapping. */
+    container: lc-callbar / inline-size;
 }
 /* LC-412: bottom tray variant for the 1:1 call modal - the bar sits under the
    video, so the divider is on top and the clusters centre. */
@@ -1620,6 +1624,9 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     align-items: center;
     gap: 0.375rem;
 }
+/* LC-416: isolate the destructive Leave / Hang up cluster with extra space so
+   it never sits flush against the transcription controls. */
+.lc-callbar-group--end { margin-left: 0.375rem; }
 /* LC-409: wrapper around both control clusters - one flex row on desktop, a
    horizontally-scrollable row under the title on mobile (see the media query). */
 .lc-callbar-controls {
@@ -1656,6 +1663,29 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 /* main.css loads after tailwind-built.css, so without this the .lc-cbtn display
    would win over the .hidden utility the call JS toggles (cf. LC-391). */
 .lc-cbtn.hidden { display: none; }
+
+/* ---- LC-416: icon + collapsible label control buttons ------------------- */
+.lc-cbtn-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    line-height: 0;
+}
+.lc-cbtn-label { white-space: nowrap; }
+/* Mute swaps mic <-> slashed-mic by aria-pressed; other state is colour only. */
+.lc-cbtn-ico--on { display: none; }
+.lc-cbtn[aria-pressed="true"] .lc-cbtn-ico--off { display: none; }
+.lc-cbtn[aria-pressed="true"] .lc-cbtn-ico--on { display: inline-flex; }
+/* Always icon-only (the device gear): keep it square. */
+.lc-cbtn--icon { padding-left: 0.5rem; padding-right: 0.5rem; }
+/* When the bar is narrow, collapse every labelled control to its icon so the
+   row compresses instead of overflowing. The device gear is already icon-only;
+   leave the Join button labelled (it shows alone, pre-join, with room). */
+@container lc-callbar (max-width: 860px) {
+    .lc-callbar-controls .lc-cbtn:not(.lc-cbtn--join) .lc-cbtn-label { display: none; }
+    .lc-callbar-controls .lc-cbtn:not(.lc-cbtn--join) { padding-left: 0.5rem; padding-right: 0.5rem; }
+}
 .lc-voice-countchip { display: inline-flex; align-items: center; gap: 0.25rem; }
 .lc-voice-countchip.hidden { display: none; }
 /* generic toggle on-state (Mute active, video on, screen sharing) */
@@ -1685,15 +1715,14 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     border-color: var(--danger-border);
     color: var(--danger-content);
 }
-.lc-rec-dot {
-    display: none;
-    height: 0.5rem;
-    width: 0.5rem;
-    flex: none;
-    border-radius: 9999px;
-    background: var(--danger);
+/* LC-416: Transcribe uses a record glyph (ring + core). Off-state inherits the
+   button text colour; the active (recording) state recolours via lc-cbtn--rec
+   above and the inner core pulses, so the toggle reads as a live record button
+   and pairs with the drawer header dot. */
+.lc-rec-glyph svg { height: 1.05rem; width: 1.05rem; }
+.lc-cbtn--rec[aria-pressed="true"] .lc-rec-core {
+    animation: lc-rec-pulse 1.6s ease-in-out infinite;
 }
-.lc-cbtn--rec[aria-pressed="true"] .lc-rec-dot { display: inline-block; animation: lc-rec-pulse 1.6s ease-in-out infinite; }
 
 /* ---- Participant grid --------------------------------------------------- */
 .lc-voice-grid {
@@ -1726,6 +1755,28 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     border-color: var(--success);
     box-shadow: 0 0 0 3px var(--success-surface);
 }
+/* LC-416: animated equalizer in the name pill, the same active-speaker cue on
+   every tile (the lone bars from the reference, made consistent). Shown only
+   while the tile is speaking; the three bars bob out of phase. */
+.lc-voice-speaking {
+    display: none;
+    align-items: flex-end;
+    gap: 2px;
+    height: 0.8125rem;
+    flex: none;
+}
+.lc-voice-tile[data-speaking="true"] .lc-voice-speaking { display: inline-flex; }
+.lc-voice-speaking i {
+    display: block;
+    width: 3px;
+    height: 40%;
+    border-radius: 1px;
+    background: var(--success);
+    animation: lc-eq 0.9s ease-in-out infinite;
+}
+.lc-voice-speaking i:nth-child(2) { animation-delay: 0.15s; }
+.lc-voice-speaking i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes lc-eq { 0%, 100% { height: 30%; } 50% { height: 100%; } }
 .lc-voice-tile video {
     position: absolute;
     inset: 0;
@@ -1878,9 +1929,35 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     background: var(--surface-elevated);
     color: var(--content);
     box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
+    /* LC-416: slide in from the right rather than snapping, so opening the panel
+       reads as reserving space (paired with the #lc-voice-root padding
+       transition below) instead of squeezing the header. */
+    transform: translateX(0);
+    transition: transform 0.2s ease, visibility 0.2s ease;
 }
-.lc-transcript.hidden { display: none; }
+/* Off-canvas + non-interactive when closed (was display:none, which could not
+   animate). visibility transitions discretely so the slide-out still shows. */
+.lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
+#lc-voice-root { transition: padding-right 0.2s ease; }
 body.lc-transcript-open #lc-voice-root { padding-right: 20rem; }
+
+/* ---- LC-416: transcript empty state ------------------------------------- */
+/* Shown until the first caption line lands (#lc-caption-log is the OOB target;
+   it is empty before any segment). :has keeps it pure-CSS - no JS toggle. */
+.lc-transcript-empty {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    text-align: center;
+    padding: 2.5rem 1.25rem;
+    color: var(--content-muted);
+}
+.lc-transcript-body:has(#lc-caption-log:empty) .lc-transcript-empty { display: flex; }
+.lc-transcript-empty-ico { height: 2rem; width: 2rem; color: var(--content-subtle); margin-bottom: 0.25rem; }
+.lc-transcript-empty-title { font-size: 0.875rem; font-weight: 600; color: var(--content); }
+.lc-transcript-empty-sub { font-size: 0.8125rem; color: var(--content-muted); max-width: 16rem; }
 .lc-transcript-head {
     display: flex;
     align-items: center;
@@ -2012,8 +2089,9 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     50% { opacity: 0.3; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lc-rec-dot, .lc-transcript-rec,
+    .lc-rec-core, .lc-transcript-rec, .lc-voice-speaking i,
     .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
+    .lc-transcript, #lc-voice-root { transition: none; }
 }
 
 /* ---- LC-409: mobile / responsive call pass ----------------------------- */
