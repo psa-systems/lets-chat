@@ -77,15 +77,6 @@ fn settings_error(headers: &HeaderMap, msg: &str) -> Response {
     }
 }
 
-/// LC-426: the avatar letter-fallback glyph (first char of the username, or `?`).
-fn avatar_letter(user: &crate::models::User) -> String {
-    user.username
-        .chars()
-        .next()
-        .map(|c| c.to_string())
-        .unwrap_or_else(|| "?".to_string())
-}
-
 /// LC-347: cache-buster for the avatar preview `<img>`. The avatar route serves
 /// `Cache-Control: max-age=300`, and the page-wide `asset_version` is a build
 /// constant that never moves on upload, so without this the browser shows the
@@ -1064,12 +1055,20 @@ pub async fn post_avatar_delete(
             user_id: user.id.clone(),
         },
     );
-    // LC-426: confirm + revert the on-page avatar preview to the letter fallback.
+    // LC-432: confirm + revert the single on-page preview <img> to the generated
+    // default. A fresh cache-buster is required because the file is now gone, so
+    // the avatar route's mtime key no longer moves the URL off the cached custom
+    // image.
+    let avatar_src = format!(
+        "/avatars/{}?v=del{}",
+        user.id,
+        chrono::Utc::now().timestamp_millis()
+    );
     if let Some(r) = hx_feedback(
         &headers,
         crate::views::settings::SettingsFeedback::ok_reset_avatar(
             crate::i18n::translate_current("settings-fb-avatar-removed"),
-            avatar_letter(&user),
+            avatar_src,
         ),
     ) {
         return r;
