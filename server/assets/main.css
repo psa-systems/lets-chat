@@ -1342,6 +1342,40 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     color: var(--danger);
 }
 
+/* LC-434: call/system events - a centered, muted timeline row distinct from
+   user messages. Icon + actor + event text + time, all on one centered line. */
+.lc-sysevent {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0.25rem 1rem;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: var(--content-muted);
+    text-align: center;
+}
+.lc-sysevent-ico {
+    display: inline-flex;
+    flex: none;
+    color: var(--content-subtle);
+}
+.lc-sysevent-ico svg { height: 0.8125rem; width: 0.8125rem; }
+.lc-sysevent-text { min-width: 0; }
+.lc-sysevent-link {
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.lc-sysevent-link:hover { text-decoration: none; }
+.lc-sysevent-time {
+    flex: none;
+    color: var(--content-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
 /* LC-380: composer controls. The two tiers share one icon-button language: a
    denser format toolbar (.lc-fmt-btn) and the larger bottom action row
    (.lc-composer-btn), both muted-to-content with a sunken hover. The primary
@@ -1559,6 +1593,13 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-header-action-danger:hover {
     color: var(--danger);
 }
+.lc-header-action svg { height: 1.25rem; width: 1.25rem; }
+/* LC-436: Mute is an icon toggle - an sr-only checkbox (keeps the hx-post mute
+   wiring) swaps a bell for a slashed bell and tints the action when muted. */
+.lc-header-action .lc-mute-off { display: none; }
+.lc-header-action:has(input:checked) .lc-mute-on { display: none; }
+.lc-header-action:has(input:checked) .lc-mute-off { display: inline-flex; }
+.lc-header-action:has(input:checked) { color: var(--danger); }
 
 /* LC-384: emoji-picker grid cell. Consistent square cells with a sunken hover,
    for both the reaction picker (reactions::get_picker) and parity with the

@@ -1544,7 +1544,7 @@ async fn relay_call_signal(
                     payload: payload.clone(),
                 };
                 state.hub.broadcast_to_user(&peer_id, &event);
-                post_call_started_message(state, user, &room).await;
+                post_call_event_message(state, user, &room, "started a call.").await;
             }
             RingingResult::DuplicateSelf => {
                 // Same caller already holds the slot. Drop silently so the
@@ -1574,6 +1574,15 @@ async fn relay_call_signal(
         state.hub.clear_ringing(room_id);
     }
 
+    // LC-438: log the silent end-states as call-event rows so both members keep
+    // a record (mirrors "started a call."). `user` is the signal sender: the
+    // callee for a decline, the caller for a cancel/no-answer.
+    match kind {
+        "reject" => post_call_event_message(state, user, &room, "declined the call.").await,
+        "cancel" => post_call_event_message(state, user, &room, "cancelled the call.").await,
+        _ => {}
+    }
+
     let mut recipients: Vec<String> = vec![peer_id];
     if matches!(kind, "accept" | "reject" | "cancel" | "hangup") {
         recipients.push(user.id.clone());
@@ -1591,20 +1600,20 @@ async fn relay_call_signal(
     }
 }
 
-/// Insert a "started a call" message into the DM `room` authored by `user`,
-/// then broadcast it like any normal message so it lands in both members'
-/// open conversation and bumps the sidebar for anyone not viewing the room.
-async fn post_call_started_message(state: &AppState, user: &User, room: &models::Room) {
-    let new_id =
-        match db::chat::insert_system_message(&state.chat, room.id, &user.id, "started a call.")
-            .await
-        {
-            Ok(id) => id,
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to insert call-started message");
-                return;
-            }
-        };
+/// Insert a call-event system message (`body`, e.g. "started a call.",
+/// "declined the call.", "cancelled the call.") into the DM `room` authored by
+/// `user`, then broadcast it like any normal message so it lands in both
+/// members' open conversation and bumps the sidebar for anyone not viewing the
+/// room. LC-438: gives every call end-state a thread record so a decline / a
+/// cancel is never silent for either party.
+async fn post_call_event_message(state: &AppState, user: &User, room: &models::Room, body: &str) {
+    let new_id = match db::chat::insert_system_message(&state.chat, room.id, &user.id, body).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to insert call-event message");
+            return;
+        }
+    };
     let raw = match db::chat::get_message(&state.chat, new_id).await {
         Ok(Some(r)) => r,
         _ => return,
@@ -1633,7 +1642,7 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
         client_id: None,
     };
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
-        tracing::warn!(error = %e, "failed to broadcast call-started message");
+        tracing::warn!(error = %e, "failed to broadcast call-event message");
     }
 }
 
