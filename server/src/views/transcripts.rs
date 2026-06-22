@@ -19,9 +19,14 @@ pub struct TranscriptIndexRow {
     pub title: String,
     /// Sub-line: "Direct call" or "Voice channel".
     pub kind_label: String,
+    /// LC-443: true for a DM (Direct call) transcript, false for a voice
+    /// channel - drives the badge colour without re-deriving from kind_label.
+    pub is_dm: bool,
     pub started_at: String,
     pub ended: bool,
     pub segment_count: i64,
+    /// LC-441: the viewer may delete this one (started it, or is a site admin).
+    pub can_delete: bool,
 }
 
 /// LC-394: the transcripts archive (every transcript the viewer can access).
@@ -41,6 +46,27 @@ pub struct TranscriptIndexPage<'a> {
     pub rows: Vec<TranscriptIndexRow>,
     /// LC-395: the current search query (echoed into the search box).
     pub query: String,
+    /// LC-442: whether the hide-empty (0-line) filter is on.
+    pub hide_empty: bool,
+}
+
+/// LC-445: just the list body (rows or empty state), returned for htmx search /
+/// filter / bulk-delete swaps into `#lc-transcript-list`.
+#[derive(Template)]
+#[template(path = "transcripts/list_body.html")]
+pub struct TranscriptListBody {
+    pub rows: Vec<TranscriptIndexRow>,
+    pub query: String,
+    pub hide_empty: bool,
+}
+
+/// LC-441: a standalone out-of-band toast (reuses the global #lc-toast-region +
+/// toast.js). Appended to a delete response so the action confirms success/error.
+#[derive(Template)]
+#[template(path = "transcripts/toast_oob.html")]
+pub struct ToastOob {
+    pub ok: bool,
+    pub message: String,
 }
 
 /// LC-393: the saved call-transcript page. Carries the standard sidebar chrome

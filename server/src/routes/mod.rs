@@ -1423,7 +1423,11 @@ pub fn build_router(state: AppState) -> Router {
             "/call/transcript/{transcript_id}/end",
             post(transcripts::end),
         )
-        .route("/transcripts", get(transcripts::index))
+        // LC-442: DELETE on the collection bulk-removes the viewer's empty rows.
+        .route(
+            "/transcripts",
+            get(transcripts::index).delete(transcripts::delete_empty),
+        )
         .route(
             "/transcripts/{transcript_id}/export",
             get(transcripts::export),
@@ -1432,7 +1436,11 @@ pub fn build_router(state: AppState) -> Router {
             "/transcripts/{transcript_id}/summary",
             post(transcripts::summary),
         )
-        .route("/transcripts/{transcript_id}", get(transcripts::show))
+        // LC-441: DELETE on a row removes that one transcript.
+        .route(
+            "/transcripts/{transcript_id}",
+            get(transcripts::show).delete(transcripts::delete_transcript),
+        )
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
         .route("/branding/logo", get(branding::get_global_logo))
