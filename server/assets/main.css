@@ -2611,3 +2611,103 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     .lc-toast, .lc-toast.lc-toast--leaving { animation: none; }
     .lc-toggle-track, .lc-toggle-track::after { transition: none; }
 }
+
+/* ===== LC-440: Call transcripts list ==================================== */
+.lc-tx-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated);
+    padding: 0.5rem 0.75rem;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.lc-tx-row:hover { background: var(--surface-sunken); }
+.lc-tx-row:focus-within { border-color: var(--accent); }
+/* Stretched link: covers the row so the whole card is clickable; the delete
+   button sits above it (z-index) so the two never conflict. */
+.lc-tx-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.lc-tx-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-tx-main { min-width: 0; flex: 1; }
+.lc-tx-titleline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.375rem 0.5rem; }
+.lc-tx-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--content);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.lc-tx-meta {
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+/* Type badge: distinct subtle colours so DM vs voice scan at a glance. */
+.lc-tx-badge {
+    flex: none;
+    border-radius: 9999px;
+    padding: 0.0625rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.1;
+}
+.lc-tx-badge--dm { background: var(--accent-surface); color: var(--accent-surface-content); }
+.lc-tx-badge--voice { background: var(--success-surface); color: var(--success); }
+.lc-tx-live { flex: none; font-size: 0.6875rem; font-weight: 600; color: var(--danger); }
+/* 0-line rows are de-emphasized so they don't compete with real transcripts. */
+.lc-tx-row--empty { background: transparent; }
+.lc-tx-row--empty .lc-tx-title { color: var(--content-muted); font-weight: 500; }
+.lc-tx-row--empty .lc-tx-meta { color: var(--content-subtle); }
+.lc-tx-row--empty:hover { background: var(--surface-sunken); }
+/* Per-row delete: hover/focus-revealed, above the stretched link. */
+.lc-tx-del {
+    position: relative;
+    z-index: 2;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.75rem;
+    width: 1.75rem;
+    border-radius: 0.375rem;
+    color: var(--content-subtle);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+}
+.lc-tx-row:hover .lc-tx-del,
+.lc-tx-row:focus-within .lc-tx-del,
+.lc-tx-del:focus-visible { opacity: 1; }
+.lc-tx-del:hover { background: var(--danger-surface); color: var(--danger); }
+.lc-tx-del svg { height: 1rem; width: 1rem; }
+.lc-tx-chevron { flex: none; height: 1rem; width: 1rem; color: var(--content-subtle); }
+/* Hide-empty toggle label. */
+.lc-tx-hide {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+    cursor: pointer;
+    user-select: none;
+}
+/* Friendly empty state. */
+.lc-tx-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--content-muted);
+}
+.lc-tx-empty-ico { height: 2.5rem; width: 2.5rem; color: var(--content-subtle); }
+.lc-tx-empty-title { font-size: 0.875rem; color: var(--content-muted); max-width: 22rem; }
+@media (prefers-reduced-motion: reduce) {
+    .lc-tx-row, .lc-tx-del { transition: none; }
+}

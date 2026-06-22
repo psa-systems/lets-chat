@@ -220,6 +220,24 @@ pub async fn list_recent(
         .collect())
 }
 
+/// LC-441: delete a transcript and its segments. Done in one transaction and
+/// deleting both tables explicitly so it works regardless of the connection's
+/// `foreign_keys` pragma (the `ON DELETE CASCADE` on `transcript_segments` only
+/// fires when foreign keys are enabled). Returns `true` if a row was removed.
+pub async fn delete(pool: &SqlitePool, id: i64) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM transcript_segments WHERE transcript_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    let res = sqlx::query("DELETE FROM call_transcripts WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// Close a session. Returns `true` only when this call actually transitioned an
 /// active session to ended (so the caller posts the "transcript saved" notice
 /// exactly once even if both an explicit /end and the disconnect backstop race).

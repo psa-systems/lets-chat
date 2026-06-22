@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Form;
 use axum::Json;
@@ -25,7 +26,8 @@ use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::views::transcripts::{
-    TranscriptIndexPage, TranscriptIndexRow, TranscriptLine, TranscriptPage,
+    ToastOob, TranscriptIndexPage, TranscriptIndexRow, TranscriptLine, TranscriptListBody,
+    TranscriptPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -373,41 +375,55 @@ async fn post_saved_message(state: &AppState, room: &Room, transcript_id: i64) {
 /// voice channels they belong to), newest first. Each candidate is gated with
 /// the same `is_room_accessible` check the single-transcript page uses, so no
 /// transcript from a room the viewer cannot see is ever listed.
-pub async fn index(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-    Query(IndexQuery { q }): Query<IndexQuery>,
-) -> Result<Html, AppError> {
-    // Scan recent transcripts, then keep the ones the viewer can access (cap the
-    // rendered list so a busy instance stays bounded). LC-395: an optional `q`
-    // restricts to transcripts containing a matching segment.
+/// LC-440: build the visible archive rows for `user`, honoring the search query
+/// (matches the resolved title / date / transcript content) and the hide-empty
+/// filter. Each candidate is gated with the same `is_room_accessible` check the
+/// single-transcript page uses, so no transcript from a room the viewer cannot
+/// see is ever listed. `can_delete` follows the LC-441 rule: the starter or a
+/// site admin.
+async fn build_index_rows(
+    state: &AppState,
+    user: &User,
+    query: &str,
+    hide_empty: bool,
+) -> Result<Vec<TranscriptIndexRow>, AppError> {
     const SCAN: i64 = 300;
     const SHOW: usize = 100;
     let is_admin = user.role == "admin";
-    let query = q.unwrap_or_default().trim().to_string();
-    let search = if query.is_empty() {
-        None
+    let q_lower = query.to_lowercase();
+    // Content-match ids (LC-395 SQL search), so a query also matches transcript
+    // body text - not just the title/date we resolve below.
+    let content_ids: std::collections::HashSet<i64> = if query.is_empty() {
+        std::collections::HashSet::new()
     } else {
-        Some(query.as_str())
+        db::transcripts::list_recent(&state.chat, Some(query), SCAN)
+            .await?
+            .into_iter()
+            .map(|r| r.id)
+            .collect()
     };
-    let candidates = db::transcripts::list_recent(&state.chat, search, SCAN).await?;
+    let candidates = db::transcripts::list_recent(&state.chat, None, SCAN).await?;
 
     let mut rows: Vec<TranscriptIndexRow> = Vec::new();
     for c in candidates {
         if rows.len() >= SHOW {
             break;
         }
+        if hide_empty && c.segment_count == 0 {
+            continue;
+        }
         if !db::chat::is_room_accessible(&state.chat, c.room_id, &user.id, is_admin).await? {
             continue;
         }
         // DM: headline the peer (the other member); voice: the channel name.
-        let (title, kind_label) = if c.room_type == "dm" {
+        let is_dm = c.room_type == "dm";
+        let (title, kind_label) = if is_dm {
             let members = db::chat::list_room_member_ids(&state.chat, c.room_id)
                 .await
                 .unwrap_or_default();
             let peer = members.into_iter().find(|m| m != &user.id);
             let title = match peer {
-                Some(pid) => label_for(&state, &pid).await,
+                Some(pid) => label_for(state, &pid).await,
                 None => crate::i18n::translate_current("transcript-kind-dm"),
             };
             (title, crate::i18n::translate_current("transcript-kind-dm"))
@@ -422,13 +438,52 @@ pub async fn index(
                 crate::i18n::translate_current("transcript-kind-voice"),
             )
         };
+        // LC-445: a query matches the resolved title, the date, or the content.
+        if !query.is_empty()
+            && !title.to_lowercase().contains(&q_lower)
+            && !c.started_at.to_lowercase().contains(&q_lower)
+            && !content_ids.contains(&c.id)
+        {
+            continue;
+        }
+        // LC-441: only the starter or a site admin may delete a shared record.
+        let can_delete = is_admin || can_delete_transcript(&state.chat, c.id, &user.id).await;
         rows.push(TranscriptIndexRow {
             id: c.id,
             title,
             kind_label,
+            is_dm,
             started_at: c.started_at,
             ended: c.status != "active",
             segment_count: c.segment_count,
+            can_delete,
+        });
+    }
+    Ok(rows)
+}
+
+/// LC-441: the destructive-delete predicate beyond view access - the user who
+/// started the transcript (or, at the call site, a site admin) may delete it.
+async fn can_delete_transcript(chat: &sqlx::SqlitePool, id: i64, user_id: &str) -> bool {
+    matches!(db::transcripts::get(chat, id).await, Ok(Some(t)) if t.started_by == user_id)
+}
+
+pub async fn index(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    headers: HeaderMap,
+    Query(IndexQuery { q, hide_empty }): Query<IndexQuery>,
+) -> Result<Html, AppError> {
+    let query = q.unwrap_or_default().trim().to_string();
+    let hide_empty = hide_empty.is_some();
+    let rows = build_index_rows(&state, &user, &query, hide_empty).await?;
+
+    // LC-445: htmx search / filter swaps just the list body.
+    if headers.contains_key("hx-request") {
+        return html(&TranscriptListBody {
+            rows,
+            query,
+            hide_empty,
         });
     }
 
@@ -456,7 +511,76 @@ pub async fn index(
         asset_version: &state.asset_version,
         rows,
         query,
+        hide_empty,
     })
+}
+
+/// LC-441: DELETE /transcripts/{id}. Removes a saved transcript (+ its segments).
+/// Authz: the same read-access gate (`require_access`) AND the destructive rule -
+/// only the user who started it, or a site admin, may delete a shared record.
+/// Returns an empty body (htmx swaps the row out) plus an out-of-band toast.
+pub async fn delete_transcript(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Response, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    if user.role != "admin" && session.started_by != user.id {
+        return Err(AppError::Forbidden);
+    }
+    db::transcripts::delete(&state.chat, transcript_id).await?;
+    let toast = html(&ToastOob {
+        ok: true,
+        message: crate::i18n::translate_current("transcript-deleted"),
+    })?;
+    Ok(toast.into_response())
+}
+
+/// LC-442: DELETE /transcripts - bulk-delete the viewer's empty (0-line)
+/// transcripts. Only rows the viewer may delete (started, or admin) and can
+/// access are removed. Returns the re-rendered list body + a toast with the count.
+pub async fn delete_empty(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Query(IndexQuery { q, hide_empty }): Query<IndexQuery>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    let mut deleted = 0i64;
+    for c in db::transcripts::list_recent(&state.chat, None, 300).await? {
+        if c.segment_count != 0 || c.status == "active" {
+            continue;
+        }
+        if !db::chat::is_room_accessible(&state.chat, c.room_id, &user.id, is_admin).await? {
+            continue;
+        }
+        let owner = matches!(db::transcripts::get(&state.chat, c.id).await, Ok(Some(t)) if t.started_by == user.id);
+        if !is_admin && !owner {
+            continue;
+        }
+        if db::transcripts::delete(&state.chat, c.id).await? {
+            deleted += 1;
+        }
+    }
+    // Re-render the (now-trimmed) list under the current search/filter, plus a
+    // toast reporting how many were removed.
+    let query = q.unwrap_or_default().trim().to_string();
+    let hide_empty = hide_empty.is_some();
+    let rows = build_index_rows(&state, &user, &query, hide_empty).await?;
+    let body = html(&TranscriptListBody {
+        rows,
+        query,
+        hide_empty,
+    })?;
+    let toast = html(&ToastOob {
+        ok: true,
+        message: crate::i18n::translate_current("transcript-deleted-n")
+            .replace("%count%", &deleted.to_string()),
+    })?;
+    Ok(Html(format!("{}{}", body.0, toast.0)))
 }
 
 /// GET /transcripts/{id}
@@ -596,6 +720,9 @@ pub async fn summary(
 pub struct IndexQuery {
     #[serde(default)]
     pub q: Option<String>,
+    /// LC-442: present ("1") to hide 0-line transcripts.
+    #[serde(default)]
+    pub hide_empty: Option<String>,
 }
 
 #[derive(Deserialize)]
