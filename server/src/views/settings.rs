@@ -80,6 +80,64 @@ pub struct UserSettingsPage<'a> {
     pub keywords: Vec<String>,
 }
 
+/// LC-426: reusable feedback fragment returned by the settings form handlers
+/// for htmx requests. The main content is the inline per-form status (swapped
+/// into the form's status slot); an out-of-band block appends a toast into
+/// `#lc-toast-region`. `toast_only` suppresses the inline status (used by the
+/// session-revoke path, whose target is the row it removes). `reset_avatar`
+/// adds an OOB swap that reverts the avatar preview to the letter fallback
+/// after a successful "Remove avatar".
+#[derive(Template)]
+#[template(path = "settings/feedback.html")]
+pub struct SettingsFeedback {
+    pub ok: bool,
+    pub message: String,
+    pub toast_only: bool,
+    pub reset_avatar: bool,
+    /// LC-432: when `reset_avatar`, the `/avatars/{id}?v=...` URL the OOB swap
+    /// points the single preview `<img>` back to (the generated default).
+    pub avatar_src: String,
+}
+
+impl SettingsFeedback {
+    pub fn ok(message: String) -> Self {
+        Self {
+            ok: true,
+            message,
+            toast_only: false,
+            reset_avatar: false,
+            avatar_src: String::new(),
+        }
+    }
+    pub fn err(message: String) -> Self {
+        Self {
+            ok: false,
+            message,
+            toast_only: false,
+            reset_avatar: false,
+            avatar_src: String::new(),
+        }
+    }
+    pub fn toast_only_ok(message: String) -> Self {
+        Self {
+            ok: true,
+            message,
+            toast_only: true,
+            reset_avatar: false,
+            avatar_src: String::new(),
+        }
+    }
+    pub fn ok_reset_avatar(message: String, avatar_src: String) -> Self {
+        Self {
+            ok: true,
+            message,
+            toast_only: false,
+            reset_avatar: true,
+            avatar_src,
+        }
+    }
+}
+
 /// LC-304: the highlight-words chip list, re-rendered by the add/remove
 /// endpoints and included by the settings page.
 #[derive(Template)]

@@ -364,6 +364,55 @@ pub enum ChatEvent {
         kind: String,
         payload: Option<String>,
     },
+    /// LC-402: a voice participant toggled their microphone. Broadcast to the
+    /// whole room (like `VoiceJoined`) so every other client shows the mute
+    /// indicator on that participant's tile. Active-speaker state is detected
+    /// locally from each peer's received audio, so only this discrete mute flag
+    /// needs propagating over the wire.
+    VoiceMuteChanged {
+        room_id: i64,
+        user_id: String,
+        muted: bool,
+    },
+    /// LC-408: a voice participant started or stopped sharing their screen.
+    /// Broadcast to the room so every client pins that participant's tile to
+    /// the stage (and drops it back to the even grid when sharing ends). The
+    /// screen video already rides the participant's normal video track; this is
+    /// only the discrete "is this tile a screen share" flag the receiver cannot
+    /// otherwise infer.
+    VoiceScreenChanged {
+        room_id: i64,
+        user_id: String,
+        sharing: bool,
+    },
+    /// LC-393: call transcription turned ON for a DM call. Broadcast to each
+    /// member (mirrors `CallSignal`'s per-recipient `to_user_id` targeting) so
+    /// both see the consent banner and their client starts capturing their own
+    /// mic. `transcript_id` is the open session the clients post segments to.
+    TranscriptStarted {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+        started_by_name: String,
+    },
+    /// LC-393: one finalized speech result, broadcast to each member as a live
+    /// caption line. `speaker_id`/`speaker_name` attribute it (the speaker is
+    /// whoever's browser produced it - each transcribes only its own mic).
+    TranscriptSegment {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+        speaker_id: String,
+        speaker_name: String,
+        text: String,
+    },
+    /// LC-393: transcription turned OFF (hangup / toggle / disconnect backstop).
+    /// Clears the banner + stops the client's local capture.
+    TranscriptEnded {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+    },
 }
 
 /// Control frames sent from client to server.

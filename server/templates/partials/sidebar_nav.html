@@ -107,26 +107,16 @@
           </svg>
           <span class="flex-1 text-left truncate">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</span>
         </button>
-        {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
-        <details class="relative">
-          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1 leading-none" title="{{ "sidebar-room-add"|t }}" aria-label="{{ "sidebar-room-add"|t }}">+</summary>
-          <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2">
-            {# Plain POST: post_create_room redirects to /enclave/{id} which then
-               redirects into the newly created room (full navigation). #}
-            <form method="post" action="/enclave/{{ eid }}/rooms" class="space-y-2">
-              <input name="name" placeholder="{{ "enclave-new-room-placeholder"|t }}" maxlength="100" required class="w-full border rounded px-2 py-1 text-xs">
-              <select name="kind" class="w-full border rounded px-2 py-1 text-xs">
-                <option value="text">{{ "enclave-room-kind-text"|t }}</option>
-                <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
-              </select>
-              <select name="room_type" class="w-full border rounded px-2 py-1 text-xs">
-                <option value="public">{{ "enclave-room-type-public"|t }}</option>
-                <option value="private">{{ "enclave-room-type-private"|t }}</option>
-              </select>
-              <button type="submit" class="w-full px-2 py-1 text-xs bg-accent text-accent-content rounded">{{ "enclave-add-room"|t }}</button>
-            </form>
-          </div>
-        </details>
+        {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
+        {# LC-400: the create-room form moved to a modal in the persistent shell
+           (add_room_modal.html). The old inline <details> popover lived inside
+           this live-swapped nav, so a WS sidebar OOB swap (EnclaveRoomAdded ...)
+           destroyed the open form + half-typed name mid-typing. This button only
+           opens the modal; it is safe to re-render on every swap. #}
+        <button type="button"
+          onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
+          class="cursor-pointer text-content-subtle hover:text-content px-1 leading-none"
+          title="{{ "sidebar-room-add"|t }}" aria-label="{{ "sidebar-room-add"|t }}">+</button>
         {% endif %}{% endif %}
       </div>
       {% if !sidebar_rooms.is_empty() %}
@@ -168,7 +158,7 @@
     {% endif %}
     {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
     <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-border">
-      <input type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required class="flex-1 border rounded px-2 py-1 text-xs">
-      <button type="submit" class="px-2 text-xs bg-surface-sunken hover:bg-surface-sunken rounded">+ {{ "sidebar-category-add"|t }}</button>
+      <input type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required class="flex-1 min-w-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+      <button type="submit" class="shrink-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">+ {{ "sidebar-category-add"|t }}</button>
     </form>
     {% endif %}{% endif %}

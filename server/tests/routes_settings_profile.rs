@@ -42,6 +42,21 @@ fn multipart_avatar_body() -> Vec<u8> {
     body
 }
 
+/// LC-439: a multipart body whose `avatar` field is `n` bytes - large enough to
+/// exceed both the 1 MiB avatar cap and (at n > 2 MiB) the old default ~2 MiB
+/// request-body limit, so this exercises the raised per-route limit.
+fn multipart_avatar_body_sized(n: usize) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"avatar\"; filename=\"a.png\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: image/png\r\n\r\n");
+    body.resize(body.len() + n, 0u8);
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    body
+}
+
 async fn post_avatar(app: &Router, sess: Option<&str>) -> axum::response::Response {
     let mut req = Request::builder()
         .method(Method::POST)
@@ -101,6 +116,8 @@ async fn setup() -> Setup {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     Setup {
         app: routes::build_router(state),
@@ -195,4 +212,38 @@ async fn over_long_display_name_redirects_with_inline_error() {
         loc.starts_with("/settings?error="),
         "expected inline error flash, got loc: {loc}"
     );
+}
+
+/// LC-439: an oversized avatar from htmx must reach the handler and come back as
+/// a visible error fragment (200 + .lc-status--err), NOT a 413 the body-limit
+/// layer would emit (which htmx silently ignores -> the original silent bug).
+/// The 3 MiB body also exceeds the old default ~2 MiB cap, proving the raised
+/// per-route limit.
+#[tokio::test]
+async fn oversized_avatar_hx_returns_error_fragment_not_413() {
+    let s = setup().await;
+    let body = multipart_avatar_body_sized(3 * 1024 * 1024);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/settings/profile")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
+        .header(header::COOKIE, format!("session={}", s.session))
+        .header("HX-Request", "true")
+        .body(Body::from(body))
+        .unwrap();
+    let resp = s.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "oversized avatar should reach the handler (raised body limit), not 413"
+    );
+    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000)
+        .await
+        .unwrap();
+    let html = String::from_utf8_lossy(&bytes);
+    assert!(html.contains("lc-status--err"), "no error fragment: {html}");
+    assert!(html.contains("1 MiB"), "no size reason shown: {html}");
 }

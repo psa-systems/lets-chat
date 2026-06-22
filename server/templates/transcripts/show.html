@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "transcript-page-title"|t }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+    <div class="min-w-0">
+      <h1 class="lc-h2 truncate">{{ "transcript-heading"|t }}</h1>
+      <p class="lc-small text-content-muted truncate">{{ room_name }} &middot; {{ started_at }}{% if !ended %} &middot; {{ "transcript-in-progress"|t }}{% endif %}</p>
+    </div>
+    {# LC-395: download as text / WebVTT. #}
+    <div class="flex shrink-0 items-center gap-2">
+      <a href="/transcripts/{{ transcript_id }}/export?format=txt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-txt"|t }}</a>
+      <a href="/transcripts/{{ transcript_id }}/export?format=vtt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-vtt"|t }}</a>
+    </div>
+  </header>
+  <div class="flex-1 overflow-y-auto px-4 py-3">
+    {# LC-396: AI summary / action items, only when an LLM endpoint is configured. #}
+    {% if llm_available && !lines.is_empty() %}
+    <div class="mx-auto max-w-2xl mb-4 rounded-md border border-border bg-surface-sunken px-3 py-2">
+      <div class="lc-section-label mb-1">{{ "transcript-summary-heading"|t }}</div>
+      <div id="lc-transcript-summary">
+        {% if let Some(html) = summary_html.as_ref() %}
+        <div class="lc-md text-content">{{ html|safe }}</div>
+        <button type="button"
+                hx-post="/transcripts/{{ transcript_id }}/summary"
+                hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-regenerate"|t }}</button>
+        {% else %}
+        <button type="button"
+                hx-post="/transcripts/{{ transcript_id }}/summary"
+                hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-generate"|t }}</button>
+        <span class="lc-caption text-content-subtle htmx-indicator ml-2">{{ "transcript-summary-working"|t }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if lines.is_empty() %}
+    <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
+    {% else %}
+    <div class="mx-auto max-w-2xl space-y-2">
+      {% for line in lines %}
+      <div class="rounded-md border border-border bg-surface-elevated px-3 py-2">
+        <div class="flex items-baseline gap-2">
+          <span class="lc-small font-medium text-content">{{ line.speaker_name }}</span>
+          <span class="lc-caption text-content-subtle tabular-nums">{{ line.spoken_at }}</span>
+        </div>
+        <p class="lc-body text-content mt-0.5 whitespace-pre-wrap break-words">{{ line.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

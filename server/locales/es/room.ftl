@@ -336,3 +336,6 @@ room-thread-following = Siguiendo
 room-thread-following-title = Estás siguiendo este hilo. Haz clic para dejar de recibir avisos.
 room-thread-reply-placeholder = Responder...
 room-thread-send-reply = Enviar respuesta
+room-info-danger-heading = Zona de peligro
+room-info-delete-room = Eliminar sala
+room-info-delete-room-confirm = ¿Eliminar esta sala y todos sus mensajes? Esta acción no se puede deshacer.

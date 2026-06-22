@@ -31,6 +31,44 @@ search-saved-remove = Remove saved search
 people-no-results = No matching people.
 people-you = (you)
 
+## LC-393: call transcription
+transcript-page-title = Call transcript
+transcript-heading = Call transcript
+transcript-in-progress = in progress
+transcript-empty = No speech was captured.
+transcript-toggle = Transcribe
+transcript-toggle-on = Stop transcription
+transcript-banner = This call is being transcribed
+transcript-unsupported = Live transcription is not supported in this browser.
+# LC-394: transcripts archive
+transcript-index-title = Transcripts
+transcript-index-heading = Call transcripts
+transcript-index-empty = No call transcripts yet. Turn on transcription during a call to save one here.
+transcript-kind-dm = Direct call
+transcript-kind-voice = Voice channel
+transcript-lines = lines
+# LC-395: search + export
+transcript-search-placeholder = Search transcripts...
+transcript-search-empty = No transcripts match your search.
+# LC-440: list management (delete, bulk-clean, filter)
+transcript-index-empty-content = No transcripts with content yet.
+transcript-delete = Delete transcript
+transcript-delete-confirm = Delete this transcript? This can't be undone.
+transcript-deleted = Transcript deleted
+transcript-delete-empty = Delete empty
+transcript-delete-empty-confirm = Delete all empty (0-line) transcripts? This can't be undone.
+transcript-deleted-n = Deleted %count% empty transcripts
+transcript-hide-empty = Hide empty
+transcript-hide-empty-tip = Hide 0-line transcripts
+transcript-download = Download
+transcript-download-txt = Text (.txt)
+transcript-download-vtt = WebVTT (.vtt)
+# LC-396: AI summary
+transcript-summary-heading = AI summary
+transcript-summary-generate = Summarize
+transcript-summary-regenerate = Regenerate
+transcript-summary-working = Summarizing...
+
 ## Activity page
 activity-page-title = Activity
 activity-heading = Activity
@@ -54,7 +92,18 @@ voice-share-screen = Share screen
 voice-leave = Leave
 voice-devices = Call devices
 voice-choose-devices = Choose call devices
-voice-empty-prefix = No one is in this voice channel yet. Click
-voice-empty-join = Join voice
-voice-empty-suffix = to start.
-voice-currently-here = Currently here:
+voice-lobby-heading-one = Someone is in this call
+voice-lobby-heading-other = people in this call
+voice-lobby-empty-title = No one's here yet
+voice-lobby-empty-sub = Be the first to start the call
+voice-transcript-panel = Transcript
+voice-transcribe-tip = Start or stop transcription
+voice-transcript-tip = Toggle transcript panel
+voice-transcript-close = Close transcript
+voice-jump-live = Jump to live
+voice-transcript-empty-title = No transcript yet
+voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
+voice-in-call = In call
+transcript-open = Open
+transcript-copy = Copy
+transcript-copied = Copied

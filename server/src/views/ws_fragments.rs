@@ -276,6 +276,27 @@ pub struct VoiceEventFragment<'a> {
     pub payload: Option<&'a str>,
 }
 
+/// LC-393: OOB-appended transcription control event (started / ended). The
+/// client's `#lc-transcript-bus` MutationObserver consumes `kind` to show or
+/// hide the consent banner + caption panel and to start/stop its local mic
+/// capture, posting segments to `transcript_id`.
+#[derive(Template)]
+#[template(path = "ws/transcript_control.html")]
+pub struct TranscriptControlFragment<'a> {
+    pub kind: &'a str,
+    pub transcript_id: i64,
+    pub started_by_name: &'a str,
+}
+
+/// LC-393: one live caption line, OOB-appended straight into the visible
+/// `#lc-caption-log` panel (no client JS needed to display it).
+#[derive(Template)]
+#[template(path = "ws/transcript_segment.html")]
+pub struct TranscriptSegmentFragment<'a> {
+    pub speaker_name: &'a str,
+    pub text: &'a str,
+}
+
 /// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes for
 /// events that do not depend on the recipient. Per-recipient events
 /// (NewMessage, MessageEdited, ReactionAdded/Removed, DmRead,
@@ -358,6 +379,13 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceLeft { .. }
         | ChatEvent::VoiceRoster { .. }
         | ChatEvent::VoiceSignal { .. }
+        | ChatEvent::VoiceMuteChanged { .. }
+        | ChatEvent::VoiceScreenChanged { .. }
+        // LC-393: transcription control + captions are rendered per recipient
+        // in the WS send task (to_user_id targeting), like the call signals.
+        | ChatEvent::TranscriptStarted { .. }
+        | ChatEvent::TranscriptSegment { .. }
+        | ChatEvent::TranscriptEnded { .. }
         // LC-173: rendered per recipient in the WS send task (own sidebar
         // self block), so the recipient-independent path emits nothing.
         | ChatEvent::UserProfileChanged { .. } => None,

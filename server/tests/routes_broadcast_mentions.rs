@@ -137,6 +137,8 @@ async fn setup_app_with_users_and_client(
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -528,6 +530,8 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state);
 

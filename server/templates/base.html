@@ -232,6 +232,9 @@
       callReconnecting: "{{ "js-call-reconnecting"|t }}",
       callConnectionFailed: "{{ "js-call-connection-failed"|t }}",
       callDeclined: "{{ "js-call-declined"|t }}",
+      callDeclinedBy: "{{ "js-call-declined-by"|t }}",
+      callMissedFrom: "{{ "js-call-missed-from"|t }}",
+      callNoAnswer: "{{ "js-call-no-answer"|t }}",
       callEnded: "{{ "js-call-ended"|t }}",
       callNoMicCamera: "{{ "js-call-no-mic-camera"|t }}",
       callNoCamera: "{{ "js-call-no-camera"|t }}",
@@ -276,7 +279,15 @@
       deviceDialogTitle: "{{ "js-device-dialog-title"|t }}",
       deviceClose: "{{ "js-device-close"|t }}",
       devicePermissionHint: "{{ "js-device-permission-hint"|t }}",
-      deviceShowNames: "{{ "js-device-show-names"|t }}"
+      deviceShowNames: "{{ "js-device-show-names"|t }}",
+      settingsSaveError: "{{ "js-settings-save-error"|t }}",
+      voiceYou: "{{ "js-voice-you"|t }}",
+      voiceWaiting: "{{ "js-voice-waiting"|t }}",
+      voicePresenting: "{{ "js-voice-presenting"|t }}",
+      connGood: "{{ "js-conn-good"|t }}",
+      connDegraded: "{{ "js-conn-degraded"|t }}",
+      connReconnecting: "{{ "js-conn-reconnecting"|t }}",
+      connFailed: "{{ "js-conn-failed"|t }}"
     };
     // Lookup helper: returns the localized string for `k`, or `fb` (the English
     // literal kept at each call site) when the key is absent.
@@ -294,9 +305,12 @@
   <script src="/assets/devices.js?v={{ asset_version }}" defer></script>
   <script src="/assets/call.js?v={{ asset_version }}" defer></script>
   <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/transcribe.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_dnd.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_jump.js?v={{ asset_version }}" defer></script>
   <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/toast.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/settings.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-ext="response-targets" class="h-screen overflow-hidden bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
@@ -310,5 +324,8 @@
     {{ "a11y-skip-to-content"|t }}
   </a>
   {% block body %}{% endblock %}
+  {# LC-426: global toast region. Forms swap a success/error toast here via
+     hx-swap-oob="beforeend:#lc-toast-region"; toast.js auto-dismisses them. #}
+  <div id="lc-toast-region" class="lc-toast-region" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>

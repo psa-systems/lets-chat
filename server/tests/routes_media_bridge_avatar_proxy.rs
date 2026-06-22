@@ -63,6 +63,8 @@ async fn app() -> TestApp {
         ice_servers: "[]".into(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     TestApp {
         app: routes::build_router(state),
@@ -199,6 +201,8 @@ async fn ok_row_serves_bytes_with_cache_headers() {
         ice_servers: "[]".into(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state);
     // Sanity: confirm the row is visible from a fresh handle on the same pool.

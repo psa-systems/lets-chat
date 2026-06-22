@@ -5,10 +5,12 @@ use sqlx::SqlitePool;
 use crate::auth::LastSeenLedger;
 use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
+use crate::llm::LlmClient;
 use crate::mail::Mailer;
 use crate::oidc::BunyipSsoClient;
 use crate::push::{ApnsClient, FcmClient, PushClient};
 use crate::rate_limit::RateLimits;
+use crate::stt::SttClient;
 use crate::ws::hub::Hub;
 
 #[derive(Clone)]
@@ -73,6 +75,15 @@ pub struct AppState {
     /// See `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md`
     /// §4.2.
     pub bunyip_sso: Option<Arc<BunyipSsoClient>>,
+    /// LC-393 Phase 3: server-side STT for call transcription. `Some` when
+    /// `LETS_CHAT_STT_URL` is set; the browser then captures audio clips and
+    /// the `/call/transcript/{id}/audio` route forwards them here. `None`
+    /// (default) keeps transcription on the in-browser Web Speech engine.
+    pub stt_client: Option<Arc<dyn SttClient>>,
+    /// LC-396: optional LLM for transcript summaries. `Some` when
+    /// `LETS_CHAT_LLM_URL` is set; gates the "Summarize" action on the
+    /// transcript page. `None` (default) hides it.
+    pub llm_client: Option<Arc<dyn LlmClient>>,
 }
 
 impl AppState {
@@ -85,6 +96,15 @@ impl AppState {
     /// email verification, and email digest are off-limits without one.
     pub fn mail_available(&self) -> bool {
         self.mailer.is_some()
+    }
+    /// LC-393 Phase 3: true when a server-side STT endpoint is configured, so
+    /// clients use the server engine (audio upload) instead of the browser one.
+    pub fn stt_available(&self) -> bool {
+        self.stt_client.is_some()
+    }
+    /// LC-396: true when an LLM endpoint is configured (transcript summaries).
+    pub fn llm_available(&self) -> bool {
+        self.llm_client.is_some()
     }
     /// Whether session and pending-auth cookies should carry the `Secure`
     /// attribute. WebKit2GTK (Tauri desktop on Linux) and Safari reject

@@ -64,6 +64,9 @@ pub(crate) mod room;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
+// LC-397: expose the per-recipient new-message render so the optimistic-echo
+// test can assert the author always gets their own echo, even unsubscribed.
+pub use ws::render_new_message_or_bump;
 mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
@@ -77,6 +80,7 @@ mod slash;
 mod starred_rooms;
 mod status;
 mod switcher;
+mod transcripts;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -534,6 +538,24 @@ pub(crate) async fn load_sidebar(
 > {
     let is_admin = user.role == "admin";
 
+    // Defense-in-depth (LC-415 follow-up): the whole-sidebar re-render routes
+    // derive `current_enclave` from client-controlled headers (HX-Current-URL /
+    // X-LC-Current-Enclave), so a crafted request could name an enclave the
+    // viewer is not in. Rendering that enclave's rooms + category names would
+    // leak them, so resolve membership once and drop back to the DM-only
+    // sidebar unless the viewer is a member (or a site admin, who may manage any
+    // enclave). Page handlers pass an already-authorized enclave, so this is a
+    // no-op for them. The membership is reused below for the manage check, so
+    // this adds no query over the previous code.
+    let enclave_membership = match current_enclave {
+        Some(eid) => db::enclave::get_membership(&state.chat, eid, &user.id).await?,
+        None => None,
+    };
+    let current_enclave = match current_enclave {
+        Some(eid) if enclave_membership.is_some() || is_admin => Some(eid),
+        _ => None,
+    };
+
     // LC-239: rooms/DMs in which the viewer has a fresh unsent draft, so each
     // sidebar row can render the pencil draft indicator. 60-day freshness
     // matches the per-room render purge in `db::drafts::get_fresh_or_purge`.
@@ -672,10 +694,9 @@ pub(crate) async fn load_sidebar(
     // an "Add category" / "Rename" / "Delete" affordance does not have
     // to redo the query.
     let can_manage_sidebar_categories = match current_enclave {
-        Some(eid) => {
-            let membership = db::enclave::get_membership(&state.chat, eid, &user.id).await?;
-            crate::perms::enclave_can_manage(membership.map(|m| m.role), &user.role)
-        }
+        // `enclave_membership` was resolved once at the top for the spoof gate;
+        // reuse it (site admins manage any enclave even with no membership row).
+        Some(_) => crate::perms::enclave_can_manage(enclave_membership.map(|m| m.role), &user.role),
         None => false,
     };
 
@@ -817,6 +838,52 @@ pub(crate) async fn enclave_for_room(
         .fetch_optional(&state.chat)
         .await?;
     Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
+}
+
+/// Resolve which enclave's sidebar the viewer is currently looking at, for a
+/// route that re-renders the whole sidebar (category mutations, star
+/// toggle/reorder, mark-read/unread). The re-render needs the viewer's CURRENT
+/// enclave - not the mutated entity's enclave, which can differ (a starred or
+/// read room may live in another enclave than the one on screen).
+///
+/// Prefers the `X-LC-Current-Enclave` header that `live.js` sets from the
+/// rendered `#sidebar-nav-{id}` on every htmx request: it is always present and
+/// always names the enclave the user is looking at. Falls back to parsing
+/// `HX-Current-URL` / `Referer` for non-htmx requests (which the path heuristic
+/// only resolves for `/enclave/{id}` and `/room/{id}` URLs). When neither
+/// resolves the sidebar renders in its enclave-less DM-only shape.
+///
+/// LC-415: the header-only path returned `None` on any URL the heuristic did
+/// not recognise / when the header was stripped / when a sidebar OOB swap raced
+/// the submit, which collapsed the re-render to the DM-only shape and dropped
+/// the just-changed row ("nothing happened"). The explicit header removes that
+/// fragility for every whole-sidebar re-render route.
+pub(crate) async fn current_enclave_for_sidebar(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+) -> Option<i64> {
+    if let Some(eid) = headers
+        .get("X-LC-Current-Enclave")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+    {
+        return Some(eid);
+    }
+    let raw = headers
+        .get("HX-Current-URL")
+        .or_else(|| headers.get(axum::http::header::REFERER))?
+        .to_str()
+        .ok()?;
+    let url = url::Url::parse(raw).ok()?;
+    let mut segs = url.path_segments()?;
+    match segs.next()? {
+        "enclave" => segs.next()?.parse::<i64>().ok(),
+        "room" => {
+            let room_id = segs.next()?.parse::<i64>().ok()?;
+            enclave_for_room(state, room_id).await.ok().flatten()
+        }
+        _ => None,
+    }
 }
 
 /// LC-323: true when a room name can be `#`-linked. A channel token is
@@ -1294,7 +1361,14 @@ pub fn build_router(state: AppState) -> Router {
             "/settings/blocked",
             get(settings::get_blocked_list).post(settings::post_block_by_username),
         )
-        .route("/settings/profile", post(settings::post_profile))
+        // LC-439: lift the default ~2 MiB body cap so the handler's own 1 MiB
+        // avatar check runs and returns a visible error fragment, instead of a
+        // typical >2 MiB photo being 413'd by the body-limit layer (which htmx
+        // silently ignores). The handler still rejects anything over 1 MiB.
+        .route(
+            "/settings/profile",
+            post(settings::post_profile).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         // LC-72: API-token management - available in both standalone and saas.
         .route(
             "/settings/api-tokens",
@@ -1335,6 +1409,38 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
         .route("/call/config", get(call::get_config))
+        // LC-393: call transcription (Phase 1, DM calls).
+        .route("/call/{room_id}/transcript/start", post(transcripts::start))
+        .route(
+            "/call/transcript/{transcript_id}/segment",
+            post(transcripts::segment),
+        )
+        .route(
+            "/call/transcript/{transcript_id}/audio",
+            post(transcripts::audio),
+        )
+        .route(
+            "/call/transcript/{transcript_id}/end",
+            post(transcripts::end),
+        )
+        // LC-442: DELETE on the collection bulk-removes the viewer's empty rows.
+        .route(
+            "/transcripts",
+            get(transcripts::index).delete(transcripts::delete_empty),
+        )
+        .route(
+            "/transcripts/{transcript_id}/export",
+            get(transcripts::export),
+        )
+        .route(
+            "/transcripts/{transcript_id}/summary",
+            post(transcripts::summary),
+        )
+        // LC-441: DELETE on a row removes that one transcript.
+        .route(
+            "/transcripts/{transcript_id}",
+            get(transcripts::show).delete(transcripts::delete_transcript),
+        )
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
         .route("/branding/logo", get(branding::get_global_logo))

@@ -2,7 +2,12 @@
 //!
 //! **Every outbound HTTP call in this server MUST go through `outbound_get()`
 //! or `outbound_post()`** below (redirect-following is the caller's job, per
-//! the "No auto-redirect client" note below). The
+//! the "No auto-redirect client" note below). The one deliberate exception is
+//! `outbound_trusted_post()`, which targets OPERATOR-CONFIGURED endpoints
+//! (LC-393 server-side STT) WITHOUT the public-IP filter so a localhost/
+//! internal service is reachable - same trust posture as the SMTP/IMAP relays;
+//! it must never see a user/remote-derived URL. It still lives in THIS module,
+//! so the grep-ban stays a single-file allowance. The
 //! underlying `reqwest::Client`s are private to this module — there is NO
 //! public way to obtain a `reqwest::Client` from outside `http_client.rs`,
 //! which makes the no-bypass rule structural (no `.get()` / `.post()`
@@ -231,6 +236,40 @@ pub async fn outbound_get(url: &str) -> Result<reqwest::RequestBuilder, Outbound
 pub async fn outbound_post(url: &str) -> Result<reqwest::RequestBuilder, OutboundError> {
     let parsed = validate_url(url).await?;
     Ok(client_no_redirects().post(parsed))
+}
+
+/// Pooled client for OPERATOR-CONFIGURED, TRUSTED endpoints (the SMTP / IMAP
+/// class): NO public-IP SSRF filter, so it can reach a `localhost`/internal
+/// service the operator deliberately points us at. Redirects still disabled.
+fn client_trusted() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .user_agent("lets-chat/1")
+            .timeout(DEFAULT_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("trusted outbound client build")
+    })
+}
+
+/// Issue a POST to an OPERATOR-CONFIGURED, TRUSTED endpoint, bypassing the
+/// public-IP SSRF filter so it can reach an internal/localhost service the
+/// operator deliberately configured (LC-393 server-side STT, `stt::SttConfig`).
+/// Scheme is still gated to http/https. This is the ONLY blessed un-filtered
+/// HTTP path; it lives HERE, in the chokepoint module, so the LC-152 grep-ban
+/// stays a single-file allowance. **Never** pass a URL derived from user or
+/// remote input - only operator env config (same trust posture as the SMTP /
+/// IMAP relays, which already connect to operator endpoints without an SSRF
+/// filter).
+pub async fn outbound_trusted_post(url: &str) -> Result<reqwest::RequestBuilder, OutboundError> {
+    let parsed = url::Url::parse(url)?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(OutboundError::UnsupportedScheme(
+            parsed.scheme().to_string(),
+        ));
+    }
+    Ok(client_trusted().post(parsed))
 }
 
 /// LC-152 test seam. Returns a fresh `reqwest::Client` with the DEFAULT
