@@ -734,3 +734,97 @@ async fn end_is_idempotent_and_posts_one_saved_notice() {
     let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
     assert!(segs.is_empty(), "late segment dropped after end");
 }
+
+// ---- LC-441/LC-442: delete authorization ----------------------------------
+
+async fn del(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::DELETE)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Pull the transcript id out of the `/start` JSON (`{"transcript_id":N}`)
+/// without pulling in a json dep for one number.
+fn extract_id(body: &str) -> i64 {
+    body.split("transcript_id")
+        .nth(1)
+        .unwrap()
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn starter_can_delete_their_transcript() {
+    let s = setup().await;
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let id = extract_id(&body);
+
+    let (st, body) = del(&s.app, &s.b_session, &format!("/transcripts/{id}")).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(body.contains("lc-toast"), "delete should confirm: {body}");
+    assert!(
+        db::transcripts::get(&s.chat, id).await.unwrap().is_none(),
+        "transcript should be gone"
+    );
+}
+
+#[tokio::test]
+async fn member_who_is_not_starter_cannot_delete() {
+    let s = setup().await;
+    // alice (admin) starts it; bob is a DM member (can view) but not the starter.
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let id = extract_id(&body);
+
+    let (st, _) = del(&s.app, &s.b_session, &format!("/transcripts/{id}")).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    assert!(
+        db::transcripts::get(&s.chat, id).await.unwrap().is_some(),
+        "a non-starter non-admin must not delete it"
+    );
+}
+
+#[tokio::test]
+async fn outsider_cannot_delete_transcript() {
+    let s = setup().await;
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let id = extract_id(&body);
+
+    // carol is not a DM member -> require_access blocks her before the owner rule.
+    let (st, _) = del(&s.app, &s.outsider_session, &format!("/transcripts/{id}")).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    assert!(db::transcripts::get(&s.chat, id).await.unwrap().is_some());
+}
