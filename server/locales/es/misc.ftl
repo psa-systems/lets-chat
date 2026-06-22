@@ -50,6 +50,16 @@ transcript-lines = líneas
 # LC-395: búsqueda + exportación
 transcript-search-placeholder = Buscar transcripciones...
 transcript-search-empty = Ninguna transcripción coincide con tu búsqueda.
+# LC-440: gestión de la lista (eliminar, limpiar, filtrar)
+transcript-index-empty-content = Aún no hay transcripciones con contenido.
+transcript-delete = Eliminar transcripción
+transcript-delete-confirm = ¿Eliminar esta transcripción? Esto no se puede deshacer.
+transcript-deleted = Transcripción eliminada
+transcript-delete-empty = Eliminar vacías
+transcript-delete-empty-confirm = ¿Eliminar todas las transcripciones vacías (0 líneas)? Esto no se puede deshacer.
+transcript-deleted-n = Se eliminaron %count% transcripciones vacías
+transcript-hide-empty = Ocultar vacías
+transcript-hide-empty-tip = Ocultar transcripciones de 0 líneas
 transcript-download = Descargar
 transcript-download-txt = Texto (.txt)
 transcript-download-vtt = WebVTT (.vtt)

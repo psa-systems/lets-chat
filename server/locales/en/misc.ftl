@@ -50,6 +50,16 @@ transcript-lines = lines
 # LC-395: search + export
 transcript-search-placeholder = Search transcripts...
 transcript-search-empty = No transcripts match your search.
+# LC-440: list management (delete, bulk-clean, filter)
+transcript-index-empty-content = No transcripts with content yet.
+transcript-delete = Delete transcript
+transcript-delete-confirm = Delete this transcript? This can't be undone.
+transcript-deleted = Transcript deleted
+transcript-delete-empty = Delete empty
+transcript-delete-empty-confirm = Delete all empty (0-line) transcripts? This can't be undone.
+transcript-deleted-n = Deleted %count% empty transcripts
+transcript-hide-empty = Hide empty
+transcript-hide-empty-tip = Hide 0-line transcripts
 transcript-download = Download
 transcript-download-txt = Text (.txt)
 transcript-download-vtt = WebVTT (.vtt)
