@@ -87,8 +87,10 @@
       ta.focus();
       /* LC-382: WS-miss safety net. If the canonical WS render does not arrive
          and remove this cid's placeholder within the grace window, reconcile it
-         by reloading #messages (see __lcEchoReconcile in the script block). */
-      if (echoCid) setTimeout(function(){ window.__lcEchoReconcile && window.__lcEchoReconcile(echoCid); }, 4000);
+         in place from the X-LC-Message-Id header (see __lcEchoReconcile in the
+         script block) - no full-list reload, no scroll jump. */
+      var sentMsgId = event.detail.xhr ? event.detail.xhr.getResponseHeader('x-lc-message-id') : null;
+      if (echoCid && sentMsgId) setTimeout(function(){ window.__lcEchoReconcile && window.__lcEchoReconcile(echoCid, sentMsgId); }, 4000);
     } else {
       /* LC-230: flip this request's optimistic placeholder (if any) to the
          failed state - on the same 2s debounce as the LC-216 banner. A slow
@@ -228,6 +230,18 @@
         <path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 005.25 5.954V17.5H7.75a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H10.75v-2.046A6 6 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-9 0z"/>
       </svg>
     </button>
+    {# LC-399: live markdown highlight overlay. The textarea stays the single
+       source of truth (all the composer autocompletes / draft autosave /
+       optimistic echo / voice / caret-restore JS read & write textarea[name=body]);
+       a backdrop div behind it mirrors the text with markdown tokens styled
+       (bold/italic/strike/code/heading/quote/list/link), markers dimmed but
+       kept, so formatting renders as the user types. The textarea sits on top
+       with transparent text + a visible caret; metrics on .lc-mdback and
+       .lc-mdinput are pinned identical (see main.css) so the highlight never
+       drifts from the caret. The :has() rule in main.css hides this whole
+       wrapper while the LC-276 preview pane is shown (textarea gets `hidden`). #}
+    <div class="lc-mdwrap flex-1 min-w-0">
+    <div class="lc-mdback" aria-hidden="true"></div>
     <textarea
       name="body"
       rows="1"
@@ -240,7 +254,7 @@
       aria-expanded="false"
       aria-controls="lc-mention-list"
       aria-haspopup="listbox"
-      class="flex-1 resize-none overflow-y-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 max-h-40 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+      class="lc-mdinput"
       hx-put="/room/{{ room.id }}/draft"
       hx-include="this"
       hx-swap="none"
@@ -275,6 +289,7 @@
         }
       "
     >{{ initial_draft }}</textarea>
+    </div>
     {# LC-276: preview pane. Hidden until the Write/Preview toggle is on; the
        server-rendered markdown HTML is swapped into it (same trust model as
        message bodies). Sits in the textarea's flex slot so it occupies the
@@ -1394,20 +1409,22 @@
   // cid's placeholder. If that single broadcast is missed - a flaky socket, a
   // reconnect gap between the POST landing and the socket re-subscribing, a
   // dropped/unprocessed OOB swap - the placeholder would sit on "Sending..."
-  // forever. Called on a delay from the composer after-request success handler:
-  // if the placeholder is still pending, reload the #messages region from the
-  // current URL so the real message renders and the stale placeholder is
-  // dropped (the manual refresh the user would otherwise do, automated). No-op
+  // forever. Called on a delay from the composer after-request success handler
+  // with the message id from the POST's X-LC-Message-Id header: if the
+  // placeholder is still pending, fetch THIS message (GET /messages/{id}) and
+  // swap it into the placeholder IN PLACE. The placeholder is already at the
+  // bottom where the user is, so there is no scroll jump and no full-list
+  // reload. A missed broadcast is never replayed by the server, so a late WS
+  // arrival (and thus a duplicate) cannot happen past the grace window. No-op
   // once the placeholder is gone - the happy path, a quarantine drop
   // (__lcEchoDrop), or a failure flip (__lcEchoFailed clears data-lc-pending).
-  window.__lcEchoReconcile = function(cid){
-    if (!cid) return;
+  window.__lcEchoReconcile = function(cid, msgId){
+    if (!cid || !msgId) return;
     if (!findPending(cid)) return;
-    if (window.htmx) {
-      htmx.ajax('GET', location.pathname + location.search, {
-        target: '#messages', select: '#messages', swap: 'outerHTML'
-      });
-    }
+    if (!window.htmx) return;
+    htmx.ajax('GET', '/messages/' + encodeURIComponent(msgId), {
+      target: '#msg-pending-' + cid, swap: 'outerHTML'
+    });
   };
 })();
 </script>
@@ -1669,5 +1686,124 @@
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]') || form;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-399: live markdown highlight overlay. Mirrors the textarea text into the
+// .lc-mdback backdrop with markdown tokens styled, so formatting renders as the
+// user types. The highlighter ONLY wraps characters in spans (never adds,
+// removes, or substitutes any) and styles with colour / weight / decoration /
+// background only - never font-size or font-family - so the backdrop wraps
+// identically to the textarea and the caret stays aligned. Any line it does not
+// recognise falls through as plain text, so the worst case is today's raw view;
+// it can never corrupt the submitted value (which is the textarea's, untouched).
+// Cleanup-root is #composer (form).
+(function(){
+  var form = document.getElementById('composer');
+  var ta = form && form.querySelector('textarea[name=body]');
+  var back = form && form.querySelector('.lc-mdback');
+  if (!form || !ta || !back) return;
+
+  function esc(s){
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function mark(s){ return '<span class="lc-mdm">' + s + '</span>'; }
+
+  // Inline pass: operates on a single line's raw text. Code spans are pulled out
+  // first (placeholder-protected) so emphasis never styles inside them, then
+  // restored verbatim. Marker glyphs are wrapped, not dropped.
+  function inline(raw){
+    var s = esc(raw);
+    var codes = [];
+    // Private-use sentinel (U+E000): typed chat text never contains it, so
+    // restoring below cannot collide with real content like a bare " 5 ".
+    s = s.replace(/`([^`]+)`/g, function(_, c){
+      codes.push(c);
+      return '\uE000' + (codes.length - 1) + '\uE000';
+    });
+    s = s.replace(/\[([^\]]*)\]\(([^)\s]*)\)/g, function(_, t, u){
+      return mark('[') + '<span class="lc-mdlink">' + t + '</span>' + mark('](')
+           + '<span class="lc-mdurl">' + u + '</span>' + mark(')');
+    });
+    s = s.replace(/\*\*([^*]+)\*\*/g, mark('**') + '<strong>$1</strong>' + mark('**'));
+    s = s.replace(/~~([^~]+)~~/g, mark('~~') + '<del>$1</del>' + mark('~~'));
+    s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1' + mark('*') + '<em>$2</em>' + mark('*'));
+    s = s.replace(/(^|[^_\w])_([^_\n]+)_/g, '$1' + mark('_') + '<em>$2</em>' + mark('_'));
+    s = s.replace(/\uE000(\d+)\uE000/g, function(_, i){
+      return mark('`') + '<span class="lc-mdcode">' + codes[+i] + '</span>' + mark('`');
+    });
+    return s;
+  }
+
+  // Block pass: line-oriented prefixes. Each branch dims the marker and styles
+  // the remainder; the marker text itself is preserved character-for-character.
+  function line(text){
+    var m;
+    if ((m = /^(\s*)(#{1,6})(\s+)(.*)$/.exec(text)))
+      return esc(m[1]) + mark(esc(m[2] + m[3])) + '<span class="lc-mdh">' + inline(m[4]) + '</span>';
+    if ((m = /^(\s*)(>\s?)(.*)$/.exec(text)))
+      return esc(m[1]) + mark(esc(m[2])) + '<span class="lc-mdq">' + inline(m[3]) + '</span>';
+    if ((m = /^(\s*)([-*+]\s+)(.*)$/.exec(text)))
+      return esc(m[1]) + mark(esc(m[2])) + inline(m[3]);
+    if ((m = /^(\s*)(\d+[.)]\s+)(.*)$/.exec(text)))
+      return esc(m[1]) + mark(esc(m[2])) + inline(m[3]);
+    return inline(text);
+  }
+
+  function highlight(text){
+    var lines = text.split('\n');
+    var out = [];
+    var inFence = false;
+    for (var i = 0; i < lines.length; i++){
+      if (/^\s*(```|~~~)/.test(lines[i])){
+        inFence = !inFence;
+        out.push(mark(esc(lines[i])));
+      } else if (inFence){
+        out.push('<span class="lc-mdcode">' + esc(lines[i]) + '</span>');
+      } else {
+        out.push(line(lines[i]));
+      }
+    }
+    // A trailing newline needs a final empty line in the backdrop or pre-wrap
+    // collapses it and the last visual row drifts up by one line.
+    var html = out.join('\n');
+    if (text.charAt(text.length - 1) === '\n') html += '\n';
+    return html;
+  }
+
+  var raf = 0;
+  function render(){
+    back.innerHTML = highlight(ta.value);
+    syncScroll();
+  }
+  function schedule(){
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(function(){ raf = 0; render(); });
+  }
+  function syncScroll(){
+    back.scrollTop = ta.scrollTop;
+    back.scrollLeft = ta.scrollLeft;
+  }
+
+  ta.addEventListener('input', schedule);
+  ta.addEventListener('scroll', syncScroll);
+  // A successful send clears the textarea via `ta.value = ''` in the form's
+  // hx-on::after-request handler - a programmatic value change fires NO 'input'
+  // event, so without this the backdrop kept showing the just-sent text until a
+  // reload. The Retry-restore path sets ta.value the same way. Re-render on
+  // every form htmx:afterRequest (rAF-coalesced, so it reads the post-clear /
+  // post-restore value); harmless extra renders on the draft PUT / autocomplete
+  // ajax that also bubble here.
+  form.addEventListener('htmx:afterRequest', schedule);
+  render(); // initial: restored draft (LC-64) or empty
+
+  function teardown(){
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    ta.removeEventListener('input', schedule);
+    ta.removeEventListener('scroll', syncScroll);
+    form.removeEventListener('htmx:afterRequest', schedule);
+  }
+  var root2 = document.currentScript.closest('[data-lc-cleanup-root]') || form;
+  root2.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>

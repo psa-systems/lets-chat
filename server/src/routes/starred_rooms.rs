@@ -78,7 +78,7 @@ async fn render_sidebar_fragment(
     user: &User,
     headers: &HeaderMap,
 ) -> Result<Html, AppError> {
-    let current_enclave = current_enclave_from_headers(state, headers).await;
+    let current_enclave = super::current_enclave_for_sidebar(state, headers).await;
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -99,22 +99,4 @@ async fn render_sidebar_fragment(
         sidebar_peers: &sidebar_peers,
     };
     html(&fragment)
-}
-
-async fn current_enclave_from_headers(state: &AppState, headers: &HeaderMap) -> Option<i64> {
-    let raw = headers
-        .get("HX-Current-URL")
-        .or_else(|| headers.get(axum::http::header::REFERER))?
-        .to_str()
-        .ok()?;
-    let url = url::Url::parse(raw).ok()?;
-    let mut segs = url.path_segments()?;
-    match segs.next()? {
-        "enclave" => segs.next()?.parse::<i64>().ok(),
-        "room" => {
-            let room_id = segs.next()?.parse::<i64>().ok()?;
-            super::enclave_for_room(state, room_id).await.ok().flatten()
-        }
-        _ => None,
-    }
 }

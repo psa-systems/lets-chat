@@ -4,13 +4,25 @@ use crate::models::{Reaction, Room, SearchResult};
 
 /// Two messages from the same author within this window are visually grouped:
 /// the second is rendered as a "follow-up" (no username/timestamp header).
+///
+/// LC-387 widened this to 15 min; LC-435 narrows it to 5 min. 15 min bundled
+/// messages sent far apart under one header, so a single visual group stretched
+/// across a real time gap and the spacing read as random. At 5 min a rapid
+/// burst still groups tightly, but a same-author message sent minutes/hours
+/// later breaks into a fresh block with its own header + avatar + timestamp -
+/// giving time-separated messages a clear anchor. The follow-up still surfaces
+/// its own HH:MM on row hover (LC-377), and a UTC day change still forces a
+/// fresh header (the same-day check below). Shared by the room + DM render.
 pub const MESSAGE_GROUPING_WINDOW_SECONDS: i64 = 300;
 
 /// Pure predicate: would `(curr_user, curr_created_at)` render as a follow-up
 /// of the immediately-prior message `(prev_user, prev_created_at)`?
 ///
 /// Times are SQLite "YYYY-MM-DD HH:MM:SS" UTC strings. Returns `false` when
-/// `prior` is `None` (first message in the thread).
+/// `prior` is `None` (first message in the thread). A grouped run breaks on a
+/// different author, a gap over the window, OR a UTC day change (LC-387) - the
+/// last so a near-midnight follow-up never renders headerless under the day
+/// divider the client inserts.
 pub fn is_follow_up_of(prior: Option<(&str, &str)>, curr: (&str, &str)) -> bool {
     let Some((prev_user, prev_at)) = prior else {
         return false;
@@ -25,6 +37,10 @@ pub fn is_follow_up_of(prior: Option<(&str, &str)>, curr: (&str, &str)) -> bool 
     let Ok(curr_dt) = chrono::NaiveDateTime::parse_from_str(curr.1, fmt) else {
         return false;
     };
+    // LC-387: a day change always starts a fresh header, even within the window.
+    if prev_dt.date() != curr_dt.date() {
+        return false;
+    }
     let delta = curr_dt - prev_dt;
     delta >= chrono::Duration::zero()
         && delta <= chrono::Duration::seconds(MESSAGE_GROUPING_WINDOW_SECONDS)

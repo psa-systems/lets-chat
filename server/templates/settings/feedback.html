@@ -1,0 +1,9 @@
+{# LC-426: settings form feedback. Main content = inline status (swaps into the
+   form's status slot); the OOB block appends a toast to #lc-toast-region. #}
+{%- if !toast_only -%}
+<span class="lc-status lc-status--{% if ok %}ok{% else %}err{% endif %}"><span class="lc-status-ico" aria-hidden="true">{% if ok %}&#10003;{% else %}!{% endif %}</span>{{ message }}</span>
+{%- endif -%}
+<div hx-swap-oob="beforeend:#lc-toast-region"><div class="lc-toast lc-toast--{% if ok %}ok{% else %}err{% endif %}" role="status" data-lc-toast><span class="lc-toast-ico" aria-hidden="true">{% if ok %}&#10003;{% else %}!{% endif %}</span><span class="lc-toast-msg">{{ message }}</span><button type="button" class="lc-toast-close" data-lc-toast-close aria-label="{{ "action-dismiss"|t }}">&times;</button></div></div>
+{%- if reset_avatar -%}
+<img id="lc-set-avatar-img" hx-swap-oob="true" data-lc-avatar-preview alt="" src="{{ avatar_src }}" class="lc-set-avatar">
+{%- endif -%}

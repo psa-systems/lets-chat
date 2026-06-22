@@ -35,6 +35,8 @@
   var ignoreOffer = false;
   var incoming = null;        // { fromId, fromName, withVideo } while invite is ringing
   var pendingCandidates = [];
+  var noAnswerTimer = null;   // LC-438: auto-ends a ringing outgoing call with "No answer"
+  var NO_ANSWER_MS = 45000;
 
   // Screen-share state. While sharing, screenTrack is the live display capture
   // and replaces the camera in the peer connection's video sender. cameraTrack
@@ -110,6 +112,20 @@
   function show(el) { if (el) { el.classList.remove('hidden'); el.setAttribute('aria-hidden', 'false'); } }
   function hide(el) { if (el) { el.classList.add('hidden'); el.setAttribute('aria-hidden', 'true'); } }
   function setStatus(text) { var s = q('[data-lc-call-status]'); if (s) s.textContent = text; }
+  // LC-438: a localized toast (key+fallback via __lcS, %name% substituted), for
+  // the call end-states that would otherwise be silent once the modal closes.
+  function lcToast(kind, key, fallback, name) {
+    if (!window.__lcToast) return;
+    var msg = (window.__lcS ? window.__lcS(key, fallback) : fallback).replace('%name%', name || '');
+    window.__lcToast(kind, msg);
+  }
+  // LC-416: control buttons are icon + .lc-cbtn-label; update the label span so
+  // the leading icon survives (fall back to the button for plain-text ones).
+  function setLabel(btn, text) {
+    if (!btn) return;
+    var l = btn.querySelector('.lc-cbtn-label');
+    if (l) l.textContent = text; else btn.textContent = text;
+  }
 
   // ---- focus trap (modal dialog discipline) -------------------------
   // Exactly one trap is active at a time. installDialogTrap migrates from
@@ -146,11 +162,14 @@
   }
 
   function setRemoteAvatar() {
-    var av = q('[data-lc-remote-avatar]');
-    if (av && peerId != null) {
-      av.setAttribute('src', '/avatars/' + peerId);
+    if (peerId == null) return;
+    var src = '/avatars/' + peerId;
+    // The active-call avatar plus the LC-437 incoming-call dialog avatar.
+    [q('[data-lc-remote-avatar]'), q('[data-lc-call-incoming-avatar]')].forEach(function (av) {
+      if (!av) return;
+      av.setAttribute('src', src);
       av.setAttribute('alt', peerName || '');
-    }
+    });
   }
 
   function hasLocalVideo() {
@@ -192,7 +211,7 @@
     var btn = q('[data-lc-call-camera]');
     if (!btn) return;
     var on = hasLocalCamera();
-    btn.textContent = on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video');
+    setLabel(btn, on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     // While the screen-share track owns the video sender, toggling the camera
     // would race for the same outgoing slot. The `disabled:*` classes on the
@@ -204,7 +223,7 @@
     var btn = q('[data-lc-call-screen]');
     if (!btn) return;
     var on = isSharingScreen();
-    btn.textContent = on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen');
+    setLabel(btn, on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
@@ -231,6 +250,7 @@
     restoreCameraAfterShare = false;
   }
   function teardown() {
+    clearNoAnswer(); // LC-438
     // Remote control rides the pc; ending the call ends any control session.
     // Detach capture and disarm the injector before the pc (and its channel)
     // go away, so no held key/button is left dangling. As the sharer, signal
@@ -253,20 +273,24 @@
     roomId = null;
     peerId = null;
     peerName = null;
+    // LC-393: the call is over - let transcribe.js finalize any open session.
+    window.__lcCallRoom = null;
+    var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.removeAttribute('data-lc-room');
+    try { document.dispatchEvent(new CustomEvent('lc:call-ended')); } catch (e) {}
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
     var lv = q('[data-lc-local-video]'); if (lv) lv.srcObject = null;
     var mute = q('[data-lc-call-mute]');
-    if (mute) { mute.textContent = window.__lcS('callMute', 'Mute'); mute.setAttribute('aria-pressed', 'false'); }
+    if (mute) { setLabel(mute, window.__lcS('callMute', 'Mute')); mute.setAttribute('aria-pressed', 'false'); }
     var cam = q('[data-lc-call-camera]');
     if (cam) {
-      cam.textContent = window.__lcS('callStartVideo', 'Start video');
+      setLabel(cam, window.__lcS('callStartVideo', 'Start video'));
       cam.setAttribute('aria-pressed', 'false');
       cam.removeAttribute('disabled');
     }
     var ss = q('[data-lc-call-screen]');
-    if (ss) { ss.textContent = window.__lcS('callShareScreen', 'Share screen'); ss.setAttribute('aria-pressed', 'false'); }
+    if (ss) { setLabel(ss, window.__lcS('callShareScreen', 'Share screen')); ss.setAttribute('aria-pressed', 'false'); }
     setRequestBtn();  // phase is now idle -> hides the control affordance
     disposeDialogTrap();
   }
@@ -414,12 +438,25 @@
   }
 
   // ---- call lifecycle ----------------------------------------------
+  function clearNoAnswer() {
+    if (noAnswerTimer) { clearTimeout(noAnswerTimer); noAnswerTimer = null; }
+  }
   function becomeCaller() {
     phase = 'outgoing';
     polite = false;
     hide(q('[data-lc-call-incoming]'));
     setStatus(window.__lcS('callCalling', 'Calling %name%...').replace('%name%', peerName || ''));
     signal('invite', hasLocalVideo() ? 'video' : 'audio');
+    // LC-438: don't ring forever. If still unanswered, end it as "No answer"
+    // (signals 'cancel', so the callee gets a missed-call record + toast).
+    clearNoAnswer();
+    noAnswerTimer = setTimeout(function () {
+      if (phase !== 'outgoing') return;
+      setStatus(window.__lcS('callNoAnswer', 'No answer'));
+      lcToast('err', 'callNoAnswer', 'No answer', '');
+      signal('cancel');
+      setTimeout(teardown, 1200);
+    }, NO_ANSWER_MS);
   }
 
   function becomeCallee() {
@@ -448,6 +485,14 @@
         setCameraBtn();
         show(q('[data-lc-call-active]'));
         installDialogTrap(q('[data-lc-call-active]'));
+        // LC-393: publish the active call's room so transcribe.js can open a
+        // transcription session, and signal that a call is live.
+        window.__lcCallRoom = roomId;
+        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
+        // the room the same robust way the voice toggle does (not just via the
+        // __lcCallRoom global).
+        var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
+        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         // The server resolves glare; if an invite arrived while we were
         // acquiring media the phase has already flipped to 'incoming'.
         // Honor that: we are now the callee.
@@ -483,6 +528,14 @@
         setCameraBtn();
         show(q('[data-lc-call-active]'));
         installDialogTrap(q('[data-lc-call-active]'));
+        // LC-393: publish the active call's room so transcribe.js can open a
+        // transcription session, and signal that a call is live.
+        window.__lcCallRoom = roomId;
+        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
+        // the room the same robust way the voice toggle does (not just via the
+        // __lcCallRoom global).
+        var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
+        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
         setStatus(window.__lcS('callConnecting', 'Connecting...'));
         signal('accept');
         incoming = null;
@@ -507,6 +560,7 @@
 
   function onAccept() {
     if (phase !== 'outgoing') return;
+    clearNoAnswer(); // LC-438: answered in time
     phase = 'connecting';
     setStatus(window.__lcS('callConnecting', 'Connecting...'));
     createPc();
@@ -519,7 +573,7 @@
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var btn = q('[data-lc-call-mute]');
     if (btn) {
-      btn.textContent = on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute');
+      setLabel(btn, on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute'));
       // aria-pressed="true" means "currently muted" (the toggle is on).
       // Mirrors the visual: button reads "Unmute" exactly when muted.
       btn.setAttribute('aria-pressed', on ? 'false' : 'true');
@@ -829,13 +883,13 @@
     if (phase === 'idle' || !remoteVideoOn) { hide(btn); if (uipi) hide(uipi); return; }
     show(btn);
     if (controlPhase === 'controlling') {
-      btn.textContent = window.__lcS('callStopControlling', 'Stop controlling');
+      setLabel(btn, window.__lcS('callStopControlling', 'Stop controlling'));
       btn.setAttribute('aria-pressed', 'true');
     } else if (controlPhase === 'requesting') {
-      btn.textContent = window.__lcS('callRequesting', 'Requesting...');
+      setLabel(btn, window.__lcS('callRequesting', 'Requesting...'));
       btn.setAttribute('aria-pressed', 'false');
     } else {
-      btn.textContent = window.__lcS('callRequestControl', 'Request control');
+      setLabel(btn, window.__lcS('callRequestControl', 'Request control'));
       btn.setAttribute('aria-pressed', 'false');
     }
     // UIPI hint (LC-186): surface that some windows can't be driven so the
@@ -1047,10 +1101,21 @@
         onAccept();
         break;
       case 'reject':
-        if (phase === 'outgoing') { setStatus(window.__lcS('callDeclined', 'Call declined')); setTimeout(teardown, 1200); }
+        // LC-438: the callee declined. Tell the caller clearly (toast + status)
+        // instead of the call just vanishing; the thread also gets a record.
+        if (phase === 'outgoing') {
+          setStatus(window.__lcS('callDeclined', 'Call declined'));
+          lcToast('err', 'callDeclinedBy', '%name% declined the call', peerName);
+          setTimeout(teardown, 1200);
+        }
         break;
       case 'cancel':
-        if (phase === 'incoming') teardown();
+        // LC-438: the caller hung up before we answered - surface it as a
+        // missed call so the dismissed ring is never silent.
+        if (phase === 'incoming') {
+          lcToast('err', 'callMissedFrom', 'Missed call from %name%', peerName);
+          teardown();
+        }
         break;
       case 'hangup':
         if (phase !== 'idle') { setStatus(window.__lcS('callEnded', 'Call ended')); setTimeout(teardown, 800); }
@@ -1120,6 +1185,13 @@
     if (t.closest('[data-lc-control-grant]')) { grantControl(); return; }
     if (t.closest('[data-lc-control-deny]')) { denyControl(); return; }
     if (t.closest('[data-lc-control-stop]')) { revokeAsSharer(); return; }
+  });
+
+  // LC-437: Escape declines a ringing incoming call (keyboard-dismissable).
+  // Scoped to the incoming phase so it never interferes with the in-call remote
+  // control keydown capture.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && phase === 'incoming') { e.preventDefault(); declineCall(); }
   });
 
   function onReady(fn) {

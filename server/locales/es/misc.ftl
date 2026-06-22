@@ -31,6 +31,44 @@ search-saved-remove = Quitar búsqueda guardada
 people-no-results = No hay personas coincidentes.
 people-you = (tú)
 
+## LC-393: transcripción de llamadas
+transcript-page-title = Transcripción de la llamada
+transcript-heading = Transcripción de la llamada
+transcript-in-progress = en curso
+transcript-empty = No se capturó ningún audio.
+transcript-toggle = Transcribir
+transcript-toggle-on = Detener transcripción
+transcript-banner = Esta llamada se está transcribiendo
+transcript-unsupported = La transcripción en vivo no es compatible con este navegador.
+# LC-394: archivo de transcripciones
+transcript-index-title = Transcripciones
+transcript-index-heading = Transcripciones de llamadas
+transcript-index-empty = Aún no hay transcripciones. Activa la transcripción durante una llamada para guardarla aquí.
+transcript-kind-dm = Llamada directa
+transcript-kind-voice = Canal de voz
+transcript-lines = líneas
+# LC-395: búsqueda + exportación
+transcript-search-placeholder = Buscar transcripciones...
+transcript-search-empty = Ninguna transcripción coincide con tu búsqueda.
+# LC-440: gestión de la lista (eliminar, limpiar, filtrar)
+transcript-index-empty-content = Aún no hay transcripciones con contenido.
+transcript-delete = Eliminar transcripción
+transcript-delete-confirm = ¿Eliminar esta transcripción? Esto no se puede deshacer.
+transcript-deleted = Transcripción eliminada
+transcript-delete-empty = Eliminar vacías
+transcript-delete-empty-confirm = ¿Eliminar todas las transcripciones vacías (0 líneas)? Esto no se puede deshacer.
+transcript-deleted-n = Se eliminaron %count% transcripciones vacías
+transcript-hide-empty = Ocultar vacías
+transcript-hide-empty-tip = Ocultar transcripciones de 0 líneas
+transcript-download = Descargar
+transcript-download-txt = Texto (.txt)
+transcript-download-vtt = WebVTT (.vtt)
+# LC-396: resumen con IA
+transcript-summary-heading = Resumen con IA
+transcript-summary-generate = Resumir
+transcript-summary-regenerate = Regenerar
+transcript-summary-working = Resumiendo...
+
 ## Activity page
 activity-page-title = Actividad
 activity-heading = Actividad
@@ -54,7 +92,18 @@ voice-share-screen = Compartir pantalla
 voice-leave = Salir
 voice-devices = Dispositivos de llamada
 voice-choose-devices = Elegir dispositivos de llamada
-voice-empty-prefix = Aún no hay nadie en este canal de voz. Haz clic en
-voice-empty-join = Unirse a la voz
-voice-empty-suffix = para empezar.
-voice-currently-here = Actualmente aquí:
+voice-lobby-heading-one = Alguien está en esta llamada
+voice-lobby-heading-other = personas en esta llamada
+voice-lobby-empty-title = Aún no hay nadie aquí
+voice-lobby-empty-sub = Sé el primero en empezar la llamada
+voice-transcript-panel = Transcripción
+voice-transcribe-tip = Iniciar o detener la transcripción
+voice-transcript-tip = Mostrar u ocultar el panel de transcripción
+voice-transcript-close = Cerrar transcripción
+voice-jump-live = Ir a lo último
+voice-transcript-empty-title = Aún no hay transcripción
+voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcripción esté activa.
+voice-in-call = En llamada
+transcript-open = Abrir
+transcript-copy = Copiar
+transcript-copied = Copiado

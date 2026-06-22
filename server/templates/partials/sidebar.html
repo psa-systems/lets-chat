@@ -49,6 +49,19 @@
     // the shared results popover; search.js handles keyboard nav unchanged.
     if (window.__lcSearchTabsWired) return;
     window.__lcSearchTabsWired = true;
+    // LC-392: htmx resolves an element's request verb+path ONCE at process time
+    // and binds them into the trigger closure; it does not re-read hx-get per
+    // fire. So setAttribute('hx-get', ...) below does NOT redirect the input's
+    // own debounced input/focus/Enter triggers - they keep hitting /search. We
+    // track the active mode and rewrite the path in htmx:configRequest (fires
+    // before every request), which DOES take effect, scoped to this input so
+    // other /search callers are untouched.
+    var currentMode = 'messages';
+    document.body.addEventListener('htmx:configRequest', function(e){
+      var d = e && e.detail;
+      if (!d || !d.elt || d.elt.id !== 'sidebar-search-input') return;
+      if (currentMode === 'people') d.path = '/users/search';
+    });
     document.addEventListener('click', function(e){
       var tab = e.target.closest && e.target.closest('[data-lc-search-tab]');
       if (!tab) return;
@@ -57,6 +70,7 @@
       var input = region.querySelector('[data-lc-search]');
       if (!input) return;
       var mode = tab.getAttribute('data-lc-search-tab');
+      currentMode = mode;
       region.querySelectorAll('[data-lc-search-tab]').forEach(function(b){
         b.setAttribute('aria-pressed', b === tab ? 'true' : 'false');
       });
@@ -107,6 +121,13 @@
         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-scheduled"|t }}</span>
+    </a>
+    {# LC-394: call transcripts archive. #}
+    <a href="/transcripts" class="lc-nav-row">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm1 4a.75.75 0 000 1.5h4a.75.75 0 000-1.5H8zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5H8zm0 3a.75.75 0 000 1.5h2a.75.75 0 000-1.5H8z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "sidebar-link-transcripts"|t }}</span>
     </a>
   </div>
   {# LC-308 + LC-367 + LC-369: room-list controls. Two icon controls on the

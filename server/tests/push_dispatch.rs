@@ -86,6 +86,8 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     Fixture {
         state,

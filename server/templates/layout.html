@@ -28,15 +28,22 @@
   {# LC-183/184: remote-control consent signals (request/grant/deny/revoke) are
      rendered here as data-lc-control-event nodes; call.js consumes + drains. #}
   <div id="lc-control-bus" class="hidden"></div>
+  {# LC-393: transcription control events (started/ended) land here as
+     data-lc-transcript-event nodes; transcribe.js consumes + drains them. #}
+  <div id="lc-transcript-bus" class="hidden"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
+    {# LC-437: incoming-call dialog. Themed via tokens (works in dark); shows the
+       caller's avatar for recognition. call.js installs a focus trap on show and
+       Escape declines (keyboard-dismissable). #}
     <div data-lc-call-incoming class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
          role="dialog" aria-modal="true" aria-labelledby="lc-call-incoming-title" aria-hidden="true">
-      <div class="w-80 rounded-lg bg-white p-6 text-center shadow-xl">
-        <div id="lc-call-incoming-title" class="text-sm text-slate-500">{{ "call-incoming"|t }}</div>
-        <div data-lc-call-incoming-name class="mt-1 text-lg font-semibold"></div>
+      <div class="w-80 rounded-lg bg-surface-elevated p-6 text-center shadow-xl">
+        <div id="lc-call-incoming-title" class="text-sm text-content-muted">{{ "call-incoming"|t }}</div>
+        <img data-lc-call-incoming-avatar alt="" src="" class="mx-auto mt-3 h-16 w-16 rounded-full border border-border object-cover">
+        <div data-lc-call-incoming-name class="mt-2 text-lg font-semibold text-content"></div>
         <div class="mt-5 flex justify-center gap-3">
-          <button type="button" data-lc-call-accept class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">{{ "call-accept"|t }}</button>
-          <button type="button" data-lc-call-decline class="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">{{ "call-decline"|t }}</button>
+          <button type="button" data-lc-call-accept class="rounded bg-success px-4 py-2 text-sm font-medium text-success-content hover:opacity-90">{{ "call-accept"|t }}</button>
+          <button type="button" data-lc-call-decline class="rounded bg-danger px-4 py-2 text-sm font-medium text-danger-content hover:opacity-90">{{ "call-decline"|t }}</button>
         </div>
       </div>
     </div>
@@ -74,22 +81,62 @@
           {{ "call-control-uipi"|t }}
         </div>
       </div>
-      <div class="flex items-center justify-center gap-3 bg-slate-800 py-4">
-        <button type="button" data-lc-call-mute aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-mute"|t }}</button>
-        <button type="button" data-lc-call-camera aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{{ "call-start-video"|t }}</button>
-        <button type="button" data-lc-call-screen aria-pressed="false" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">{{ "call-share-screen"|t }}</button>
-        {# LC-184: controller-side "Request control" affordance. Hidden until the
-           peer's video is live; toggles to "Stop controlling" while active.
-           Server enforces the verified-email + block gate at the relay, so a
-           dropped request never produces a grant (the requesting state times
-           out client-side). #}
-        <button type="button" data-lc-control-request aria-pressed="false" class="hidden rounded-full bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500">{{ "call-request-control"|t }}</button>
-        <button type="button" data-lc-open-devices title="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-            <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-          </svg>
-        </button>
-        <button type="button" data-lc-call-hangup class="rounded-full bg-red-600 px-6 py-2 text-sm font-medium text-white hover:bg-red-700">{{ "call-hang-up"|t }}</button>
+      {# LC-412: 1:1 call control bar, on the same .lc-cbtn token system as the
+         enclave voice page (LC-402). Two clusters - media controls (devices /
+         Mute / video / screen) and session actions (Transcribe / Transcript
+         panel / request-control / Hang up) - split by a divider. Mute/video/
+         screen carry aria-pressed on/off; Transcribe is the danger "recording"
+         toggle tied to the pill + drawer; Hang up is danger. call.js drives
+         these by their data-lc-* hooks, so the restyle is transparent to it. #}
+      {# LC-416: 1:1 call control bar, same icon + collapsible-label system as the
+         enclave voice page. Media controls / transcription / isolated Hang up.
+         call.js drives these by their data-lc-* hooks and updates the
+         .lc-cbtn-label text; the restyle is transparent to it. #}
+      <div class="lc-callbar lc-callbar--bottom">
+        <div class="lc-callbar-group">
+          <button type="button" data-lc-open-devices data-lc-tip="{{ "call-devices"|t }}" aria-label="{{ "call-choose-devices"|t }}" class="lc-cbtn lc-cbtn--icon">
+            <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+            </svg></span>
+          </button>
+          <button type="button" data-lc-call-mute aria-pressed="false" aria-label="{{ "call-mute"|t }}" data-lc-tip="{{ "call-mute"|t }}" class="lc-cbtn">
+            <span class="lc-cbtn-ico lc-cbtn-ico--off" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/></svg></span>
+            <span class="lc-cbtn-ico lc-cbtn-ico--on" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 01-.13.87L7.13 4.13A3 3 0 017 4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 1.36.453 2.616 1.216 3.624l1.1-1.1A4.48 4.48 0 015.5 10v-.357z"/><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 10-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-2.3-2.3A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10c0 .886-.256 1.713-.698 2.41l-1.1-1.1c.19-.41.298-.866.298-1.346V9.4l-2.4-2.4 2.9 2.9-3.1-3.1L3.28 2.22zm6.97 13.734V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546a6.02 6.02 0 01-1.5 0z" clip-rule="evenodd"/></svg></span>
+            <span class="lc-cbtn-label">{{ "call-mute"|t }}</span>
+          </button>
+          <button type="button" data-lc-call-camera aria-pressed="false" aria-label="{{ "call-start-video"|t }}" data-lc-tip="{{ "call-start-video"|t }}" class="lc-cbtn">
+            <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v1.4l3.2-2.133A.75.75 0 0118 4.89v10.22a.75.75 0 01-1.8.623L13 13.6V15a2 2 0 01-2 2H4a2 2 0 01-2-2V5z"/></svg></span>
+            <span class="lc-cbtn-label">{{ "call-start-video"|t }}</span>
+          </button>
+          <button type="button" data-lc-call-screen aria-pressed="false" aria-label="{{ "call-share-screen"|t }}" data-lc-tip="{{ "call-share-screen"|t }}" class="lc-cbtn">
+            <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 014.25 2h11.5A2.25 2.25 0 0118 4.25v8.5A2.25 2.25 0 0115.75 15h-3.105l.347 1.736.94.313a.75.75 0 01-.237 1.461H6.305a.75.75 0 01-.237-1.461l.94-.313L7.355 15H4.25A2.25 2.25 0 012 12.75v-8.5zm8.75.75a.75.75 0 00-1.5 0v2.69L8.03 6.22a.75.75 0 00-1.06 1.06l2.5 2.5a.75.75 0 001.06 0l2.5-2.5a.75.75 0 10-1.06-1.06L10.75 7.69V5z" clip-rule="evenodd"/></svg></span>
+            <span class="lc-cbtn-label">{{ "call-share-screen"|t }}</span>
+          </button>
+        </div>
+        <div class="lc-callbar-sep"></div>
+        <div class="lc-callbar-group">
+          {# LC-393: transcription toggle. Disabled + titled with the unsupported
+             note by transcribe.js when the browser has no SpeechRecognition. #}
+          <button type="button" data-lc-transcribe-toggle aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}" aria-label="{{ "voice-transcribe-tip"|t }}" data-lc-tip="{{ "voice-transcribe-tip"|t }}" class="lc-cbtn lc-cbtn--rec">
+            <span class="lc-cbtn-ico lc-rec-glyph" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle class="lc-rec-core" cx="10" cy="10" r="3.25" fill="currentColor"/></svg></span>
+            <span class="lc-cbtn-label">{{ "transcript-toggle"|t }}</span>
+          </button>
+          {# LC-412: reopen the transcript drawer after closing it (it auto-opens
+             when a session starts). transcribe.js handles the click + close. #}
+          <button type="button" data-lc-transcript-panel-toggle aria-pressed="false" data-lc-tip="{{ "voice-transcript-tip"|t }}" aria-label="{{ "voice-transcript-tip"|t }}" class="lc-cbtn">
+            <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
+            <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
+          </button>
+          {# LC-184: controller-side "Request control" affordance. Hidden until the
+             peer's video is live; toggles to "Stop controlling" while active. #}
+          <button type="button" data-lc-control-request aria-pressed="false" class="hidden lc-cbtn"><span class="lc-cbtn-label">{{ "call-request-control"|t }}</span></button>
+        </div>
+        <div class="lc-callbar-group lc-callbar-group--end">
+          <button type="button" data-lc-call-hangup aria-label="{{ "call-hang-up"|t }}" data-lc-tip="{{ "call-hang-up"|t }}" class="lc-cbtn lc-cbtn--leave">
+            <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 4c-2.4 0-4.69.42-6.81 1.19a2.25 2.25 0 00-1.45 2.5l.2 1.2a1.75 1.75 0 001.62 1.46l2.06.14a1.75 1.75 0 001.78-1.16l.3-.86a.75.75 0 01.5-.47 11.2 11.2 0 013.6 0 .75.75 0 01.5.47l.3.86a1.75 1.75 0 001.78 1.16l2.06-.14a1.75 1.75 0 001.62-1.46l.2-1.2a2.25 2.25 0 00-1.45-2.5A20.9 20.9 0 0010 4z" clip-rule="evenodd"/></svg></span>
+            <span class="lc-cbtn-label">{{ "call-hang-up"|t }}</span>
+          </button>
+        </div>
       </div>
     </div>
     {# LC-186: persistent active-control banner shown to the sharer for the whole
@@ -102,10 +149,69 @@
       <span class="text-xs text-red-100">{{ "call-stop-control-hint"|t }}</span>
     </div>
   </div>
+  {# LC-393 / LC-402 / LC-416: shared live transcript drawer, used by BOTH 1:1
+     calls and enclave voice channels. Standalone + fixed (z above the call
+     overlay) so it works whether or not the fullscreen call dialog is up;
+     transcribe.js reveals it whenever a session is active. #lc-caption-log is
+     the OOB target the server appends caption lines into.
+
+     LC-416: the old position:fixed "This call is being transcribed" pill was
+     removed - it floated over the header controls (the overlap bug) and merely
+     duplicated the Transcribe toggle's red recording state. Recording awareness
+     now lives in that toggle and this drawer's header rec dot, which share one
+     state. #}
+  <div data-lc-caption-wrap aria-hidden="true" class="hidden lc-transcript">
+    <div class="lc-transcript-head">
+      <span class="lc-transcript-title"><span class="lc-transcript-rec" aria-hidden="true"></span>{{ "voice-transcript-panel"|t }}</span>
+      <button type="button" data-lc-transcript-close class="lc-transcript-close" aria-label="{{ "voice-transcript-close"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="lc-transcript-body" data-lc-transcript-body>
+      {# #lc-caption-log is the OOB target the server appends caption lines into
+         (ws/transcript_segment.html). The empty-state below shows until the
+         first line lands (CSS keys on #lc-caption-log:empty). #}
+      <div id="lc-caption-log"></div>
+      <div class="lc-transcript-empty" data-lc-transcript-empty>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="lc-transcript-empty-ico">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3.75h6m-6.75 6 3-3h6a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0016.5 3.75H4.5A2.25 2.25 0 002.25 6v9.75A2.25 2.25 0 004.5 18h.75v3z"/>
+        </svg>
+        <p class="lc-transcript-empty-title">{{ "voice-transcript-empty-title"|t }}</p>
+        <p class="lc-transcript-empty-sub">{{ "voice-transcript-empty-sub"|t }}</p>
+      </div>
+      <button type="button" data-lc-jump-live class="lc-transcript-jump">{{ "voice-jump-live"|t }}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 3a.75.75 0 01.75.75v9.69l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V3.75A.75.75 0 0110 3z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+    {# LC-411: in-call transcript actions. Revealed (transcribe.js sets the hrefs
+       from the live transcript id) only while a session is active, so every
+       participant - not just the initiator - can open the saved transcript,
+       copy the captions, or download txt/vtt mid-call. The saved record is
+       access-gated server-side to call participants. #}
+    <div class="lc-transcript-foot" data-lc-transcript-actions hidden>
+      <a data-lc-transcript-open href="#" target="_blank" rel="noopener" class="lc-transcript-action">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/>
+          <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/>
+        </svg>{{ "transcript-open"|t }}
+      </a>
+      <button type="button" data-lc-transcript-copy class="lc-transcript-action"
+              data-lc-label="{{ "transcript-copy"|t }}" data-lc-copied="{{ "transcript-copied"|t }}">{{ "transcript-copy"|t }}</button>
+      <a data-lc-transcript-dl-txt href="#" download class="lc-transcript-action">{{ "transcript-download-txt"|t }}</a>
+      <a data-lc-transcript-dl-vtt href="#" download class="lc-transcript-action">{{ "transcript-download-vtt"|t }}</a>
+    </div>
+  </div>
   {% include "scheduled_modal.html" %}
   {% include "poll_modal.html" %}
   {% include "shortcuts_modal.html" %}
   {% include "switcher_modal.html" %}
+  {# LC-400: add-room modal in the persistent shell so a live sidebar OOB swap
+     cannot clobber it mid-typing (the `+` button opens it). #}
+  {% include "add_room_modal.html" %}
   {% include "lightbox_modal.html" %}
   <div id="lc-mention-counts" class="hidden"
        data-base-title="lets-chat"
@@ -127,6 +233,12 @@
   <div id="lc-forward-modal"></div>
   {# LC-334: singleton slot for the report-a-message modal. #}
   <div id="lc-report-modal"></div>
+  {# LC-384: singleton, fixed-position host for the reaction emoji picker. The
+     add-reaction button loads the picker (htmx) in here; the LC-384 script
+     positions it next to the trigger - fixed positioning escapes the #messages
+     overflow clip, so the picker floats above the conversation instead of
+     reflowing it. Single host = inherently single-open. #}
+  <div id="lc-reaction-popover" role="dialog" aria-label="{{ "partials-reaction-add"|t }}" class="fixed z-50 hidden"></div>
 </div>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser
@@ -716,6 +828,10 @@ document.body.addEventListener('click', function(e){
 // picker's emoji buttons by case-insensitive substring against each button's
 // data-lc-emoji-name (unicode keyword or custom shortcode). The picker is
 // ephemeral (htmx-swapped in/out), so a single permanent listener suffices.
+// LC-389: the grid is now categorized (~1900 cells across labeled sections).
+// While a query is active, hide the category tab strip and collapse any section
+// with no surviving cell so results read as one flat list; clearing the query
+// restores the browsable category view.
 (function(){
   document.addEventListener('input', function(e){
     var input = e.target;
@@ -724,11 +840,39 @@ document.body.addEventListener('click', function(e){
     var grid = picker && picker.querySelector('[data-lc-emoji-grid]');
     if (!grid) return;
     var q = input.value.trim().toLowerCase();
+    var searching = q !== '';
     var btns = grid.querySelectorAll('[data-lc-emoji-name]');
     for (var i = 0; i < btns.length; i++) {
       var name = (btns[i].getAttribute('data-lc-emoji-name') || '').toLowerCase();
-      btns[i].hidden = q !== '' && name.indexOf(q) === -1;
+      btns[i].hidden = searching && name.indexOf(q) === -1;
     }
+    var secs = grid.querySelectorAll('[data-lc-emoji-cat]');
+    for (var j = 0; j < secs.length; j++) {
+      secs[j].hidden = searching && !secs[j].querySelector('[data-lc-emoji-name]:not([hidden])');
+    }
+    var tabs = picker.querySelector('[data-lc-emoji-tabs]');
+    if (tabs) tabs.hidden = searching;
+  });
+})();
+</script>
+<script>
+// LC-389: category tab strip. Clicking a tab scrolls the grid to that section.
+// Delegated + permanent like the filter; the picker is htmx-swapped in/out.
+// Scroll the grid's own scrollTop (not scrollIntoView) so only the picker's
+// internal scroll container moves, never an ancestor / the page.
+(function(){
+  document.addEventListener('click', function(e){
+    var tab = e.target.closest && e.target.closest('[data-lc-emoji-tab]');
+    if (!tab) return;
+    var picker = tab.closest('[id^="picker-"]');
+    var grid = picker && picker.querySelector('[data-lc-emoji-grid]');
+    if (!grid) return;
+    var cat = tab.getAttribute('data-lc-emoji-tab');
+    var sec = grid.querySelector('[data-lc-emoji-cat="' + cat + '"]');
+    if (sec) grid.scrollTop = sec.offsetTop - grid.offsetTop;
+    var all = picker.querySelectorAll('[data-lc-emoji-tab]');
+    for (var i = 0; i < all.length; i++) all[i].removeAttribute('data-lc-active');
+    tab.setAttribute('data-lc-active', '');
   });
 })();
 </script>
@@ -741,15 +885,38 @@ document.body.addEventListener('click', function(e){
 (function(){
   var KEY = 'lc-recent-emoji';
   var CAP = 12;
+  // Some emoji render as a text-style glyph unless followed by VS-16 (U+FE0F).
+  // The grid emits the fully-qualified form (e.g. heart = U+2764 U+FE0F) while
+  // older MRU entries and the quick-bar defaults stored the bare code point, so
+  // a Recent entry could render text-style/tofu or fail to dedupe against the
+  // grid. Canonicalize the known bare emoji-presentation code points to one form
+  // so every source agrees (LC-390).
+  var VS16 = '❤✊✋✌☝☺☹☕☘✂✈⚠♠♣♥♦';
+  function canon(g){
+    if (typeof g !== 'string' || !g) return g;
+    if (g.length === 1 && VS16.indexOf(g) !== -1) return g + '️';
+    return g;
+  }
   function read(){
-    try { var a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; }
-    catch (e) { return []; }
+    var a;
+    try { a = JSON.parse(localStorage.getItem(KEY)); } catch (e) { return []; }
+    if (!Array.isArray(a)) return [];
+    // Canonicalize + dedupe so legacy bare-codepoint entries collapse onto the
+    // qualified form rather than lingering as a separate, text-style entry.
+    var out = [], seen = {};
+    for (var i = 0; i < a.length; i++) {
+      var g = canon(a[i]);
+      if (g && !seen[g]) { seen[g] = 1; out.push(g); }
+    }
+    return out;
   }
   function record(glyph){
+    glyph = canon(glyph);
     var a = read().filter(function(g){ return g !== glyph; });
     a.unshift(glyph);
     if (a.length > CAP) a = a.slice(0, CAP);
     try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {}
+    scan(); // same-tab: refresh any open Recent row immediately (LC-390)
   }
   // Record on any reaction POST (picker buttons, existing pills, recent
   // buttons). cancel/open use hx-get, so they never match.
@@ -763,14 +930,24 @@ document.body.addEventListener('click', function(e){
     if (!emoji || /^:.*:$/.test(emoji)) return; // skip custom shortcodes
     record(emoji);
   });
-  function fill(box){
-    if (box.getAttribute('data-lc-recent-done')) return;
-    box.setAttribute('data-lc-recent-done', '1');
+  // Idempotent rebuild: re-render the row from the CURRENT MRU on every scan,
+  // skipping the work only when this box's rendered set is unchanged (signature
+  // = the joined glyph list) so the scan firing on unrelated afterSettle events
+  // (WS / sidebar swaps) never duplicates buttons. Because a changed MRU always
+  // refills, the row self-heals after a react without depending on a freshly-
+  // fetched picker fragment. Replaces the old one-shot data-lc-recent-done guard
+  // (LC-390), which froze the row at the MRU captured when the picker opened, so
+  // a later react was not reflected until a full page reload.
+  function render(box){
     var picker = box.closest('[id^="picker-"]');
     if (!picker) return;
     var mid = picker.id.slice('picker-'.length);
     var recents = read();
-    if (!recents.length) return;
+    var sig = recents.join('\u0000');
+    if (box.getAttribute('data-lc-recent-sig') === sig) return;
+    box.setAttribute('data-lc-recent-sig', sig);
+    box.replaceChildren();
+    if (!recents.length) { box.classList.add('hidden'); return; }
     var label = box.getAttribute('data-lc-recent-label');
     if (label) {
       var s = document.createElement('span');
@@ -792,9 +969,11 @@ document.body.addEventListener('click', function(e){
     if (window.htmx) window.htmx.process(box);
   }
   function scan(){
-    document.querySelectorAll('[data-lc-emoji-recent]:not([data-lc-recent-done])').forEach(fill);
+    document.querySelectorAll('[data-lc-emoji-recent]').forEach(render);
   }
   document.body.addEventListener('htmx:afterSettle', scan);
+  // Cross-tab: another tab reacting (or clearing) refreshes this tab's open row.
+  window.addEventListener('storage', function(e){ if (!e || e.key === null || e.key === KEY) scan(); });
   scan();
 
   // LC-302: quick-reaction hover bar. On first hover of a message row, fill its
@@ -802,7 +981,9 @@ document.body.addEventListener('click', function(e){
   // default set when empty). Each button is the SAME hx-post the picker emits,
   // so the recorder above also records quick-react clicks. Lazy per-row fill
   // keeps large rooms from processing every message on load.
-  var DEFAULTS = ['\u{1F44D}', '\u{2764}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
+  // Fully-qualified glyphs (heart carries VS-16) so quick-react defaults match
+  // the grid + canon() and never seed a text-style Recent entry (LC-390).
+  var DEFAULTS = ['\u{1F44D}', '\u{2764}\u{FE0F}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
   var QCAP = 5;
   function fillQuick(row){
     var bar = row.querySelector('[data-lc-quick-bar]');
@@ -833,6 +1014,84 @@ document.body.addEventListener('click', function(e){
     var row = e.target.closest && e.target.closest('[data-lc-quick-react]');
     if (row) fillQuick(row);
   });
+})();
+</script>
+<script>
+// LC-384: reaction emoji-picker popover. The add-reaction button (LC-377,
+// [data-lc-reaction-open]) loads the picker (reactions::get_picker) into the
+// shared fixed-position host #lc-reaction-popover instead of swapping inline.
+// This positions the host next to the trigger - fixed positioning escapes the
+// #messages overflow clip, so the picker floats above the conversation rather
+// than reflowing it. One host = single-open; dismiss on outside-click / Escape
+// / a react (NOT on scroll/resize - see the fixup note below). Permanent +
+// delegated (the picker is htmx-swapped in/out of the persistent host).
+(function(){
+  var trigger = null;
+  function host(){ return document.getElementById('lc-reaction-popover'); }
+  function open(){ var h = host(); return h && !h.classList.contains('hidden'); }
+  function hide(){
+    var h = host(); if (!h) return;
+    h.classList.add('hidden');
+    h.replaceChildren();
+    trigger = null;
+  }
+  function place(){
+    var h = host(); if (!h || !trigger) return;
+    var GAP = 6, MARGIN = 8;
+    h.style.visibility = 'hidden';
+    h.classList.remove('hidden');
+    var r = trigger.getBoundingClientRect();
+    var hr = h.getBoundingClientRect();
+    // Prefer below the trigger; flip above when it would overflow the viewport.
+    var top = r.bottom + GAP;
+    if (top + hr.height > window.innerHeight - MARGIN && r.top - GAP - hr.height > MARGIN) {
+      top = r.top - GAP - hr.height;
+    }
+    var left = Math.max(MARGIN, Math.min(r.left, window.innerWidth - hr.width - MARGIN));
+    top = Math.max(MARGIN, Math.min(top, window.innerHeight - hr.height - MARGIN));
+    h.style.left = Math.round(left) + 'px';
+    h.style.top = Math.round(top) + 'px';
+    h.style.visibility = 'visible';
+  }
+  // Capture which button opened the picker (runs before htmx fires the swap).
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-lc-reaction-open]');
+    if (t) { trigger = t; return; }
+    // A react inside the picker (grid / recent button) closes it after the post.
+    if (open() && e.target.closest && e.target.closest('#lc-reaction-popover [hx-post*="/reactions/"]')) {
+      setTimeout(hide, 0);
+      return;
+    }
+    // Explicit close affordance.
+    if (open() && e.target.closest && e.target.closest('[data-lc-reaction-close]')) {
+      var c = trigger; hide(); if (c) c.focus();
+      return;
+    }
+    // Outside click.
+    if (open() && !host().contains(e.target)) hide();
+  });
+  // Position + focus the filter once the picker has settled into the host.
+  document.body.addEventListener('htmx:afterSettle', function(e){
+    var h = host();
+    if (!h || !e || !e.target) return;
+    if (e.target === h || (h.contains && h.contains(e.target))) {
+      place();
+      var f = h.querySelector('[data-lc-emoji-filter]');
+      // preventScroll so focusing the filter never scrolls an ancestor.
+      if (f) { try { f.focus({ preventScroll: true }); } catch (e2) { f.focus(); } }
+    }
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && open()) { var t = trigger; hide(); if (t) t.focus(); }
+  });
+  // LC-384 fixup: deliberately NO scroll/resize auto-dismiss. The earlier version
+  // closed on any document scroll (capture) and on resize, which fired on stray
+  // trackpad scrolls, the filter-input focus, and the mobile keyboard - so the
+  // picker vanished the moment the pointer reached into it. The popover is fixed
+  // and anchored at open time (the add-reaction trigger is hover-revealed, so it
+  // collapses to display:none once the pointer leaves the row and can no longer
+  // be re-measured); it stays put and closes only on outside-click / Escape / a
+  // react. A list scroll lets it drift slightly, harmless for the interaction.
 })();
 </script>
 <script>

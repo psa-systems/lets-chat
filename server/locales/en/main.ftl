@@ -8,6 +8,7 @@ action-save = Save
 action-cancel = Cancel
 action-delete = Delete
 action-revoke = Revoke
+action-dismiss = Dismiss
 action-create = Create
 
 ## Settings

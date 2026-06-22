@@ -15,7 +15,8 @@
 //!   4. The `NewMessageFragment` OOB wrapper renders `data-lc-client-id`
 //!      when (and only when) a client id is attached.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use askama::Template;
@@ -77,6 +78,8 @@ async fn setup() -> TestApp {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state.clone());
     TestApp {
@@ -132,6 +135,73 @@ async fn next_new_message(rx: &mut Receiver<ChatEvent>) -> (String, Option<Strin
         }
     }
     panic!("no NewMessage event among the first 10 hub events");
+}
+
+/// Like `next_new_message`, but returns the full `Message` so callers can feed
+/// it back into the per-recipient render.
+async fn next_new_message_full(
+    rx: &mut Receiver<ChatEvent>,
+) -> (lets_chat::models::Message, Option<String>) {
+    for _ in 0..10 {
+        let evt = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("did not receive a hub event within 1s")
+            .expect("hub channel closed");
+        if let ChatEvent::NewMessage {
+            message, client_id, ..
+        } = evt
+        {
+            return (message, client_id);
+        }
+    }
+    panic!("no NewMessage event among the first 10 hub events");
+}
+
+#[tokio::test]
+async fn author_gets_echo_even_when_not_subscribed() {
+    // LC-397: the author who just sent a message MUST receive their own echo
+    // (carrying the client_id, which reconciles the optimistic placeholder)
+    // even when this connection is NOT in the room's `subscribed` set. That gap
+    // is what left enclave-room sends stuck on "Sending..." while DMs were
+    // instant. Render directly with an empty subscription set and assert the
+    // echo still carries the client_id.
+    let t = setup().await;
+    let (_conn, mut rx, _) = t.state.hub.connect(&t.alice_id, "alice");
+
+    let status = post_form(
+        &t.app,
+        &t.alice_session,
+        t.room_id,
+        "body=enclave+hi&client_id=cid-xyz",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (message, client_id) = next_new_message_full(&mut rx).await;
+    assert_eq!(client_id.as_deref(), Some("cid-xyz"));
+
+    let alice = lets_chat::models::User::from(
+        db::auth::find_user_by_id(&t.state.auth, &t.alice_id)
+            .await
+            .unwrap()
+            .unwrap(),
+    );
+    // This connection has NOT subscribed to the room.
+    let not_subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    let out = routes::render_new_message_or_bump(
+        &t.state,
+        &message,
+        client_id.as_deref(),
+        &alice,
+        &not_subscribed,
+    )
+    .await;
+    let html = out.expect("the author always receives their own echo, even unsubscribed");
+    assert!(
+        html.contains("data-lc-client-id=\"cid-xyz\""),
+        "author echo must carry the client_id so the optimistic placeholder is removed: {html}"
+    );
 }
 
 #[tokio::test]

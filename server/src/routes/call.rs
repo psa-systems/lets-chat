@@ -15,5 +15,8 @@ use crate::state::AppState;
 pub async fn get_config(State(state): State<AppState>, AuthUser(_user): AuthUser) -> Json<Value> {
     let ice: Value = serde_json::from_str(&state.ice_servers)
         .unwrap_or_else(|_| serde_json::json!([{"urls": "stun:stun.l.google.com:19302"}]));
-    Json(serde_json::json!({ "iceServers": ice }))
+    // LC-393 Phase 3: tells transcribe.js which transcription engine to use -
+    // when true, capture audio clips and POST them for server-side STT; when
+    // false, use the in-browser Web Speech API.
+    Json(serde_json::json!({ "iceServers": ice, "sttServer": state.stt_available() }))
 }

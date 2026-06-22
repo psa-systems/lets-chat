@@ -295,40 +295,44 @@
 // and briefly flashes it - reusing the permalink highlight (.lc-msg-flash). No
 // server round trip. No-ops on pages without the control (DMs) or with no
 // messages.
+// LC-386: a custom month-grid calendar replaces the native <input type="date">,
+// whose browser picker mis-positioned (top-left) and clashed with the room
+// search. Same client-side scroll-to: picking a day scrolls to the first message
+// on/after it and flashes it. Today / Clear are real buttons.
 (function() {
   var root = document.querySelector('[data-lc-jumpdate-root]');
   var messages = document.getElementById('messages');
   if (!root || !messages) return;
   var toggle = root.querySelector('[data-lc-jumpdate-toggle]');
   var pop = root.querySelector('[data-lc-jumpdate-popover]');
-  var input = root.querySelector('[data-lc-jumpdate-input]');
+  var cal = root.querySelector('[data-lc-jumpdate-cal]');
   var empty = root.querySelector('[data-lc-jumpdate-empty]');
-  if (!toggle || !pop || !input) return;
+  if (!toggle || !pop || !cal) return;
+
+  var L_TODAY = "{{ "partials-room-jumpdate-today"|t }}";
+  var L_CLEAR = "{{ "partials-room-jumpdate-clear"|t }}";
+  var L_PREV  = "{{ "partials-room-jumpdate-prev"|t }}";
+  var L_NEXT  = "{{ "partials-room-jumpdate-next"|t }}";
 
   function dayRows() { return messages.querySelectorAll('[data-lc-day]'); }
-
   // No messages -> nothing to jump to; hide the control entirely.
   if (dayRows().length === 0) { root.hidden = true; return; }
 
-  function open() {
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function ymd(y, m, d){ return y + '-' + pad(m + 1) + '-' + pad(d); } // m is 0-based
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function bounds(){
     var rows = dayRows();
-    input.min = rows[0].getAttribute('data-lc-day');
-    input.max = rows[rows.length - 1].getAttribute('data-lc-day');
-    if (empty) empty.hidden = true;
-    pop.hidden = false;
-    toggle.setAttribute('aria-expanded', 'true');
-    try { input.showPicker ? input.showPicker() : input.focus(); } catch (e) { input.focus(); }
+    return { min: rows[0].getAttribute('data-lc-day'), max: rows[rows.length - 1].getAttribute('data-lc-day') };
   }
-  function close() {
-    pop.hidden = true;
-    toggle.setAttribute('aria-expanded', 'false');
-  }
-  function jump() {
-    var chosen = input.value; // "YYYY-MM-DD" or ""
+  var view = null; // { y, m } 0-based month currently displayed
+
+  function jumpTo(chosen){
     if (!chosen) return;
     var rows = dayRows();
     var target = null;
     for (var i = 0; i < rows.length; i++) {
+      // Lexical compare on the "YYYY-MM-DD" data-lc-day is chronological.
       if (rows[i].getAttribute('data-lc-day') >= chosen) { target = rows[i]; break; }
     }
     if (!target) { if (empty) empty.hidden = false; return; }
@@ -338,22 +342,72 @@
     setTimeout(function () { target.classList.remove('lc-msg-flash'); }, 2000);
   }
 
+  function render(){
+    if (empty) empty.hidden = true;
+    var b = bounds();
+    var now = new Date();
+    var todayStr = ymd(now.getFullYear(), now.getMonth(), now.getDate());
+    if (!view) { var mx = b.max.split('-'); view = { y: +mx[0], m: +mx[1] - 1 }; }
+    var first = new Date(view.y, view.m, 1);
+    var startDow = first.getDay();
+    var daysIn = new Date(view.y, view.m + 1, 0).getDate();
+    var monthLabel = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    var pm = view.m === 0 ? { y: view.y - 1, m: 11 } : { y: view.y, m: view.m - 1 };
+    var nm = view.m === 11 ? { y: view.y + 1, m: 0 } : { y: view.y, m: view.m + 1 };
+    var canPrev = ymd(pm.y, pm.m, new Date(pm.y, pm.m + 1, 0).getDate()) >= b.min;
+    var canNext = ymd(nm.y, nm.m, 1) <= b.max;
+
+    var h = '<div class="flex items-center justify-between mb-2">';
+    h += '<button type="button" data-lc-jd-prev'+(canPrev?'':' disabled')+' class="lc-jd-nav" aria-label="'+esc(L_PREV)+'">&#8249;</button>';
+    h += '<span class="font-medium">'+esc(monthLabel)+'</span>';
+    h += '<button type="button" data-lc-jd-next'+(canNext?'':' disabled')+' class="lc-jd-nav" aria-label="'+esc(L_NEXT)+'">&#8250;</button>';
+    h += '</div><div class="grid grid-cols-7 gap-0.5 text-center">';
+    for (var w = 0; w < 7; w++) {
+      // 2023-01-01 was a Sunday, so w=0..6 yields Sun..Sat (localized one-letter).
+      var dn = new Date(2023, 0, 1 + w).toLocaleDateString(undefined, { weekday: 'narrow' });
+      h += '<span class="lc-jd-dow">'+esc(dn)+'</span>';
+    }
+    for (var s = 0; s < startDow; s++) h += '<span></span>';
+    for (var d = 1; d <= daysIn; d++) {
+      var ds = ymd(view.y, view.m, d);
+      var dis = ds < b.min || ds > b.max;
+      h += '<button type="button" data-lc-jd-day="'+ds+'"'+(dis?' disabled':'')+' class="lc-jd-day'+(ds===todayStr?' lc-jd-today':'')+'">'+d+'</button>';
+    }
+    h += '</div><div class="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-border">';
+    h += '<button type="button" data-lc-jd-today class="lc-jd-btn">'+esc(L_TODAY)+'</button>';
+    h += '<button type="button" data-lc-jd-clear class="lc-jd-btn">'+esc(L_CLEAR)+'</button>';
+    h += '</div>';
+    cal.innerHTML = h;
+  }
+
+  function open() { view = null; pop.hidden = false; toggle.setAttribute('aria-expanded', 'true'); render(); }
+  function close() { pop.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
+
+  function onCal(e){
+    var day = e.target.closest && e.target.closest('[data-lc-jd-day]');
+    if (day) { if (!day.disabled) jumpTo(day.getAttribute('data-lc-jd-day')); return; }
+    if (e.target.closest('[data-lc-jd-prev]') && !e.target.closest('[data-lc-jd-prev]').disabled) {
+      view = view.m === 0 ? { y: view.y - 1, m: 11 } : { y: view.y, m: view.m - 1 }; render(); return;
+    }
+    if (e.target.closest('[data-lc-jd-next]') && !e.target.closest('[data-lc-jd-next]').disabled) {
+      view = view.m === 11 ? { y: view.y + 1, m: 0 } : { y: view.y, m: view.m + 1 }; render(); return;
+    }
+    if (e.target.closest('[data-lc-jd-today]')) { var t = new Date(); jumpTo(ymd(t.getFullYear(), t.getMonth(), t.getDate())); return; }
+    if (e.target.closest('[data-lc-jd-clear]')) { close(); return; }
+  }
   function onToggle() { if (pop.hidden) open(); else close(); }
-  function onKey(e) {
-    if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); close(); toggle.focus(); }
-  }
-  function onOutside(e) {
-    if (!pop.hidden && !root.contains(e.target)) close();
-  }
+  function onKey(e) { if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); close(); toggle.focus(); } }
+  function onOutside(e) { if (!pop.hidden && !root.contains(e.target)) close(); }
+
   toggle.addEventListener('click', onToggle);
-  input.addEventListener('change', jump);
+  cal.addEventListener('click', onCal);
   document.addEventListener('keydown', onKey);
   document.addEventListener('mousedown', onOutside);
 
   function teardown(evt) {
     if (evt && evt.target !== messages) return;
     toggle.removeEventListener('click', onToggle);
-    input.removeEventListener('change', jump);
+    cal.removeEventListener('click', onCal);
     document.removeEventListener('keydown', onKey);
     document.removeEventListener('mousedown', onOutside);
     messages.removeEventListener('htmx:beforeCleanupElement', teardown);

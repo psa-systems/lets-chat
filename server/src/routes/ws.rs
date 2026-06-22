@@ -20,8 +20,8 @@ use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, CallSignalFragment, EditedMessageFragment, MentionClearedFragment,
     MentionedFragment, NewMessageFragment, ReactionUpdateFragment, ReminderFragment,
-    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment, UnreadBadgeFragment,
-    VoiceEventFragment,
+    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
+    TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -71,6 +71,14 @@ enum ClientFrame {
         #[serde(default)]
         payload: Option<String>,
     },
+    /// LC-402: a voice participant toggled their mic; broadcast to the channel
+    /// so peers can show the mute indicator on that participant's tile.
+    #[serde(rename = "voice_mute")]
+    VoiceMute { room_id: i64, muted: bool },
+    /// LC-408: a voice participant started/stopped screen-sharing; broadcast so
+    /// peers can pin that participant's tile to the stage.
+    #[serde(rename = "voice_screen")]
+    VoiceScreen { room_id: i64, sharing: bool },
 }
 
 /// Recognized `kind` discriminators for a call signal. Anything else is
@@ -511,14 +519,28 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_control_signal(&e)
                                 }
-                                ChatEvent::VoiceJoined { .. } | ChatEvent::VoiceLeft { .. } => {
-                                    render_voice_event(&e)
-                                }
+                                ChatEvent::VoiceJoined { .. }
+                                | ChatEvent::VoiceLeft { .. }
+                                | ChatEvent::VoiceMuteChanged { .. }
+                                | ChatEvent::VoiceScreenChanged { .. } => render_voice_event(&e),
                                 ChatEvent::VoiceRoster { to_user_id, .. }
                                 | ChatEvent::VoiceSignal { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
                                 {
                                     render_voice_event(&e)
+                                }
+                                // LC-393: call-transcription control + captions,
+                                // per-recipient like the call/voice signals.
+                                ChatEvent::TranscriptStarted { to_user_id, .. }
+                                | ChatEvent::TranscriptEnded { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_transcript_control(&e)
+                                }
+                                ChatEvent::TranscriptSegment { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_transcript_segment(&e)
                                 }
                                 _ => render_event(&e),
                             };
@@ -632,6 +654,34 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 payload,
                             );
                         }
+                        ClientFrame::VoiceMute { room_id, muted } => {
+                            // Only a participant of the channel may announce mute
+                            // state, and only to that channel's subscribers.
+                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                                state.hub.broadcast_to_room(
+                                    room_id,
+                                    &ChatEvent::VoiceMuteChanged {
+                                        room_id,
+                                        user_id: user.id.clone(),
+                                        muted,
+                                    },
+                                );
+                            }
+                        }
+                        ClientFrame::VoiceScreen { room_id, sharing } => {
+                            // Same gate as mute: only a channel participant may
+                            // announce, and only to that channel's subscribers.
+                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                                state.hub.broadcast_to_room(
+                                    room_id,
+                                    &ChatEvent::VoiceScreenChanged {
+                                        room_id,
+                                        user_id: user.id.clone(),
+                                        sharing,
+                                    },
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -648,6 +698,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // still handles the OS side; this only finalizes the audit row.
         let _ =
             db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect").await;
+        // LC-393 backstop: a hard drop never sends /end, so finalize any
+        // transcription session this user started (close + notify + post the
+        // saved notice). Idempotent against a peer's explicit /end.
+        super::transcripts::finalize_open_for_user(&state, &uid).await;
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
             status: "offline".to_string(),
@@ -804,7 +858,7 @@ async fn render_dm_read(
 /// - Else, if the message was authored by someone other than the viewer,
 ///   render an unread-badge bump for the sidebar.
 /// - Otherwise (own message, no open subscription), render nothing.
-async fn render_new_message_or_bump(
+pub async fn render_new_message_or_bump(
     state: &AppState,
     message: &models::Message,
     // LC-230: optimistic-echo dedupe id; rendered as `data-lc-client-id` on
@@ -823,38 +877,42 @@ async fn render_new_message_or_bump(
         return None;
     }
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
-    if is_subscribed {
-        // The viewer has the room open in the foreground, so the message is
-        // effectively read on arrival. Advance their last-read watermark and
-        // broadcast a DmRead so the author sees a live "Seen" update (in DMs)
-        // and any other tabs of this user clear their sidebar badge. Skip
-        // when the viewer authored the message - their own send path already
-        // re-marks read state.
-        if message.user_id != viewer.id {
-            if let Ok(read_at) =
-                db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
-            {
-                db::mentions::mark_mentions_read_for_room(
-                    &state.chat,
-                    &viewer.id,
-                    message.room_id,
-                    message.id,
-                )
-                .await
-                .ok();
-                let event = ChatEvent::DmRead {
-                    room_id: message.room_id,
-                    user_id: viewer.id.clone(),
-                    last_read_message_id: message.id,
-                    read_at,
-                };
-                state.hub.broadcast_to_room(message.room_id, &event);
-            }
-        }
+    // LC-397: the author ALWAYS receives their own message echo (carrying the
+    // client_id) so the optimistic placeholder is reconciled even if THIS
+    // connection's room subscription has not registered yet. That gap is what
+    // left enclave-room sends stuck on "Sending..." while DMs were instant: the
+    // author was a broadcast recipient but, not (yet) in `subscribed`, fell to
+    // the old author `return None` and got no echo. The echo is an id-keyed OOB
+    // swap into #messages, so it self-limits to the tab actually viewing the
+    // room; tabs elsewhere drop it harmlessly.
+    if message.user_id == viewer.id {
         return render_new_message(state, message, client_id, viewer).await;
     }
-    if message.user_id == viewer.id {
-        return None;
+    if is_subscribed {
+        // The viewer (a non-author) has the room open in the foreground, so the
+        // message is effectively read on arrival. Advance their last-read
+        // watermark and broadcast a DmRead so the author sees a live "Seen"
+        // update (in DMs) and any other tabs of this user clear their badge.
+        if let Ok(read_at) =
+            db::chat::set_last_read(&state.chat, &viewer.id, message.room_id, message.id).await
+        {
+            db::mentions::mark_mentions_read_for_room(
+                &state.chat,
+                &viewer.id,
+                message.room_id,
+                message.id,
+            )
+            .await
+            .ok();
+            let event = ChatEvent::DmRead {
+                room_id: message.room_id,
+                user_id: viewer.id.clone(),
+                last_read_message_id: message.id,
+                read_at,
+            };
+            state.hub.broadcast_to_room(message.room_id, &event);
+        }
+        return render_new_message(state, message, None, viewer).await;
     }
     // Muted rooms suppress the sidebar unread bump for background recipients.
     // The foreground branch above is intentionally left untouched: viewers
@@ -1388,6 +1446,40 @@ fn render_call_signal(event: &ChatEvent) -> Option<String> {
     .ok()
 }
 
+/// LC-393: render a transcription start/end control event into the
+/// `#lc-transcript-bus` fragment the browser's transcribe.js drains.
+fn render_transcript_control(event: &ChatEvent) -> Option<String> {
+    let (kind, transcript_id, by): (&str, i64, &str) = match event {
+        ChatEvent::TranscriptStarted {
+            transcript_id,
+            started_by_name,
+            ..
+        } => ("started", *transcript_id, started_by_name.as_str()),
+        ChatEvent::TranscriptEnded { transcript_id, .. } => ("ended", *transcript_id, ""),
+        _ => return None,
+    };
+    TranscriptControlFragment {
+        kind,
+        transcript_id,
+        started_by_name: by,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-393: render one live caption line into the visible `#lc-caption-log`.
+fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::TranscriptSegment {
+        speaker_name, text, ..
+    } = event
+    else {
+        return None;
+    };
+    TranscriptSegmentFragment { speaker_name, text }
+        .render()
+        .ok()
+}
+
 /// Validate and relay one WebRTC call signal to the other member of a DM
 /// room. The server is a dumb relay: it confirms the sender belongs to a
 /// `dm` room, that the two parties have not blocked each other, and that
@@ -1452,7 +1544,7 @@ async fn relay_call_signal(
                     payload: payload.clone(),
                 };
                 state.hub.broadcast_to_user(&peer_id, &event);
-                post_call_started_message(state, user, &room).await;
+                post_call_event_message(state, user, &room, "started a call.").await;
             }
             RingingResult::DuplicateSelf => {
                 // Same caller already holds the slot. Drop silently so the
@@ -1482,6 +1574,15 @@ async fn relay_call_signal(
         state.hub.clear_ringing(room_id);
     }
 
+    // LC-438: log the silent end-states as call-event rows so both members keep
+    // a record (mirrors "started a call."). `user` is the signal sender: the
+    // callee for a decline, the caller for a cancel/no-answer.
+    match kind {
+        "reject" => post_call_event_message(state, user, &room, "declined the call.").await,
+        "cancel" => post_call_event_message(state, user, &room, "cancelled the call.").await,
+        _ => {}
+    }
+
     let mut recipients: Vec<String> = vec![peer_id];
     if matches!(kind, "accept" | "reject" | "cancel" | "hangup") {
         recipients.push(user.id.clone());
@@ -1499,20 +1600,20 @@ async fn relay_call_signal(
     }
 }
 
-/// Insert a "started a call" message into the DM `room` authored by `user`,
-/// then broadcast it like any normal message so it lands in both members'
-/// open conversation and bumps the sidebar for anyone not viewing the room.
-async fn post_call_started_message(state: &AppState, user: &User, room: &models::Room) {
-    let new_id =
-        match db::chat::insert_system_message(&state.chat, room.id, &user.id, "started a call.")
-            .await
-        {
-            Ok(id) => id,
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to insert call-started message");
-                return;
-            }
-        };
+/// Insert a call-event system message (`body`, e.g. "started a call.",
+/// "declined the call.", "cancelled the call.") into the DM `room` authored by
+/// `user`, then broadcast it like any normal message so it lands in both
+/// members' open conversation and bumps the sidebar for anyone not viewing the
+/// room. LC-438: gives every call end-state a thread record so a decline / a
+/// cancel is never silent for either party.
+async fn post_call_event_message(state: &AppState, user: &User, room: &models::Room, body: &str) {
+    let new_id = match db::chat::insert_system_message(&state.chat, room.id, &user.id, body).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to insert call-event message");
+            return;
+        }
+    };
     let raw = match db::chat::get_message(&state.chat, new_id).await {
         Ok(Some(r)) => r,
         _ => return,
@@ -1541,7 +1642,7 @@ async fn post_call_started_message(state: &AppState, user: &User, room: &models:
         client_id: None,
     };
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
-        tracing::warn!(error = %e, "failed to broadcast call-started message");
+        tracing::warn!(error = %e, "failed to broadcast call-event message");
     }
 }
 
@@ -1737,6 +1838,34 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
         }
         .render()
         .ok(),
+        ChatEvent::VoiceMuteChanged {
+            room_id,
+            user_id,
+            muted,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "mute",
+            user_id,
+            username: "",
+            peers_json: "",
+            payload: Some(if *muted { "1" } else { "0" }),
+        }
+        .render()
+        .ok(),
+        ChatEvent::VoiceScreenChanged {
+            room_id,
+            user_id,
+            sharing,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "screen",
+            user_id,
+            username: "",
+            peers_json: "",
+            payload: Some(if *sharing { "1" } else { "0" }),
+        }
+        .render()
+        .ok(),
         _ => None,
     }
 }
@@ -1796,6 +1925,15 @@ fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     // participants preview stays accurate.
     let left = ChatEvent::VoiceLeft { room_id, user_id };
     state.hub.broadcast_to_room(room_id, &left);
+    // LC-393 Phase 2: if that was the last participant, finalize any open
+    // transcription session for the channel (save + post the notice). Spawned
+    // because this fn is sync; AppState is cheap to clone (Arc-backed).
+    if state.hub.voice_room_users(room_id).is_empty() {
+        let st = state.clone();
+        tokio::spawn(async move {
+            super::transcripts::finalize_open_for_room(&st, room_id).await;
+        });
+    }
 }
 
 /// Relay one mesh signal (offer/answer/ice) to a specific peer in the same

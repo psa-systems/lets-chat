@@ -18,9 +18,16 @@
 </div>
 {% endif %}
 {% if message.is_system %}
-<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap px-4 py-1 text-center text-xs text-content-muted">
-  <span class="font-medium">{{ message.label() }}</span> {{ message.body }}
-  <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="ml-1 text-content-subtle">{{ message.created_at }}</time>
+{# LC-434: call/system events render as a centered, muted timeline row (like the
+   day divider) - visually distinct from user messages. The body is rendered
+   inline (system_html) so the transcript "[label](url)" markdown becomes a real
+   anchor instead of literal text. #}
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap lc-sysevent">
+  <span class="lc-sysevent-ico" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c.41 1.163 1.162 2.255 2.124 3.217.962.962 2.054 1.715 3.217 2.124l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg>
+  </span>
+  <span class="lc-sysevent-text"><span class="font-medium">{{ message.label() }}</span> {{ message.system_html()|safe }}</span>
+  <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-sysevent-time">{{ message.created_at }}</time>
 </div>
 {% else %}
 <div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">

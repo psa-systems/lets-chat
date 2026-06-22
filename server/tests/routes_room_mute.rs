@@ -79,6 +79,8 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -290,6 +292,8 @@ async fn post_to_inaccessible_private_room_returns_403() {
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),
         bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
     };
     let app = routes::build_router(state);
     let status = post_notify_prefs(&app, &alice_session, private_id, "all").await;

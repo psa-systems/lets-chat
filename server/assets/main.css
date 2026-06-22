@@ -856,9 +856,72 @@ math {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 3rem;
-    background: linear-gradient(to bottom, transparent, var(--surface));
+    height: 4rem;
+    /* Smoother two-stop fade so the cut reads as an intentional fade, not a hard
+       crop. Fades to --surface (the message-list background). */
+    background: linear-gradient(to bottom, transparent, var(--surface) 85%);
     pointer-events: none;
+}
+
+/* LC-386: jump-to-date custom month-grid calendar (built by auto_scroll.html),
+   replacing the native date input's mis-positioning browser picker. */
+.lc-jd-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: 0.375rem;
+    color: var(--content-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.lc-jd-nav:hover:not(:disabled) {
+    background-color: var(--surface-sunken);
+    color: var(--content);
+}
+.lc-jd-nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.lc-jd-dow {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--content-subtle);
+    padding: 0.125rem 0;
+    text-transform: uppercase;
+}
+.lc-jd-day {
+    height: 1.875rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--content);
+    cursor: pointer;
+}
+.lc-jd-day:hover:not(:disabled) {
+    background-color: var(--surface-sunken);
+}
+.lc-jd-day:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+.lc-jd-today {
+    font-weight: 600;
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.lc-jd-btn {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--content-muted);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+.lc-jd-btn:hover {
+    background-color: var(--surface-sunken);
+    color: var(--content);
 }
 
 /* LC-262: image lightbox. The full image is constrained to the viewport and
@@ -1279,6 +1342,40 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     color: var(--danger);
 }
 
+/* LC-434: call/system events - a centered, muted timeline row distinct from
+   user messages. Icon + actor + event text + time, all on one centered line. */
+.lc-sysevent {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0.25rem 1rem;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: var(--content-muted);
+    text-align: center;
+}
+.lc-sysevent-ico {
+    display: inline-flex;
+    flex: none;
+    color: var(--content-subtle);
+}
+.lc-sysevent-ico svg { height: 0.8125rem; width: 0.8125rem; }
+.lc-sysevent-text { min-width: 0; }
+.lc-sysevent-link {
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.lc-sysevent-link:hover { text-decoration: none; }
+.lc-sysevent-time {
+    flex: none;
+    color: var(--content-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
 /* LC-380: composer controls. The two tiers share one icon-button language: a
    denser format toolbar (.lc-fmt-btn) and the larger bottom action row
    (.lc-composer-btn), both muted-to-content with a sunken hover. The primary
@@ -1344,13 +1441,93 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     width: 1.25rem;
 }
 
-/* LC-371: active sidebar room / DM row. Soft accent fill + a left accent bar
-   (inset shadow follows the rounded corners) for a strong, scannable active
-   state without a layout-shifting border. Paired in the row templates with a
-   bold-unread / muted-room treatment driven by per-row conditionals. */
+/* LC-399: live markdown highlight overlay for the composer. The .lc-mdback
+   backdrop renders the styled text and the box chrome; the .lc-mdinput textarea
+   sits on top transparent (text + background) with a visible caret. The two
+   MUST share identical box metrics - font, line-height, padding, border width,
+   wrapping - or the highlight drifts from the caret, so every metric below is
+   set on both and only colour / weight / decoration / background ever differs
+   between a token and plain text (changing glyph advance would desync). */
+.lc-mdwrap {
+    position: relative;
+    display: block;
+}
+.lc-mdback,
+.lc-mdinput {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: normal;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-height: 10rem;
+}
+.lc-mdback {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--surface-elevated);
+    color: var(--content);
+    border-color: transparent;
+}
+.lc-mdinput {
+    position: relative;
+    z-index: 1;
+    display: block;
+    resize: none;
+    overflow-y: auto;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--content);
+}
+.lc-mdinput:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.lc-mdinput::placeholder {
+    color: var(--content-muted);
+    opacity: 1;
+}
+/* When the LC-276 preview pane is shown the textarea gets `hidden`; collapse the
+   whole overlay so the preview pane (its flex sibling) takes the slot. */
+.lc-mdwrap:has(> .lc-mdinput.hidden) {
+    display: none;
+}
+/* Token styling. Colour / weight / decoration / background only. */
+.lc-mdback .lc-mdm { color: var(--content-muted); opacity: 0.55; }
+.lc-mdback strong { font-weight: 600; color: var(--content); }
+.lc-mdback em { font-style: italic; }
+.lc-mdback del { text-decoration: line-through; color: var(--content-muted); }
+.lc-mdback .lc-mdcode {
+    background: var(--surface-sunken);
+    border-radius: 0.25rem;
+    color: var(--content);
+}
+.lc-mdback .lc-mdh { font-weight: 700; color: var(--content); }
+.lc-mdback .lc-mdq { color: var(--content-muted); font-style: italic; }
+.lc-mdback .lc-mdlink { color: var(--accent); }
+.lc-mdback .lc-mdurl { color: var(--content-muted); text-decoration: underline; }
+
+/* LC-371 / LC-381: active sidebar room / DM row. LC-381 lightens the prior
+   full soft-accent fill (which read heavy in-room) to a neutral raised surface
+   plus an accent left bar and accent-colored, bold label - a clear but quiet
+   active state. The inset shadow bar follows the rounded corners and shifts no
+   layout. Paired in the row templates with a bold-unread / muted-room treatment
+   driven by per-row conditionals. */
 .lc-room-row-active {
-    background-color: var(--accent-surface);
-    color: var(--accent-surface-content);
+    background-color: var(--surface-elevated);
+    color: var(--accent);
     font-weight: 600;
     box-shadow: inset 3px 0 0 0 var(--accent);
 }
@@ -1416,6 +1593,747 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-header-action-danger:hover {
     color: var(--danger);
 }
+.lc-header-action svg { height: 1.25rem; width: 1.25rem; }
+/* LC-436: Mute is an icon toggle - an sr-only checkbox (keeps the hx-post mute
+   wiring) swaps a bell for a slashed bell and tints the action when muted. */
+.lc-header-action .lc-mute-off { display: none; }
+.lc-header-action:has(input:checked) .lc-mute-on { display: none; }
+.lc-header-action:has(input:checked) .lc-mute-off { display: inline-flex; }
+.lc-header-action:has(input:checked) { color: var(--danger); }
+
+/* LC-384: emoji-picker grid cell. Consistent square cells with a sunken hover,
+   for both the reaction picker (reactions::get_picker) and parity with the
+   composer picker. */
+.lc-emoji-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.875rem;
+    border-radius: 0.375rem;
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.lc-emoji-cell:hover {
+    background-color: var(--surface-sunken);
+}
+/* LC-391: the filter hides non-matching cells (and the tab strip) via the
+   [hidden] attribute, but the author display rules above (.lc-emoji-cell ->
+   inline-flex, .lc-emoji-tabs -> flex) override the UA [hidden]{display:none}
+   regardless of specificity, so without these the filter looked dead. The
+   attribute-qualified selector (0,2,0) beats the bare class (0,1,0); no
+   !important needed. Sections already hide (default block display). */
+.lc-emoji-cell[hidden],
+.lc-emoji-tabs[hidden] {
+    display: none;
+}
+
+/* ============================================================================
+   LC-402: in-call (voice/video) UI design system. Theme-token driven so the
+   call surface follows light / dark / high-contrast like the rest of the app.
+   JS (voice.js / call.js / transcribe.js) targets data-lc-* hooks and element
+   ids, never these classes, so styling here is free to change.
+   ============================================================================ */
+
+/* ---- Control bar -------------------------------------------------------- */
+.lc-callbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    padding: 0.5rem 1rem;
+    /* LC-416: a query container so the control buttons can drop their labels to
+       icon-only when the bar itself is narrow - notably while the transcript
+       drawer reserves width - instead of overflowing / overlapping. */
+    container: lc-callbar / inline-size;
+}
+/* LC-412: bottom tray variant for the 1:1 call modal - the bar sits under the
+   video, so the divider is on top and the clusters centre. */
+.lc-callbar--bottom {
+    flex: none;
+    justify-content: center;
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    padding: 0.625rem 1rem;
+}
+.lc-callbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+/* LC-416: isolate the destructive Leave / Hang up cluster with extra space so
+   it never sits flush against the transcription controls. */
+.lc-callbar-group--end { margin-left: 0.375rem; }
+/* LC-409: wrapper around both control clusters - one flex row on desktop, a
+   horizontally-scrollable row under the title on mobile (see the media query). */
+.lc-callbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.lc-callbar-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: 0.125rem 0.25rem;
+    background: var(--border);
+}
+/* base call control button */
+.lc-cbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--content);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.lc-cbtn:hover { background: var(--surface-sunken); }
+.lc-cbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-cbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lc-cbtn svg { height: 1rem; width: 1rem; }
+/* main.css loads after tailwind-built.css, so without this the .lc-cbtn display
+   would win over the .hidden utility the call JS toggles (cf. LC-391). */
+.lc-cbtn.hidden { display: none; }
+
+/* ---- LC-416: icon + collapsible label control buttons ------------------- */
+.lc-cbtn-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    line-height: 0;
+}
+.lc-cbtn-label { white-space: nowrap; }
+/* Mute swaps mic <-> slashed-mic by aria-pressed; other state is colour only. */
+.lc-cbtn-ico--on { display: none; }
+.lc-cbtn[aria-pressed="true"] .lc-cbtn-ico--off { display: none; }
+.lc-cbtn[aria-pressed="true"] .lc-cbtn-ico--on { display: inline-flex; }
+/* Always icon-only (the device gear): keep it square. */
+.lc-cbtn--icon { padding-left: 0.5rem; padding-right: 0.5rem; }
+/* When the bar is narrow, collapse every labelled control to its icon so the
+   row compresses instead of overflowing. The device gear is already icon-only;
+   leave the Join button labelled (it shows alone, pre-join, with room). */
+@container lc-callbar (max-width: 860px) {
+    .lc-callbar-controls .lc-cbtn:not(.lc-cbtn--join) .lc-cbtn-label { display: none; }
+    .lc-callbar-controls .lc-cbtn:not(.lc-cbtn--join) { padding-left: 0.5rem; padding-right: 0.5rem; }
+}
+.lc-voice-countchip { display: inline-flex; align-items: center; gap: 0.25rem; }
+.lc-voice-countchip.hidden { display: none; }
+/* generic toggle on-state (Mute active, video on, screen sharing) */
+.lc-cbtn[aria-pressed="true"] {
+    background: var(--accent-surface);
+    border-color: var(--accent);
+    color: var(--accent-surface-content);
+}
+/* primary: Join */
+.lc-cbtn--join {
+    background: var(--success);
+    border-color: var(--success);
+    color: var(--success-content);
+}
+.lc-cbtn--join:hover { background: var(--success); filter: brightness(0.94); }
+/* destructive: Leave / Hang up */
+.lc-cbtn--leave {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--danger-content);
+}
+.lc-cbtn--leave:hover { background: var(--danger); filter: brightness(0.94); }
+/* Transcribe: idle is the quiet neutral .lc-cbtn; when recording it is an
+   affirmative, saturated "on" - a solid red fill (the same solid --danger /
+   --danger-content pairing as Leave, so it reads as live, not disabled, in
+   every theme) with the record glyph's core pulsing. LC-416 follow-up: the old
+   pale --danger-surface fill read as a hover-ghost / disabled control, putting
+   the strongest emphasis on the inactive buttons instead of the live one. */
+.lc-cbtn--rec[aria-pressed="true"] {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--danger-content);
+}
+.lc-cbtn--rec[aria-pressed="true"]:hover { background: var(--danger); filter: brightness(0.94); }
+/* LC-416: Transcribe uses a record glyph (ring + core). Off-state inherits the
+   button text colour; the active (recording) state recolours via lc-cbtn--rec
+   above and the inner core pulses, so the toggle reads as a live record button
+   and pairs with the drawer header dot. */
+.lc-rec-glyph svg { height: 1.05rem; width: 1.05rem; }
+.lc-cbtn--rec[aria-pressed="true"] .lc-rec-core {
+    animation: lc-rec-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---- Participant grid --------------------------------------------------- */
+/* LC-416 follow-up: cap each cell to a bounded max (not 1fr) and centre the
+   row. With a 1fr max the 2-up case ballooned to two huge edge-to-edge tiles
+   (the right one hard against the viewport), which read as unbalanced. A
+   bounded max keeps tiles a sensible size and `justify-content: center` keeps
+   even gutters on both sides for 1 / 2 / 3+; tracks still shrink toward the min
+   when many participants are present, so cells stay equal-width and nothing
+   overflows. */
+.lc-voice-grid {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+    justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 480px));
+}
+/* LC-408 fix: the grid's shown/hidden state is a class, NOT an inline
+   `display`. An inline `display:grid` would beat the stylesheet and stop the
+   screen-share stage rule below from switching the container to flex. */
+.lc-voice-grid.lc-voice-grid--hidden { display: none; }
+/* Alone in the call (the waiting placeholder is present): keep the lone self
+   tile a sensible size instead of ballooning to the full row width. */
+.lc-voice-grid:has(.lc-voice-waiting) {
+    grid-template-columns: minmax(0, 480px);
+    justify-content: center;
+}
+.lc-voice-tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: var(--surface-sunken);
+    border: 2px solid transparent;
+    aspect-ratio: 16 / 9;
+    min-height: 140px;
+}
+/* active-speaker highlight (voice.js toggles data-speaking via an analyser) */
+.lc-voice-tile[data-speaking="true"] {
+    border-color: var(--success);
+    box-shadow: 0 0 0 3px var(--success-surface);
+}
+/* LC-416: animated equalizer in the name pill, the same active-speaker cue on
+   every tile (the lone bars from the reference, made consistent). Shown only
+   while the tile is speaking; the three bars bob out of phase. */
+.lc-voice-speaking {
+    display: none;
+    align-items: flex-end;
+    gap: 2px;
+    height: 0.8125rem;
+    flex: none;
+}
+.lc-voice-tile[data-speaking="true"] .lc-voice-speaking { display: inline-flex; }
+.lc-voice-speaking i {
+    display: block;
+    width: 3px;
+    height: 40%;
+    border-radius: 1px;
+    background: var(--success);
+    animation: lc-eq 0.9s ease-in-out infinite;
+}
+.lc-voice-speaking i:nth-child(2) { animation-delay: 0.15s; }
+.lc-voice-speaking i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes lc-eq { 0%, 100% { height: 30%; } 50% { height: 100%; } }
+.lc-voice-tile video {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+}
+.lc-voice-avatar {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    height: 5rem;
+    width: 5rem;
+    border-radius: 9999px;
+    object-fit: cover;
+}
+.lc-voice-name {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: calc(100% - 1rem);
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-voice-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lc-voice-you {
+    flex: none;
+    border-radius: 0.25rem;
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0 0.25rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.lc-voice-mute-badge {
+    display: none;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    height: 1.5rem;
+    width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: var(--danger-content);
+}
+.lc-voice-mute-badge svg { height: 0.875rem; width: 0.875rem; }
+.lc-voice-tile[data-muted="true"] .lc-voice-mute-badge { display: inline-flex; }
+/* LC-410: per-peer connection-quality glyph, inside the name pill. Hidden
+   until the tile gets a data-quality (never on the self tile). Recoloured per
+   state; "reconnecting" pulses. */
+.lc-voice-quality { display: none; line-height: 0; flex: none; }
+.lc-voice-tile[data-quality] .lc-voice-quality { display: inline-flex; }
+.lc-voice-quality svg { height: 0.875rem; width: 0.875rem; }
+.lc-voice-tile[data-quality="good"] .lc-voice-quality { color: var(--success); }
+.lc-voice-tile[data-quality="degraded"] .lc-voice-quality { color: var(--warning); }
+.lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality {
+    color: var(--warning);
+    animation: lc-rec-pulse 1.4s ease-in-out infinite;
+}
+.lc-voice-tile[data-quality="failed"] .lc-voice-quality { color: var(--danger); }
+/* "Waiting for others" empty state when joined but alone */
+.lc-voice-waiting {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 6rem;
+    color: var(--content-muted);
+    font-size: 0.875rem;
+}
+
+/* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
+/* Shown before joining: previews who is already here as avatar chips, with a
+   heading + primary Join CTA, or an empty state. voice.js hides the whole
+   region (inline display:none) once joined, so the in-call grid takes over. */
+.lc-voice-lobby {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+}
+.lc-voice-lobby-empty,
+.lc-voice-lobby-active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+}
+/* main.css loads after tailwind-built.css, so the flex above would beat the
+   .hidden utility voice.js toggles; restore it explicitly (cf. LC-391). */
+.lc-voice-lobby-empty.hidden,
+.lc-voice-lobby-active.hidden { display: none; }
+.lc-voice-lobby-empty-ico {
+    display: inline-flex;
+    height: 3rem;
+    width: 3rem;
+    color: var(--content-subtle);
+}
+.lc-voice-lobby-empty-ico svg { height: 3rem; width: 3rem; }
+.lc-voice-lobby-title { font-size: 1.125rem; font-weight: 600; color: var(--content); }
+.lc-voice-lobby-sub { font-size: 0.875rem; color: var(--content-muted); }
+.lc-voice-lobby-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    max-width: 40rem;
+}
+.lc-voice-lobby-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    width: 5rem;
+}
+.lc-voice-lobby-avatar {
+    height: 3.5rem;
+    width: 3.5rem;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 2px solid var(--border);
+    background: var(--surface-sunken);
+}
+.lc-voice-lobby-name {
+    max-width: 5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+.lc-voice-lobby-join {
+    font-size: 0.9375rem;
+    padding: 0.5rem 1.25rem;
+}
+
+/* ---- Screen-share stage (LC-408) --------------------------------------- */
+/* When any tile is a screen share, reshape the grid into a flexbox "stage":
+   the sharing tile spans the full width (forcing a wrap) and the rest flow
+   below as a centered filmstrip of small tiles. Placed after the grid rules so
+   it wins; the :has() toggles automatically when voice.js sets data-screen. */
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-content: flex-start;
+    justify-content: center;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+    flex: 1 1 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 70vh;
+    background: #0b0c0f; /* shared screens read best on a neutral-dark stage */
+}
+/* Don't crop the shared screen - letterbox it instead. */
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
+    object-fit: contain;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
+    flex: 0 0 clamp(120px, 16vw, 196px);
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+}
+.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
+/* "Presenting" badge, shown on a tile that is the active screen share. */
+.lc-voice-screen-badge {
+    display: none;
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.375rem;
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0.125rem 0.4rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+.lc-voice-screen-badge svg { height: 0.8125rem; width: 0.8125rem; }
+.lc-voice-tile[data-screen] .lc-voice-screen-badge { display: inline-flex; }
+
+/* ---- Transcript drawer -------------------------------------------------- */
+/* Fixed right-hand drawer, used by BOTH the voice page and the 1:1 call modal.
+   On the voice page #lc-voice-root reserves space for it (below) so tiles are
+   never covered; over the fullscreen 1:1 modal it simply overlays the right. */
+.lc-transcript {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 62;
+    display: flex;
+    flex-direction: column;
+    width: 20rem;
+    max-width: 85vw;
+    border-left: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
+    /* LC-416: slide in from the right rather than snapping, so opening the panel
+       reads as reserving space (paired with the #lc-voice-root padding
+       transition below) instead of squeezing the header. */
+    transform: translateX(0);
+    transition: transform 0.2s ease, visibility 0.2s ease;
+}
+/* Off-canvas + non-interactive when closed (was display:none, which could not
+   animate). visibility transitions discretely so the slide-out still shows. */
+.lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
+#lc-voice-root { transition: padding-right 0.2s ease; }
+body.lc-transcript-open #lc-voice-root { padding-right: 20rem; }
+
+/* ---- LC-416: transcript empty state ------------------------------------- */
+/* Shown until the first caption line lands (#lc-caption-log is the OOB target;
+   it is empty before any segment). :has keeps it pure-CSS - no JS toggle. */
+.lc-transcript-empty {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    text-align: center;
+    padding: 2.5rem 1.25rem;
+    color: var(--content-muted);
+}
+.lc-transcript-body:has(#lc-caption-log:empty) .lc-transcript-empty { display: flex; }
+.lc-transcript-empty-ico { height: 2rem; width: 2rem; color: var(--content-subtle); margin-bottom: 0.25rem; }
+.lc-transcript-empty-title { font-size: 0.875rem; font-weight: 600; color: var(--content); }
+.lc-transcript-empty-sub { font-size: 0.8125rem; color: var(--content-muted); max-width: 16rem; }
+.lc-transcript-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.625rem 0.75rem;
+}
+.lc-transcript-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+.lc-transcript-rec {
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 9999px;
+    background: var(--danger);
+    animation: lc-rec-pulse 1.6s ease-in-out infinite;
+}
+.lc-transcript-close {
+    margin-left: auto;
+    display: inline-flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-transcript-close:hover { background: var(--surface-sunken); color: var(--content); }
+.lc-transcript-body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
+}
+#lc-caption-log { display: flex; flex-direction: column; gap: 0.5rem; }
+/* "Jump to live" affordance, revealed when the user scrolls up off the bottom. */
+.lc-transcript-jump {
+    position: sticky;
+    bottom: 0;
+    align-self: center;
+    display: none;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    border-radius: 9999px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-content);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+}
+body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
+
+/* ---- Transcript actions footer (LC-411) -------------------------------- */
+/* Open / copy / download the saved transcript from inside the call. Shown only
+   while a session is active (transcribe.js toggles the [hidden] attribute). */
+.lc-transcript-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    flex: none;
+    border-top: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+}
+/* main.css loads after tailwind-built.css, so the display above would beat the
+   UA [hidden]; restore it explicitly. */
+.lc-transcript-foot[hidden] { display: none; }
+.lc-transcript-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--content);
+    padding: 0.1875rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+}
+.lc-transcript-action:hover { background: var(--surface-sunken); }
+.lc-transcript-action:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+
+/* ---- Transcript lines (grouped by speaker, speaker + time + text) ------- */
+/* LC-402: re-homed from the old dark bottom scrim into the themed drawer, so
+   colours come from tokens. Consecutive lines from one speaker are grouped:
+   transcribe.js adds .lc-cap-cont to repeats, hiding the speaker header. */
+.lc-cap-line {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--content);
+}
+.lc-cap-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+.lc-cap-line.lc-cap-cont .lc-cap-head { display: none; }
+.lc-cap-line.lc-cap-cont { margin-top: -0.25rem; }
+.lc-cap-speaker {
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-cap-time {
+    font-size: 0.6875rem;
+    color: var(--content-subtle);
+    font-variant-numeric: tabular-nums;
+}
+.lc-cap-text {
+    display: block;
+    color: var(--content-muted);
+    padding-left: 0.125rem;
+}
+
+@keyframes lc-rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lc-rec-core, .lc-transcript-rec, .lc-voice-speaking i,
+    .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
+    .lc-transcript, #lc-voice-root { transition: none; }
+}
+
+/* ---- LC-409: mobile / responsive call pass ----------------------------- */
+@media (max-width: 640px) {
+    /* Control bar: title on its own row, the two control clusters in one
+       horizontally-scrollable row beneath it - instead of wrapping into
+       several cramped lines. */
+    .lc-callbar {
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+    /* LC-412: the 1:1 modal bar has no title row to stack, so keep it a centred
+       wrapping row of controls rather than a column. */
+    .lc-callbar--bottom {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .lc-callbar-spacer { display: none; }
+    .lc-callbar-controls {
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding-bottom: 0.125rem;
+    }
+    /* Keep each button at full label width and scroll the row, don't squash. */
+    .lc-callbar-controls .lc-cbtn,
+    .lc-callbar-controls .lc-callbar-group,
+    .lc-callbar-controls .lc-callbar-sep { flex: none; }
+    /* Comfortable touch target. */
+    .lc-cbtn { min-height: 2.5rem; }
+
+    /* Participant grid: tighter gutters; clear the iOS home indicator. */
+    .lc-voice-grid {
+        gap: 0.75rem;
+        padding: 0.75rem;
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+
+    /* Transcript drawer becomes a bottom sheet: full width, anchored to the
+       bottom, so it never covers the controls and respects the home-bar inset.
+       (The right-padding reservation on #lc-voice-root is dropped here.) */
+    body.lc-transcript-open #lc-voice-root { padding-right: 0; }
+    .lc-transcript {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 62vh;
+        max-height: 80vh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 0.875rem 0.875rem 0 0;
+        box-shadow: 0 -10px 28px -14px rgba(0, 0, 0, 0.5);
+    }
+    .lc-transcript-body {
+        padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+}
+
+/* LC-389: full categorized reaction picker. The scroll container holds labeled
+   category sections; each section is an 8-column grid of .lc-emoji-cell. The
+   sticky label keeps the current category visible while scrolling. */
+.lc-emoji-scroll {
+    max-height: 16rem;
+    overflow-y: auto;
+    padding: 0.25rem 0.5rem 0.5rem;
+}
+.lc-emoji-cat-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.375rem 0.125rem 0.25rem;
+    background-color: var(--surface-elevated);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--content-subtle);
+}
+.lc-emoji-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 0.125rem;
+}
+/* The category tab strip: one representative glyph per section, horizontally
+   scrollable so it never wraps. The active tab gets an accent underline. */
+.lc-emoji-tabs {
+    display: flex;
+    gap: 0.125rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.lc-emoji-tab {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+.lc-emoji-tab:hover {
+    background-color: var(--surface-sunken);
+}
+.lc-emoji-tab[data-lc-active] {
+    border-bottom-color: var(--accent);
+}
 
 /* Universal reduced-motion kill switch. Sets transition + animation duration
    to near-zero (not 0; some JS waits on `transitionend` and 0 means the event
@@ -1428,4 +2346,368 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* ===== LC-426: Settings redesign ======================================== */
+/* Two-column shell: sticky section nav + a centered, max-width content column.
+   Reuses the .btn / .input / .card / .toast component vocabulary; only the
+   settings-specific layout, toggle, status and toast-region live here. */
+.lc-set-shell {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+.lc-set-nav {
+    position: sticky;
+    top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+.lc-set-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--content-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+.lc-set-tab:hover { background: var(--surface-sunken); color: var(--content); }
+.lc-set-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-set-tab[aria-selected="true"] {
+    background: var(--accent-surface);
+    border-color: var(--accent);
+    color: var(--accent-surface-content);
+}
+.lc-set-tab svg { height: 1.05rem; width: 1.05rem; flex: none; }
+.lc-set-main { min-width: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+.lc-set-panel { display: flex; flex-direction: column; gap: 1.25rem; }
+.lc-set-panel[hidden] { display: none; }
+.lc-set-panel-title { font-size: 1.25rem; font-weight: 700; color: var(--content); }
+
+/* Settings card: a .card with internal structure. */
+.lc-set-card { padding: 1.25rem 1.25rem 1.375rem; }
+.lc-set-card--danger { border-color: var(--danger-border); background: var(--danger-surface); }
+.lc-set-card-head { margin-bottom: 1rem; }
+.lc-set-card-title { font-size: 1rem; font-weight: 600; color: var(--content); }
+.lc-set-card-desc { margin-top: 0.125rem; font-size: 0.8125rem; color: var(--content-muted); }
+.lc-set-pending { color: var(--warning); font-weight: 500; }
+
+/* Field: label + control + help, evenly spaced. */
+.lc-set-form { display: flex; flex-direction: column; gap: 1rem; }
+.lc-set-field { display: flex; flex-direction: column; gap: 0.3125rem; }
+.lc-set-field.lc-set-field--narrow { max-width: 22rem; }
+.lc-set-label { font-size: 0.8125rem; font-weight: 500; color: var(--content); }
+.lc-set-help { font-size: 0.75rem; color: var(--content-muted); }
+/* LC-439: inline field validation error (avatar size/type). */
+.lc-set-error { font-size: 0.75rem; font-weight: 500; color: var(--danger); }
+.lc-set-error[hidden] { display: none; }
+textarea.input { min-height: 4.5rem; resize: vertical; }
+
+/* Action row: submit button + inline status, with a spinner inside the button. */
+.lc-set-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
+}
+/* LC-432: push a trailing action (Remove avatar) to the far right so the status
+   stays anchored next to Save. */
+.lc-set-actions-end { margin-left: auto; }
+.lc-set-actions .lc-spinner.htmx-indicator { display: none; }
+.htmx-request .lc-spinner.htmx-indicator { display: inline-block; }
+/* Inline per-form status, swapped in by the server fragment. */
+.lc-set-status:empty { display: none; }
+.lc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+.lc-status--ok { color: var(--success); }
+.lc-status--err { color: var(--danger); }
+.lc-status-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1rem;
+    width: 1rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    line-height: 1;
+    color: var(--accent-content);
+}
+.lc-status--ok .lc-status-ico { background: var(--success); }
+.lc-status--err .lc-status-ico { background: var(--danger); color: var(--danger-content); }
+
+/* Definition lists (Account / About). */
+.lc-set-defs { display: flex; flex-direction: column; gap: 0.375rem; font-size: 0.875rem; }
+.lc-set-defs > div { display: flex; gap: 0.75rem; }
+.lc-set-defs dt { width: 8rem; flex: none; color: var(--content-muted); }
+.lc-set-defs dd { color: var(--content); min-width: 0; word-break: break-word; }
+
+/* Toggle switch: a styled checkbox + label + description, aligned in a row. */
+.lc-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+}
+.lc-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.lc-toggle-track {
+    position: relative;
+    flex: none;
+    margin-top: 0.125rem;
+    height: 1.25rem;
+    width: 2.25rem;
+    border-radius: 9999px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-strong);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.lc-toggle-track::after {
+    content: "";
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    height: 0.875rem;
+    width: 0.875rem;
+    border-radius: 9999px;
+    background: var(--content-muted);
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.lc-toggle input:checked + .lc-toggle-track {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.lc-toggle input:checked + .lc-toggle-track::after {
+    transform: translateX(1rem);
+    background: var(--accent-content);
+}
+.lc-toggle input:focus-visible + .lc-toggle-track { box-shadow: 0 0 0 2px var(--ring); }
+.lc-toggle input:disabled + .lc-toggle-track { opacity: 0.5; }
+.lc-toggle:has(input:disabled) { cursor: not-allowed; opacity: 0.7; }
+.lc-toggle-text { min-width: 0; }
+.lc-toggle-title { font-size: 0.875rem; color: var(--content); }
+.lc-toggle-desc { display: block; font-size: 0.75rem; color: var(--content-muted); margin-top: 0.125rem; }
+
+/* Quiet-hours time grid: labelled start/end pairs, aligned. */
+.lc-set-timegrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    max-width: 30rem;
+}
+.lc-set-timegrid input.input { color-scheme: light dark; }
+
+/* Avatar editor row. */
+.lc-set-avatar-row { display: flex; align-items: flex-start; gap: 1rem; }
+.lc-set-avatar {
+    height: 4rem; width: 4rem; flex: none;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+}
+.lc-set-avatar-fallback {
+    display: flex; align-items: center; justify-content: center;
+    height: 4rem; width: 4rem; flex: none;
+    border-radius: 9999px;
+    background: var(--surface-sunken);
+    color: var(--content-muted);
+    font-weight: 600; font-size: 1.25rem;
+}
+
+/* Sessions list. */
+.lc-set-sessions { display: flex; flex-direction: column; }
+.lc-set-session {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+}
+.lc-set-session:first-child { border-top: none; }
+
+/* ===== LC-426: toast region ============================================= */
+.lc-toast-region {
+    position: fixed;
+    z-index: 80;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: min(22rem, calc(100vw - 2rem));
+    pointer-events: none;
+}
+.lc-toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    background: var(--surface-elevated);
+    color: var(--content);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
+    box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+    animation: lc-toast-in 160ms ease-out;
+}
+.lc-toast--ok { border-left-color: var(--success); }
+.lc-toast--err { border-left-color: var(--danger); }
+.lc-toast.lc-toast--leaving { animation: lc-toast-out 160ms ease-in forwards; }
+.lc-toast-ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: none; height: 1.125rem; width: 1.125rem; margin-top: 0.0625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem; line-height: 1;
+    color: var(--accent-content);
+}
+.lc-toast--ok .lc-toast-ico { background: var(--success); }
+.lc-toast--err .lc-toast-ico { background: var(--danger); color: var(--danger-content); }
+.lc-toast-msg { flex: 1; min-width: 0; }
+.lc-toast-close {
+    flex: none;
+    margin-left: 0.25rem;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--content-subtle);
+    font-size: 1rem; line-height: 1;
+    padding: 0 0.125rem;
+}
+.lc-toast-close:hover { color: var(--content); }
+@keyframes lc-toast-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: none; } }
+@keyframes lc-toast-out { to { opacity: 0; transform: translateY(0.5rem); } }
+
+/* Mobile: nav becomes a horizontal scroll strip above the content. */
+@media (max-width: 768px) {
+    .lc-set-shell { grid-template-columns: minmax(0, 1fr); padding: 1rem 0.875rem 3rem; gap: 1rem; }
+    .lc-set-nav {
+        position: static;
+        flex-direction: row;
+        gap: 0.375rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+        scrollbar-width: thin;
+    }
+    .lc-set-tab { width: auto; flex: none; white-space: nowrap; }
+    .lc-set-timegrid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lc-toast, .lc-toast.lc-toast--leaving { animation: none; }
+    .lc-toggle-track, .lc-toggle-track::after { transition: none; }
+}
+
+/* ===== LC-440: Call transcripts list ==================================== */
+.lc-tx-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated);
+    padding: 0.5rem 0.75rem;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.lc-tx-row:hover { background: var(--surface-sunken); }
+.lc-tx-row:focus-within { border-color: var(--accent); }
+/* Stretched link: covers the row so the whole card is clickable; the delete
+   button sits above it (z-index) so the two never conflict. */
+.lc-tx-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.lc-tx-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-tx-main { min-width: 0; flex: 1; }
+.lc-tx-titleline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.375rem 0.5rem; }
+.lc-tx-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--content);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.lc-tx-meta {
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+/* Type badge: distinct subtle colours so DM vs voice scan at a glance. */
+.lc-tx-badge {
+    flex: none;
+    border-radius: 9999px;
+    padding: 0.0625rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.1;
+}
+.lc-tx-badge--dm { background: var(--accent-surface); color: var(--accent-surface-content); }
+.lc-tx-badge--voice { background: var(--success-surface); color: var(--success); }
+.lc-tx-live { flex: none; font-size: 0.6875rem; font-weight: 600; color: var(--danger); }
+/* 0-line rows are de-emphasized so they don't compete with real transcripts. */
+.lc-tx-row--empty { background: transparent; }
+.lc-tx-row--empty .lc-tx-title { color: var(--content-muted); font-weight: 500; }
+.lc-tx-row--empty .lc-tx-meta { color: var(--content-subtle); }
+.lc-tx-row--empty:hover { background: var(--surface-sunken); }
+/* Per-row delete: hover/focus-revealed, above the stretched link. */
+.lc-tx-del {
+    position: relative;
+    z-index: 2;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.75rem;
+    width: 1.75rem;
+    border-radius: 0.375rem;
+    color: var(--content-subtle);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+}
+.lc-tx-row:hover .lc-tx-del,
+.lc-tx-row:focus-within .lc-tx-del,
+.lc-tx-del:focus-visible { opacity: 1; }
+.lc-tx-del:hover { background: var(--danger-surface); color: var(--danger); }
+.lc-tx-del svg { height: 1rem; width: 1rem; }
+.lc-tx-chevron { flex: none; height: 1rem; width: 1rem; color: var(--content-subtle); }
+/* Hide-empty toggle label. */
+.lc-tx-hide {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+    cursor: pointer;
+    user-select: none;
+}
+/* Friendly empty state. */
+.lc-tx-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--content-muted);
+}
+.lc-tx-empty-ico { height: 2.5rem; width: 2.5rem; color: var(--content-subtle); }
+.lc-tx-empty-title { font-size: 0.875rem; color: var(--content-muted); max-width: 22rem; }
+@media (prefers-reduced-motion: reduce) {
+    .lc-tx-row, .lc-tx-del { transition: none; }
 }

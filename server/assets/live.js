@@ -100,4 +100,25 @@
     var pending = document.querySelector('#messages [data-client-id="' + cid + '"]');
     if (pending) pending.remove();
   });
+
+  // LC-415 follow-up: tell the server which enclave's sidebar the viewer is
+  // currently looking at, on every htmx request. Routes that re-render the
+  // whole sidebar (category add/rename/delete/reorder, star toggle/reorder,
+  // mark-read / mark-unread) need the viewer's CURRENT enclave to render the
+  // right shape; deriving it from HX-Current-URL alone is fragile (a URL the
+  // path heuristic does not recognise, a stripped header, or a sidebar OOB
+  // swap that raced the submit all yield None, collapsing the re-render to the
+  // DM-only sidebar and dropping the just-changed row). The rendered sidebar
+  // already encodes it in the `#sidebar-nav-{id}` element id (plain
+  // `sidebar-nav` when not in an enclave), so read it live from the DOM and
+  // send it as an explicit header the server prefers. Always present and
+  // always correct because it is the very element the user is looking at.
+  document.body.addEventListener('htmx:configRequest', function (evt) {
+    var nav = document.querySelector('nav[id^="sidebar-nav-"]');
+    if (!nav) return;
+    var m = /^sidebar-nav-(\d+)$/.exec(nav.id);
+    if (m && evt.detail && evt.detail.headers) {
+      evt.detail.headers['X-LC-Current-Enclave'] = m[1];
+    }
+  });
 })();

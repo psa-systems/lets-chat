@@ -15,6 +15,7 @@ sidebar-unread-only = Solo no leídos
 sidebar-link-activity = Actividad
 sidebar-link-saved = Guardados
 sidebar-link-scheduled = Programados
+sidebar-link-transcripts = Transcripciones
 sidebar-link-settings = Ajustes
 sidebar-link-shortcuts = Atajos de teclado
 sidebar-toggle-theme = Cambiar tema
@@ -99,6 +100,17 @@ partials-poll-closes = cierra
 partials-reaction-add = Añadir reacción
 partials-reaction-filter = Filtrar emoji
 partials-reaction-recent = Recientes
+# LC-389: emoji-picker category labels (tab + section heading).
+partials-reaction-cat-smileys = Caras y emociones
+partials-reaction-cat-people = Personas y cuerpo
+partials-reaction-cat-nature = Animales y naturaleza
+partials-reaction-cat-food = Comida y bebida
+partials-reaction-cat-travel = Viajes y lugares
+partials-reaction-cat-activities = Actividades
+partials-reaction-cat-objects = Objetos
+partials-reaction-cat-symbols = Símbolos
+partials-reaction-cat-flags = Banderas
+partials-reaction-cat-custom = Personalizados
 
 ## Room header
 partials-room-info-title = Ver información, descripción y wiki de la sala
@@ -111,6 +123,10 @@ partials-room-moderators = Moderadores
 partials-room-jumpdate-title = Saltar a fecha
 partials-room-jumpdate-label = Saltar a fecha
 partials-room-jumpdate-none = No hay mensajes en esa fecha ni posteriores.
+partials-room-jumpdate-today = Hoy
+partials-room-jumpdate-clear = Borrar
+partials-room-jumpdate-prev = Mes anterior
+partials-room-jumpdate-next = Mes siguiente
 
 ## Message list (LC-242 jump-to-latest pill)
 # %n% se sustituye con el conteo de mensajes en vivo en JS (partials/auto_scroll.html).
