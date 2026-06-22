@@ -5,6 +5,15 @@
 name: Build desktop (Linux)
 
 on:
+  # Releases are cut by create-release.yml, which tags the merge commit via the
+  # Forgejo API. An API-created tag does NOT raise `push: tags: v*` (YOTUN-29),
+  # so the versioned release bundle is built from the `release` event instead:
+  # it fires for the API-created release with github.ref = refs/tags/<tag>. The
+  # `release` event ignores the `paths` filter (paths only gates `push`), so a
+  # release always builds.
+  release:
+    types:
+      - published
   push:
     branches:
       - "main"
@@ -57,12 +66,21 @@ jobs:
         id: get-version
         shell: nu {0}
         run: |
-          let describe = (^git describe --tags --always | str trim)
-          let parts = ($describe | parse --regex '^(?<tag>.+)-\d+-g[0-9a-f]+$')
-          let version = if ($parts | is-not-empty) {
-              $parts.tag.0
-          } else if ($describe | str starts-with "v") {
-              $describe
+          # GOV-13: resolve the Generic Packages path label (`version`) from the
+          # TRIGGER, never from `git describe`. A release commit is at once a
+          # push to `main` and the tagged commit, so a describe-derived label
+          # made the main-push run and the tag/release run resolve the SAME
+          # `vX.Y.Z` path and race to DELETE-then-PUT the same immutable
+          # generic-package file (409 package file already exists). A
+          # release/tag build publishes under its semver tag; every other build
+          # is a `push: branches: main` build and publishes under the moving
+          # `latest` package. The two trains write disjoint paths, so they never
+          # collide. (`version` keeps the leading `v` - the registry path and
+          # artifact filenames both include it.)
+          let event_name = "${{ github.event_name }}"
+          let git_ref = "${{ github.ref }}"
+          let version = if ($event_name == "release") or ($git_ref | str starts-with "refs/tags/") {
+              $git_ref | str replace --regex '^refs/tags/' ''
           } else {
               "latest"
           }
