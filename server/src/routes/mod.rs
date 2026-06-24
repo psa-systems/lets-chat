@@ -1194,9 +1194,12 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/description",
             get(room_info::get_description).patch(room_info::patch_description),
         )
+        .route("/room/{room_id}/manage", get(room_rbac::get_page))
         .route(
             "/room/{room_id}/moderators",
-            get(room_rbac::get_page).post(room_rbac::post_grant),
+            // LC-454: page renamed to /manage; GET 302-redirects for back-compat,
+            // POST (grant override) keeps its original action URL.
+            get(room_rbac::redirect_to_manage).post(room_rbac::post_grant),
         )
         .route(
             "/room/{room_id}/moderators/{user_id}",

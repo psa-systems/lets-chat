@@ -2711,3 +2711,33 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
     .lc-tx-row, .lc-tx-del { transition: none; }
 }
+
+/* LC-454: shared room About / Manage polish.
+   Reuses the .lc-set-* / .card / .btn vocabulary; adds a single empty-state
+   treatment and a "caution" card variant (less severe than --danger) for the
+   message-retention section. */
+.lc-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 1.5rem 1rem;
+}
+.lc-empty-ico { height: 2rem; width: 2rem; color: var(--content-subtle); }
+.lc-empty-text { font-size: 0.8125rem; color: var(--content-muted); max-width: 24rem; }
+/* Caution card: amber edge for the destructive-but-not-irreversible retention
+   section, distinct from the red --danger delete card. */
+.lc-set-card--caution { border-color: var(--warning-border); }
+/* State pill (retention current state). */
+.lc-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.0625rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.lc-pill--off { background: var(--surface-sunken); color: var(--content-muted); }
+.lc-pill--on { background: var(--danger-surface); color: var(--danger); }
