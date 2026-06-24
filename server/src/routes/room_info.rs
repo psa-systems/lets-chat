@@ -319,10 +319,23 @@ pub async fn post_nickname(
             })?;
     }
     let nick_value = db::room_nicknames::get(&state.chat, room_id, &user.id).await?;
-    html(&RoomNicknameFragment {
+    // LC-454: swap the #room-nickname section in place AND append a toast so the
+    // save is never silent (mirrors the settings save-feedback pattern). The
+    // section partial stays toast-free so a fresh page load does not emit one.
+    let saved = nick_value.is_some();
+    let frag = html(&RoomNicknameFragment {
         nick_room_id: room_id,
         nick_value,
-    })
+    })?;
+    let msg = crate::i18n::translate_current(if saved {
+        "room-nickname-saved"
+    } else {
+        "room-nickname-cleared"
+    });
+    let toast = html(&crate::views::settings::SettingsFeedback::toast_only_ok(
+        msg,
+    ))?;
+    Ok(Html(format!("{}{}", frag.0, toast.0)))
 }
 
 async fn require_can_edit_wiki(

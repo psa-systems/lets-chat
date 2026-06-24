@@ -133,3 +133,7 @@ partials-room-jumpdate-next = Mes siguiente
 room-jump-to-latest-aria = Saltar al último mensaje
 room-jump-new-one = 1 mensaje nuevo
 room-jump-new-many = %n% mensajes nuevos
+
+# LC-454: accion "Gestionar" del encabezado de sala (antes Moderadores)
+partials-room-manage-title = Gestionar esta sala
+partials-room-manage = Gestionar

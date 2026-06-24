@@ -20,7 +20,7 @@
       </ul>
       <form method="post" action="/room/{{ room_id }}/retention" class="mt-2">
         <input type="hidden" name="days" value="{{ n }}" />
-        <button type="submit" class="bg-danger text-danger-content rounded px-3 py-1 text-sm hover:bg-danger">
+        <button type="submit" class="btn btn-danger btn-sm">
           {{ "room-rpreview-confirm-apply"|t }}
         </button>
       </form>
@@ -35,7 +35,7 @@
       </p>
       <form method="post" action="/room/{{ room_id }}/retention" class="mt-2">
         <input type="hidden" name="days" value="" />
-        <button type="submit" class="bg-slate-600 text-white rounded px-3 py-1 text-sm hover:bg-slate-700">
+        <button type="submit" class="btn btn-secondary btn-sm">
           {{ "room-rpreview-confirm"|t }}
         </button>
       </form>

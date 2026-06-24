@@ -72,13 +72,13 @@
       <span>{{ "partials-room-info"|t }}</span>
     </a>
     {% if can_manage_overrides %}
-    <a href="/room/{{ room.id }}/moderators"
+    <a href="/room/{{ room.id }}/manage"
        class="lc-header-action"
-       data-lc-tip="{{ "partials-room-moderators-title"|t }}" data-lc-tip-pos="bottom">
+       data-lc-tip="{{ "partials-room-manage-title"|t }}" data-lc-tip-pos="bottom">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
         <path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/>
       </svg>
-      <span>{{ "partials-room-moderators"|t }}</span>
+      <span>{{ "partials-room-manage"|t }}</span>
     </a>
     {% endif %}
     {% include "room/notify_dropdown.html" %}
