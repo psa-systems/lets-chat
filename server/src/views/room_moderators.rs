@@ -21,11 +21,19 @@ pub struct RoomModeratorRow {
     pub label: String,
 }
 
+/// LC-454: the room "Manage" page (renamed from "Moderators"). Reached at
+/// `/room/{id}/manage` (`/moderators` 302-redirects here for back-compat).
+/// Same `room_can_manage_overrides` gate; groups posting policy, integrations,
+/// roles/overrides, message retention, and the delete-room danger zone.
 #[derive(Template)]
-#[template(path = "room/moderators.html")]
+#[template(path = "room/manage.html")]
 pub struct RoomModeratorsPage<'a> {
     pub user: &'a User,
     pub room: &'a Room,
+    /// LC-454: the room's enclave id, used to build the delete-room POST target
+    /// `/enclave/{enclave_id}/rooms/{room_id}/delete`. `None` for DMs / rooms
+    /// with no enclave (the danger zone is hidden then).
+    pub enclave_id: Option<i64>,
     pub overrides: &'a [RoomOverrideEntry],
     pub candidates: &'a [RoomModeratorRow],
     /// LC-85: current `posting_allowed_for` for this room. Drives the

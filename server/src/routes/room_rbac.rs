@@ -6,18 +6,36 @@
 //! enclave admin) and write a `mod_actions` audit row so the action is
 //! discoverable in the moderation log.
 use axum::extract::{Path, State};
-use axum::response::{IntoResponse, Redirect};
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::Form;
 use serde::Deserialize;
 
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
+use crate::i18n::translate_current;
 use crate::models::User;
 use crate::perms::room_can_manage_overrides;
 use crate::state::AppState;
 use crate::views::room_moderators::{RoomModeratorRow, RoomModeratorsPage, RoomOverrideEntry};
+use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
+
+/// LC-454: true when the request came from htmx, so a mutating handler returns a
+/// small status fragment (the shared `SettingsFeedback`) instead of a full-page
+/// redirect. Mirrors `routes::settings::is_hx`.
+fn is_hx(headers: &HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+}
+
+/// LC-454: `GET /room/{id}/moderators` -> `/room/{id}/manage`. The page was
+/// renamed + relocated; this keeps old links / bookmarks working. The mutating
+/// action routes (POST grant, DELETE revoke, posting-policy, retention) keep
+/// their original URLs.
+pub async fn redirect_to_manage(Path(room_id): Path<i64>) -> Redirect {
+    Redirect::to(&format!("/room/{room_id}/manage"))
+}
 
 #[derive(Deserialize)]
 pub struct GrantForm {
@@ -133,6 +151,7 @@ pub async fn get_page(
     html(&RoomModeratorsPage {
         user: &user,
         room: &room,
+        enclave_id: enclave_id_for_chrome,
         overrides: &overrides,
         candidates: &candidates,
         posting_policy: &room.posting_allowed_for,
@@ -186,7 +205,7 @@ pub async fn post_grant(
         Some(&metadata),
     )
     .await?;
-    Ok(Redirect::to(&format!("/room/{room_id}/moderators")))
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")))
 }
 
 #[derive(Deserialize)]
@@ -206,8 +225,9 @@ pub async fn post_posting_policy(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
+    headers: HeaderMap,
     Form(form): Form<PostingPolicyForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_can_manage(&state, &user, room_id).await?;
     let policy = form.policy.trim();
     if !matches!(policy, "all" | "moderators_only" | "admins_only") {
@@ -230,7 +250,15 @@ pub async fn post_posting_policy(
         Some(&metadata),
     )
     .await?;
-    Ok(Redirect::to(&format!("/room/{room_id}/moderators")))
+    // LC-454: htmx submit gets the shared status fragment + toast; a no-JS
+    // submit falls back to a full-page redirect (progressive enhancement).
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "room-policy-saved",
+        )))?
+        .into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
 
 /// DELETE /room/{id}/moderators/{user_id}
@@ -254,5 +282,5 @@ pub async fn delete_revoke(
         None,
     )
     .await?;
-    Ok(Redirect::to(&format!("/room/{room_id}/moderators")))
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")))
 }

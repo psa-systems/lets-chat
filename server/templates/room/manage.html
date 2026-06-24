@@ -1,0 +1,182 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "room-manage-heading"|t }} - #{{ room.name }} - lets-chat{% endblock %}
+
+{% block main %}
+<header class="border-b border-border px-4 py-2 flex items-center justify-between gap-3">
+  <div class="min-w-0">
+    <h1 class="font-semibold truncate">{{ "room-manage-heading"|t }} <span class="text-content-subtle font-normal">#{{ room.name }}</span></h1>
+  </div>
+  <a href="/room/{{ room.id }}" class="btn btn-secondary btn-sm flex-none">{{ "room-info-back-to-chat"|t }}</a>
+</header>
+{# LC-454: room admin settings on the settings-card vocabulary. Gate unchanged
+   (room_can_manage_overrides). Single column of standardized cards; every Save
+   returns the shared SettingsFeedback status + toast. Action routes + htmx
+   targets are unchanged from the old /moderators page. #}
+<div class="flex-1 overflow-y-auto">
+  <div class="mx-auto max-w-3xl px-4 py-6 flex flex-col gap-5">
+
+    {# ===== Posting policy ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-mods-policy-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-mods-policy-intro"|t }}</p>
+      </div>
+      <form hx-post="/room/{{ room.id }}/posting-policy"
+            hx-target="#lc-pp-status" hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-label" for="lc-pp">{{ "room-mods-who-can-post"|t }}</label>
+          <select id="lc-pp" name="policy" class="input">
+            <option value="all" {% if posting_policy == "all" %}selected{% endif %}>{{ "room-mods-policy-all"|t }}</option>
+            <option value="moderators_only" {% if posting_policy == "moderators_only" %}selected{% endif %}>{{ "room-mods-policy-mods"|t }}</option>
+            <option value="admins_only" {% if posting_policy == "admins_only" %}selected{% endif %}>{{ "room-mods-policy-admins"|t }}</option>
+          </select>
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "room-save"|t }}</span></button>
+          <span id="lc-pp-status" class="lc-set-status" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+
+    {# ===== Integrations ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-manage-integrations-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-manage-integrations-desc"|t }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/room/{{ room.id }}/webhooks" class="btn btn-secondary btn-sm">{{ "room-mods-manage-webhooks"|t }}</a>
+        <a href="/room/{{ room.id }}/email-inboxes" class="btn btn-secondary btn-sm">{{ "room-mods-manage-inboxes"|t }}</a>
+        <a href="/room/{{ room.id }}/feeds" class="btn btn-secondary btn-sm">{{ "room-mods-manage-feeds"|t }}</a>
+      </div>
+    </div>
+
+    {# ===== Roles & overrides ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-manage-roles-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-mods-intro"|t }}</p>
+      </div>
+
+      {% if overrides.is_empty() %}
+      {% let empty_text_key = "room-mods-overrides-empty" %}
+      {% include "partials/empty_state.html" %}
+      {% else %}
+      <ul class="divide-y divide-border">
+        {% for o in overrides %}
+        <li class="py-3 first:pt-0 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-sm font-medium">{{ o.user_label }}</div>
+            <div class="text-xs text-content-muted">
+              {{ o.role }} - {{ "room-mods-granted-by"|t }} {{ o.assigned_by_label }} {{ "room-mods-granted-on"|t }} {{ o.assigned_at }}
+            </div>
+          </div>
+          <button type="button"
+                  hx-delete="/room/{{ room.id }}/moderators/{{ o.user_id }}"
+                  hx-confirm="{{ "room-mods-revoke-confirm-1"|t }} {{ o.role }} {{ "room-mods-revoke-confirm-2"|t }} {{ o.user_label }}?"
+                  hx-on::after-request="window.location.reload()"
+                  class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface flex-none">{{ "room-table-revoke"|t }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if !candidates.is_empty() %}
+      <form method="post" action="/room/{{ room.id }}/moderators" class="lc-set-form border-t border-border pt-4 mt-4">
+        <span class="lc-set-label">{{ "room-mods-grant-heading"|t }}</span>
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-help" for="lc-grant-user">{{ "room-mods-member"|t }}</label>
+          <select id="lc-grant-user" name="user_id" required class="input">
+            {% for c in candidates %}
+            <option value="{{ c.user_id }}">{{ c.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-help" for="lc-grant-role">{{ "room-mods-role"|t }}</label>
+          <select id="lc-grant-role" name="role" required class="input">
+            <option value="moderator">{{ "room-mods-role-moderator"|t }}</option>
+            <option value="admin">{{ "room-mods-role-admin"|t }}</option>
+          </select>
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-primary btn-sm">{{ "room-mods-grant-button"|t }}</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="lc-set-help mt-3">{{ "room-mods-grant-all-have"|t }}</p>
+      {% endif %}
+    </div>
+
+    {# ===== Message retention (caution) ===== #}
+    {% if room.room_type != "dm" %}
+    <div class="card lc-set-card lc-set-card--caution">
+      <div class="lc-set-card-head">
+        <div class="flex items-center gap-2">
+          <h3 class="lc-set-card-title text-warning">{{ "room-retention-heading"|t }}</h3>
+          {% match retention_days %}
+            {% when Some with (d) %}
+              <span class="lc-pill lc-pill--on">{{ d }} {{ "room-retention-days"|t }}</span>
+            {% when None %}
+              <span class="lc-pill lc-pill--off">{{ "room-retention-pill-disabled"|t }}</span>
+          {% endmatch %}
+        </div>
+        <p class="lc-set-card-desc">
+          {{ "room-retention-intro-1"|t }} <strong>{{ "room-retention-cannot-undo"|t }}</strong>
+          {{ "room-retention-intro-2"|t }}
+          <a href="/room/{{ room.id }}/info" class="text-accent hover:underline">{{ "room-retention-wiki-link"|t }}</a>
+          {{ "room-retention-intro-3"|t }}
+        </p>
+      </div>
+      <form hx-get="/room/{{ room.id }}/retention/preview"
+            hx-target="#retention-preview"
+            hx-swap="outerHTML"
+            class="lc-set-form">
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-label" for="lc-retention">{{ "room-retention-input-label"|t }}</label>
+          <input id="lc-retention" type="number" name="days" min="1" step="1"
+                 value="{% match retention_days %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %}"
+                 placeholder="{{ "room-retention-off"|t }}" class="input">
+          <p class="lc-set-help">{{ "room-retention-preview-note"|t }}</p>
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-secondary">{{ "room-retention-preview"|t }}</button>
+        </div>
+      </form>
+      <div id="retention-preview"></div>
+    </div>
+    {% endif %}
+
+    {# ===== Danger zone: delete room (moved from About, LC-454) ===== #}
+    {% if let Some(eid) = enclave_id %}
+    <div class="card lc-set-card lc-set-card--danger">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title text-danger">{{ "room-info-danger-heading"|t }}</h3>
+        <p class="lc-set-card-desc text-danger">{{ "room-delete-room-desc"|t }}</p>
+      </div>
+      {# Type-to-confirm gate (roominfo.js): the Delete button stays disabled
+         until the phrase matches; the native confirm() is the second guard.
+         Native POST so the handler's redirect (out of the deleted room) runs as
+         a full navigation. post_delete_room is unchanged. #}
+      <form method="post" action="/enclave/{{ eid }}/rooms/{{ room.id }}/delete"
+            data-lc-confirm-gate
+            data-lc-confirm="{{ "room-info-delete-room-confirm"|t }}"
+            onsubmit="return confirm(this.getAttribute('data-lc-confirm'))"
+            class="lc-set-form">
+        <div class="lc-set-field">
+          <label class="lc-set-label text-danger" for="lc-del-room">{{ "room-delete-confirm-prefix"|t }} <code class="font-mono">{{ "room-delete-confirm-phrase"|t }}</code> {{ "room-delete-confirm-suffix"|t }}</label>
+          <input id="lc-del-room" class="input border-danger-border" type="text" autocomplete="off"
+                 data-lc-confirm-input data-lc-confirm-phrase="{{ "room-delete-confirm-phrase"|t }}">
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-danger" data-lc-confirm-submit disabled>{{ "room-info-delete-room"|t }}</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

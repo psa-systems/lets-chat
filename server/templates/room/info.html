@@ -12,11 +12,12 @@
   </div>
   <a href="/room/{{ room.id }}" class="btn btn-secondary btn-sm flex-none">{{ "room-info-back-to-chat"|t }}</a>
 </header>
-{# LC-449: room info on the settings shell. Client-side tabs (roominfo.js)
-   keep all three panels in the DOM and toggle visibility, hash + sessionStorage
-   synced. `active_tab` sets the INITIAL selection for deep-links / no-JS.
-   Progressive enhancement: with no JS every panel shows (one long page) and the
-   now-inert tab rail is hidden. #}
+{# LC-449 / LC-454: room About page on the settings shell. Client-side tabs
+   (roominfo.js) keep all panels in the DOM and toggle visibility, hash +
+   sessionStorage synced. `active_tab` sets the INITIAL selection for deep-links
+   / no-JS. Content tabs (About / Pinned / Files) are read-oriented; the
+   Preferences tab holds personal-only settings (your nickname). Room admin
+   actions (posting policy, retention, overrides, delete) live on /manage. #}
 <div class="flex-1 overflow-y-auto" data-lc-roominfo>
   <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
   <div class="lc-set-shell">
@@ -33,10 +34,14 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3.75 3A1.75 1.75 0 002 4.75v3.26a3.235 3.235 0 011.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0016.25 5h-4.836a.25.25 0 01-.177-.073L9.823 3.513A1.75 1.75 0 008.586 3H3.75zM3.75 9A1.75 1.75 0 002 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25v-4.5A1.75 1.75 0 0016.25 9H3.75z"/></svg>
         <span>{{ "room-info-tab-files"|t }}</span>
       </button>
+      <button type="button" role="tab" id="lc-rtab-prefs" data-lc-tab="prefs" aria-controls="lc-rpanel-prefs" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        <span>{{ "room-info-tab-prefs"|t }}</span>
+      </button>
     </nav>
 
     <div class="lc-set-main">
-      {# ===== Docs ===== #}
+      {# ===== About ===== #}
       <section id="lc-rpanel-docs" role="tabpanel" aria-labelledby="lc-rtab-docs" data-lc-tabpanel="docs" class="lc-set-panel"{% if active_tab != "docs" %} hidden{% endif %}>
         <h2 class="lc-set-panel-title">{{ "room-info-tab-docs"|t }}</h2>
 
@@ -46,7 +51,8 @@
           </div>
           <div id="description-content" class="space-y-2">
             {% if description_html.is_empty() %}
-            <p class="lc-set-help italic">{{ "room-description-empty"|t }}</p>
+            {% let empty_text_key = "room-description-empty" %}
+            {% include "partials/empty_state.html" %}
             {% else %}
             <div class="lc-md text-sm">{{ description_html|safe }}</div>
             {% endif %}
@@ -66,7 +72,8 @@
           </div>
           <div id="wiki-content" class="space-y-2">
             {% if wiki_html.is_empty() %}
-            <p class="lc-set-help italic">{{ "room-info-wiki-empty"|t }}</p>
+            {% let empty_text_key = "room-info-wiki-empty" %}
+            {% include "partials/empty_state.html" %}
             {% else %}
             <div class="lc-md text-sm">{{ wiki_html|safe }}</div>
             <p class="lc-set-help">
@@ -84,27 +91,6 @@
             {% endif %}
           </div>
         </div>
-
-        <div class="card lc-set-card">
-          {% include "room/nickname_section.html" %}
-        </div>
-
-        {# LC-400 / LC-449: delete-room affordance in a danger card. Gated by
-           `can_manage` (enclave_can_manage), the same role `post_delete_room`
-           enforces. Native POST so the handler's redirect runs as a full
-           navigation; the JS confirm guards the destructive action. #}
-        {% if can_manage %}{% if let Some(eid) = enclave_id %}
-        <div class="card lc-set-card lc-set-card--danger">
-          <div class="lc-set-card-head">
-            <h3 class="lc-set-card-title text-danger">{{ "room-info-danger-heading"|t }}</h3>
-          </div>
-          <form method="post" action="/enclave/{{ eid }}/rooms/{{ room.id }}/delete"
-                data-lc-confirm="{{ "room-info-delete-room-confirm"|t }}"
-                onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
-            <button type="submit" class="btn btn-danger btn-sm">{{ "room-info-delete-room"|t }}</button>
-          </form>
-        </div>
-        {% endif %}{% endif %}
       </section>
 
       {# ===== Pinned ===== #}
@@ -116,7 +102,8 @@
             <h3 class="lc-set-card-title">{{ "room-info-pinned-heading"|t }}</h3>
           </div>
           {% if pinned.is_empty() %}
-          <p class="lc-set-help italic">{{ "room-info-pinned-empty"|t }}</p>
+          {% let empty_text_key = "room-info-pinned-empty" %}
+          {% include "partials/empty_state.html" %}
           {% else %}
           <ul class="divide-y divide-border">
             {% for p in pinned %}
@@ -160,7 +147,8 @@
           </div>
           <div id="files-grid">
             {% if files.is_empty() %}
-            <p class="lc-set-help italic">{{ "room-info-files-empty"|t }}</p>
+            {% let empty_text_key = "room-info-files-empty" %}
+            {% include "partials/empty_state.html" %}
             {% else %}
             <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
               {% let card_room_id = room.id %}
@@ -179,6 +167,19 @@
             </div>
             {% endif %}
           </div>
+        </div>
+      </section>
+
+      {# ===== Preferences (personal) ===== #}
+      <section id="lc-rpanel-prefs" role="tabpanel" aria-labelledby="lc-rtab-prefs" data-lc-tabpanel="prefs" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "room-info-tab-prefs"|t }}</h2>
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "room-nickname-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "room-prefs-nickname-desc"|t }}</p>
+          </div>
+          {% include "room/nickname_section.html" %}
         </div>
       </section>
     </div>
