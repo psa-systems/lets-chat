@@ -9,11 +9,11 @@
               autofocus>{{ body }}</textarea>
   </label>
   <div class="flex gap-2">
-    <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1 text-sm">{{ "room-save"|t }}</button>
+    <button type="submit" class="btn btn-primary btn-sm">{{ "room-save"|t }}</button>
     <button type="button"
             hx-get="/room/{{ room_id }}/description"
             hx-target="#description-content"
             hx-swap="innerHTML"
-            class="bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1 text-sm">{{ "room-cancel"|t }}</button>
+            class="btn btn-secondary btn-sm">{{ "room-cancel"|t }}</button>
   </div>
 </form>
