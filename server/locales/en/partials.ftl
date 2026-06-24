@@ -133,3 +133,7 @@ partials-room-jumpdate-next = Next month
 room-jump-to-latest-aria = Jump to latest message
 room-jump-new-one = 1 new message
 room-jump-new-many = %n% new messages
+
+# LC-454: room header "Manage" action (renamed from Moderators)
+partials-room-manage-title = Manage this room
+partials-room-manage = Manage

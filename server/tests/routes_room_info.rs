@@ -112,7 +112,9 @@ async fn member_can_view_info_page() {
     let t = app().await;
     let (status, body) = req(&t.app, &t.member_session, Method::GET, "/room/1/info", "").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("Docs"), "tab nav present");
+    // LC-454: the "Docs" tab was renamed "About"; Preferences was added.
+    assert!(body.contains("About"), "tab nav present");
+    assert!(body.contains("Preferences"), "preferences tab present");
     assert!(body.contains("Description"), "description section present");
     assert!(body.contains("Wiki"), "wiki section present");
     let _ = t.admin_id;
