@@ -13,5 +13,5 @@
         hx-get="/room/{{ room_id }}/wiki/edit"
         hx-target="#wiki-content"
         hx-swap="innerHTML"
-        class="text-xs bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1">{% if html.is_empty() %}{{ "room-info-wiki-create"|t }}{% else %}{{ "room-info-wiki-edit"|t }}{% endif %}</button>
+        class="btn btn-secondary btn-sm">{% if html.is_empty() %}{{ "room-info-wiki-create"|t }}{% else %}{{ "room-info-wiki-edit"|t }}{% endif %}</button>
 {% endif %}
