@@ -210,9 +210,12 @@ pub async fn get_page(
     // by the same `enclave_can_manage` that `post_delete_room` enforces.
     let can_manage = crate::perms::enclave_can_manage(enclave_role, &user.role);
 
-    // Pinned rows only when the pinned tab is active. Cheap to skip
-    // otherwise.
-    let pinned: Vec<PinnedListRow> = if active_tab == "pinned" {
+    // LC-449: the redesigned info page (settings-shell, client-side tabs) keeps
+    // all three panels in the DOM, so load pinned + files unconditionally rather
+    // than gating on `active_tab` (which now only sets the INITIAL panel). Both
+    // are bounded scans (pinned <= MAX_PINS_PER_ROOM, files = one page), cheap
+    // enough to render on every info-page load.
+    let pinned: Vec<PinnedListRow> = {
         let pins =
             db::pinned::pins_for_room(&state.chat, room_id, db::pinned::MAX_PINS_PER_ROOM).await?;
         let names = super::pinned::resolve_author_labels(&state, &pins).await?;
@@ -231,16 +234,10 @@ pub async fn get_page(
                 body: p.body.clone(),
             })
             .collect()
-    } else {
-        Vec::new()
     };
 
-    // LC-87: file rows + cursor only when the files tab is active.
-    let (files, files_next_cursor) = if active_tab == "files" {
-        load_room_files(&state, room_id, files_kind_filter, None).await?
-    } else {
-        (Vec::new(), None)
-    };
+    let (files, files_next_cursor) =
+        load_room_files(&state, room_id, files_kind_filter, None).await?;
 
     let (
         sidebar_categories,

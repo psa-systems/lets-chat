@@ -8,5 +8,5 @@
         hx-get="/room/{{ room_id }}/description/edit"
         hx-target="#description-content"
         hx-swap="innerHTML"
-        class="text-xs bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1 mt-2">{% if html.is_empty() %}{{ "room-description-set"|t }}{% else %}{{ "room-description-edit"|t }}{% endif %}</button>
+        class="btn btn-secondary btn-sm mt-2">{% if html.is_empty() %}{{ "room-description-set"|t }}{% else %}{{ "room-description-edit"|t }}{% endif %}</button>
 {% endif %}
