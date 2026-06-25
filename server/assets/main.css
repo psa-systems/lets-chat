@@ -610,44 +610,47 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
  * composer; both share the same color palette but the in-message chip is
  * compact and clickable while the composer bar adds an "x" to cancel.
  */
-/* LC-460: inline quoted-reply pointer. Accent left edge + reply-arrow icon +
-   "Replying to" label so it reads as a reply to a parent (and matches the
-   composer's accent "Replying to" bar), distinct from the thread-entry chip. */
+/* LC-461: inline quote-reply reference. A QUIET, muted context line - thin
+   neutral left-border, no fill, small low-contrast text - so it stays
+   subordinate to the message body below it. Deliberately NOT accent-tinted:
+   the accent treatment is reserved for the thread-entry pill (the interactive
+   door to the side panel), keeping the two reply concepts visually distinct. */
 .lc-quote-chip {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    margin-bottom: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    border-left: 3px solid var(--accent);
-    background: var(--accent-surface);
-    border-radius: 0.25rem;
-    font-size: 0.85em;
-    color: var(--content-muted);
+    gap: 0.3125rem;
+    margin-bottom: 0.1875rem;
+    padding: 0.0625rem 0.5rem;
+    border-left: 2px solid var(--border-strong);
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.8em;
+    color: var(--content-subtle);
     text-decoration: none;
     max-width: 100%;
     width: fit-content;
 }
 .lc-quote-chip:hover {
     background: var(--surface-sunken);
+    color: var(--content-muted);
 }
 .lc-quote-ico {
-    height: 0.85em;
-    width: 0.85em;
+    height: 0.8em;
+    width: 0.8em;
     flex: none;
-    color: var(--accent);
+    color: var(--content-subtle);
 }
 .lc-quote-label {
-    color: var(--content-muted);
+    color: var(--content-subtle);
     white-space: nowrap;
 }
 .lc-quote-author {
     font-weight: 600;
-    color: var(--content);
+    color: var(--content-muted);
     white-space: nowrap;
 }
 .lc-quote-excerpt {
-    color: var(--content-muted);
+    color: var(--content-subtle);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
