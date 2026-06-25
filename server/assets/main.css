@@ -610,22 +610,36 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
  * composer; both share the same color palette but the in-message chip is
  * compact and clickable while the composer bar adds an "x" to cancel.
  */
+/* LC-460: inline quoted-reply pointer. Accent left edge + reply-arrow icon +
+   "Replying to" label so it reads as a reply to a parent (and matches the
+   composer's accent "Replying to" bar), distinct from the thread-entry chip. */
 .lc-quote-chip {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
     margin-bottom: 0.25rem;
     padding: 0.25rem 0.5rem;
-    border-left: 3px solid var(--border-strong);
-    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    background: var(--accent-surface);
     border-radius: 0.25rem;
     font-size: 0.85em;
     color: var(--content-muted);
     text-decoration: none;
     max-width: 100%;
+    width: fit-content;
 }
 .lc-quote-chip:hover {
     background: var(--surface-sunken);
+}
+.lc-quote-ico {
+    height: 0.85em;
+    width: 0.85em;
+    flex: none;
+    color: var(--accent);
+}
+.lc-quote-label {
+    color: var(--content-muted);
+    white-space: nowrap;
 }
 .lc-quote-author {
     font-weight: 600;
@@ -642,6 +656,53 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 .lc-quote-deleted {
     font-style: italic;
     color: var(--content-subtle);
+}
+
+/* LC-460: thread-entry chip under a message (replaces the speech-balloon emoji
+   pill). Branch icon + count + chevron read as "open the thread", visually
+   distinct from the quoted-reply pointer above. */
+.lc-thread-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    padding: 0.1875rem 0.5rem 0.1875rem 0.4375rem;
+    border: 1px solid var(--accent-border, var(--border));
+    border-radius: 9999px;
+    background: var(--accent-surface);
+    color: var(--accent-surface-content);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.lc-thread-entry:hover { background: var(--surface-sunken); border-color: var(--accent); }
+.lc-thread-entry:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-thread-entry-ico { height: 0.9rem; width: 0.9rem; flex: none; color: var(--accent); }
+.lc-thread-entry-count { white-space: nowrap; }
+.lc-thread-entry-chevron { height: 0.8rem; width: 0.8rem; flex: none; color: var(--content-subtle); margin-left: -0.125rem; }
+
+/* LC-460: thread panel hierarchy. A count divider labels the replies section and
+   a left rail nests replies beneath the root message. */
+.lc-thread-count {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem 0.125rem;
+}
+.lc-thread-count-rule { height: 1px; flex: 1; background: var(--border); }
+.lc-thread-count-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--content-subtle);
+    white-space: nowrap;
+}
+.lc-thread-replies {
+    border-left: 2px solid var(--accent-surface);
+    margin-left: 0.5rem;
 }
 
 .lc-quote-bar {

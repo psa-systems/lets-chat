@@ -1,13 +1,20 @@
 <div id="reply-count-{{ message_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {# LC-460: thread-entry affordance. A branch icon + count + chevron read as
+     "open the thread" - distinct from the inline quoted-reply chip (which points
+     up to a parent). Opens the thread side panel; inputs unchanged so the WS
+     OOB reply-count swap keeps working. #}
   {% if reply_count > 0 %}
   <button
     hx-get="/room/{{ room_id }}/thread/{{ message_id }}"
     hx-target="#thread-panel"
     hx-swap="outerHTML"
-    class="mt-1 inline-flex items-center gap-1 rounded-full bg-accent-surface px-2 py-0.5 text-xs text-accent-surface-content hover:bg-accent-surface"
+    class="lc-thread-entry"
+    data-lc-tip="{{ "room-thread-view"|t }}" data-lc-tip-pos="top"
+    aria-label="{{ "room-thread-view"|t }}"
   >
-    <span>&#128172;</span>
-    <span>{{ reply_count }} {% if reply_count == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
+    <svg class="lc-thread-entry-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v5.5A2.5 2.5 0 006.5 12H15"/><path d="M12 9l3 3-3 3"/></svg>
+    <span class="lc-thread-entry-count">{{ reply_count }} {% if reply_count == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
+    <svg class="lc-thread-entry-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/></svg>
   </button>
   {% endif %}
 </div>
