@@ -149,6 +149,39 @@ enclave-settings-member-kick = Kick
 enclave-settings-member-transfer = Transfer
 enclave-settings-member-transfer-confirm-prefix = Transfer ownership to
 enclave-settings-member-transfer-confirm-suffix = ?
+
+# LC-463: enclave settings redesign (tabs, copy, switches, danger zone, feedback)
+enclave-settings-back = Back to enclave
+enclave-settings-tabs-aria = Enclave settings sections
+enclave-settings-tab-general = General
+enclave-settings-tab-members = Members
+enclave-settings-tab-moderation = Moderation
+enclave-settings-tab-custom = Customization
+enclave-settings-tab-danger = Danger zone
+enclave-settings-visibility-public-label = Public enclave
+enclave-settings-copy = Copy
+enclave-settings-copied = Copied
+enclave-settings-emoji-choose = Choose image
+enclave-settings-no-file = No file chosen
+enclave-settings-emoji-formats = PNG, GIF, or WebP, up to 256 KiB.
+enclave-settings-emoji-err-type = Use a PNG, GIF, or WebP image.
+enclave-settings-emoji-err-size = Image must be under 256 KiB.
+enclave-settings-delete-heading = Delete this enclave
+enclave-settings-delete-desc = Permanently delete this enclave and all of its rooms, messages, and history. This cannot be undone.
+enclave-delete-confirm-prefix = Type
+enclave-delete-confirm-phrase = delete this enclave
+enclave-delete-confirm-suffix = to confirm.
+enclave-settings-member-kick-confirm-prefix = Kick
+enclave-settings-member-kick-confirm-suffix = from this enclave?
+enclave-flash-saved = Saved
+enclave-flash-rotated = Invite code rotated
+enclave-flash-added = Added
+enclave-flash-created = Created
+enclave-flash-deleted = Deleted
+enclave-flash-updated = Updated
+enclave-flash-unbanned = User unbanned
+enclave-flash-transferred = Ownership transferred
+
 # LC-469: branding page redesign
 enclave-branding-back = Back to settings
 enclave-branding-colors-heading = Colors

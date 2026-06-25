@@ -2822,6 +2822,47 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-pill--off { background: var(--surface-sunken); color: var(--content-muted); }
 .lc-pill--on { background: var(--danger-surface); color: var(--danger); }
 
+/* LC-463: toggle switch for enclave on/off settings. Rendered as a submit
+   button (so the existing POST-flip server contract is unchanged); aria-checked
+   drives the visual on/off state, set by the server from the current value. */
+.lc-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 1.5rem;
+    width: 2.75rem;
+    flex: none;
+    border: none;
+    border-radius: 9999px;
+    background: var(--border-strong);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.lc-switch[aria-checked="true"] { background: var(--accent); }
+.lc-switch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    height: calc(1.5rem - 4px);
+    width: calc(1.5rem - 4px);
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+.lc-switch[aria-checked="true"] .lc-switch-thumb { transform: translateX(1.25rem); }
+@media (prefers-reduced-motion: reduce) {
+    .lc-switch, .lc-switch-thumb { transition: none; }
+}
+/* A settings row that pairs explanatory copy with a trailing control. */
+.lc-set-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
 /* LC-469: branding color swatch - style the native color input as a clean,
    consistently-sized swatch matching the form controls. */
 .lc-swatch {

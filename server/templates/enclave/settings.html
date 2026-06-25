@@ -3,293 +3,364 @@
 {% block title %}{{ enclave.name }} {{ "enclave-settings-title"|t }} - lets-chat{% endblock %}
 
 {% block main %}
-{# LC-172: subscribe to the enclave topic so the member list below updates live
-   on join / kick / leave / role-change without a manual reload. live.js sends
-   the SubscribeTopic frame; the server authorizes enclave membership (and site
-   admins) before joining the fan-out set. #}
-<div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
-<section class="p-6 max-w-2xl space-y-6">
-  {% if let Some(msg) = flash_error %}
-  <div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger">
-    {{ msg }}
+<header class="border-b border-border px-4 py-2 flex items-center justify-between gap-3">
+  <div class="min-w-0">
+    <h1 class="font-semibold truncate">{{ enclave.name }} <span class="text-content-subtle font-normal">{{ "enclave-settings-title"|t }}</span></h1>
   </div>
-  {% endif %}
-  <h1 class="text-2xl font-semibold">{{ enclave.name }} {{ "enclave-settings-title"|t }}</h1>
-
-  <form method="post" action="/enclave/{{ enclave.id }}/edit" class="space-y-2">
-    <label class="block">
-      <span class="text-sm">{{ "enclave-settings-name"|t }}</span>
-      <input name="name" value="{{ enclave.name }}" class="w-full border rounded px-2 py-1" required>
-    </label>
-    <label class="block">
-      <span class="text-sm">{{ "enclave-settings-description"|t }}</span>
-      <input name="description" value="{% if let Some(d) = enclave.description %}{{ d }}{% endif %}" class="w-full border rounded px-2 py-1">
-    </label>
-    <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-settings-save"|t }}</button>
-  </form>
-
-  <section>
-    <h2 class="font-semibold">{{ "enclave-settings-visibility-heading"|t }}</h2>
-    <p class="text-sm text-content-muted mb-2">
-      {% if enclave.is_public %}{{ "enclave-settings-visibility-public"|t }}{% else %}{{ "enclave-settings-visibility-private"|t }}{% endif %}
-    </p>
-    <form method="post" action="/enclave/{{ enclave.id }}/visibility" class="inline">
-      <button name="is_public" value="{% if enclave.is_public %}0{% else %}1{% endif %}" type="submit" class="bg-surface-sunken rounded px-3 py-1">
-        {% if enclave.is_public %}{{ "enclave-settings-make-private"|t }}{% else %}{{ "enclave-settings-make-public"|t }}{% endif %}
+  <a href="/enclave/{{ enclave.id }}" class="btn btn-secondary btn-sm flex-none">{{ "enclave-settings-back"|t }}</a>
+</header>
+{# LC-172: subscribe to the enclave topic so the member list updates live on
+   join / kick / leave / role-change. LC-463: redesigned on the settings shell
+   with client-side tabs (enclave_settings.js); ?ok= redirects surface a toast
+   via the hidden node below. #}
+<div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}" data-lc-enclave-settings>
+  {% if let Some(m) = flash_ok %}<div data-lc-flash-toast hidden>{{ m }}</div>{% endif %}
+  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
+  <div class="lc-set-shell">
+    <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "enclave-settings-tabs-aria"|t }}">
+      <button type="button" role="tab" id="lc-etab-general" data-lc-tab="general" aria-controls="lc-epanel-general" aria-selected="true" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        <span>{{ "enclave-settings-tab-general"|t }}</span>
       </button>
-    </form>
-  </section>
-
-  <section class="space-y-2">
-    <h2 class="font-semibold">{{ "enclave-settings-invite-code-heading"|t }}</h2>
-    {% if let Some(c) = enclave.invite_code %}
-    <p class="font-mono text-sm bg-surface-sunken rounded p-2 select-all">{{ c }}</p>
-    {% else %}
-    <p class="text-sm text-content-muted">{{ "enclave-settings-no-invite-code"|t }}</p>
-    {% endif %}
-    <form method="post" action="/enclave/{{ enclave.id }}/invite-code">
-      <button type="submit" class="bg-surface-sunken rounded px-3 py-1">{% if enclave.invite_code.is_some() %}{{ "enclave-settings-rotate"|t }}{% else %}{{ "enclave-settings-generate"|t }}{% endif %}</button>
-    </form>
-  </section>
-
-  <section>
-    <div id="lc-enclave-settings-members">
-      {% include "enclave/settings_members_items.html" %}
-    </div>
-    {# LC-336: invite-by-search moved here from the removed enclave landing menu.
-       Same hx contract (get_invite_search -> #enclave-invite-results, post_invite)
-       and data-lc-search wiring; the settings page is already manage-gated. #}
-    <div class="relative mt-3" autocomplete="off">
-      <input
-        name="q"
-        placeholder="{{ "enclave-invite-placeholder"|t }}"
-        hx-get="/enclave/{{ enclave.id }}/invite/search"
-        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-        hx-target="#enclave-invite-results"
-        hx-swap="innerHTML"
-        autocomplete="off"
-        data-lc-search
-        data-lc-search-results="#enclave-invite-results"
-        role="combobox"
-        aria-expanded="false"
-        aria-controls="enclave-invite-results"
-        aria-autocomplete="list"
-        class="w-full border rounded px-2 py-1 text-sm">
-      <div id="enclave-invite-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
-    </div>
-  </section>
-
-  {# LC-217: per-enclave message send rate limit. Manage-gated form. #}
-  <section class="space-y-3">
-    <h2 class="font-semibold">{{ "enclave-settings-rate-limit-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "enclave-settings-rate-limit-help"|t }}</p>
-    <form method="post" action="/enclave/{{ enclave.id }}/rate-limit" class="flex items-end gap-3">
-      <label class="text-sm">
-        <span class="text-content-muted">{{ "enclave-settings-rate-limit-burst"|t }}</span>
-        <input type="number" name="burst" min="0" max="10000" step="1"
-               value="{{ enclave.msg_rate_limit_burst }}"
-               class="mt-1 block w-32 border border-border-strong rounded px-2 py-1 text-sm">
-      </label>
-      <button type="submit" class="rounded bg-accent text-accent-content px-3 py-1.5 text-sm hover:bg-accent-hover">
-        {{ "enclave-settings-rate-limit-save"|t }}
+      <button type="button" role="tab" id="lc-etab-members" data-lc-tab="members" aria-controls="lc-epanel-members" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 8a3 3 0 100-6 3 3 0 000 6zM14.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 017 18a9.953 9.953 0 01-5.385-1.572zM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 00-1.588-3.755 4.502 4.502 0 015.874 2.636.818.818 0 01-.36.98A7.465 7.465 0 0114.5 16z"/></svg>
+        <span>{{ "enclave-settings-tab-members"|t }}</span>
       </button>
-      <p class="text-xs text-content-muted ml-auto">
-        {% if enclave.msg_rate_limit_burst == 0 %}{{ "enclave-settings-rate-limit-status-global"|t }}{% else %}{{ "enclave-settings-rate-limit-status-active-prefix"|t }} {{ enclave.msg_rate_limit_burst }} {{ "enclave-settings-rate-limit-status-active-suffix"|t }}{% endif %}
-      </p>
-    </form>
-  </section>
+      <button type="button" role="tab" id="lc-etab-moderation" data-lc-tab="moderation" aria-controls="lc-epanel-moderation" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.43.105.86.105 1.299 0 5.628-3.808 10.36-8.97 11.749a.53.53 0 01-.276 0C4.808 17.057 1 12.325 1 6.7c0-.439.036-.87.105-1.3a.5.5 0 01.48-.425 11.947 11.947 0 007.076-2.738zm4.196 5.954a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+        <span>{{ "enclave-settings-tab-moderation"|t }}</span>
+      </button>
+      <button type="button" role="tab" id="lc-etab-custom" data-lc-tab="custom" aria-controls="lc-epanel-custom" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+        <span>{{ "enclave-settings-tab-custom"|t }}</span>
+      </button>
+      {% if can_delete %}
+      <button type="button" role="tab" id="lc-etab-danger" data-lc-tab="danger" aria-controls="lc-epanel-danger" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+        <span class="text-danger">{{ "enclave-settings-tab-danger"|t }}</span>
+      </button>
+      {% endif %}
+    </nav>
 
-  {# LC-339: Coyote Mode anti-spam. Manage-gated toggle. #}
-  <section class="space-y-3">
-    <h2 class="font-semibold">{{ "enclave-settings-coyote-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "enclave-settings-coyote-help"|t }}</p>
-    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
-      <div class="text-sm">
-        {% if enclave.coyote_mode %}
-        <strong>{{ "enclave-settings-coyote-on-label"|t }}</strong> {{ "enclave-settings-coyote-on-text"|t }}
-        {% else %}
-        <strong>{{ "enclave-settings-coyote-off-label"|t }}</strong> {{ "enclave-settings-coyote-off-text"|t }}
-        {% endif %}
-      </div>
-      <form method="post" action="/enclave/{{ enclave.id }}/coyote-mode">
-        <button name="enabled" value="{% if enclave.coyote_mode %}0{% else %}1{% endif %}"
-                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
-          {% if enclave.coyote_mode %}{{ "enclave-settings-coyote-disable"|t }}{% else %}{{ "enclave-settings-coyote-enable"|t }}{% endif %}
-        </button>
-      </form>
-    </div>
-  </section>
+    <div class="lc-set-main">
+      {% if let Some(msg) = flash_error %}
+      <div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ msg }}</div>
+      {% endif %}
 
-  {# LC-342: shame-tag community moderation (prototype). Manage-gated toggle. #}
-  <section class="space-y-3">
-    <h2 class="font-semibold">{{ "enclave-settings-shame-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "enclave-settings-shame-help"|t }}</p>
-    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
-      <div class="text-sm">
-        {% if enclave.shame_tags_enabled %}
-        <strong>{{ "enclave-settings-shame-on-label"|t }}</strong> {{ "enclave-settings-shame-on-text"|t }}
-        {% else %}
-        <strong>{{ "enclave-settings-shame-off-label"|t }}</strong> {{ "enclave-settings-shame-off-text"|t }}
-        {% endif %}
-      </div>
-      <form method="post" action="/enclave/{{ enclave.id }}/shame-tags">
-        <button name="enabled" value="{% if enclave.shame_tags_enabled %}0{% else %}1{% endif %}"
-                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
-          {% if enclave.shame_tags_enabled %}{{ "enclave-settings-shame-disable"|t }}{% else %}{{ "enclave-settings-shame-enable"|t }}{% endif %}
-        </button>
-      </form>
-    </div>
-  </section>
+      {# ===== General ===== #}
+      <section id="lc-epanel-general" role="tabpanel" aria-labelledby="lc-etab-general" data-lc-tabpanel="general" class="lc-set-panel">
+        <h2 class="lc-set-panel-title">{{ "enclave-settings-tab-general"|t }}</h2>
 
-  {# LC-340: enclave ban-list. Manage-gated; lift a ban (e.g. a Coyote Mode
-     false positive) so the user can rejoin and post again. #}
-  <section class="space-y-3">
-    <h2 class="font-semibold">{{ "enclave-settings-bans-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "enclave-settings-bans-help"|t }}</p>
-    {% if bans.is_empty() %}
-    <p class="text-sm text-content-muted italic">{{ "enclave-settings-bans-empty"|t }}</p>
-    {% else %}
-    <ul class="divide-y border rounded">
-      {% for b in bans %}
-      <li class="flex items-center justify-between gap-2 p-2">
-        <div class="min-w-0">
-          <span class="text-sm truncate" title="{{ b.user_id }}">{{ b.label }}</span>
-          <span class="text-xs text-content-muted">
-            {% if let Some(r) = b.reason %}{{ r }} - {% endif %}{{ b.banned_at }}
-          </span>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-name"|t }}</h3></div>
+          <form method="post" action="/enclave/{{ enclave.id }}/edit" class="lc-set-form">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-enc-name">{{ "enclave-settings-name"|t }}</label>
+              <input id="lc-enc-name" name="name" value="{{ enclave.name }}" class="input" required>
+            </div>
+            <div class="lc-set-field">
+              <label class="lc-set-label" for="lc-enc-desc">{{ "enclave-settings-description"|t }}</label>
+              <input id="lc-enc-desc" name="description" value="{% if let Some(d) = enclave.description %}{{ d }}{% endif %}" class="input">
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary">{{ "enclave-settings-save"|t }}</button>
+            </div>
+          </form>
         </div>
-        <form method="post" action="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban">
-          <button type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">{{ "enclave-settings-bans-unban"|t }}</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-  </section>
 
-  <section class="space-y-3">
-    <h2 class="font-semibold">{{ "enclave-settings-emojis-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      {{ "enclave-settings-emojis-help-1"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">:shortcode:</code> {{ "enclave-settings-emojis-help-2"|t }}
-    </p>
-    <div class="flex items-center justify-between gap-3 border rounded p-2 bg-surface">
-      <div class="text-sm">
-        {% if enclave.share_emojis_globally %}
-        <strong>{{ "enclave-settings-emojis-shared-label"|t }}</strong> {{ "enclave-settings-emojis-shared-text"|t }}
-        {% else %}
-        <strong>{{ "enclave-settings-emojis-private-label"|t }}</strong> {{ "enclave-settings-emojis-private-text"|t }}
-        {% endif %}
-      </div>
-      <form method="post" action="/enclave/{{ enclave.id }}/share-emojis">
-        <button name="share" value="{% if enclave.share_emojis_globally %}0{% else %}1{% endif %}"
-                type="submit" class="text-sm bg-surface-sunken rounded px-3 py-1">
-          {% if enclave.share_emojis_globally %}{{ "enclave-settings-emojis-stop-sharing"|t }}{% else %}{{ "enclave-settings-emojis-share-globally"|t }}{% endif %}
-        </button>
-      </form>
-    </div>
-    {% if emojis.is_empty() %}
-    <p class="text-sm text-content-muted italic">{{ "enclave-settings-emojis-empty"|t }}</p>
-    {% else %}
-    <ul class="grid grid-cols-2 gap-2">
-      {% for e in emojis %}
-      <li class="flex items-center gap-2 border rounded p-2">
-        <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
-        <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
-        <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="inline">
-          <button type="submit" class="text-xs text-danger hover:underline"
-                  onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')">{{ "enclave-settings-emoji-delete"|t }}</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    <form method="post" action="/enclave/{{ enclave.id }}/emojis" enctype="multipart/form-data" class="space-y-2 border-t pt-3">
-      <label class="block">
-        <span class="text-sm">{{ "enclave-settings-emoji-shortcode-label"|t }}</span>
-        <input name="shortcode" pattern="[a-z0-9_]{2,32}" required class="w-full border rounded px-2 py-1 font-mono text-sm">
-      </label>
-      <label class="block">
-        <span class="text-sm">{{ "enclave-settings-emoji-image-label"|t }}</span>
-        <input type="file" name="file" accept="image/png,image/gif,image/webp" required class="block text-sm">
-      </label>
-      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-settings-add-emoji"|t }}</button>
-    </form>
-  </section>
-
-  <section class="space-y-3 border-t pt-4">
-    <h2 class="font-semibold">{{ "enclave-settings-groups-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">{{ "enclave-settings-groups-help-1"|t }} <code>@group-name</code> {{ "enclave-settings-groups-help-2"|t }}</p>
-    {% if groups.is_empty() %}
-    <p class="text-sm text-content-muted italic">{{ "enclave-settings-groups-empty"|t }}</p>
-    {% else %}
-    <ul class="divide-y border rounded">
-      {% for g in groups %}
-      <li class="p-3 space-y-2">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <span class="font-mono text-sm">@{{ g.name }}</span>
-            <span class="text-xs text-content-muted">({{ g.member_count }} {% if g.member_count == 1 %}{{ "enclave-settings-group-member-singular"|t }}{% else %}{{ "enclave-settings-group-member-plural"|t }}{% endif %})</span>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-visibility-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{% if enclave.is_public %}{{ "enclave-settings-visibility-public"|t }}{% else %}{{ "enclave-settings-visibility-private"|t }}{% endif %}</p>
           </div>
-          <button type="button"
-                  hx-delete="/enclave/{{ enclave.id }}/groups/{{ g.id }}"
-                  hx-confirm="{{ "enclave-settings-group-delete-confirm-prefix"|t }}{{ g.name }}{{ "enclave-settings-group-delete-confirm-suffix"|t }}"
-                  hx-on::after-request="window.location.reload()"
-                  class="text-xs text-danger hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
+          <div class="lc-set-toggle-row">
+            <span class="lc-set-label">{{ "enclave-settings-visibility-public-label"|t }}</span>
+            <form method="post" action="/enclave/{{ enclave.id }}/visibility">
+              <button type="submit" name="is_public" value="{% if enclave.is_public %}0{% else %}1{% endif %}"
+                      class="lc-switch" role="switch" aria-checked="{% if enclave.is_public %}true{% else %}false{% endif %}"
+                      aria-label="{{ "enclave-settings-visibility-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+            </form>
+          </div>
         </div>
-        {% if !g.member_labels.is_empty() %}
-        <div class="text-xs text-content-muted flex flex-wrap gap-1">
-          {% for label in g.member_labels %}
-          <span class="border rounded px-2 py-0.5">{{ label }}</span>
-          {% endfor %}
+
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-invite-code-heading"|t }}</h3></div>
+          {% if let Some(c) = enclave.invite_code %}
+          <div class="flex items-center gap-2">
+            <code class="flex-1 min-w-0 truncate font-mono text-sm bg-surface-sunken rounded px-2 py-1.5 select-all">{{ c }}</code>
+            <button type="button" class="btn btn-secondary btn-sm flex-none" data-lc-copy="{{ c }}" data-lc-copied="{{ "enclave-settings-copied"|t }}">
+              <span data-lc-copy-label>{{ "enclave-settings-copy"|t }}</span>
+            </button>
+          </div>
+          {% else %}
+          <p class="lc-set-help">{{ "enclave-settings-no-invite-code"|t }}</p>
+          {% endif %}
+          <form method="post" action="/enclave/{{ enclave.id }}/invite-code" class="mt-2">
+            <button type="submit" class="btn btn-secondary btn-sm">{% if enclave.invite_code.is_some() %}{{ "enclave-settings-rotate"|t }}{% else %}{{ "enclave-settings-generate"|t }}{% endif %}</button>
+          </form>
         </div>
-        {% endif %}
-        <details class="text-xs">
-          <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
-          <div class="relative mt-2" autocomplete="off">
+      </section>
+
+      {# ===== Members ===== #}
+      <section id="lc-epanel-members" role="tabpanel" aria-labelledby="lc-etab-members" data-lc-tabpanel="members" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "enclave-settings-tab-members"|t }}</h2>
+        <div class="card lc-set-card">
+          <div id="lc-enclave-settings-members">
+            {% include "enclave/settings_members_items.html" %}
+          </div>
+          {# LC-336: invite-by-search. Same hx contract as before. #}
+          <div class="relative mt-3" autocomplete="off">
             <input
               name="q"
-              placeholder="{{ "enclave-settings-group-search-placeholder"|t }}"
-              hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
+              placeholder="{{ "enclave-invite-placeholder"|t }}"
+              hx-get="/enclave/{{ enclave.id }}/invite/search"
               hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-              hx-target="#group-{{ g.id }}-add-results"
+              hx-target="#enclave-invite-results"
               hx-swap="innerHTML"
               autocomplete="off"
               data-lc-search
-              data-lc-search-results="#group-{{ g.id }}-add-results"
-              role="combobox"
-              aria-expanded="false"
-              aria-controls="group-{{ g.id }}-add-results"
-              aria-autocomplete="list"
-              class="w-full border rounded px-2 py-1 text-xs">
-            <div id="group-{{ g.id }}-add-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+              data-lc-search-results="#enclave-invite-results"
+              role="combobox" aria-expanded="false" aria-controls="enclave-invite-results" aria-autocomplete="list"
+              class="input text-sm">
+            <div id="enclave-invite-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
           </div>
-        </details>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    <form method="post" action="/enclave/{{ enclave.id }}/groups" class="flex gap-2 border-t pt-3">
-      <input type="text" name="name" placeholder="{{ "enclave-settings-create-group-placeholder"|t }}" pattern="[A-Za-z0-9_-]{1,40}" required
-             class="flex-1 border rounded px-2 py-1 text-sm">
-      <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1 text-sm">{{ "enclave-settings-create-group"|t }}</button>
-    </form>
-  </section>
+        </div>
+      </section>
 
-  <section class="space-y-2 border-t pt-4">
-    <h2 class="font-semibold">{{ "enclave-settings-branding-heading"|t }}</h2>
-    <p class="text-sm text-content-muted">
-      <a href="/enclave/{{ enclave.id }}/branding" class="text-accent hover:underline">{{ "enclave-settings-branding-link"|t }}</a>
-      {{ "enclave-settings-branding-text-1"|t }}
-      <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-settings-branding-text-2"|t }}
-    </p>
-  </section>
+      {# ===== Moderation ===== #}
+      <section id="lc-epanel-moderation" role="tabpanel" aria-labelledby="lc-etab-moderation" data-lc-tabpanel="moderation" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "enclave-settings-tab-moderation"|t }}</h2>
 
-  {% if can_delete %}
-  <form method="post" action="/enclave/{{ enclave.id }}/delete" class="pt-6 border-t">
-    <button type="submit" class="text-danger"
-            onclick="return confirm('{{ "enclave-settings-delete-confirm"|t }}')">{{ "enclave-settings-delete"|t }}</button>
-  </form>
-  {% endif %}
-</section>
+        {# Anti-spam rate limit #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-rate-limit-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-rate-limit-help"|t }}</p>
+          </div>
+          <form method="post" action="/enclave/{{ enclave.id }}/rate-limit" class="lc-set-form">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-enc-burst">{{ "enclave-settings-rate-limit-burst"|t }}</label>
+              <input id="lc-enc-burst" type="number" name="burst" min="0" max="10000" step="1" value="{{ enclave.msg_rate_limit_burst }}" class="input w-32">
+              <p class="lc-set-help">{% if enclave.msg_rate_limit_burst == 0 %}{{ "enclave-settings-rate-limit-status-global"|t }}{% else %}{{ "enclave-settings-rate-limit-status-active-prefix"|t }} {{ enclave.msg_rate_limit_burst }} {{ "enclave-settings-rate-limit-status-active-suffix"|t }}{% endif %}</p>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary">{{ "enclave-settings-rate-limit-save"|t }}</button>
+            </div>
+          </form>
+        </div>
+
+        {# Coyote Mode #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-coyote-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-coyote-help"|t }}</p>
+          </div>
+          <div class="lc-set-toggle-row">
+            <span class="text-sm">{% if enclave.coyote_mode %}<strong>{{ "enclave-settings-coyote-on-label"|t }}</strong> {{ "enclave-settings-coyote-on-text"|t }}{% else %}<strong>{{ "enclave-settings-coyote-off-label"|t }}</strong> {{ "enclave-settings-coyote-off-text"|t }}{% endif %}</span>
+            <form method="post" action="/enclave/{{ enclave.id }}/coyote-mode">
+              <button type="submit" name="enabled" value="{% if enclave.coyote_mode %}0{% else %}1{% endif %}"
+                      class="lc-switch" role="switch" aria-checked="{% if enclave.coyote_mode %}true{% else %}false{% endif %}"
+                      aria-label="{{ "enclave-settings-coyote-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+            </form>
+          </div>
+        </div>
+
+        {# Shame tags #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-shame-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-shame-help"|t }}</p>
+          </div>
+          <div class="lc-set-toggle-row">
+            <span class="text-sm">{% if enclave.shame_tags_enabled %}<strong>{{ "enclave-settings-shame-on-label"|t }}</strong> {{ "enclave-settings-shame-on-text"|t }}{% else %}<strong>{{ "enclave-settings-shame-off-label"|t }}</strong> {{ "enclave-settings-shame-off-text"|t }}{% endif %}</span>
+            <form method="post" action="/enclave/{{ enclave.id }}/shame-tags">
+              <button type="submit" name="enabled" value="{% if enclave.shame_tags_enabled %}0{% else %}1{% endif %}"
+                      class="lc-switch" role="switch" aria-checked="{% if enclave.shame_tags_enabled %}true{% else %}false{% endif %}"
+                      aria-label="{{ "enclave-settings-shame-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+            </form>
+          </div>
+        </div>
+
+        {# Banned users #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-bans-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-bans-help"|t }}</p>
+          </div>
+          {% if bans.is_empty() %}
+          {% let empty_text_key = "enclave-settings-bans-empty" %}
+          {% include "partials/empty_state.html" %}
+          {% else %}
+          <ul class="divide-y divide-border">
+            {% for b in bans %}
+            <li class="flex items-center justify-between gap-2 py-2 first:pt-0">
+              <div class="min-w-0">
+                <div class="text-sm truncate" title="{{ b.user_id }}">{{ b.label }}</div>
+                <div class="text-xs text-content-muted">{% if let Some(r) = b.reason %}{{ r }} - {% endif %}{{ b.banned_at }}</div>
+              </div>
+              <form method="post" action="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban">
+                <button type="submit" class="btn btn-secondary btn-sm">{{ "enclave-settings-bans-unban"|t }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </section>
+
+      {# ===== Customization ===== #}
+      <section id="lc-epanel-custom" role="tabpanel" aria-labelledby="lc-etab-custom" data-lc-tabpanel="custom" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "enclave-settings-tab-custom"|t }}</h2>
+
+        {# Custom emojis #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-emojis-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-emojis-help-1"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">:shortcode:</code> {{ "enclave-settings-emojis-help-2"|t }}</p>
+          </div>
+          <div class="lc-set-toggle-row">
+            <span class="text-sm">{% if enclave.share_emojis_globally %}<strong>{{ "enclave-settings-emojis-shared-label"|t }}</strong> {{ "enclave-settings-emojis-shared-text"|t }}{% else %}<strong>{{ "enclave-settings-emojis-private-label"|t }}</strong> {{ "enclave-settings-emojis-private-text"|t }}{% endif %}</span>
+            <form method="post" action="/enclave/{{ enclave.id }}/share-emojis">
+              <button type="submit" name="share" value="{% if enclave.share_emojis_globally %}0{% else %}1{% endif %}"
+                      class="lc-switch" role="switch" aria-checked="{% if enclave.share_emojis_globally %}true{% else %}false{% endif %}"
+                      aria-label="{{ "enclave-settings-emojis-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+            </form>
+          </div>
+          {% if emojis.is_empty() %}
+          {% let empty_text_key = "enclave-settings-emojis-empty" %}
+          {% include "partials/empty_state.html" %}
+          {% else %}
+          <ul class="grid grid-cols-2 gap-2 mt-3">
+            {% for e in emojis %}
+            <li class="flex items-center gap-2 border border-border rounded p-2">
+              <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
+              <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
+              <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete">
+                <button type="submit" class="text-xs text-danger hover:underline"
+                        onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')">{{ "enclave-settings-emoji-delete"|t }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form method="post" action="/enclave/{{ enclave.id }}/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-emoji-shortcode">{{ "enclave-settings-emoji-shortcode-label"|t }}</label>
+              <input id="lc-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required class="input font-mono text-sm">
+            </div>
+            <div class="lc-set-field">
+              <span class="lc-set-label">{{ "enclave-settings-emoji-image-label"|t }}</span>
+              <div class="flex items-center gap-2 flex-wrap">
+                <label for="lc-emoji-file" class="btn btn-secondary btn-sm">{{ "enclave-settings-emoji-choose"|t }}</label>
+                <span data-lc-emoji-filename class="lc-set-help">{{ "enclave-settings-no-file"|t }}</span>
+              </div>
+              <input id="lc-emoji-file" data-lc-emoji-input type="file" name="file" accept="image/png,image/gif,image/webp" required class="sr-only"
+                     data-lc-no-file="{{ "enclave-settings-no-file"|t }}"
+                     data-lc-max-bytes="262144"
+                     data-lc-err-type="{{ "enclave-settings-emoji-err-type"|t }}"
+                     data-lc-err-size="{{ "enclave-settings-emoji-err-size"|t }}">
+              <p class="lc-set-help">{{ "enclave-settings-emoji-formats"|t }}</p>
+              <p data-lc-emoji-error hidden role="alert" class="lc-set-error"></p>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary">{{ "enclave-settings-add-emoji"|t }}</button>
+            </div>
+          </form>
+        </div>
+
+        {# User groups #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "enclave-settings-groups-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "enclave-settings-groups-help-1"|t }} <code>@group-name</code> {{ "enclave-settings-groups-help-2"|t }}</p>
+          </div>
+          {% if groups.is_empty() %}
+          {% let empty_text_key = "enclave-settings-groups-empty" %}
+          {% include "partials/empty_state.html" %}
+          {% else %}
+          <ul class="divide-y divide-border">
+            {% for g in groups %}
+            <li class="py-3 first:pt-0 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <span class="font-mono text-sm">@{{ g.name }}</span>
+                  <span class="text-xs text-content-muted">({{ g.member_count }} {% if g.member_count == 1 %}{{ "enclave-settings-group-member-singular"|t }}{% else %}{{ "enclave-settings-group-member-plural"|t }}{% endif %})</span>
+                </div>
+                <button type="button"
+                        hx-delete="/enclave/{{ enclave.id }}/groups/{{ g.id }}"
+                        hx-confirm="{{ "enclave-settings-group-delete-confirm-prefix"|t }}{{ g.name }}{{ "enclave-settings-group-delete-confirm-suffix"|t }}"
+                        hx-on::after-request="window.location.reload()"
+                        class="text-xs text-danger hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
+              </div>
+              {% if !g.member_labels.is_empty() %}
+              <div class="text-xs text-content-muted flex flex-wrap gap-1">
+                {% for label in g.member_labels %}
+                <span class="border border-border rounded px-2 py-0.5">{{ label }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+              <details class="text-xs">
+                <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
+                <div class="relative mt-2" autocomplete="off">
+                  <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}"
+                    hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
+                    hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+                    hx-target="#group-{{ g.id }}-add-results" hx-swap="innerHTML"
+                    autocomplete="off" data-lc-search data-lc-search-results="#group-{{ g.id }}-add-results"
+                    role="combobox" aria-expanded="false" aria-controls="group-{{ g.id }}-add-results" aria-autocomplete="list"
+                    class="input text-xs">
+                  <div id="group-{{ g.id }}-add-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+                </div>
+              </details>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form method="post" action="/enclave/{{ enclave.id }}/groups" class="flex gap-2 border-t border-border pt-3 mt-3">
+            <input type="text" name="name" placeholder="{{ "enclave-settings-create-group-placeholder"|t }}" pattern="[A-Za-z0-9_-]{1,40}" required class="input flex-1 text-sm">
+            <button type="submit" class="btn btn-primary btn-sm flex-none">{{ "enclave-settings-create-group"|t }}</button>
+          </form>
+        </div>
+
+        {# Branding #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-branding-heading"|t }}</h3></div>
+          <p class="lc-set-card-desc">
+            <a href="/enclave/{{ enclave.id }}/branding" class="text-accent hover:underline">{{ "enclave-settings-branding-link"|t }}</a>
+            {{ "enclave-settings-branding-text-1"|t }} <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-settings-branding-text-2"|t }}
+          </p>
+        </div>
+      </section>
+
+      {# ===== Danger zone ===== #}
+      {% if can_delete %}
+      <section id="lc-epanel-danger" role="tabpanel" aria-labelledby="lc-etab-danger" data-lc-tabpanel="danger" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title text-danger">{{ "enclave-settings-tab-danger"|t }}</h2>
+        <div class="card lc-set-card lc-set-card--danger">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title text-danger">{{ "enclave-settings-delete-heading"|t }}</h3>
+            <p class="lc-set-card-desc text-danger">{{ "enclave-settings-delete-desc"|t }}</p>
+          </div>
+          {# Type-to-confirm gate (roominfo.js): Delete stays disabled until the
+             phrase matches; native confirm() is the second guard. #}
+          <form method="post" action="/enclave/{{ enclave.id }}/delete"
+                data-lc-confirm-gate
+                data-lc-confirm="{{ "enclave-settings-delete-confirm"|t }}"
+                onsubmit="return confirm(this.getAttribute('data-lc-confirm'))"
+                class="lc-set-form">
+            <div class="lc-set-field">
+              <label class="lc-set-label text-danger" for="lc-enc-del">{{ "enclave-delete-confirm-prefix"|t }} <code class="font-mono">{{ "enclave-delete-confirm-phrase"|t }}</code> {{ "enclave-delete-confirm-suffix"|t }}</label>
+              <input id="lc-enc-del" class="input border-danger-border" type="text" autocomplete="off"
+                     data-lc-confirm-input data-lc-confirm-phrase="{{ "enclave-delete-confirm-phrase"|t }}">
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-danger" data-lc-confirm-submit disabled>{{ "enclave-settings-delete"|t }}</button>
+            </div>
+          </form>
+        </div>
+      </section>
+      {% endif %}
+    </div>
+  </div>
 </div>
 {% endblock %}

@@ -124,6 +124,8 @@ pub struct EnclaveSettingsPage<'a> {
     pub emojis: &'a [CustomEmoji],
     pub can_delete: bool,
     pub flash_error: Option<&'a str>,
+    /// LC-463: localized success message, shown as a toast on load.
+    pub flash_ok: Option<&'a str>,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],

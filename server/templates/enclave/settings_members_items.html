@@ -1,30 +1,35 @@
-{# LC-172: the dynamic settings-page member list, shared by EnclaveSettingsPage
-   and the live OOB fragment (ws/enclave_settings_members_live.html) so both
-   render identically. References `members`, `enclave`, and `can_delete` from
-   whichever parent struct includes it. Unlike the read-only landing list, this
-   one carries the role-toggle / kick / transfer controls, gated on can_delete
-   (owner or site admin), so it is rendered per recipient. #}
-<h2 class="font-semibold">{{ "enclave-members-settings-heading"|t }}</h2>
-<ul class="mt-2 space-y-1">
+{# LC-172 / LC-463: the dynamic settings-page member list, shared by
+   EnclaveSettingsPage and the live OOB fragment (ws/enclave_settings_members_live.html)
+   so both render identically. References `members`, `enclave`, and `can_delete`.
+   Carries the role-toggle / kick / transfer controls, gated on can_delete
+   (owner or site admin). Action routes + POST-flip values are unchanged. #}
+<h3 class="lc-set-card-title">{{ "enclave-members-settings-heading"|t }}</h3>
+<ul class="mt-3 divide-y divide-border">
   {% for m in members %}
-  <li class="flex items-center justify-between gap-2">
-    <span class="truncate" title="{{ m.user_id }}">{{ m.label }}</span>
-    <span class="text-xs uppercase text-content-muted mr-auto">{{ m.role.as_str() }}</span>
+  <li class="flex items-center gap-2 py-2 first:pt-0">
+    <span class="text-sm truncate min-w-0" title="{{ m.user_id }}">{{ m.label }}</span>
+    {% if m.role.as_str() == "owner" %}
+    <span class="inline-flex items-center rounded-full bg-accent-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-surface-content">{{ m.role.as_str() }}</span>
+    {% else %}
+    <span class="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-content-muted">{{ m.role.as_str() }}</span>
+    {% endif %}
     {% if can_delete && m.role.as_str() != "owner" %}
-    <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role" class="inline">
-      <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}"
-              type="submit" class="text-xs bg-surface-sunken rounded px-2 py-0.5">
-        {% if m.role.as_str() == "admin" %}{{ "enclave-settings-member-demote"|t }}{% else %}{{ "enclave-settings-member-promote"|t }}{% endif %}
-      </button>
-    </form>
-    <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick" class="inline">
-      <button type="submit" class="text-xs text-danger">{{ "enclave-settings-member-kick"|t }}</button>
-    </form>
-    <form method="post" action="/enclave/{{ enclave.id }}/transfer" class="inline">
-      <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
-      <button type="submit" class="text-xs text-accent"
-              onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
-    </form>
+    <div class="ml-auto flex items-center gap-1.5 flex-none">
+      <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role">
+        <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}" type="submit" class="btn btn-secondary btn-sm">
+          {% if m.role.as_str() == "admin" %}{{ "enclave-settings-member-demote"|t }}{% else %}{{ "enclave-settings-member-promote"|t }}{% endif %}
+        </button>
+      </form>
+      <form method="post" action="/enclave/{{ enclave.id }}/transfer">
+        <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
+        <button type="submit" class="btn btn-secondary btn-sm"
+                onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
+      </form>
+      <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick">
+        <button type="submit" class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface"
+                onclick="return confirm('{{ "enclave-settings-member-kick-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-kick-confirm-suffix"|t }}')">{{ "enclave-settings-member-kick"|t }}</button>
+      </form>
+    </div>
     {% endif %}
   </li>
   {% endfor %}
