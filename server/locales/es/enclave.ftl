@@ -149,3 +149,13 @@ enclave-settings-member-kick = Expulsar
 enclave-settings-member-transfer = Transferir
 enclave-settings-member-transfer-confirm-prefix = Transferir la propiedad a
 enclave-settings-member-transfer-confirm-suffix = ?
+# LC-469: rediseno de la pagina de marca
+enclave-branding-back = Volver a ajustes
+enclave-branding-colors-heading = Colores
+enclave-branding-login-card-heading = Pagina de inicio de sesion
+enclave-branding-preview-label = Vista previa
+enclave-branding-choose-logo = Elegir imagen
+enclave-branding-no-file = Ningun archivo seleccionado
+enclave-branding-logo-err-type = Usa una imagen PNG, JPEG, WebP o GIF.
+enclave-branding-logo-err-size = La imagen debe pesar menos de 1 MiB.
+enclave-branding-saving = Guardando...
