@@ -274,6 +274,7 @@ pub async fn get_dm(
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
+            suppress_quote_preview: false,
             is_system: m.is_system,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
