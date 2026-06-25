@@ -332,6 +332,9 @@ room-thread-heading = Hilo
 # LC-460: etiquetas de hilo/respuesta
 room-thread-view = Ver hilo
 room-quote-jump = Ir al mensaje respondido
+# LC-461: referencia al mensaje padre del panel de hilo + indicador del redactor
+room-thread-replies-to = Respuestas a
+room-thread-composer-cue = Respondiendo en el hilo
 room-thread-close = Cerrar hilo
 # LC-310: thread following toggle.
 room-thread-follow = Seguir
