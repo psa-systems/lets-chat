@@ -181,3 +181,14 @@ enclave-flash-deleted = Deleted
 enclave-flash-updated = Updated
 enclave-flash-unbanned = User unbanned
 enclave-flash-transferred = Ownership transferred
+
+# LC-469: branding page redesign
+enclave-branding-back = Back to settings
+enclave-branding-colors-heading = Colors
+enclave-branding-login-card-heading = Login page
+enclave-branding-preview-label = Preview
+enclave-branding-choose-logo = Choose image
+enclave-branding-no-file = No file chosen
+enclave-branding-logo-err-type = Use a PNG, JPEG, WebP, or GIF image.
+enclave-branding-logo-err-size = Image must be under 1 MiB.
+enclave-branding-saving = Saving...

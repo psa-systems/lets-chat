@@ -1,64 +1,108 @@
 {% extends "layout.html" %}
 
-{% block title %}{{ enclave.name }} - Branding{% endblock %}
+{% block title %}{{ enclave.name }} - {{ "enclave-branding-breadcrumb-current"|t }} - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex-1 overflow-y-auto p-4">
-  <nav class="text-sm text-content-muted mb-3">
-    <a href="/enclave/{{ enclave.id }}/settings" class="text-accent hover:underline">{{ enclave.name }} {{ "enclave-branding-breadcrumb-settings"|t }}</a>
-    &raquo; {{ "enclave-branding-breadcrumb-current"|t }}
-  </nav>
-  <h1 class="text-lg font-semibold mb-4">{{ "enclave-branding-heading-prefix"|t }} {{ enclave.name }}</h1>
-  {% if saved %}
-  <div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "enclave-branding-saved"|t }}</div>
-  {% endif %}
-  {% if let Some(err) = error %}
-  <div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
-  {% endif %}
-  <p class="text-sm text-content-muted mb-6 max-w-2xl">
-    {{ "enclave-branding-intro-1"|t }} <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-branding-intro-2"|t }} <code>/admin/branding</code> {{ "enclave-branding-intro-3"|t }}
-    <a href="/enclave/{{ enclave.id }}/branding/logo" target="_blank" class="text-accent hover:underline"><code>/enclave/{{ enclave.id }}/branding/logo</code></a>.
-  </p>
+<header class="border-b border-border px-4 py-2 flex items-center justify-between gap-3">
+  <div class="min-w-0">
+    <h1 class="font-semibold truncate">{{ "enclave-branding-breadcrumb-current"|t }} <span class="text-content-subtle font-normal">{{ enclave.name }}</span></h1>
+  </div>
+  <a href="/enclave/{{ enclave.id }}/settings" class="btn btn-secondary btn-sm flex-none">{{ "enclave-branding-back"|t }}</a>
+</header>
+{# LC-469: enclave branding on the settings-card vocabulary. branding.js handles
+   color swatch<->hex sync + live preview, logo upload validation + preview, and
+   the post-save toast. Native multipart POST (handler redirects ?saved=1 on
+   success, re-renders with `error` on validation failure) is unchanged. #}
+<div class="flex-1 overflow-y-auto" data-lc-branding>
+  {% if saved %}<div data-lc-flash-toast hidden>{{ "enclave-branding-saved"|t }}</div>{% endif %}
+  <div class="mx-auto max-w-2xl px-4 py-6 flex flex-col gap-5">
+    {% if let Some(err) = error %}
+    <div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
+    {% endif %}
 
-  <form method="post" action="/enclave/{{ enclave.id }}/branding" enctype="multipart/form-data" class="max-w-2xl space-y-5">
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-medium mb-1" for="primary_color">{{ "enclave-branding-primary-color"|t }}</label>
-        <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}"
-               class="h-9 w-12 border border-border-strong rounded cursor-pointer">
+    <p class="lc-set-help">
+      {{ "enclave-branding-intro-1"|t }} <code>/enclave/{{ enclave.id }}/</code>{{ "enclave-branding-intro-2"|t }} <code>/admin/branding</code> {{ "enclave-branding-intro-3"|t }}
+      <a href="/enclave/{{ enclave.id }}/branding/logo" target="_blank" class="text-accent hover:underline"><code>/enclave/{{ enclave.id }}/branding/logo</code></a>.
+    </p>
+
+    <form method="post" action="/enclave/{{ enclave.id }}/branding" enctype="multipart/form-data" data-lc-branding-form class="flex flex-col gap-5">
+
+      {# ===== Colors ===== #}
+      <div class="card lc-set-card">
+        <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-branding-colors-heading"|t }}</h3></div>
+        <div class="flex flex-wrap items-start gap-6">
+          <div data-lc-color-pair class="lc-set-field">
+            <span class="lc-set-label">{{ "enclave-branding-primary-color"|t }}</span>
+            <div class="flex items-center gap-2">
+              <input type="color" name="primary_color" value="{{ primary_color }}" class="lc-swatch" data-lc-color-swatch data-lc-color-var="--lc-pv-primary" aria-label="{{ "enclave-branding-primary-color"|t }}">
+              <input type="text" value="{{ primary_color }}" maxlength="7" class="input w-28 font-mono uppercase" data-lc-color-hex aria-label="{{ "enclave-branding-primary-color"|t }}">
+            </div>
+          </div>
+          <div data-lc-color-pair class="lc-set-field">
+            <span class="lc-set-label">{{ "enclave-branding-accent-color"|t }}</span>
+            <div class="flex items-center gap-2">
+              <input type="color" name="accent_color" value="{{ accent_color }}" class="lc-swatch" data-lc-color-swatch data-lc-color-var="--lc-pv-accent" aria-label="{{ "enclave-branding-accent-color"|t }}">
+              <input type="text" value="{{ accent_color }}" maxlength="7" class="input w-28 font-mono uppercase" data-lc-color-hex aria-label="{{ "enclave-branding-accent-color"|t }}">
+            </div>
+          </div>
+          {# Live preview of the two colors applied to a header bar + button. #}
+          <div data-lc-brand-preview class="rounded-lg border border-border overflow-hidden w-44 flex-none" style="--lc-pv-primary: {{ primary_color }}; --lc-pv-accent: {{ accent_color }};">
+            <div class="px-3 py-2 text-xs font-medium text-white truncate" style="background: var(--lc-pv-primary);">{{ enclave.name }}</div>
+            <div class="p-3 bg-surface-elevated flex items-center justify-between gap-2">
+              <span class="text-xs text-content-muted">{{ "enclave-branding-preview-label"|t }}</span>
+              <span class="rounded px-2 py-1 text-xs text-white" style="background: var(--lc-pv-accent);">{{ "enclave-branding-save"|t }}</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div>
-        <label class="block text-sm font-medium mb-1" for="accent_color">{{ "enclave-branding-accent-color"|t }}</label>
-        <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}"
-               class="h-9 w-12 border border-border-strong rounded cursor-pointer">
+
+      {# ===== Logo ===== #}
+      <div class="card lc-set-card">
+        <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-branding-logo"|t }}</h3></div>
+        <div class="lc-set-avatar-row">
+          {% if has_logo %}
+          <img data-lc-logo-preview src="/enclave/{{ enclave.id }}/branding/logo?v={{ asset_version }}" alt="{{ "enclave-branding-current-logo-alt"|t }}"
+               class="max-h-16 max-w-40 object-contain border border-border rounded p-1 bg-surface-elevated">
+          {% else %}
+          <img data-lc-logo-preview alt="" class="hidden max-h-16 max-w-40 object-contain border border-border rounded p-1 bg-surface-elevated">
+          {% endif %}
+          <div class="flex-1 min-w-0">
+            <div class="lc-set-field">
+              <div class="flex items-center gap-2 flex-wrap">
+                <label for="lc-logo-input" class="btn btn-secondary btn-sm">{{ "enclave-branding-choose-logo"|t }}</label>
+                <span data-lc-logo-filename class="lc-set-help">{{ "enclave-branding-no-file"|t }}</span>
+              </div>
+              <input id="lc-logo-input" data-lc-logo-input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only"
+                     data-lc-no-file="{{ "enclave-branding-no-file"|t }}"
+                     data-lc-max-bytes="1048576"
+                     data-lc-err-type="{{ "enclave-branding-logo-err-type"|t }}"
+                     data-lc-err-size="{{ "enclave-branding-logo-err-size"|t }}">
+              <p class="lc-set-help">{{ "enclave-branding-logo-help"|t }}</p>
+              <p data-lc-logo-error hidden role="alert" class="lc-set-error"></p>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div>
-      <label class="block text-sm font-medium mb-1" for="logo">{{ "enclave-branding-logo"|t }}</label>
-      {% if has_logo %}
-      <div class="mb-2 flex items-center gap-3">
-        <img src="/enclave/{{ enclave.id }}/branding/logo?v={{ asset_version }}" alt="{{ "enclave-branding-current-logo-alt"|t }}"
-             class="max-h-12 max-w-32 object-contain border border-border rounded p-1 bg-surface-elevated">
+      {# ===== Login page copy ===== #}
+      <div class="card lc-set-card">
+        <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-branding-login-card-heading"|t }}</h3></div>
+        <div class="lc-set-form">
+          <div class="lc-set-field">
+            <label class="lc-set-label" for="login_heading">{{ "enclave-branding-login-heading-label"|t }}</label>
+            <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}" class="input">
+          </div>
+          <div class="lc-set-field">
+            <label class="lc-set-label" for="login_body">{{ "enclave-branding-login-body-label"|t }}</label>
+            <textarea id="login_body" name="login_body" rows="6" maxlength="2000" class="input font-mono">{{ login_body }}</textarea>
+          </div>
+        </div>
       </div>
-      {% endif %}
-      <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
-             class="block text-sm">
-      <p class="text-xs text-content-muted mt-1">{{ "enclave-branding-logo-help"|t }}</p>
-    </div>
 
-    <div>
-      <label class="block text-sm font-medium mb-1" for="login_heading">{{ "enclave-branding-login-heading-label"|t }}</label>
-      <input id="login_heading" name="login_heading" type="text" maxlength="120" value="{{ login_heading }}"
-             class="w-full border border-border-strong rounded px-2 py-1 text-sm">
-    </div>
-    <div>
-      <label class="block text-sm font-medium mb-1" for="login_body">{{ "enclave-branding-login-body-label"|t }}</label>
-      <textarea id="login_body" name="login_body" rows="6" maxlength="2000"
-                class="w-full border border-border-strong rounded px-2 py-1 text-sm font-mono">{{ login_body }}</textarea>
-    </div>
-
-    <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "enclave-branding-save"|t }}</button>
-  </form>
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary" data-lc-working="{{ "enclave-branding-saving"|t }}"><span data-lc-btn-label>{{ "enclave-branding-save"|t }}</span></button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
