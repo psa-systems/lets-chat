@@ -305,6 +305,10 @@ pub async fn get_room(
 
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
+    // LC-462: id of the previous rendered (visible) timeline message, so a
+    // quote-reply whose parent is the row immediately above can suppress its
+    // redundant inline "Replying to" stub (the adjacency already shows it).
+    let mut prev_msg_id: Option<i64> = None;
     // LC-244: track the previous rendered message's UTC day so a day change
     // (or the first message) places a date separator above the row.
     let mut prev_day: Option<String> = None;
@@ -339,6 +343,11 @@ pub async fn get_room(
             (&m.user_id, &m.created_at),
         );
         prev = Some((m.user_id.clone(), m.created_at.clone()));
+        // LC-462: Slack-style suppression - if this message quote-replies the row
+        // directly above it, drop the redundant inline reference. `quote_id` is
+        // Copy (Option<i64>), so comparing here does not disturb the later move.
+        let suppress_quote_preview = m.quote_id.is_some() && m.quote_id == prev_msg_id;
+        prev_msg_id = Some(m.id);
         // LC-244: day separator above the first message and on each UTC day
         // change. `created_at` is "YYYY-MM-DD HH:MM:SS"; the date is its first
         // 10 chars.
@@ -387,6 +396,7 @@ pub async fn get_room(
             quote_preview: m
                 .quote_id
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
+            suppress_quote_preview,
             is_system: m.is_system,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
@@ -2019,6 +2029,7 @@ pub async fn patch_message(
         custom_emojis,
         channels: channel_refs,
         quote_preview,
+        suppress_quote_preview: false,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
             .await
@@ -2139,6 +2150,7 @@ pub async fn get_thread_panel(
         custom_emojis: custom_emojis.clone(),
         channels: channel_refs.clone(),
         quote_preview: parent_quote_preview,
+        suppress_quote_preview: false,
         is_system: parent.is_system,
         poll: if poll_ids.contains(&parent.id) {
             crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
@@ -2208,6 +2220,7 @@ pub async fn get_thread_panel(
             custom_emojis: custom_emojis.clone(),
             channels: channel_refs.clone(),
             quote_preview: None,
+            suppress_quote_preview: false,
             is_system: r.is_system,
             poll: if poll_ids.contains(&r_id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
