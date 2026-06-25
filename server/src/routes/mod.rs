@@ -455,6 +455,7 @@ pub(crate) async fn load_message_view_for_viewer(
         custom_emojis,
         channels,
         quote_preview,
+        suppress_quote_preview: false,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
             .await
