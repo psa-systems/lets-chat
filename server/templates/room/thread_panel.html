@@ -1,7 +1,12 @@
 <aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
-  <header class="flex items-center justify-between border-b border-border px-3 py-2">
-    <div class="font-semibold">{{ "room-thread-heading"|t }}</div>
-    <div class="flex items-center gap-2">
+  {# LC-461: the header references the PARENT message so it is obvious this panel
+     is the expanded view of that message's "N replies" pill. #}
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight">{{ "room-thread-heading"|t }}</div>
+      <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} {{ parent.label() }}</div>
+    </div>
+    <div class="flex items-center gap-2 flex-none">
       {# LC-310: follow/unfollow this thread to be notified of new replies. #}
       {% let room_id = room.id %}
       {% let parent_id = parent.id %}
@@ -70,6 +75,12 @@
     "
     class="border-t border-border p-2"
   >
+    {# LC-461: cue that this composer posts INTO the open thread, not the main
+       room composer below the timeline. #}
+    <div class="mb-1 flex items-center gap-1.5 text-xs font-medium text-accent">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5" aria-hidden="true"><path d="M4 4v5.5A2.5 2.5 0 006.5 12H15"/><path d="M12 9l3 3-3 3"/></svg>
+      <span>{{ "room-thread-composer-cue"|t }}</span>
+    </div>
     <div class="thread-error hidden mb-1 flex items-center gap-2 text-xs text-danger">
       <span>{{ "room-composer-send-failed"|t }}</span>
       <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>

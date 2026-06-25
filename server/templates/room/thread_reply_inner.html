@@ -1,4 +1,8 @@
-{# Single thread reply row. Avatar, header, body, reactions only. #}
+{# Single thread reply row. LC-461: avatar / name / time / body align to the
+   redesigned main-timeline message (h-6 avatar, lc-caption time, pl-8 body) so
+   the thread panel and the main timeline read consistently. Kept as a separate
+   lightweight partial (no action toolbar, no duplicate id="msg-{id}" - that id
+   already exists in the main timeline). #}
 <div id="msg-{{ message.id }}" class="px-3 py-1.5 hover:bg-surface-sunken group">
   <div class="flex items-center gap-2">
     {% let avatar_user_id = message.user_id.clone() %}
@@ -6,10 +10,10 @@
     {% let avatar_ext = message.avatar_ext.clone() %}
     {% let avatar_status = message.status.clone() %}
     {% let avatar_custom_status = message.custom_status.clone() %}
-    {% let avatar_size = "h-5 w-5 text-xs" %}
+    {% let avatar_size = "h-6 w-6 text-xs" %}
     {% include "partials/avatar.html" %}
-    <span class="font-medium text-sm">{{ message.label() }}</span>
-    <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="text-xs text-content-muted">{{ message.created_at }}</time>
+    <span class="font-medium">{{ message.label() }}</span>
+    <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-caption">{{ message.created_at }}</time>
     {% if message.edited_at.is_some() %}
     <button
       hx-get="/messages/{{ message.id }}/history"
@@ -20,5 +24,5 @@
     >{{ "room-msg-edited"|t }}</button>
     {% endif %}
   </div>
-  <div class="lc-md leading-snug text-sm pl-7">{{ message.body_html()|safe }}</div>
+  <div class="lc-md leading-snug text-sm pl-8">{{ message.body_html()|safe }}</div>
 </div>
