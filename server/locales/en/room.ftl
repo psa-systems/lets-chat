@@ -329,6 +329,9 @@ room-pins-back = Back
 
 ## Thread panel
 room-thread-heading = Thread
+# LC-460: thread/reply affordance labels
+room-thread-view = View thread
+room-quote-jump = Jump to the replied message
 room-thread-close = Close thread
 # LC-310: thread following toggle.
 room-thread-follow = Follow

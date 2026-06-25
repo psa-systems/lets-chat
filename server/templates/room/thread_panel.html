@@ -16,12 +16,23 @@
       >&#10005;</button>
     </div>
   </header>
+  {# LC-460: the thread root, visually marked as the parent the replies hang off. #}
   <div class="border-b border-border px-3 py-2 bg-surface">
     {% let parent_message = parent %}
     {% let message = parent_message %}
     {% include "room/thread_reply_inner.html" %}
   </div>
-  <div id="thread-replies-{{ parent.id }}" class="flex-1 overflow-y-auto py-1">
+  {# LC-460: count divider labels the replies section so the root -> replies
+     relationship is explicit. #}
+  {% if !replies.is_empty() %}
+  <div class="lc-thread-count">
+    <span class="lc-thread-count-rule"></span>
+    <span class="lc-thread-count-label">{{ replies.len() }} {% if replies.len() == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
+    <span class="lc-thread-count-rule"></span>
+  </div>
+  {% endif %}
+  {# LC-460: a left rail nests the replies under the root. #}
+  <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto py-1">
     {% for r in replies %}
     {% let message = r %}
     {% include "room/thread_reply_inner.html" %}
