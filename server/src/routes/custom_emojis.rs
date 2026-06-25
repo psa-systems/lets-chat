@@ -208,7 +208,7 @@ pub async fn post_upload(
         Err(e) => return Err(e.into()),
     }
 
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")).into_response())
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings?ok=added")).into_response())
 }
 
 /// DELETE /enclave/{id}/emojis/{eid} - remove the row. The file on disk is
@@ -228,7 +228,7 @@ pub async fn post_delete(
         return Err(AppError::NotFound);
     }
     db::custom_emojis::delete(&state.chat, emoji_id).await?;
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")).into_response())
+    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings?ok=deleted")).into_response())
 }
 
 /// GET /api/emojis/{id} - stream a custom emoji file. Any logged-in user
