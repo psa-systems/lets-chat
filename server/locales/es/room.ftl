@@ -329,6 +329,9 @@ room-pins-back = Volver
 
 ## Thread panel
 room-thread-heading = Hilo
+# LC-460: etiquetas de hilo/respuesta
+room-thread-view = Ver hilo
+room-quote-jump = Ir al mensaje respondido
 room-thread-close = Cerrar hilo
 # LC-310: thread following toggle.
 room-thread-follow = Seguir
