@@ -73,6 +73,13 @@ pub struct MessageView {
     /// renders as an inline chip above the body that links back to the
     /// original. `None` for plain top-level messages.
     pub quote_preview: Option<QuotePreview>,
+    /// LC-462: when true, the inline "Replying to" stub is omitted because the
+    /// quoted parent is the message rendered immediately above this one in the
+    /// same view (Slack-style adjacency suppression). Only set by the main
+    /// timeline list builder, which has previous-row context; every other
+    /// construction site leaves it `false` (no adjacency known), so the stub
+    /// renders as before for single-message / WS / thread renders.
+    pub suppress_quote_preview: bool,
     /// True for server-authored system notices (e.g. "started a call").
     /// The template renders these as a centered, non-interactive line with
     /// no avatar, hover menu, reactions, or thread affordances.

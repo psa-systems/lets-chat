@@ -377,6 +377,7 @@ fn user_view(body: &str) -> MessageView {
         is_bookmarked: false,
         custom_emojis: vec![],
         quote_preview: None,
+        suppress_quote_preview: false,
         is_system: false,
         poll: None,
         author_is_bot: false,
