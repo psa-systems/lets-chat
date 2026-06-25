@@ -57,6 +57,7 @@ fn synthetic_view(actor: MessageActor, username: &str, body: &str) -> MessageVie
         is_bookmarked: false,
         custom_emojis: vec![],
         quote_preview: None,
+        suppress_quote_preview: false,
         is_system: false,
         poll: None,
         author_is_bot: false,

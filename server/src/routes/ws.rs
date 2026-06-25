@@ -1093,6 +1093,7 @@ async fn render_new_message(
         custom_emojis,
         channels,
         quote_preview,
+        suppress_quote_preview: false,
         is_system: message.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
             .await
@@ -1233,6 +1234,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         custom_emojis,
         channels,
         quote_preview,
+        suppress_quote_preview: false,
         is_system: m.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
             .await
@@ -1325,6 +1327,7 @@ async fn render_thread_reply(
         custom_emojis,
         channels,
         quote_preview: None,
+        suppress_quote_preview: false,
         is_system: message.is_system,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
             .await

@@ -703,9 +703,25 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     color: var(--content-subtle);
     white-space: nowrap;
 }
+/* LC-462: the replies list. The earlier heavy accent rail down the left edge
+   read as a "wall"; the parent block + count divider already convey hierarchy,
+   so drop the rail and instead give the scroll region a thin, unobtrusive
+   overlay scrollbar so the panel feels attached to the conversation. */
 .lc-thread-replies {
-    border-left: 2px solid var(--accent-surface);
-    margin-left: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+.lc-thread-replies::-webkit-scrollbar { width: 8px; }
+.lc-thread-replies::-webkit-scrollbar-track { background: transparent; }
+.lc-thread-replies::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+.lc-thread-replies::-webkit-scrollbar-thumb:hover {
+    background-color: var(--content-subtle);
+    background-clip: content-box;
 }
 
 .lc-quote-bar {
