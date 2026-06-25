@@ -332,6 +332,9 @@ room-thread-heading = Thread
 # LC-460: thread/reply affordance labels
 room-thread-view = View thread
 room-quote-jump = Jump to the replied message
+# LC-461: thread panel parent reference + composer cue
+room-thread-replies-to = Replies to
+room-thread-composer-cue = Replying in thread
 room-thread-close = Close thread
 # LC-310: thread following toggle.
 room-thread-follow = Follow
