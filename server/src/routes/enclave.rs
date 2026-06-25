@@ -11,6 +11,28 @@ pub struct FlashQuery {
     pub error: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    /// LC-463: success code set by an action's post-redirect (e.g. `?ok=saved`).
+    /// Resolved to a localized message and surfaced as a toast on page load, so
+    /// every redirect-based settings action confirms without per-handler HX work.
+    #[serde(default)]
+    pub ok: Option<String>,
+}
+
+/// LC-463: map a known success code to a localized confirmation. Unknown codes
+/// drop to `None` so a forged `?ok=` query param cannot inject text.
+fn flash_ok_message(code: Option<&str>) -> Option<String> {
+    use crate::i18n::translate_current;
+    Some(match code? {
+        "saved" => translate_current("enclave-flash-saved"),
+        "rotated" => translate_current("enclave-flash-rotated"),
+        "added" => translate_current("enclave-flash-added"),
+        "created" => translate_current("enclave-flash-created"),
+        "deleted" => translate_current("enclave-flash-deleted"),
+        "updated" => translate_current("enclave-flash-updated"),
+        "unbanned" => translate_current("enclave-flash-unbanned"),
+        "transferred" => translate_current("enclave-flash-transferred"),
+        _ => return None,
+    })
 }
 
 /// Resolve a known error code (with optional caller-supplied name) into the
@@ -312,7 +334,7 @@ pub async fn post_visibility(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_public(&state.chat, id, form.is_public == "1").await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 #[derive(Deserialize)]
@@ -331,7 +353,7 @@ pub async fn post_share_emojis(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_share_emojis_globally(&state.chat, id, form.share == "1").await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 /// LC-217: form for `POST /enclave/{id}/rate-limit`. `burst` is a per-minute
@@ -361,7 +383,7 @@ pub async fn post_msg_rate_limit(
         return Err(AppError::BadRequest("burst exceeds 10000".into()));
     }
     db::enclave::set_msg_rate_limit_burst(&state.chat, id, burst).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=saved")))
 }
 
 #[derive(Deserialize)]
@@ -380,7 +402,7 @@ pub async fn post_coyote_mode(
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_coyote_mode(&state.chat, id, enabled).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 /// LC-342: toggle the shame-tag prototype for an enclave (manager-gated).
@@ -393,7 +415,7 @@ pub async fn post_shame_tags(
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_shame_tags_enabled(&state.chat, id, enabled).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 /// LC-340: lift an enclave ban (manager-gated). The user can then rejoin and
@@ -405,7 +427,7 @@ pub async fn post_unban(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::unban_from_enclave(&state.chat, id, &target).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=unbanned")))
 }
 
 pub async fn post_invite_code(
@@ -420,7 +442,7 @@ pub async fn post_invite_code(
         .map(char::from)
         .collect();
     db::enclave::regenerate_invite_code(&state.chat, id, &code).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=rotated")))
 }
 
 pub async fn delete_invite_code(
@@ -430,7 +452,7 @@ pub async fn delete_invite_code(
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::clear_invite_code(&state.chat, id).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=deleted")))
 }
 
 pub async fn post_discover_join(
@@ -790,6 +812,7 @@ pub async fn get_settings(
         emojis: &emojis,
         can_delete,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
+        flash_ok: flash_ok_message(flash.ok.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -835,7 +858,7 @@ pub async fn post_edit(
         }
         return Err(e.into());
     }
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=saved")))
 }
 
 #[derive(Deserialize)]
@@ -854,7 +877,9 @@ pub async fn post_transfer(
         return Err(AppError::Forbidden);
     }
     db::enclave::transfer_ownership(&state.chat, id, form.new_owner_id.trim()).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!(
+        "/enclave/{id}/settings?ok=transferred"
+    )))
 }
 
 pub async fn post_delete(
@@ -968,7 +993,7 @@ pub async fn post_member_role(
             user_id: target.clone(),
         },
     );
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 pub async fn post_kick(
@@ -1005,7 +1030,7 @@ pub async fn post_kick(
     state
         .hub
         .unsubscribe_user_from_topic(&target, &format!("enclave:{id}"));
-    Ok(Redirect::to(&format!("/enclave/{id}/settings")))
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 
 #[derive(Deserialize)]
