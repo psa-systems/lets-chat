@@ -62,7 +62,9 @@ pub async fn post_create(
         &user.id,
     )
     .await?;
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
+    Ok(Redirect::to(&format!(
+        "/enclave/{enclave_id}/settings?ok=created"
+    )))
 }
 
 /// PATCH /enclave/{id}/groups/{group_id}
@@ -81,7 +83,9 @@ pub async fn patch_rename(
     if n == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
+    Ok(Redirect::to(&format!(
+        "/enclave/{enclave_id}/settings?ok=updated"
+    )))
 }
 
 /// DELETE /enclave/{id}/groups/{group_id}
@@ -95,7 +99,9 @@ pub async fn delete_group(
     if n == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
+    Ok(Redirect::to(&format!(
+        "/enclave/{enclave_id}/settings?ok=deleted"
+    )))
 }
 
 /// POST /enclave/{id}/groups/{group_id}/members  body: user_id=...
@@ -201,7 +207,9 @@ pub async fn delete_member(
     require_manage(&state, &user, enclave_id).await?;
     assert_group_in_enclave(&state, enclave_id, group_id).await?;
     db::user_groups::remove_member(&state.chat, group_id, &target).await?;
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings")))
+    Ok(Redirect::to(&format!(
+        "/enclave/{enclave_id}/settings?ok=updated"
+    )))
 }
 
 async fn assert_group_in_enclave(
