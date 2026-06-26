@@ -204,6 +204,7 @@ settings-pref-push-available = Actívalo y luego usa el botón de abajo para sus
 settings-push-enable = Activar notificaciones de escritorio
 settings-push-enable-help = Concede el permiso y suscribe este navegador de inmediato. Mantén activado el interruptor de arriba y guarda para recibir menciones, mensajes directos y recordatorios incluso con la pestaña cerrada.
 settings-push-status-ok = Suscrito. Este dispositivo recibirá notificaciones push.
+settings-push-status-ok-toggle-off = Suscrito, pero activa el interruptor de arriba y guarda. Hasta que lo hagas, el servidor no enviará notificaciones a este dispositivo.
 settings-push-status-prompting = Esperando la solicitud de permiso del navegador...
 settings-push-status-denied = No se concedió el permiso, así que este dispositivo no está suscrito.
 settings-push-status-blocked = Las notificaciones están bloqueadas para este sitio. Permítelas en la configuración del navegador e inténtalo de nuevo.
