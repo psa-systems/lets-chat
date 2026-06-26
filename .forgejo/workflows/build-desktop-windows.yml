@@ -159,8 +159,17 @@ jobs:
               $"($container):/out/lets-chat-desktop-setup-x86_64.exe"
               $"artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
           )
+          # LC-180: the same image also emits the portable .zip fallback
+          # (raw exe + WebView2 bootstrapper + user README). Pull it from the
+          # same container before removing it.
+          (
+            ^docker cp
+              $"($container):/out/lets-chat-desktop-windows-x86_64.zip"
+              $"artifacts/lets-chat-desktop-($version)-windows-x86_64.zip"
+          )
           ^docker rm $container
           print $"Installer: artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
+          print $"Portable zip: artifacts/lets-chat-desktop-($version)-windows-x86_64.zip"
 
       - name: Upload binary to Generic Packages
         shell: nu {0}
@@ -255,6 +264,52 @@ jobs:
           (
             http put
               --content-type application/octet-stream
+              --headers $auth
+              $url
+              (open --raw $src)
+          )
+          print $"Uploaded ($file) to generic registry as ($env.PACKAGE_NAME)/($version)"
+
+      - name: Upload portable zip to Generic Packages
+        shell: nu {0}
+        env:
+          FORGEJO_TOKEN: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+        run: |
+          let version = "${{ steps.get-version.outputs.version }}"
+          # LC-180: stable filename, parallel to the installer/raw binary.
+          let file = "lets-chat-desktop-windows-x86_64.zip"
+          let src = $"artifacts/lets-chat-desktop-($version)-windows-x86_64.zip"
+          let url = (
+            $env.GITHUB_SERVER_URL
+            | url parse
+            | update path ([
+                "api"
+                "packages"
+                $env.PACKAGE_OWNER
+                "generic"
+                $env.PACKAGE_NAME
+                $version
+                $file
+              ] | str join "/")
+            | url join
+          )
+          let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
+
+          # Generic Packages files are immutable: delete-then-PUT (204/404 ok).
+          print $"Deleting existing ($url) if present"
+          let delete_status = (
+            http delete --full --allow-errors --headers $auth $url | get status
+          )
+          if $delete_status not-in [204 404] {
+            print --stderr $"Unexpected DELETE status: ($delete_status)"
+            exit 1
+          }
+          print $"DELETE returned ($delete_status)"
+
+          print $"Uploading ($src) to ($url)"
+          (
+            http put
+              --content-type application/zip
               --headers $auth
               $url
               (open --raw $src)
