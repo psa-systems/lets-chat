@@ -58,15 +58,33 @@ docker rm "$id"
   `lets-chat-desktop-setup-windows-x86_64.exe` to the Generic Packages registry
   alongside the raw binary.
 
+## Portable .zip fallback (LC-180)
+
+The same installer Dockerfile stage also emits a no-install **portable zip**,
+`lets-chat-desktop-windows-x86_64.zip`, published next to the installer in the
+Generic Packages registry. It contains the cross-built `lets-chat-desktop.exe`,
+the bundled WebView2 Evergreen bootstrapper (run-once if the runtime is
+missing), and `portable-README.txt` (the user-facing run/SmartScreen guide). It
+is the first-install option for users the NSIS installer does not suit
+(SmartScreen installer hostility while unsigned, no admin rights, locked-down
+boxes); the self-updater consumes the raw exe, so updates are unaffected. Built
+trivially from Linux in the same `zip` step - no Windows host.
+
 ## Remaining (ops-gated, not code)
 
-- **Code signing**: sign the installer (and ideally the binary) from Linux with
-  `osslsigncode` once a cert is provisioned - a cert/cost decision (self-signed
-  still trips SmartScreen, so it adds little). Inject after the `makensis` RUN
-  in the installer Dockerfile: `osslsigncode sign -pkcs12 cert.p12 -pass ... -in
-  setup.exe -out signed.exe`, with the cert as a Docker build secret.
-- **Real Windows 10+ install test** (cannot run from Linux CI): confirm the
-  Program Files layout, Start-Menu shortcut, ARP entry, the WebView2 bootstrap
-  firing on a clean VM, first-run welcome page, and a clean uninstall. The Linux
-  build only proves the installer compiles to a valid PE.
+- **Code signing**: explicitly deferred (decision 2026-05-26, LC-180) - no cert
+  for the foreseeable future, so the installer and the portable zip both ship
+  unsigned and trip SmartScreen / "unknown publisher". The user-facing
+  `portable-README.txt` documents the "More info -> Run anyway" workaround. The
+  `osslsigncode` step stays sketched here for whenever a cert is provisioned:
+  sign the installer (and ideally the binary) from Linux by injecting after the
+  `makensis` RUN in the installer Dockerfile: `osslsigncode sign -pkcs12
+  cert.p12 -pass ... -in setup.exe -out signed.exe`, with the cert as a Docker
+  build secret.
+- **Real Windows 10+ install test** (cannot run from Linux CI, owned by
+  LC-180): confirm the Program Files layout, Start-Menu shortcut, ARP entry, the
+  WebView2 bootstrap firing on a clean VM, first-run welcome page, and a clean
+  uninstall. The Linux build only proves the installer compiles to a valid PE.
+  The portable zip above is the unsigned-first-delivery fallback if the
+  installer proves unworkable on real Windows.
 - Optionally add a per-user (non-admin, `$LOCALAPPDATA`) install variant.

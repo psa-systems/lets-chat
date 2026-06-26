@@ -26,13 +26,14 @@
 FROM debian:trixie-slim AS installer
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends nsis curl ca-certificates \
+ && apt-get install -y --no-install-recommends nsis curl ca-certificates zip \
  && rm -rf /var/lib/apt/lists/*
 
 ARG APP_VERSION=0.0.0-dev
 
 WORKDIR /pkg
 COPY desktop/installer/lets-chat.nsi ./
+COPY desktop/installer/portable-README.txt ./
 COPY artifacts/lets-chat-desktop.exe /out/lets-chat-desktop.exe
 
 # Bundle the Microsoft Edge WebView2 Evergreen *bootstrapper* (~2 MB). It is
@@ -52,3 +53,23 @@ RUN makensis -V2 \
       lets-chat.nsi \
  && test -s /out/lets-chat-desktop-setup-x86_64.exe \
  && echo "built installer:" && ls -l /out/lets-chat-desktop-setup-x86_64.exe
+
+# LC-180: portable .zip fallback. A no-install first-delivery option for users
+# the NSIS installer does not suit (SmartScreen installer hostility, no admin
+# rights, locked-down boxes). Same cross-built exe, plus the bundled WebView2
+# Evergreen bootstrapper (run-once if the runtime is missing) and a user-facing
+# README that documents the unsigned-binary SmartScreen "Run anyway" flow. The
+# self-updater consumes the raw exe, so updates are unaffected - this is only
+# the first-install path. Staged under /pkg/portable so the exe inside the zip
+# keeps its stable `lets-chat-desktop.exe` name (the /out copy is the same
+# bytes). `zip -j` flattens, so the archive has no nested directory.
+RUN mkdir -p /pkg/portable \
+ && cp /out/lets-chat-desktop.exe /pkg/portable/lets-chat-desktop.exe \
+ && cp /pkg/MicrosoftEdgeWebview2Setup.exe /pkg/portable/MicrosoftEdgeWebview2Setup.exe \
+ && cp /pkg/portable-README.txt /pkg/portable/README.txt \
+ && zip -j -9 /out/lets-chat-desktop-windows-x86_64.zip \
+      /pkg/portable/lets-chat-desktop.exe \
+      /pkg/portable/MicrosoftEdgeWebview2Setup.exe \
+      /pkg/portable/README.txt \
+ && test -s /out/lets-chat-desktop-windows-x86_64.zip \
+ && echo "built portable zip:" && ls -l /out/lets-chat-desktop-windows-x86_64.zip
