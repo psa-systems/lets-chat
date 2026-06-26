@@ -1,5 +1,7 @@
 # Let's Chat
 
+Let's Chat: a self-hosted place to talk, on your own terms. Mascot: a cheerful messenger bird perched on a speech bubble. Tagline: Talk on your own terms.
+
 A self-hosted fullstack chat application built in Rust. Server-rendered HTML via Askama + HTMX over an Axum backend, compiled to a single binary serving HTTP, WebSocket, and static assets.
 
 ![Let's Chat][1]
