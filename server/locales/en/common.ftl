@@ -209,6 +209,7 @@ settings-pref-push-available = Turn this on, then use the button below to subscr
 settings-push-enable = Enable desktop notifications
 settings-push-enable-help = Grants permission and subscribes this browser right away. Keep the toggle above on and save so mentions, DMs, and reminders are delivered even when the tab is closed.
 settings-push-status-ok = Subscribed. This device will receive push notifications.
+settings-push-status-ok-toggle-off = Subscribed, but turn on the toggle above and save. Until you do, the server will not send notifications to this device.
 settings-push-status-prompting = Waiting for the browser permission prompt...
 settings-push-status-denied = Permission was not granted, so this device is not subscribed.
 settings-push-status-blocked = Notifications are blocked for this site. Allow them in your browser settings, then try again.

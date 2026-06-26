@@ -217,7 +217,15 @@
        data-base-title="lets-chat"
        data-browser-enabled="{% if user.notify_browser_enabled %}1{% else %}0{% endif %}"
        data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"
-       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
+       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"
+       data-push-msg-ok="{{ "settings-push-status-ok"|t }}"
+       data-push-msg-ok-toggle-off="{{ "settings-push-status-ok-toggle-off"|t }}"
+       data-push-msg-prompting="{{ "settings-push-status-prompting"|t }}"
+       data-push-msg-denied="{{ "settings-push-status-denied"|t }}"
+       data-push-msg-blocked="{{ "settings-push-status-blocked"|t }}"
+       data-push-msg-unsupported="{{ "settings-push-status-unsupported"|t }}"
+       data-push-msg-unavailable="{{ "settings-push-status-unavailable"|t }}"
+       data-push-msg-failed="{{ "settings-push-status-failed"|t }}"></div>
   <!-- LC-98: offline-outbox banner. Rendered by /assets/outbox.js from the
        service worker's queue state (offline notice, queued count, and
        retry/discard for messages that failed on replay). -->
@@ -269,17 +277,20 @@
     return arr;
   }
   // LC-343: localized status strings for the explicit "Enable desktop
-  // notifications" control + diagnosable failure reporting. Sourced here (a
-  // template) so the layout script owns the i18n; the settings button passes a
-  // status <span> for the reporter to write into.
+  // notifications" control + diagnosable failure reporting. Read from data-*
+  // attributes on the cfg div (HTML-escaped by the template, so a translation
+  // containing a quote or apostrophe is safe) rather than interpolated into a
+  // JS string literal here. The settings button passes a status <span> for the
+  // reporter to write into.
   var PUSH_MSGS = {
-    ok:          "{{ "settings-push-status-ok"|t }}",
-    prompting:   "{{ "settings-push-status-prompting"|t }}",
-    denied:      "{{ "settings-push-status-denied"|t }}",
-    blocked:     "{{ "settings-push-status-blocked"|t }}",
-    unsupported: "{{ "settings-push-status-unsupported"|t }}",
-    unavailable: "{{ "settings-push-status-unavailable"|t }}",
-    failed:      "{{ "settings-push-status-failed"|t }}"
+    ok:          cfg.getAttribute('data-push-msg-ok') || '',
+    okToggleOff: cfg.getAttribute('data-push-msg-ok-toggle-off') || '',
+    prompting:   cfg.getAttribute('data-push-msg-prompting') || '',
+    denied:      cfg.getAttribute('data-push-msg-denied') || '',
+    blocked:     cfg.getAttribute('data-push-msg-blocked') || '',
+    unsupported: cfg.getAttribute('data-push-msg-unsupported') || '',
+    unavailable: cfg.getAttribute('data-push-msg-unavailable') || '',
+    failed:      cfg.getAttribute('data-push-msg-failed') || ''
   };
   function makeReporter(el){
     return function(key, ok){
@@ -326,7 +337,12 @@
         }),
       });
       if (!sres.ok) { report('failed', false); return; }
-      report('ok', true);
+      // LC-343: the subscription row now exists, but push::dispatch still
+      // early-returns unless the SAVED notify_push_enabled is on. `pushEnabled`
+      // mirrors that saved value, so when it is off (e.g. the user flipped the
+      // toggle but has not submitted the form, or never enabled it) report the
+      // toggle-off variant instead of promising delivery that will be dropped.
+      report(pushEnabled ? 'ok' : 'okToggleOff', true);
     } catch (e) { report('failed', false); console.error('push registration failed', e); }
   }
   // LC-343: explicit opt-in. Settings calls this on a user click: request
