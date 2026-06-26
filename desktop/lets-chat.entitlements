@@ -3,34 +3,37 @@
 <!--
   macOS hardened-runtime entitlements for the lets-chat desktop bundle.
 
-  Tauri enables the hardened runtime by default (bundle.macOS.hardenedRuntime).
-  Under the hardened runtime a signed app cannot reach device capture APIs
-  unless it also carries the matching entitlements, even when the Info.plist
-  usage strings are present. These entitlements are inert until the codesign
-  step runs, which only happens on the macOS build path owned by LC-126
-  (currently parked for lack of macOS hardware + Apple credentials). On
-  Linux / Windows builds this file is ignored.
+  Tauri signs with the hardened runtime enabled, and under it a signed app
+  needs the matching capability entitlement to reach a TCC-protected device
+  API (camera, microphone, ...). These entitlements are inert until the
+  codesign step runs, which only happens on the macOS build path owned by
+  LC-126 (parked for lack of macOS hardware + Apple credentials). On
+  Linux / Windows builds this file is ignored, and macOS is not yet in
+  bundle.targets, so nothing consumes it today; it is wired into
+  tauri.conf.json (bundle.macOS.entitlements) so the keys are in place when
+  signing lands.
 
-  LC-137: getDisplayMedia (screen share). WKWebView gained getDisplayMedia in
-  macOS 13. The WebKit-layer consent is auto-granted by wry's
-  WryWebViewUIDelegate (the same delegate that auto-grants getUserMedia), so
-  there is no Rust-side permission hook to install in src/main.rs. What the
-  hardened runtime requires is the screen-capture entitlement below; the
-  OS-level Screen Recording (TCC) prompt is then raised automatically by
-  macOS the first time a call requests display capture and remembered across
-  launches (no Info.plist usage string controls the Screen Recording prompt).
+  LC-137: getDisplayMedia (screen share). There is NO codesign entitlement
+  for screen capture. Screen recording is gated purely by TCC (the
+  user-granted Screen Recording permission in System Settings, raised at
+  runtime via CGRequestScreenCaptureAccess / the automatic first-use prompt);
+  no entitlement and no Info.plist usage string controls it. So the
+  screen-share slice adds nothing to the dict below. There is no real
+  `com.apple.security.device.screen-capture` key - the earlier draft of this
+  file invented one. See Apple's hardened-runtime entitlement list:
+  https://developer.apple.com/documentation/security/hardened-runtime
+  The WebKit-layer getUserMedia consent is auto-granted by wry's UI delegate;
+  whether WKWebView exposes getDisplayMedia at all, and whether that delegate
+  also covers it, is unverified and must be confirmed during the LC-126 macOS
+  bring-up (a getDisplayMedia call may still need a Rust-side hook).
 
-  LC-134 (getUserMedia, camera + microphone) adds the
-  com.apple.security.device.camera and com.apple.security.device.audio-input
-  entitlements to this same file. If both land independently, union the keys:
-  this file should carry camera, audio-input, AND screen-capture.
-
-  LC-126 may extend this file with the remaining signing entitlements WebKit
-  needs under the hardened runtime (e.g. com.apple.security.cs.allow-jit).
+  LC-134 (getUserMedia, camera + microphone) is what actually populates this
+  file: it adds com.apple.security.device.camera and
+  com.apple.security.device.audio-input. LC-126 may add the remaining signing
+  entitlements WebKit needs under the hardened runtime (e.g.
+  com.apple.security.cs.allow-jit). Union the keys if these land independently.
 -->
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.device.screen-capture</key>
-	<true/>
 </dict>
 </plist>
