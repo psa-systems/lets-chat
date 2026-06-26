@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Let's Chat - Talk on your own terms{% endblock %}
+
+{# LC-470: the marketing landing scrolls, so opt out of base.html's
+   app-shell `h-screen overflow-hidden` body class. #}
+{% block body_class %}min-h-screen{% endblock %}
+
+{% block body %}
+<style>
+  /* LC-470: self-hosted brand wordmark font (no external CDN). */
+  @font-face {
+    font-family: 'Nunito';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('/assets/fonts/nunito-800.woff2?v={{ asset_version }}') format('woff2');
+  }
+  .lc-wordmark { font-family: 'Nunito', Inter, system-ui, sans-serif; }
+</style>
+<div id="main" class="min-h-screen flex flex-col bg-surface text-content">
+
+  <!-- Top nav -->
+  <header class="w-full border-b border-border">
+    <div class="mx-auto max-w-6xl flex items-center justify-between px-6 h-16">
+      <a href="/" class="flex items-center gap-2" aria-label="Let's Chat home">
+        <img src="/assets/letschat-bird.png?v={{ asset_version }}" alt="" class="h-14 w-auto drop-shadow-md">
+        <span class="lc-wordmark text-2xl font-extrabold tracking-tight">Let's <span class="text-accent">Chat</span></span>
+      </a>
+      <a href="/auth/bunyip/start" class="btn btn-primary btn-sm">Sign in with Bunyip</a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="mx-auto max-w-6xl w-full px-6 py-16 md:py-24 grid items-center gap-12 md:grid-cols-[1fr_1.25fr]">
+    <div class="flex flex-col items-center text-center md:items-start md:text-left">
+      <span class="mb-5 inline-flex items-center gap-2 rounded-full bg-accent-surface px-3 py-1 text-xs font-medium uppercase tracking-wide text-accent-surface-content">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+        Self-hosted chat
+      </span>
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl leading-tight">
+        Team chat you <span class="text-accent">actually own</span>.
+      </h1>
+      <p class="mt-6 max-w-xl text-lg text-content-muted leading-relaxed">
+        Let's Chat is team chat you run yourself: real-time messaging, voice and video,
+        threads, and search, in a single Rust binary. Your conversations stay in your house.
+      </p>
+      <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+        <a href="/auth/bunyip/start" class="btn btn-primary">Sign in with Bunyip</a>
+        <a href="#features" class="btn btn-secondary">See what's inside</a>
+      </div>
+      <p class="mt-4 text-xs text-content-subtle">You'll be redirected to {{ bunyip_issuer_host }} to sign in.</p>
+    </div>
+    <div class="flex flex-col items-center">
+      <img src="/assets/letschat.png?v={{ asset_version }}"
+           alt="The Let's Chat messenger bird mascot perched on a speech bubble"
+           class="w-full max-w-md h-auto drop-shadow-2xl" width="512" height="512">
+      <p class="relative z-10 -mt-12 w-fit mx-auto rounded-full border border-border bg-surface px-4 py-1.5 text-sm italic text-content-muted shadow-md whitespace-nowrap">
+        "Talk on your own terms."
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="border-t border-border bg-surface-sunken">
+    <div class="mx-auto max-w-6xl w-full px-6 py-16 md:py-20">
+      <div class="max-w-2xl">
+        <p class="text-sm uppercase tracking-wide font-semibold text-accent">What's inside</p>
+        <h2 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Everything a team needs to talk.</h2>
+        <p class="mt-4 text-content-muted">Server-rendered, real-time, and yours to host. No SaaS lock-in, no per-seat surprises.</p>
+      </div>
+      <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+
+        <div class="card p-6 h-full flex flex-col">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-surface text-accent">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold">Real-time by default</h3>
+          <p class="mt-2 text-sm leading-relaxed text-content-muted">Messages, typing, presence, and read state update live over WebSocket. No refresh, no spinner.</p>
+        </div>
+
+        <div class="card p-6 h-full flex flex-col">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-surface text-accent">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6z"/></svg>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold">Self-hosted &amp; private</h3>
+          <p class="mt-2 text-sm leading-relaxed text-content-muted">One Rust binary, your database, your server. Conversations never leave infrastructure you control.</p>
+        </div>
+
+        <div class="card p-6 h-full flex flex-col">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-surface text-accent">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold">Voice, video &amp; calls</h3>
+          <p class="mt-2 text-sm leading-relaxed text-content-muted">1:1 and group calls with screen share, plus optional server-side call transcripts and AI summaries.</p>
+        </div>
+
+        <div class="card p-6 h-full flex flex-col">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-surface text-accent">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z"/></svg>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold">Threads, search &amp; email-in</h3>
+          <p class="mt-2 text-sm leading-relaxed text-content-muted">Organized threads, fast full-text search, and reply by email when you are away from the app.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="border-t border-border">
+    <div class="mx-auto max-w-4xl w-full px-6 py-16">
+      <div class="rounded-2xl bg-accent text-accent-content p-10 md:p-12 flex flex-col gap-6 md:flex-row md:items-center md:justify-between shadow-lg">
+        <div>
+          <h3 class="text-2xl md:text-3xl font-bold tracking-tight">Your words, your house.</h3>
+          <p class="mt-2 opacity-90">Sign in and start the conversation.</p>
+        </div>
+        <a href="/auth/bunyip/start" class="whitespace-nowrap rounded-lg bg-surface px-6 py-3 font-medium text-content shadow-sm transition-shadow hover:shadow-md">
+          Sign in with Bunyip
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-border">
+    <div class="mx-auto max-w-6xl w-full px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-content-subtle">
+      <span class="flex items-center gap-2">
+        <img src="/assets/favicon.svg?v={{ asset_version }}" alt="" class="h-5 w-5"> Let's Chat
+      </span>
+      <span title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
+    </div>
+  </footer>
+
+</div>
+{% endblock %}

@@ -3,12 +3,12 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::auth::AuthUser;
+use crate::auth::OptionalUser;
 use crate::error::AppError;
 use crate::last_visited;
 use crate::models::User;
 use crate::state::AppState;
-use crate::views::home::WelcomePage;
+use crate::views::home::{LandingPage, WelcomePage};
 use crate::views::html;
 
 #[derive(Deserialize)]
@@ -22,10 +22,17 @@ pub struct HomeQuery {
 
 pub async fn get_home(
     State(state): State<AppState>,
-    AuthUser(user): AuthUser,
+    OptionalUser(maybe_user): OptionalUser,
     headers: HeaderMap,
     Query(q): Query<HomeQuery>,
 ) -> Result<Response, AppError> {
+    // LC-470: logged-out visitors get the public marketing landing page
+    // instead of being bounced to /login. Authenticated users fall through
+    // to the existing chat-home behavior below.
+    let user = match maybe_user {
+        Some(u) => u,
+        None => return render_landing(&state),
+    };
     let force_home = q.home.as_deref() == Some("1");
     if !force_home {
         if let Some(path) = last_visited::read(&headers) {
@@ -64,6 +71,25 @@ pub async fn get_home(
     };
     let body = html(&page)?;
     Ok(body.into_response())
+}
+
+/// LC-470: render the public marketing landing page. The Bunyip issuer host
+/// is shown in the "you'll be redirected to ..." note, mirroring the login
+/// page; it falls back to "Bunyip" when SSO is not configured.
+fn render_landing(state: &AppState) -> Result<Response, AppError> {
+    let host = state
+        .bunyip_sso
+        .as_ref()
+        .map(|c| c.config.issuer.host_str().unwrap_or("Bunyip").to_string())
+        .unwrap_or_else(|| "Bunyip".to_string());
+    let page = LandingPage {
+        asset_version: &state.asset_version,
+        app_version: crate::version::VERSION,
+        git_hash: crate::version::GIT_HASH,
+        build_date: crate::version::BUILD_DATE,
+        bunyip_issuer_host: &host,
+    };
+    Ok(html(&page)?.into_response())
 }
 
 async fn target_accessible(state: &AppState, user: &User, path: &str) -> Result<bool, AppError> {
