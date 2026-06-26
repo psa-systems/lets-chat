@@ -6,7 +6,7 @@ A self-hosted fullstack chat application built in Rust. Server-rendered HTML via
 
 ![Let's Chat][1]
 
-[1]: letschat.png
+[1]: lets-chat.png
 
 ## Features
 
