@@ -315,7 +315,7 @@
   <script src="/assets/enclave_settings.js?v={{ asset_version }}" defer></script>
   <script src="/assets/branding.js?v={{ asset_version }}" defer></script>
 </head>
-<body hx-ext="response-targets" class="h-screen overflow-hidden bg-surface text-content">
+<body hx-ext="response-targets" class="{% block body_class %}h-screen overflow-hidden{% endblock %} bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
      (Tab from address bar lands here first), then becomes a positioned
      button that jumps focus to #main. Pages that don't have #main (login,
