@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS hardened-runtime entitlements for the lets-chat desktop bundle.
+
+  Tauri signs with the hardened runtime enabled, and under it a signed app
+  needs the matching capability entitlement to reach a TCC-protected device
+  API (camera, microphone, ...). These entitlements are inert until the
+  codesign step runs, which only happens on the macOS build path owned by
+  LC-126 (parked for lack of macOS hardware + Apple credentials). On
+  Linux / Windows builds this file is ignored, and macOS is not yet in
+  bundle.targets, so nothing consumes it today; it is wired into
+  tauri.conf.json (bundle.macOS.entitlements) so the keys are in place when
+  signing lands.
+
+  LC-137: getDisplayMedia (screen share). There is NO codesign entitlement
+  for screen capture. Screen recording is gated purely by TCC (the
+  user-granted Screen Recording permission in System Settings, raised at
+  runtime via CGRequestScreenCaptureAccess / the automatic first-use prompt);
+  no entitlement and no Info.plist usage string controls it. So the
+  screen-share slice adds nothing to the dict below. There is no real
+  `com.apple.security.device.screen-capture` key - the earlier draft of this
+  file invented one. See Apple's hardened-runtime entitlement list:
+  https://developer.apple.com/documentation/security/hardened-runtime
+  The WebKit-layer getUserMedia consent is auto-granted by wry's UI delegate;
+  whether WKWebView exposes getDisplayMedia at all, and whether that delegate
+  also covers it, is unverified and must be confirmed during the LC-126 macOS
+  bring-up (a getDisplayMedia call may still need a Rust-side hook).
+
+  LC-134 (getUserMedia, camera + microphone) is what actually populates this
+  file: it adds com.apple.security.device.camera and
+  com.apple.security.device.audio-input. LC-126 may add the remaining signing
+  entitlements WebKit needs under the hardened runtime (e.g.
+  com.apple.security.cs.allow-jit). Union the keys if these land independently.
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

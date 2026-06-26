@@ -33,6 +33,9 @@
           "libgtk-3-0"
         ]
       }
+    },
+    "macOS": {
+      "entitlements": "lets-chat.entitlements"
     }
   }
 }
