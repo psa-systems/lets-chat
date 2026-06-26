@@ -248,6 +248,23 @@
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-push"|t }}</span>{% if !push_available %}<span class="lc-toggle-desc">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-push-available"|t }}</span>{% endif %}</span>
             </label>
+            {# LC-343: explicit opt-in. Clicking requests the browser
+               Notification permission on a user gesture and registers the push
+               subscription immediately (creating the push_subscriptions row),
+               instead of waiting for a future background mention to do it.
+               window.__lcEnablePush lives in layout.html and writes its result
+               into #st-push so a failed subscribe is no longer silent. type=button
+               so it never submits the surrounding preferences form. #}
+            {% if push_available %}
+            <div class="lc-set-field">
+              <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        onclick="window.__lcEnablePush&&window.__lcEnablePush(document.getElementById('st-push'))">{{ "settings-push-enable"|t }}</button>
+                <span id="st-push" class="lc-set-status" role="status" aria-live="polite"></span>
+              </div>
+              <p class="lc-set-help">{{ "settings-push-enable-help"|t }}</p>
+            </div>
+            {% endif %}
             <label class="lc-toggle">
               <input type="checkbox" name="notify_email_digest_enabled" value="1" {% if user.notify_email_digest_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
