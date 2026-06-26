@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LC-134: macOS getUserMedia permission hook (WKWebView slice).
+
+  Tauri enables the hardened runtime by default (bundle.macOS.hardenedRuntime).
+  Under the hardened runtime a signed app cannot reach the camera or microphone
+  - even with the Info.plist usage strings present - unless it also carries the
+  matching entitlements. Without them the 1:1 call would hit the "silent denial"
+  the LC-134 acceptance criteria forbid once LC-126 ships a signed/notarized
+  build.
+
+  These entitlements are inert until the codesign step runs, which only happens
+  on the macOS build path owned by LC-126 (parked). LC-126 may extend this file
+  with the remaining signing entitlements WebKit needs under the hardened
+  runtime (e.g. com.apple.security.cs.allow-jit); the two media entitlements
+  below are the LC-134 slice.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

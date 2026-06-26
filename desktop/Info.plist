@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LC-134: macOS getUserMedia permission hook (WKWebView slice).
+
+  This file is auto-merged into the bundle's generated Info.plist by
+  tauri-bundler at `cargo tauri build` time (it looks for an `Info.plist`
+  next to tauri.conf.json). It only takes effect once the macOS build path
+  lands under LC-126 (currently parked for lack of macOS hardware + Apple
+  credentials); on Linux/Windows builds the file is ignored.
+
+  Why this is the macOS slice of the work:
+
+  * The WebKit-layer getUserMedia consent is already auto-granted by wry's
+    WryWebViewUIDelegate, which implements
+    `webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:`
+    and unconditionally calls the decision handler with WKPermissionDecision::Grant
+    (wry 0.55, src/wkwebview/class/wry_web_view_ui_delegate.rs). So there is no
+    Rust-side delegate for us to install - see install_media_permission_handler
+    in src/main.rs.
+
+  * What is NOT automatic is the OS-level (TCC) prompt. WKWebView reaches the
+    camera/microphone through AVFoundation in the host app's process; macOS
+    refuses that access - silently denying the stream, or terminating the app -
+    unless the host bundle declares a usage-description string. With these keys
+    present, macOS shows exactly ONE prompt the first time a 1:1 call requests
+    camera/mic and remembers the choice in the TCC database across launches,
+    satisfying the LC-134 acceptance criteria ("exactly ONE OS-level permission
+    prompt, never a silent denial" + "remembered across app launches").
+
+  The matching hardened-runtime entitlements (com.apple.security.device.camera
+  and com.apple.security.device.audio-input) live in lets-chat.entitlements,
+  referenced from tauri.conf.json's bundle.macOS.entitlements; they are applied
+  by the codesign step owned by LC-126.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>lets-chat needs camera access to make video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>lets-chat needs microphone access to make voice and video calls.</string>
+</dict>
+</plist>

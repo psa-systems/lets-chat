@@ -305,10 +305,19 @@ fn set_linux_gtk_env() {}
 // so granting unconditionally inside this binary is no weaker than the
 // trust model around `LETS_CHAT_SERVER_URL` itself.
 //
-// macOS / iOS / Android variants live under LC-134 / LC-135 / LC-136
-// in the Apple+mobile tracker (LC-133); those targets need their
-// permission flows wired through Tauri's per-platform hooks once the
-// build paths for those targets land.
+// macOS (LC-134) needs no Rust-side handler: wry's WryWebViewUIDelegate
+// already implements
+// `webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:`
+// and unconditionally grants it (WKPermissionDecision::Grant), so the
+// WebKit-layer consent is auto-granted. The macOS-specific work is the
+// OS-level (TCC) prompt, gated on the NSCameraUsageDescription /
+// NSMicrophoneUsageDescription strings in desktop/Info.plist plus the
+// camera/microphone entitlements in desktop/lets-chat.entitlements; see the
+// explicit macOS arm below.
+//
+// iOS / Android variants live under LC-135 / LC-136 in the Apple+mobile
+// tracker (LC-133); those targets need their permission flows wired through
+// Tauri's per-platform hooks once the build paths for those targets land.
 #[cfg(target_os = "linux")]
 fn install_media_permission_handler(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     use webkit2gtk::glib::Cast;
@@ -366,7 +375,20 @@ fn install_media_permission_handler(window: &tauri::WebviewWindow) -> tauri::Res
     Ok(())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+// LC-134: macOS WKWebView. The WebKit-layer getUserMedia consent is already
+// auto-granted by wry's WryWebViewUIDelegate (WKPermissionDecision::Grant), so
+// there is no delegate for us to install here without clobbering wry's own
+// UIDelegate (which also drives file-upload panels and new-window handling).
+// The OS-level prompt is provisioned declaratively via desktop/Info.plist
+// (NSCameraUsageDescription / NSMicrophoneUsageDescription) and
+// desktop/lets-chat.entitlements (camera / audio-input), so this arm is
+// intentionally a no-op.
+#[cfg(target_os = "macos")]
+fn install_media_permission_handler(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 fn install_media_permission_handler(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
