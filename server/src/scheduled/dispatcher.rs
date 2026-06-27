@@ -203,6 +203,20 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
         }
     };
 
+    // LC-485: for a recurring row, enqueue the next occurrence in THIS
+    // transaction - atomic with marking the current one delivered. The current
+    // row is already claimed (delivered_at set by try_claim), so a re-run of the
+    // tick cannot double-enqueue. Only on the delivered path: a dropped row ends
+    // the series (its room/user may be gone, which would also FK-fail the insert).
+    if let Some(next_for) =
+        crate::scheduled::recurrence::next_occurrence(&row.scheduled_for, &row.repeat)
+    {
+        if let Err(e) = db::scheduled::enqueue_next_occurrence(&mut conn, &row, &next_for).await {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            return Err(e.into());
+        }
+    }
+
     sqlx::query("COMMIT").execute(&mut *conn).await?;
     drop(conn);
 

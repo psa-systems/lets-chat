@@ -24,6 +24,9 @@ pub struct ScheduledRow {
     pub failed_reason: Option<String>,
     pub attempt_count: i64,
     pub next_attempt_at: Option<String>,
+    /// LC-485: recurrence kind - `none` / `daily` / `weekly` / `weekdays`.
+    /// A delivered row with `repeat != "none"` enqueues its next occurrence.
+    pub repeat: String,
 }
 
 fn row_to_scheduled(r: sqlx::sqlite::SqliteRow) -> ScheduledRow {
@@ -41,6 +44,7 @@ fn row_to_scheduled(r: sqlx::sqlite::SqliteRow) -> ScheduledRow {
         failed_reason: r.get("failed_reason"),
         attempt_count: r.get("attempt_count"),
         next_attempt_at: r.get("next_attempt_at"),
+        repeat: r.get("repeat"),
     }
 }
 
@@ -59,10 +63,39 @@ pub async fn insert_scheduled(
     quote_id: Option<i64>,
     file_id: Option<i64>,
 ) -> Result<i64, sqlx::Error> {
+    insert_scheduled_with_repeat(
+        pool,
+        room_id,
+        user_id,
+        body,
+        scheduled_for,
+        parent_id,
+        quote_id,
+        file_id,
+        "none",
+    )
+    .await
+}
+
+/// LC-485: like [`insert_scheduled`] but with an explicit `repeat` kind. The
+/// route's create path uses this; the 7-arg wrapper above keeps the one-shot
+/// call shape for everyone else.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_scheduled_with_repeat(
+    pool: &SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    body: &str,
+    scheduled_for: &str,
+    parent_id: Option<i64>,
+    quote_id: Option<i64>,
+    file_id: Option<i64>,
+    repeat: &str,
+) -> Result<i64, sqlx::Error> {
     let result = sqlx::query(
         "INSERT INTO scheduled_messages \
-             (room_id, user_id, body, scheduled_for, parent_id, quote_id, file_id) \
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+             (room_id, user_id, body, scheduled_for, parent_id, quote_id, file_id, repeat) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(room_id)
     .bind(user_id)
@@ -71,7 +104,33 @@ pub async fn insert_scheduled(
     .bind(parent_id)
     .bind(quote_id)
     .bind(file_id)
+    .bind(repeat)
     .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// LC-485: enqueue the next occurrence of a recurring row, inside the caller's
+/// claim transaction (`&mut SqliteConnection`) so it commits atomically with
+/// marking the current row delivered. The clone carries body + repeat only:
+/// attachments, parent, and quote are one-shot (they belong to the original
+/// message moment), so subsequent occurrences are plain top-level posts.
+pub async fn enqueue_next_occurrence(
+    conn: &mut SqliteConnection,
+    src: &ScheduledRow,
+    scheduled_for: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        "INSERT INTO scheduled_messages \
+             (room_id, user_id, body, scheduled_for, repeat) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(src.room_id)
+    .bind(&src.user_id)
+    .bind(&src.body)
+    .bind(scheduled_for)
+    .bind(&src.repeat)
+    .execute(&mut *conn)
     .await?;
     Ok(result.last_insert_rowid())
 }
