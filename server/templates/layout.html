@@ -1661,6 +1661,9 @@ document.body.addEventListener('click', function(e){
     var nodes = (root || document).querySelectorAll('[data-lc-voice]');
     Array.prototype.forEach.call(nodes, initVoice);
   }
+  // LC-499: let the composer initialize a preview player it injects directly
+  // (not via an htmx swap, so afterSettle/oobAfterSwap do not fire for it).
+  window.__lcScanVoice = scan;
 
   function onReady(fn){
     if (document.readyState !== 'loading') fn();
