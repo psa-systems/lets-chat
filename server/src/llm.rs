@@ -11,6 +11,12 @@
 //! `http_client::outbound_trusted_post` (NOT public-IP SSRF-filtered, so a
 //! localhost engine works). Mockable so the summary route is testable without a
 //! live model.
+//!
+//! LC-484: the same client also powers chat "catch me up" summaries for rooms
+//! and threads (`crate::routes::summary`) via `complete`. Enabling the LLM
+//! therefore sends chat message text to the endpoint in addition to call
+//! transcripts - relevant to load/cost/content on a metered or third-party
+//! engine.
 
 use async_trait::async_trait;
 
