@@ -106,7 +106,9 @@ async fn run_summary(
     target_id: String,
 ) -> Result<Html, AppError> {
     let Some(llm) = state.llm_client.clone() else {
-        return Err(AppError::BadRequest("summarization is not configured".into()));
+        return Err(AppError::BadRequest(
+            "summarization is not configured".into(),
+        ));
     };
     let labels = author_labels(state, msgs).await?;
     let text = build_prompt_text(msgs, &labels);

@@ -80,8 +80,7 @@ Be concise and faithful to the transcript; do not invent details.";
 #[async_trait]
 pub trait LlmClient: Send + Sync {
     /// Run one chat-completion with the given system + user prompt.
-    async fn complete(&self, system_prompt: &str, user_content: &str)
-        -> Result<String, LlmError>;
+    async fn complete(&self, system_prompt: &str, user_content: &str) -> Result<String, LlmError>;
 
     /// Summarize a transcript -> markdown summary. Default delegates to
     /// `complete` with the transcript [`SYSTEM_PROMPT`].
@@ -104,11 +103,7 @@ impl ReqwestLlmClient {
 
 #[async_trait]
 impl LlmClient for ReqwestLlmClient {
-    async fn complete(
-        &self,
-        system_prompt: &str,
-        user_content: &str,
-    ) -> Result<String, LlmError> {
+    async fn complete(&self, system_prompt: &str, user_content: &str) -> Result<String, LlmError> {
         let payload = serde_json::json!({
             "model": self.cfg.model,
             "temperature": 0.2,
