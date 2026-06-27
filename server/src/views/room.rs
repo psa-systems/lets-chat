@@ -1079,10 +1079,11 @@ pub struct RoomPage<'a> {
     /// compose-box render: when false the composer is replaced with a
     /// read-only notice.
     pub can_post: bool,
-    /// LC-85: human-readable label for the current policy when the
-    /// composer is disabled (e.g. "Only admins can post in this room").
-    /// Empty string when `can_post` is true.
-    pub posting_locked_reason: &'a str,
+    /// LC-480: raw posting policy (`all` / `moderators_only` / `admins_only`).
+    /// Drives the announcement banner above the timeline and the localized
+    /// read-only notice when `can_post` is false. The template maps the value
+    /// to the right `|t` string so the copy is translatable.
+    pub posting_policy: &'a str,
     /// LC-64: the user's persisted draft body for this room, if any.
     /// Empty string means "no draft" (whether absent, stale, or just
     /// purged by the 60-day lazy-cleanup rule). The composer template
