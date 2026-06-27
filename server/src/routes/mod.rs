@@ -1248,6 +1248,10 @@ pub fn build_router(state: AppState) -> Router {
             post(room_rbac::post_posting_policy),
         )
         .route(
+            "/room/{room_id}/broadcast-policy",
+            post(room_rbac::post_broadcast_policy),
+        )
+        .route(
             "/room/{room_id}/retention/preview",
             get(retention::get_preview),
         )
