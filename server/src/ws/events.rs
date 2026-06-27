@@ -32,6 +32,14 @@ pub enum ChatEvent {
         message_id: i64,
         room_id: i64,
     },
+    /// LC-483: a voice message's server-side transcription finished and was
+    /// stored. Recipients re-render the referenced message so the transcript
+    /// appears under the waveform player (same per-viewer render path as
+    /// `MessageEdited`/`MessageRegrouped`).
+    VoiceTranscribed {
+        message_id: i64,
+        room_id: i64,
+    },
     MessageDeleted {
         message_id: i64,
         room_id: i64,

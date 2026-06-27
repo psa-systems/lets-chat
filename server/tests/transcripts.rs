@@ -80,6 +80,7 @@ async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
 
 struct Setup {
     app: Router,
+    state: AppState,
     chat: sqlx::SqlitePool,
     hub: Arc<Hub>,
     a_session: String,
@@ -171,7 +172,8 @@ async fn setup_with_clients(
         llm_client,
     };
     Setup {
-        app: routes::build_router(state),
+        app: routes::build_router(state.clone()),
+        state,
         chat,
         hub,
         a_session,
@@ -827,4 +829,110 @@ async fn outsider_cannot_delete_transcript() {
     let (st, _) = del(&s.app, &s.outsider_session, &format!("/transcripts/{id}")).await;
     assert_eq!(st, StatusCode::FORBIDDEN);
     assert!(db::transcripts::get(&s.chat, id).await.unwrap().is_some());
+}
+
+// ── LC-483: voice-message transcription ───────────────────────────────────────
+
+/// A voice message (audio upload + waveform) gets transcribed via the STT
+/// client and the text lands on the attachment that the message render reads.
+#[tokio::test]
+async fn voice_message_is_transcribed_and_attached() {
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
+        canned: "hello from whisper".into(),
+    })))
+    .await;
+
+    let rel = "lc483-voice.webm";
+    std::fs::write(db::uploads_dir().join(rel), b"fake-audio-bytes").unwrap();
+    let upload_id = db::uploads::insert_upload(
+        &s.chat,
+        &s.b_id,
+        "voice.webm",
+        "audio/webm",
+        16,
+        rel,
+        Some(r#"{"d":1.5,"p":[0.1,0.4,0.2]}"#),
+    )
+    .await
+    .unwrap();
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "\u{1f3a4}")
+        .await
+        .unwrap();
+    db::uploads::link_upload_to_message(&s.chat, upload_id, mid)
+        .await
+        .unwrap();
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    let atts = db::uploads::attachments_for_message(&s.chat, mid)
+        .await
+        .unwrap();
+    assert_eq!(atts.len(), 1);
+    assert_eq!(atts[0].transcript.as_deref(), Some("hello from whisper"));
+    assert!(atts[0].waveform.is_some(), "still rendered as a voice message");
+}
+
+/// A non-voice upload (image: no waveform) is never sent to STT, even with a
+/// working client configured.
+#[tokio::test]
+async fn non_voice_upload_is_not_transcribed() {
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
+        canned: "should not be used".into(),
+    })))
+    .await;
+
+    let rel = "lc483-image.png";
+    std::fs::write(db::uploads_dir().join(rel), b"not-really-a-png").unwrap();
+    let upload_id =
+        db::uploads::insert_upload(&s.chat, &s.b_id, "pic.png", "image/png", 16, rel, None)
+            .await
+            .unwrap();
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "pic")
+        .await
+        .unwrap();
+    db::uploads::link_upload_to_message(&s.chat, upload_id, mid)
+        .await
+        .unwrap();
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    let (row, _) = db::uploads::get_upload(&s.chat, upload_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.transcript, None);
+}
+
+/// With STT disabled the helper is a no-op, even for a real voice message.
+#[tokio::test]
+async fn voice_message_not_transcribed_when_stt_disabled() {
+    let s = setup().await; // stt_client = None
+
+    let rel = "lc483-voice-off.webm";
+    std::fs::write(db::uploads_dir().join(rel), b"fake-audio-bytes").unwrap();
+    let upload_id = db::uploads::insert_upload(
+        &s.chat,
+        &s.b_id,
+        "voice.webm",
+        "audio/webm",
+        16,
+        rel,
+        Some(r#"{"d":1.0,"p":[0.2]}"#),
+    )
+    .await
+    .unwrap();
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, 0, s.public_room)
+        .await
+        .unwrap();
+
+    let (row, _) = db::uploads::get_upload(&s.chat, upload_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.transcript, None);
 }
