@@ -3,7 +3,7 @@
 {% block title %}#{{ room.name }} - lets-chat{% endblock %}
 
 {% block main %}
-<div class="flex flex-1 overflow-hidden" data-lc-live-room="{{ room.id }}"{% if let Some(eid) = sidebar_current_enclave %} data-lc-live-topic="enclave:{{ eid }}"{% endif %}>
+<div class="flex flex-1 overflow-hidden"{% if llm_available %} data-lc-llm{% endif %} data-lc-live-room="{{ room.id }}"{% if let Some(eid) = sidebar_current_enclave %} data-lc-live-topic="enclave:{{ eid }}"{% endif %}>
   <div class="flex flex-col flex-1 overflow-hidden">
     {% include "partials/room_header.html" %}
     {{ pinned_strip_html|safe }}

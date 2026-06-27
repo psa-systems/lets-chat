@@ -85,6 +85,7 @@ mod status;
 mod summary;
 mod switcher;
 mod transcripts;
+mod translate;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -1159,6 +1160,11 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/messages/{message_id}/pin",
             post(pinned::post_pin).delete(pinned::delete_pin),
+        )
+        // LC-486: inline per-message translation into the viewer's locale.
+        .route(
+            "/messages/{message_id}/translate",
+            post(translate::post_translate),
         )
         .route(
             "/messages/{message_id}/bookmark",

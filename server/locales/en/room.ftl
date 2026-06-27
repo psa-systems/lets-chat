@@ -194,6 +194,10 @@ room-msg-forward = Forward
 room-msg-report = Report
 room-msg-edit = Edit
 room-msg-delete = Delete
+# LC-486: inline translation
+room-msg-translate = Translate
+room-msg-translated-to = Translated to
+room-msg-show-original = Show original
 room-msg-delete-confirm = Delete this message?
 room-msg-quote-deleted = (quoted message was deleted)
 room-msg-seen = Seen

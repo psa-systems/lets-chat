@@ -116,6 +116,15 @@ pub fn native_name(code: &str) -> &'static str {
     }
 }
 
+/// LC-486: English-language name of a locale code, for an LLM translation
+/// prompt ("translate into Spanish"). Falls back to English for unknown codes.
+pub fn language_name(code: &str) -> &'static str {
+    match code {
+        c if c.starts_with("es") => "Spanish",
+        _ => "English",
+    }
+}
+
 /// Return the shipped locale whose language subtag matches `code`, if any.
 fn match_supported(code: &str) -> Option<LanguageIdentifier> {
     let want = code.parse::<LanguageIdentifier>().ok()?;
