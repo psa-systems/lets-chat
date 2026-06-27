@@ -529,6 +529,7 @@ pub async fn get_room(
         can_post,
         posting_locked_reason,
         initial_draft: &initial_draft,
+        llm_available: state.llm_available(),
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -2331,6 +2332,7 @@ pub async fn get_thread_panel(
         parent: &parent_view,
         replies: &replies,
         is_following,
+        llm_available: state.llm_available(),
     };
     html(&fragment)
 }
