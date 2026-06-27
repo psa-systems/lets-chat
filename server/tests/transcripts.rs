@@ -939,3 +939,85 @@ async fn voice_message_not_transcribed_when_stt_disabled() {
         .unwrap();
     assert_eq!(row.transcript, None);
 }
+
+// ── LC-484: AI catch-me-up summaries (threads + channel) ──────────────────────
+
+fn with_llm(canned: &str) -> Option<std::sync::Arc<dyn lets_chat::llm::LlmClient>> {
+    Some(std::sync::Arc::new(lets_chat::llm::MockLlmClient {
+        canned: canned.to_string(),
+    }))
+}
+
+/// POST /room/{id}/summary summarizes the room's messages via the LLM client
+/// and renders the result markdown into the fragment.
+#[tokio::test]
+async fn channel_summary_generates_from_messages() {
+    let s = setup_with_clients(None, with_llm("CANNED_CHANNEL_SUMMARY")).await;
+    db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hello team")
+        .await
+        .unwrap();
+    db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "ship it friday")
+        .await
+        .unwrap();
+
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/room/{}/summary", s.public_room),
+        Some(""),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    assert!(body.contains("CANNED_CHANNEL_SUMMARY"), "rendered: {body}");
+}
+
+/// With no LLM configured the action is rejected (the button is also hidden).
+#[tokio::test]
+async fn channel_summary_400_when_llm_disabled() {
+    let s = setup().await;
+    db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hi")
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/room/{}/summary", s.public_room),
+        Some(""),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+}
+
+/// POST /room/{id}/thread/{parent}/summary summarizes the thread root (+ any
+/// replies) via the LLM client.
+#[tokio::test]
+async fn thread_summary_generates() {
+    let s = setup_with_clients(None, with_llm("CANNED_THREAD_SUMMARY")).await;
+    let parent = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "root question")
+        .await
+        .unwrap();
+
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/room/{}/thread/{}/summary", s.public_room, parent),
+        Some(""),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    assert!(body.contains("CANNED_THREAD_SUMMARY"), "rendered: {body}");
+}
+
+/// GET /room/{id}/summary opens the catch-me-up drawer with a Generate button.
+#[tokio::test]
+async fn catch_me_up_panel_opens() {
+    let s = setup_with_clients(None, with_llm("x")).await;
+    let (st, body) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/room/{}/summary", s.public_room),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    assert!(body.contains("room-summary-body"), "drawer body: {body}");
+}

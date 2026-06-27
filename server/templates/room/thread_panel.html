@@ -12,6 +12,18 @@
       {% let parent_id = parent.id %}
       {% let following = is_following %}
       {% include "partials/thread_follow_button.html" %}
+      {# LC-484: AI summary of this thread (root + replies), gated on an
+         operator LLM. Result swaps into #thread-summary-{parent} below. #}
+      {% if llm_available %}
+      <button
+        type="button"
+        hx-post="/room/{{ room.id }}/thread/{{ parent.id }}/summary"
+        hx-target="#thread-summary-{{ parent.id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="this"
+        class="text-content-subtle hover:text-content-muted text-xs font-medium"
+      >{{ "room-thread-summarize"|t }}</button>
+      {% endif %}
       <button
         hx-delete="/thread-panel"
         hx-target="#thread-panel"
@@ -27,6 +39,9 @@
     {% let message = parent_message %}
     {% include "room/thread_reply_inner.html" %}
   </div>
+  {# LC-484: AI summary result swaps in here (empty until the Summarize button
+     in the header is clicked). #}
+  <div id="thread-summary-{{ parent.id }}" class="empty:hidden border-b border-border px-3 py-2 bg-surface-elevated"></div>
   {# LC-460: count divider labels the replies section so the root -> replies
      relationship is explicit. #}
   {% if !replies.is_empty() %}
