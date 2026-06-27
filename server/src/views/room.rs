@@ -121,6 +121,10 @@ pub struct PollView {
     pub closes_at: Option<String>,
     pub total_voters: i64,
     pub options: Vec<PollOptionView>,
+    /// LC-491: when set, render as an event card (RSVP). `event_at` is the
+    /// start time (UTC), `event_location` an optional place.
+    pub event_at: Option<String>,
+    pub event_location: Option<String>,
 }
 
 pub struct PollOptionView {
@@ -191,6 +195,8 @@ pub async fn build_poll_view(
         closes_at: poll.closes_at,
         total_voters,
         options,
+        event_at: poll.event_at,
+        event_location: poll.event_location,
     }))
 }
 
