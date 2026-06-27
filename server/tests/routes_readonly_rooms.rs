@@ -248,3 +248,61 @@ async fn policy_change_writes_audit_log() {
         .unwrap_or("")
         .contains("moderators_only"));
 }
+
+// LC-480: announcement-channel surfacing - banner above the timeline for
+// everyone, plus the localized read-only notice replacing the composer for
+// members who cannot post (while the admin keeps the composer).
+async fn get_body(app: &Router, sess: &str, uri: &str) -> String {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+#[tokio::test]
+async fn announcement_banner_and_readonly_notice_render() {
+    let t = app().await;
+    let st = send(
+        &t.app,
+        &t.admin_session,
+        Method::POST,
+        "/room/1/posting-policy",
+        "policy=admins_only",
+    )
+    .await;
+    assert_eq!(st, StatusCode::SEE_OTHER);
+
+    // Member (cannot post): banner + read-only notice with the react hint.
+    let member = get_body(&t.app, &t.member_session, "/room/1").await;
+    assert!(
+        member.contains("Only admins can post in this channel."),
+        "member sees announcement text"
+    );
+    assert!(
+        member.contains("You can still react to messages."),
+        "member sees the read-only react hint"
+    );
+    assert!(
+        member.contains("Announcement"),
+        "member sees the banner label"
+    );
+
+    // Admin (can post): banner shows, but the composer stays - no read-only
+    // notice (the react hint only appears in that notice).
+    let admin = get_body(&t.app, &t.admin_session, "/room/1").await;
+    assert!(
+        admin.contains("Only admins can post in this channel."),
+        "admin still sees the banner"
+    );
+    assert!(
+        !admin.contains("You can still react to messages."),
+        "admin keeps the composer, no read-only notice"
+    );
+}
