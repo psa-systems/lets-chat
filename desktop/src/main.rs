@@ -305,8 +305,13 @@ fn set_linux_gtk_env() {}
 // so granting unconditionally inside this binary is no weaker than the
 // trust model around `LETS_CHAT_SERVER_URL` itself.
 //
-// macOS / iOS / Android variants live under LC-134 / LC-135 / LC-136
-// in the Apple+mobile tracker (LC-133); those targets need their
+// iOS (LC-136) needs no code-side hook: WKWebView routes getUserMedia
+// consent through the OS prompt, which iOS shows automatically once the
+// NSMicrophoneUsageDescription / NSCameraUsageDescription strings are
+// declared. Those live in `desktop/Info.ios.plist`, merged into the
+// generated iOS Info.plist by the Tauri CLI; the no-op fallback below
+// covers the iOS target. macOS / Android variants live under LC-134 /
+// LC-135 in the Apple+mobile tracker (LC-133) and still need their
 // permission flows wired through Tauri's per-platform hooks once the
 // build paths for those targets land.
 #[cfg(target_os = "linux")]
