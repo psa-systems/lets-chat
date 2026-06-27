@@ -334,6 +334,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         ChatEvent::NewMessage { .. }
         | ChatEvent::MessageEdited { .. }
         | ChatEvent::MessageRegrouped { .. }
+        // LC-483: rendered per recipient in the WS send task (re-render message).
+        | ChatEvent::VoiceTranscribed { .. }
         | ChatEvent::ReactionAdded { .. }
         | ChatEvent::ReactionRemoved { .. }
         | ChatEvent::RoomMemberAdded { .. }

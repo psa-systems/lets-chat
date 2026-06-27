@@ -64,6 +64,9 @@ pub(crate) mod room;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
+// LC-483: expose the off-request-path voice transcription helper for the test
+// crate so it can be asserted deterministically without racing the spawn.
+pub use room::maybe_transcribe_voice_message;
 // LC-397: expose the per-recipient new-message render so the optimistic-echo
 // test can assert the author always gets their own echo, even unsubscribed.
 pub use ws::render_new_message_or_bump;
