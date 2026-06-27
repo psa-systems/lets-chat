@@ -362,3 +362,12 @@ room-delete-room-desc = Permanently delete this room and all its messages, files
 room-delete-confirm-prefix = Type
 room-delete-confirm-phrase = delete this room
 room-delete-confirm-suffix = to confirm.
+
+# LC-484: AI "catch me up" summaries (threads + channel)
+summary-catch-up-heading = Catch me up
+summary-unread-suffix = unread messages
+summary-recent-scope = Summarize recent activity
+summary-generate = Generate summary
+summary-regenerate = Regenerate
+summary-disclaimer = AI-generated from recent messages. May be incomplete.
+room-thread-summarize = Summarize

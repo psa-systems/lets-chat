@@ -38,6 +38,7 @@ pub mod scheduled;
 pub mod search;
 pub mod settings;
 pub mod shame_tags;
+pub mod summary;
 pub mod switcher;
 pub mod transcripts;
 pub mod users;

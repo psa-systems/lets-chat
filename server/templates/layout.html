@@ -217,7 +217,15 @@
        data-base-title="lets-chat"
        data-browser-enabled="{% if user.notify_browser_enabled %}1{% else %}0{% endif %}"
        data-sound-enabled="{% if user.notify_sound_enabled %}1{% else %}0{% endif %}"
-       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"></div>
+       data-push-enabled="{% if user.notify_push_enabled %}1{% else %}0{% endif %}"
+       data-push-msg-ok="{{ "settings-push-status-ok"|t }}"
+       data-push-msg-ok-toggle-off="{{ "settings-push-status-ok-toggle-off"|t }}"
+       data-push-msg-prompting="{{ "settings-push-status-prompting"|t }}"
+       data-push-msg-denied="{{ "settings-push-status-denied"|t }}"
+       data-push-msg-blocked="{{ "settings-push-status-blocked"|t }}"
+       data-push-msg-unsupported="{{ "settings-push-status-unsupported"|t }}"
+       data-push-msg-unavailable="{{ "settings-push-status-unavailable"|t }}"
+       data-push-msg-failed="{{ "settings-push-status-failed"|t }}"></div>
   <!-- LC-98: offline-outbox banner. Rendered by /assets/outbox.js from the
        service worker's queue state (offline notice, queued count, and
        retry/discard for messages that failed on replay). -->
@@ -268,14 +276,50 @@
     for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
     return arr;
   }
-  async function tryRegisterPush(){
-    if (pushTried || !pushEnabled) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  // LC-343: localized status strings for the explicit "Enable desktop
+  // notifications" control + diagnosable failure reporting. Read from data-*
+  // attributes on the cfg div (HTML-escaped by the template, so a translation
+  // containing a quote or apostrophe is safe) rather than interpolated into a
+  // JS string literal here. The settings button passes a status <span> for the
+  // reporter to write into.
+  var PUSH_MSGS = {
+    ok:          cfg.getAttribute('data-push-msg-ok') || '',
+    okToggleOff: cfg.getAttribute('data-push-msg-ok-toggle-off') || '',
+    prompting:   cfg.getAttribute('data-push-msg-prompting') || '',
+    denied:      cfg.getAttribute('data-push-msg-denied') || '',
+    blocked:     cfg.getAttribute('data-push-msg-blocked') || '',
+    unsupported: cfg.getAttribute('data-push-msg-unsupported') || '',
+    unavailable: cfg.getAttribute('data-push-msg-unavailable') || '',
+    failed:      cfg.getAttribute('data-push-msg-failed') || ''
+  };
+  function makeReporter(el){
+    return function(key, ok){
+      var msg = PUSH_MSGS[key] || '';
+      if (el) { el.textContent = msg; el.setAttribute('data-lc-push-ok', ok === true ? '1' : (ok === false ? '0' : '')); }
+      // LC-343: failures were previously console.warn-only (silent). Surface
+      // them at error level so a broken subscribe is diagnosable in the console
+      // even when no status element is wired.
+      if (ok === false) console.error('push: ' + key + (msg ? ' - ' + msg : ''));
+    };
+  }
+  // LC-343: subscribe this browser to push and POST the subscription so a
+  // `push_subscriptions` row exists immediately. `opts.force` (explicit user
+  // gesture) bypasses the toggle/one-shot gates; the no-arg auto path keeps
+  // them so page-load re-subscribe only runs for an opted-in, permission-
+  // granted user. `opts.report` is the status reporter (default no-op).
+  async function tryRegisterPush(opts){
+    opts = opts || {};
+    var report = opts.report || function(){};
+    if (!opts.force) {
+      if (pushTried || !pushEnabled) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { report('unsupported', false); return; }
+    if (!('Notification' in window) || Notification.permission !== 'granted') { report('denied', false); return; }
     pushTried = true;
     try {
       var resp = await fetch('/push/vapid-public-key');
-      if (!resp.ok) return;
+      if (!resp.ok) { report('unavailable', false); return; }
       var data = await resp.json();
       var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       var existing = await reg.pushManager.getSubscription();
@@ -284,7 +328,7 @@
         applicationServerKey: urlBase64ToUint8Array(data.key),
       });
       var json = sub.toJSON();
-      await fetch('/push/subscribe', {
+      var sres = await fetch('/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -292,8 +336,36 @@
           keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
         }),
       });
-    } catch (e) { console.warn('push registration failed', e); }
+      if (!sres.ok) { report('failed', false); return; }
+      // LC-343: the subscription row now exists, but push::dispatch still
+      // early-returns unless the SAVED notify_push_enabled is on. `pushEnabled`
+      // mirrors that saved value, so when it is off (e.g. the user flipped the
+      // toggle but has not submitted the form, or never enabled it) report the
+      // toggle-off variant instead of promising delivery that will be dropped.
+      report(pushEnabled ? 'ok' : 'okToggleOff', true);
+    } catch (e) { report('failed', false); console.error('push registration failed', e); }
   }
+  // LC-343: explicit opt-in. Settings calls this on a user click: request
+  // Notification permission (a user gesture, so the browser does not penalize
+  // the prompt) then subscribe eagerly - decoupled from the first-background-
+  // mention path that previously was the only way to ever subscribe.
+  window.__lcEnablePush = function(statusEl){
+    var report = makeReporter(statusEl);
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      report('unsupported', false); return;
+    }
+    if (Notification.permission === 'granted') {
+      tryRegisterPush({ force: true, report: report });
+    } else if (Notification.permission === 'denied') {
+      report('blocked', false);
+    } else {
+      report('prompting', null);
+      Notification.requestPermission().then(function(p){
+        if (p === 'granted') tryRegisterPush({ force: true, report: report });
+        else report('denied', false);
+      });
+    }
+  };
   // Title + favicon reflect the running total; called after every event.
   function refresh(){
     var n = 0; for (var k in counts) n += counts[k];
@@ -440,6 +512,13 @@
       bus.replaceChildren();
     }, 2000);
   }).observe(bus, { childList: true });
+  // LC-343: re-subscribe an already-permission-granted, opted-in user on page
+  // load - decoupled from the first-background-mention path. This is what makes
+  // an existing grantee get a fresh `push_subscriptions` row without needing a
+  // mention to fire first (the root cause of non-delivery: no row ever existed).
+  if (pushEnabled && 'Notification' in window && Notification.permission === 'granted') {
+    tryRegisterPush();
+  }
 })();
 </script>
 <script>

@@ -529,6 +529,7 @@ pub async fn get_room(
         can_post,
         posting_locked_reason,
         initial_draft: &initial_draft,
+        llm_available: state.llm_available(),
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -806,6 +807,24 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body, client_id).await?;
 
+    // LC-483: server-side voice-message transcription. Runs off the request
+    // path (transcription is a network round-trip to the STT endpoint) and
+    // only when STT is configured and the message carried an attachment. The
+    // helper itself re-checks the attachment is actually a voice message, so a
+    // plain image/file upload spawns at most a couple of cheap DB reads. On
+    // success it stores the transcript and broadcasts a re-render.
+    if state.stt_available() {
+        if let Some(file_id) = form.file_id {
+            let st = state.clone();
+            tokio::spawn(async move {
+                if let Err(e) = maybe_transcribe_voice_message(&st, file_id, new_id, room_id).await
+                {
+                    tracing::warn!(error = %e, message_id = new_id, upload_id = file_id, "voice transcription failed");
+                }
+            });
+        }
+    }
+
     // LC-339/LC-341: Coyote Mode bot-burst detection. For enclave rooms, run
     // the (fully gated) check off the request path so the send returns
     // promptly. All gating + the ban + 24h soft-purge live in
@@ -841,6 +860,75 @@ pub async fn post_message(
             .expect("decimal message id is a valid header value"),
     );
     Ok(response)
+}
+
+/// LC-483: upper bound on a stored voice transcript. A voice message is a short
+/// clip, so a multi-KB result is almost certainly a runaway/garbage response;
+/// cap the INPUT we persist (and later render) rather than trusting the engine.
+pub(crate) const MAX_VOICE_TRANSCRIPT_CHARS: usize = 8_000;
+
+/// LC-483: transcribe one freshly-sent voice message and broadcast a re-render.
+/// Called off the request path (the caller spawns it) and only when STT is
+/// configured. Re-checks that `upload_id` is actually a voice message (audio
+/// mime + a waveform) so a plain attachment is a couple of cheap reads and a
+/// return. Any failure (file gone, engine down, empty/garbage result) is
+/// non-fatal: the message simply keeps no transcript. Idempotent - skips a row
+/// that already has a transcript so a re-delivery never re-bills the engine.
+/// Re-exported as `crate::routes::maybe_transcribe_voice_message` for tests.
+pub async fn maybe_transcribe_voice_message(
+    state: &AppState,
+    upload_id: i64,
+    message_id: i64,
+    room_id: i64,
+) -> Result<(), AppError> {
+    let Some(stt) = state.stt_client.clone() else {
+        return Ok(());
+    };
+    let Some((row, _room)) = db::uploads::get_upload(&state.chat, upload_id).await? else {
+        return Ok(());
+    };
+    // Voice message == audio attachment carrying a waveform. Anything else
+    // (image, pdf, plain audio file without a waveform) is not transcribed.
+    if !row.mime_type.starts_with("audio/") || row.waveform.is_none() {
+        return Ok(());
+    }
+    if row.transcript.is_some() {
+        return Ok(());
+    }
+    let path = db::uploads_dir().join(&row.storage_path);
+    let bytes = match tokio::fs::read(&path).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, upload_id, "voice transcript: read failed");
+            return Ok(());
+        }
+    };
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    let text = match stt.transcribe(bytes, &row.mime_type).await {
+        Ok(t) => t,
+        Err(e) => {
+            // INFO, not WARN: a transient engine hiccup is expected operational
+            // noise and never blocks the message that was already sent.
+            tracing::info!(error = %e, upload_id, "voice transcript: stt call failed");
+            return Ok(());
+        }
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let capped: String = trimmed.chars().take(MAX_VOICE_TRANSCRIPT_CHARS).collect();
+    db::uploads::set_transcript(&state.chat, upload_id, &capped).await?;
+    state.hub.broadcast_to_room(
+        room_id,
+        &ChatEvent::VoiceTranscribed {
+            message_id,
+            room_id,
+        },
+    );
+    Ok(())
 }
 
 /// LC-341: the fully-gated Coyote Mode decision + action, extracted from
@@ -2244,6 +2332,7 @@ pub async fn get_thread_panel(
         parent: &parent_view,
         replies: &replies,
         is_following,
+        llm_available: state.llm_available(),
     };
     html(&fragment)
 }
