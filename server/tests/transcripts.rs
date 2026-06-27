@@ -871,7 +871,10 @@ async fn voice_message_is_transcribed_and_attached() {
         .unwrap();
     assert_eq!(atts.len(), 1);
     assert_eq!(atts[0].transcript.as_deref(), Some("hello from whisper"));
-    assert!(atts[0].waveform.is_some(), "still rendered as a voice message");
+    assert!(
+        atts[0].waveform.is_some(),
+        "still rendered as a voice message"
+    );
 }
 
 /// A non-voice upload (image: no waveform) is never sent to STT, even with a
