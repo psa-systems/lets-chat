@@ -12,6 +12,7 @@ room-composer-attach-file = Attach file
 room-composer-record-voice = Record voice message
 room-composer-message-placeholder = Message
 room-composer-create-poll = Create poll
+room-composer-create-event = Create event
 room-composer-schedule-title = Schedule for later
 room-composer-schedule-aria = Schedule message for later
 room-composer-send-message = Send message
