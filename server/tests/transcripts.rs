@@ -1021,3 +1021,75 @@ async fn catch_me_up_panel_opens() {
     assert_eq!(st, StatusCode::OK, "{body}");
     assert!(body.contains("room-summary-body"), "drawer body: {body}");
 }
+
+// ── LC-486: inline message translation ────────────────────────────────────────
+
+#[tokio::test]
+async fn translate_returns_translation_and_caches() {
+    let s = setup_with_clients(None, with_llm("HOLA_TRANSLATED")).await;
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hello there")
+        .await
+        .unwrap();
+
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/messages/{mid}/translate"),
+        Some(""),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    assert!(
+        body.contains("HOLA_TRANSLATED"),
+        "rendered translation: {body}"
+    );
+
+    // Cached for the viewer's resolved locale (default fallback locale).
+    let cached = db::translations::get_cached(&s.chat, mid, &lets_chat::i18n::current_lang_code())
+        .await
+        .unwrap();
+    assert_eq!(cached.as_deref(), Some("HOLA_TRANSLATED"));
+}
+
+#[tokio::test]
+async fn translate_400_when_llm_disabled() {
+    let s = setup().await; // no llm client
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hello")
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/messages/{mid}/translate"),
+        Some(""),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+}
+
+// The cache round-trips and `delete_for_message` (called from the edit path)
+// clears it, so a re-translation reflects the edited body.
+#[tokio::test]
+async fn translation_cache_upsert_and_invalidate() {
+    let s = setup().await;
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hi")
+        .await
+        .unwrap();
+    db::translations::upsert(&s.chat, mid, "es", "hola")
+        .await
+        .unwrap();
+    assert_eq!(
+        db::translations::get_cached(&s.chat, mid, "es")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("hola")
+    );
+    db::translations::delete_for_message(&s.chat, mid)
+        .await
+        .unwrap();
+    assert!(db::translations::get_cached(&s.chat, mid, "es")
+        .await
+        .unwrap()
+        .is_none());
+}
