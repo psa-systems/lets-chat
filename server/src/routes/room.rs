@@ -1665,6 +1665,19 @@ async fn resolve_tokens_for_room(
         }
     }
 
+    // LC-476: politeness gate. @here / @channel expand only when the room's
+    // broadcast policy permits this author; otherwise the tokens are left as
+    // plain text (no rows, no fan-out). Synthetic actors (webhook / email /
+    // bridge, `author_id == ""`) bypass the gate - they are operator- or
+    // owner-configured, not a member abuse vector.
+    if (here_seen || channel_seen)
+        && !author_id.is_empty()
+        && !broadcast_policy_allows_user(state, room, author_id).await?
+    {
+        here_seen = false;
+        channel_seen = false;
+    }
+
     let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
     if here_seen {
         targets.extend(resolve_here_targets(state, room, author_id).await?);
@@ -1727,6 +1740,59 @@ async fn resolve_tokens_for_room(
     let mut seen = std::collections::HashSet::new();
     targets.retain(|m| seen.insert(m.user_id.clone()));
     Ok(targets)
+}
+
+/// LC-476: does `author_id` (a real user) pass the room's broadcast policy?
+/// `all` -> always; otherwise the author's effective room role is checked.
+async fn broadcast_policy_allows_user(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<bool, AppError> {
+    let policy = db::chat::get_room_broadcast_policy(&state.chat, room.id).await?;
+    if policy == "all" {
+        return Ok(true);
+    }
+    let Some(rec) = db::auth::find_user_by_id(&state.auth, author_id).await? else {
+        return Ok(false);
+    };
+    broadcast_role_allows(state, room.id, author_id, &rec.role, &policy).await
+}
+
+/// LC-476: evaluate a broadcast policy against an org role. Mirrors
+/// `can_post_with_policy`, but the fallthrough is permissive (broadcast's
+/// default is `all`); the CHECK constraint makes it unreachable anyway.
+async fn broadcast_role_allows(
+    state: &AppState,
+    room_id: i64,
+    user_id: &str,
+    org_role: &str,
+    policy: &str,
+) -> Result<bool, AppError> {
+    match policy {
+        "moderators_only" => {
+            Ok(db::room_rbac::is_room_moderator(&state.chat, room_id, user_id, org_role).await?)
+        }
+        "admins_only" => {
+            let r = db::room_rbac::effective_role(&state.chat, room_id, user_id, org_role).await?;
+            Ok(r == "admin")
+        }
+        _ => Ok(true),
+    }
+}
+
+/// LC-476: whether `user` may use @here/@channel in `room_id`. For the
+/// autocomplete + broadcast-count surfaces, which hold a full `User`.
+pub(crate) async fn broadcast_allowed_for_user(
+    state: &AppState,
+    room_id: i64,
+    user: &User,
+) -> Result<bool, AppError> {
+    let policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
+    if policy == "all" {
+        return Ok(true);
+    }
+    broadcast_role_allows(state, room_id, &user.id, &user.role, &policy).await
 }
 
 /// LC-304: resolve everyone who should get a mention row for `body` in `room` -
