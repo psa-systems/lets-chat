@@ -176,7 +176,7 @@ compose_uid := 'HOST_UID="$(id -u)" HOST_GID="$(id -g)"'
 [group('dev')]
 dev-web:
     @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    {{ compose_env }} docker compose --file compose.dev-web.yml up --build
+    TRAEFIK_PUBLIC_IP="$(./dev/traefik-ip)" {{ compose_env }} docker compose --file compose.dev-web.yml up --build
 
 # Stop dev-web container
 [group('dev')]
