@@ -59,6 +59,7 @@ partials-status-online = En línea
 
 ## Voice attachment
 partials-voice-play = Reproducir mensaje de voz
+partials-voice-transcript = Transcripcion
 
 ## Profile hovercard (LC-298)
 hovercard-message = Mensaje

@@ -3,6 +3,9 @@
     <span>
       {{ "scheduled-for-prefix"|t }} <a href="{{ row.room_path }}" class="text-accent hover:underline">{{ row.room_label }}</a>
       &middot; {{ "scheduled-row-delivers"|t }} {{ row.scheduled_for }} UTC
+      {% if row.repeat != "none" %}
+      &middot; <span class="rounded bg-surface-sunken px-1.5 py-0.5 font-medium text-content">{% if row.repeat == "daily" %}{{ "scheduled-repeat-daily"|t }}{% else if row.repeat == "weekly" %}{{ "scheduled-repeat-weekly"|t }}{% else %}{{ "scheduled-repeat-weekdays"|t }}{% endif %}</span>
+      {% endif %}
     </span>
     <button hx-delete="/scheduled/{{ row.id }}"
             hx-target="#scheduled-row-{{ row.id }}"

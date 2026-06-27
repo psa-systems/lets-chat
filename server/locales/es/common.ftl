@@ -130,7 +130,13 @@ code-copied = Copiado
 ## Scheduled message modal
 scheduled-modal-title = Programar mensaje
 scheduled-modal-deliver-at = Entregar el (tu hora local)
+scheduled-modal-repeat = Repetir
 scheduled-modal-submit = Programar
+# LC-485: opciones de recurrencia + insignia de la fila pendiente
+scheduled-repeat-none = No se repite
+scheduled-repeat-daily = Se repite a diario
+scheduled-repeat-weekdays = Se repite cada dia laborable
+scheduled-repeat-weekly = Se repite semanalmente
 
 ## Scheduled messages page
 scheduled-page-title = Programados
@@ -200,7 +206,17 @@ settings-pref-sound = Reproducir un sonido en nuevas menciones y MD
 settings-pref-push = Activar notificaciones push (funciona con la pestaña cerrada)
 settings-pref-push-unavailable-prefix = No disponible: define la variable de entorno
 settings-pref-push-unavailable-suffix = en el servidor y reinicia para activar las notificaciones push.
-settings-pref-push-available = Aparecerá una solicitud de permiso del navegador en la próxima mención.
+settings-pref-push-available = Actívalo y luego usa el botón de abajo para suscribir este dispositivo.
+settings-push-enable = Activar notificaciones de escritorio
+settings-push-enable-help = Concede el permiso y suscribe este navegador de inmediato. Mantén activado el interruptor de arriba y guarda para recibir menciones, mensajes directos y recordatorios incluso con la pestaña cerrada.
+settings-push-status-ok = Suscrito. Este dispositivo recibirá notificaciones push.
+settings-push-status-ok-toggle-off = Suscrito, pero activa el interruptor de arriba y guarda. Hasta que lo hagas, el servidor no enviará notificaciones a este dispositivo.
+settings-push-status-prompting = Esperando la solicitud de permiso del navegador...
+settings-push-status-denied = No se concedió el permiso, así que este dispositivo no está suscrito.
+settings-push-status-blocked = Las notificaciones están bloqueadas para este sitio. Permítelas en la configuración del navegador e inténtalo de nuevo.
+settings-push-status-unsupported = Este navegador no admite notificaciones push.
+settings-push-status-unavailable = Las notificaciones push no están disponibles en el servidor en este momento.
+settings-push-status-failed = No se pudo suscribir. Revisa la consola del navegador para más detalles e inténtalo de nuevo.
 settings-pref-email-digest = Enviarme por correo un resumen de menciones y MD perdidos
 settings-pref-email-unavailable = No disponible: el administrador del servidor no ha configurado SMTP.
 settings-pref-email-digest-help = Se envía como máximo una vez por sesión sin conexión (tras al menos una hora de inactividad). Define tu correo arriba para recibirlos.

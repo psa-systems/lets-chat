@@ -723,6 +723,36 @@ pub async fn set_room_posting_policy(
     Ok(res.rows_affected())
 }
 
+/// LC-476: the room's `@here`/`@channel` broadcast policy. Read on demand
+/// (not carried on the `Room` struct) - mirrors `get_room_retention_days`.
+/// A missing row yields `'all'` (the permissive default).
+pub async fn get_room_broadcast_policy(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<String, sqlx::Error> {
+    let v: Option<String> =
+        sqlx::query_scalar("SELECT broadcast_allowed_for FROM rooms WHERE id = ?")
+            .bind(room_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.unwrap_or_else(|| "all".to_string()))
+}
+
+/// LC-476: set the room's broadcast policy. Returns rows affected (0 = no such
+/// room). Mirrors `set_room_posting_policy`.
+pub async fn set_room_broadcast_policy(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    policy: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET broadcast_allowed_for = ? WHERE id = ?")
+        .bind(policy)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
 /// Read the per-room retention policy. `None` means retention is
 /// disabled; `Some(N)` means messages older than N days are eligible
 /// for the retention sweep. The CHECK in migration 0043 enforces

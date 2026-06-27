@@ -65,10 +65,24 @@ ENV GIT_HASH=${GIT_HASH} \
     GIT_VERSION=${GIT_VERSION} \
     BUILD_DATE=${BUILD_DATE}
 COPY . .
-COPY --from=cacher /app/target target
+COPY --from=cacher /app/target /app/target-cooked
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY --from=css /app/server/assets/tailwind-built.css server/assets/tailwind-built.css
-RUN set -eux; \
+# A BuildKit cache mount keeps the release target dir warm across `--build`
+# runs so a source edit recompiles only the changed crates instead of the
+# whole app crate every time (the dominant cost in local `just dev-web`
+# iteration). The mount shadows the cargo-chef-cooked target COPY'd above,
+# so on a cold cache (every CI build; the first local build) we seed it from
+# /app/target-cooked with `cp -a` to preserve mtimes and keep cargo's
+# dependency fingerprints valid; warm rebuilds skip the copy. The id is keyed
+# by BUILD_MODE so the standalone and saas feature sets get separate caches
+# and never relink against each other. The cargo registry stays on the COPY
+# above (already layer-cached via the cacher stage), so it is intentionally
+# NOT cache-mounted here - a registry cache mount would shadow that COPY and
+# force a cold re-download.
+RUN --mount=type=cache,target=/app/target,id=lc-target-${BUILD_MODE},sharing=locked \
+    set -eux; \
+    if [ ! -d target/release ]; then cp -a /app/target-cooked/. target/; fi; \
     if [ "$BUILD_MODE" = "saas" ]; then \
       cargo build --release --no-default-features --features saas -p lets-chat-server; \
       cp target/release/lets-chat-saas /app/lets-chat; \

@@ -252,11 +252,23 @@ room-mods-manage-inboxes = Manage email inboxes
 room-mods-manage-feeds = Manage feeds
 room-mods-intro = Grant a room-scoped Moderator or Admin role. Overrides only elevate; removing one returns the user to their org-wide role inside this room.
 room-mods-policy-heading = Posting policy
-room-mods-policy-intro = Controls who can post messages in this room. Reactions, pins, and edits of own messages are unaffected.
+room-mods-policy-intro = Controls who can post messages in this room. Restricting posting turns this into an announcement channel: everyone can still read and react, but only the chosen roles can post. Reactions, pins, and edits of own messages are unaffected.
 room-mods-who-can-post = Who can post
 room-mods-policy-all = Everyone (default)
-room-mods-policy-mods = Moderators only
-room-mods-policy-admins = Admins only
+room-mods-policy-mods = Moderators only (announcement)
+room-mods-policy-admins = Admins only (announcement)
+# LC-480: announcement-channel banner + read-only composer notice
+room-announce-label = Announcement
+room-announce-admins = Only admins can post in this channel.
+room-announce-mods = Only moderators can post in this channel.
+room-readonly-hint = You can still react to messages.
+# LC-476: broadcast-mention (@here / @channel) policy
+room-broadcast-policy-heading = Broadcast mentions
+room-broadcast-policy-intro = Controls who can use @here and @channel to notify many people at once. Restrict it to curb noise; normal @mentions are unaffected.
+room-broadcast-who = Who can use @here / @channel
+room-broadcast-all = Everyone (default)
+room-broadcast-mods = Moderators only
+room-broadcast-admins = Admins only
 room-mods-overrides-heading = Current overrides
 room-mods-overrides-empty = No overrides yet.
 room-mods-granted-by = granted by
@@ -362,3 +374,12 @@ room-delete-room-desc = Permanently delete this room and all its messages, files
 room-delete-confirm-prefix = Type
 room-delete-confirm-phrase = delete this room
 room-delete-confirm-suffix = to confirm.
+
+# LC-484: AI "catch me up" summaries (threads + channel)
+summary-catch-up-heading = Catch me up
+summary-unread-suffix = unread messages
+summary-recent-scope = Summarize recent activity
+summary-generate = Generate summary
+summary-regenerate = Regenerate
+summary-disclaimer = AI-generated from recent messages. May be incomplete.
+room-thread-summarize = Summarize

@@ -48,13 +48,21 @@ js-upload-voice-attached = Mensaje de voz adjunto
 js-upload-failed = Error al subir
 js-upload-failed-status = Error al subir: %status%
 js-upload-remove-attachment = Quitar adjunto
+js-upload-bad-type = %name% no es un tipo de archivo admitido (solo imagenes y PDF).
+js-upload-too-large = %name% pesa %size%, supera el limite de %limit%.
 js-voice-rec-unsupported = Este navegador no admite la grabación de voz
 js-voice-rec-mic-denied = Acceso al micrófono denegado
-js-voice-rec-start-failed = No se pudo iniciar la grabación
+js-voice-rec-mic-help = Permite el acceso al micrófono en los ajustes del sitio de tu navegador y vuelve a intentarlo.
+js-voice-rec-start-failed = No se pudo iniciar la grabación. Comprueba que ninguna otra app esté usando el micrófono.
 js-voice-rec-empty = La grabación estaba vacía
-js-voice-recording = ● Grabando
+js-voice-recording = Grabando
 js-voice-rec-stop = Detener
 js-voice-rec-cancel = Cancelar
+js-voice-play = Reproducir mensaje de voz
+js-voice-re-record = Volver a grabar
+js-voice-remove = Quitar
+js-voice-retry = Reintentar
+js-voice-uploading = Subiendo mensaje de voz...
 
 # Recordatorios (reminders/picker.html)
 js-reminder-invalid-time = Elige una hora válida.
