@@ -2020,6 +2020,13 @@ pub async fn patch_message(
 
     let edited_at_str = db::chat::update_message_body(&state.chat, message_id, body).await?;
 
+    // LC-486: drop any cached translation of the old body so a later Translate
+    // re-translates the edited text. Best-effort; a stale cache must not fail
+    // the edit.
+    if let Err(e) = db::translations::delete_for_message(&state.chat, message_id).await {
+        tracing::warn!(error = %e, message_id, "failed to invalidate cached translations on edit");
+    }
+
     let event = ChatEvent::MessageEdited {
         message_id,
         room_id: m.room_id,

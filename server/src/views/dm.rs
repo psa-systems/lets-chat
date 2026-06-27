@@ -35,6 +35,9 @@ pub struct DmPage<'a> {
     /// LC-500: configured max upload size (bytes), surfaced to the composer for
     /// client-side validation. Same as `RoomPage::max_upload_bytes`.
     pub max_upload_bytes: i64,
+    /// LC-486: an operator LLM is configured. Drives `data-lc-llm` on the page
+    /// root, which CSS-gates the per-message Translate action.
+    pub llm_available: bool,
 }
 
 impl DmPage<'_> {
