@@ -82,6 +82,7 @@ mod sidebar_categories;
 mod slash;
 mod starred_rooms;
 mod status;
+mod summary;
 mod switcher;
 mod transcripts;
 mod unfurl;
@@ -1138,6 +1139,15 @@ pub fn build_router(state: AppState) -> Router {
             post(room::post_thread_follow).delete(room::delete_thread_follow),
         )
         .route("/thread-panel", delete(room::close_thread_panel))
+        // LC-484: AI "catch me up" summaries (threads + channel unread range).
+        .route(
+            "/room/{room_id}/summary",
+            get(summary::open_catch_me_up).post(summary::summarize_channel),
+        )
+        .route(
+            "/room/{room_id}/thread/{parent_id}/summary",
+            post(summary::summarize_thread),
+        )
         .route(
             "/room/{room_id}/composer-quote/{message_id}",
             get(room::get_composer_quote),
