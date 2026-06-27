@@ -65,17 +65,29 @@ impl std::fmt::Display for LlmError {
     }
 }
 
-/// The system prompt: ask for a concise summary + bulleted action items, in
-/// markdown (rendered through the message markdown pipeline on display).
+/// The transcript system prompt: ask for a concise summary + bulleted action
+/// items, in markdown (rendered through the message markdown pipeline on
+/// display).
 const SYSTEM_PROMPT: &str = "You summarize meeting and call transcripts. Reply in \
 GitHub-flavored markdown with a short '## Summary' section (2-4 sentences) followed \
 by a '## Action items' section as a bullet list (write 'None.' if there are none). \
 Be concise and faithful to the transcript; do not invent details.";
 
-/// Summarize a transcript -> markdown summary. Mockable for tests.
+/// An operator LLM endpoint. `complete` is the core call (arbitrary system +
+/// user prompt); `summarize` is a convenience wrapper that applies the
+/// transcript prompt. LC-484 reuses `complete` with a chat-specific prompt for
+/// the "catch me up" thread/channel summaries. Mockable for tests.
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn summarize(&self, transcript: &str) -> Result<String, LlmError>;
+    /// Run one chat-completion with the given system + user prompt.
+    async fn complete(&self, system_prompt: &str, user_content: &str)
+        -> Result<String, LlmError>;
+
+    /// Summarize a transcript -> markdown summary. Default delegates to
+    /// `complete` with the transcript [`SYSTEM_PROMPT`].
+    async fn summarize(&self, transcript: &str) -> Result<String, LlmError> {
+        self.complete(SYSTEM_PROMPT, transcript).await
+    }
 }
 
 /// Production client: chat-completions POST to the operator's endpoint via the
@@ -92,13 +104,17 @@ impl ReqwestLlmClient {
 
 #[async_trait]
 impl LlmClient for ReqwestLlmClient {
-    async fn summarize(&self, transcript: &str) -> Result<String, LlmError> {
+    async fn complete(
+        &self,
+        system_prompt: &str,
+        user_content: &str,
+    ) -> Result<String, LlmError> {
         let payload = serde_json::json!({
             "model": self.cfg.model,
             "temperature": 0.2,
             "messages": [
-                { "role": "system", "content": SYSTEM_PROMPT },
-                { "role": "user", "content": transcript },
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_content },
             ],
         });
         let mut req = crate::http_client::outbound_trusted_post(&self.cfg.url)
@@ -141,7 +157,11 @@ pub struct MockLlmClient {
 
 #[async_trait]
 impl LlmClient for MockLlmClient {
-    async fn summarize(&self, _transcript: &str) -> Result<String, LlmError> {
+    async fn complete(
+        &self,
+        _system_prompt: &str,
+        _user_content: &str,
+    ) -> Result<String, LlmError> {
         Ok(self.canned.clone())
     }
 }
