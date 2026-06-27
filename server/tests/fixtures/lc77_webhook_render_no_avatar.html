@@ -97,6 +97,8 @@
         
         <button role="menuitem" hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">Remind</button>
         
+        <button role="menuitem" hx-post="/messages/1/translate" hx-target="#translation-1" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">Translate</button>
+        
         <button role="menuitem" hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">Mark unread</button>
         
         <button role="menuitem" hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">Forward</button>
@@ -125,6 +127,8 @@
     
     
   
+  
+  <div id="translation-1" class="lc-translation"></div>
   
   <div id="reactions-1" class="mt-1">
     
