@@ -1091,6 +1091,9 @@ pub struct RoomPage<'a> {
     pub initial_draft: &'a str,
     /// LC-484: gates the header "Catch me up" action (operator LLM configured).
     pub llm_available: bool,
+    /// LC-500: configured max upload size (bytes), surfaced to the composer so
+    /// client-side validation matches the server cap.
+    pub max_upload_bytes: i64,
 }
 
 impl RoomPage<'_> {
@@ -1113,6 +1116,9 @@ pub struct ComposerFragment<'a> {
     /// to restore from the server here. The next keystroke will
     /// re-create the draft if non-empty.
     pub initial_draft: &'a str,
+    /// LC-500: see `RoomPage::max_upload_bytes`. Required for the shared
+    /// composer template to compile against this struct.
+    pub max_upload_bytes: i64,
 }
 
 impl ComposerFragment<'_> {
