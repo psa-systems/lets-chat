@@ -50,14 +50,19 @@ pub async fn get_autocomplete(
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    // LC-476: only offer @here/@channel when the room's broadcast policy lets
+    // this viewer use them; otherwise the send path would silently drop the
+    // tokens, so suggesting them would be misleading.
+    let can_broadcast = room.room_type != "dm"
+        && super::room::broadcast_allowed_for_user(&state, room_id, &viewer).await?;
     if room.room_type != "dm" {
-        if "here".starts_with(&q_lower) {
+        if can_broadcast && "here".starts_with(&q_lower) {
             results.push(MentionSuggestion::broadcast(
                 "here",
                 "Notify online members",
             ));
         }
-        if "channel".starts_with(&q_lower) {
+        if can_broadcast && "channel".starts_with(&q_lower) {
             results.push(MentionSuggestion::broadcast(
                 "channel",
                 "Notify the entire room",
@@ -176,7 +181,12 @@ pub async fn get_broadcast_count(
         ));
     }
 
-    let count = if token_lower == "here" {
+    // LC-476: when the viewer isn't allowed to broadcast here, the send path
+    // would drop the token, so the honest preview is zero (the fragment renders
+    // nothing for count == 0).
+    let count = if !super::room::broadcast_allowed_for_user(&state, room_id, &viewer).await? {
+        0
+    } else if token_lower == "here" {
         super::room::resolve_here_targets(&state, &room, &viewer.id)
             .await?
             .len() as i64
