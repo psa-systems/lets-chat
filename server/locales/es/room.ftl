@@ -262,6 +262,13 @@ room-announce-label = Anuncios
 room-announce-admins = Solo los administradores pueden publicar en este canal.
 room-announce-mods = Solo los moderadores pueden publicar en este canal.
 room-readonly-hint = Aun puedes reaccionar a los mensajes.
+# LC-476: politica de menciones masivas (@here / @channel)
+room-broadcast-policy-heading = Menciones masivas
+room-broadcast-policy-intro = Controla quien puede usar @here y @channel para notificar a muchas personas a la vez. Restringelo para reducir el ruido; las menciones normales no se ven afectadas.
+room-broadcast-who = Quien puede usar @here / @channel
+room-broadcast-all = Todos (predeterminado)
+room-broadcast-mods = Solo moderadores
+room-broadcast-admins = Solo administradores
 room-mods-overrides-heading = Excepciones actuales
 room-mods-overrides-empty = Aun no hay excepciones.
 room-mods-granted-by = otorgado por
