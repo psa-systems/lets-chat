@@ -41,6 +41,7 @@ pub mod shame_tags;
 pub mod summary;
 pub mod switcher;
 pub mod transcripts;
+pub mod translate;
 pub mod users;
 pub mod voice;
 pub mod webhooks;
