@@ -1,0 +1,11 @@
+{# LC-486: inline translation under a message body. Swapped into
+   #translation-{id}; "Show original" clears the container (re-translating is a
+   cache hit, so toggling back on is cheap). #}
+<div class="lc-translation-block">
+  <div class="lc-translation-head">
+    <span>{{ "room-msg-translated-to"|t }} {{ language }}</span>
+    <button type="button" class="lc-translation-hide"
+            onclick="var c=this.closest('[id^=translation-]'); if(c)c.innerHTML='';">{{ "room-msg-show-original"|t }}</button>
+  </div>
+  <div class="lc-md leading-snug">{{ translated_html|safe }}</div>
+</div>

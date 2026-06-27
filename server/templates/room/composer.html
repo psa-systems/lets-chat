@@ -2,7 +2,9 @@
      encoding the moment a file input is inside a form, which would break
      the server's axum::Form parser. The JS uploads to /api/upload directly
      and stashes the returned file_id in the hidden input below. -->
-<input id="lc-file" type="file" class="hidden">
+<input id="lc-file" type="file" class="hidden"
+       accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+       data-lc-max-bytes="{{ max_upload_bytes }}">
 <form
   id="composer"
   data-lc-cleanup-root
@@ -355,7 +357,10 @@
       // LC-332: keep Send disabled while the body is over the length cap, on
       // top of the existing "text or attachment present" predicate. The counter
       // IIFE owns window.__lcOverLimit.
+      // LC-499: also hold Send disabled while a voice upload is in flight, so
+      // the user cannot submit text before the attachment's file_id lands.
       sendBtn.disabled = window.__lcOverLimit === true
+        || window.__lcUploadBusy === true
         || (!ta.value.trim() && !ta.form.file_id.value);
     };
     ta.addEventListener('input', window.__lcRefreshSend);
@@ -813,6 +818,25 @@
   var overlay = document.getElementById('lc-drop-overlay');
   var currentObjectUrl = null;
 
+  // LC-500: client-side mirror of the server allowlist
+  // (uploads::allowed_ext_for_mime) + the configured size cap, so oversize /
+  // unsupported files are rejected with a clear inline message before the
+  // upload round-trip instead of failing on send.
+  var ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+  var MAX_BYTES = parseInt(input.getAttribute('data-lc-max-bytes'), 10) || (10 * 1024 * 1024);
+
+  function esc(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function humanBytes(n){
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function isImage(f){ return f.type && f.type.indexOf('image/') === 0; }
+
   function revokePreview(){
     if (currentObjectUrl) {
       URL.revokeObjectURL(currentObjectUrl);
@@ -821,6 +845,7 @@
   }
   function clear(){
     revokePreview();
+    window.__lcUploadBusy = false;
     hidden.value = '';
     staged.textContent = '';
     errSlot.textContent = '';
@@ -832,51 +857,102 @@
   }
   window.__lcClearAttach = clear;
 
-  function fmt(n){ return n < 1024 ? n+'B' : (n/1024).toFixed(1)+'KB'; }
-
-  function showPreview(f){
-    revokePreview();
-    if (!f.type || !f.type.startsWith('image/')) {
-      staged.innerHTML = window.__lcS('uploadUploadingFile', 'Uploading %name%...').replace('%name%', function () { return f.name; });
-      return;
+  // Inline error (reuses the .lc-rec-error card styling from the voice
+  // composer), optionally with a Retry that re-runs the upload.
+  function showError(msg, retryFn){
+    staged.textContent = '';
+    var html = '<div class="lc-rec-error">' +
+      '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="lc-rec-error-icon"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>' +
+      '<div class="lc-rec-error-body"><span>' + esc(msg) + '</span></div>';
+    if (retryFn) html += '<button type="button" class="lc-rec-error-retry">' + esc(window.__lcS('voiceRetry', 'Retry')) + '</button>';
+    html += '</div>';
+    errSlot.innerHTML = html;
+    if (retryFn) {
+      var btn = errSlot.querySelector('.lc-rec-error-retry');
+      if (btn) btn.addEventListener('click', function(){ errSlot.textContent = ''; retryFn(); });
     }
-    currentObjectUrl = URL.createObjectURL(f);
+  }
+
+  function validate(f){
+    if (ALLOWED.indexOf(f.type) === -1) {
+      return window.__lcS('uploadBadType', '%name% is not a supported file type (images and PDF only).').replace('%name%', f.name);
+    }
+    if (f.size > MAX_BYTES) {
+      return window.__lcS('uploadTooLarge', '%name% is %size%, over the %limit% limit.')
+        .replace('%name%', f.name).replace('%size%', humanBytes(f.size)).replace('%limit%', humanBytes(MAX_BYTES));
+    }
+    return null;
+  }
+
+  // The bounded attachment card - image thumbnail or a file-type icon, the
+  // (truncated) name + size, and a labeled Remove. While `uploading`, a spinner
+  // overlays the thumb and the Remove action is withheld.
+  function thumbHtml(f, uploading){
+    var inner;
+    if (isImage(f)) {
+      currentObjectUrl = URL.createObjectURL(f);
+      inner = '<img src="' + currentObjectUrl + '" alt="" class="lc-attach-thumb">';
+    } else {
+      inner = '<span class="lc-attach-icon">' +
+        '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.62a1.5 1.5 0 00-.44-1.06l-3.62-3.62A1.5 1.5 0 0011.38 2H4.5zm6.5 1.75L15.25 8H12a1 1 0 01-1-1V3.75z" clip-rule="evenodd"/></svg>' +
+        '</span>';
+    }
+    if (uploading) {
+      inner = '<span class="lc-attach-thumbwrap">' + inner +
+        '<span class="lc-attach-spin"><span class="lc-rec-spinner"></span></span></span>';
+    }
+    return inner;
+  }
+  function renderCard(f, uploading){
+    revokePreview();
+    var actions = uploading ? '' :
+      '<div class="lc-recpreview-actions">' +
+        '<button type="button" class="lc-recpreview-btn lc-recpreview-btn--danger" id="lc-attach-remove">' +
+          '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1a1 1 0 00-.96.73L7.5 3H4a.75.75 0 000 1.5h.42l.81 11.36A2.25 2.25 0 007.47 18h5.06a2.25 2.25 0 002.24-2.14L15.58 4.5H16A.75.75 0 0016 3h-3.5l-.29-1.27A1 1 0 0011.25 1h-2.5zM9 7.25a.75.75 0 011.5 0v6a.75.75 0 01-1.5 0v-6z" clip-rule="evenodd"/></svg>' +
+          '<span>' + esc(window.__lcS('voiceRemove', 'Remove')) + '</span>' +
+        '</button>' +
+      '</div>';
     staged.innerHTML =
-      '<span class="inline-flex items-center gap-2">' +
-        '<img src="' + currentObjectUrl + '" alt="" class="h-12 w-12 rounded object-cover">' +
-        '<span>' + window.__lcS('uploadUploadingFile', 'Uploading %name%...').replace('%name%', function () { return f.name; }) + '</span>' +
-      '</span>';
+      '<div class="lc-attach">' +
+        thumbHtml(f, uploading) +
+        '<div class="lc-attach-meta">' +
+          '<span class="lc-attach-name" title="' + esc(f.name) + '">' + esc(f.name) + '</span>' +
+          '<span class="lc-attach-size">' + humanBytes(f.size) + '</span>' +
+        '</div>' +
+        actions +
+      '</div>';
+    var rm = document.getElementById('lc-attach-remove');
+    if (rm) rm.addEventListener('click', function(){ clear(); });
   }
 
   async function uploadStaged(f){
     errSlot.textContent = '';
-    showPreview(f);
+    var err = validate(f);
+    if (err) { input.value = ''; showError(err); return; }
+    window.__lcUploadBusy = true;
+    if (window.__lcRefreshSend) window.__lcRefreshSend();
+    renderCard(f, true);
     var fd = new FormData(); fd.append('file', f);
     try {
       var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      window.__lcUploadBusy = false;
       if (!res.ok) {
         var msg = await res.text();
-        errSlot.textContent = msg || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
-        revokePreview();
-        staged.textContent = '';
+        showError(msg || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status), function(){ uploadStaged(f); });
         input.value = '';
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
         return;
       }
       var data = await res.json();
       hidden.value = data.file_id;
-      var preview = currentObjectUrl
-        ? '<img src="' + currentObjectUrl + '" alt="" class="h-12 w-12 rounded object-cover">'
-        : '';
-      staged.innerHTML =
-        '<span class="inline-flex items-center gap-2">' + preview +
-          '<span>' + window.__lcS('uploadAttached', 'Attached: %name% (%size%)').replace('%name%', function () { return f.name; }).replace('%size%', function () { return fmt(f.size); }) + '</span>' +
-          '<button type="button" aria-label="' + window.__lcS('uploadRemoveAttachment', 'Remove attachment') + '" onclick="window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
-        '</span>';
+      renderCard(f, false);
+      input.value = '';
       if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
-      errSlot.textContent = window.__lcS('uploadFailed', 'Upload failed');
-      revokePreview();
+      window.__lcUploadBusy = false;
+      showError(window.__lcS('uploadFailed', 'Upload failed'), function(){ uploadStaged(f); });
       input.value = '';
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
     }
   }
 
@@ -954,6 +1030,11 @@
   var tickTimer = null;
   var capTimer = null;
   var recording = false;
+  // LC-499: live audio-level meter (confirms the mic is capturing) + retry.
+  var levelCtx = null;       // AudioContext driving the recording level meter
+  var levelRaf = 0;          // requestAnimationFrame handle for the meter
+  var levelBars = [];        // the <i> bar elements currently animated
+  var LEVEL_BARS = 24;
 
   function fmtTime(s){
     if (!isFinite(s) || s < 0) s = 0;
@@ -981,9 +1062,72 @@
 
   function resetUi(){
     recording = false;
-    recordBtn.classList.remove('text-danger');
+    recordBtn.classList.remove('is-recording');
+    recordBtn.setAttribute('aria-pressed', 'false');
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
     if (capTimer) { clearTimeout(capTimer); capTimer = null; }
+    stopLevel();
+  }
+
+  // LC-499: drive the recording level meter from the live mic stream. A
+  // dedicated AudioContext + AnalyserNode reads the time-domain signal each
+  // frame and scales the bars by RMS, so the user sees the mic responding.
+  function setupLevel(stream){
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      levelCtx = new AC();
+      var source = levelCtx.createMediaStreamSource(stream);
+      var analyser = levelCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.75;
+      source.connect(analyser);
+      var data = new Uint8Array(analyser.fftSize);
+      var animate = function(){
+        analyser.getByteTimeDomainData(data);
+        var sum = 0;
+        for (var i = 0; i < data.length; i++) {
+          var v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        var rms = Math.sqrt(sum / data.length);          // 0..~1
+        var level = Math.min(1, rms * 2.2);              // perceptual boost
+        for (var b = 0; b < levelBars.length; b++) {
+          // A gentle bell across the row so the centre reacts most, giving a
+          // waveform-ish shape rather than a flat block.
+          var centre = 1 - Math.abs((b / (levelBars.length - 1)) - 0.5) * 1.6;
+          var h = Math.max(0.12, level * Math.max(0.15, centre));
+          levelBars[b].style.transform = 'scaleY(' + h.toFixed(3) + ')';
+        }
+        levelRaf = requestAnimationFrame(animate);
+      };
+      animate();
+    } catch (e) { /* meter is decorative; ignore failures */ }
+  }
+  function stopLevel(){
+    if (levelRaf) { cancelAnimationFrame(levelRaf); levelRaf = 0; }
+    levelBars = [];
+    if (levelCtx) { try { levelCtx.close(); } catch (e) {} levelCtx = null; }
+  }
+
+  // LC-499: styled, role=alert error with optional how-to-fix help and a retry
+  // action (used by the upload-failed path to re-send the recorded blob).
+  function showError(msg, help, retryFn){
+    staged.textContent = '';
+    var html = '<div class="lc-rec-error">' +
+      '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="lc-rec-error-icon"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>' +
+      '<div class="lc-rec-error-body"><span>' + msg + '</span>' +
+      (help ? '<span class="lc-rec-error-help">' + help + '</span>' : '') +
+      '</div>';
+    if (retryFn) {
+      html += '<button type="button" class="lc-rec-error-retry">' + window.__lcS('voiceRetry', 'Retry') + '</button>';
+    }
+    html += '</div>';
+    errSlot.innerHTML = html;
+    if (retryFn) {
+      var btn = errSlot.querySelector('.lc-rec-error-retry');
+      if (btn) btn.addEventListener('click', function(){ errSlot.textContent = ''; retryFn(); });
+    }
   }
 
   // Decode the recorded blob to WAVEFORM_BUCKETS peak values (0..1) plus the
@@ -1025,15 +1169,56 @@
   }
 
   function showRecording(){
+    var bars = '';
+    for (var i = 0; i < LEVEL_BARS; i++) bars += '<i></i>';
     staged.innerHTML =
-      '<span class="inline-flex items-center gap-2">' +
-        '<span class="text-danger">' + window.__lcS('voiceRecording', '● Recording') + '</span>' +
-        '<span id="lc-record-time">0:00</span>' +
-        '<button type="button" id="lc-record-stop" class="underline">' + window.__lcS('voiceRecStop', 'Stop') + '</button>' +
-        '<button type="button" id="lc-record-cancel" class="text-danger">' + window.__lcS('voiceRecCancel', 'Cancel') + '</button>' +
-      '</span>';
+      '<div class="lc-rec" role="status">' +
+        '<span class="lc-rec-dot" aria-hidden="true"></span>' +
+        '<span class="lc-rec-label">' + window.__lcS('voiceRecording', 'Recording') + '</span>' +
+        '<span class="lc-rec-time" id="lc-record-time">0:00</span>' +
+        '<span class="lc-rec-level" id="lc-rec-level" aria-hidden="true">' + bars + '</span>' +
+        '<span class="lc-rec-actions">' +
+          '<button type="button" id="lc-record-stop" class="lc-rec-stop">' + window.__lcS('voiceRecStop', 'Stop') + '</button>' +
+          '<button type="button" id="lc-record-cancel" class="lc-rec-cancel">' + window.__lcS('voiceRecCancel', 'Cancel') + '</button>' +
+        '</span>' +
+      '</div>';
     document.getElementById('lc-record-stop').addEventListener('click', function(){ stop(false); });
     document.getElementById('lc-record-cancel').addEventListener('click', function(){ stop(true); });
+    var lvl = document.getElementById('lc-rec-level');
+    levelBars = lvl ? Array.prototype.slice.call(lvl.querySelectorAll('i')) : [];
+  }
+
+  // LC-499: the recorded-and-attached preview - a real inline player (the same
+  // component the timeline uses) plus Re-record + Remove actions, so the user
+  // can listen before deciding to send.
+  function renderPreview(fileId, wf){
+    var peaksCsv = (wf.peaks || []).map(function(p){ return p.toFixed(3); }).join(',');
+    staged.innerHTML =
+      '<div class="lc-recpreview">' +
+        '<div class="lc-voice" data-lc-voice data-src="/api/files/' + fileId + '" data-waveform="' + peaksCsv + '" data-duration="' + (wf.duration || 0) + '">' +
+          '<button type="button" class="lc-voice-play" aria-label="' + window.__lcS('voicePlay', 'Play voice message') + '">' +
+            '<svg class="lc-voice-icon-play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.8a1 1 0 011.04-.06l9 5.2a1 1 0 010 1.73l-9 5.2A1 1 0 016 14V3.66a1 1 0 01.3-.86z"/></svg>' +
+            '<svg class="lc-voice-icon-pause" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M5.75 3A1.75 1.75 0 004 4.75v10.5c0 .97.78 1.75 1.75 1.75h1.5A1.75 1.75 0 009 15.25V4.75A1.75 1.75 0 007.25 3h-1.5zM12.75 3A1.75 1.75 0 0011 4.75v10.5c0 .97.78 1.75 1.75 1.75h1.5A1.75 1.75 0 0016 15.25V4.75A1.75 1.75 0 0014.25 3h-1.5z"/></svg>' +
+          '</button>' +
+          '<canvas class="lc-voice-wave" width="320" height="40"></canvas>' +
+          '<span class="lc-voice-time">0:00</span>' +
+        '</div>' +
+        '<div class="lc-recpreview-actions">' +
+          '<button type="button" class="lc-recpreview-btn" id="lc-rec-redo">' +
+            '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 4.5V2.25a.25.25 0 00-.41-.19L5.5 5.5l4.09 3.44a.25.25 0 00.41-.19V6.5a3.5 3.5 0 11-3.5 3.5.75.75 0 00-1.5 0 5 5 0 105-5z"/></svg>' +
+            '<span>' + window.__lcS('voiceReRecord', 'Re-record') + '</span>' +
+          '</button>' +
+          '<button type="button" class="lc-recpreview-btn lc-recpreview-btn--danger" id="lc-rec-remove">' +
+            '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1a1 1 0 00-.96.73L7.5 3H4a.75.75 0 000 1.5h.42l.81 11.36A2.25 2.25 0 007.47 18h5.06a2.25 2.25 0 002.24-2.14L15.58 4.5H16A.75.75 0 0016 3h-3.5l-.29-1.27A1 1 0 0011.25 1h-2.5zM9 7.25a.75.75 0 011.5 0v6a.75.75 0 01-1.5 0v-6z" clip-rule="evenodd"/></svg>' +
+            '<span>' + window.__lcS('voiceRemove', 'Remove') + '</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    if (window.__lcScanVoice) window.__lcScanVoice(staged);
+    var redo = document.getElementById('lc-rec-redo');
+    var remove = document.getElementById('lc-rec-remove');
+    if (redo) redo.addEventListener('click', function(){ if (window.__lcClearAttach) window.__lcClearAttach(); start(); });
+    if (remove) remove.addEventListener('click', function(){ if (window.__lcClearAttach) window.__lcClearAttach(); });
   }
 
   function tick(){
@@ -1044,7 +1229,7 @@
   async function start(){
     errSlot.textContent = '';
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      errSlot.textContent = window.__lcS('voiceRecUnsupported', 'Voice recording is not supported in this browser');
+      showError(window.__lcS('voiceRecUnsupported', 'Voice recording is not supported in this browser'));
       return;
     }
     try {
@@ -1054,7 +1239,10 @@
       // the raw capture; disabling it lets that noise straight into the file.
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      errSlot.textContent = window.__lcS('voiceRecMicDenied', 'Microphone access denied');
+      showError(
+        window.__lcS('voiceRecMicDenied', 'Microphone access denied'),
+        window.__lcS('voiceRecMicHelp', "Allow microphone access in your browser's site settings, then try again.")
+      );
       return;
     }
     var mimeType = pickMimeType();
@@ -1064,7 +1252,7 @@
         : new MediaRecorder(mediaStream);
     } catch (e) {
       releaseStream();
-      errSlot.textContent = window.__lcS('voiceRecStartFailed', 'Could not start recording');
+      showError(window.__lcS('voiceRecStartFailed', 'Could not start recording. Check that no other app is using the mic.'));
       return;
     }
     chunks = [];
@@ -1075,8 +1263,10 @@
     mediaRecorder.start();
     recording = true;
     startedAt = Date.now();
-    recordBtn.classList.add('text-danger');
+    recordBtn.classList.add('is-recording');
+    recordBtn.setAttribute('aria-pressed', 'true');
     showRecording();
+    setupLevel(mediaStream);
     tickTimer = setInterval(tick, 250);
     capTimer = setTimeout(function(){ stop(false); }, MAX_SECONDS * 1000);
   }
@@ -1100,12 +1290,26 @@
       return;
     }
     if (blob.size === 0) {
-      errSlot.textContent = window.__lcS('voiceRecEmpty', 'Recording was empty');
-      staged.textContent = '';
+      showError(window.__lcS('voiceRecEmpty', 'Recording was empty'));
       return;
     }
-    staged.innerHTML = window.__lcS('uploadUploadingVoice', 'Uploading voice message...');
     var wf = await computeWaveform(blob);
+    uploadBlob(blob, type, wf);
+  }
+
+  // LC-499: upload (or re-upload, on retry) a recorded blob. Holds Send
+  // disabled while in flight (via __lcUploadBusy) and shows a progress state;
+  // on success swaps in the playback preview; on failure shows a styled error
+  // with a Retry that re-runs this same call with the retained blob.
+  async function uploadBlob(blob, type, wf){
+    errSlot.textContent = '';
+    window.__lcUploadBusy = true;
+    if (window.__lcRefreshSend) window.__lcRefreshSend();
+    staged.innerHTML =
+      '<div class="lc-rec lc-rec--busy" role="status">' +
+        '<span class="lc-rec-spinner" aria-hidden="true"></span>' +
+        '<span class="lc-rec-label">' + window.__lcS('voiceUploading', 'Uploading voice message...') + '</span>' +
+      '</div>';
     var fd = new FormData();
     // Order matters: the server reads kind + waveform before the file field.
     // The waveform field is a JSON object: { d: duration_seconds, p: [peaks] }.
@@ -1115,22 +1319,21 @@
     fd.append('file', blob, 'voice-message.' + ext);
     try {
       var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      window.__lcUploadBusy = false;
       if (!res.ok) {
-        errSlot.textContent = (await res.text()) || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
-        staged.textContent = '';
+        var msg = (await res.text()) || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
+        showError(msg, null, function(){ uploadBlob(blob, type, wf); });
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
         return;
       }
       var data = await res.json();
       hidden.value = data.file_id;
-      staged.innerHTML =
-        '<span class="inline-flex items-center gap-2">' +
-          '<span>' + window.__lcS('uploadVoiceAttached', 'Voice message attached') + '</span>' +
-          '<button type="button" aria-label="' + window.__lcS('uploadRemoveAttachment', 'Remove attachment') + '" onclick="window.__lcClearAttach && window.__lcClearAttach()" class="ml-1 text-danger">x</button>' +
-        '</span>';
+      renderPreview(data.file_id, wf);
       if (window.__lcRefreshSend) window.__lcRefreshSend();
     } catch (e) {
-      errSlot.textContent = window.__lcS('uploadFailed', 'Upload failed');
-      staged.textContent = '';
+      window.__lcUploadBusy = false;
+      showError(window.__lcS('uploadFailed', 'Upload failed'), null, function(){ uploadBlob(blob, type, wf); });
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
     }
   }
 
@@ -1145,6 +1348,7 @@
   // now-detached DOM. Cleanup-root is #composer (form).
   function teardown(){
     cancelled = true;
+    window.__lcUploadBusy = false;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       try { mediaRecorder.stop(); } catch (e) {}
     }

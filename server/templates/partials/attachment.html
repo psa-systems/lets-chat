@@ -7,6 +7,15 @@
   <canvas class="lc-voice-wave" width="320" height="40"></canvas>
   <span class="lc-voice-time">0:00</span>
 </div>
+{# LC-483: server-side transcript, rendered as escaped text under the player.
+   Absent until (and unless) transcription completes; a VoiceTranscribed WS
+   event re-renders this message in place once it does. #}
+{% if let Some(t) = a.transcript %}
+<div class="mt-1 max-w-sm text-xs text-content-muted">
+  <span class="font-medium text-content-subtle">{{ "partials-voice-transcript"|t }}:</span>
+  <span>{{ t }}</span>
+</div>
+{% endif %}
 {% else if a.is_image() %}
 <div class="mt-1">
   {# LC-262: data-lc-lightbox opens the full image in the in-app lightbox
@@ -18,9 +27,15 @@
   </a>
 </div>
 {% else %}
-<div class="mt-1 inline-flex items-center gap-2 border border-border rounded px-3 py-2 bg-surface-elevated text-sm">
-  <span class="font-mono text-xs text-content-muted">{{ a.mime_type }}</span>
-  <a href="{{ a.url }}" class="text-accent hover:underline" target="_blank" rel="noopener noreferrer">{{ a.filename }}</a>
-  <span class="text-xs text-content-subtle">({{ a.size_bytes }} B)</span>
-</div>
+{# LC-500: clean download card (icon + truncated name + human size), matching
+   the composer attachment chip, instead of a plain bordered link. #}
+<a href="{{ a.url }}" class="lc-filecard mt-1" target="_blank" rel="noopener noreferrer" download title="{{ a.filename }}">
+  <span class="lc-filecard-icon">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.62a1.5 1.5 0 00-.44-1.06l-3.62-3.62A1.5 1.5 0 0011.38 2H4.5zm6.5 1.75L15.25 8H12a1 1 0 01-1-1V3.75z" clip-rule="evenodd"/></svg>
+  </span>
+  <span class="lc-filecard-meta">
+    <span class="lc-filecard-name">{{ a.filename }}</span>
+    <span class="lc-filecard-size">{{ a.human_size() }}</span>
+  </span>
+</a>
 {% endif %}

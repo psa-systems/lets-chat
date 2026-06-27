@@ -195,6 +195,11 @@
         <button role="menuitem" hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-save"|t }}</button>
         {% endif %}
         <button role="menuitem" hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-remind"|t }}</button>
+        {# LC-486: translate into the viewer's language. Shown only when an LLM is
+           configured (CSS-gated via [data-lc-llm] on the page root, which also
+           covers live-swapped message fragments). Result swaps into the
+           per-message #translation-{id} block under the body. #}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">{{ "room-msg-translate"|t }}</button>
         {# LC-286: mark this conversation unread from here. #}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
         {# LC-278: forward this message to another room/DM. #}
@@ -266,6 +271,8 @@
       {% include "partials/attachment.html" %}
     {% endfor %}
   {% endif %}
+  {# LC-486: inline translation target (empty until the Translate action fills it). #}
+  <div id="translation-{{ message.id }}" class="lc-translation"></div>
   {% if let Some(poll) = message.poll.as_ref() %}
   <div id="poll-{{ poll.message_id }}">
     {% include "partials/poll_block.html" %}

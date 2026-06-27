@@ -147,6 +147,7 @@ pub async fn get_page(
     ) = super::load_chrome(&state, &user, enclave_id_for_chrome).await?;
 
     let retention_days = db::chat::get_room_retention_days(&state.chat, room_id).await?;
+    let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
 
     html(&RoomModeratorsPage {
         user: &user,
@@ -155,6 +156,7 @@ pub async fn get_page(
         overrides: &overrides,
         candidates: &candidates,
         posting_policy: &room.posting_allowed_for,
+        broadcast_policy: &broadcast_policy,
         retention_days,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
@@ -252,6 +254,49 @@ pub async fn post_posting_policy(
     .await?;
     // LC-454: htmx submit gets the shared status fragment + toast; a no-JS
     // submit falls back to a full-page redirect (progressive enhancement).
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "room-policy-saved",
+        )))?
+        .into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+/// POST /room/{id}/broadcast-policy
+///
+/// LC-476: set who may use `@here`/`@channel` in this room (the politeness
+/// gate). Same authorization + audit + dual-mode response shape as
+/// `post_posting_policy`; reuses `PostingPolicyForm` (identical `policy` field).
+pub async fn post_broadcast_policy(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<PostingPolicyForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let policy = form.policy.trim();
+    if !matches!(policy, "all" | "moderators_only" | "admins_only") {
+        return Err(AppError::BadRequest(
+            "policy must be one of: all, moderators_only, admins_only".into(),
+        ));
+    }
+    let n = db::chat::set_room_broadcast_policy(&state.chat, room_id, policy).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"broadcast_allowed_for":"{policy}"}}"#);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_broadcast_policy",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current(
             "room-policy-saved",
