@@ -371,6 +371,7 @@ pub async fn get_dm(
         mute_mode,
         pinned_strip_html,
         initial_draft,
+        max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

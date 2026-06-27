@@ -523,6 +523,7 @@ pub async fn get_room(
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
+        max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
