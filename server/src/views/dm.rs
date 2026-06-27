@@ -32,6 +32,9 @@ pub struct DmPage<'a> {
     /// any. Same shape as `RoomPage::initial_draft`. Empty string =
     /// no draft (or stale + just purged).
     pub initial_draft: String,
+    /// LC-500: configured max upload size (bytes), surfaced to the composer for
+    /// client-side validation. Same as `RoomPage::max_upload_bytes`.
+    pub max_upload_bytes: i64,
 }
 
 impl DmPage<'_> {
