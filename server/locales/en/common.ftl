@@ -135,7 +135,13 @@ code-copied = Copied
 ## Scheduled message modal
 scheduled-modal-title = Schedule message
 scheduled-modal-deliver-at = Deliver at (your local time)
+scheduled-modal-repeat = Repeat
 scheduled-modal-submit = Schedule
+# LC-485: recurrence options + pending-row badge
+scheduled-repeat-none = Does not repeat
+scheduled-repeat-daily = Repeats daily
+scheduled-repeat-weekdays = Repeats every weekday
+scheduled-repeat-weekly = Repeats weekly
 
 ## Scheduled messages page
 scheduled-page-title = Scheduled
