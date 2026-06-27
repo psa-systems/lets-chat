@@ -194,6 +194,10 @@ room-msg-forward = Reenviar
 room-msg-report = Denunciar
 room-msg-edit = Editar
 room-msg-delete = Eliminar
+# LC-486: traduccion en linea
+room-msg-translate = Traducir
+room-msg-translated-to = Traducido a
+room-msg-show-original = Mostrar original
 room-msg-delete-confirm = ¿Eliminar este mensaje?
 room-msg-quote-deleted = (el mensaje citado fue eliminado)
 room-msg-seen = Visto
@@ -252,11 +256,23 @@ room-mods-manage-inboxes = Gestionar buzones de correo
 room-mods-manage-feeds = Gestionar canales
 room-mods-intro = Otorga un rol de Moderador o Administrador a nivel de sala. Las excepciones solo elevan; quitar una devuelve al usuario a su rol global dentro de esta sala.
 room-mods-policy-heading = Politica de publicacion
-room-mods-policy-intro = Controla quien puede publicar mensajes en esta sala. Las reacciones, los fijados y la edicion de mensajes propios no se ven afectados.
+room-mods-policy-intro = Controla quien puede publicar mensajes en esta sala. Restringir la publicacion la convierte en un canal de anuncios: todos pueden seguir leyendo y reaccionando, pero solo los roles elegidos pueden publicar. Las reacciones, los fijados y la edicion de mensajes propios no se ven afectados.
 room-mods-who-can-post = Quien puede publicar
 room-mods-policy-all = Todos (predeterminado)
-room-mods-policy-mods = Solo moderadores
-room-mods-policy-admins = Solo administradores
+room-mods-policy-mods = Solo moderadores (anuncios)
+room-mods-policy-admins = Solo administradores (anuncios)
+# LC-480: aviso de canal de anuncios + nota de solo lectura del redactor
+room-announce-label = Anuncios
+room-announce-admins = Solo los administradores pueden publicar en este canal.
+room-announce-mods = Solo los moderadores pueden publicar en este canal.
+room-readonly-hint = Aun puedes reaccionar a los mensajes.
+# LC-476: politica de menciones masivas (@here / @channel)
+room-broadcast-policy-heading = Menciones masivas
+room-broadcast-policy-intro = Controla quien puede usar @here y @channel para notificar a muchas personas a la vez. Restringelo para reducir el ruido; las menciones normales no se ven afectadas.
+room-broadcast-who = Quien puede usar @here / @channel
+room-broadcast-all = Todos (predeterminado)
+room-broadcast-mods = Solo moderadores
+room-broadcast-admins = Solo administradores
 room-mods-overrides-heading = Excepciones actuales
 room-mods-overrides-empty = Aun no hay excepciones.
 room-mods-granted-by = otorgado por
@@ -362,3 +378,12 @@ room-delete-room-desc = Elimina permanentemente esta sala y todos sus mensajes, 
 room-delete-confirm-prefix = Escribe
 room-delete-confirm-phrase = eliminar esta sala
 room-delete-confirm-suffix = para confirmar.
+
+# LC-484: resumenes con IA "ponme al dia" (hilos + canal)
+summary-catch-up-heading = Ponme al dia
+summary-unread-suffix = mensajes sin leer
+summary-recent-scope = Resumir la actividad reciente
+summary-generate = Generar resumen
+summary-regenerate = Regenerar
+summary-disclaimer = Generado por IA a partir de mensajes recientes. Puede estar incompleto.
+room-thread-summarize = Resumir

@@ -482,17 +482,10 @@ pub async fn get_room(
         crate::perms::room_can_manage_overrides(enclave_role, &user.role)
     };
 
-    // LC-85: whether to render the composer vs a read-only notice.
+    // LC-85: whether to render the composer vs a read-only notice. LC-480: the
+    // raw policy is handed to the template, which picks the localized banner +
+    // read-only notice text (the strings used to be hardcoded English here).
     let can_post = can_post_with_policy(&state, &user, room_id, &room.posting_allowed_for).await?;
-    let posting_locked_reason = if can_post {
-        ""
-    } else {
-        match room.posting_allowed_for.as_str() {
-            "moderators_only" => "Only moderators can post in this room.",
-            "admins_only" => "Only admins can post in this room.",
-            _ => "",
-        }
-    };
 
     // Pre-render the pinned strip so the page template can inline it
     // verbatim. Builder resolves author labels in a single bulk auth
@@ -527,8 +520,10 @@ pub async fn get_room(
         pinned_strip_html,
         can_manage_overrides,
         can_post,
-        posting_locked_reason,
+        posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
+        llm_available: state.llm_available(),
+        max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
@@ -806,6 +801,24 @@ pub async fn post_message(
 
     finalize_message_send(&state, &room, &user, new_id, body, client_id).await?;
 
+    // LC-483: server-side voice-message transcription. Runs off the request
+    // path (transcription is a network round-trip to the STT endpoint) and
+    // only when STT is configured and the message carried an attachment. The
+    // helper itself re-checks the attachment is actually a voice message, so a
+    // plain image/file upload spawns at most a couple of cheap DB reads. On
+    // success it stores the transcript and broadcasts a re-render.
+    if state.stt_available() {
+        if let Some(file_id) = form.file_id {
+            let st = state.clone();
+            tokio::spawn(async move {
+                if let Err(e) = maybe_transcribe_voice_message(&st, file_id, new_id, room_id).await
+                {
+                    tracing::warn!(error = %e, message_id = new_id, upload_id = file_id, "voice transcription failed");
+                }
+            });
+        }
+    }
+
     // LC-339/LC-341: Coyote Mode bot-burst detection. For enclave rooms, run
     // the (fully gated) check off the request path so the send returns
     // promptly. All gating + the ban + 24h soft-purge live in
@@ -841,6 +854,75 @@ pub async fn post_message(
             .expect("decimal message id is a valid header value"),
     );
     Ok(response)
+}
+
+/// LC-483: upper bound on a stored voice transcript. A voice message is a short
+/// clip, so a multi-KB result is almost certainly a runaway/garbage response;
+/// cap the INPUT we persist (and later render) rather than trusting the engine.
+pub(crate) const MAX_VOICE_TRANSCRIPT_CHARS: usize = 8_000;
+
+/// LC-483: transcribe one freshly-sent voice message and broadcast a re-render.
+/// Called off the request path (the caller spawns it) and only when STT is
+/// configured. Re-checks that `upload_id` is actually a voice message (audio
+/// mime + a waveform) so a plain attachment is a couple of cheap reads and a
+/// return. Any failure (file gone, engine down, empty/garbage result) is
+/// non-fatal: the message simply keeps no transcript. Idempotent - skips a row
+/// that already has a transcript so a re-delivery never re-bills the engine.
+/// Re-exported as `crate::routes::maybe_transcribe_voice_message` for tests.
+pub async fn maybe_transcribe_voice_message(
+    state: &AppState,
+    upload_id: i64,
+    message_id: i64,
+    room_id: i64,
+) -> Result<(), AppError> {
+    let Some(stt) = state.stt_client.clone() else {
+        return Ok(());
+    };
+    let Some((row, _room)) = db::uploads::get_upload(&state.chat, upload_id).await? else {
+        return Ok(());
+    };
+    // Voice message == audio attachment carrying a waveform. Anything else
+    // (image, pdf, plain audio file without a waveform) is not transcribed.
+    if !row.mime_type.starts_with("audio/") || row.waveform.is_none() {
+        return Ok(());
+    }
+    if row.transcript.is_some() {
+        return Ok(());
+    }
+    let path = db::uploads_dir().join(&row.storage_path);
+    let bytes = match tokio::fs::read(&path).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, upload_id, "voice transcript: read failed");
+            return Ok(());
+        }
+    };
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    let text = match stt.transcribe(bytes, &row.mime_type).await {
+        Ok(t) => t,
+        Err(e) => {
+            // INFO, not WARN: a transient engine hiccup is expected operational
+            // noise and never blocks the message that was already sent.
+            tracing::info!(error = %e, upload_id, "voice transcript: stt call failed");
+            return Ok(());
+        }
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let capped: String = trimmed.chars().take(MAX_VOICE_TRANSCRIPT_CHARS).collect();
+    db::uploads::set_transcript(&state.chat, upload_id, &capped).await?;
+    state.hub.broadcast_to_room(
+        room_id,
+        &ChatEvent::VoiceTranscribed {
+            message_id,
+            room_id,
+        },
+    );
+    Ok(())
 }
 
 /// LC-341: the fully-gated Coyote Mode decision + action, extracted from
@@ -1583,6 +1665,19 @@ async fn resolve_tokens_for_room(
         }
     }
 
+    // LC-476: politeness gate. @here / @channel expand only when the room's
+    // broadcast policy permits this author; otherwise the tokens are left as
+    // plain text (no rows, no fan-out). Synthetic actors (webhook / email /
+    // bridge, `author_id == ""`) bypass the gate - they are operator- or
+    // owner-configured, not a member abuse vector.
+    if (here_seen || channel_seen)
+        && !author_id.is_empty()
+        && !broadcast_policy_allows_user(state, room, author_id).await?
+    {
+        here_seen = false;
+        channel_seen = false;
+    }
+
     let mut targets: Vec<db::mentions::MentionRef> = Vec::new();
     if here_seen {
         targets.extend(resolve_here_targets(state, room, author_id).await?);
@@ -1645,6 +1740,59 @@ async fn resolve_tokens_for_room(
     let mut seen = std::collections::HashSet::new();
     targets.retain(|m| seen.insert(m.user_id.clone()));
     Ok(targets)
+}
+
+/// LC-476: does `author_id` (a real user) pass the room's broadcast policy?
+/// `all` -> always; otherwise the author's effective room role is checked.
+async fn broadcast_policy_allows_user(
+    state: &AppState,
+    room: &crate::models::Room,
+    author_id: &str,
+) -> Result<bool, AppError> {
+    let policy = db::chat::get_room_broadcast_policy(&state.chat, room.id).await?;
+    if policy == "all" {
+        return Ok(true);
+    }
+    let Some(rec) = db::auth::find_user_by_id(&state.auth, author_id).await? else {
+        return Ok(false);
+    };
+    broadcast_role_allows(state, room.id, author_id, &rec.role, &policy).await
+}
+
+/// LC-476: evaluate a broadcast policy against an org role. Mirrors
+/// `can_post_with_policy`, but the fallthrough is permissive (broadcast's
+/// default is `all`); the CHECK constraint makes it unreachable anyway.
+async fn broadcast_role_allows(
+    state: &AppState,
+    room_id: i64,
+    user_id: &str,
+    org_role: &str,
+    policy: &str,
+) -> Result<bool, AppError> {
+    match policy {
+        "moderators_only" => {
+            Ok(db::room_rbac::is_room_moderator(&state.chat, room_id, user_id, org_role).await?)
+        }
+        "admins_only" => {
+            let r = db::room_rbac::effective_role(&state.chat, room_id, user_id, org_role).await?;
+            Ok(r == "admin")
+        }
+        _ => Ok(true),
+    }
+}
+
+/// LC-476: whether `user` may use @here/@channel in `room_id`. For the
+/// autocomplete + broadcast-count surfaces, which hold a full `User`.
+pub(crate) async fn broadcast_allowed_for_user(
+    state: &AppState,
+    room_id: i64,
+    user: &User,
+) -> Result<bool, AppError> {
+    let policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
+    if policy == "all" {
+        return Ok(true);
+    }
+    broadcast_role_allows(state, room_id, &user.id, &user.role, &policy).await
 }
 
 /// LC-304: resolve everyone who should get a mention row for `body` in `room` -
@@ -1871,6 +2019,13 @@ pub async fn patch_message(
     check_message_length(body)?;
 
     let edited_at_str = db::chat::update_message_body(&state.chat, message_id, body).await?;
+
+    // LC-486: drop any cached translation of the old body so a later Translate
+    // re-translates the edited text. Best-effort; a stale cache must not fail
+    // the edit.
+    if let Err(e) = db::translations::delete_for_message(&state.chat, message_id).await {
+        tracing::warn!(error = %e, message_id, "failed to invalidate cached translations on edit");
+    }
 
     let event = ChatEvent::MessageEdited {
         message_id,
@@ -2244,6 +2399,7 @@ pub async fn get_thread_panel(
         parent: &parent_view,
         replies: &replies,
         is_following,
+        llm_available: state.llm_available(),
     };
     html(&fragment)
 }

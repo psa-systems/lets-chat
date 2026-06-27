@@ -17,6 +17,12 @@ pub struct Attachment {
     /// at record time. `None` for non-voice attachments (or voice messages
     /// whose client could not determine the duration).
     pub voice_duration: Option<f32>,
+    /// LC-483: server-side transcript of a voice message, produced off the
+    /// request path via the configured STT endpoint. `None` until (and unless)
+    /// transcription completes; always `None` when STT is disabled or the
+    /// attachment is not a voice message. Rendered as escaped text, so it is
+    /// safe to render directly.
+    pub transcript: Option<String>,
 }
 
 impl Attachment {
@@ -26,6 +32,19 @@ impl Attachment {
 
     pub fn is_audio(&self) -> bool {
         self.mime_type.starts_with("audio/")
+    }
+
+    /// LC-500: human-readable size (B / KB / MB) for the download card. Mirrors
+    /// the composer's client-side `humanBytes` so timeline + composer agree.
+    pub fn human_size(&self) -> String {
+        let n = self.size_bytes;
+        if n < 1024 {
+            format!("{n} B")
+        } else if n < 1024 * 1024 {
+            format!("{:.1} KB", n as f64 / 1024.0)
+        } else {
+            format!("{:.1} MB", n as f64 / (1024.0 * 1024.0))
+        }
     }
 
     /// Waveform peaks rendered as a comma-separated string for the template's

@@ -31,6 +31,8 @@ pub struct UploadRow {
     /// otherwise. Parsed into `Attachment::waveform` / `voice_duration` by
     /// `parse_waveform`.
     pub waveform: Option<String>,
+    /// LC-483: server-side voice-message transcript, `None` until produced.
+    pub transcript: Option<String>,
 }
 
 fn map_upload(row: &sqlx::sqlite::SqliteRow) -> UploadRow {
@@ -44,6 +46,7 @@ fn map_upload(row: &sqlx::sqlite::SqliteRow) -> UploadRow {
         storage_path: row.get("storage_path"),
         created_at: row.get("created_at"),
         waveform: row.get("waveform"),
+        transcript: row.get("transcript"),
     }
 }
 
@@ -102,6 +105,22 @@ pub async fn link_upload_to_message(
     Ok(())
 }
 
+/// LC-483: store a voice message's server-side transcript on its upload row.
+/// Best-effort, overwrites any prior value; the caller transcribes off the
+/// request path and only calls this on a non-empty result.
+pub async fn set_transcript(
+    pool: &SqlitePool,
+    upload_id: i64,
+    transcript: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE file_uploads SET transcript = ? WHERE id = ?")
+        .bind(transcript)
+        .bind(upload_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Fetch one upload row alongside the room_id of its parent message.
 /// Returns `None` for unknown ids. The second tuple element is `Some(rid)`
 /// once the upload is linked to a message and `None` while it is still
@@ -112,7 +131,7 @@ pub async fn get_upload(
 ) -> Result<Option<(UploadRow, Option<i64>)>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
-                u.size_bytes, u.storage_path, u.created_at, u.waveform, \
+                u.size_bytes, u.storage_path, u.created_at, u.waveform, u.transcript, \
                 m.room_id AS room_id \
          FROM file_uploads u \
          LEFT JOIN messages m ON m.id = u.message_id \
@@ -141,7 +160,7 @@ pub async fn attachments_for_messages(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT id, message_id, filename, mime_type, size_bytes, waveform \
+        "SELECT id, message_id, filename, mime_type, size_bytes, waveform, transcript \
          FROM file_uploads \
          WHERE message_id IN ({placeholders}) \
          ORDER BY id"
@@ -165,6 +184,7 @@ pub async fn attachments_for_messages(
             url: format!("/api/files/{id}"),
             waveform,
             voice_duration,
+            transcript: r.get("transcript"),
         };
         out.entry(mid).or_default().push(att);
     }
@@ -330,7 +350,7 @@ pub async fn list_room_files(
     // filter rather than baking a CASE into the WHERE clause.
     let mut sql = String::from(
         "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
-                u.size_bytes, u.storage_path, u.created_at, u.waveform \
+                u.size_bytes, u.storage_path, u.created_at, u.waveform, u.transcript \
            FROM file_uploads u \
            JOIN messages m ON m.id = u.message_id \
           WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
@@ -365,7 +385,7 @@ pub async fn list_room_files(
 pub async fn list_image_uploads(pool: &SqlitePool) -> Result<Vec<UploadRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, uploader_id, message_id, filename, mime_type, size_bytes, \
-                storage_path, created_at, waveform \
+                storage_path, created_at, waveform, transcript \
          FROM file_uploads \
          WHERE mime_type LIKE 'image/%' \
          ORDER BY id",

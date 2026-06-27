@@ -46,6 +46,7 @@ pub mod slash;
 pub mod starred_rooms;
 pub mod thread_followers;
 pub mod transcripts;
+pub mod translations;
 pub mod uploads;
 pub mod user_groups;
 pub mod vapid;

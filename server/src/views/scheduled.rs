@@ -21,6 +21,9 @@ pub struct PendingRow {
     pub scheduled_for: String,
     /// Already-sanitized HTML from `views::markdown::render`.
     pub body_html: String,
+    /// LC-485: recurrence kind (`none` / `daily` / `weekly` / `weekdays`).
+    /// `none` renders no badge; others render a "Repeats ..." label.
+    pub repeat: String,
 }
 
 /// One dropped scheduled message as rendered on `/scheduled`'s "Recently
