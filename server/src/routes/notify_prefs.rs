@@ -72,6 +72,7 @@ pub async fn post_notify_prefs(
         room: &room,
         mute_mode: mode.as_str(),
         can_manage_overrides,
+        llm_available: state.llm_available(),
     };
     html(&fragment)
 }

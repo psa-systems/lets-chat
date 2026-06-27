@@ -1,0 +1,34 @@
+{# LC-484: the "Catch me up" panel. Occupies the shared right-side
+   #thread-panel slot (one drawer at a time), so it reuses the thread panel's
+   close affordance (DELETE /thread-panel). The body holds a Generate button
+   that POSTs /room/{id}/summary and swaps the rendered summary into
+   #room-summary-body in place. #}
+<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight">{{ "summary-catch-up-heading"|t }}</div>
+      <div class="text-xs text-content-muted truncate">
+        {% if has_unread %}{{ unread_count }} {{ "summary-unread-suffix"|t }}{% else %}{{ "summary-recent-scope"|t }}{% endif %}
+      </div>
+    </div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-content-subtle hover:text-content-muted flex-none"
+      aria-label="{{ "room-thread-close"|t }}"
+    >&#10005;</button>
+  </header>
+  <div class="flex-1 overflow-y-auto p-3">
+    <div id="room-summary-body">
+      <button type="button"
+              hx-post="/room/{{ room_id }}/summary"
+              hx-target="#room-summary-body" hx-swap="innerHTML"
+              hx-disabled-elt="this"
+              class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+        {{ "summary-generate"|t }}
+      </button>
+      <p class="mt-2 text-xs text-content-subtle">{{ "summary-disclaimer"|t }}</p>
+    </div>
+  </div>
+</aside>

@@ -1,0 +1,12 @@
+{# LC-484: a generated catch-up summary, swapped into a container (the thread
+   panel's summary slot or the catch-me-up panel body). The regenerate button
+   targets the same container by id so a re-run replaces this fragment in
+   place. #}
+<div class="lc-md text-content text-sm">{{ summary_html|safe }}</div>
+<button type="button"
+        hx-post="{{ post_url }}"
+        hx-target="#{{ target_id }}" hx-swap="innerHTML"
+        hx-disabled-elt="this"
+        class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+  {{ "summary-regenerate"|t }}
+</button>

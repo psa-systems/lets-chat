@@ -1088,6 +1088,8 @@ pub struct RoomPage<'a> {
     /// purged by the 60-day lazy-cleanup rule). The composer template
     /// inlines it as the textarea's initial inner content.
     pub initial_draft: &'a str,
+    /// LC-484: gates the header "Catch me up" action (operator LLM configured).
+    pub llm_available: bool,
 }
 
 impl RoomPage<'_> {
@@ -1167,6 +1169,8 @@ pub struct ThreadPanelFragment<'a> {
     pub replies: &'a [MessageView],
     /// LC-310: whether the viewer follows this thread (drives the toggle).
     pub is_following: bool,
+    /// LC-484: gates the "Summarize" action (operator LLM configured).
+    pub llm_available: bool,
 }
 
 /// LC-310: the thread Follow/Following toggle button, included by the thread

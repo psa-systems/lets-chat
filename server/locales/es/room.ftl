@@ -362,3 +362,12 @@ room-delete-room-desc = Elimina permanentemente esta sala y todos sus mensajes, 
 room-delete-confirm-prefix = Escribe
 room-delete-confirm-phrase = eliminar esta sala
 room-delete-confirm-suffix = para confirmar.
+
+# LC-484: resumenes con IA "ponme al dia" (hilos + canal)
+summary-catch-up-heading = Ponme al dia
+summary-unread-suffix = mensajes sin leer
+summary-recent-scope = Resumir la actividad reciente
+summary-generate = Generar resumen
+summary-regenerate = Regenerar
+summary-disclaimer = Generado por IA a partir de mensajes recientes. Puede estar incompleto.
+room-thread-summarize = Resumir
