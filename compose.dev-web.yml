@@ -17,6 +17,11 @@ services:
       dockerfile: ci-build/Dockerfile.web
       args:
         BUILD_MODE: standalone
+        # The Dockerfile defaults this to 2 (a CI runner-sharing cap). Local
+        # dev builds one image at a time, so lift it well above that to use
+        # the host's cores on the slow release compile. Override per-invocation
+        # with `CARGO_BUILD_JOBS=N just dev-web`.
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-16}
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_VERSION: ${GIT_VERSION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}

@@ -382,3 +382,91 @@ async fn mention_target_renamed_between_schedule_and_delivery_drops_mention() {
         .unwrap();
     assert_eq!(robert.as_deref(), Some("robert"));
 }
+
+// LC-485: a delivered recurring row enqueues its next occurrence atomically,
+// as a fresh pending row carrying the same repeat kind and a future time.
+#[tokio::test]
+async fn recurring_message_reenqueues_next_occurrence() {
+    let state = build_state().await;
+    let (alice, _bob, room_id) = seed_general_with_users(&state).await;
+
+    let sched_id = db::scheduled::insert_scheduled_with_repeat(
+        &state.chat,
+        room_id,
+        &alice,
+        "daily standup",
+        "2000-01-01 09:00:00",
+        None,
+        None,
+        None,
+        "daily",
+    )
+    .await
+    .unwrap();
+
+    let stats = scheduled::run_dispatch_tick(&state).await.unwrap();
+    assert_eq!(stats.delivered, 1);
+
+    // Original row delivered.
+    let orig = db::scheduled::get_scheduled(&state.chat, sched_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        orig.delivered_at.is_some(),
+        "original recurring row delivered"
+    );
+
+    // Exactly one new pending row, future-dated, same repeat kind.
+    let pending: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, scheduled_for, repeat FROM scheduled_messages \
+         WHERE delivered_at IS NULL",
+    )
+    .fetch_all(&state.chat)
+    .await
+    .unwrap();
+    assert_eq!(pending.len(), 1, "next occurrence enqueued");
+    assert_ne!(pending[0].0, sched_id, "it is a new row");
+    assert_eq!(pending[0].2, "daily");
+    let future: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM scheduled_messages \
+         WHERE delivered_at IS NULL AND scheduled_for > datetime('now')",
+    )
+    .fetch_one(&state.chat)
+    .await
+    .unwrap();
+    assert_eq!(future, 1, "next occurrence is scheduled in the future");
+
+    // The next tick does not re-deliver the just-delivered row.
+    let stats2 = scheduled::run_dispatch_tick(&state).await.unwrap();
+    assert_eq!(stats2.delivered, 0, "future occurrence not yet due");
+}
+
+// LC-485: a non-recurring row does NOT enqueue anything.
+#[tokio::test]
+async fn one_shot_message_does_not_reenqueue() {
+    let state = build_state().await;
+    let (alice, _bob, room_id) = seed_general_with_users(&state).await;
+
+    db::scheduled::insert_scheduled(
+        &state.chat,
+        room_id,
+        &alice,
+        "one and done",
+        "2000-01-01 09:00:00",
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    scheduled::run_dispatch_tick(&state).await.unwrap();
+
+    let pending: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_messages WHERE delivered_at IS NULL")
+            .fetch_one(&state.chat)
+            .await
+            .unwrap();
+    assert_eq!(pending, 0, "one-shot leaves no pending row");
+}

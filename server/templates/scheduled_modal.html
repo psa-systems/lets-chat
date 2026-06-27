@@ -37,6 +37,17 @@
                required
                class="rounded border border-border-strong px-2 py-1">
       </label>
+      {# LC-485: optional recurrence. The JS reads this select and includes it
+         in the POST body as `repeat`. #}
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "scheduled-modal-repeat"|t }}</span>
+        <select name="repeat" class="rounded border border-border-strong px-2 py-1">
+          <option value="none">{{ "scheduled-repeat-none"|t }}</option>
+          <option value="daily">{{ "scheduled-repeat-daily"|t }}</option>
+          <option value="weekdays">{{ "scheduled-repeat-weekdays"|t }}</option>
+          <option value="weekly">{{ "scheduled-repeat-weekly"|t }}</option>
+        </select>
+      </label>
       <div data-lc-scheduled-modal-error
            class="hidden text-sm text-danger"
            role="alert"></div>
@@ -151,6 +162,9 @@
     fd.set('body', ctx.body);
     fd.set('scheduled_for', iso);
     if (ctx.fileId) fd.set('file_id', ctx.fileId);
+    // LC-485: recurrence selection (defaults to 'none').
+    var repeatSel = form.querySelector('select[name=repeat]');
+    fd.set('repeat', repeatSel ? repeatSel.value : 'none');
     try {
       var res = await fetch('/scheduled', {
         method: 'POST',

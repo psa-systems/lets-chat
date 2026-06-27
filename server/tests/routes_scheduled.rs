@@ -160,6 +160,60 @@ async fn post_creates_pending_row_for_valid_input() {
     assert_eq!(row.room_id, 1);
     assert_eq!(row.body, "hello future");
     assert!(row.delivered_at.is_none());
+    assert_eq!(row.repeat, "none", "absent repeat defaults to one-shot");
+}
+
+// LC-485: the `repeat` form field is stored on the pending row.
+#[tokio::test]
+async fn post_with_repeat_stores_recurrence() {
+    let t = fresh_app().await;
+    let when = iso(Utc::now() + Duration::hours(1));
+    let body = form_body(&[
+        ("room_id", "1"),
+        ("body", "daily standup"),
+        ("scheduled_for", &when),
+        ("repeat", "daily"),
+    ]);
+    let (status, resp) = send(
+        &t.app,
+        &t.alice_session,
+        Method::POST,
+        "/scheduled",
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {resp}");
+
+    let id = first_pending_id(&t.chat, &t.alice_id)
+        .await
+        .expect("pending row");
+    let row = db::scheduled::get_scheduled(&t.chat, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.repeat, "daily");
+}
+
+// LC-485: an unknown repeat value is rejected.
+#[tokio::test]
+async fn post_rejects_invalid_repeat() {
+    let t = fresh_app().await;
+    let when = iso(Utc::now() + Duration::hours(1));
+    let body = form_body(&[
+        ("room_id", "1"),
+        ("body", "bad"),
+        ("scheduled_for", &when),
+        ("repeat", "hourly"),
+    ]);
+    let (status, _resp) = send(
+        &t.app,
+        &t.alice_session,
+        Method::POST,
+        "/scheduled",
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

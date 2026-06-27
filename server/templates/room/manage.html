@@ -40,6 +40,30 @@
       </form>
     </div>
 
+    {# ===== Broadcast mentions (LC-476) ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-broadcast-policy-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-broadcast-policy-intro"|t }}</p>
+      </div>
+      <form hx-post="/room/{{ room.id }}/broadcast-policy"
+            hx-target="#lc-bp-status" hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-label" for="lc-bp">{{ "room-broadcast-who"|t }}</label>
+          <select id="lc-bp" name="policy" class="input">
+            <option value="all" {% if broadcast_policy == "all" %}selected{% endif %}>{{ "room-broadcast-all"|t }}</option>
+            <option value="moderators_only" {% if broadcast_policy == "moderators_only" %}selected{% endif %}>{{ "room-broadcast-mods"|t }}</option>
+            <option value="admins_only" {% if broadcast_policy == "admins_only" %}selected{% endif %}>{{ "room-broadcast-admins"|t }}</option>
+          </select>
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "room-save"|t }}</span></button>
+          <span id="lc-bp-status" class="lc-set-status" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+
     {# ===== Integrations ===== #}
     <div class="card lc-set-card">
       <div class="lc-set-card-head">

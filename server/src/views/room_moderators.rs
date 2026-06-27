@@ -39,6 +39,9 @@ pub struct RoomModeratorsPage<'a> {
     /// LC-85: current `posting_allowed_for` for this room. Drives the
     /// "Posting policy" dropdown's selected option.
     pub posting_policy: &'a str,
+    /// LC-476: current `broadcast_allowed_for` for this room. Drives the
+    /// "Broadcast mentions" dropdown's selected option.
+    pub broadcast_policy: &'a str,
     /// Current `rooms.retention_days`. `None` = retention disabled
     /// (default); `Some(N)` = messages older than N days are deleted
     /// on the next sweep. The Retention section in the moderators
