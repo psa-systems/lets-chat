@@ -5,6 +5,7 @@
 //! `crate::routes::scheduled` (Task 4) round out the feature.
 
 pub mod dispatcher;
+pub mod recurrence;
 pub mod validation;
 
 pub use dispatcher::{run_dispatch_tick, DispatchOutcome, DispatchStats};

@@ -53,6 +53,9 @@ pub struct CreateForm {
     pub quote_id: Option<i64>,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub file_id: Option<i64>,
+    /// LC-485: recurrence kind. Absent / empty defaults to `none` (one-shot).
+    #[serde(default)]
+    pub repeat: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -183,6 +186,7 @@ async fn build_pending_row(state: &AppState, row: &db::scheduled::ScheduledRow) 
         room_path,
         scheduled_for: row.scheduled_for.clone(),
         body_html,
+        repeat: row.repeat.clone(),
     }
 }
 
@@ -311,7 +315,20 @@ pub async fn post_scheduled(
 
     let stored = parse_and_check_scheduled_for(&form.scheduled_for)?;
 
-    let id = db::scheduled::insert_scheduled(
+    // LC-485: recurrence kind (empty / absent -> one-shot).
+    let repeat = form
+        .repeat
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("none");
+    if !crate::scheduled::recurrence::is_valid_repeat(repeat) {
+        return Err(AppError::BadRequest(
+            "repeat must be one of: none, daily, weekly, weekdays".into(),
+        ));
+    }
+
+    let id = db::scheduled::insert_scheduled_with_repeat(
         &state.chat,
         room.id,
         &user.id,
@@ -320,6 +337,7 @@ pub async fn post_scheduled(
         None,
         form.quote_id,
         form.file_id,
+        repeat,
     )
     .await?;
 

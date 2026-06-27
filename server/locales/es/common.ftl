@@ -130,7 +130,13 @@ code-copied = Copiado
 ## Scheduled message modal
 scheduled-modal-title = Programar mensaje
 scheduled-modal-deliver-at = Entregar el (tu hora local)
+scheduled-modal-repeat = Repetir
 scheduled-modal-submit = Programar
+# LC-485: opciones de recurrencia + insignia de la fila pendiente
+scheduled-repeat-none = No se repite
+scheduled-repeat-daily = Se repite a diario
+scheduled-repeat-weekdays = Se repite cada dia laborable
+scheduled-repeat-weekly = Se repite semanalmente
 
 ## Scheduled messages page
 scheduled-page-title = Programados
