@@ -482,17 +482,10 @@ pub async fn get_room(
         crate::perms::room_can_manage_overrides(enclave_role, &user.role)
     };
 
-    // LC-85: whether to render the composer vs a read-only notice.
+    // LC-85: whether to render the composer vs a read-only notice. LC-480: the
+    // raw policy is handed to the template, which picks the localized banner +
+    // read-only notice text (the strings used to be hardcoded English here).
     let can_post = can_post_with_policy(&state, &user, room_id, &room.posting_allowed_for).await?;
-    let posting_locked_reason = if can_post {
-        ""
-    } else {
-        match room.posting_allowed_for.as_str() {
-            "moderators_only" => "Only moderators can post in this room.",
-            "admins_only" => "Only admins can post in this room.",
-            _ => "",
-        }
-    };
 
     // Pre-render the pinned strip so the page template can inline it
     // verbatim. Builder resolves author labels in a single bulk auth
@@ -527,7 +520,7 @@ pub async fn get_room(
         pinned_strip_html,
         can_manage_overrides,
         can_post,
-        posting_locked_reason,
+        posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
     };
