@@ -99,6 +99,16 @@ poll-close-after = Close after
 poll-close-after-suffix = minutes (0 = never)
 poll-post = Post poll
 
+## Event modal (LC-491)
+event-create-title = Create event
+event-title-label = Event title
+event-when-label = When (your local time)
+event-location-label = Location (optional)
+event-post = Post event
+event-rsvp-going = Going
+event-rsvp-maybe = Maybe
+event-rsvp-no = Can't go
+
 ## Keyboard shortcuts overlay (LC-252)
 shortcuts-title = Keyboard shortcuts
 shortcuts-close-dialog = Close dialog

@@ -1,0 +1,108 @@
+{# LC-491: singleton "create event" modal, in the persistent shell so its JS
+   survives composer swaps. Opened by the composer button via
+   window.__lcOpenEventModal(); reads the current composer's data-room-id at
+   open time. Submits to POST /room/{id}/event and closes on 2xx. The
+   datetime-local value is converted to UTC ISO before sending. #}
+<div data-lc-event-modal
+     class="hidden modal-backdrop"
+     role="dialog" aria-modal="true" aria-labelledby="lc-event-modal-title" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-event-modal-title" class="text-lg font-semibold">{{ "event-create-title"|t }}</h2>
+      <button type="button" data-lc-event-close aria-label="{{ "poll-close-dialog"|t }}"
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <form data-lc-event-form class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "event-title-label"|t }}</span>
+        <input type="text" name="title" required maxlength="300"
+               class="rounded border border-border-strong px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "event-when-label"|t }}</span>
+        <input type="datetime-local" name="event_at_local" required
+               class="rounded border border-border-strong px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-content-muted">{{ "event-location-label"|t }}</span>
+        <input type="text" name="location" maxlength="200"
+               class="rounded border border-border-strong px-2 py-1">
+      </label>
+      <div data-lc-event-error class="hidden text-sm text-danger" role="alert"></div>
+      <div class="flex justify-end gap-2 mt-1">
+        <button type="button" data-lc-event-cancel
+                class="rounded px-3 py-1 text-sm text-content-muted hover:bg-surface-sunken">{{ "action-cancel"|t }}</button>
+        <button type="submit"
+                class="rounded bg-accent px-3 py-1 text-sm text-accent-content hover:bg-accent-hover">{{ "event-post"|t }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-event-modal]');
+  if (!modal) return;
+  var form = modal.querySelector('[data-lc-event-form]');
+  var errSlot = modal.querySelector('[data-lc-event-error]');
+  var roomId = null;
+  var opener = null;
+  var trap = null;
+
+  function setError(msg){
+    if (!msg) { errSlot.classList.add('hidden'); errSlot.textContent = ''; }
+    else { errSlot.textContent = msg; errSlot.classList.remove('hidden'); }
+  }
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    setError('');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  modal.querySelector('[data-lc-event-close]').addEventListener('click', close);
+  modal.querySelector('[data-lc-event-cancel]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    setError('');
+    if (!roomId) { setError('No room; reopen the dialog.'); return; }
+    var local = form.event_at_local.value;
+    if (!local) { setError('Pick a date and time.'); return; }
+    var dt = new Date(local);
+    if (isNaN(dt.getTime())) { setError('That date is not valid.'); return; }
+    var body = new URLSearchParams();
+    body.set('title', form.title.value);
+    body.set('event_at', dt.toISOString());
+    if (form.location.value) body.set('location', form.location.value);
+    try {
+      var res = await fetch('/room/' + roomId + '/event', {
+        method: 'POST', body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+      });
+      if (res.ok) { form.reset(); close(); }
+      else { setError((await res.text()) || ('Could not create event (' + res.status + ')')); }
+    } catch (e2) { setError('Network error; event not created.'); }
+  });
+
+  window.__lcOpenEventModal = function(){
+    var composer = document.getElementById('composer');
+    if (!composer) return;
+    roomId = composer.getAttribute('data-room-id');
+    if (!roomId) return;
+    opener = document.activeElement;
+    setError('');
+    form.reset();
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { form.title.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  };
+})();
+</script>

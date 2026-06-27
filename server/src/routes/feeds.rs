@@ -242,16 +242,23 @@ async fn build_ical(
     room: &crate::models::Room,
 ) -> Result<(String, &'static str, String), AppError> {
     let polls = db::polls::scheduled_for_room(&state.chat, room.id).await?;
+    // LC-491: events (polls carrying a start time) are VEVENTs too.
+    let events = db::polls::events_for_room(&state.chat, room.id).await?;
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for (mid, _, closes_at) in &polls {
         mid.hash(&mut hasher);
         closes_at.hash(&mut hasher);
     }
+    for (mid, _, event_at, loc) in &events {
+        mid.hash(&mut hasher);
+        event_at.hash(&mut hasher);
+        loc.hash(&mut hasher);
+    }
     let etag = format!("\"ical-{:x}\"", hasher.finish());
 
     let dtstamp = ical_dt(&now_sqlite());
-    let mut out = String::with_capacity(256 + polls.len() * 256);
+    let mut out = String::with_capacity(256 + (polls.len() + events.len()) * 256);
     out.push_str("BEGIN:VCALENDAR\r\n");
     out.push_str("VERSION:2.0\r\n");
     out.push_str("PRODID:-//lets-chat//room-feed//EN\r\n");
@@ -265,6 +272,23 @@ async fn build_ical(
             "SUMMARY:Poll closes: {}\r\n",
             ical_escape(question)
         ));
+        out.push_str(&format!(
+            "DESCRIPTION:{}/room/{}#msg-{}\r\n",
+            ical_escape(&state.base_url),
+            room.id,
+            mid
+        ));
+        out.push_str("END:VEVENT\r\n");
+    }
+    for (mid, title, event_at, location) in &events {
+        out.push_str("BEGIN:VEVENT\r\n");
+        out.push_str(&format!("UID:lets-chat-event-{mid}\r\n"));
+        out.push_str(&format!("DTSTAMP:{dtstamp}\r\n"));
+        out.push_str(&format!("DTSTART:{}\r\n", ical_dt(event_at)));
+        out.push_str(&format!("SUMMARY:{}\r\n", ical_escape(title)));
+        if let Some(loc) = location {
+            out.push_str(&format!("LOCATION:{}\r\n", ical_escape(loc)));
+        }
         out.push_str(&format!(
             "DESCRIPTION:{}/room/{}#msg-{}\r\n",
             ical_escape(&state.base_url),
