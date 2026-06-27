@@ -34,6 +34,19 @@ impl Attachment {
         self.mime_type.starts_with("audio/")
     }
 
+    /// LC-500: human-readable size (B / KB / MB) for the download card. Mirrors
+    /// the composer's client-side `humanBytes` so timeline + composer agree.
+    pub fn human_size(&self) -> String {
+        let n = self.size_bytes;
+        if n < 1024 {
+            format!("{n} B")
+        } else if n < 1024 * 1024 {
+            format!("{:.1} KB", n as f64 / 1024.0)
+        } else {
+            format!("{:.1} MB", n as f64 / (1024.0 * 1024.0))
+        }
+    }
+
     /// Waveform peaks rendered as a comma-separated string for the template's
     /// `data-waveform` attribute. Empty string when there is no waveform.
     pub fn waveform_csv(&self) -> String {
