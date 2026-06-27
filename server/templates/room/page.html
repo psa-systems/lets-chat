@@ -7,6 +7,16 @@
   <div class="flex flex-col flex-1 overflow-hidden">
     {% include "partials/room_header.html" %}
     {{ pinned_strip_html|safe }}
+    {# LC-480: announcement-channel banner. Shown whenever posting is
+       restricted, so every reader sees this is a read-only/announcement
+       channel (they can still react). #}
+    {% if posting_policy != "all" %}
+    <div class="lc-announce-strip" role="note">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M14.5 3.5a1 1 0 00-1.45-.9L6.8 5.7H4.5A2.5 2.5 0 002 8.2v.6a2.5 2.5 0 002.5 2.5h.3l.9 3.6a1.25 1.25 0 002.42-.61l-.74-2.99 5.62 2.9a1 1 0 001.45-.9V3.5z"/></svg>
+      <span class="lc-announce-strip-label">{{ "room-announce-label"|t }}</span>
+      <span>{% if posting_policy == "admins_only" %}{{ "room-announce-admins"|t }}{% else %}{{ "room-announce-mods"|t }}{% endif %}</span>
+    </div>
+    {% endif %}
     {# LC-242: relative wrapper anchors the jump-to-latest pill to the
        bottom-right of the message viewport (above the composer). #}
     <div class="relative flex flex-1 flex-col min-h-0">
@@ -18,8 +28,9 @@
     {% if can_post %}
     {% include "room/composer.html" %}
     {% else %}
-    <div class="border-t border-border px-4 py-3 text-center text-sm text-content-muted" role="status">
-      {{ posting_locked_reason }}
+    <div class="lc-readonly-notice" role="status">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M14.5 3.5a1 1 0 00-1.45-.9L6.8 5.7H4.5A2.5 2.5 0 002 8.2v.6a2.5 2.5 0 002.5 2.5h.3l.9 3.6a1.25 1.25 0 002.42-.61l-.74-2.99 5.62 2.9a1 1 0 001.45-.9V3.5z"/></svg>
+      <span>{% if posting_policy == "admins_only" %}{{ "room-announce-admins"|t }}{% else %}{{ "room-announce-mods"|t }}{% endif %} {{ "room-readonly-hint"|t }}</span>
     </div>
     {% endif %}
   </div>
