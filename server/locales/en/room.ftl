@@ -262,6 +262,13 @@ room-announce-label = Announcement
 room-announce-admins = Only admins can post in this channel.
 room-announce-mods = Only moderators can post in this channel.
 room-readonly-hint = You can still react to messages.
+# LC-476: broadcast-mention (@here / @channel) policy
+room-broadcast-policy-heading = Broadcast mentions
+room-broadcast-policy-intro = Controls who can use @here and @channel to notify many people at once. Restrict it to curb noise; normal @mentions are unaffected.
+room-broadcast-who = Who can use @here / @channel
+room-broadcast-all = Everyone (default)
+room-broadcast-mods = Moderators only
+room-broadcast-admins = Admins only
 room-mods-overrides-heading = Current overrides
 room-mods-overrides-empty = No overrides yet.
 room-mods-granted-by = granted by
