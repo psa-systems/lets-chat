@@ -309,6 +309,19 @@
         <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z"/>
       </svg>
     </button>
+    {# LC-491: create an RSVP event (a poll with a start time + Going/Maybe/No). #}
+    <button
+      type="button"
+      data-lc-tip="{{ "room-composer-create-event"|t }}" data-lc-tip-pos="top"
+      aria-label="{{ "room-composer-create-event"|t }}"
+      aria-haspopup="dialog"
+      class="lc-composer-btn"
+      onclick="window.__lcOpenEventModal && window.__lcOpenEventModal()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path fill-rule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zM3.5 8.5v6.75c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V8.5h-13z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     <button
       type="button"
       data-lc-tip="{{ "room-composer-schedule-title"|t }}" data-lc-tip-pos="top"

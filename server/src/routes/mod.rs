@@ -1186,6 +1186,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reminders/picker", get(reminders::get_picker))
         .route("/reminders/{id}", delete(reminders::delete_reminder))
         .route("/room/{room_id}/poll", post(polls::post_create))
+        .route("/room/{room_id}/event", post(polls::post_create_event))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))

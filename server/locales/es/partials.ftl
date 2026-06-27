@@ -92,6 +92,7 @@ partials-pinned-see-all-suffix = fijados
 ## Poll block
 partials-poll-your-vote = tu voto
 partials-poll-voted = votaron
+partials-event-responses = respondieron
 partials-poll-multiple-choice = opción múltiple
 partials-poll-anonymous = anónima
 partials-poll-closed = cerrada
