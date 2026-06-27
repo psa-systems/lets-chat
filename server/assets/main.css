@@ -1133,6 +1133,29 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 }
 .lc-filecard-size { font-size: 0.75rem; color: var(--content-muted); }
 
+/* LC-486: inline message translation. The Translate menu item is CSS-gated on
+   an LLM being configured - revealed only under a [data-lc-llm] page root (which
+   also covers live-swapped message fragments, since the rule is ancestor-based). */
+.lc-llm-only { display: none; }
+[data-lc-llm] .lc-menu-item.lc-llm-only { display: flex; }
+.lc-translation-block {
+    margin-top: 0.25rem;
+    border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    padding: 0.125rem 0 0.125rem 0.625rem;
+}
+.lc-translation-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.125rem;
+    font-size: 0.6875rem;
+    color: var(--content-muted);
+}
+.lc-translation-hide {
+    color: var(--accent);
+}
+.lc-translation-hide:hover { text-decoration: underline; }
+
 /* LC-59 server-rendered math. pulldown-latex emits `<math display="...">`
    elements which the browser styles natively (per MathML Core). We do NOT
    set `display: block` on display math: that CSS property overrides the
