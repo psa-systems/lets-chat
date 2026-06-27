@@ -7,6 +7,15 @@
   <canvas class="lc-voice-wave" width="320" height="40"></canvas>
   <span class="lc-voice-time">0:00</span>
 </div>
+{# LC-483: server-side transcript, rendered as escaped text under the player.
+   Absent until (and unless) transcription completes; a VoiceTranscribed WS
+   event re-renders this message in place once it does. #}
+{% if let Some(t) = a.transcript %}
+<div class="mt-1 max-w-sm text-xs text-content-muted">
+  <span class="font-medium text-content-subtle">{{ "partials-voice-transcript"|t }}:</span>
+  <span>{{ t }}</span>
+</div>
+{% endif %}
 {% else if a.is_image() %}
 <div class="mt-1">
   {# LC-262: data-lc-lightbox opens the full image in the in-app lightbox

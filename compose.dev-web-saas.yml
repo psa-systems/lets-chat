@@ -15,6 +15,9 @@ services:
       dockerfile: ci-build/Dockerfile.web
       args:
         BUILD_MODE: saas
+        # See compose.dev-web.yml: lift the Dockerfile's CI-oriented job cap of
+        # 2 for local single-image builds. Override with `CARGO_BUILD_JOBS=N`.
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-16}
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_VERSION: ${GIT_VERSION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}

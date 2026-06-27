@@ -17,6 +17,12 @@ pub struct Attachment {
     /// at record time. `None` for non-voice attachments (or voice messages
     /// whose client could not determine the duration).
     pub voice_duration: Option<f32>,
+    /// LC-483: server-side transcript of a voice message, produced off the
+    /// request path via the configured STT endpoint. `None` until (and unless)
+    /// transcription completes; always `None` when STT is disabled or the
+    /// attachment is not a voice message. Rendered as escaped text, so it is
+    /// safe to render directly.
+    pub transcript: Option<String>,
 }
 
 impl Attachment {
