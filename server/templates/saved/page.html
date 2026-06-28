@@ -7,13 +7,56 @@
   <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
     <h1 class="font-semibold truncate">{{ "saved-heading"|t }}</h1>
   </header>
-  {# LC-178: live region. bookmark/unbookmark broadcasts SavedChanged to every
-     tab; the WS send task swaps #lc-saved-list. Tabs not on /saved have no
-     such id and drop it. #}
-  <div class="flex-1 overflow-y-auto">
+  {# LC-178: live region. bookmark/unbookmark/label broadcasts SavedChanged to
+     every tab; the WS send task swaps #lc-saved-list. Tabs not on /saved have
+     no such id and drop it. LC-479: the active filter lives on the stable
+     #lc-saved-wrap (which the live swap does NOT replace), so client-side
+     filtering survives a live refresh. #}
+  <div id="lc-saved-wrap" data-lc-active-filter="" class="flex-1 overflow-y-auto">
     <div id="lc-saved-list">
       {% include "saved/items.html" %}
     </div>
   </div>
 </div>
+<script>
+// LC-479: client-side label filtering for /saved. Filter chips live inside the
+// live-swapped #lc-saved-list; the active filter is stored on the stable
+// #lc-saved-wrap so it survives the SavedChanged OOB refresh. Rows carry
+// data-lc-saved-label; chips carry data-lc-saved-filter ("" = All, the reserved
+// "__lc_unlabeled__" = no label, else an exact label match). apply() re-runs on
+// every htmx settle so a live refresh re-applies the active filter.
+(function(){
+  var wrap = document.getElementById('lc-saved-wrap');
+  if (!wrap) return;
+  var UNLABELED = '__lc_unlabeled__';
+  function apply(){
+    var list = document.getElementById('lc-saved-list');
+    if (!list) return;
+    var active = wrap.getAttribute('data-lc-active-filter') || '';
+    // If the active label no longer exists after a refresh, fall back to All.
+    if (active && active !== UNLABELED &&
+        !list.querySelector('[data-lc-saved-filter="' + (window.CSS && CSS.escape ? CSS.escape(active) : active) + '"]')) {
+      active = '';
+      wrap.setAttribute('data-lc-active-filter', '');
+    }
+    list.querySelectorAll('[data-lc-saved-filter]').forEach(function(c){
+      c.setAttribute('aria-pressed', c.getAttribute('data-lc-saved-filter') === active ? 'true' : 'false');
+    });
+    list.querySelectorAll('[data-lc-saved-label]').forEach(function(row){
+      var lbl = row.getAttribute('data-lc-saved-label') || '';
+      var show = active === '' ? true : (active === UNLABELED ? lbl === '' : lbl === active);
+      row.hidden = !show;
+    });
+  }
+  wrap.addEventListener('click', function(e){
+    var chip = e.target.closest && e.target.closest('[data-lc-saved-filter]');
+    if (!chip) return;
+    e.preventDefault();
+    wrap.setAttribute('data-lc-active-filter', chip.getAttribute('data-lc-saved-filter') || '');
+    apply();
+  });
+  document.body.addEventListener('htmx:afterSettle', apply);
+  apply();
+})();
+</script>
 {% endblock %}
