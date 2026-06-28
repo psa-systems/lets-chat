@@ -1100,7 +1100,7 @@ pub struct RoomPage<'a> {
     /// LC-500: configured max upload size (bytes), surfaced to the composer so
     /// client-side validation matches the server cap.
     pub max_upload_bytes: i64,
-    /// LC-488: the GIF picker is configured (LETS_CHAT_TENOR_API_KEY set).
+    /// LC-488: the GIF picker is configured (LETS_CHAT_GIPHY_API_KEY set).
     /// Drives the composer GIF button.
     pub gif_available: bool,
 }

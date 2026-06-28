@@ -1,8 +1,8 @@
 //! LC-488: GIF picker routes.
 //!
-//! - `GET /api/gifs?q=` searches Tenor (featured when `q` is empty) and renders
+//! - `GET /api/gifs?q=` searches Giphy (trending when `q` is empty) and renders
 //!   a result grid.
-//! - `POST /room/{id}/gif` fetches the chosen GIF from the Tenor CDN, stores it
+//! - `POST /room/{id}/gif` fetches the chosen GIF from the Giphy CDN, stores it
 //!   through the uploads pipeline (same-origin), and posts it as a message
 //!   attachment.
 
@@ -22,7 +22,7 @@ use crate::views::gif::GifResultsFragment;
 use crate::views::{html, Html};
 
 const SEARCH_LIMIT: u32 = 24;
-/// Hard cap on a fetched GIF (Tenor full GIFs are well under this).
+/// Hard cap on a fetched GIF (Giphy "downsized" GIFs are well under this).
 const MAX_GIF_BYTES: usize = 8 * 1024 * 1024;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -42,15 +42,14 @@ pub async fn search(
         return Err(AppError::BadRequest("GIF picker is not configured".into()));
     };
     let q = q.trim();
-    let endpoint = if q.is_empty() { "featured" } else { "search" };
-    let mut url = url::Url::parse(&format!("https://tenor.googleapis.com/v2/{endpoint}"))
-        .map_err(|e| AppError::Internal(format!("tenor url: {e}")))?;
+    // Giphy: /trending for an empty query, /search otherwise.
+    let endpoint = if q.is_empty() { "trending" } else { "search" };
+    let mut url = url::Url::parse(&format!("https://api.giphy.com/v1/gifs/{endpoint}"))
+        .map_err(|e| AppError::Internal(format!("giphy url: {e}")))?;
     {
         let mut qp = url.query_pairs_mut();
-        qp.append_pair("key", &cfg.api_key)
-            .append_pair("client_key", &cfg.client_key)
-            .append_pair("contentfilter", &cfg.content_filter)
-            .append_pair("media_filter", "tinygif,gif")
+        qp.append_pair("api_key", &cfg.api_key)
+            .append_pair("rating", &cfg.rating)
             .append_pair("limit", &SEARCH_LIMIT.to_string());
         if !q.is_empty() {
             qp.append_pair("q", q);
@@ -63,7 +62,7 @@ pub async fn search(
         .send()
         .await
         .map_err(|e| {
-            tracing::warn!(error = %e, "tenor search failed");
+            tracing::warn!(error = %e, "giphy search failed");
             AppError::BadRequest("gif search failed".into())
         })?;
     if !resp.status().is_success() {
@@ -82,7 +81,7 @@ pub struct PostGifForm {
     pub url: String,
 }
 
-/// POST /room/{room_id}/gif - fetch the chosen Tenor GIF, store it same-origin,
+/// POST /room/{room_id}/gif - fetch the chosen Giphy GIF, store it same-origin,
 /// and post it as a message attachment (empty body, like an image-only post).
 pub async fn post_gif(
     State(state): State<AppState>,
@@ -104,9 +103,9 @@ pub async fn post_gif(
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
-    // Only ever fetch a Tenor CDN URL (plus the http_client SSRF filter).
-    if !gif::is_tenor_media_url(&form.url) {
-        return Err(AppError::BadRequest("not a Tenor GIF URL".into()));
+    // Only ever fetch a Giphy CDN URL (plus the http_client SSRF filter).
+    if !gif::is_giphy_media_url(&form.url) {
+        return Err(AppError::BadRequest("not a Giphy GIF URL".into()));
     }
 
     let file_id = fetch_and_store_gif(&state, &user.id, &form.url).await?;
@@ -202,7 +201,7 @@ async fn fetch_and_store_gif(
     let id = db::uploads::insert_upload(
         &state.chat,
         uploader_id,
-        "tenor.gif",
+        "giphy.gif",
         &processed.mime,
         processed.original_bytes.len() as i64,
         &storage_name,
