@@ -80,6 +80,7 @@ admin-bots-th-actions = Actions
 admin-bots-status-disabled = disabled
 admin-bots-status-active = active
 admin-bots-disable = Disable
+admin-bots-disable-confirm = Disable this bot? It will be banned and all its API tokens revoked.
 admin-bots-empty = No bots yet.
 
 admin-bridges-title = Bridges
@@ -103,6 +104,7 @@ admin-bridges-th-bot = Bot
 admin-bridges-th-status = Status
 admin-bridges-th-last-heartbeat = Last heartbeat
 admin-bridges-remove = Remove
+admin-bridges-remove-confirm = Remove this bridge? New traffic stops; historical messages remain.
 admin-bridges-empty = No bridges registered.
 
 ## Branding
@@ -231,9 +233,11 @@ admin-webhooks-status-active = active
 admin-webhooks-fails = fails
 admin-webhooks-history = History
 admin-webhooks-rotate = Rotate secret
+admin-webhooks-rotate-confirm = Rotate this webhook's signing secret? The current secret stops working immediately.
 admin-webhooks-enable = Enable
 admin-webhooks-disable = Disable
 admin-webhooks-delete = Delete
+admin-webhooks-delete-confirm = Delete this webhook subscription?
 admin-webhooks-empty = No outgoing webhooks yet.
 
 ## Quarantine
@@ -378,6 +382,7 @@ admin-slash-th-actions = Actions
 admin-slash-yes = yes
 admin-slash-no = no
 admin-slash-delete = Delete
+admin-slash-delete-confirm = Delete this custom command?
 admin-slash-empty = No custom commands yet.
 
 ## User row
