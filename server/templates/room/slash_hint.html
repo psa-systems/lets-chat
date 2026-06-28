@@ -1,0 +1,11 @@
+{# LC-509: argument-hint bar shown while typing a recognized command's
+   arguments (e.g. `/poll `). Swapped into #lc-slash-popover; non-interactive
+   (no role=option, so the keyboard nav no-ops and Enter sends the message).
+   Renders nothing when the typed command is not recognized. #}
+{% if let Some(c) = command %}
+<div id="lc-slash-hint"
+     class="absolute bottom-full mb-1 w-full rounded border border-border bg-surface-elevated shadow-lg z-20 px-3 py-1.5">
+  <span class="font-mono text-content">{{ c.usage }}</span>
+  <span class="block text-xs text-content-muted">{{ c.description }}</span>
+</div>
+{% endif %}
