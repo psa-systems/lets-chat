@@ -124,7 +124,11 @@ async fn require_ack_then_acknowledge_roster() {
         &format!("/messages/{mid}/ack-required"),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "non-author cannot require ack");
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "non-author cannot require ack"
+    );
 
     // Acking before it is required is a 400.
     let (status, _) = post(&t.app, &t.bob_session, &format!("/messages/{mid}/ack")).await;
