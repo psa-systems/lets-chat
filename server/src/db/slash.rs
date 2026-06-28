@@ -109,3 +109,82 @@ pub async fn delete(pool: &SqlitePool, id: i64) -> sqlx::Result<()> {
         .await?;
     Ok(())
 }
+
+// LC-487: per-user canned responses live in `canned_responses` (user-scoped)
+// but are surfaced as `CustomCommand`s so the existing slash dispatch +
+// autocomplete handle them like personal static_text commands. They are never
+// admin-only and always StaticText.
+
+fn map_canned(r: sqlx::sqlite::SqliteRow) -> CustomCommand {
+    CustomCommand {
+        id: r.get("id"),
+        name: r.get("name"),
+        description: r.get("description"),
+        kind: CustomKind::StaticText,
+        target: r.get("body"),
+        admin_only: false,
+    }
+}
+
+/// Every canned response owned by `user_id`, name-ordered.
+pub async fn list_canned_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> sqlx::Result<Vec<CustomCommand>> {
+    let rows = sqlx::query(
+        "SELECT id, name, description, body FROM canned_responses \
+         WHERE user_id = ? ORDER BY name",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(map_canned).collect())
+}
+
+/// Resolve one of `user_id`'s canned responses by name (lowercased, no slash).
+pub async fn get_canned_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    name: &str,
+) -> sqlx::Result<Option<CustomCommand>> {
+    let row = sqlx::query(
+        "SELECT id, name, description, body FROM canned_responses \
+         WHERE user_id = ? AND name = ?",
+    )
+    .bind(user_id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(map_canned))
+}
+
+/// Insert a canned response for `user_id`. Unique per (user, name).
+pub async fn insert_canned(
+    pool: &SqlitePool,
+    user_id: &str,
+    name: &str,
+    description: &str,
+    body: &str,
+) -> sqlx::Result<i64> {
+    let res = sqlx::query(
+        "INSERT INTO canned_responses (user_id, name, description, body) VALUES (?, ?, ?, ?)",
+    )
+    .bind(user_id)
+    .bind(name)
+    .bind(description)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(res.last_insert_rowid())
+}
+
+/// Delete one of `user_id`'s canned responses, scoped to its owner. Returns the
+/// number of rows removed (0 when it is not theirs / does not exist).
+pub async fn delete_canned(pool: &SqlitePool, user_id: &str, id: i64) -> sqlx::Result<u64> {
+    let res = sqlx::query("DELETE FROM canned_responses WHERE id = ? AND user_id = ?")
+        .bind(id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}

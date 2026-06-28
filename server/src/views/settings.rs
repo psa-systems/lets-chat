@@ -82,6 +82,9 @@ pub struct UserSettingsPage<'a> {
     pub personal_emojis: Vec<crate::models::custom_emoji::CustomEmoji>,
     /// LC-482: per-emoji byte cap, surfaced to the upload form help text.
     pub emoji_max_kib: i64,
+    /// LC-487: the user's canned responses (saved replies), name-ordered.
+    /// `target` carries the body; `description` the optional help line.
+    pub canned_responses: Vec<crate::db::slash::CustomCommand>,
 }
 
 /// LC-426: reusable feedback fragment returned by the settings form handlers
