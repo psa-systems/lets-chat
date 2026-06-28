@@ -3,38 +3,45 @@
 {% block title %}{{ "admin-invites-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-invites-heading"|t }}</h1>
+<div class="mb-4 flex justify-end">
+  <form method="post" action="/admin/invites">
+    <button type="submit" class="btn btn-primary">{{ "admin-invites-create"|t }}</button>
+  </form>
+</div>
 
-<form method="post" action="/admin/invites" class="mb-6 flex gap-2">
-  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-invites-create"|t }}</button>
-</form>
-
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-invites-th-code"|t }}</th>
-      <th class="py-2">{{ "admin-invites-th-created-by"|t }}</th>
-      <th class="py-2">{{ "admin-invites-th-created-at"|t }}</th>
-      <th class="py-2">{{ "admin-invites-th-used-by"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-invites-th-action"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for inv in invites %}
-    <tr id="invite-{{ inv.id }}" class="border-t border-border">
-      <td class="py-1 font-mono">{{ inv.code }}</td>
-      <td class="py-1">{{ inv.created_by_username }}</td>
-      <td class="py-1">{{ inv.created_at }}</td>
-      <td class="py-1">{% if let Some(name) = inv.used_by_username.as_ref() %}{{ name }}{% else %}-{% endif %}</td>
-      <td class="py-1 text-right">
-        {% if inv.used_by_username.is_none() %}
-        <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" class="text-danger hover:underline">{{ "admin-invites-revoke"|t }}</button>
-        {% else %}
-        <span class="text-content-subtle">-</span>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if invites.is_empty() %}
+{% let empty_text_key = "admin-invites-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-invites-th-code"|t }}</th>
+        <th>{{ "admin-invites-th-created-by"|t }}</th>
+        <th>{{ "admin-invites-th-created-at"|t }}</th>
+        <th>{{ "admin-invites-th-used-by"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-invites-th-action"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invites %}
+      <tr id="invite-{{ inv.id }}">
+        <td class="font-mono">{{ inv.code }}</td>
+        <td>{{ inv.created_by_username }}</td>
+        <td class="text-content-muted">{{ inv.created_at }}</td>
+        <td>{% if let Some(name) = inv.used_by_username.as_ref() %}{{ name }}{% else %}<span class="text-content-subtle">-</span>{% endif %}</td>
+        <td class="lc-table-actions">
+          {% if inv.used_by_username.is_none() %}
+          <button hx-post="/admin/invites/{{ inv.id }}/revoke" hx-target="#invite-{{ inv.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-invites-revoke-confirm"|t }}" class="btn btn-sm btn-danger-outline">{{ "admin-invites-revoke"|t }}</button>
+          {% else %}
+          <span class="text-content-subtle">-</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

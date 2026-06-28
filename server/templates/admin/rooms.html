@@ -3,28 +3,31 @@
 {% block title %}{{ "admin-rooms-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-rooms-heading"|t }}</h1>
+<p class="mb-4 text-sm text-content-muted">{{ "admin-rooms-intro"|t }}</p>
 
-<p class="text-sm text-content-muted mb-6">
-  {{ "admin-rooms-intro"|t }}
-</p>
-
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-rooms-th-name"|t }}</th>
-      <th class="py-2">{{ "admin-rooms-th-type"|t }}</th>
-      <th class="py-2">{{ "admin-rooms-th-members"|t }}</th>
-      <th class="py-2">{{ "admin-rooms-th-invite"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-rooms-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {# LC-177: page-render rows are not OOB; the live update sets oob=true. #}
-    {% let oob = false %}
-    {% for r in rooms_admin %}
-    {% include "admin/room_row.html" %}
-    {% endfor %}
-  </tbody>
-</table>
+{% if rooms_admin.is_empty() %}
+{% let empty_text_key = "admin-rooms-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-rooms-th-name"|t }}</th>
+        <th>{{ "admin-rooms-th-type"|t }}</th>
+        <th>{{ "admin-rooms-th-members"|t }}</th>
+        <th>{{ "admin-rooms-th-invite"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-rooms-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {# LC-177: page-render rows are not OOB; the live update sets oob=true. #}
+      {% let oob = false %}
+      {% for r in rooms_admin %}
+      {% include "admin/room_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
