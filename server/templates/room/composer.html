@@ -1397,6 +1397,10 @@
   var slot = document.getElementById('lc-slash-popover');
   if (!ta || !slot) return;
   var SLASH = /^\/([a-z0-9_-]*)$/i;
+  // LC-509: a command followed by whitespace means the user is typing
+  // arguments; show that command's non-interactive usage hint instead of the
+  // list, so they know what to type next.
+  var SLASH_ARGS = /^\/([a-z0-9_-]+)\s/i;
   var timer = null;
   // Whether the popover currently holds options. Gates the keyboard handler so
   // it no-ops (and lets the textarea's normal keys through) when slash is not
@@ -1424,18 +1428,22 @@
     ta.setAttribute('aria-expanded', 'false');
     ta.removeAttribute('aria-activedescendant');
   }
-  function refresh(){
-    var m = ta.value.match(SLASH);
-    if (!m) { clearPopover(); return; }
+  function scheduleAjax(url){
     if (timer) clearTimeout(timer);
-    var q = m[1];
     timer = setTimeout(function(){
       timer = null;
       if (window.htmx) {
-        window.htmx.ajax('GET', '/api/slash-commands?q=' + encodeURIComponent(q),
-          { target: '#lc-slash-popover', swap: 'innerHTML' });
+        window.htmx.ajax('GET', url, { target: '#lc-slash-popover', swap: 'innerHTML' });
       }
     }, 120);
+  }
+  function refresh(){
+    var v = ta.value;
+    var m = v.match(SLASH);
+    if (m) { scheduleAjax('/api/slash-commands?q=' + encodeURIComponent(m[1])); return; }
+    var ma = v.match(SLASH_ARGS);
+    if (ma) { scheduleAjax('/api/slash-commands?hint=true&q=' + encodeURIComponent(ma[1].toLowerCase())); return; }
+    clearPopover();
   }
   function insert(li){
     if (!li) return clearPopover();
@@ -1472,7 +1480,16 @@
     }
   }
   document.body.addEventListener('htmx:afterSwap', onAfterSwap);
-  function teardown(){ document.body.removeEventListener('htmx:afterSwap', onAfterSwap); }
+  // LC-509: a successful send clears the textarea programmatically (no 'input'
+  // event fires), so re-evaluate on the form's afterRequest to drop a stale
+  // hint/list once the box is empty.
+  var slashForm = ta.closest('form');
+  function onAfterReq(){ setTimeout(refresh, 0); }
+  if (slashForm) slashForm.addEventListener('htmx:afterRequest', onAfterReq);
+  function teardown(){
+    document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+    if (slashForm) slashForm.removeEventListener('htmx:afterRequest', onAfterReq);
+  }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
@@ -1481,9 +1498,13 @@
     ta.value = '/' + name + ' ';
     clearPopover();
     ta.focus();
+    // LC-509: drop the caret after the trailing space so arguments can be
+    // typed immediately, then surface that command's argument-hint bar.
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
     // LC-229: shared predicate (pre-LC-229 this site checked only
     // ta.value.trim() and ignored an attached file_id).
     if (window.__lcRefreshSend) window.__lcRefreshSend();
+    refresh();
   };
 })();
 </script>
