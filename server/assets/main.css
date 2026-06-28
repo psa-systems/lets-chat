@@ -1204,6 +1204,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* LC-506: AI action shown to admins as a disabled teaser (LLM unconfigured). */
 .lc-action-disabled { opacity: 0.5; cursor: default; }
 .lc-header-action.lc-action-disabled:hover { background-color: transparent; color: var(--content-muted); }
+/* LC-511: same teaser posture for the composer GIF button (Giphy unconfigured). */
+.lc-composer-btn.lc-action-disabled:hover { background-color: transparent; color: var(--content-muted); }
 
 /* LC-59 server-rendered math. pulldown-latex emits `<math display="...">`
    elements which the browser styles natively (per MathML Core). We do NOT
