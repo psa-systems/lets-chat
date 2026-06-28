@@ -61,6 +61,12 @@ pub struct MessageView {
     /// page render path looks it up in bulk for the current viewer and
     /// per-message renders query it for the specific viewer.
     pub is_bookmarked: bool,
+    /// LC-490: `Some(_)` when this message requires acknowledgement; carries the
+    /// per-viewer ack roster state. `None` for ordinary messages. Full-bubble
+    /// re-renders (edit/pin/bookmark/ack) must populate this or they would wipe
+    /// the ack bar for a required message; `load_message_view_for_viewer`
+    /// computes it centrally for the WS single-message paths.
+    pub ack: Option<AckState>,
     /// Custom emoji set in the message's enclave, used by `body_html()` to
     /// rewrite `:shortcode:` tokens into `<img>` tags. Empty for DM messages
     /// and any non-enclave room; unknown shortcodes pass through as text.
@@ -1163,6 +1169,28 @@ pub struct SingleMessageFragment<'a> {
 pub struct ReactionBarFragment<'a> {
     pub message_id: i64,
     pub reactions: &'a [ReactionView],
+}
+
+/// LC-490: per-viewer acknowledgement state for a message that requires it.
+/// `None` on `MessageView` means the message does not require acknowledgement
+/// (the common case); `Some(_)` renders the ack bar.
+#[derive(Debug, Clone)]
+pub struct AckState {
+    /// How many users have acknowledged.
+    pub count: i64,
+    /// Whether the viewing user has acknowledged.
+    pub acked_by_me: bool,
+    /// Comma-joined acker display names for the roster tooltip (empty when none).
+    pub ackers_title: String,
+}
+
+/// LC-490: initial render of the ack bar, included by `room/message.html` and
+/// returned by the acknowledge handler for the acting tab.
+#[derive(Template)]
+#[template(path = "partials/ack_bar.html")]
+pub struct AckBarFragment {
+    pub message_id: i64,
+    pub ack: AckState,
 }
 
 /// LC-66: OOB re-render of a poll block after a vote or a close. Swaps the
