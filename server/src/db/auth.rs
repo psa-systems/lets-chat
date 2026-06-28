@@ -1039,6 +1039,29 @@ pub async fn set_notify_email_activity_enabled(
 /// Bulk-resolve display fields for a set of user ids in a single query.
 /// Returns a map keyed by user id with `(username, display_name)`.
 /// Missing ids are absent from the map; callers fall back to the raw id
+/// LC-489: the subset of `ids` whose owner has `read_receipts_enabled = 1`.
+/// Used to filter a room's caught-up members down to those who consented to
+/// broadcasting their read status before showing them in a "Seen by" stack.
+pub async fn read_receipts_enabled_ids(
+    pool: &SqlitePool,
+    ids: &[&str],
+) -> Result<HashSet<String>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql =
+        format!("SELECT id FROM users WHERE read_receipts_enabled = 1 AND id IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
 /// for unknown / deleted users. Used by callers that already have the
 /// id list in hand (e.g. pinned-message render) to avoid N+1 lookups
 /// across the chat/auth pool boundary.
