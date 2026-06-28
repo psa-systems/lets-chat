@@ -38,6 +38,8 @@ pub struct DmPage<'a> {
     /// LC-486: an operator LLM is configured. Drives `data-lc-llm` on the page
     /// root, which CSS-gates the per-message Translate action.
     pub llm_available: bool,
+    /// LC-488: the GIF picker is configured. Drives the composer GIF button.
+    pub gif_available: bool,
 }
 
 impl DmPage<'_> {

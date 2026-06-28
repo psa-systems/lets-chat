@@ -1100,6 +1100,9 @@ pub struct RoomPage<'a> {
     /// LC-500: configured max upload size (bytes), surfaced to the composer so
     /// client-side validation matches the server cap.
     pub max_upload_bytes: i64,
+    /// LC-488: the GIF picker is configured (LETS_CHAT_TENOR_API_KEY set).
+    /// Drives the composer GIF button.
+    pub gif_available: bool,
 }
 
 impl RoomPage<'_> {
@@ -1125,6 +1128,9 @@ pub struct ComposerFragment<'a> {
     /// LC-500: see `RoomPage::max_upload_bytes`. Required for the shared
     /// composer template to compile against this struct.
     pub max_upload_bytes: i64,
+    /// LC-488: see `RoomPage::gif_available`. Required for the shared composer
+    /// template to compile against this struct.
+    pub gif_available: bool,
 }
 
 impl ComposerFragment<'_> {

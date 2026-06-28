@@ -109,6 +109,12 @@ event-rsvp-going = Going
 event-rsvp-maybe = Maybe
 event-rsvp-no = Can't go
 
+## GIF picker (LC-488)
+gif-modal-title = Pick a GIF
+gif-search-placeholder = Search GIFs...
+gif-no-results = No GIFs found.
+gif-powered-by = Powered by Tenor
+
 ## Keyboard shortcuts overlay (LC-252)
 shortcuts-title = Keyboard shortcuts
 shortcuts-close-dialog = Close dialog

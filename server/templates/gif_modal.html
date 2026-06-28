@@ -1,0 +1,99 @@
+{# LC-488: singleton GIF picker modal, in the persistent shell so its JS
+   survives composer swaps. Opened by the composer button via
+   window.__lcOpenGifModal(); reads the current composer's data-room-id at open
+   time. The search input hx-GETs /api/gifs into the results grid; clicking a
+   result POSTs its (Tenor) URL to /room/{id}/gif, which fetches + stores it
+   same-origin and posts it. #}
+<div data-lc-gif-modal
+     class="hidden modal-backdrop"
+     role="dialog" aria-modal="true" aria-labelledby="lc-gif-modal-title" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 id="lc-gif-modal-title" class="text-lg font-semibold">{{ "gif-modal-title"|t }}</h2>
+      <button type="button" data-lc-gif-close aria-label="{{ "poll-close-dialog"|t }}"
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <input type="search" data-lc-gif-search name="q"
+           placeholder="{{ "gif-search-placeholder"|t }}"
+           autocomplete="off"
+           hx-get="/api/gifs"
+           hx-trigger="input changed delay:350ms, lcgifopen"
+           hx-target="#lc-gif-results" hx-swap="innerHTML"
+           class="w-full rounded border border-border-strong px-2 py-1 mb-2">
+    <div data-lc-gif-error class="hidden text-sm text-danger mb-2" role="alert"></div>
+    <div id="lc-gif-results" class="lc-gif-results"></div>
+    <p class="lc-gif-attribution">{{ "gif-powered-by"|t }}</p>
+  </div>
+</div>
+<script>
+(function(){
+  var modal = document.querySelector('[data-lc-gif-modal]');
+  if (!modal) return;
+  var input = modal.querySelector('[data-lc-gif-search]');
+  var results = modal.querySelector('#lc-gif-results');
+  var errSlot = modal.querySelector('[data-lc-gif-error]');
+  var roomId = null;
+  var opener = null;
+  var trap = null;
+  var posting = false;
+
+  function setError(msg){
+    if (!msg) { errSlot.classList.add('hidden'); errSlot.textContent = ''; }
+    else { errSlot.textContent = msg; errSlot.classList.remove('hidden'); }
+  }
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    setError('');
+    results.innerHTML = '';
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  modal.querySelector('[data-lc-gif-close]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); }
+  });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+
+  // Click a result cell -> post its GIF and close.
+  results.addEventListener('click', async function(e){
+    var cell = e.target.closest('[data-lc-gif-url]');
+    if (!cell || posting) return;
+    var url = cell.getAttribute('data-lc-gif-url');
+    if (!roomId || !url) return;
+    posting = true;
+    setError('');
+    cell.setAttribute('aria-disabled', 'true');
+    var body = new URLSearchParams();
+    body.set('url', url);
+    try {
+      var res = await fetch('/room/' + roomId + '/gif', {
+        method: 'POST', body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+      });
+      if (res.ok) { close(); }
+      else { setError((await res.text()) || ('Could not post GIF (' + res.status + ')')); }
+    } catch (e2) { setError('Network error; GIF not posted.'); }
+    finally { posting = false; cell.removeAttribute('aria-disabled'); }
+  });
+
+  window.__lcOpenGifModal = function(){
+    var composer = document.getElementById('composer');
+    if (!composer) return;
+    roomId = composer.getAttribute('data-room-id');
+    if (!roomId) return;
+    opener = document.activeElement;
+    setError('');
+    input.value = '';
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    try { input.focus(); } catch (e) {}
+    // Load featured (empty query) on open.
+    if (window.htmx) { try { window.htmx.trigger(input, 'lcgifopen'); } catch (e) {} }
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  };
+})();
+</script>
