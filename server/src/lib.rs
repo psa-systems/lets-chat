@@ -29,6 +29,7 @@ pub mod reminders;
 pub mod retention;
 pub mod routes;
 pub mod scheduled;
+pub mod security_headers;
 pub mod ssrf;
 pub mod state;
 pub mod stt;
