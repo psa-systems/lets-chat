@@ -138,6 +138,10 @@ async fn csp_and_framing_values_are_locked_down() {
     assert!(csp.contains("frame-ancestors 'none'"), "csp: {csp}");
     assert!(csp.contains("object-src 'none'"), "csp: {csp}");
     assert!(csp.contains("base-uri 'self'"), "csp: {csp}");
+    // LC-507: the GIF picker grid hotlinks Giphy CDN thumbnails, so img-src must
+    // allow the Giphy CDN (and must not still point at the dead Tenor CDN).
+    assert!(csp.contains("https://*.giphy.com"), "csp: {csp}");
+    assert!(!csp.contains("tenor.com"), "csp: {csp}");
 
     let perms = resp
         .headers()

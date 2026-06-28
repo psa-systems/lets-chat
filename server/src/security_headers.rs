@@ -50,9 +50,12 @@ const PERMISSIONS_POLICY: HeaderValue = HeaderValue::from_static(
 ///   CSS-var blocks.
 /// - `'unsafe-eval'` because htmx evaluates `hx-on::*` handlers via the
 ///   `Function` constructor.
-/// - `img-src` allows `data:`/`blob:` (avatar/upload previews) and the Tenor
-///   CDN (`*.tenor.com`) because the LC-488 GIF picker grid hotlinks Tenor
+/// - `img-src` allows `data:`/`blob:` (avatar/upload previews) and the Giphy
+///   CDN (`*.giphy.com`) because the LC-488 GIF picker grid hotlinks Giphy
 ///   preview thumbnails (the posted GIF itself is re-hosted same-origin).
+///   LC-507: migrated from the dead Tenor CDN allowance to Giphy (LC-505 moved
+///   the provider but left this directive pointing at Tenor, so the grid
+///   thumbnails were CSP-blocked).
 /// - `connect-src` allows `ws:`/`wss:` for the `/ws` live hub.
 /// - `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'` and
 ///   `form-action 'self'` are the real hardening wins this adds.
@@ -61,7 +64,7 @@ const CSP: HeaderValue = HeaderValue::from_static(
      base-uri 'self'; \
      object-src 'none'; \
      frame-ancestors 'none'; \
-     img-src 'self' data: blob: https://tenor.com https://*.tenor.com; \
+     img-src 'self' data: blob: https://giphy.com https://*.giphy.com; \
      media-src 'self' blob:; \
      font-src 'self' data:; \
      style-src 'self' 'unsafe-inline'; \
