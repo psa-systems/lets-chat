@@ -46,6 +46,12 @@ services:
       # there is no env/mount-only remedy, so server-to-server SSO discovery
       # fails TLS without this. NEVER set in production.
       LETS_CHAT_BUNYIP_SSO_INSECURE_TLS: "1"
+      # LC-488/LC-505: optional GIF picker (Giphy). Pass the key through from your
+      # shell so it stays OUT of git: `export LETS_CHAT_GIPHY_API_KEY=... ` then
+      # `just dev-web`. Empty/unset keeps the composer GIF button hidden. Rating
+      # is optional (g/pg/pg-13/r; the server defaults to pg-13 when unset).
+      LETS_CHAT_GIPHY_API_KEY: "${LETS_CHAT_GIPHY_API_KEY:-}"
+      LETS_CHAT_GIPHY_RATING: "${LETS_CHAT_GIPHY_RATING:-}"
       # Optional: enable password reset emails. Uncomment and fill in all
       # six LETS_CHAT_SMTP_* variables plus LETS_CHAT_BASE_URL with values
       # appropriate to your relay. Leaving any of them blank disables outbound
