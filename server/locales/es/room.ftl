@@ -334,6 +334,7 @@ room-rpreview-confirm = Confirmar
 ## Slash commands
 room-slash-help-heading = Comandos de barra
 room-slash-dismiss = Descartar
+room-slash-no-match = No hay comandos coincidentes
 
 ## Notify dropdown
 room-notify-unmuted = Sin silenciar

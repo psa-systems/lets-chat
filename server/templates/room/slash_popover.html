@@ -1,17 +1,26 @@
-{# LC-76: slash-command autocomplete dropdown, swapped into
-   #lc-slash-popover. Empty render hides the popover. Click inserts the
-   command name into the composer via __lcInsertSlash. #}
+{# LC-76 / LC-509: slash-command autocomplete dropdown (list mode), swapped
+   into #lc-slash-popover. A header + filtered command rows when there are
+   matches; a subtle "no matching commands" state when a query matched nothing;
+   nothing at all when no query was typed (popover stays hidden). Click or
+   keyboard inserts the command via __lcInsertSlash. #}
 {% if !commands.is_empty() %}
-<ul id="lc-slash-list" role="listbox" aria-label="{{ "room-slash-help-heading"|t }}"
-    class="absolute bottom-full mb-1 w-full max-h-60 overflow-y-auto rounded border border-border bg-surface-elevated shadow-lg z-20">
-  {% for c in commands %}
-  <li role="option" data-slash-name="{{ c.name }}"
-      id="lc-slash-option-{{ loop.index0 }}" aria-selected="false"
-      class="px-3 py-1.5 text-sm hover:bg-surface-sunken cursor-pointer"
-      onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
-    <span class="font-mono text-content">{{ c.usage }}</span>
-    <span class="block text-xs text-content-muted truncate">{{ c.description }}</span>
-  </li>
-  {% endfor %}
-</ul>
+<div class="absolute bottom-full mb-1 w-full rounded border border-border bg-surface-elevated shadow-lg z-20 overflow-hidden">
+  <div class="lc-ac-header">{{ "room-slash-help-heading"|t }}</div>
+  <ul id="lc-slash-list" role="listbox" aria-label="{{ "room-slash-help-heading"|t }}"
+      class="max-h-60 overflow-y-auto">
+    {% for c in commands %}
+    <li role="option" data-slash-name="{{ c.name }}"
+        id="lc-slash-option-{{ loop.index0 }}" aria-selected="false"
+        class="lc-ac-option px-3 py-1.5 text-sm cursor-pointer"
+        onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
+      <span class="font-mono text-content">{{ c.usage }}</span>
+      <span class="block text-xs text-content-muted truncate">{{ c.description }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else if !query.is_empty() %}
+<div class="absolute bottom-full mb-1 w-full rounded border border-border bg-surface-elevated shadow-lg z-20 px-3 py-2 text-xs text-content-muted">
+  {{ "room-slash-no-match"|t }}
+</div>
 {% endif %}
