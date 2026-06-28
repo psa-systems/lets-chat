@@ -48,6 +48,7 @@ mod enclave;
 mod export;
 mod feeds;
 mod forward;
+mod gif;
 mod home;
 mod inbox;
 mod mentions;
@@ -1187,6 +1188,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reminders/{id}", delete(reminders::delete_reminder))
         .route("/room/{room_id}/poll", post(polls::post_create))
         .route("/room/{room_id}/event", post(polls::post_create_event))
+        // LC-488: GIF picker search + post.
+        .route("/api/gifs", get(gif::search))
+        .route("/room/{room_id}/gif", post(gif::post_gif))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
