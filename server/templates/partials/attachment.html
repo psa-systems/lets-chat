@@ -22,8 +22,15 @@
      (lightbox_modal.html); href + target stay as the no-JS fallback (open the
      raw file in a new tab). #}
   <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer">
+    {# LC-507: GIFs serve the animated original so they autoplay inline; the
+       still first-frame preview rendition is for non-animated images only. #}
+    {% if a.is_gif() %}
+    <img src="{{ a.url }}" alt="{{ a.filename }}"
+         class="max-w-sm max-h-96 rounded border border-border">
+    {% else %}
     <img src="{{ a.url }}?size=preview" alt="{{ a.filename }}"
          class="max-w-sm max-h-96 rounded border border-border">
+    {% endif %}
   </a>
 </div>
 {% else %}
