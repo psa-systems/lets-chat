@@ -920,6 +920,33 @@ pub async fn count_room_members(pool: &sqlx::SqlitePool, room_id: i64) -> Result
     Ok(row.get("c"))
 }
 
+/// LC-489: user_ids of room members (excluding `viewer_id`) whose read
+/// watermark has reached the room's latest non-deleted message - i.e. who have
+/// "seen" everything. Returns ids only; the caller resolves consent
+/// (`read_receipts_enabled`) and display labels from auth.db. Empty when the
+/// room has no messages (`MAX(id)` is NULL, so the `>=` never holds).
+pub async fn room_caught_up_member_ids(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    viewer_id: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT s.user_id \
+           FROM dm_read_state s \
+           JOIN room_members rm ON rm.room_id = s.room_id AND rm.user_id = s.user_id \
+          WHERE s.room_id = ? AND s.user_id != ? \
+            AND s.last_read_message_id >= ( \
+                SELECT MAX(id) FROM messages \
+                 WHERE room_id = ? AND deleted_at IS NULL AND quarantined = 0)",
+    )
+    .bind(room_id)
+    .bind(viewer_id)
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
+}
+
 /// List the user_ids of all members of a room.
 pub async fn list_room_member_ids(
     pool: &sqlx::SqlitePool,

@@ -195,6 +195,62 @@ pub(crate) async fn build_ack_view(
     }))
 }
 
+/// LC-489: only rooms with at most this many members show a "Seen by" stack.
+/// Caps per-event fan-out cost and keeps the avatar row from overflowing; the
+/// privacy posture is also clearer in a small room.
+pub(crate) const SEEN_BY_MAX_MEMBERS: i64 = 8;
+
+/// LC-489: the "Seen by" members for a group room, or `None` when the room is
+/// not eligible (a DM, larger than `SEEN_BY_MAX_MEMBERS`, or the viewer has read
+/// receipts off - symmetric consent, mirroring DM receipts). `Some(vec)` is the
+/// eligible case; the vec is empty when nobody is caught up. Only members who
+/// themselves enabled read receipts are listed, and the viewer is excluded.
+pub(crate) async fn room_seen_members_if_applicable(
+    state: &AppState,
+    viewer: &User,
+    room: &Room,
+) -> Result<Option<Vec<crate::views::room::SeenAvatar>>, AppError> {
+    if room.room_type == "dm" || !viewer.read_receipts_enabled {
+        return Ok(None);
+    }
+    if db::chat::count_room_members(&state.chat, room.id).await? > SEEN_BY_MAX_MEMBERS {
+        return Ok(None);
+    }
+    let ids = db::chat::room_caught_up_member_ids(&state.chat, room.id, &viewer.id).await?;
+    if ids.is_empty() {
+        return Ok(Some(Vec::new()));
+    }
+    let id_refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let consenting = db::auth::read_receipts_enabled_ids(&state.auth, &id_refs).await?;
+    let consent_ids: Vec<&str> = ids
+        .iter()
+        .filter(|i| consenting.contains(*i))
+        .map(|s| s.as_str())
+        .collect();
+    if consent_ids.is_empty() {
+        return Ok(Some(Vec::new()));
+    }
+    let labels = db::auth::display_names_for_ids(&state.auth, &consent_ids).await?;
+    let mut out: Vec<crate::views::room::SeenAvatar> = consent_ids
+        .iter()
+        .map(|id| {
+            let label = labels
+                .get(*id)
+                .map(|(uname, dname)| match dname.as_deref() {
+                    Some(n) if !n.trim().is_empty() => n.to_string(),
+                    _ => uname.clone(),
+                })
+                .unwrap_or_else(|| (*id).to_string());
+            crate::views::room::SeenAvatar {
+                user_id: (*id).to_string(),
+                label,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    Ok(Some(out))
+}
+
 /// Per-message author metadata cached by callers that build many MessageViews.
 /// Keeps the join across auth.db and chat.db to a single field per author.
 #[derive(Clone)]
