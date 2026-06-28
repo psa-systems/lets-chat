@@ -2930,6 +2930,39 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
 .lc-admin-main { flex: 1 1 auto; padding: 1.5rem 1.25rem 4rem; }
 /* A redesigned page caps form content; tables stay full-width. */
 .lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* LC-510: shared admin table. Wrap in `.card.overflow-hidden` so rows go edge
+   to edge; cells provide the padding. Reused across the admin list pages. */
+.lc-table { width: 100%; font-size: 0.875rem; border-collapse: collapse; }
+.lc-table thead th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--content-muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.lc-table tbody td {
+    padding: 0.625rem 0.75rem;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+}
+.lc-table tbody tr:first-child td { border-top: 0; }
+.lc-table tbody tr:hover { background: var(--surface-sunken); }
+.lc-table-actions { text-align: right; white-space: nowrap; }
+/* Compact danger / caution outline buttons for destructive row actions. */
+.btn-danger-outline {
+    color: var(--danger);
+    border: 1px solid var(--danger-border);
+    background: transparent;
+}
+.btn-danger-outline:hover { background: var(--danger-surface); }
+.btn-warning-outline {
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+    background: transparent;
+}
+.btn-warning-outline:hover { background: var(--warning-surface); }
 @media (max-width: 48rem) {
     .lc-admin-shell { grid-template-columns: minmax(0, 1fr); }
     .lc-admin-nav {
