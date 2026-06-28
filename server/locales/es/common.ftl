@@ -29,6 +29,13 @@ admin-nav-bridges = Puentes
 admin-nav-version-release = Versión
 admin-nav-version-built = compilado
 admin-nav-label = Navegación de administración
+# LC-510: encabezados de grupo de la barra lateral
+admin-nav-group-overview = Resumen
+admin-nav-group-people = Personas
+admin-nav-group-spaces = Espacios
+admin-nav-group-safety = Seguridad
+admin-nav-group-integrations = Integraciones
+admin-nav-group-system = Sistema
 
 ## Layout shell
 layout-menu = Menú

@@ -34,6 +34,13 @@ admin-nav-bridges = Bridges
 admin-nav-version-release = Release
 admin-nav-version-built = built
 admin-nav-label = Admin navigation
+# LC-510: sidebar group headings
+admin-nav-group-overview = Overview
+admin-nav-group-people = People
+admin-nav-group-spaces = Spaces
+admin-nav-group-safety = Safety
+admin-nav-group-integrations = Integrations
+admin-nav-group-system = System
 
 ## Layout shell
 layout-menu = Menu
