@@ -195,6 +195,19 @@ settings-emoji-formats = PNG, GIF o WebP, hasta
 settings-emoji-add = Anadir emoji
 settings-emoji-delete = Eliminar
 settings-emoji-delete-confirm = Eliminar este emoji?
+# LC-487: panel de respuestas guardadas.
+settings-section-canned = Respuestas guardadas
+settings-canned-heading = Tus respuestas guardadas
+settings-canned-help-1 = Fragmentos reutilizables que publicas desde el redactor escribiendo
+settings-canned-help-2 = . Usa
+settings-canned-help-3 = para insertar lo que escribas despues del nombre.
+settings-canned-empty = Aun no tienes respuestas guardadas.
+settings-canned-name-label = Nombre del atajo
+settings-canned-desc-label = Descripcion (opcional)
+settings-canned-body-label = Texto de la respuesta
+settings-canned-add = Anadir respuesta guardada
+settings-canned-delete = Eliminar
+settings-canned-delete-confirm = Eliminar esta respuesta guardada?
 settings-saved = Guardado.
 # LC-426: feedback por acción (estado en línea + toast)
 settings-fb-saved = Guardado
