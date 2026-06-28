@@ -3,50 +3,51 @@
 {% block title %}{{ "admin-backup-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-backup-heading"|t }}</h1>
-
-{% if restore_pending %}
-<div class="mb-6 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
-  <strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
-  <code>.replaced-{timestamp}</code>{{ "admin-backup-staged-2"|t }}
-  <code>.restore-pending</code> {{ "admin-backup-staged-3"|t }}
-  <code>.staged-restore</code> {{ "admin-backup-staged-4"|t }}
-</div>
-{% endif %}
-
-<div class="mb-6 p-3 rounded bg-surface text-content-muted text-xs border border-border max-w-2xl">
-  <strong>{{ "admin-backup-headsup-title"|t }}</strong> {{ "admin-backup-headsup-1"|t }}
-  <code>{data_dir}.replaced-{timestamp}</code>{{ "admin-backup-headsup-2"|t }}
-  <code>.replaced-*</code> {{ "admin-backup-headsup-3"|t }}
-</div>
-
-
-<section class="mb-8 max-w-2xl">
-  <h2 class="text-base font-semibold mb-2">{{ "admin-backup-create-heading"|t }}</h2>
-  <p class="text-sm text-content-muted mb-3">
-    {{ "admin-backup-create-1"|t }} <code>.zip</code> {{ "admin-backup-create-2"|t }}
-    <code>VACUUM INTO</code>{{ "admin-backup-create-3"|t }}
-    <code>uploads/</code> {{ "admin-backup-create-4"|t }} <code>avatars/</code> {{ "admin-backup-create-5"|t }}
-    <code>manifest.json</code> {{ "admin-backup-create-6"|t }}
-  </p>
-  <form method="post" action="/admin/backup">
-    <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-backup-download"|t }}</button>
-  </form>
-</section>
-
-<section class="max-w-2xl">
-  <h2 class="text-base font-semibold mb-2">{{ "admin-backup-restore-heading"|t }}</h2>
-  <p class="text-sm text-content-muted mb-3">
-    {{ "admin-backup-restore-note"|t }}
-  </p>
-  {% if let Some(err) = error %}
-  <div class="mb-3 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+<div class="lc-admin-narrow">
+  {% if restore_pending %}
+  <div class="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
+    <strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
+    <code>.replaced-{timestamp}</code>{{ "admin-backup-staged-2"|t }}
+    <code>.restore-pending</code> {{ "admin-backup-staged-3"|t }}
+    <code>.staged-restore</code> {{ "admin-backup-staged-4"|t }}
+  </div>
   {% endif %}
-  <form method="post" action="/admin/restore" enctype="multipart/form-data" class="space-y-3">
-    <input type="file" name="archive" required accept=".zip,application/zip" class="block text-sm">
-    <button type="submit" class="px-3 py-1 bg-danger text-danger-content rounded hover:bg-danger text-sm"
-      onclick="return confirm('{{ "admin-backup-stage-confirm"|t }}')">{{ "admin-backup-stage"|t }}</button>
-    <p class="text-xs text-content-muted">{{ "admin-backup-stage-note"|t }}</p>
-  </form>
-</section>
+
+  <div class="rounded-md border border-border bg-surface-sunken px-3 py-2.5 text-xs text-content-muted">
+    <strong>{{ "admin-backup-headsup-title"|t }}</strong> {{ "admin-backup-headsup-1"|t }}
+    <code>{data_dir}.replaced-{timestamp}</code>{{ "admin-backup-headsup-2"|t }}
+    <code>.replaced-*</code> {{ "admin-backup-headsup-3"|t }}
+  </div>
+
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-backup-create-heading"|t }}</h3>
+      <p class="lc-set-card-desc">
+        {{ "admin-backup-create-1"|t }} <code>.zip</code> {{ "admin-backup-create-2"|t }}
+        <code>VACUUM INTO</code>{{ "admin-backup-create-3"|t }}
+        <code>uploads/</code> {{ "admin-backup-create-4"|t }} <code>avatars/</code> {{ "admin-backup-create-5"|t }}
+        <code>manifest.json</code> {{ "admin-backup-create-6"|t }}
+      </p>
+    </div>
+    <form method="post" action="/admin/backup">
+      <button type="submit" class="btn btn-primary">{{ "admin-backup-download"|t }}</button>
+    </form>
+  </div>
+
+  <div class="card lc-set-card lc-set-card--danger">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-backup-restore-heading"|t }}</h3>
+      <p class="lc-set-card-desc">{{ "admin-backup-restore-note"|t }}</p>
+    </div>
+    {% if let Some(err) = error %}
+    <div class="mb-3 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
+    {% endif %}
+    <form method="post" action="/admin/restore" enctype="multipart/form-data" class="lc-set-form"
+          onsubmit="return confirm('{{ "admin-backup-stage-confirm"|t }}')">
+      <input type="file" name="archive" required accept=".zip,application/zip" class="block text-sm">
+      <div><button type="submit" class="btn btn-danger">{{ "admin-backup-stage"|t }}</button></div>
+      <p class="lc-set-help">{{ "admin-backup-stage-note"|t }}</p>
+    </form>
+  </div>
+</div>
 {% endblock %}

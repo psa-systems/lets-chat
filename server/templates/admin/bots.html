@@ -3,18 +3,15 @@
 {% block title %}{{ "admin-bots-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-bots-heading"|t }}</h1>
-<p class="text-sm text-content-muted mb-4">
-  {{ "admin-bots-intro"|t }}
-</p>
+<p class="mb-4 text-sm text-content-muted">{{ "admin-bots-intro"|t }}</p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+<div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
 {% endif %}
 
 {% if let Some(tok) = new_token %}
-<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-  <p class="font-medium text-success">
+<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
+  <p class="font-medium">
     {{ "admin-bots-created-prefix"|t }}{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} {{ "admin-bots-created-suffix"|t }}
   </p>
   <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
@@ -22,54 +19,62 @@
 {% endif %}
 
 {% if !available %}
-<div class="mb-4 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
+<div class="mb-4 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
   {{ "admin-bots-no-secret-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>) {{ "admin-bots-no-secret-2"|t }}
 </div>
 {% else %}
-<form method="post" action="/admin/bots" class="space-y-3 border rounded-lg p-4 mb-6 max-w-2xl">
-  <h2 class="font-semibold">{{ "admin-bots-create-heading"|t }}</h2>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-bots-username"|t }}</span>
-    <input name="username" type="text" required maxlength="32" placeholder="standup-bot"
-           class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-  </label>
-  <fieldset class="text-sm">
-    <legend class="text-content-muted mb-1">{{ "admin-bots-token-scopes"|t }}</legend>
-    <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_read"> <code>messages:read</code></label>
-    <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_write" checked> <code>messages:write</code></label>
-    <label class="flex items-center gap-2"><input type="checkbox" name="s_rooms_read"> <code>rooms:read</code></label>
-  </fieldset>
-  <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "admin-bots-create-button"|t }}</button>
-</form>
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-bots-create-heading"|t }}</h3>
+  </div>
+  <form method="post" action="/admin/bots" class="lc-set-form">
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-label" for="bot_username">{{ "admin-bots-username"|t }}</label>
+      <input id="bot_username" name="username" type="text" required maxlength="32" placeholder="standup-bot" class="input">
+    </div>
+    <fieldset class="text-sm">
+      <legend class="lc-set-label mb-1">{{ "admin-bots-token-scopes"|t }}</legend>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_read"> <code>messages:read</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_messages_write" checked> <code>messages:write</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="s_rooms_read"> <code>rooms:read</code></label>
+    </fieldset>
+    <div><button type="submit" class="btn btn-primary">{{ "admin-bots-create-button"|t }}</button></div>
+  </form>
+</div>
 {% endif %}
 
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-bots-th-bot"|t }}</th>
-      <th class="py-2">{{ "admin-bots-th-created"|t }}</th>
-      <th class="py-2">{{ "admin-bots-th-status"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-bots-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for b in bots %}
-    <tr class="border-t border-border">
-      <td class="py-1 font-mono text-xs">{{ b.username }}</td>
-      <td class="py-1 text-xs text-content-muted">{{ b.created_at }}</td>
-      <td class="py-1 text-xs">{% if b.disabled %}<span class="text-danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}{{ "admin-bots-status-active"|t }}{% endif %}</td>
-      <td class="py-1 text-right">
-        {% if !b.disabled %}
-        <form method="post" action="/admin/bots/{{ b.id }}/disable" class="inline">
-          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-bots-disable"|t }}</button>
-        </form>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-    {% if bots.is_empty() %}
-    <tr><td colspan="4" class="py-4 text-center text-content-subtle text-xs">{{ "admin-bots-empty"|t }}</td></tr>
-    {% endif %}
-  </tbody>
-</table>
+{% if bots.is_empty() %}
+{% let empty_text_key = "admin-bots-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-bots-th-bot"|t }}</th>
+        <th>{{ "admin-bots-th-created"|t }}</th>
+        <th>{{ "admin-bots-th-status"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-bots-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bots %}
+      <tr>
+        <td class="font-mono text-xs">{{ b.username }}</td>
+        <td class="text-xs text-content-muted">{{ b.created_at }}</td>
+        <td class="text-xs">{% if b.disabled %}<span class="font-medium text-danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="text-content-muted">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
+        <td class="lc-table-actions">
+          {% if !b.disabled %}
+          <form method="post" action="/admin/bots/{{ b.id }}/disable"
+                onsubmit="return confirm('{{ "admin-bots-disable-confirm"|t }}')">
+            <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-bots-disable"|t }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
