@@ -3,23 +3,31 @@
 {% block title %}{{ "admin-users-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-users-heading"|t }}</h1>
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-users-th-username"|t }}</th>
-      <th class="py-2">{{ "admin-users-th-role"|t }}</th>
-      <th class="py-2">{{ "admin-users-th-status"|t }}</th>
-      <th class="py-2">{{ "admin-users-th-storage"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-users-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {# LC-175: page-render rows are not OOB; the live update sets oob=true. #}
-    {% let oob = false %}
-    {% for u in users %}
-    {% include "admin/user_row.html" %}
-    {% endfor %}
-  </tbody>
-</table>
+{# LC-510: standardized admin table (card-wrapped, .lc-table). The page header
+   is rendered by the shell from `section`, so no per-page <h1>. #}
+{% if users.is_empty() %}
+{% let empty_text_key = "admin-users-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-users-th-username"|t }}</th>
+        <th>{{ "admin-users-th-role"|t }}</th>
+        <th>{{ "admin-users-th-status"|t }}</th>
+        <th>{{ "admin-users-th-storage"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-users-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {# LC-175: page-render rows are not OOB; the live update sets oob=true. #}
+      {% let oob = false %}
+      {% for u in users %}
+      {% include "admin/user_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
