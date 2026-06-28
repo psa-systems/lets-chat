@@ -1212,6 +1212,11 @@ pub fn build_router(state: AppState) -> Router {
             "/messages/{message_id}/bookmark",
             post(bookmarks::post_bookmark).delete(bookmarks::delete_bookmark),
         )
+        // LC-479: set/clear the label on a saved message.
+        .route(
+            "/messages/{message_id}/bookmark/label",
+            post(bookmarks::post_label),
+        )
         .route("/saved", get(bookmarks::get_saved))
         .route(
             "/scheduled",
