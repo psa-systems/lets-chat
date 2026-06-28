@@ -113,7 +113,7 @@ event-rsvp-no = Can't go
 gif-modal-title = Pick a GIF
 gif-search-placeholder = Search GIFs...
 gif-no-results = No GIFs found.
-gif-powered-by = Powered by Tenor
+gif-powered-by = Powered by GIPHY
 
 ## Keyboard shortcuts overlay (LC-252)
 shortcuts-title = Keyboard shortcuts
