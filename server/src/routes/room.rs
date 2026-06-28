@@ -523,6 +523,7 @@ pub async fn get_room(
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
+        llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
     };
