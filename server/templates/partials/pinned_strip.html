@@ -1,4 +1,4 @@
-<div id="lc-pinned-strip-{{ room_id }}" data-lc-pinned-strip data-room-id="{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-warning-border bg-warning-surface{% endif %}">
+<div id="lc-pinned-strip-{{ room_id }}" data-lc-pinned-strip data-room-id="{{ room_id }}" data-lc-pin-latest="{{ latest_pin_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="{% if total_count > 0 %}border-b border-warning-border bg-warning-surface{% endif %}">
   {% if total_count > 0 %}
   {# LC-264: header carries the collapse toggle. Folding hides the list below
      (persisted per-room in localStorage by the script). #}
@@ -10,13 +10,24 @@
     </span>
     <span class="font-semibold uppercase tracking-wide">{{ "partials-pinned-heading"|t }}</span>
     <span class="text-content-muted">{{ total_count }}</span>
-    <button type="button" data-lc-pin-toggle aria-expanded="true" aria-controls="lc-pinned-list-{{ room_id }}"
-            title="{{ "partials-pinned-toggle"|t }}" aria-label="{{ "partials-pinned-toggle"|t }}"
-            class="ml-auto shrink-0 text-content-muted hover:text-content">
-      <svg data-lc-pin-chevron class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.085l3.71-3.855a.75.75 0 111.08 1.04l-4.25 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
-      </svg>
-    </button>
+    <span class="ml-auto flex shrink-0 items-center gap-1">
+      <button type="button" data-lc-pin-toggle aria-expanded="true" aria-controls="lc-pinned-list-{{ room_id }}"
+              title="{{ "partials-pinned-toggle"|t }}" aria-label="{{ "partials-pinned-toggle"|t }}"
+              class="shrink-0 text-content-muted hover:text-content">
+        <svg data-lc-pin-chevron class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.085l3.71-3.855a.75.75 0 111.08 1.04l-4.25 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+      {# LC-481: dismiss the whole banner for the CURRENT latest pin (device-local,
+         per-room). A later pin changes data-lc-pin-latest, so the banner returns. #}
+      <button type="button" data-lc-pin-dismiss
+              title="{{ "partials-pinned-dismiss"|t }}" aria-label="{{ "partials-pinned-dismiss"|t }}"
+              class="shrink-0 text-content-muted hover:text-content">
+        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+        </svg>
+      </button>
+    </span>
   </div>
   <ul id="lc-pinned-list-{{ room_id }}" data-lc-pin-list class="px-4 pb-2 space-y-1 text-sm">
     {% for p in top_pins %}
@@ -43,14 +54,26 @@
 // someone pins/unpins. Once-guarded: the strip re-renders on pin changes, so
 // the handler registers a single delegated listener and just re-applies state
 // on subsequent runs.
+// LC-481: dismiss hides the WHOLE banner for the current latest pin
+// (device-local, per-room, keyed on data-lc-pin-latest). A later pin changes
+// that id, so the stored dismissal no longer matches and the banner returns -
+// Telegram-style. Collapse (fold the list) and dismiss (hide the banner) are
+// independent.
 (function(){
   function key(id){ return 'lc-pins-collapsed-' + id; }
   function collapsed(id){ try { return localStorage.getItem(key(id)) === '1'; } catch (e) { return false; } }
   function setCollapsed(id, v){
     try { if (v) localStorage.setItem(key(id), '1'); else localStorage.removeItem(key(id)); } catch (e) {}
   }
+  function dkey(id){ return 'lc-pins-dismissed-' + id; }
+  function dismissedPin(id){ try { return localStorage.getItem(dkey(id)) || ''; } catch (e) { return ''; } }
+  function setDismissed(id, pin){ try { localStorage.setItem(dkey(id), pin); } catch (e) {} }
   function apply(strip){
     var id = strip.getAttribute('data-room-id');
+    // Dismiss check first: if this room's stored dismissed pin matches the
+    // current latest pin (and there is one), hide the whole banner.
+    var latest = strip.getAttribute('data-lc-pin-latest') || '0';
+    strip.hidden = latest !== '0' && dismissedPin(id) === latest;
     var list = strip.querySelector('[data-lc-pin-list]');
     var btn = strip.querySelector('[data-lc-pin-toggle]');
     if (!list || !btn) return;
@@ -65,6 +88,14 @@
   if (window.__lcPinsInit) { applyAll(); return; }
   window.__lcPinsInit = true;
   document.addEventListener('click', function(e){
+    var dismiss = e.target.closest && e.target.closest('[data-lc-pin-dismiss]');
+    if (dismiss) {
+      var dstrip = dismiss.closest('[data-lc-pinned-strip]');
+      if (!dstrip) return;
+      setDismissed(dstrip.getAttribute('data-room-id'), dstrip.getAttribute('data-lc-pin-latest') || '0');
+      apply(dstrip);
+      return;
+    }
     var btn = e.target.closest && e.target.closest('[data-lc-pin-toggle]');
     if (!btn) return;
     var strip = btn.closest('[data-lc-pinned-strip]');
