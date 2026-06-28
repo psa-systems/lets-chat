@@ -18,7 +18,7 @@ use crate::state::AppState;
 
 /// Hard cap for a single custom emoji file. Kept small so the picker stays
 /// snappy and bandwidth costs stay bounded.
-const MAX_EMOJI_BYTES: i64 = 256 * 1024;
+pub const MAX_EMOJI_BYTES: i64 = 256 * 1024;
 
 fn allowed_ext_for_mime(mime: &str) -> Option<&'static str> {
     match mime {
@@ -53,18 +53,24 @@ async fn require_manage(
     Ok(())
 }
 
-/// POST /enclave/{id}/emojis - multipart upload. Fields: `shortcode`,
-/// `file`. Streams `file` to a tmp path, sniffs magic bytes, content-
-/// addresses into `uploads_dir()`, then inserts the `custom_emojis` row.
-/// Requires `enclave_can_manage` (owner, admin, or site admin).
-pub async fn post_upload(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(enclave_id): Path<i64>,
-    mut multipart: Multipart,
-) -> Result<Response, AppError> {
-    require_manage(&state, &user, enclave_id).await?;
+/// Validated, content-addressed result of a custom-emoji multipart upload,
+/// before the scope-specific DB insert. LC-482: shared by the enclave and the
+/// personal (user-scoped) upload handlers.
+struct IngestedEmoji {
+    shortcode: String,
+    storage_name: String,
+    mime_type: String,
+    size_bytes: i64,
+}
 
+/// Parse a `shortcode` + `file` multipart upload, enforce the size cap and
+/// shortcode rules, sniff the real MIME, and content-address the file into
+/// `uploads_dir()`. `Ok(Err(resp))` is a client-error response to return
+/// verbatim (oversize / unsupported type); `Ok(Ok(ingested))` is success.
+/// Scope-specific auth and the DB insert are the caller's responsibility.
+async fn ingest_emoji_multipart(
+    mut multipart: Multipart,
+) -> Result<Result<IngestedEmoji, Response>, AppError> {
     let uploads_root = db::uploads_dir();
     let tmp_dir = uploads_root.join(".tmp");
     tokio::fs::create_dir_all(&tmp_dir)
@@ -125,11 +131,11 @@ pub async fn post_upload(
                 drop(file);
                 if overflow {
                     let _ = tokio::fs::remove_file(&tmp_path).await;
-                    return Ok((
+                    return Ok(Err((
                         StatusCode::PAYLOAD_TOO_LARGE,
                         format!("emoji exceeds {MAX_EMOJI_BYTES}-byte limit"),
                     )
-                        .into_response());
+                        .into_response()));
                 }
                 emoji_payload = Some((tmp_path, total));
             }
@@ -153,21 +159,21 @@ pub async fn post_upload(
         Ok(Some(k)) => k,
         Ok(None) | Err(_) => {
             let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Ok((
+            return Ok(Err((
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 "could not determine file type",
             )
-                .into_response());
+                .into_response()));
         }
     };
     let mime_type = kind.mime_type().to_string();
     let Some(ext) = allowed_ext_for_mime(&mime_type) else {
         let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Ok((
+        return Ok(Err((
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             format!("unsupported emoji type: {mime_type}"),
         )
-            .into_response());
+            .into_response()));
     };
 
     let hex = sha256_file(&tmp_path)
@@ -186,13 +192,38 @@ pub async fn post_upload(
         }
     }
 
+    Ok(Ok(IngestedEmoji {
+        shortcode,
+        storage_name,
+        mime_type,
+        size_bytes: total,
+    }))
+}
+
+/// POST /enclave/{id}/emojis - multipart upload. Fields: `shortcode`,
+/// `file`. Streams `file` to a tmp path, sniffs magic bytes, content-
+/// addresses into `uploads_dir()`, then inserts the `custom_emojis` row.
+/// Requires `enclave_can_manage` (owner, admin, or site admin).
+pub async fn post_upload(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(enclave_id): Path<i64>,
+    multipart: Multipart,
+) -> Result<Response, AppError> {
+    require_manage(&state, &user, enclave_id).await?;
+
+    let ingested = match ingest_emoji_multipart(multipart).await? {
+        Ok(v) => v,
+        Err(resp) => return Ok(resp),
+    };
+
     match db::custom_emojis::insert(
         &state.chat,
         enclave_id,
-        &shortcode,
-        &storage_name,
-        &mime_type,
-        total,
+        &ingested.shortcode,
+        &ingested.storage_name,
+        &ingested.mime_type,
+        ingested.size_bytes,
         &user.id,
     )
     .await
@@ -201,7 +232,10 @@ pub async fn post_upload(
         Err(sqlx::Error::Database(d)) if d.is_unique_violation() => {
             return Ok((
                 StatusCode::CONFLICT,
-                format!("shortcode :{shortcode}: already exists in this enclave"),
+                format!(
+                    "shortcode :{}: already exists in this enclave",
+                    ingested.shortcode
+                ),
             )
                 .into_response());
         }
@@ -209,6 +243,57 @@ pub async fn post_upload(
     }
 
     Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings?ok=added")).into_response())
+}
+
+/// POST /settings/emojis - LC-482 personal (user-scoped) emoji upload. Same
+/// multipart pipeline as the enclave upload; no manage check (a user manages
+/// their own emoji). Redirects back to the settings Custom-emoji panel.
+pub async fn post_user_upload(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    multipart: Multipart,
+) -> Result<Response, AppError> {
+    let ingested = match ingest_emoji_multipart(multipart).await? {
+        Ok(v) => v,
+        Err(resp) => return Ok(resp),
+    };
+
+    match db::custom_emojis::insert_for_user(
+        &state.chat,
+        &user.id,
+        &ingested.shortcode,
+        &ingested.storage_name,
+        &ingested.mime_type,
+        ingested.size_bytes,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(sqlx::Error::Database(d)) if d.is_unique_violation() => {
+            return Ok((
+                StatusCode::CONFLICT,
+                format!("you already have an emoji :{}:", ingested.shortcode),
+            )
+                .into_response());
+        }
+        Err(e) => return Err(e.into()),
+    }
+
+    Ok(Redirect::to("/settings?ok=emoji-added#emoji").into_response())
+}
+
+/// POST /settings/emojis/{emoji_id}/delete - LC-482 remove one of the
+/// caller's own personal emoji. Scoped to the owner; 404 if it is not theirs.
+pub async fn post_user_delete(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(emoji_id): Path<i64>,
+) -> Result<Response, AppError> {
+    let removed = db::custom_emojis::delete_for_user(&state.chat, &user.id, emoji_id).await?;
+    if removed == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Redirect::to("/settings?ok=emoji-deleted#emoji").into_response())
 }
 
 /// DELETE /enclave/{id}/emojis/{eid} - remove the row. The file on disk is
@@ -224,7 +309,7 @@ pub async fn post_delete(
     let row = db::custom_emojis::get(&state.chat, emoji_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if row.enclave_id != enclave_id {
+    if row.enclave_id != Some(enclave_id) {
         return Err(AppError::NotFound);
     }
     db::custom_emojis::delete(&state.chat, emoji_id).await?;
@@ -244,15 +329,25 @@ pub async fn get_emoji(
     let row = db::custom_emojis::get(&state.chat, emoji_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let enclave = db::enclave::get_enclave(&state.chat, row.enclave_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
     let is_site_admin = user.role == "admin";
-    let allowed = is_site_admin
-        || enclave.share_emojis_globally
-        || db::enclave::get_membership(&state.chat, row.enclave_id, &user.id)
-            .await?
-            .is_some();
+    // LC-482: authorize by scope. Personal emoji are private to their owner
+    // (and the renderer only resolves them in the owner's views, so only the
+    // owner ever requests one); enclave emoji keep the share/membership rule.
+    let allowed = match (&row.enclave_id, &row.user_id) {
+        (Some(eid), _) => {
+            let enclave = db::enclave::get_enclave(&state.chat, *eid)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            is_site_admin
+                || enclave.share_emojis_globally
+                || db::enclave::get_membership(&state.chat, *eid, &user.id)
+                    .await?
+                    .is_some()
+        }
+        (None, Some(owner)) => is_site_admin || owner == &user.id,
+        // CHECK guarantees one scope is set; treat the impossible row as 404.
+        (None, None) => return Err(AppError::NotFound),
+    };
     if !allowed {
         return Err(AppError::Forbidden);
     }

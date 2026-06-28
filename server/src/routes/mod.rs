@@ -437,7 +437,8 @@ pub(crate) async fn load_message_view_for_viewer(
     let can_delete = m.user_id == viewer.id
         || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
             .await?;
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &viewer.id).await?;
     let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id).await?;
     let reactor_titles = build_reactor_titles(state, &reaction_counts).await;
     let reactions: Vec<ReactionView> = reaction_counts
@@ -1438,6 +1439,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/settings/dnd", post(settings::post_dnd_schedule))
         .route("/settings/dnd/pause", post(settings::post_dnd_pause))
         .route("/settings/dnd/resume", post(settings::post_dnd_resume))
+        // LC-482: personal (user-scoped) custom emoji management.
+        .route(
+            "/settings/emojis",
+            post(custom_emojis::post_user_upload).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/settings/emojis/{emoji_id}/delete",
+            post(custom_emojis::post_user_delete),
+        )
         .route("/settings/export-data", get(export::get_export))
         .route(
             "/settings/delete-account",
