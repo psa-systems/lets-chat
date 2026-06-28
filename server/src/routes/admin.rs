@@ -1,4 +1,5 @@
 use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -8,6 +9,7 @@ use serde::Deserialize;
 use crate::auth::AdminUser;
 use crate::db;
 use crate::error::AppError;
+use crate::i18n::translate_current;
 use crate::state::AppState;
 use crate::version;
 use crate::views::admin::{
@@ -21,8 +23,16 @@ use crate::views::admin::{
     SlashCommandsPage, UserRowFragment, UsersPage, OUTGOING_EVENTS,
 };
 use crate::views::charts;
+use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
+
+/// LC-510: true when the request came from htmx, so a mutating admin handler
+/// returns the shared `SettingsFeedback` status fragment (inline status +
+/// toast) instead of a full-page redirect. Mirrors `routes::settings::is_hx`.
+fn is_hx(headers: &HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -431,7 +441,8 @@ async fn load_imap_settings_for_display(
 pub async fn post_regenerate_thumbnails(
     State(state): State<AppState>,
     AdminUser(_): AdminUser,
-) -> Result<Redirect, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
     let rows = db::uploads::list_image_uploads(&state.chat).await?;
     let uploads_dir = db::uploads_dir();
     let mut regenerated: i64 = 0;
@@ -484,9 +495,14 @@ pub async fn post_regenerate_thumbnails(
         }
     }
     tracing::info!(regenerated, "admin regenerate-thumbnails complete");
-    Ok(Redirect::to(&format!(
-        "/admin/settings?regenerated={regenerated}"
-    )))
+    if is_hx(&headers) {
+        let msg = format!(
+            "{}: {regenerated}",
+            translate_current("admin-uploads-regenerated")
+        );
+        return Ok(html(&SettingsFeedback::ok(msg))?.into_response());
+    }
+    Ok(Redirect::to(&format!("/admin/settings?regenerated={regenerated}")).into_response())
 }
 
 /// Run the orphan sweeper with threshold = 0, i.e. consider every
@@ -497,7 +513,8 @@ pub async fn post_regenerate_thumbnails(
 pub async fn post_purge_orphans(
     State(state): State<AppState>,
     AdminUser(_): AdminUser,
-) -> Result<Redirect, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
     let stats = crate::uploads::sweep::run_orphan_sweep(&state.chat, 0)
         .await
         .map_err(|e| AppError::Internal(format!("purge orphans: {e}")))?;
@@ -507,10 +524,15 @@ pub async fn post_purge_orphans(
         errors = stats.errors,
         "admin purge-orphans complete",
     );
-    Ok(Redirect::to(&format!(
-        "/admin/settings?purged={}",
-        stats.rows_deleted
-    )))
+    if is_hx(&headers) {
+        let msg = format!(
+            "{}: {}",
+            translate_current("admin-uploads-purged"),
+            stats.rows_deleted
+        );
+        return Ok(html(&SettingsFeedback::ok(msg))?.into_response());
+    }
+    Ok(Redirect::to(&format!("/admin/settings?purged={}", stats.rows_deleted)).into_response())
 }
 
 /// LC-77-SMTP-SEAL: previously wrote the SMTP form into `settings.db`
@@ -535,19 +557,29 @@ pub async fn post_settings(
 pub async fn post_imap_settings(
     State(state): State<AppState>,
     AdminUser(_user): AdminUser,
+    headers: HeaderMap,
     Form(form): Form<ImapSettingsForm>,
 ) -> Result<Response, AppError> {
     let Some(key) = state.secret_key.as_ref() else {
-        return Err(AppError::BadRequest(
-            "IMAP settings require LETS_CHAT_SECRET_KEY to be set on the server".into(),
-        ));
+        let msg = "IMAP settings require LETS_CHAT_SECRET_KEY to be set on the server".to_string();
+        if is_hx(&headers) {
+            return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+        }
+        return Err(AppError::BadRequest(msg));
     };
-    let port: u16 = form.imap_port.trim().parse().map_err(|_| {
-        AppError::BadRequest(format!(
-            "IMAP port must be a 1-65535 integer; got {:?}",
-            form.imap_port
-        ))
-    })?;
+    let port: u16 = match form.imap_port.trim().parse() {
+        Ok(p) => p,
+        Err(_) => {
+            let msg = format!(
+                "IMAP port must be a 1-65535 integer; got {:?}",
+                form.imap_port
+            );
+            if is_hx(&headers) {
+                return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+            }
+            return Err(AppError::BadRequest(msg));
+        }
+    };
     let host = form.imap_host.trim().to_string();
     let username = form.imap_username.trim().to_string();
     let folder = {
@@ -606,6 +638,9 @@ pub async fn post_imap_settings(
         .await
         .map_err(|e| AppError::Internal(format!("imap_config write: {e}")))?;
 
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
     Ok(Redirect::to("/admin/settings?imap_saved=1").into_response())
 }
 
@@ -623,6 +658,7 @@ pub struct EmailDigestDefaultForm {
 pub async fn post_email_digest_default(
     State(state): State<AppState>,
     AdminUser(_user): AdminUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<EmailDigestDefaultForm>,
 ) -> Result<Response, AppError> {
     let value = if form.default_notify_email_digest.is_some() {
@@ -631,6 +667,9 @@ pub async fn post_email_digest_default(
         "0"
     };
     db::settings::set_setting(&state.settings, "default_notify_email_digest", value).await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
     Ok(Redirect::to("/admin/settings").into_response())
 }
 
@@ -653,6 +692,7 @@ pub struct MaintenanceForm {
 pub async fn post_maintenance(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<MaintenanceForm>,
 ) -> Result<Response, AppError> {
     let on = form.enabled.is_some();
@@ -667,6 +707,9 @@ pub async fn post_maintenance(
     let metadata = (!form.message.trim().is_empty()).then(|| form.message.trim());
     db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, metadata)
         .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
     Ok(Redirect::to("/admin/settings").into_response())
 }
 
