@@ -38,6 +38,7 @@ mod bridge_avatar_media;
 #[cfg(feature = "standalone")]
 mod bunyip_sso;
 mod call;
+mod canned;
 mod channel_complete;
 mod custom_emojis;
 mod dm;
@@ -1448,6 +1449,9 @@ pub fn build_router(state: AppState) -> Router {
             "/settings/emojis/{emoji_id}/delete",
             post(custom_emojis::post_user_delete),
         )
+        // LC-487: personal canned responses / saved replies.
+        .route("/settings/canned", post(canned::post_create))
+        .route("/settings/canned/{id}/delete", post(canned::post_delete))
         .route("/settings/export-data", get(export::get_export))
         .route(
             "/settings/delete-account",

@@ -134,6 +134,24 @@ pub struct AutocompleteQuery {
     pub hint: bool,
 }
 
+/// LC-487: the custom commands visible to `user`: admin-defined global commands
+/// plus the user's own canned responses (saved replies). A personal canned
+/// response whose name collides with a global command is dropped here so the
+/// list/help show one row; dispatch resolves global first for the same reason.
+async fn custom_for_user(
+    state: &AppState,
+    user: &User,
+) -> Result<Vec<db::slash::CustomCommand>, AppError> {
+    let mut custom = db::slash::list_global(&state.chat).await?;
+    let canned = db::slash::list_canned_for_user(&state.chat, &user.id).await?;
+    for c in canned {
+        if !custom.iter().any(|g| g.name == c.name) {
+            custom.push(c);
+        }
+    }
+    Ok(custom)
+}
+
 /// GET /api/slash-commands?q=&hint=  - autocomplete dropdown (list mode) or the
 /// argument-hint bar (`hint=true`) for the composer.
 pub async fn get_autocomplete(
@@ -142,7 +160,7 @@ pub async fn get_autocomplete(
     Query(q): Query<AutocompleteQuery>,
 ) -> Result<Html, AppError> {
     let prefix = q.q.trim_start_matches('/').to_ascii_lowercase();
-    let custom = db::slash::list_global(&state.chat).await?;
+    let custom = custom_for_user(&state, &user).await?;
     if q.hint {
         let command = exact_command(&user, &custom, &prefix);
         return html(&SlashHint { command });
@@ -183,7 +201,7 @@ pub(crate) async fn try_dispatch(
         }
         match cmd.as_str() {
             "help" => {
-                let custom = db::slash::list_global(&state.chat).await?;
+                let custom = custom_for_user(state, user).await?;
                 let rows = visible_commands(user, &custom, "");
                 return Ok(Some(html(&SlashHelp { commands: rows })?.into_response()));
             }
@@ -241,6 +259,21 @@ pub(crate) async fn try_dispatch(
         }
         post_message_body(state, room, user, out).await?;
         // LC-228: see note above; same waste pattern for custom commands.
+        return Ok(Some(StatusCode::NO_CONTENT.into_response()));
+    }
+
+    // LC-487: the caller's own canned responses (saved replies). Checked after
+    // built-ins and global commands so neither can be shadowed; static_text
+    // expansion is identical to a global static_text command.
+    if let Some(c) = db::slash::get_canned_for_user(&state.chat, &user.id, &cmd).await? {
+        let out = c.target.replace("{args}", rest);
+        let out = out.trim();
+        if out.is_empty() {
+            return Err(AppError::BadRequest(
+                "canned response produced no output".into(),
+            ));
+        }
+        post_message_body(state, room, user, out).await?;
         return Ok(Some(StatusCode::NO_CONTENT.into_response()));
     }
 
