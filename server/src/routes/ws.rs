@@ -789,7 +789,9 @@ async fn render_dm_read(
     }
 
     if room.room_type != "dm" {
-        return None;
+        // LC-489: a group-room read advanced a member's watermark - refresh this
+        // viewer's "Seen by" bar (gating + eligibility handled in the helper).
+        return render_room_seen_bar(state, viewer, room_id).await;
     }
 
     if !viewer.read_receipts_enabled {
@@ -865,6 +867,23 @@ async fn render_dm_read(
     } else {
         Some(html)
     }
+}
+
+/// LC-489: render the group-room "Seen by" bar OOB for one viewer, or `None`
+/// when the room is ineligible (DM / too large / viewer has receipts off). The
+/// id-keyed `#lc-seen-{room_id}` swap drops on connections not viewing the room.
+async fn render_room_seen_bar(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
+    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let members = super::room_seen_members_if_applicable(state, viewer, &room)
+        .await
+        .ok()??;
+    crate::views::room::RoomSeenBar {
+        room_id,
+        members,
+        oob: true,
+    }
+    .render()
+    .ok()
 }
 
 /// Pick the right rendering for a `NewMessage` event for this connection:
@@ -1167,11 +1186,18 @@ async fn render_new_message(
     } else {
         None
     };
-    render_template(&NewMessageFragment {
+    let mut out = render_template(&NewMessageFragment {
         message: &view,
         client_id: echo_client_id,
     })
-    .ok()
+    .ok()?;
+    // LC-489: a new message resets the room's "Seen by" bar (only the author is
+    // caught up to it). Append the recomputed bar OOB so it refreshes live for
+    // anyone viewing the room; ineligible rooms append nothing.
+    if let Some(bar) = render_room_seen_bar(state, viewer, message.room_id).await {
+        out.push_str(&bar);
+    }
+    Some(out)
 }
 
 /// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
