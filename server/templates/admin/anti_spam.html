@@ -3,49 +3,54 @@
 {% block title %}{{ "admin-antispam-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-antispam-heading"|t }}</h1>
-{% if saved %}
-<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm">{{ "admin-antispam-saved"|t }}</div>
-{% endif %}
+<div class="lc-admin-narrow">
+  {% if saved %}
+  <div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "admin-antispam-saved"|t }}</div>
+  {% endif %}
 
-<form method="post" action="/admin/anti-spam" class="max-w-lg space-y-6">
-  <section class="space-y-3">
-    <h2 class="text-base font-semibold">{{ "admin-antispam-rate-limits-heading"|t }}</h2>
-    <p class="text-xs text-content-muted">{{ "admin-antispam-rate-limits-note-1"|t }} <code>0</code> {{ "admin-antispam-rate-limits-note-2"|t }} <code>X-Forwarded-For</code>.</p>
-    <div>
-      <label class="block text-sm font-medium mb-1" for="rate_limit_messages">{{ "admin-antispam-messages-per-user"|t }}</label>
-      <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" max="10000" value="{{ rate_limit_messages }}"
-             class="w-32 border border-border-strong rounded px-2 py-1 text-sm">
+  <form method="post" action="/admin/anti-spam"
+        hx-post="/admin/anti-spam" hx-target="#st-antispam" hx-swap="innerHTML" hx-disabled-elt="this">
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "admin-antispam-rate-limits-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "admin-antispam-rate-limits-note-1"|t }} <code>0</code> {{ "admin-antispam-rate-limits-note-2"|t }} <code>X-Forwarded-For</code>.</p>
+      </div>
+      <div class="lc-set-field lc-set-field--narrow">
+        <label class="lc-set-label" for="rate_limit_messages">{{ "admin-antispam-messages-per-user"|t }}</label>
+        <input id="rate_limit_messages" name="rate_limit_messages" type="number" min="0" max="10000" value="{{ rate_limit_messages }}" class="input">
+      </div>
+      {# LC-22 cutover: registration / login / password-reset per-IP caps are
+         gone with the local-auth surface. Bunyip handles credential rate limits
+         upstream. #}
     </div>
-    {# LC-22 cutover: registration / login / password-reset per-IP caps are
-       gone with the local-auth surface. Bunyip handles credential rate limits
-       upstream. #}
-  </section>
 
-  <section class="space-y-3">
-    <h2 class="text-base font-semibold">{{ "admin-antispam-defenses-heading"|t }}</h2>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="link_filter_enabled" value="1" class="mt-0.5"
-        {% if link_filter_enabled %}checked{% endif %}>
-      <span>
-        {{ "admin-antispam-link-filter"|t }}
-        <span class="block text-xs text-content-muted mt-1">
-          {{ "admin-antispam-link-filter-note-1"|t }} <a href="/admin/link-filter" class="text-accent hover:underline">/admin/link-filter</a>. {{ "admin-antispam-link-filter-note-2"|t }}
-        </span>
-      </span>
-    </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" name="honeypot_enabled" value="1" class="mt-0.5"
-        {% if honeypot_enabled %}checked{% endif %}>
-      <span>
-        {{ "admin-antispam-honeypot"|t }}
-        <span class="block text-xs text-content-muted mt-1">
-          {{ "admin-antispam-honeypot-note"|t }}
-        </span>
-      </span>
-    </label>
-  </section>
-
-  <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-antispam-save"|t }}</button>
-</form>
+    <div class="card lc-set-card mt-5">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "admin-antispam-defenses-heading"|t }}</h3>
+      </div>
+      <div class="lc-set-form">
+        <label class="lc-toggle">
+          <input type="checkbox" name="link_filter_enabled" value="1" {% if link_filter_enabled %}checked{% endif %}>
+          <span class="lc-toggle-track" aria-hidden="true"></span>
+          <span class="lc-toggle-text">
+            <span class="lc-toggle-title">{{ "admin-antispam-link-filter"|t }}</span>
+            <span class="lc-toggle-desc">{{ "admin-antispam-link-filter-note-1"|t }} <a href="/admin/link-filter" class="text-accent hover:underline">/admin/link-filter</a>. {{ "admin-antispam-link-filter-note-2"|t }}</span>
+          </span>
+        </label>
+        <label class="lc-toggle">
+          <input type="checkbox" name="honeypot_enabled" value="1" {% if honeypot_enabled %}checked{% endif %}>
+          <span class="lc-toggle-track" aria-hidden="true"></span>
+          <span class="lc-toggle-text">
+            <span class="lc-toggle-title">{{ "admin-antispam-honeypot"|t }}</span>
+            <span class="lc-toggle-desc">{{ "admin-antispam-honeypot-note"|t }}</span>
+          </span>
+        </label>
+      </div>
+      <div class="lc-set-actions mt-4">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-antispam-save"|t }}</span></button>
+        <span id="st-antispam" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+  </form>
+</div>
 {% endblock %}
