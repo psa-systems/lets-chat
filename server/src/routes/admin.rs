@@ -1566,8 +1566,9 @@ pub async fn get_anti_spam(
 pub async fn post_anti_spam(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<AntiSpamForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Response, AppError> {
     fn cap_or_zero(s: &Option<String>) -> String {
         s.as_deref()
             .map(str::trim)
@@ -1602,7 +1603,10 @@ pub async fn post_anti_spam(
         Some(&summary),
     )
     .await?;
-    Ok(Redirect::to("/admin/anti-spam?saved=1"))
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/anti-spam?saved=1").into_response())
 }
 
 // Link-filter rules (LC-94) -------------------------------------------------
