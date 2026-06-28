@@ -202,7 +202,8 @@ struct FileUploadExport {
 #[derive(Serialize)]
 struct CustomEmojiExport {
     id: i64,
-    enclave_id: i64,
+    // LC-482: None for personal (user-scoped) emoji.
+    enclave_id: Option<i64>,
     shortcode: String,
     mime_type: String,
     size_bytes: i64,
@@ -716,7 +717,7 @@ async fn load_custom_emojis(
     user_id: &str,
 ) -> Result<Vec<CustomEmojiExport>, AppError> {
     let rows = sqlx::query(
-        "SELECT id, enclave_id, shortcode, mime_type, size_bytes, created_at \
+        "SELECT id, enclave_id, user_id, shortcode, mime_type, size_bytes, created_at \
          FROM custom_emojis WHERE uploaded_by = ? ORDER BY id",
     )
     .bind(user_id)
