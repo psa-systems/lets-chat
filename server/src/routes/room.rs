@@ -280,6 +280,9 @@ pub async fn get_room(
     // Same shape for the viewer's bookmarks in this room - per-viewer state.
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
+    // LC-490: ids in this room that require acknowledgement (usually empty), so
+    // the per-message ack rollup runs only for flagged messages.
+    let ack_required_ids = db::acks::required_ids_for_room(&state.chat, room_id).await?;
 
     // Resolve quote-reply previews for every message that quotes one, in a
     // single bulk lookup keyed by the quoted message's id.
@@ -391,6 +394,11 @@ pub async fn get_room(
             mentions,
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
+            ack: if ack_required_ids.contains(&m.id) {
+                super::build_ack_view(&state, m.id, &user.id).await?
+            } else {
+                None
+            },
             custom_emojis: custom_emojis.clone(),
             channels: channel_refs.clone(),
             quote_preview: m
@@ -2183,6 +2191,8 @@ pub async fn patch_message(
         mentions,
         is_pinned: false,
         is_bookmarked: db::bookmarks::is_bookmarked(&state.chat, &user.id, m.id).await?,
+        // LC-490: recompute ack so the edit response keeps the bar.
+        ack: super::build_ack_view(&state, m.id, &user.id).await?,
         custom_emojis,
         channels: channel_refs,
         quote_preview,
@@ -2304,6 +2314,7 @@ pub async fn get_thread_panel(
         mentions: mentions_by_message.remove(&parent.id).unwrap_or_default(),
         is_pinned: false,
         is_bookmarked: bookmarked_ids.contains(&parent.id),
+        ack: super::build_ack_view(&state, parent.id, &user.id).await?,
         custom_emojis: custom_emojis.clone(),
         channels: channel_refs.clone(),
         quote_preview: parent_quote_preview,
@@ -2374,6 +2385,7 @@ pub async fn get_thread_panel(
             mentions,
             is_pinned: false,
             is_bookmarked: bookmarked_ids.contains(&r_id),
+            ack: super::build_ack_view(&state, r_id, &user.id).await?,
             custom_emojis: custom_emojis.clone(),
             channels: channel_refs.clone(),
             quote_preview: None,

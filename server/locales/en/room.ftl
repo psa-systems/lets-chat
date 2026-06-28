@@ -192,6 +192,13 @@ room-msg-unpin = Unpin
 room-msg-pin = Pin
 room-msg-unsave = Unsave
 room-msg-save = Save
+# LC-490: acknowledgement / required-read
+room-msg-require-ack = Require acknowledgement
+room-msg-unrequire-ack = Clear acknowledgement
+room-ack-required = Acknowledgement required
+room-ack-button = Acknowledge
+room-ack-done = Acknowledged
+room-ack-count-prefix = Acknowledged by
 room-msg-remind = Remind
 room-msg-mark-unread = Mark unread
 room-msg-forward = Forward

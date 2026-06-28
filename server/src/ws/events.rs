@@ -100,6 +100,19 @@ pub enum ChatEvent {
         emoji: String,
         user_id: String,
     },
+    /// LC-490: a message's acknowledgement requirement was toggled on or off.
+    /// Re-renders the full bubble per viewer so the ack bar and the
+    /// require/clear menu item flip.
+    AckRequiredChanged {
+        room_id: i64,
+        message_id: i64,
+    },
+    /// LC-490: someone acknowledged a message. Re-renders the ack-bar
+    /// sub-region (`#ack-{id}`) per viewer so the roster + own state stay correct.
+    Acknowledged {
+        room_id: i64,
+        message_id: i64,
+    },
     /// LC-66: a poll's tallies changed (a vote, or the poll closed). The
     /// per-connection render re-renders the poll block for the viewer so
     /// `voted_by_me` highlighting stays correct across clients.
