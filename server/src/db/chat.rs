@@ -1431,6 +1431,33 @@ pub async fn list_room_reactions(
         .collect())
 }
 
+/// LC-477: the caller's most-used Unicode reaction emoji, most-frequent first.
+/// Powers the one-tap quick-react bar so a user's actual habits (cross-device,
+/// frequency-ranked) seed the bar instead of only device-local MRU. Custom
+/// `:shortcode:` reactions are excluded - they are enclave-scoped and the
+/// quick-react bar/recents path deliberately skips them (LC-288/LC-302). Ties
+/// break toward the more recently used glyph. `limit` caps the row count.
+pub async fn top_reaction_emojis(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    limit: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT emoji \
+         FROM message_reactions \
+         WHERE user_id = ? AND emoji NOT LIKE ':%' \
+         GROUP BY emoji \
+         ORDER BY COUNT(*) DESC, MAX(created_at) DESC \
+         LIMIT ?",
+    )
+    .bind(user_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|r| r.get("emoji")).collect())
+}
+
 /// Escape a raw user query string for safe use in an FTS5 MATCH expression.
 /// Splits on whitespace, strips FTS5 special characters from each token,
 /// and drops empty tokens. Returns None if no usable tokens remain.

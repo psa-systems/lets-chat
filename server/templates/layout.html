@@ -1058,22 +1058,48 @@ document.body.addEventListener('click', function(e){
   scan();
 
   // LC-302: quick-reaction hover bar. On first hover of a message row, fill its
-  // [data-lc-quick-bar] with up to QCAP one-tap buttons from the same MRU (or a
-  // default set when empty). Each button is the SAME hx-post the picker emits,
-  // so the recorder above also records quick-react clicks. Lazy per-row fill
-  // keeps large rooms from processing every message on load.
+  // [data-lc-quick-bar] with up to QCAP one-tap buttons. Each button is the SAME
+  // hx-post the picker emits, so the recorder above also records quick-react
+  // clicks. Lazy per-row fill keeps large rooms from processing every message on
+  // load.
+  // LC-477: the seed is frequency-first - the caller's server-computed most-used
+  // emoji (cross-device, ranked over message_reactions) take priority, then this
+  // device's MRU recents, then a hardcoded default set. This makes the one-tap
+  // row reflect real habits instead of only recency, and stays useful on a fresh
+  // device before any local MRU exists.
   // Fully-qualified glyphs (heart carries VS-16) so quick-react defaults match
   // the grid + canon() and never seed a text-style Recent entry (LC-390).
   var DEFAULTS = ['\u{1F44D}', '\u{2764}\u{FE0F}', '\u{1F602}', '\u{1F389}', '\u{1F62E}'];
   var QCAP = 5;
+  var FREQUENT = []; // LC-477: server-computed most-used emoji, filled async.
+  // Merge frequents -> recents -> defaults, canonicalized + deduped, skipping
+  // custom :shortcode: entries (the bar only does reusable Unicode glyphs), to
+  // at most QCAP buttons.
+  function quickList(){
+    var recents = read();
+    var seen = {}, out = [];
+    function add(arr){
+      for (var i = 0; i < arr.length && out.length < QCAP; i++){
+        var g = canon(arr[i]);
+        if (g && !/^:.*:$/.test(g) && !seen[g]){ seen[g] = 1; out.push(g); }
+      }
+    }
+    add(FREQUENT); add(recents); add(DEFAULTS);
+    return out;
+  }
+  // Idempotent: render from the CURRENT seed and key on a signature so a re-fill
+  // after FREQUENT loads (or after a react updates the MRU) refreshes the row
+  // rather than duplicating buttons or freezing the first computed set.
   function fillQuick(row){
     var bar = row.querySelector('[data-lc-quick-bar]');
-    if (!bar || bar.getAttribute('data-lc-quick-done')) return;
-    bar.setAttribute('data-lc-quick-done', '1');
+    if (!bar) return;
     var mid = row.getAttribute('data-lc-quick-react');
     if (!mid) return;
-    var recents = read();
-    var list = (recents.length ? recents : DEFAULTS).slice(0, QCAP);
+    var list = quickList();
+    var sig = list.join(' ');
+    if (bar.getAttribute('data-lc-quick-sig') === sig) return;
+    bar.setAttribute('data-lc-quick-sig', sig);
+    bar.replaceChildren();
     list.forEach(function(g){
       var b = document.createElement('button');
       b.type = 'button';
@@ -1095,6 +1121,19 @@ document.body.addEventListener('click', function(e){
     var row = e.target.closest && e.target.closest('[data-lc-quick-react]');
     if (row) fillQuick(row);
   });
+  // LC-477: fetch the caller's most-used emoji once, then refill any bar already
+  // built (rare early-hover race) so frequents apply without a reload.
+  fetch('/api/reactions/frequent', { headers: { 'Accept': 'application/json' } })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(a){
+      if (!Array.isArray(a) || !a.length) return;
+      FREQUENT = a;
+      document.querySelectorAll('[data-lc-quick-bar][data-lc-quick-sig]').forEach(function(bar){
+        var row = bar.closest('[data-lc-quick-react]');
+        if (row) fillQuick(row);
+      });
+    })
+    .catch(function(){});
 })();
 </script>
 <script>

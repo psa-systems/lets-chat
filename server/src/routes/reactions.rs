@@ -1,5 +1,6 @@
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 
 use crate::auth::AuthUser;
 use crate::db;
@@ -41,6 +42,26 @@ fn attr_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('<', "&lt;")
+}
+
+/// Number of frequent emoji to return. A handful more than the quick-react
+/// bar shows (QCAP=5 in layout.html) so the client can dedupe against recents
+/// and still have a full row.
+const FREQUENT_LIMIT: i64 = 8;
+
+/// GET /api/reactions/frequent
+/// LC-477: the caller's most-used Unicode reaction emoji as a JSON array,
+/// most-frequent first. The quick-react bar (LC-302) fetches this once and uses
+/// it as the primary seed so the one-tap row reflects the user's real habits
+/// (cross-device, frequency-ranked) rather than only device-local MRU. No room
+/// scope: the result is the caller's own aggregate across every room they have
+/// reacted in, so no per-room access check applies.
+pub async fn get_frequent(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<Vec<String>>, AppError> {
+    let emojis = db::chat::top_reaction_emojis(&state.chat, &user.id, FREQUENT_LIMIT).await?;
+    Ok(Json(emojis))
 }
 
 /// POST /messages/:message_id/reactions/:emoji

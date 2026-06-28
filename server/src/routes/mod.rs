@@ -1386,6 +1386,8 @@ pub fn build_router(state: AppState) -> Router {
             "/messages/{message_id}/reactions/{emoji}",
             post(reactions::toggle_reaction),
         )
+        // LC-477: caller's most-used emoji, seeds the one-tap quick-react bar.
+        .route("/api/reactions/frequent", get(reactions::get_frequent))
         // LC-490: acknowledgement / required-read tracking.
         .route("/messages/{message_id}/ack", post(acks::post_ack))
         .route(
