@@ -24,6 +24,8 @@
       {% include "partials/jump_to_unread.html" %}
       {% include "partials/jump_to_latest.html" %}
     </div>
+    {# LC-489: group-room "Seen by" avatar stack (small rooms, opt-in). #}
+    {{ room_seen_bar_html|safe }}
     <div id="typing" class="px-4 text-xs text-content-muted"></div>
     {% if can_post %}
     {% include "room/composer.html" %}

@@ -1116,6 +1116,10 @@ pub struct RoomPage<'a> {
     /// button disabled with a "set LETS_CHAT_GIPHY_API_KEY" hint
     /// (discoverability), mirroring the LC-506 AI teaser.
     pub gif_teaser: bool,
+    /// LC-489: pre-rendered "Seen by" avatar bar (`partials/room_seen_bar.html`),
+    /// empty string when the room is not eligible. Threaded as HTML like
+    /// `pinned_strip_html` so the page handler owns the per-viewer query.
+    pub room_seen_bar_html: String,
 }
 
 impl RoomPage<'_> {
@@ -1168,6 +1172,25 @@ pub struct EditFormFragment<'a> {
 #[template(path = "room/message.html")]
 pub struct SingleMessageFragment<'a> {
     pub message: &'a MessageView,
+    pub oob: bool,
+}
+
+/// LC-489: one member in a group room's "Seen by" avatar stack. Avatars resolve
+/// via `/avatars/{user_id}` (the route serves a generated fallback), so only the
+/// id + display label are needed.
+pub struct SeenAvatar {
+    pub user_id: String,
+    pub label: String,
+}
+
+/// LC-489: the "Seen by" avatar stack pinned below a small group room's message
+/// list (`#lc-seen-{room_id}`). Shared by the page render and the live OOB swap;
+/// an empty `members` renders an empty bar (so it clears live).
+#[derive(Template)]
+#[template(path = "partials/room_seen_bar.html")]
+pub struct RoomSeenBar {
+    pub room_id: i64,
+    pub members: Vec<SeenAvatar>,
     pub oob: bool,
 }
 

@@ -512,6 +512,20 @@ pub async fn get_room(
         .await?
         .unwrap_or_default();
 
+    // LC-489: pre-render the "Seen by" bar for this viewer (empty when the room
+    // is not eligible). Computed after the mark-read above so the viewer is not
+    // shown as needing to catch up to their own just-read state.
+    let room_seen_bar_html = {
+        let members = super::room_seen_members_if_applicable(&state, &user, &room)
+            .await?
+            .unwrap_or_default();
+        askama::Template::render(&crate::views::room::RoomSeenBar {
+            room_id,
+            members,
+            oob: false,
+        })?
+    };
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -536,6 +550,7 @@ pub async fn get_room(
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
+        room_seen_bar_html,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

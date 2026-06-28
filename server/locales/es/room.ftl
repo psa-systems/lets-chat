@@ -279,6 +279,8 @@ room-announce-label = Anuncios
 room-announce-admins = Solo los administradores pueden publicar en este canal.
 room-announce-mods = Solo los moderadores pueden publicar en este canal.
 room-readonly-hint = Aun puedes reaccionar a los mensajes.
+# LC-489: etiqueta de la pila de avatares "Visto por" en salas de grupo.
+room-seen-by = Visto por
 # LC-476: politica de menciones masivas (@here / @channel)
 room-broadcast-policy-heading = Menciones masivas
 room-broadcast-policy-intro = Controla quien puede usar @here y @channel para notificar a muchas personas a la vez. Restringelo para reducir el ruido; las menciones normales no se ven afectadas.
