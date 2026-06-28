@@ -36,6 +36,11 @@ pub struct PinnedStripFragment<'a> {
     pub has_more: bool,
     pub pin_path: &'a str,
     pub top_pins: Vec<PinnedStripRow>,
+    /// LC-481: message id of the most recently pinned message (top_pins is
+    /// ordered pinned_at DESC, so the first row), or 0 when there are no pins.
+    /// The client keys its per-room "dismissed" state on this so a NEW pin
+    /// (different id) re-shows a previously dismissed banner, Telegram-style.
+    pub latest_pin_id: i64,
     /// True when this fragment is being broadcast as an OOB swap (WS
     /// event or HTTP response that also carries an unrelated primary
     /// target). False on the initial page render.
