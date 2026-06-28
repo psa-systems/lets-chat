@@ -24,6 +24,7 @@ use crate::views::not_found::NotFoundPage;
 use crate::ws::events::ChatEvent;
 
 mod account;
+mod acks;
 mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
@@ -156,6 +157,41 @@ fn reactor_title_from_labels(
     } else {
         format!("{}, +{}", names[..CAP].join(", "), names.len() - CAP)
     }
+}
+
+/// LC-490: comma-joined acknowledger display names for the roster tooltip.
+/// Reuses the reactor name-resolution path (`display_names_for_ids` +
+/// `reactor_title_from_labels`).
+async fn build_acker_title(state: &AppState, acker_ids: &[String]) -> String {
+    if acker_ids.is_empty() {
+        return String::new();
+    }
+    let ids: Vec<&str> = acker_ids.iter().map(|s| s.as_str()).collect();
+    let labels = db::auth::display_names_for_ids(&state.auth, &ids)
+        .await
+        .unwrap_or_default();
+    reactor_title_from_labels(acker_ids, &labels)
+}
+
+/// LC-490: build the per-viewer ack state for a message, or `None` when the
+/// message does not require acknowledgement. Used by every full-bubble render
+/// path (so an edit/pin/bookmark does not wipe the ack bar) and the list/thread
+/// builders.
+pub(crate) async fn build_ack_view(
+    state: &AppState,
+    message_id: i64,
+    viewer_id: &str,
+) -> Result<Option<crate::views::room::AckState>, AppError> {
+    if !db::acks::is_required(&state.chat, message_id).await? {
+        return Ok(None);
+    }
+    let rollup = db::acks::rollup(&state.chat, message_id, viewer_id).await?;
+    let ackers_title = build_acker_title(state, &rollup.acker_ids).await;
+    Ok(Some(crate::views::room::AckState {
+        count: rollup.count,
+        acked_by_me: rollup.acked_by_me,
+        ackers_title,
+    }))
 }
 
 /// Per-message author metadata cached by callers that build many MessageViews.
@@ -429,6 +465,10 @@ pub(crate) async fn load_message_view_for_viewer(
         None => None,
     };
     let channels = channel_refs_for_room(state, m.room_id, viewer).await?;
+    // LC-490: per-viewer ack state; None unless the message requires it. Computed
+    // centrally so every WS single-message render (edit/pin/bookmark/ack) keeps
+    // the ack bar instead of wiping it.
+    let ack = build_ack_view(state, m.id, &viewer.id).await?;
     Ok(MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -458,6 +498,7 @@ pub(crate) async fn load_message_view_for_viewer(
         mentions,
         is_pinned,
         is_bookmarked,
+        ack,
         custom_emojis,
         channels,
         quote_preview,
@@ -1344,6 +1385,12 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/messages/{message_id}/reactions/{emoji}",
             post(reactions::toggle_reaction),
+        )
+        // LC-490: acknowledgement / required-read tracking.
+        .route("/messages/{message_id}/ack", post(acks::post_ack))
+        .route(
+            "/messages/{message_id}/ack-required",
+            post(acks::post_require).delete(acks::delete_require),
         )
         .route("/search", get(search::get_search))
         .route("/searches", post(search::post_save))

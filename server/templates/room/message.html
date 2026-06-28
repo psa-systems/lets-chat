@@ -194,6 +194,16 @@
         {% else %}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-save"|t }}</button>
         {% endif %}
+        {# LC-490: require / clear acknowledgement (author or room moderator only,
+           same gate as delete). Re-renders the whole bubble so the bar + this
+           menu item flip for the acting tab; other viewers update over WS. #}
+        {% if message.can_delete && !message.is_system %}
+        {% if message.ack.is_some() %}
+        <button role="menuitem" hx-delete="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unrequire-ack"|t }}</button>
+        {% else %}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-require-ack"|t }}</button>
+        {% endif %}
+        {% endif %}
         <button role="menuitem" hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-remind"|t }}</button>
         {# LC-486: translate into the viewer's language. Shown only when an LLM is
            configured (CSS-gated via [data-lc-llm] on the page root, which also
@@ -283,6 +293,15 @@
     {% let reactions = message.reactions.as_slice() %}
     {% include "partials/reaction_bar.html" %}
   </div>
+  {# LC-490: acknowledgement bar. Always an id-keyed region so live OOB swaps
+     (ws/ack_update.html) land even on a message that becomes required later;
+     empty unless this message currently requires acknowledgement. #}
+  {% if let Some(ack) = message.ack.as_ref() %}
+  {% let message_id = message.id %}
+  {% include "partials/ack_bar.html" %}
+  {% else %}
+  <div id="ack-{{ message.id }}"></div>
+  {% endif %}
   {% let reply_count = message.reply_count %}
   {% let message_id = message.id %}
   {% let room_id = message.room_id %}
