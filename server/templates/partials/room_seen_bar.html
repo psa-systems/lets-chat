@@ -1,0 +1,13 @@
+{# LC-489: group-room "Seen by" avatar stack. Pinned below the message list for
+   small rooms only; empty (and so invisible) when nobody is caught up, when the
+   viewer has read receipts off, or in large rooms. The id-keyed region is swapped
+   live (ws/render_room_seen_bar) on read + new-message events; a connection not
+   viewing this room has no matching id and drops the swap. #}
+<div id="lc-seen-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="empty:hidden flex items-center gap-1 px-4 py-1 text-xs text-content-muted">
+  {% if !members.is_empty() %}
+  <span class="mr-1">{{ "room-seen-by"|t }}</span>
+  {% for m in members %}
+  <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" title="{{ m.label }}" class="h-5 w-5 rounded-full object-cover ring-1 ring-surface-elevated -ml-1 first:ml-0">
+  {% endfor %}
+  {% endif %}
+</div>
