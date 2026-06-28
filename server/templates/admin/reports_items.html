@@ -5,11 +5,12 @@
    fragment (and broadcasts one to the `admin` topic) that re-renders this list
    and the nav badge for every admin tab. #}
 {% if reports.is_empty() %}
-<p class="text-sm text-content-muted">{{ "report-queue-empty"|t }}</p>
+{% let empty_text_key = "report-queue-empty" %}
+{% include "partials/empty_state.html" %}
 {% else %}
 <ul class="flex flex-col gap-3">
   {% for r in reports %}
-  <li class="rounded border border-border p-3">
+  <li class="card p-3">
     <div class="flex items-center justify-between gap-2 mb-1">
       <div class="flex items-center gap-2">
         <span class="rounded bg-danger-surface text-danger-surface-content text-xs px-1.5 py-0.5 uppercase tracking-wide">
@@ -32,10 +33,8 @@
     {% endif %}
     <p class="text-xs text-content-muted mt-1">{{ "report-row-reporter"|t }} {{ r.reporter_label }}</p>
     <div class="flex gap-2 mt-2">
-      <button hx-post="/admin/reports/{{ r.id }}/resolve" hx-swap="none"
-              class="rounded bg-success px-2 py-1 text-xs text-success-content hover:opacity-90">{{ "report-action-resolve"|t }}</button>
-      <button hx-post="/admin/reports/{{ r.id }}/dismiss" hx-swap="none"
-              class="rounded border border-border px-2 py-1 text-xs hover:bg-surface-sunken">{{ "report-action-dismiss"|t }}</button>
+      <button hx-post="/admin/reports/{{ r.id }}/resolve" hx-swap="none" class="btn btn-sm btn-primary">{{ "report-action-resolve"|t }}</button>
+      <button hx-post="/admin/reports/{{ r.id }}/dismiss" hx-swap="none" class="btn btn-sm btn-secondary">{{ "report-action-dismiss"|t }}</button>
     </div>
   </li>
   {% endfor %}
