@@ -313,6 +313,10 @@ admin-settings-imap-save = Save IMAP settings
 admin-settings-uploads-heading = Uploads
 admin-settings-uploads-generated-prefix = Generated
 admin-settings-uploads-generated-suffix = preview(s).
+# LC-510: inline save-feedback toasts (htmx path)
+admin-saved = Saved
+admin-uploads-regenerated = Previews regenerated
+admin-uploads-purged = Orphans purged
 admin-settings-uploads-purged-prefix = Purged
 admin-settings-uploads-purged-suffix = orphan upload(s).
 admin-settings-uploads-disk-size = On-disk size
