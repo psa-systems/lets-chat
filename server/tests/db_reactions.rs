@@ -131,3 +131,60 @@ async fn test_reaction_removed_disappears_from_list() {
         "emoji should be gone after toggle-off"
     );
 }
+
+#[tokio::test]
+async fn test_top_reaction_emojis_ranks_by_frequency_unicode_only() {
+    let pool = setup_pool().await;
+    let room_id =
+        lets_chat::db::chat::create_room(&pool, "test-react-top", None, "public", None, None)
+            .await
+            .unwrap();
+    // Three messages so user-1 can react with the same emoji repeatedly
+    // (one reaction row per (message, user, emoji)).
+    let mut msgs = Vec::new();
+    for i in 0..3 {
+        msgs.push(
+            lets_chat::db::chat::insert_message(&pool, room_id, "user-1", &format!("m{i}"))
+                .await
+                .unwrap(),
+        );
+    }
+
+    // 👍 x3, ❤️ x2, 😂 x1 for user-1, plus a custom :party: that must be excluded.
+    for m in &msgs {
+        lets_chat::db::chat::toggle_reaction(&pool, *m, "user-1", "👍")
+            .await
+            .unwrap();
+    }
+    for m in &msgs[..2] {
+        lets_chat::db::chat::toggle_reaction(&pool, *m, "user-1", "❤️")
+            .await
+            .unwrap();
+    }
+    lets_chat::db::chat::toggle_reaction(&pool, msgs[0], "user-1", "😂")
+        .await
+        .unwrap();
+    lets_chat::db::chat::toggle_reaction(&pool, msgs[0], "user-1", ":party:")
+        .await
+        .unwrap();
+    // Another user's reactions must not leak into user-1's ranking.
+    lets_chat::db::chat::toggle_reaction(&pool, msgs[0], "user-2", "😡")
+        .await
+        .unwrap();
+
+    let top = lets_chat::db::chat::top_reaction_emojis(&pool, "user-1", 8)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        top,
+        vec!["👍".to_string(), "❤️".to_string(), "😂".to_string()],
+        "frequency-ranked, custom :shortcode: excluded, other users excluded"
+    );
+
+    // limit caps the row count
+    let top2 = lets_chat::db::chat::top_reaction_emojis(&pool, "user-1", 2)
+        .await
+        .unwrap();
+    assert_eq!(top2, vec!["👍".to_string(), "❤️".to_string()]);
+}
