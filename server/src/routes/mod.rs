@@ -64,6 +64,9 @@ pub(crate) mod room;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
+// LC-483: expose the off-request-path voice transcription helper for the test
+// crate so it can be asserted deterministically without racing the spawn.
+pub use room::maybe_transcribe_voice_message;
 // LC-397: expose the per-recipient new-message render so the optimistic-echo
 // test can assert the author always gets their own echo, even unsubscribed.
 pub use ws::render_new_message_or_bump;
@@ -79,8 +82,10 @@ mod sidebar_categories;
 mod slash;
 mod starred_rooms;
 mod status;
+mod summary;
 mod switcher;
 mod transcripts;
+mod translate;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -1135,6 +1140,15 @@ pub fn build_router(state: AppState) -> Router {
             post(room::post_thread_follow).delete(room::delete_thread_follow),
         )
         .route("/thread-panel", delete(room::close_thread_panel))
+        // LC-484: AI "catch me up" summaries (threads + channel unread range).
+        .route(
+            "/room/{room_id}/summary",
+            get(summary::open_catch_me_up).post(summary::summarize_channel),
+        )
+        .route(
+            "/room/{room_id}/thread/{parent_id}/summary",
+            post(summary::summarize_thread),
+        )
         .route(
             "/room/{room_id}/composer-quote/{message_id}",
             get(room::get_composer_quote),
@@ -1146,6 +1160,11 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/messages/{message_id}/pin",
             post(pinned::post_pin).delete(pinned::delete_pin),
+        )
+        // LC-486: inline per-message translation into the viewer's locale.
+        .route(
+            "/messages/{message_id}/translate",
+            post(translate::post_translate),
         )
         .route(
             "/messages/{message_id}/bookmark",
@@ -1167,6 +1186,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reminders/picker", get(reminders::get_picker))
         .route("/reminders/{id}", delete(reminders::delete_reminder))
         .route("/room/{room_id}/poll", post(polls::post_create))
+        .route("/room/{room_id}/event", post(polls::post_create_event))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
@@ -1233,6 +1253,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/room/{room_id}/posting-policy",
             post(room_rbac::post_posting_policy),
+        )
+        .route(
+            "/room/{room_id}/broadcast-policy",
+            post(room_rbac::post_broadcast_policy),
         )
         .route(
             "/room/{room_id}/retention/preview",

@@ -13,6 +13,10 @@ pub struct Poll {
     pub anonymous: bool,
     pub closes_at: Option<String>,
     pub closed_at: Option<String>,
+    /// LC-491: when set, this poll is an event; `event_at` is the start time
+    /// (UTC `%Y-%m-%d %H:%M:%S`) and the options are the RSVP choices.
+    pub event_at: Option<String>,
+    pub event_location: Option<String>,
 }
 
 /// One option row plus its current vote count.
@@ -70,6 +74,78 @@ pub async fn create(
     Ok(message_id)
 }
 
+/// LC-491: create an event (a poll with `event_at`/`event_location` set and a
+/// fixed set of RSVP `options`). Single-choice, non-anonymous, never auto-closes
+/// (RSVP stays open). Atomic, mirrors [`create`]. Returns the message id.
+pub async fn create_event(
+    pool: &SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    title: &str,
+    options: &[String],
+    event_at: &str,
+    event_location: Option<&str>,
+) -> sqlx::Result<i64> {
+    let mut tx = pool.begin().await?;
+    let res = sqlx::query("INSERT INTO messages (room_id, user_id, body) VALUES (?, ?, ?)")
+        .bind(room_id)
+        .bind(user_id)
+        .bind(title)
+        .execute(&mut *tx)
+        .await?;
+    let message_id = res.last_insert_rowid();
+    sqlx::query(
+        "INSERT INTO polls \
+             (message_id, question, allows_multi, anonymous, closes_at, event_at, event_location) \
+         VALUES (?, ?, 0, 0, NULL, ?, ?)",
+    )
+    .bind(message_id)
+    .bind(title)
+    .bind(event_at)
+    .bind(event_location)
+    .execute(&mut *tx)
+    .await?;
+    for (i, text) in options.iter().enumerate() {
+        sqlx::query("INSERT INTO poll_options (message_id, position, text) VALUES (?, ?, ?)")
+            .bind(message_id)
+            .bind(i as i64)
+            .bind(text)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(message_id)
+}
+
+/// LC-491: events in a room - polls carrying an `event_at`, joined to their
+/// (non-deleted) message. Drives the iCal feed. Returns
+/// `(message_id, title, event_at, location)` ordered by start time.
+pub async fn events_for_room(
+    pool: &SqlitePool,
+    room_id: i64,
+) -> sqlx::Result<Vec<(i64, String, String, Option<String>)>> {
+    let rows = sqlx::query(
+        "SELECT p.message_id AS mid, p.question AS q, p.event_at AS ea, p.event_location AS loc \
+         FROM polls p JOIN messages m ON m.id = p.message_id \
+         WHERE m.room_id = ? AND m.deleted_at IS NULL AND p.event_at IS NOT NULL \
+         ORDER BY p.event_at ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.get::<i64, _>("mid"),
+                r.get::<String, _>("q"),
+                r.get::<String, _>("ea"),
+                r.get::<Option<String>, _>("loc"),
+            )
+        })
+        .collect())
+}
+
 fn map_poll(r: sqlx::sqlite::SqliteRow) -> Poll {
     Poll {
         message_id: r.get("message_id"),
@@ -78,6 +154,8 @@ fn map_poll(r: sqlx::sqlite::SqliteRow) -> Poll {
         anonymous: r.get::<i64, _>("anonymous") != 0,
         closes_at: r.get("closes_at"),
         closed_at: r.get("closed_at"),
+        event_at: r.get("event_at"),
+        event_location: r.get("event_location"),
     }
 }
 
@@ -137,7 +215,8 @@ pub async fn scheduled_for_room(
 
 pub async fn get(pool: &SqlitePool, message_id: i64) -> sqlx::Result<Option<Poll>> {
     let row = sqlx::query(
-        "SELECT message_id, question, allows_multi, anonymous, closes_at, closed_at \
+        "SELECT message_id, question, allows_multi, anonymous, closes_at, closed_at, \
+                event_at, event_location \
          FROM polls WHERE message_id = ?",
     )
     .bind(message_id)

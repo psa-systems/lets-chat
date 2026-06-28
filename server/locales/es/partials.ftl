@@ -59,6 +59,7 @@ partials-status-online = En línea
 
 ## Voice attachment
 partials-voice-play = Reproducir mensaje de voz
+partials-voice-transcript = Transcripcion
 
 ## Profile hovercard (LC-298)
 hovercard-message = Mensaje
@@ -91,6 +92,7 @@ partials-pinned-see-all-suffix = fijados
 ## Poll block
 partials-poll-your-vote = tu voto
 partials-poll-voted = votaron
+partials-event-responses = respondieron
 partials-poll-multiple-choice = opción múltiple
 partials-poll-anonymous = anónima
 partials-poll-closed = cerrada

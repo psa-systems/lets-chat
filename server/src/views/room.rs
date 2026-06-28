@@ -121,6 +121,10 @@ pub struct PollView {
     pub closes_at: Option<String>,
     pub total_voters: i64,
     pub options: Vec<PollOptionView>,
+    /// LC-491: when set, render as an event card (RSVP). `event_at` is the
+    /// start time (UTC), `event_location` an optional place.
+    pub event_at: Option<String>,
+    pub event_location: Option<String>,
 }
 
 pub struct PollOptionView {
@@ -191,6 +195,8 @@ pub async fn build_poll_view(
         closes_at: poll.closes_at,
         total_voters,
         options,
+        event_at: poll.event_at,
+        event_location: poll.event_location,
     }))
 }
 
@@ -1079,15 +1085,21 @@ pub struct RoomPage<'a> {
     /// compose-box render: when false the composer is replaced with a
     /// read-only notice.
     pub can_post: bool,
-    /// LC-85: human-readable label for the current policy when the
-    /// composer is disabled (e.g. "Only admins can post in this room").
-    /// Empty string when `can_post` is true.
-    pub posting_locked_reason: &'a str,
+    /// LC-480: raw posting policy (`all` / `moderators_only` / `admins_only`).
+    /// Drives the announcement banner above the timeline and the localized
+    /// read-only notice when `can_post` is false. The template maps the value
+    /// to the right `|t` string so the copy is translatable.
+    pub posting_policy: &'a str,
     /// LC-64: the user's persisted draft body for this room, if any.
     /// Empty string means "no draft" (whether absent, stale, or just
     /// purged by the 60-day lazy-cleanup rule). The composer template
     /// inlines it as the textarea's initial inner content.
     pub initial_draft: &'a str,
+    /// LC-484: gates the header "Catch me up" action (operator LLM configured).
+    pub llm_available: bool,
+    /// LC-500: configured max upload size (bytes), surfaced to the composer so
+    /// client-side validation matches the server cap.
+    pub max_upload_bytes: i64,
 }
 
 impl RoomPage<'_> {
@@ -1110,6 +1122,9 @@ pub struct ComposerFragment<'a> {
     /// to restore from the server here. The next keystroke will
     /// re-create the draft if non-empty.
     pub initial_draft: &'a str,
+    /// LC-500: see `RoomPage::max_upload_bytes`. Required for the shared
+    /// composer template to compile against this struct.
+    pub max_upload_bytes: i64,
 }
 
 impl ComposerFragment<'_> {
@@ -1167,6 +1182,8 @@ pub struct ThreadPanelFragment<'a> {
     pub replies: &'a [MessageView],
     /// LC-310: whether the viewer follows this thread (drives the toggle).
     pub is_following: bool,
+    /// LC-484: gates the "Summarize" action (operator LLM configured).
+    pub llm_available: bool,
 }
 
 /// LC-310: the thread Follow/Following toggle button, included by the thread

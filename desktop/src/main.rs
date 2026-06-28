@@ -305,7 +305,7 @@ fn set_linux_gtk_env() {}
 // so granting unconditionally inside this binary is no weaker than the
 // trust model around `LETS_CHAT_SERVER_URL` itself.
 //
-// macOS (LC-134) needs no Rust-side handler: wry's WryWebViewUIDelegate
+// macOS (LC-134) needs no Rust-side grant handler: wry's WryWebViewUIDelegate
 // already implements
 // `webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:`
 // and unconditionally grants it (WKPermissionDecision::Grant), so the
@@ -315,9 +315,12 @@ fn set_linux_gtk_env() {}
 // camera/microphone entitlements in desktop/lets-chat.entitlements; see the
 // explicit macOS arm below.
 //
-// iOS / Android variants live under LC-135 / LC-136 in the Apple+mobile
-// tracker (LC-133); those targets need their permission flows wired through
-// Tauri's per-platform hooks once the build paths for those targets land.
+// iOS (LC-136) likewise needs no code-side hook: WKWebView routes getUserMedia
+// consent through the OS prompt, which iOS shows automatically once the same
+// usage-description strings are declared in desktop/Info.ios.plist (merged into
+// the generated iOS Info.plist by the Tauri CLI); the no-op fallback below
+// covers the iOS target. Android (LC-135) still needs its permission flow wired
+// through Tauri's per-platform hooks once that build path lands (LC-133 tracker).
 #[cfg(target_os = "linux")]
 fn install_media_permission_handler(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     use webkit2gtk::glib::Cast;

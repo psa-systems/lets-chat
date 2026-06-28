@@ -85,7 +85,9 @@ pub async fn get_logout(
     clear.set_path("/");
     clear.make_removal();
     let jar = jar.remove(clear);
-    Ok((jar, Redirect::to("/login")).into_response())
+    // LC-472: land on the public marketing page (LC-470) after logout, not the
+    // bare SSO /login shell. The landing carries the "Sign in with Bunyip" CTA.
+    Ok((jar, Redirect::to("/")).into_response())
 }
 
 #[cfg_attr(not(feature = "standalone"), allow(dead_code))]

@@ -17,6 +17,11 @@ services:
       dockerfile: ci-build/Dockerfile.web
       args:
         BUILD_MODE: standalone
+        # The Dockerfile defaults this to 2 (a CI runner-sharing cap). Local
+        # dev builds one image at a time, so lift it well above that to use
+        # the host's cores on the slow release compile. Override per-invocation
+        # with `CARGO_BUILD_JOBS=N just dev-web`.
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-16}
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_VERSION: ${GIT_VERSION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
@@ -63,13 +68,15 @@ services:
     # network-traefik-public so the request hits the right Traefik; the issuer
     # string stays the public URL, so ID-token `iss` validation is unaffected.
     # The browser flow is untouched (the user reaches Traefik over Nebula).
-    # NB: this is the Traefik container's current IP on network-traefik-public;
-    # if that network is recreated, refresh it via
-    #   docker inspect network-traefik --format '{{(index .NetworkSettings.Networks "network-traefik-public").IPAddress}}'
-    # Sequence form so Compose interpolates ${USER} in the hostname (it does
-    # not substitute variables inside YAML mapping keys, only in values).
+    # The target IP is NOT hardcoded: `just dev-web` runs ./dev/traefik-ip to
+    # find Traefik's CURRENT address on network-traefik-public and passes it as
+    # TRAEFIK_PUBLIC_IP, so this never goes stale when that network is recreated
+    # (the old hardcoded pin silently broke SSO startup; chore/dev-web-traefik-
+    # ip). The `:-` default keeps a bare `docker compose up` working outside the
+    # recipe. Sequence form so Compose interpolates ${USER} + ${TRAEFIK_PUBLIC_IP}
+    # in the value (it does not substitute variables inside YAML mapping keys).
     extra_hosts:
-      - "${USER}-bunyip-api.a8n.run:10.200.0.4"
+      - "${USER}-bunyip-api.a8n.run:${TRAEFIK_PUBLIC_IP:-10.200.0.3}"
     networks:
       - default
       - network-traefik-public
