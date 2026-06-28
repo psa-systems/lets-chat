@@ -3,27 +3,33 @@
 {% block title %}{{ "admin-modlog-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-modlog-heading"|t }}</h1>
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-modlog-th-who"|t }}</th>
-      <th class="py-2">{{ "admin-modlog-th-action"|t }}</th>
-      <th class="py-2">{{ "admin-modlog-th-target"|t }}</th>
-      <th class="py-2">{{ "admin-modlog-th-reason"|t }}</th>
-      <th class="py-2">{{ "admin-modlog-th-when"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for entry in entries %}
-    <tr class="border-t border-border">
-      <td class="py-1">{{ entry.actor_user }}</td>
-      <td class="py-1">{{ entry.action }}</td>
-      <td class="py-1">{{ entry.target_user }}</td>
-      <td class="py-1">{% if let Some(reason) = entry.reason.as_ref() %}{{ reason }}{% else %}-{% endif %}</td>
-      <td class="py-1">{{ entry.created_at }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if entries.is_empty() %}
+{% let empty_text_key = "admin-modlog-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-modlog-th-who"|t }}</th>
+        <th>{{ "admin-modlog-th-action"|t }}</th>
+        <th>{{ "admin-modlog-th-target"|t }}</th>
+        <th>{{ "admin-modlog-th-reason"|t }}</th>
+        <th>{{ "admin-modlog-th-when"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td>{{ entry.actor_user }}</td>
+        <td class="font-mono text-xs">{{ entry.action }}</td>
+        <td>{{ entry.target_user }}</td>
+        <td class="text-content-muted">{% if let Some(reason) = entry.reason.as_ref() %}{{ reason }}{% else %}-{% endif %}</td>
+        <td class="text-xs text-content-muted whitespace-nowrap">{{ entry.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
