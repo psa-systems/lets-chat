@@ -16,6 +16,8 @@ room-composer-create-event = Create event
 room-composer-gif = Add a GIF
 # LC-506: admin-only hint when an AI action is shown but the LLM is unconfigured
 ai-needs-setup = AI is not configured. Set LETS_CHAT_LLM_URL to enable.
+# LC-511: admin-only hint when the GIF button is shown but Giphy is unconfigured
+gif-needs-setup = GIF picker is not configured. Set LETS_CHAT_GIPHY_API_KEY to enable.
 room-composer-schedule-title = Schedule for later
 room-composer-schedule-aria = Schedule message for later
 room-composer-send-message = Send message

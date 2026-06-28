@@ -376,6 +376,7 @@ pub async fn get_dm(
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         llm_available: state.llm_available(),
         gif_available: crate::gif::available(),
+        gif_teaser: !crate::gif::available() && user.role == "admin",
     };
     let body = html(&page)?;
     let mut response = body.into_response();
