@@ -7,6 +7,42 @@ async fn setup_chat_pool() -> SqlitePool {
 }
 
 #[tokio::test]
+async fn room_caught_up_member_ids_tracks_latest() {
+    use lets_chat::db::chat;
+    let pool = setup_chat_pool().await;
+    let room = chat::create_room(&pool, "general", None, "public", None, None)
+        .await
+        .unwrap();
+    for u in ["viewer", "alice", "bob"] {
+        chat::add_room_member(&pool, room, u).await.unwrap();
+    }
+    let m1 = chat::insert_message(&pool, room, "viewer", "one")
+        .await
+        .unwrap();
+    let m2 = chat::insert_message(&pool, room, "viewer", "two")
+        .await
+        .unwrap();
+
+    // alice read everything; bob only the first message.
+    chat::set_last_read(&pool, "alice", room, m2).await.unwrap();
+    chat::set_last_read(&pool, "bob", room, m1).await.unwrap();
+
+    let caught = chat::room_caught_up_member_ids(&pool, room, "viewer")
+        .await
+        .unwrap();
+    assert_eq!(caught, vec!["alice".to_string()], "only alice reached m2");
+
+    // bob catches up -> both, viewer always excluded.
+    chat::set_last_read(&pool, "bob", room, m2).await.unwrap();
+    let mut caught = chat::room_caught_up_member_ids(&pool, room, "viewer")
+        .await
+        .unwrap();
+    caught.sort();
+    assert_eq!(caught, vec!["alice".to_string(), "bob".to_string()]);
+    assert!(!caught.contains(&"viewer".to_string()));
+}
+
+#[tokio::test]
 async fn upsert_is_monotonic() {
     let pool = setup_chat_pool().await;
     let room = lets_chat::db::chat::create_dm_room(&pool, "dm-a-b", "user-a", "user-b")
