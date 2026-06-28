@@ -19,6 +19,8 @@ pub struct BookmarkRow {
     pub room_id: i64,
     pub room_name: String,
     pub room_type: String,
+    /// LC-479: optional user-set label ("folder"); NULL = unlabeled.
+    pub label: Option<String>,
 }
 
 /// Insert a bookmark for `(user_id, message_id)`. Idempotent: a second
@@ -99,7 +101,7 @@ pub async fn bookmarks_for_user(
     user_id: &str,
 ) -> Result<Vec<BookmarkRow>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT b.message_id, b.created_at, \
+        "SELECT b.message_id, b.created_at, b.label AS label, \
                 m.body AS message_body, m.created_at AS message_created_at, \
                 m.user_id AS author_user_id, \
                 r.id AS room_id, r.name AS room_name, r.room_type AS room_type \
@@ -123,8 +125,27 @@ pub async fn bookmarks_for_user(
             room_id: r.get("room_id"),
             room_name: r.get("room_name"),
             room_type: r.get("room_type"),
+            label: r.get("label"),
         })
         .collect())
+}
+
+/// LC-479: set (or clear) the label on a bookmark. `label = None` clears it
+/// back to NULL ("unlabeled"). Only the owning user's row is touched; a
+/// non-existent `(user_id, message_id)` pair is a successful no-op.
+pub async fn set_label(
+    pool: &SqlitePool,
+    user_id: &str,
+    message_id: i64,
+    label: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE bookmarks SET label = ? WHERE user_id = ? AND message_id = ?")
+        .bind(label)
+        .bind(user_id)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Look up the room id for a message, ignoring soft-deleted messages.
