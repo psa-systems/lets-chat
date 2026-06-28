@@ -268,6 +268,94 @@ async fn autocomplete_lists_matching_commands() {
     );
 }
 
+// LC-509: a query that matches no command name or description keyword renders
+// the subtle "no matching commands" empty state (not an empty/hidden body).
+#[tokio::test]
+async fn autocomplete_no_match_shows_empty_state() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=zzzzz")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("No matching commands"),
+        "non-matching query renders the empty state"
+    );
+    assert!(
+        !body.contains("role=\"listbox\""),
+        "empty state has no listbox"
+    );
+}
+
+// LC-509: filtering also matches a description keyword, not just the name.
+// "action" appears only in /me's description ("Post an action in the third
+// person."), so it must surface /me.
+#[tokio::test]
+async fn autocomplete_matches_description_keyword() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=action")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("/me"),
+        "description keyword 'action' matches /me"
+    );
+}
+
+// LC-509: hint mode returns the single command's argument-usage bar (not the
+// interactive list) for an exact command name.
+#[tokio::test]
+async fn autocomplete_hint_mode_returns_usage_bar() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=poll&hint=true")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("lc-slash-hint"), "renders the hint bar");
+    assert!(body.contains("Question"), "shows the poll argument usage");
+    assert!(
+        !body.contains("role=\"option\""),
+        "hint bar is non-interactive (no options)"
+    );
+}
+
+// LC-509: hint mode for an unrecognized command renders nothing (the popover
+// stays hidden while typing args of a non-command).
+#[tokio::test]
+async fn autocomplete_hint_mode_unknown_is_empty() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=nope&hint=true")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.trim().is_empty(),
+        "unknown command hint renders nothing, got: {body}"
+    );
+}
+
 #[tokio::test]
 async fn autocomplete_hides_admin_only_from_non_admin() {
     let t = app().await;
