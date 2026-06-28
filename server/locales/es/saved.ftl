@@ -8,3 +8,8 @@ saved-empty = Aún no has guardado ningún mensaje. Pasa el cursor sobre un mens
 saved-in = en
 saved-saved-at = guardado
 saved-unsave = Quitar
+# LC-479: etiquetas por marcador ("carpetas") + chips de filtro.
+saved-label-placeholder = Etiqueta
+saved-label-aria = Etiquetar este mensaje guardado
+saved-filter-all = Todos
+saved-filter-unlabeled = Sin etiqueta
