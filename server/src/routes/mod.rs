@@ -1525,6 +1525,13 @@ pub fn build_router(state: AppState) -> Router {
         // logs (only the webhook id is logged, from the handler).
         .merge(webhooks::public_router())
         .merge(feeds::public_router())
+        // LC-504: security response headers. OUTERMOST layer so it covers
+        // every route - cookie pages, the JSON API, webhooks, feeds, static
+        // assets, redirects and error responses alike (a layer applied earlier
+        // would miss routes merged after it).
+        .layer(middleware::from_fn(
+            crate::security_headers::set_security_headers,
+        ))
         .with_state(state)
 }
 
