@@ -2865,12 +2865,85 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
 }
 .lc-set-tab:hover { background: var(--surface-sunken); color: var(--content); }
 .lc-set-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
-.lc-set-tab[aria-selected="true"] {
+.lc-set-tab[aria-selected="true"],
+.lc-set-tab[aria-current="page"] {
     background: var(--accent-surface);
     border-color: var(--accent);
     color: var(--accent-surface-content);
 }
 .lc-set-tab svg { height: 1.05rem; width: 1.05rem; flex: none; }
+
+/* LC-510: admin panel shell. A grouped left sidebar (reusing .lc-set-tab for
+   the links) + a scrollable content column, replacing the overflowing
+   horizontal tab strip. Collapses to a horizontal rail under 48rem. */
+.lc-admin-shell {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+}
+.lc-admin-nav {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 0.75rem;
+}
+.lc-admin-nav-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex: 1 1 auto;
+}
+.lc-admin-group-label {
+    margin: 0.875rem 0.75rem 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--content-subtle);
+}
+.lc-admin-group-label:first-child { margin-top: 0; }
+.lc-admin-badge { margin-left: auto; }
+.lc-admin-version {
+    margin-top: 0.75rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.6875rem;
+    color: var(--content-subtle);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+}
+.lc-admin-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+.lc-admin-header {
+    border-bottom: 1px solid var(--border);
+    padding: 0.625rem 1.25rem;
+}
+.lc-admin-title { font-size: 1rem; font-weight: 600; color: var(--content); }
+.lc-admin-main { flex: 1 1 auto; padding: 1.5rem 1.25rem 4rem; }
+/* A redesigned page caps form content; tables stay full-width. */
+.lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }
+@media (max-width: 48rem) {
+    .lc-admin-shell { grid-template-columns: minmax(0, 1fr); }
+    .lc-admin-nav {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.25rem;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+    }
+    .lc-admin-nav-scroll { flex-direction: row; align-items: center; gap: 0.25rem; }
+    .lc-admin-group-label { display: none; }
+    .lc-admin-version { display: none; }
+}
 .lc-set-main { min-width: 0; display: flex; flex-direction: column; gap: 1.25rem; }
 .lc-set-panel { display: flex; flex-direction: column; gap: 1.25rem; }
 .lc-set-panel[hidden] { display: none; }

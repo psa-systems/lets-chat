@@ -1,55 +1,63 @@
 {% extends "layout.html" %}
 
 {% block main %}
-{# LC-219: nav scrolls horizontally instead of wrapping. The actual fix is
-   `whitespace-nowrap` on each `<a>` so multi-word labels (Outgoing webhooks,
-   Anti-spam, Link filter, Backup & restore) never break mid-anchor;
-   `shrink-0` keeps each link at its natural width; `overflow-x-auto` reveals
-   a scrollbar / lets touch + Shift-wheel scroll the strip when total link
-   width exceeds the viewport. (Flex default is nowrap; the pre-LC-219 bug was
-   text wrapping inside each anchor, not flex item wrapping.)
+{# LC-510: admin panel redesign. The old single-row horizontal tab strip
+   (LC-219) could not hold 17 tabs and overflowed under the version chip. It is
+   replaced by a grouped left-hand sidebar (anchor links styled like the
+   redesigned settings rail, .lc-set-tab) with the version string pinned in the
+   sidebar footer so it never collides with nav. Collapses to a horizontal
+   scroll rail under 48rem. #}
+<div class="lc-admin-shell">
+  <nav class="lc-admin-nav" aria-label="{{ "admin-nav-label"|t }}">
+    <div class="lc-admin-nav-scroll">
+      <div class="lc-admin-group-label">{{ "admin-nav-group-overview"|t }}</div>
+      <a href="/admin/analytics" class="lc-set-tab"{% if section == "analytics" %} aria-current="page"{% endif %}>{{ "admin-nav-analytics"|t }}</a>
 
-   The version chip is moved OUTSIDE the scroll container and absolute-pinned
-   to the right edge so it stays visible while the strip is scrolled.
-   `bg-surface` masks underlying link text that would otherwise show through
-   when the strip is scrolled all the way right; `md:pr-48` on the `<nav>`
-   reserves chip-width worth of right padding so the last link never scrolls
-   BENEATH the chip (the chip's mask would otherwise visually hide the link's
-   label even though `pointer-events-none` lets the click pass through).
+      <div class="lc-admin-group-label">{{ "admin-nav-group-people"|t }}</div>
+      <a href="/admin/users" class="lc-set-tab"{% if section == "users" %} aria-current="page"{% endif %}>{{ "admin-nav-users"|t }}</a>
+      <a href="/admin/invites" class="lc-set-tab"{% if section == "invites" %} aria-current="page"{% endif %}>{{ "admin-nav-invites"|t }}</a>
 
-   `aria-label` names the landmark; `aria-current="page"` adds proper SR
-   active-section semantics alongside the existing `font-semibold` affordance. #}
-<div class="relative border-b border-border">
-  <nav aria-label="{{ "admin-nav-label"|t }}" class="px-4 py-2 md:pr-48 flex gap-4 overflow-x-auto text-sm items-center">
-    <a href="/admin"{% if section == "settings" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "settings" %} font-semibold{% endif %}">{{ "admin-nav-settings"|t }}</a>
-    <a href="/admin/users"{% if section == "users" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "users" %} font-semibold{% endif %}">{{ "admin-nav-users"|t }}</a>
-    <a href="/admin/invites"{% if section == "invites" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "invites" %} font-semibold{% endif %}">{{ "admin-nav-invites"|t }}</a>
-    <a href="/admin/rooms"{% if section == "rooms" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "rooms" %} font-semibold{% endif %}">{{ "admin-nav-rooms"|t }}</a>
-    <a href="/admin/enclaves"{% if section == "enclaves" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "enclaves" %} font-semibold{% endif %}">{{ "admin-nav-enclaves"|t }}</a>
-    <a href="/admin/anti-spam"{% if section == "anti_spam" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "anti_spam" %} font-semibold{% endif %}">{{ "admin-nav-anti-spam"|t }}</a>
-    <a href="/admin/link-filter"{% if section == "link_filter" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "link_filter" %} font-semibold{% endif %}">{{ "admin-nav-link-filter"|t }}</a>
-    <a href="/admin/quarantine"{% if section == "quarantine" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "quarantine" %} font-semibold{% endif %}">{{ "admin-nav-quarantine"|t }}</a>
-    <a href="/admin/branding"{% if section == "branding" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "branding" %} font-semibold{% endif %}">{{ "admin-nav-branding"|t }}</a>
-    <a href="/admin/backup-restore"{% if section == "backup" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "backup" %} font-semibold{% endif %}">{{ "admin-nav-backup"|t }}</a>
-    <a href="/admin/modlog"{% if section == "modlog" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "modlog" %} font-semibold{% endif %}">{{ "admin-nav-modlog"|t }}</a>
-    {# LC-334: report queue. The badge inner is fetched on load (so the count
-       need not thread through every admin page struct) and re-rendered live via
-       the AdminReportsOob OOB swap on the `admin` topic. #}
-    <a href="/admin/reports"{% if section == "reports" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "reports" %} font-semibold{% endif %}">{{ "admin-nav-reports"|t }}<span id="admin-reports-badge" hx-get="/admin/reports/badge" hx-trigger="load" hx-swap="innerHTML"></span></a>
-    <a href="/admin/analytics"{% if section == "analytics" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "analytics" %} font-semibold{% endif %}">{{ "admin-nav-analytics"|t }}</a>
-    <a href="/admin/slash-commands"{% if section == "slash_commands" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "slash_commands" %} font-semibold{% endif %}">{{ "admin-nav-commands"|t }}</a>
-    <a href="/admin/bots"{% if section == "bots" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "bots" %} font-semibold{% endif %}">{{ "admin-nav-bots"|t }}</a>
-    <a href="/admin/outgoing-webhooks"{% if section == "outgoing_webhooks" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "outgoing_webhooks" %} font-semibold{% endif %}">{{ "admin-nav-webhooks"|t }}</a>
-    <a href="/admin/bridges"{% if section == "bridges" %} aria-current="page"{% endif %} class="whitespace-nowrap shrink-0{% if section == "bridges" %} font-semibold{% endif %}">{{ "admin-nav-bridges"|t }}</a>
+      <div class="lc-admin-group-label">{{ "admin-nav-group-spaces"|t }}</div>
+      <a href="/admin/rooms" class="lc-set-tab"{% if section == "rooms" %} aria-current="page"{% endif %}>{{ "admin-nav-rooms"|t }}</a>
+      <a href="/admin/enclaves" class="lc-set-tab"{% if section == "enclaves" %} aria-current="page"{% endif %}>{{ "admin-nav-enclaves"|t }}</a>
+
+      <div class="lc-admin-group-label">{{ "admin-nav-group-safety"|t }}</div>
+      {# LC-334: report queue. The badge inner is fetched on load and re-rendered
+         live via the AdminReportsOob OOB swap on the `admin` topic; its id must
+         stay #admin-reports-badge. #}
+      <a href="/admin/reports" class="lc-set-tab"{% if section == "reports" %} aria-current="page"{% endif %}><span>{{ "admin-nav-reports"|t }}</span><span id="admin-reports-badge" class="lc-admin-badge" hx-get="/admin/reports/badge" hx-trigger="load" hx-swap="innerHTML"></span></a>
+      <a href="/admin/quarantine" class="lc-set-tab"{% if section == "quarantine" %} aria-current="page"{% endif %}>{{ "admin-nav-quarantine"|t }}</a>
+      <a href="/admin/modlog" class="lc-set-tab"{% if section == "modlog" %} aria-current="page"{% endif %}>{{ "admin-nav-modlog"|t }}</a>
+      <a href="/admin/anti-spam" class="lc-set-tab"{% if section == "anti_spam" %} aria-current="page"{% endif %}>{{ "admin-nav-anti-spam"|t }}</a>
+      <a href="/admin/link-filter" class="lc-set-tab"{% if section == "link_filter" %} aria-current="page"{% endif %}>{{ "admin-nav-link-filter"|t }}</a>
+
+      <div class="lc-admin-group-label">{{ "admin-nav-group-integrations"|t }}</div>
+      <a href="/admin/slash-commands" class="lc-set-tab"{% if section == "slash_commands" %} aria-current="page"{% endif %}>{{ "admin-nav-commands"|t }}</a>
+      <a href="/admin/bots" class="lc-set-tab"{% if section == "bots" %} aria-current="page"{% endif %}>{{ "admin-nav-bots"|t }}</a>
+      <a href="/admin/outgoing-webhooks" class="lc-set-tab"{% if section == "outgoing_webhooks" %} aria-current="page"{% endif %}>{{ "admin-nav-webhooks"|t }}</a>
+      <a href="/admin/bridges" class="lc-set-tab"{% if section == "bridges" %} aria-current="page"{% endif %}>{{ "admin-nav-bridges"|t }}</a>
+
+      <div class="lc-admin-group-label">{{ "admin-nav-group-system"|t }}</div>
+      <a href="/admin" class="lc-set-tab"{% if section == "settings" %} aria-current="page"{% endif %}>{{ "admin-nav-settings"|t }}</a>
+      <a href="/admin/backup-restore" class="lc-set-tab"{% if section == "backup" %} aria-current="page"{% endif %}>{{ "admin-nav-backup"|t }}</a>
+      <a href="/admin/branding" class="lc-set-tab"{% if section == "branding" %} aria-current="page"{% endif %}>{{ "admin-nav-branding"|t }}</a>
+    </div>
+    <div class="lc-admin-version"
+         title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</div>
   </nav>
-  <span class="hidden md:inline-block absolute right-2 top-1/2 -translate-y-1/2 bg-surface px-2 text-xs text-content-subtle font-mono pointer-events-none"
-        title="{{ "admin-nav-version-release"|t }} {{ git_version }} - {{ "admin-nav-version-built"|t }} {{ build_date }}">v{{ app_version }} ({{ git_hash }})</span>
-</div>
-{# LC-175: subscribe admin pages to the `admin` topic so moderation actions
-   (ban / mute / role / quota / delete) refresh the user list live across all
-   admins. topic_subscribe_allowed gates this on the admin role; admin pages
-   without a matching #user-{id} row drop the OOB swap harmlessly. #}
-<div class="flex-1 overflow-y-auto p-4" data-lc-live-topic="admin">
-  {% block admin_main %}{% endblock %}
+  {# LC-175: subscribe admin pages to the `admin` topic so moderation actions
+     (ban / mute / role / quota / delete) refresh lists live across all admins.
+     topic_subscribe_allowed gates this on the admin role; pages without a
+     matching id-keyed OOB target drop the swap harmlessly. #}
+  <div class="lc-admin-content" data-lc-live-topic="admin">
+    {% block admin_header %}
+    <header class="lc-admin-header">
+      <h1 class="lc-admin-title">{% if section == "settings" %}{{ "admin-nav-settings"|t }}{% else if section == "users" %}{{ "admin-nav-users"|t }}{% else if section == "invites" %}{{ "admin-nav-invites"|t }}{% else if section == "rooms" %}{{ "admin-nav-rooms"|t }}{% else if section == "enclaves" %}{{ "admin-nav-enclaves"|t }}{% else if section == "anti_spam" %}{{ "admin-nav-anti-spam"|t }}{% else if section == "link_filter" %}{{ "admin-nav-link-filter"|t }}{% else if section == "quarantine" %}{{ "admin-nav-quarantine"|t }}{% else if section == "branding" %}{{ "admin-nav-branding"|t }}{% else if section == "backup" %}{{ "admin-nav-backup"|t }}{% else if section == "modlog" %}{{ "admin-nav-modlog"|t }}{% else if section == "reports" %}{{ "admin-nav-reports"|t }}{% else if section == "analytics" %}{{ "admin-nav-analytics"|t }}{% else if section == "slash_commands" %}{{ "admin-nav-commands"|t }}{% else if section == "bots" %}{{ "admin-nav-bots"|t }}{% else if section == "outgoing_webhooks" %}{{ "admin-nav-webhooks"|t }}{% else if section == "bridges" %}{{ "admin-nav-bridges"|t }}{% endif %}</h1>
+    </header>
+    {% endblock %}
+    <div class="lc-admin-main">
+      {% block admin_main %}{% endblock %}
+    </div>
+  </div>
 </div>
 {% endblock %}
