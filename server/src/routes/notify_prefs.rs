@@ -73,6 +73,7 @@ pub async fn post_notify_prefs(
         mute_mode: mode.as_str(),
         can_manage_overrides,
         llm_available: state.llm_available(),
+        llm_teaser: !state.llm_available() && user.role == "admin",
     };
     html(&fragment)
 }

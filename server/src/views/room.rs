@@ -1097,6 +1097,9 @@ pub struct RoomPage<'a> {
     pub initial_draft: &'a str,
     /// LC-484: gates the header "Catch me up" action (operator LLM configured).
     pub llm_available: bool,
+    /// LC-506: LLM unconfigured but the viewer is a site admin - show the AI
+    /// actions disabled with a "set LETS_CHAT_LLM_URL" hint (discoverability).
+    pub llm_teaser: bool,
     /// LC-500: configured max upload size (bytes), surfaced to the composer so
     /// client-side validation matches the server cap.
     pub max_upload_bytes: i64,
