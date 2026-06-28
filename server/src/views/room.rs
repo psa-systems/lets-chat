@@ -1112,6 +1112,10 @@ pub struct RoomPage<'a> {
     /// LC-488: the GIF picker is configured (LETS_CHAT_GIPHY_API_KEY set).
     /// Drives the composer GIF button.
     pub gif_available: bool,
+    /// LC-511: Giphy unconfigured but the viewer is a site admin - show the GIF
+    /// button disabled with a "set LETS_CHAT_GIPHY_API_KEY" hint
+    /// (discoverability), mirroring the LC-506 AI teaser.
+    pub gif_teaser: bool,
 }
 
 impl RoomPage<'_> {
@@ -1140,6 +1144,9 @@ pub struct ComposerFragment<'a> {
     /// LC-488: see `RoomPage::gif_available`. Required for the shared composer
     /// template to compile against this struct.
     pub gif_available: bool,
+    /// LC-511: see `RoomPage::gif_teaser`. Required for the shared composer
+    /// template to compile against this struct.
+    pub gif_teaser: bool,
 }
 
 impl ComposerFragment<'_> {

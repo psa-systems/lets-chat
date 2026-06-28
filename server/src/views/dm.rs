@@ -40,6 +40,9 @@ pub struct DmPage<'a> {
     pub llm_available: bool,
     /// LC-488: the GIF picker is configured. Drives the composer GIF button.
     pub gif_available: bool,
+    /// LC-511: see `RoomPage::gif_teaser`. Giphy unconfigured but the viewer is a
+    /// site admin - show the GIF button disabled with a setup hint.
+    pub gif_teaser: bool,
 }
 
 impl DmPage<'_> {
