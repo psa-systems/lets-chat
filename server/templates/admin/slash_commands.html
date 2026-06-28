@@ -3,83 +3,92 @@
 {% block title %}{{ "admin-slash-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-slash-heading"|t }}</h1>
-<p class="text-sm text-content-muted mb-4">
+<p class="mb-4 text-sm text-content-muted">
   {{ "admin-slash-intro-1"|t }}
   <code>static_text</code> {{ "admin-slash-intro-2"|t }} <code>{args}</code> {{ "admin-slash-intro-3"|t }}
   <code>webhook_post</code> {{ "admin-slash-intro-4"|t }}
 </p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+<div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
 {% endif %}
 
-<h2 class="text-sm font-semibold text-content-muted mb-1">{{ "admin-slash-builtin-heading"|t }}</h2>
-<ul class="text-xs mb-6 space-y-0.5">
-  {% for b in builtins %}
-  <li><span class="font-mono text-content">{{ b.usage }}</span> - {{ b.description }}</li>
-  {% endfor %}
-</ul>
-
-<h2 class="text-sm font-semibold text-content-muted mb-2">{{ "admin-slash-custom-heading"|t }}</h2>
-<form method="post" action="/admin/slash-commands" class="grid grid-cols-2 gap-3 mb-6 max-w-2xl">
-  <div>
-    <label class="block text-xs text-content-muted mb-1" for="name">{{ "admin-slash-name-label"|t }}</label>
-    <input id="name" name="name" type="text" required placeholder="standup"
-           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-slash-builtin-heading"|t }}</h3>
   </div>
-  <div>
-    <label class="block text-xs text-content-muted mb-1" for="kind">{{ "admin-slash-kind-label"|t }}</label>
-    <select id="kind" name="kind" class="w-full border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="static_text">static_text</option>
-      <option value="webhook_post">webhook_post</option>
-    </select>
-  </div>
-  <div class="col-span-2">
-    <label class="block text-xs text-content-muted mb-1" for="description">{{ "admin-slash-description-label"|t }}</label>
-    <input id="description" name="description" type="text" placeholder="{{ "admin-slash-description-placeholder"|t }}"
-           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
-  </div>
-  <div class="col-span-2">
-    <label class="block text-xs text-content-muted mb-1" for="target">{{ "admin-slash-target-label"|t }}</label>
-    <input id="target" name="target" type="text" required placeholder="Standup for {args}"
-           class="w-full border border-border-strong rounded px-2 py-1 text-sm">
-  </div>
-  <label class="col-span-2 flex items-center gap-2 text-sm">
-    <input type="checkbox" name="admin_only"> {{ "admin-slash-admin-only"|t }}
-  </label>
-  <div class="col-span-2">
-    <button type="submit" class="px-3 py-1 bg-accent text-accent-content rounded hover:bg-accent-hover text-sm">{{ "admin-slash-add-command"|t }}</button>
-  </div>
-</form>
-
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-slash-th-command"|t }}</th>
-      <th class="py-2">{{ "admin-slash-th-kind"|t }}</th>
-      <th class="py-2">{{ "admin-slash-th-target"|t }}</th>
-      <th class="py-2">{{ "admin-slash-th-admin-only"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-slash-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for c in commands %}
-    <tr class="border-t border-border">
-      <td class="py-1 font-mono text-xs">/{{ c.name }}</td>
-      <td class="py-1 text-xs">{{ c.kind }}</td>
-      <td class="py-1 text-xs font-mono truncate max-w-xs">{{ c.target }}</td>
-      <td class="py-1 text-xs">{% if c.admin_only %}{{ "admin-slash-yes"|t }}{% else %}{{ "admin-slash-no"|t }}{% endif %}</td>
-      <td class="py-1 text-right">
-        <form method="post" action="/admin/slash-commands/{{ c.id }}/delete" class="inline">
-          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-slash-delete"|t }}</button>
-        </form>
-      </td>
-    </tr>
+  <ul class="text-xs space-y-0.5">
+    {% for b in builtins %}
+    <li><span class="font-mono text-content">{{ b.usage }}</span> - <span class="text-content-muted">{{ b.description }}</span></li>
     {% endfor %}
-    {% if commands.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "admin-slash-empty"|t }}</td></tr>
-    {% endif %}
-  </tbody>
-</table>
+  </ul>
+</div>
+
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-slash-custom-heading"|t }}</h3>
+  </div>
+  <form method="post" action="/admin/slash-commands" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div class="lc-set-field">
+      <label class="lc-set-label" for="name">{{ "admin-slash-name-label"|t }}</label>
+      <input id="name" name="name" type="text" required placeholder="standup" class="input">
+    </div>
+    <div class="lc-set-field">
+      <label class="lc-set-label" for="kind">{{ "admin-slash-kind-label"|t }}</label>
+      <select id="kind" name="kind" class="input">
+        <option value="static_text">static_text</option>
+        <option value="webhook_post">webhook_post</option>
+      </select>
+    </div>
+    <div class="lc-set-field sm:col-span-2">
+      <label class="lc-set-label" for="description">{{ "admin-slash-description-label"|t }}</label>
+      <input id="description" name="description" type="text" placeholder="{{ "admin-slash-description-placeholder"|t }}" class="input">
+    </div>
+    <div class="lc-set-field sm:col-span-2">
+      <label class="lc-set-label" for="target">{{ "admin-slash-target-label"|t }}</label>
+      <input id="target" name="target" type="text" required placeholder="Standup for {args}" class="input">
+    </div>
+    <label class="sm:col-span-2 flex items-center gap-2 text-sm">
+      <input type="checkbox" name="admin_only"> {{ "admin-slash-admin-only"|t }}
+    </label>
+    <div class="sm:col-span-2">
+      <button type="submit" class="btn btn-primary">{{ "admin-slash-add-command"|t }}</button>
+    </div>
+  </form>
+</div>
+
+{% if commands.is_empty() %}
+{% let empty_text_key = "admin-slash-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-slash-th-command"|t }}</th>
+        <th>{{ "admin-slash-th-kind"|t }}</th>
+        <th>{{ "admin-slash-th-target"|t }}</th>
+        <th>{{ "admin-slash-th-admin-only"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-slash-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in commands %}
+      <tr>
+        <td class="font-mono text-xs">/{{ c.name }}</td>
+        <td class="text-xs">{{ c.kind }}</td>
+        <td class="text-xs font-mono truncate max-w-xs">{{ c.target }}</td>
+        <td class="text-xs">{% if c.admin_only %}{{ "admin-slash-yes"|t }}{% else %}{{ "admin-slash-no"|t }}{% endif %}</td>
+        <td class="lc-table-actions">
+          <form method="post" action="/admin/slash-commands/{{ c.id }}/delete"
+                onsubmit="return confirm('{{ "admin-slash-delete-confirm"|t }}')">
+            <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-slash-delete"|t }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

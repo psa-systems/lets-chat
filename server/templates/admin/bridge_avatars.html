@@ -3,67 +3,70 @@
 {% block title %}{{ "admin-bridge-avatars-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<div class="flex items-baseline gap-2 mb-4">
-  <h1 class="text-lg font-semibold">{{ "admin-bridge-avatars-heading"|t }}</h1>
-  <a href="/admin/bridges" class="ml-auto text-sm text-accent hover:underline">{{ "admin-bridge-avatars-back"|t }}</a>
+<div class="mb-4 flex items-center justify-between gap-2">
+  <p class="text-sm text-content-muted">{{ "admin-bridge-avatars-intro"|t }}</p>
+  <a href="/admin/bridges" class="btn btn-secondary btn-sm flex-none">{{ "admin-bridge-avatars-back"|t }}</a>
 </div>
-<p class="text-sm text-content-muted mb-4">{{ "admin-bridge-avatars-intro"|t }}</p>
 
 <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-total"|t }}</dt>
     <dd class="text-lg font-semibold">{{ stats.total }}</dd>
   </div>
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-ok"|t }}</dt>
     <dd class="text-lg font-semibold text-success">{{ stats.ok }}</dd>
   </div>
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-pending"|t }}</dt>
     <dd class="text-lg font-semibold">{{ stats.pending }}</dd>
   </div>
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-failed"|t }}</dt>
     <dd class="text-lg font-semibold text-danger">{{ stats.failed }}</dd>
   </div>
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-bytes"|t }}</dt>
     <dd class="text-lg font-semibold">{{ stats.total_bytes_display }}</dd>
   </div>
-  <div class="border border-border rounded-lg p-3">
+  <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-oldest"|t }}</dt>
     <dd class="text-xs text-content-muted">{% if let Some(ts) = stats.oldest_last_seen %}{{ ts }}{% else %}-{% endif %}</dd>
   </div>
 </dl>
 
 {% if stats.pending_stale > 0 %}
-<div class="mb-4 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
+<div class="mb-4 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
   {{ "admin-bridge-avatars-stale-pending-prefix"|t }} {{ stats.pending_stale }} {{ "admin-bridge-avatars-stale-pending-suffix"|t }}
 </div>
 {% endif %}
 
-<h2 class="font-semibold mb-2">{{ "admin-bridge-avatars-failures-heading"|t }}</h2>
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-bridge-avatars-th-host"|t }}</th>
-      <th class="py-2">{{ "admin-bridge-avatars-th-reason"|t }}</th>
-      <th class="py-2">{{ "admin-bridge-avatars-th-type"|t }}</th>
-      <th class="py-2">{{ "admin-bridge-avatars-th-last-seen"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for f in failures %}
-    <tr class="border-t border-border">
-      <td class="py-1 text-xs font-mono"><span title="{{ f.foreign_url }}">{{ f.foreign_host }}</span></td>
-      <td class="py-1 text-xs text-danger break-all">{{ f.failure_reason }}</td>
-      <td class="py-1 text-xs text-content-muted">{% if let Some(ct) = f.content_type.as_ref() %}{{ ct }}{% else %}-{% endif %}</td>
-      <td class="py-1 text-xs text-content-muted">{{ f.last_seen_at }}</td>
-    </tr>
-    {% endfor %}
-    {% if failures.is_empty() %}
-    <tr><td colspan="4" class="py-4 text-center text-content-subtle text-xs">{{ "admin-bridge-avatars-empty"|t }}</td></tr>
-    {% endif %}
-  </tbody>
-</table>
+<h2 class="text-sm font-semibold text-content-muted mb-2">{{ "admin-bridge-avatars-failures-heading"|t }}</h2>
+{% if failures.is_empty() %}
+{% let empty_text_key = "admin-bridge-avatars-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-bridge-avatars-th-host"|t }}</th>
+        <th>{{ "admin-bridge-avatars-th-reason"|t }}</th>
+        <th>{{ "admin-bridge-avatars-th-type"|t }}</th>
+        <th>{{ "admin-bridge-avatars-th-last-seen"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in failures %}
+      <tr>
+        <td class="text-xs font-mono"><span title="{{ f.foreign_url }}">{{ f.foreign_host }}</span></td>
+        <td class="text-xs text-danger break-all">{{ f.failure_reason }}</td>
+        <td class="text-xs text-content-muted">{% if let Some(ct) = f.content_type.as_ref() %}{{ ct }}{% else %}-{% endif %}</td>
+        <td class="text-xs text-content-muted">{{ f.last_seen_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

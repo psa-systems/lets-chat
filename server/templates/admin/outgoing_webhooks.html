@@ -3,8 +3,7 @@
 {% block title %}{{ "admin-webhooks-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-webhooks-heading"|t }}</h1>
-<p class="text-sm text-content-muted mb-4">
+<p class="mb-4 text-sm text-content-muted">
   {{ "admin-webhooks-intro-1"|t }} <code>POST</code> {{ "admin-webhooks-intro-2"|t }}
   <code>{"version":"1","event":"...","room_id":N,"data":{...}}</code> {{ "admin-webhooks-intro-3"|t }}
   <code>X-LetsChat-Signature: sha256=&lt;hmac&gt;</code> {{ "admin-webhooks-intro-4"|t }}
@@ -12,87 +11,97 @@
 </p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+<div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
 {% endif %}
 
 {% if let Some(rev) = revealed %}
-<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-  <p class="font-medium text-success">{{ "admin-webhooks-secret-prefix"|t }} #{{ rev.0 }} {{ "admin-webhooks-secret-suffix"|t }}</p>
+<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
+  <p class="font-medium">{{ "admin-webhooks-secret-prefix"|t }} #{{ rev.0 }} {{ "admin-webhooks-secret-suffix"|t }}</p>
   <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ rev.1 }}</code>
 </div>
 {% endif %}
 
-<form method="post" action="/admin/outgoing-webhooks" class="space-y-3 border rounded-lg p-4 mb-6 max-w-2xl">
-  <h2 class="font-semibold">{{ "admin-webhooks-create-heading"|t }}</h2>
-  <div class="grid grid-cols-2 gap-3">
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "admin-webhooks-scope"|t }}</span>
-      <select name="scope_kind" class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-        <option value="global">{{ "admin-webhooks-scope-global"|t }}</option>
-        <option value="enclave">{{ "admin-webhooks-scope-enclave"|t }}</option>
-        <option value="room">{{ "admin-webhooks-scope-room"|t }}</option>
-      </select>
-    </label>
-    <label class="block text-sm">
-      <span class="text-content-muted">{{ "admin-webhooks-scope-id"|t }}</span>
-      <input name="scope_id" type="number" min="1" placeholder="{{ "admin-webhooks-scope-id-placeholder"|t }}"
-             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-    </label>
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-webhooks-create-heading"|t }}</h3>
   </div>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-webhooks-delivery-url"|t }}</span>
-    <input name="url" type="url" required placeholder="https://example.com/hook"
-           class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-  </label>
-  <fieldset class="text-sm">
-    <legend class="text-content-muted mb-1">{{ "admin-webhooks-events"|t }}</legend>
-    <label class="flex items-center gap-2"><input type="checkbox" name="e_message_posted" checked> <code>message.posted</code></label>
-    <label class="flex items-center gap-2"><input type="checkbox" name="e_message_edited"> <code>message.edited</code></label>
-    <label class="flex items-center gap-2"><input type="checkbox" name="e_message_deleted"> <code>message.deleted</code></label>
-    <label class="flex items-center gap-2"><input type="checkbox" name="e_reaction_added"> <code>reaction.added</code></label>
-  </fieldset>
-  <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "admin-webhooks-create-button"|t }}</button>
-</form>
+  <form method="post" action="/admin/outgoing-webhooks" class="lc-set-form">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div class="lc-set-field">
+        <label class="lc-set-label" for="scope_kind">{{ "admin-webhooks-scope"|t }}</label>
+        <select id="scope_kind" name="scope_kind" class="input">
+          <option value="global">{{ "admin-webhooks-scope-global"|t }}</option>
+          <option value="enclave">{{ "admin-webhooks-scope-enclave"|t }}</option>
+          <option value="room">{{ "admin-webhooks-scope-room"|t }}</option>
+        </select>
+      </div>
+      <div class="lc-set-field">
+        <label class="lc-set-label" for="scope_id">{{ "admin-webhooks-scope-id"|t }}</label>
+        <input id="scope_id" name="scope_id" type="number" min="1" placeholder="{{ "admin-webhooks-scope-id-placeholder"|t }}" class="input">
+      </div>
+    </div>
+    <div class="lc-set-field">
+      <label class="lc-set-label" for="webhook_url">{{ "admin-webhooks-delivery-url"|t }}</label>
+      <input id="webhook_url" name="url" type="url" required placeholder="https://example.com/hook" class="input">
+    </div>
+    <fieldset class="text-sm">
+      <legend class="lc-set-label mb-1">{{ "admin-webhooks-events"|t }}</legend>
+      <label class="flex items-center gap-2"><input type="checkbox" name="e_message_posted" checked> <code>message.posted</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="e_message_edited"> <code>message.edited</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="e_message_deleted"> <code>message.deleted</code></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="e_reaction_added"> <code>reaction.added</code></label>
+    </fieldset>
+    <div><button type="submit" class="btn btn-primary">{{ "admin-webhooks-create-button"|t }}</button></div>
+  </form>
+</div>
 
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-webhooks-th-scope"|t }}</th>
-      <th class="py-2">{{ "admin-webhooks-th-events"|t }}</th>
-      <th class="py-2">{{ "admin-webhooks-th-url"|t }}</th>
-      <th class="py-2">{{ "admin-webhooks-th-status"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-webhooks-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for w in webhooks %}
-    <tr class="border-t border-border align-top">
-      <td class="py-1 text-xs">{{ w.scope }}</td>
-      <td class="py-1 text-xs font-mono">{{ w.events }}</td>
-      <td class="py-1 text-xs font-mono break-all max-w-xs">{{ w.url }}</td>
-      <td class="py-1 text-xs">
-        {% if w.disabled %}<span class="text-danger">{{ "admin-webhooks-status-disabled"|t }}</span>
-        {% else %}{{ "admin-webhooks-status-active"|t }}{% endif %}
-        {% if w.consecutive_failures > 0 %}<span class="text-warning">({{ w.consecutive_failures }} {{ "admin-webhooks-fails"|t }})</span>{% endif %}
-      </td>
-      <td class="py-1 text-right space-x-2 whitespace-nowrap">
-        <a href="/admin/outgoing-webhooks/{{ w.id }}/deliveries" class="text-accent hover:underline text-xs">{{ "admin-webhooks-history"|t }}</a>
-        <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/rotate" class="inline">
-          <button type="submit" class="text-content-muted hover:underline text-xs">{{ "admin-webhooks-rotate"|t }}</button>
-        </form>
-        <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/toggle" class="inline">
-          {% if !w.disabled %}<input type="hidden" name="_off" value="1">{% else %}<input type="hidden" name="enable" value="1">{% endif %}
-          <button type="submit" class="text-content-muted hover:underline text-xs">{% if w.disabled %}{{ "admin-webhooks-enable"|t }}{% else %}{{ "admin-webhooks-disable"|t }}{% endif %}</button>
-        </form>
-        <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/delete" class="inline">
-          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-webhooks-delete"|t }}</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-    {% if webhooks.is_empty() %}
-    <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "admin-webhooks-empty"|t }}</td></tr>
-    {% endif %}
-  </tbody>
-</table>
+{% if webhooks.is_empty() %}
+{% let empty_text_key = "admin-webhooks-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-webhooks-th-scope"|t }}</th>
+        <th>{{ "admin-webhooks-th-events"|t }}</th>
+        <th>{{ "admin-webhooks-th-url"|t }}</th>
+        <th>{{ "admin-webhooks-th-status"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-webhooks-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for w in webhooks %}
+      <tr>
+        <td class="text-xs">{{ w.scope }}</td>
+        <td class="text-xs font-mono">{{ w.events }}</td>
+        <td class="text-xs font-mono break-all max-w-xs">{{ w.url }}</td>
+        <td class="text-xs">
+          {% if w.disabled %}<span class="font-medium text-danger">{{ "admin-webhooks-status-disabled"|t }}</span>
+          {% else %}<span class="text-content-muted">{{ "admin-webhooks-status-active"|t }}</span>{% endif %}
+          {% if w.consecutive_failures > 0 %}<span class="text-warning">({{ w.consecutive_failures }} {{ "admin-webhooks-fails"|t }})</span>{% endif %}
+        </td>
+        <td class="lc-table-actions">
+          <div class="inline-flex flex-wrap justify-end items-center gap-1">
+            <a href="/admin/outgoing-webhooks/{{ w.id }}/deliveries" class="btn btn-sm btn-ghost">{{ "admin-webhooks-history"|t }}</a>
+            <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/rotate"
+                  onsubmit="return confirm('{{ "admin-webhooks-rotate-confirm"|t }}')">
+              <button type="submit" class="btn btn-sm btn-ghost">{{ "admin-webhooks-rotate"|t }}</button>
+            </form>
+            <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/toggle">
+              {% if !w.disabled %}<input type="hidden" name="_off" value="1">{% else %}<input type="hidden" name="enable" value="1">{% endif %}
+              <button type="submit" class="btn btn-sm btn-secondary">{% if w.disabled %}{{ "admin-webhooks-enable"|t }}{% else %}{{ "admin-webhooks-disable"|t }}{% endif %}</button>
+            </form>
+            <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/delete"
+                  onsubmit="return confirm('{{ "admin-webhooks-delete-confirm"|t }}')">
+              <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-webhooks-delete"|t }}</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
