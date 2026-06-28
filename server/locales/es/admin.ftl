@@ -396,6 +396,14 @@ admin-userrow-mute = Silenciar
 admin-userrow-delete = Eliminar
 admin-userrow-delete-confirm-prefix = Eliminar permanentemente a
 admin-userrow-delete-confirm-suffix = Esto no se puede deshacer.
+# LC-510: confirmaciones de acciones destructivas + estados vacios de tablas
+admin-userrow-ban-confirm = Banear a este usuario? No podra iniciar sesion ni publicar.
+admin-userrow-mute-confirm = Silenciar a este usuario? No podra publicar.
+admin-invites-revoke-confirm = Revocar este codigo de invitacion? Ya no se podra usar.
+admin-users-empty = Aun no hay usuarios.
+admin-invites-empty = Aun no hay codigos de invitacion.
+admin-rooms-empty = Aun no hay salas.
+admin-enclaves-empty = Aun no hay enclaves.
 
 ## Users
 admin-users-title = Usuarios
