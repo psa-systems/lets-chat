@@ -86,6 +86,8 @@ partials-dm-block-confirm-suffix = No podrá enviarte mensajes y no verás los s
 ## Pinned strip
 partials-pinned-heading = Fijados
 partials-pinned-toggle = Mostrar u ocultar mensajes fijados
+# LC-481: ocultar el aviso de fijados hasta que se fije un mensaje mas nuevo.
+partials-pinned-dismiss = Descartar aviso de fijados
 partials-pinned-see-all-prefix = Ver todos los
 partials-pinned-see-all-suffix = fijados
 
