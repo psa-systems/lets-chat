@@ -1,6 +1,6 @@
 use lets_chat::db::bookmarks::{
     bookmark_message, bookmarked_message_ids_in_room, bookmarks_for_user, is_bookmarked,
-    room_for_message, unbookmark_message,
+    room_for_message, set_label, unbookmark_message,
 };
 use sqlx::SqlitePool;
 mod common;
@@ -41,6 +41,49 @@ async fn bookmark_then_unbookmark_round_trips() {
 
     unbookmark_message(&pool, "viewer", msg).await.unwrap();
     assert!(!is_bookmarked(&pool, "viewer", msg).await.unwrap());
+}
+
+#[tokio::test]
+async fn set_label_roundtrips_and_clears() {
+    let pool = setup_chat_pool().await;
+    let room = seed_room(&pool, "general", "public").await;
+    let msg = seed_message(&pool, room, "author", "hi").await;
+    bookmark_message(&pool, "viewer", msg).await.unwrap();
+
+    // Default: unlabeled.
+    let rows = bookmarks_for_user(&pool, "viewer").await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].label, None);
+
+    // Set a label.
+    set_label(&pool, "viewer", msg, Some("follow-up"))
+        .await
+        .unwrap();
+    let rows = bookmarks_for_user(&pool, "viewer").await.unwrap();
+    assert_eq!(rows[0].label.as_deref(), Some("follow-up"));
+
+    // Clear it back to NULL.
+    set_label(&pool, "viewer", msg, None).await.unwrap();
+    let rows = bookmarks_for_user(&pool, "viewer").await.unwrap();
+    assert_eq!(rows[0].label, None);
+}
+
+#[tokio::test]
+async fn set_label_is_scoped_to_owner() {
+    let pool = setup_chat_pool().await;
+    let room = seed_room(&pool, "general", "public").await;
+    let msg = seed_message(&pool, room, "author", "hi").await;
+    bookmark_message(&pool, "alice", msg).await.unwrap();
+    bookmark_message(&pool, "bob", msg).await.unwrap();
+
+    set_label(&pool, "alice", msg, Some("read-later"))
+        .await
+        .unwrap();
+
+    let alice = bookmarks_for_user(&pool, "alice").await.unwrap();
+    assert_eq!(alice[0].label.as_deref(), Some("read-later"));
+    let bob = bookmarks_for_user(&pool, "bob").await.unwrap();
+    assert_eq!(bob[0].label, None, "bob's bookmark is untouched");
 }
 
 #[tokio::test]

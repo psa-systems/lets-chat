@@ -1,15 +1,30 @@
 {# LC-178: the saved-message list body, shared by saved/page.html and the live
-   OOB fragment (ws/saved_live.html) so a bookmark/unbookmark from anywhere
-   refreshes the list identically. References `entries` from whichever parent
-   includes it. #}
+   OOB fragment (ws/saved_live.html) so a bookmark/unbookmark/label change from
+   anywhere refreshes the list identically. References `entries` plus the
+   `labels()` / `has_unlabeled()` helpers from whichever parent includes it.
+   LC-479: a per-row inline label editor + filter chips. Filtering is
+   client-side (saved/page.html script) over `data-lc-saved-label`, so the
+   chips + this whole region can be replaced wholesale by the live refresh
+   without the server needing to know each tab's active filter. #}
 {% if entries.is_empty() %}
 <p class="p-4 text-sm text-content-muted">
   {{ "saved-empty"|t }}
 </p>
 {% else %}
+{% if !self.labels().is_empty() %}
+<div data-lc-saved-chips class="flex flex-wrap items-center gap-1 px-4 py-2 border-b border-border">
+  <button type="button" data-lc-saved-filter="" aria-pressed="true" class="lc-saved-chip">{{ "saved-filter-all"|t }}</button>
+  {% for l in self.labels() %}
+  <button type="button" data-lc-saved-filter="{{ l }}" aria-pressed="false" class="lc-saved-chip">{{ l }}</button>
+  {% endfor %}
+  {% if self.has_unlabeled() %}
+  <button type="button" data-lc-saved-filter="__lc_unlabeled__" aria-pressed="false" class="lc-saved-chip">{{ "saved-filter-unlabeled"|t }}</button>
+  {% endif %}
+</div>
+{% endif %}
 <ul class="divide-y divide-border">
   {% for e in entries %}
-  <li id="saved-row-{{ e.message_id }}" class="px-4 py-3">
+  <li id="saved-row-{{ e.message_id }}" data-lc-saved-label="{{ e.label_value() }}" class="px-4 py-3">
     <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
       <span>
         <span class="font-medium text-content-muted">{{ e.author_label }}</span>
@@ -17,10 +32,20 @@
         <a href="{{ e.context_path }}" class="text-accent hover:underline">{{ e.context_label }}</a>
         &middot; {{ "saved-saved-at"|t }} {{ e.saved_at }}
       </span>
-      <button hx-delete="/messages/{{ e.message_id }}/bookmark"
-              hx-target="#saved-row-{{ e.message_id }}"
-              hx-swap="delete"
-              class="text-danger hover:underline">{{ "saved-unsave"|t }}</button>
+      <span class="flex items-center gap-2 shrink-0">
+        {# LC-479: inline label editor. Posts on change (htmx sends this input's
+           value); the SavedChanged broadcast refreshes the list + chips. #}
+        <input type="text" name="label" value="{{ e.label_value() }}" maxlength="40"
+               hx-post="/messages/{{ e.message_id }}/bookmark/label"
+               hx-trigger="change" hx-swap="none"
+               placeholder="{{ "saved-label-placeholder"|t }}"
+               aria-label="{{ "saved-label-aria"|t }}"
+               class="w-28 rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs text-content placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+        <button hx-delete="/messages/{{ e.message_id }}/bookmark"
+                hx-target="#saved-row-{{ e.message_id }}"
+                hx-swap="delete"
+                class="text-danger hover:underline">{{ "saved-unsave"|t }}</button>
+      </span>
     </div>
     <div class="mt-1 whitespace-pre-wrap text-sm text-content">{{ e.body }}</div>
   </li>

@@ -1,5 +1,8 @@
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::Form;
+use serde::Deserialize;
 
 use crate::auth::AuthUser;
 use crate::db;
@@ -81,6 +84,52 @@ pub async fn delete_bookmark(
     );
 
     render_bookmark_response(&state, &user, message_id, false).await
+}
+
+/// LC-479: upper bound on a bookmark label, enforced server-side (the input
+/// also carries `maxlength`). Generous for short bucket names ("follow-up",
+/// "read-later") while bounding the stored/rendered text.
+const MAX_LABEL_CHARS: usize = 40;
+
+#[derive(Deserialize)]
+pub struct LabelForm {
+    pub label: String,
+}
+
+/// POST /messages/{message_id}/bookmark/label
+///
+/// Set or clear the label ("folder") on the viewer's bookmark for this
+/// message. An empty/whitespace value clears it back to unlabeled. No-op if
+/// the message is not bookmarked by the viewer. Broadcasts `SavedChanged` so
+/// every /saved tab (including this one) re-renders its list + filter chips
+/// over the WebSocket; the request itself returns 204 (the form is
+/// `hx-swap="none"`).
+pub async fn post_label(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(message_id): Path<i64>,
+    Form(form): Form<LabelForm>,
+) -> Result<Response, AppError> {
+    let room_id = room_id_for_message(&state, message_id).await?;
+    require_room_access(&state, &user, room_id).await?;
+
+    let trimmed = form.label.trim();
+    let capped: String = trimmed.chars().take(MAX_LABEL_CHARS).collect();
+    let label = if capped.is_empty() {
+        None
+    } else {
+        Some(capped.as_str())
+    };
+    db::bookmarks::set_label(&state.chat, &user.id, message_id, label).await?;
+
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::SavedChanged {
+            user_id: user.id.clone(),
+        },
+    );
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Re-render the single message bubble for the acting viewer so the hover
@@ -174,6 +223,7 @@ pub(crate) async fn build_saved_rows(
             saved_at: r.created_at,
             context_label,
             context_path,
+            label: r.label,
         });
     }
     Ok(entries)

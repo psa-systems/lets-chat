@@ -3329,6 +3329,27 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-pill--off { background: var(--surface-sunken); color: var(--content-muted); }
 .lc-pill--on { background: var(--danger-surface); color: var(--danger); }
 
+/* LC-479: /saved label filter chips. Toggle button styled as a pill; the
+   active chip (aria-pressed=true) uses the accent surface. */
+.lc-saved-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    padding: 0.0625rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--content-muted);
+    background: var(--surface-sunken);
+}
+.lc-saved-chip:hover { background: var(--surface-elevated); color: var(--content); }
+.lc-saved-chip[aria-pressed="true"] {
+    background: var(--accent-surface);
+    color: var(--accent-surface-content);
+    border-color: var(--accent);
+}
+
 /* LC-463: toggle switch for enclave on/off settings. Rendered as a submit
    button (so the existing POST-flip server contract is unchanged); aria-checked
    drives the visual on/off state, set by the server from the current value. */
