@@ -225,6 +225,8 @@ pub async fn get_settings(
     }
 
     let keywords = db::notification_keywords::list(&state.auth, &user.id).await?;
+    // LC-482: the user's personal custom emoji for the Custom-emoji panel.
+    let personal_emojis = db::custom_emojis::list_for_user(&state.chat, &user.id).await?;
     let avatar_version = avatar_cache_key(&user, &state.asset_version).await;
 
     let page = UserSettingsPage {
@@ -262,6 +264,8 @@ pub async fn get_settings(
         timezones,
         locales,
         keywords,
+        personal_emojis,
+        emoji_max_kib: crate::routes::custom_emojis::MAX_EMOJI_BYTES / 1024,
     };
     html(&page)
 }
