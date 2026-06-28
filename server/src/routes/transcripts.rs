@@ -650,6 +650,7 @@ pub async fn show(
         ended: session.status != "active",
         lines,
         llm_available: state.llm_available(),
+        llm_teaser: !state.llm_available() && user.role == "admin",
         summary_html,
     })
 }

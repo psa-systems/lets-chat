@@ -91,6 +91,8 @@ pub struct TranscriptPage<'a> {
     pub lines: Vec<TranscriptLine>,
     /// LC-396: true when an LLM endpoint is configured (shows the Summarize UI).
     pub llm_available: bool,
+    /// LC-506: LLM unconfigured but viewer is a site admin - disabled teaser.
+    pub llm_teaser: bool,
     /// LC-396: the rendered (markdown -> HTML) summary, if one exists.
     pub summary_html: Option<String>,
 }

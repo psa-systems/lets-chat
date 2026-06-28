@@ -38,6 +38,13 @@
         {% endif %}
       </div>
     </div>
+    {# LC-506: LLM unconfigured but viewer is a site admin - disabled teaser. #}
+    {% else if llm_teaser && !lines.is_empty() %}
+    <div class="mx-auto max-w-2xl mb-4 rounded-md border border-border bg-surface-sunken px-3 py-2">
+      <div class="lc-section-label mb-1">{{ "transcript-summary-heading"|t }}</div>
+      <button type="button" aria-disabled="true" data-lc-tip="{{ "ai-needs-setup"|t }}"
+              class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted lc-action-disabled">{{ "transcript-summary-generate"|t }}</button>
+    </div>
     {% endif %}
     {% if lines.is_empty() %}
     <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
