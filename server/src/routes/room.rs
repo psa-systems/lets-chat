@@ -524,6 +524,7 @@ pub async fn get_room(
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
+        gif_available: crate::gif::available(),
     };
     let body = html(&page)?;
     let mut response = body.into_response();
