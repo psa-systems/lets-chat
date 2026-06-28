@@ -84,12 +84,16 @@ pub(crate) async fn build_strip_fragment(
         })
         .collect();
     let has_more = total_count > top_pins.len() as i64;
+    // LC-481: top_pins is ordered pinned_at DESC, so the first row is the most
+    // recent pin; 0 when empty (the client treats 0 as "nothing to dismiss").
+    let latest_pin_id = top_pins.first().map(|p| p.message_id).unwrap_or(0);
     Ok(PinnedStripFragmentOwned {
         room_id,
         total_count,
         has_more,
         pin_path,
         top_pins,
+        latest_pin_id,
         oob,
     })
 }
@@ -103,6 +107,7 @@ pub(crate) struct PinnedStripFragmentOwned {
     pub has_more: bool,
     pub pin_path: String,
     pub top_pins: Vec<PinnedStripRow>,
+    pub latest_pin_id: i64,
     pub oob: bool,
 }
 
@@ -124,6 +129,7 @@ impl PinnedStripFragmentOwned {
                     pinned_at: p.pinned_at.clone(),
                 })
                 .collect(),
+            latest_pin_id: self.latest_pin_id,
             oob: self.oob,
         }
         .render()
