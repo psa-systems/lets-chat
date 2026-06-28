@@ -3,54 +3,59 @@
 {% block title %}{{ "admin-enclaves-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<h1 class="text-lg font-semibold mb-4">{{ "admin-enclaves-heading"|t }}</h1>
+<p class="mb-4 text-sm text-content-muted">{{ "admin-enclaves-intro"|t }}</p>
 
-<p class="text-sm text-content-muted mb-6">
-  {{ "admin-enclaves-intro"|t }}
-</p>
-
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-enclaves-th-name"|t }}</th>
-      <th class="py-2">{{ "admin-enclaves-th-visibility"|t }}</th>
-      <th class="py-2">{{ "admin-enclaves-th-owner"|t }}</th>
-      <th class="py-2">{{ "admin-enclaves-th-members"|t }}</th>
-      <th class="py-2">{{ "admin-enclaves-th-storage"|t }}</th>
-      <th class="py-2">{{ "admin-enclaves-th-created"|t }}</th>
-      <th class="py-2 text-right">{{ "admin-enclaves-th-actions"|t }}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for e in enclaves %}
-    <tr class="border-b border-border">
-      <td class="py-2">
-        <div class="font-medium">{{ e.name }}</div>
-        {% if let Some(d) = e.description %}<div class="text-xs text-content-muted">{{ d }}</div>{% endif %}
-      </td>
-      <td class="py-2">
-        {% if e.is_public %}<span class="text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "admin-enclaves-public"|t }}</span>
-        {% else %}<span class="text-xs bg-surface-sunken text-content-muted rounded px-2 py-0.5">{{ "admin-enclaves-private"|t }}</span>{% endif %}
-      </td>
-      <td class="py-2 font-mono text-xs">
-        {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-content-subtle">{{ "admin-enclaves-none"|t }}</span>{% endif %}
-      </td>
-      <td class="py-2">{{ e.member_count }}</td>
-      <td class="py-2 text-xs">
-        <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
-          <span class="font-mono text-content-muted">{{ e.usage_display }}</span>
-          <span>/</span>
-          <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" class="border rounded text-xs px-1 py-0.5 w-20">
-          <button type="submit" class="text-accent hover:underline">{{ "admin-enclaves-save"|t }}</button>
-        </form>
-      </td>
-      <td class="py-2 text-xs text-content-muted">{{ e.created_at }}</td>
-      <td class="py-2 text-right">
-        <a href="/enclave/{{ e.id }}" class="text-accent hover:underline">{{ "admin-enclaves-open"|t }}</a>
-        <a href="/enclave/{{ e.id }}/settings" class="text-accent hover:underline ml-2">{{ "admin-enclaves-manage"|t }}</a>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if enclaves.is_empty() %}
+{% let empty_text_key = "admin-enclaves-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-enclaves-th-name"|t }}</th>
+        <th>{{ "admin-enclaves-th-visibility"|t }}</th>
+        <th>{{ "admin-enclaves-th-owner"|t }}</th>
+        <th>{{ "admin-enclaves-th-members"|t }}</th>
+        <th>{{ "admin-enclaves-th-storage"|t }}</th>
+        <th>{{ "admin-enclaves-th-created"|t }}</th>
+        <th class="lc-table-actions">{{ "admin-enclaves-th-actions"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in enclaves %}
+      <tr>
+        <td>
+          <div class="font-medium">{{ e.name }}</div>
+          {% if let Some(d) = e.description %}<div class="text-xs text-content-muted">{{ d }}</div>{% endif %}
+        </td>
+        <td>
+          {% if e.is_public %}<span class="lc-pill lc-pill--on">{{ "admin-enclaves-public"|t }}</span>
+          {% else %}<span class="lc-pill lc-pill--off">{{ "admin-enclaves-private"|t }}</span>{% endif %}
+        </td>
+        <td class="font-mono text-xs">
+          {% if let Some(o) = e.owner_id %}{{ o }}{% else %}<span class="text-content-subtle">{{ "admin-enclaves-none"|t }}</span>{% endif %}
+        </td>
+        <td>{{ e.member_count }}</td>
+        <td class="text-xs">
+          <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
+            <span class="font-mono text-content-muted">{{ e.usage_display }}</span>
+            <span class="text-content-subtle">/</span>
+            <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" class="w-20 rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+            <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-enclaves-save"|t }}</button>
+          </form>
+        </td>
+        <td class="text-xs text-content-muted">{{ e.created_at }}</td>
+        <td class="lc-table-actions">
+          <div class="inline-flex justify-end gap-1">
+            <a href="/enclave/{{ e.id }}" class="btn btn-sm btn-ghost">{{ "admin-enclaves-open"|t }}</a>
+            <a href="/enclave/{{ e.id }}/settings" class="btn btn-sm btn-secondary">{{ "admin-enclaves-manage"|t }}</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

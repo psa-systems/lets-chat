@@ -1,31 +1,33 @@
-<tr id="room-{{ r.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="border-t border-border align-top">
-  <td class="py-2">
+<tr id="room-{{ r.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  <td>
     <details>
-      <summary class="cursor-pointer">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-content-subtle text-xs">{{ topic }}</span>{% endif %}</summary>
+      <summary class="cursor-pointer font-medium">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-content-subtle text-xs font-normal">{{ topic }}</span>{% endif %}</summary>
       <form hx-post="/admin/rooms/{{ r.id }}/edit" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex flex-col gap-1">
-        <input name="name" value="{{ r.name }}" required maxlength="64" class="border rounded px-2 py-1 text-xs">
-        <input name="topic" value="{% if let Some(topic) = r.topic.as_ref() %}{{ topic }}{% endif %}" maxlength="200" placeholder="{{ "admin-roomrow-topic-placeholder"|t }}" class="border rounded px-2 py-1 text-xs">
-        <button type="submit" class="text-accent hover:underline text-xs self-start">{{ "admin-roomrow-save"|t }}</button>
+        <input name="name" value="{{ r.name }}" required maxlength="64" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        <input name="topic" value="{% if let Some(topic) = r.topic.as_ref() %}{{ topic }}{% endif %}" maxlength="200" placeholder="{{ "admin-roomrow-topic-placeholder"|t }}" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        <button type="submit" class="btn btn-sm btn-secondary self-start">{{ "admin-roomrow-save"|t }}</button>
       </form>
       {% if r.room_type == "private" %}
       <form hx-post="/admin/rooms/{{ r.id }}/invite" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex gap-1">
-        <input name="username" required placeholder="{{ "admin-roomrow-username-placeholder"|t }}" class="border rounded px-2 py-1 text-xs">
-        <button type="submit" class="text-accent hover:underline text-xs">{{ "admin-roomrow-invite"|t }}</button>
+        <input name="username" required placeholder="{{ "admin-roomrow-username-placeholder"|t }}" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-roomrow-invite"|t }}</button>
       </form>
       {% endif %}
     </details>
   </td>
-  <td class="py-2 text-xs">{{ r.room_type }}</td>
-  <td class="py-2 text-xs">{{ r.members }}</td>
-  <td class="py-2 text-xs">
+  <td class="text-xs text-content-muted">{{ r.room_type }}</td>
+  <td class="text-xs">{{ r.members }}</td>
+  <td class="text-xs">
     {% if let Some(code) = r.invite_code.as_ref() %}
-    <span class="font-mono">/invite/{{ code }}</span>
-    <button hx-post="/admin/rooms/{{ r.id }}/regenerate" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="text-accent hover:underline ml-1">{{ "admin-roomrow-regen"|t }}</button>
+    <div class="flex items-center gap-1">
+      <span class="font-mono">/invite/{{ code }}</span>
+      <button hx-post="/admin/rooms/{{ r.id }}/regenerate" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="btn btn-sm btn-ghost">{{ "admin-roomrow-regen"|t }}</button>
+    </div>
     {% else %}
     <span class="text-content-subtle">-</span>
     {% endif %}
   </td>
-  <td class="py-2 text-right text-xs whitespace-nowrap">
-    <button hx-post="/admin/rooms/{{ r.id }}/archive" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-roomrow-delete-confirm-prefix"|t }} {{ r.name }}? {{ "admin-roomrow-delete-confirm-suffix"|t }}" class="text-danger hover:underline">{{ "admin-roomrow-delete"|t }}</button>
+  <td class="lc-table-actions">
+    <button hx-post="/admin/rooms/{{ r.id }}/archive" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-roomrow-delete-confirm-prefix"|t }} {{ r.name }}? {{ "admin-roomrow-delete-confirm-suffix"|t }}" class="btn btn-sm btn-danger-outline">{{ "admin-roomrow-delete"|t }}</button>
   </td>
 </tr>

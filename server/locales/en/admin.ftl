@@ -396,6 +396,14 @@ admin-userrow-mute = Mute
 admin-userrow-delete = Delete
 admin-userrow-delete-confirm-prefix = Permanently delete
 admin-userrow-delete-confirm-suffix = This cannot be undone.
+# LC-510: destructive-action confirmations + table empty states
+admin-userrow-ban-confirm = Ban this user? They will be unable to sign in or post.
+admin-userrow-mute-confirm = Mute this user? They will be unable to post.
+admin-invites-revoke-confirm = Revoke this invite code? It can no longer be used.
+admin-users-empty = No users yet.
+admin-invites-empty = No invite codes yet.
+admin-rooms-empty = No rooms yet.
+admin-enclaves-empty = No enclaves yet.
 
 ## Users
 admin-users-title = Users
