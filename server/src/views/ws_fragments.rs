@@ -71,6 +71,17 @@ pub struct ReactionUpdateFragment<'a> {
     pub reactions: &'a [super::room::ReactionView],
 }
 
+/// LC-490: out-of-band swap of the ack bar (`#ack-{message_id}`) for one
+/// recipient after an acknowledge. `ack: None` renders an empty region (the
+/// requirement was cleared); `Some(_)` re-renders the roster + the viewer's
+/// Acknowledge / acknowledged state.
+#[derive(Template)]
+#[template(path = "ws/ack_update.html")]
+pub struct AckUpdateFragment {
+    pub message_id: i64,
+    pub ack: Option<super::room::AckState>,
+}
+
 /// Out-of-band swap that updates a sidebar unread badge. The badge id is
 /// `unread-{kind}-{id}` where kind is "room" or "dm" and id is the room_id
 /// (for rooms) or peer user_id (for DMs, from the badge owner's perspective).
@@ -338,6 +349,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceTranscribed { .. }
         | ChatEvent::ReactionAdded { .. }
         | ChatEvent::ReactionRemoved { .. }
+        | ChatEvent::AckRequiredChanged { .. }
+        | ChatEvent::Acknowledged { .. }
         | ChatEvent::RoomMemberAdded { .. }
         | ChatEvent::RoomMemberRemoved { .. }
         | ChatEvent::DmRead { .. }
