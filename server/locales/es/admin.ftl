@@ -178,6 +178,8 @@ admin-linkfilter-th-added = Anadido
 admin-linkfilter-th-actions = Acciones
 admin-linkfilter-delete = Eliminar
 admin-linkfilter-empty = No hay reglas. Anade una arriba para empezar a filtrar.
+# LC-510: confirmacion de eliminar regla
+admin-linkfilter-delete-confirm = Eliminar esta regla de filtro de enlaces?
 
 ## Mod log
 admin-modlog-title = Registro de moderacion
@@ -187,6 +189,7 @@ admin-modlog-th-action = Accion
 admin-modlog-th-target = Objetivo
 admin-modlog-th-reason = Motivo
 admin-modlog-th-when = Cuando
+admin-modlog-empty = Aun no hay acciones de moderacion registradas.
 
 ## Webhook deliveries
 admin-deliveries-title = Entregas de webhook
@@ -248,6 +251,7 @@ admin-quarantine-th-held = Retenido
 admin-quarantine-th-actions = Acciones
 admin-quarantine-approve = Aprobar
 admin-quarantine-reject = Rechazar
+admin-quarantine-reject-confirm = Rechazar este mensaje? Se descartara permanentemente.
 admin-quarantine-empty = No hay nada en la cola.
 
 ## Room row
