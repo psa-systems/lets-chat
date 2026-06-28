@@ -3,21 +3,18 @@
 {% block title %}{{ "admin-bridges-title"|t }} - Admin - lets-chat{% endblock %}
 
 {% block admin_main %}
-<div class="flex items-baseline gap-2 mb-4">
-  <h1 class="text-lg font-semibold">{{ "admin-bridges-heading"|t }}</h1>
-  <a href="/admin/bridges/avatars" class="ml-auto text-sm text-accent hover:underline">{{ "admin-bridges-avatars-link"|t }}</a>
+<div class="mb-4 flex items-center justify-between gap-2">
+  <p class="text-sm text-content-muted">{{ "admin-bridges-intro"|t }}</p>
+  <a href="/admin/bridges/avatars" class="btn btn-secondary btn-sm flex-none">{{ "admin-bridges-avatars-link"|t }}</a>
 </div>
-<p class="text-sm text-content-muted mb-4">
-  {{ "admin-bridges-intro"|t }}
-</p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+<div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ err }}</div>
 {% endif %}
 
 {% if let Some(tok) = new_token %}
-<div class="mb-4 p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-  <p class="font-medium text-success">
+<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
+  <p class="font-medium">
     {{ "admin-bridges-created-prefix"|t }}{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} {{ "admin-bridges-created-suffix"|t }}
   </p>
   <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
@@ -26,85 +23,92 @@
 {% endif %}
 
 {% if !available %}
-<div class="mb-4 p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
+<div class="mb-4 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
   {{ "admin-bridges-no-secret"|t }} (<code>LETS_CHAT_SECRET_KEY</code>)
 </div>
 {% else %}
-<form method="post" action="/admin/bridges" class="space-y-3 border rounded-lg p-4 mb-6 max-w-2xl">
-  <h2 class="font-semibold">{{ "admin-bridges-create-heading"|t }}</h2>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-bridges-room"|t }}</span>
-    <select name="room_id" required class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-      {% for room in rooms %}
-      <option value="{{ room.id }}">#{{ room.name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-bridges-bot-username"|t }}</span>
-    <input name="bot_username" type="text" required maxlength="32" placeholder="matrix-bridge"
-           class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-  </label>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-bridges-kind"|t }}</span>
-    <select name="kind" required class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
-      <option value="matrix">matrix</option>
-    </select>
-    <span class="text-xs text-content-subtle">{{ "admin-bridges-kind-note"|t }}</span>
-  </label>
-  <label class="block text-sm">
-    <span class="text-content-muted">{{ "admin-bridges-config"|t }}</span>
-    <textarea name="config" rows="4" required
-              class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-xs font-mono"
-              placeholder='{"homeserver":"https://matrix.example","shared_secret":"..."}'></textarea>
-    <span class="text-xs text-content-subtle">{{ "admin-bridges-config-note"|t }}</span>
-  </label>
-  <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "admin-bridges-create-button"|t }}</button>
-</form>
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-bridges-create-heading"|t }}</h3>
+  </div>
+  <form method="post" action="/admin/bridges" class="lc-set-form">
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-label" for="bridge_room">{{ "admin-bridges-room"|t }}</label>
+      <select id="bridge_room" name="room_id" required class="input">
+        {% for room in rooms %}
+        <option value="{{ room.id }}">#{{ room.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-label" for="bot_username">{{ "admin-bridges-bot-username"|t }}</label>
+      <input id="bot_username" name="bot_username" type="text" required maxlength="32" placeholder="matrix-bridge" class="input">
+    </div>
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-label" for="bridge_kind">{{ "admin-bridges-kind"|t }}</label>
+      <select id="bridge_kind" name="kind" required class="input">
+        <option value="matrix">matrix</option>
+      </select>
+      <p class="lc-set-help">{{ "admin-bridges-kind-note"|t }}</p>
+    </div>
+    <div class="lc-set-field">
+      <label class="lc-set-label" for="bridge_config">{{ "admin-bridges-config"|t }}</label>
+      <textarea id="bridge_config" name="config" rows="4" required class="input font-mono text-xs"
+                placeholder='{"homeserver":"https://matrix.example","shared_secret":"..."}'></textarea>
+      <p class="lc-set-help">{{ "admin-bridges-config-note"|t }}</p>
+    </div>
+    <div><button type="submit" class="btn btn-primary">{{ "admin-bridges-create-button"|t }}</button></div>
+  </form>
+</div>
 {% endif %}
 
-<table class="w-full text-sm">
-  <thead>
-    <tr class="text-left text-content-muted border-b border-border">
-      <th class="py-2">{{ "admin-bridges-th-room"|t }}</th>
-      <th class="py-2">{{ "admin-bridges-th-kind"|t }}</th>
-      <th class="py-2">{{ "admin-bridges-th-bot"|t }}</th>
-      <th class="py-2">{{ "admin-bridges-th-status"|t }}</th>
-      <th class="py-2">{{ "admin-bridges-th-last-heartbeat"|t }}</th>
-      <th class="py-2"></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for b in bridges %}
-    <tr class="border-b border-border">
-      <td class="py-2">#{{ b.room_name }}</td>
-      <td class="py-2 font-mono">{{ b.kind }}</td>
-      <td class="py-2 font-mono">{{ b.bot_username }}</td>
-      <td class="py-2">
-        {% if b.status == "healthy" %}
-        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-success-surface text-success-surface-content">{{ b.status }}</span>
-        {% else if b.status == "errored" %}
-        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-danger-surface text-danger">{{ b.status }}</span>
-        {% else if b.status == "stale" %}
-        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-warning-surface text-warning-surface-content">{{ b.status }}</span>
-        {% else %}
-        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-surface-sunken text-content-muted">{{ b.status }}</span>
-        {% endif %}
-        {% if let Some(err) = b.last_error.as_ref() %}
-        <div class="text-xs text-danger mt-1 break-all">{{ err }}</div>
-        {% endif %}
-      </td>
-      <td class="py-2 text-xs text-content-muted">{% if let Some(ts) = b.last_heartbeat_at.as_ref() %}{{ ts }}{% else %}-{% endif %}</td>
-      <td class="py-2 text-right">
-        <form method="post" action="/admin/bridges/{{ b.id }}/remove" class="inline">
-          <button type="submit" class="text-danger hover:underline text-xs">{{ "admin-bridges-remove"|t }}</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
 {% if bridges.is_empty() %}
-<p class="text-sm text-content-subtle mt-4">{{ "admin-bridges-empty"|t }}</p>
+{% let empty_text_key = "admin-bridges-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card overflow-hidden">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-bridges-th-room"|t }}</th>
+        <th>{{ "admin-bridges-th-kind"|t }}</th>
+        <th>{{ "admin-bridges-th-bot"|t }}</th>
+        <th>{{ "admin-bridges-th-status"|t }}</th>
+        <th>{{ "admin-bridges-th-last-heartbeat"|t }}</th>
+        <th class="lc-table-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bridges %}
+      <tr>
+        <td>#{{ b.room_name }}</td>
+        <td class="font-mono text-xs">{{ b.kind }}</td>
+        <td class="font-mono text-xs">{{ b.bot_username }}</td>
+        <td>
+          {% if b.status == "healthy" %}
+          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-success-surface text-success-surface-content">{{ b.status }}</span>
+          {% else if b.status == "errored" %}
+          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-danger-surface text-danger-surface-content">{{ b.status }}</span>
+          {% else if b.status == "stale" %}
+          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-warning-surface text-warning-surface-content">{{ b.status }}</span>
+          {% else %}
+          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-surface-sunken text-content-muted">{{ b.status }}</span>
+          {% endif %}
+          {% if let Some(err) = b.last_error.as_ref() %}
+          <div class="text-xs text-danger mt-1 break-all">{{ err }}</div>
+          {% endif %}
+        </td>
+        <td class="text-xs text-content-muted">{% if let Some(ts) = b.last_heartbeat_at.as_ref() %}{{ ts }}{% else %}-{% endif %}</td>
+        <td class="lc-table-actions">
+          <form method="post" action="/admin/bridges/{{ b.id }}/remove"
+                onsubmit="return confirm('{{ "admin-bridges-remove-confirm"|t }}')">
+            <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-bridges-remove"|t }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endif %}
 {% endblock %}
