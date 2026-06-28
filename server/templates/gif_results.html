@@ -1,0 +1,15 @@
+{# LC-488: GIF search results grid. Swapped into #lc-gif-results. Each cell
+   carries the full GIF URL in data-lc-gif-url; the modal's click handler POSTs
+   it to /room/{id}/gif. Previews are hotlinked to Tenor's CDN (the posted GIF
+   is fetched + stored same-origin by the server). #}
+{% if results.is_empty() %}
+<div class="lc-gif-empty">{{ "gif-no-results"|t }}</div>
+{% else %}
+<div class="lc-gif-grid">
+  {% for g in results %}
+  <button type="button" class="lc-gif-cell" data-lc-gif-url="{{ g.gif_url }}" title="{{ g.description }}">
+    <img src="{{ g.preview_url }}" alt="{{ g.description }}" loading="lazy">
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
