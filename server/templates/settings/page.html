@@ -42,6 +42,11 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-emoji"|t }}</span>
       </button>
+      {# LC-487: canned responses / saved replies #}
+      <button type="button" role="tab" id="lc-tab-canned" data-lc-tab="canned" aria-controls="lc-panel-canned" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v6.5A2.75 2.75 0 0115.25 14H7.5l-3.6 2.7A.75.75 0 012.7 16.1L3 13.9A2.75 2.75 0 012 11.25v-6.5zM6 7a1 1 0 100 2h8a1 1 0 100-2H6zm0 3.5a1 1 0 100 2h5a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+        <span>{{ "settings-section-canned"|t }}</span>
+      </button>
     </nav>
 
     <div class="lc-set-main">
@@ -513,6 +518,54 @@
             </div>
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary">{{ "settings-emoji-add"|t }}</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {# ===== Saved replies / canned responses (LC-487) ===== #}
+      <section id="lc-panel-canned" role="tabpanel" aria-labelledby="lc-tab-canned" data-lc-tabpanel="canned" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-canned"|t }}</h2>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-canned-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-canned-help-1"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">/name</code> {{ "settings-canned-help-2"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">{args}</code> {{ "settings-canned-help-3"|t }}</p>
+          </div>
+          {% if canned_responses.is_empty() %}
+          {% let empty_text_key = "settings-canned-empty" %}
+          {% include "partials/empty_state.html" %}
+          {% else %}
+          <ul class="divide-y divide-border">
+            {% for c in canned_responses %}
+            <li class="py-3 first:pt-0 flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-mono text-sm">/{{ c.name }}</div>
+                {% if !c.description.is_empty() %}<div class="text-xs text-content-muted">{{ c.description }}</div>{% endif %}
+                <div class="mt-0.5 text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3">{{ c.target }}</div>
+              </div>
+              <form method="post" action="/settings/canned/{{ c.id }}/delete" class="shrink-0">
+                <button type="submit" class="text-xs text-danger hover:underline"
+                        onclick="return confirm('{{ "settings-canned-delete-confirm"|t }}')">{{ "settings-canned-delete"|t }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form method="post" action="/settings/canned" class="lc-set-form border-t border-border pt-3 mt-3">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-canned-name">{{ "settings-canned-name-label"|t }}</label>
+              <input id="lc-canned-name" name="name" pattern="[A-Za-z0-9_-]{1,32}" required class="input font-mono text-sm" placeholder="sig">
+            </div>
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-canned-desc">{{ "settings-canned-desc-label"|t }}</label>
+              <input id="lc-canned-desc" name="description" maxlength="200" class="input text-sm">
+            </div>
+            <div class="lc-set-field">
+              <label class="lc-set-label" for="lc-canned-body">{{ "settings-canned-body-label"|t }}</label>
+              <textarea id="lc-canned-body" name="body" rows="3" required class="input text-sm"></textarea>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary">{{ "settings-canned-add"|t }}</button>
             </div>
           </form>
         </div>

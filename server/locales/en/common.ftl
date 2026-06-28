@@ -200,6 +200,19 @@ settings-emoji-formats = PNG, GIF, or WebP, up to
 settings-emoji-add = Add emoji
 settings-emoji-delete = Delete
 settings-emoji-delete-confirm = Delete this emoji?
+# LC-487: canned responses / saved replies panel.
+settings-section-canned = Saved replies
+settings-canned-heading = Your saved replies
+settings-canned-help-1 = Reusable snippets you post from the composer by typing
+settings-canned-help-2 = . Use
+settings-canned-help-3 = to drop in whatever you type after the name.
+settings-canned-empty = You have no saved replies yet.
+settings-canned-name-label = Shortcut name
+settings-canned-desc-label = Description (optional)
+settings-canned-body-label = Reply text
+settings-canned-add = Add saved reply
+settings-canned-delete = Delete
+settings-canned-delete-confirm = Delete this saved reply?
 settings-saved = Saved.
 # LC-426: per-action feedback (inline status + toast)
 settings-fb-saved = Saved
