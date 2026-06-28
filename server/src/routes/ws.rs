@@ -18,9 +18,9 @@ use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
-    render_event, CallSignalFragment, EditedMessageFragment, MentionClearedFragment,
-    MentionedFragment, NewMessageFragment, ReactionUpdateFragment, ReminderFragment,
-    SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
+    render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment,
+    MentionClearedFragment, MentionedFragment, NewMessageFragment, ReactionUpdateFragment,
+    ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
     TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
@@ -224,6 +224,21 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::ReactionAdded { message_id, .. }
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
                                     render_reaction_bar(&send_state, *message_id, &send_user.id).await
+                                }
+                                ChatEvent::Acknowledged { message_id, .. } => {
+                                    render_ack_bar(&send_state, *message_id, &send_user.id).await
+                                }
+                                ChatEvent::AckRequiredChanged {
+                                    room_id,
+                                    message_id,
+                                } => {
+                                    render_ack_required(
+                                        &send_state,
+                                        &send_user,
+                                        *room_id,
+                                        *message_id,
+                                    )
+                                    .await
                                 }
                                 ChatEvent::PollUpdated { message_id, .. } => {
                                     render_poll(&send_state, *message_id, &send_user.id).await
@@ -981,6 +996,45 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
     .ok()
 }
 
+/// LC-490: re-render the ack-bar sub-region (`#ack-{id}`) for one recipient.
+/// `build_ack_view` returns `None` once the requirement is cleared, which the
+/// fragment renders as an empty region (so the bar disappears live).
+async fn render_ack_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+    let ack = super::build_ack_view(state, message_id, user_id)
+        .await
+        .ok()?;
+    AckUpdateFragment { message_id, ack }.render().ok()
+}
+
+/// LC-490: re-render the whole bubble for one recipient after the ack
+/// requirement is toggled, so the bar + the require/clear menu item flip.
+/// Mirrors `render_pin_event` minus the pinned strip; `load_message_view_for_viewer`
+/// computes the ack state per viewer internally.
+async fn render_ack_required(
+    state: &AppState,
+    viewer: &User,
+    room_id: i64,
+    message_id: i64,
+) -> Option<String> {
+    let is_pinned = db::pinned::pinned_message_ids_for_room(&state.chat, room_id)
+        .await
+        .ok()?
+        .contains(&message_id);
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, message_id)
+        .await
+        .unwrap_or(false);
+    let view =
+        super::load_message_view_for_viewer(state, viewer, message_id, is_pinned, is_bookmarked)
+            .await
+            .ok()?;
+    crate::views::room::SingleMessageFragment {
+        message: &view,
+        oob: true,
+    }
+    .render()
+    .ok()
+}
+
 /// Build a MessageView for a freshly broadcast message rendered for `viewer`.
 /// Reactions are empty (a brand-new message has none); can_edit/can_delete
 /// reflect viewer's role and authorship.
@@ -1091,6 +1145,8 @@ async fn render_new_message(
         mentions,
         is_pinned: false,
         is_bookmarked: false,
+        // LC-490: a brand-new message cannot yet require acknowledgement.
+        ack: None,
         custom_emojis,
         channels,
         quote_preview,
@@ -1203,6 +1259,11 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .flatten(),
         None => None,
     };
+    // LC-490: recompute ack so editing a required message doesn't wipe its bar.
+    let ack = super::build_ack_view(state, m.id, &viewer.id)
+        .await
+        .ok()
+        .flatten();
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -1232,6 +1293,7 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         mentions,
         is_pinned: pinned_ids.contains(&m.id),
         is_bookmarked,
+        ack,
         custom_emojis,
         channels,
         quote_preview,
@@ -1325,6 +1387,9 @@ async fn render_thread_reply(
         mentions,
         is_pinned: false,
         is_bookmarked: false,
+        // LC-490: thread-reply broadcast; ack bar (if any) updates via its own
+        // event. A new reply isn't required at creation time.
+        ack: None,
         custom_emojis,
         channels,
         quote_preview: None,

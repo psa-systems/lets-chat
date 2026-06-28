@@ -192,6 +192,13 @@ room-msg-unpin = Desfijar
 room-msg-pin = Fijar
 room-msg-unsave = Quitar guardado
 room-msg-save = Guardar
+# LC-490: confirmacion de lectura
+room-msg-require-ack = Requerir confirmacion
+room-msg-unrequire-ack = Quitar confirmacion
+room-ack-required = Confirmacion requerida
+room-ack-button = Confirmar
+room-ack-done = Confirmado
+room-ack-count-prefix = Confirmado por
 room-msg-remind = Recordar
 room-msg-mark-unread = Marcar como no leído
 room-msg-forward = Reenviar

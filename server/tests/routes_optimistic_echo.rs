@@ -375,6 +375,7 @@ fn user_view(body: &str) -> MessageView {
         mentions: vec![],
         is_pinned: false,
         is_bookmarked: false,
+        ack: None,
         custom_emojis: vec![],
         quote_preview: None,
         suppress_quote_preview: false,

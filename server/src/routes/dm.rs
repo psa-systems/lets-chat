@@ -268,6 +268,8 @@ pub async fn get_dm(
             mentions: Vec::new(),
             is_pinned: pinned_ids.contains(&m.id),
             is_bookmarked: bookmarked_ids.contains(&m.id),
+            // LC-490: required-read is a channel feature; DMs never flag ack.
+            ack: None,
             custom_emojis: shared_emojis.clone(),
             // LC-323: DMs have no enclave, so there are no #channel targets.
             channels: Vec::new(),
