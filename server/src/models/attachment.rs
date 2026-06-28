@@ -34,6 +34,14 @@ impl Attachment {
         self.mime_type.starts_with("audio/")
     }
 
+    /// LC-507: a GIF (picker-posted or user-uploaded). The timeline serves the
+    /// animated original for these rather than the still first-frame preview the
+    /// pipeline produces, so posted GIFs autoplay inline (Slack/Discord-style)
+    /// instead of looking frozen until clicked.
+    pub fn is_gif(&self) -> bool {
+        self.mime_type == "image/gif"
+    }
+
     /// LC-500: human-readable size (B / KB / MB) for the download card. Mirrors
     /// the composer's client-side `humanBytes` so timeline + composer agree.
     pub fn human_size(&self) -> String {
