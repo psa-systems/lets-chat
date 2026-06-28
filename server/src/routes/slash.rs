@@ -40,6 +40,18 @@ pub struct SlashRow {
 #[template(path = "room/slash_popover.html")]
 struct SlashPopover {
     commands: Vec<SlashRow>,
+    /// The name prefix the user typed (without the leading `/`). Used to decide
+    /// between the hidden state (empty query, nothing typed) and the "no
+    /// matching commands" empty state (a real query that matched nothing).
+    query: String,
+}
+
+/// LC-509: argument-hint bar shown while a recognized command's arguments are
+/// being typed (e.g. `/poll `). Non-interactive; just surfaces the usage line.
+#[derive(Template)]
+#[template(path = "room/slash_hint.html")]
+struct SlashHint {
+    command: Option<SlashRow>,
 }
 
 #[derive(Template)]
@@ -49,19 +61,23 @@ struct SlashHelp {
 }
 
 /// Visible commands for `user`, honoring `admin_only`. Built-ins first, then
-/// custom, both filtered by a name prefix (empty matches all).
+/// custom. A row matches when its name starts with `prefix` OR (LC-509) its
+/// description contains `prefix` as a keyword; an empty prefix matches all.
 fn visible_commands(
     user: &User,
     custom: &[db::slash::CustomCommand],
     prefix: &str,
 ) -> Vec<SlashRow> {
     let is_admin = user.role == "admin";
+    let matches = |name: &str, description: &str| {
+        name.starts_with(prefix) || description.to_ascii_lowercase().contains(prefix)
+    };
     let mut rows = Vec::new();
     for b in commands::BUILTINS {
         if b.admin_only && !is_admin {
             continue;
         }
-        if b.name.starts_with(prefix) {
+        if matches(b.name, b.description) {
             rows.push(SlashRow {
                 name: b.name.to_string(),
                 usage: b.usage.to_string(),
@@ -73,7 +89,7 @@ fn visible_commands(
         if c.admin_only && !is_admin {
             continue;
         }
-        if c.name.starts_with(prefix) {
+        if matches(&c.name, &c.description) {
             rows.push(SlashRow {
                 name: c.name.clone(),
                 usage: format!("/{}", c.name),
@@ -84,13 +100,42 @@ fn visible_commands(
     rows
 }
 
+/// LC-509: the single command whose name exactly equals `name` (honoring
+/// `admin_only`), for the argument-hint bar. Built-ins win over custom.
+fn exact_command(user: &User, custom: &[db::slash::CustomCommand], name: &str) -> Option<SlashRow> {
+    let is_admin = user.role == "admin";
+    if let Some(b) = commands::find_builtin(name) {
+        if b.admin_only && !is_admin {
+            return None;
+        }
+        return Some(SlashRow {
+            name: b.name.to_string(),
+            usage: b.usage.to_string(),
+            description: b.description.to_string(),
+        });
+    }
+    custom
+        .iter()
+        .find(|c| c.name == name && (!c.admin_only || is_admin))
+        .map(|c| SlashRow {
+            name: c.name.clone(),
+            usage: format!("/{}", c.name),
+            description: c.description.clone(),
+        })
+}
+
 #[derive(Deserialize)]
 pub struct AutocompleteQuery {
     #[serde(default)]
     pub q: String,
+    /// LC-509: when true, return the argument-hint bar for the exact command
+    /// named by `q` instead of the filtered command list.
+    #[serde(default)]
+    pub hint: bool,
 }
 
-/// GET /api/slash-commands?q=  - autocomplete dropdown for the composer.
+/// GET /api/slash-commands?q=&hint=  - autocomplete dropdown (list mode) or the
+/// argument-hint bar (`hint=true`) for the composer.
 pub async fn get_autocomplete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -98,8 +143,15 @@ pub async fn get_autocomplete(
 ) -> Result<Html, AppError> {
     let prefix = q.q.trim_start_matches('/').to_ascii_lowercase();
     let custom = db::slash::list_global(&state.chat).await?;
+    if q.hint {
+        let command = exact_command(&user, &custom, &prefix);
+        return html(&SlashHint { command });
+    }
     let commands = visible_commands(&user, &custom, &prefix);
-    html(&SlashPopover { commands })
+    html(&SlashPopover {
+        commands,
+        query: prefix,
+    })
 }
 
 /// Try to handle `body` as a slash command. Returns `Ok(None)` when the body

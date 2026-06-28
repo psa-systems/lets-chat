@@ -2090,6 +2090,24 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     display: none;
 }
 
+/* LC-509: shared styling for the composer's autocomplete popovers (slash
+   commands, @mentions, :emoji:). The keyboard-highlighted option must be
+   visually distinct, not just aria-selected; mouse hover matches it so the two
+   selection modes look identical. */
+.lc-ac-header {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--content-subtle);
+    border-bottom: 1px solid var(--border);
+}
+.lc-ac-option:hover,
+.lc-ac-option[aria-selected="true"] {
+    background-color: var(--surface-sunken);
+}
+
 /* ============================================================================
    LC-402: in-call (voice/video) UI design system. Theme-token driven so the
    call surface follows light / dark / high-contrast like the rest of the app.
