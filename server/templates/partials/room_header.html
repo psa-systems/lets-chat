@@ -64,7 +64,9 @@
       </div>
     </div>
     {# LC-484: "Catch me up" opens the AI summary drawer in the shared
-       #thread-panel slot. Gated on an operator-configured LLM. #}
+       #thread-panel slot. Gated on an operator-configured LLM. LC-506: when
+       unconfigured, site admins still see it - disabled, with a tooltip telling
+       them which env to set (discoverability); regular members see nothing. #}
     {% if llm_available %}
     <button type="button"
             hx-get="/room/{{ room.id }}/summary"
@@ -72,6 +74,15 @@
             hx-swap="outerHTML"
             class="lc-header-action"
             data-lc-tip="{{ "summary-catch-up-heading"|t }}" data-lc-tip-pos="bottom">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5zM4.5 12.5a.5.5 0 01.474.342l.53 1.59 1.59.53a.5.5 0 010 .948l-1.59.53-.53 1.59a.5.5 0 01-.948 0l-.53-1.59-1.59-.53a.5.5 0 010-.948l1.59-.53.53-1.59A.5.5 0 014.5 12.5z"/>
+      </svg>
+      <span>{{ "summary-catch-up-heading"|t }}</span>
+    </button>
+    {% else if llm_teaser %}
+    <button type="button" aria-disabled="true"
+            class="lc-header-action lc-action-disabled"
+            data-lc-tip="{{ "ai-needs-setup"|t }}" data-lc-tip-pos="bottom">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
         <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5zM4.5 12.5a.5.5 0 01.474.342l.53 1.59 1.59.53a.5.5 0 010 .948l-1.59.53-.53 1.59a.5.5 0 01-.948 0l-.53-1.59-1.59-.53a.5.5 0 010-.948l1.59-.53.53-1.59A.5.5 0 014.5 12.5z"/>
       </svg>

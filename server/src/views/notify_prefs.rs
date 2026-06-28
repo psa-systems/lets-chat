@@ -18,4 +18,6 @@ pub struct RoomHeaderFragment<'a> {
     /// LC-484: gates the "Catch me up" action; recomputed here so it
     /// survives the notify-prefs header swap.
     pub llm_available: bool,
+    /// LC-506: admin-only disabled teaser when the LLM is unconfigured.
+    pub llm_teaser: bool,
 }
