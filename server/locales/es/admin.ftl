@@ -313,6 +313,10 @@ admin-settings-imap-save = Guardar ajustes de IMAP
 admin-settings-uploads-heading = Subidas
 admin-settings-uploads-generated-prefix = Generadas
 admin-settings-uploads-generated-suffix = vista(s) previa(s).
+# LC-510: avisos de guardado en linea (ruta htmx)
+admin-saved = Guardado
+admin-uploads-regenerated = Vistas previas regeneradas
+admin-uploads-purged = Huerfanos purgados
 admin-settings-uploads-purged-prefix = Purgadas
 admin-settings-uploads-purged-suffix = subida(s) huerfana(s).
 admin-settings-uploads-disk-size = Tamano en disco
