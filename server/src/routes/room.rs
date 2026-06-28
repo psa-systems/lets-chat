@@ -534,6 +534,7 @@ pub async fn get_room(
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
+        gif_teaser: !crate::gif::available() && user.role == "admin",
     };
     let body = html(&page)?;
     let mut response = body.into_response();
