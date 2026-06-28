@@ -975,7 +975,7 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
-    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
+    let emojis = db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, user_id)
         .await
         .ok()
         .unwrap_or_default();
@@ -1101,10 +1101,11 @@ async fn render_new_message(
         .ok()
         .and_then(|mut m| m.remove(&message.id))
         .unwrap_or_default();
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, message.room_id)
-        .await
-        .ok()
-        .unwrap_or_default();
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, message.room_id, &viewer.id)
+            .await
+            .ok()
+            .unwrap_or_default();
     // LC-323: same-enclave #channel link targets for this viewer.
     let channels = super::channel_refs_for_room(state, message.room_id, viewer)
         .await
@@ -1200,10 +1201,11 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
     )
     .await
     .ok()?;
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id)
-        .await
-        .ok()
-        .unwrap_or_default();
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &viewer.id)
+            .await
+            .ok()
+            .unwrap_or_default();
     // LC-323: same-enclave #channel link targets for this viewer.
     let channels = super::channel_refs_for_room(state, m.room_id, viewer)
         .await
@@ -1350,10 +1352,11 @@ async fn render_thread_reply(
         .ok()
         .and_then(|mut x| x.remove(&message.id))
         .unwrap_or_default();
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, message.room_id)
-        .await
-        .ok()
-        .unwrap_or_default();
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, message.room_id, &viewer.id)
+            .await
+            .ok()
+            .unwrap_or_default();
     // LC-323: same-enclave #channel link targets for this viewer.
     let channels = super::channel_refs_for_room(state, message.room_id, viewer)
         .await

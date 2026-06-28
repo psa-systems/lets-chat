@@ -63,7 +63,7 @@ pub async fn post_preview(
         return Err(AppError::Forbidden);
     }
     let capped: String = form.body.chars().take(MAX_MESSAGE_CHARS).collect();
-    let emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let emojis = db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
     let rendered = crate::views::markdown::render(&capped, &[], &emojis);
     Ok(Html(format!(
         r#"<div class="lc-md leading-snug">{rendered}</div>"#
@@ -230,7 +230,8 @@ pub async fn get_room(
 
     // Load the enclave's custom emoji set once for the whole page. Reactions
     // and message bodies share the same map, so a single lookup serves both.
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
     // LC-323: same-enclave #channel link targets, resolved once for the page.
     let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
 
@@ -2135,7 +2136,8 @@ pub async fn patch_message(
         m.room_id,
     )
     .await?;
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &user.id).await?;
     let channel_refs = super::channel_refs_for_room(&state, m.room_id, &user).await?;
     let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &user.id).await?;
     let reactor_titles = super::build_reactor_titles(&state, &reaction_counts).await;
@@ -2272,7 +2274,8 @@ pub async fn get_thread_panel(
         db::uploads::attachments_for_messages(&state.chat, &all_ids).await?;
     let mut mentions_by_message =
         db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
     let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
     let bookmarked_ids =
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
@@ -2640,7 +2643,8 @@ pub async fn get_history_panel(
         return Err(AppError::Forbidden);
     }
     let edits = db::chat::list_message_edits(&state.chat, message_id).await?;
-    let emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &user.id).await?;
     let current_mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
         .await?
         .remove(&m.id)

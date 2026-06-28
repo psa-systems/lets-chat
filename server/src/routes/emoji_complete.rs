@@ -56,7 +56,8 @@ pub async fn get_autocomplete(
     // Custom emojis (per-enclave) first. refs_for_room returns the room's
     // enclave set, or empty for DMs / non-enclave rooms. Prefix matches rank
     // above substring matches; an empty query lists them all (up to MAX).
-    let mut custom = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let mut custom =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &viewer.id).await?;
     custom.sort_by(|a, b| a.shortcode.cmp(&b.shortcode));
     let mut custom_prefix = Vec::new();
     let mut custom_other = Vec::new();
@@ -177,7 +178,8 @@ pub async fn get_picker(
 
     // Per-enclave custom emojis as a trailing Custom category (empty for DMs /
     // non-enclave rooms, in which case no Custom tab/section renders).
-    let mut custom = db::custom_emojis::refs_for_room(&state.chat, room_id).await?;
+    let mut custom =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &viewer.id).await?;
     custom.sort_by(|a, b| a.shortcode.cmp(&b.shortcode));
     if !custom.is_empty() {
         let suggestions = custom

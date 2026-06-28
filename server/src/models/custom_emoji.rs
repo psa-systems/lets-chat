@@ -1,10 +1,14 @@
-/// Stored row for an enclave-scoped custom emoji. The file itself lives in
-/// the shared `uploads_dir()` (content-addressed by sha256), so multiple
-/// emojis pointing at the same image share storage transparently.
+/// Stored row for a custom emoji. The file itself lives in the shared
+/// `uploads_dir()` (content-addressed by sha256), so multiple emojis pointing
+/// at the same image share storage transparently. LC-482: a row is either
+/// enclave-scoped (`enclave_id` set) or user-scoped/personal (`user_id` set);
+/// exactly one is non-NULL (enforced by a CHECK in migration 0075).
 #[derive(Debug, Clone)]
 pub struct CustomEmoji {
     pub id: i64,
-    pub enclave_id: i64,
+    pub enclave_id: Option<i64>,
+    /// LC-482: owner of a personal emoji; None for enclave-scoped rows.
+    pub user_id: Option<String>,
     pub shortcode: String,
     pub storage_path: String,
     pub mime_type: String,

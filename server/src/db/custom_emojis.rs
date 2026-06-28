@@ -6,6 +6,7 @@ fn map_row(row: &sqlx::sqlite::SqliteRow) -> CustomEmoji {
     CustomEmoji {
         id: row.get("id"),
         enclave_id: row.get("enclave_id"),
+        user_id: row.get("user_id"),
         shortcode: row.get("shortcode"),
         storage_path: row.get("storage_path"),
         mime_type: row.get("mime_type"),
@@ -41,7 +42,7 @@ pub async fn insert(
 
 pub async fn get(pool: &SqlitePool, id: i64) -> Result<Option<CustomEmoji>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, enclave_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by, created_at \
+        "SELECT id, enclave_id, user_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by, created_at \
          FROM custom_emojis WHERE id=?",
     )
     .bind(id)
@@ -63,13 +64,83 @@ pub async fn list_for_enclave(
     enclave_id: i64,
 ) -> Result<Vec<CustomEmoji>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, enclave_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by, created_at \
+        "SELECT id, enclave_id, user_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by, created_at \
          FROM custom_emojis WHERE enclave_id=? ORDER BY shortcode COLLATE NOCASE",
     )
     .bind(enclave_id)
     .fetch_all(pool)
     .await?;
     Ok(rows.iter().map(map_row).collect())
+}
+
+/// LC-482: insert a personal (user-scoped) custom emoji. enclave_id is left
+/// NULL; `uploaded_by` is the owner. Uniqueness is per-user (partial index).
+pub async fn insert_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    shortcode: &str,
+    storage_path: &str,
+    mime_type: &str,
+    size_bytes: i64,
+) -> Result<i64, sqlx::Error> {
+    let res = sqlx::query(
+        "INSERT INTO custom_emojis (user_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by) \
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(user_id)
+    .bind(shortcode)
+    .bind(storage_path)
+    .bind(mime_type)
+    .bind(size_bytes)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(res.last_insert_rowid())
+}
+
+/// LC-482: every personal emoji owned by `user_id`, newest UI ordering.
+pub async fn list_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<CustomEmoji>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, enclave_id, user_id, shortcode, storage_path, mime_type, size_bytes, uploaded_by, created_at \
+         FROM custom_emojis WHERE user_id=? ORDER BY shortcode COLLATE NOCASE",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_row).collect())
+}
+
+/// LC-482: delete a personal emoji, scoped to its owner so one user cannot
+/// remove another's row by id. Returns the number of rows removed.
+pub async fn delete_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+    id: i64,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("DELETE FROM custom_emojis WHERE id=? AND user_id=?")
+        .bind(id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+/// LC-482: render-only projection of a user's personal emoji set.
+pub async fn refs_for_user(pool: &SqlitePool, user_id: &str) -> Result<Vec<EmojiRef>, sqlx::Error> {
+    let rows = sqlx::query("SELECT id, shortcode FROM custom_emojis WHERE user_id=?")
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| EmojiRef {
+            id: r.get("id"),
+            shortcode: r.get("shortcode"),
+        })
+        .collect())
 }
 
 /// Render-only projection of an enclave's emoji set. Used by the body and
@@ -131,6 +202,22 @@ pub async fn refs_for_room(pool: &SqlitePool, room_id: i64) -> Result<Vec<EmojiR
     };
     let own = refs_for_enclave(pool, eid).await?;
     Ok(merge_with_own_precedence(own, shared))
+}
+
+/// LC-482: the emoji set visible to `user_id` inside `room_id`: the room's set
+/// (own enclave > globally-shared) with the viewer's personal emoji layered
+/// additively underneath. The room/enclave set wins on shortcode collisions so
+/// a shared `:code:` renders identically for everyone; personal emoji only fill
+/// in shortcodes the room does not already define. Personal emoji are otherwise
+/// per-viewer (they resolve only in the owner's renders).
+pub async fn refs_for_room_and_user(
+    pool: &SqlitePool,
+    room_id: i64,
+    user_id: &str,
+) -> Result<Vec<EmojiRef>, sqlx::Error> {
+    let room = refs_for_room(pool, room_id).await?;
+    let personal = refs_for_user(pool, user_id).await?;
+    Ok(merge_with_own_precedence(room, personal))
 }
 
 /// Merge two emoji sets, preferring rows from `own` whenever a shortcode

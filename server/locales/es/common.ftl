@@ -183,6 +183,18 @@ settings-section-appearance = Apariencia
 settings-section-notifications = Notificaciones y actividad
 settings-section-privacy = Privacidad y seguridad
 settings-section-account = Datos y cuenta
+# LC-482: panel de emoji personalizado personal.
+settings-section-emoji = Emoji personalizado
+settings-emoji-heading = Tus emoji personalizados
+settings-emoji-help-1 = Emoji personales que puedes usar en cualquier sitio con
+settings-emoji-help-2 = . Solo tu los ves.
+settings-emoji-empty = Aun no tienes emoji personales.
+settings-emoji-shortcode-label = Codigo corto
+settings-emoji-image-label = Imagen
+settings-emoji-formats = PNG, GIF o WebP, hasta
+settings-emoji-add = Anadir emoji
+settings-emoji-delete = Eliminar
+settings-emoji-delete-confirm = Eliminar este emoji?
 settings-saved = Guardado.
 # LC-426: feedback por acción (estado en línea + toast)
 settings-fb-saved = Guardado
