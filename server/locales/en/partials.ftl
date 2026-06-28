@@ -86,6 +86,8 @@ partials-dm-block-confirm-suffix = They won't be able to message you and you won
 ## Pinned strip
 partials-pinned-heading = Pinned
 partials-pinned-toggle = Toggle pinned messages
+# LC-481: hide the pinned banner until a newer message is pinned.
+partials-pinned-dismiss = Dismiss pinned banner
 partials-pinned-see-all-prefix = See all
 partials-pinned-see-all-suffix = pinned
 
