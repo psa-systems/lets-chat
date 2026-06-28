@@ -181,7 +181,11 @@ pub async fn get_dm(
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
     // DMs have no enclave of their own but still resolve `:shortcode:` for
     // any enclave that opted into global sharing.
-    let shared_emojis = db::custom_emojis::refs_globally_shared(&state.chat).await?;
+    // LC-482: globally-shared enclave emoji plus the viewer's personal emoji
+    // (refs_for_room resolves a DM to the globally-shared set; the helper layers
+    // the viewer's personal emoji on top).
+    let shared_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
     let quote_ids: Vec<i64> = raw_messages.iter().filter_map(|m| m.quote_id).collect();
     let quote_preview_map =
         crate::views::room::build_quote_previews_bulk(&state.chat, &state.auth, &quote_ids).await?;

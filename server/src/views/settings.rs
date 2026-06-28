@@ -78,6 +78,10 @@ pub struct UserSettingsPage<'a> {
     pub locales: Vec<LocaleOption>,
     /// LC-304: the user's highlight words, alphabetical, for the chip list.
     pub keywords: Vec<String>,
+    /// LC-482: the user's personal custom emoji, for the Custom-emoji panel.
+    pub personal_emojis: Vec<crate::models::custom_emoji::CustomEmoji>,
+    /// LC-482: per-emoji byte cap, surfaced to the upload form help text.
+    pub emoji_max_kib: i64,
 }
 
 /// LC-426: reusable feedback fragment returned by the settings form handlers

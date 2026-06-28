@@ -37,6 +37,11 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 3a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H3zm0 4h14v8H3V7z"/></svg>
         <span>{{ "settings-section-account"|t }}</span>
       </button>
+      {# LC-482: personal custom emoji #}
+      <button type="button" role="tab" id="lc-tab-emoji" data-lc-tab="emoji" aria-controls="lc-panel-emoji" aria-selected="false" tabindex="-1" class="lc-set-tab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
+        <span>{{ "settings-section-emoji"|t }}</span>
+      </button>
     </nav>
 
     <div class="lc-set-main">
@@ -468,6 +473,48 @@
             <div><dt>{{ "settings-about-commit"|t }}</dt><dd class="font-mono text-xs">{{ git_hash }}</dd></div>
             <div><dt>{{ "settings-about-built"|t }}</dt><dd class="font-mono text-xs">{{ build_date }}</dd></div>
           </dl>
+        </div>
+      </section>
+
+      {# ===== Custom emoji (LC-482) ===== #}
+      <section id="lc-panel-emoji" role="tabpanel" aria-labelledby="lc-tab-emoji" data-lc-tabpanel="emoji" class="lc-set-panel" hidden>
+        <h2 class="lc-set-panel-title">{{ "settings-section-emoji"|t }}</h2>
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-emoji-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-emoji-help-1"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">:shortcode:</code> {{ "settings-emoji-help-2"|t }}</p>
+          </div>
+          {% if personal_emojis.is_empty() %}
+          {% let empty_text_key = "settings-emoji-empty" %}
+          {% include "partials/empty_state.html" %}
+          {% else %}
+          <ul class="grid grid-cols-2 gap-2 mt-3">
+            {% for e in personal_emojis %}
+            <li class="flex items-center gap-2 border border-border rounded p-2">
+              <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
+              <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
+              <form method="post" action="/settings/emojis/{{ e.id }}/delete">
+                <button type="submit" class="text-xs text-danger hover:underline"
+                        onclick="return confirm('{{ "settings-emoji-delete-confirm"|t }}')">{{ "settings-emoji-delete"|t }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form method="post" action="/settings/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3">
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-user-emoji-shortcode">{{ "settings-emoji-shortcode-label"|t }}</label>
+              <input id="lc-user-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required class="input font-mono text-sm">
+            </div>
+            <div class="lc-set-field">
+              <span class="lc-set-label">{{ "settings-emoji-image-label"|t }}</span>
+              <input type="file" name="file" accept="image/png,image/gif,image/webp" required class="text-sm">
+              <p class="lc-set-help">{{ "settings-emoji-formats"|t }} {{ emoji_max_kib }} KiB.</p>
+            </div>
+            <div class="lc-set-actions">
+              <button type="submit" class="btn btn-primary">{{ "settings-emoji-add"|t }}</button>
+            </div>
+          </form>
         </div>
       </section>
     </div>

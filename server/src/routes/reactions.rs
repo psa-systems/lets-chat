@@ -119,7 +119,8 @@ pub async fn toggle_reaction(
         .await;
     }
 
-    let custom_emojis = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &user.id).await?;
     let counts = db::chat::list_reactions(&state.chat, message_id, &user.id).await?;
     let reactor_titles = super::build_reactor_titles(&state, &counts).await;
     let reactions: Vec<ReactionView> = counts
@@ -192,7 +193,8 @@ pub async fn get_picker(
     // LC-389: per-enclave custom emojis as their own trailing section + tab.
     // Message-specific image buttons, unchanged from LC-384 (the LC-288 recorder
     // deliberately skips `:shortcode:` reactions, so these stay out of Recent).
-    let custom = db::custom_emojis::refs_for_room(&state.chat, m.room_id).await?;
+    let custom =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &user.id).await?;
     if !custom.is_empty() {
         let label = attr_escape(&crate::i18n::translate_current(
             "partials-reaction-cat-custom",

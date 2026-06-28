@@ -28,7 +28,8 @@ async fn insert_and_list_round_trip() {
     assert_eq!(row.storage_path, "abc.png");
     assert_eq!(row.mime_type, "image/png");
     assert_eq!(row.size_bytes, 1234);
-    assert_eq!(row.enclave_id, eid);
+    assert_eq!(row.enclave_id, Some(eid));
+    assert_eq!(row.user_id, None);
 
     let listed = db::custom_emojis::list_for_enclave(&chat, eid)
         .await
@@ -105,6 +106,99 @@ async fn delete_removes_row_and_does_not_affect_other_enclaves() {
     db::custom_emojis::delete(&chat, id1).await.unwrap();
     assert!(db::custom_emojis::get(&chat, id1).await.unwrap().is_none());
     assert!(db::custom_emojis::get(&chat, id2).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn user_emoji_insert_list_and_scope() {
+    let chat = chat_pool().await;
+    let eid = make_enclave(&chat, "ent").await;
+    // An enclave emoji and a personal emoji can share a shortcode.
+    db::custom_emojis::insert(&chat, eid, "wave", "a.png", "image/png", 1, "u-ent")
+        .await
+        .unwrap();
+    let pid = db::custom_emojis::insert_for_user(&chat, "u-1", "wave", "b.png", "image/png", 1)
+        .await
+        .unwrap();
+
+    let row = db::custom_emojis::get(&chat, pid).await.unwrap().unwrap();
+    assert_eq!(row.enclave_id, None);
+    assert_eq!(row.user_id.as_deref(), Some("u-1"));
+
+    // Per-user uniqueness.
+    let err = db::custom_emojis::insert_for_user(&chat, "u-1", "wave", "c.png", "image/png", 1)
+        .await
+        .unwrap_err();
+    assert!(matches!(&err, sqlx::Error::Database(d) if d.is_unique_violation()));
+    // A different user may reuse the shortcode.
+    db::custom_emojis::insert_for_user(&chat, "u-2", "wave", "d.png", "image/png", 1)
+        .await
+        .unwrap();
+
+    let mine = db::custom_emojis::list_for_user(&chat, "u-1")
+        .await
+        .unwrap();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0].shortcode, "wave");
+}
+
+#[tokio::test]
+async fn refs_for_room_and_user_layers_personal_under_room() {
+    let chat = chat_pool().await;
+    let eid = make_enclave(&chat, "scoped2").await;
+    db::custom_emojis::insert(&chat, eid, "shared", "a.png", "image/png", 1, "u-ent")
+        .await
+        .unwrap();
+    // Personal "shared" collides with the room's -> room wins (one row, room id).
+    db::custom_emojis::insert_for_user(&chat, "u-1", "shared", "b.png", "image/png", 1)
+        .await
+        .unwrap();
+    let personal_only =
+        db::custom_emojis::insert_for_user(&chat, "u-1", "mine", "c.png", "image/png", 1)
+            .await
+            .unwrap();
+
+    let room_id = db::chat::create_room(&chat, "g", None, "public", None, Some(eid))
+        .await
+        .unwrap();
+    let refs = db::custom_emojis::refs_for_room_and_user(&chat, room_id, "u-1")
+        .await
+        .unwrap();
+    // "shared" resolves to the enclave row (not the personal one), plus "mine".
+    let shared = refs.iter().find(|r| r.shortcode == "shared").unwrap();
+    assert_ne!(shared.id, personal_only, "enclave row wins the collision");
+    assert!(refs
+        .iter()
+        .any(|r| r.shortcode == "mine" && r.id == personal_only));
+
+    // Another viewer does not get u-1's personal emoji.
+    let other = db::custom_emojis::refs_for_room_and_user(&chat, room_id, "u-2")
+        .await
+        .unwrap();
+    assert!(!other.iter().any(|r| r.shortcode == "mine"));
+}
+
+#[tokio::test]
+async fn delete_for_user_is_owner_scoped() {
+    let chat = chat_pool().await;
+    let id = db::custom_emojis::insert_for_user(&chat, "owner", "x", "a.png", "image/png", 1)
+        .await
+        .unwrap();
+    // A non-owner delete removes nothing.
+    assert_eq!(
+        db::custom_emojis::delete_for_user(&chat, "intruder", id)
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(db::custom_emojis::get(&chat, id).await.unwrap().is_some());
+    // The owner can delete it.
+    assert_eq!(
+        db::custom_emojis::delete_for_user(&chat, "owner", id)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(db::custom_emojis::get(&chat, id).await.unwrap().is_none());
 }
 
 #[tokio::test]
