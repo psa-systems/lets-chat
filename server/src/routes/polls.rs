@@ -11,7 +11,7 @@
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::Form;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 
 use crate::auth::AuthUser;
@@ -187,6 +187,70 @@ pub async fn post_create(
         closes_at,
     )
     .await?;
+    Ok((axum::http::StatusCode::OK, "").into_response())
+}
+
+/// LC-491: max lengths for the event title + location.
+const MAX_EVENT_TITLE_LEN: usize = 300;
+const MAX_EVENT_LOCATION_LEN: usize = 200;
+
+#[derive(Deserialize)]
+pub struct CreateEventForm {
+    pub title: String,
+    /// UTC ISO8601 start time (the modal converts the local datetime input).
+    pub event_at: String,
+    #[serde(default)]
+    pub location: Option<String>,
+}
+
+/// POST /room/{room_id}/event (compose modal) - create an RSVP event, i.e. a
+/// poll with `event_at` + fixed Going / Maybe / Can't-go options.
+pub async fn post_create_event(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    Form(form): Form<CreateEventForm>,
+) -> Result<Response, AppError> {
+    let room = require_post_access(&state, &user, room_id).await?;
+    let title = form.title.trim();
+    if title.is_empty() {
+        return Err(AppError::BadRequest("event title is required".into()));
+    }
+    if title.chars().count() > MAX_EVENT_TITLE_LEN {
+        return Err(AppError::BadRequest("event title is too long".into()));
+    }
+    let event_at = DateTime::parse_from_rfc3339(form.event_at.trim())
+        .map_err(|e| AppError::BadRequest(format!("invalid event time ({e})")))?
+        .with_timezone(&Utc)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let location = form
+        .location
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(l) = location {
+        if l.chars().count() > MAX_EVENT_LOCATION_LEN {
+            return Err(AppError::BadRequest("event location is too long".into()));
+        }
+    }
+    // RSVP options in the creator's locale, stored as text like poll options.
+    let options = vec![
+        crate::i18n::translate_current("event-rsvp-going"),
+        crate::i18n::translate_current("event-rsvp-maybe"),
+        crate::i18n::translate_current("event-rsvp-no"),
+    ];
+    let message_id = db::polls::create_event(
+        &state.chat,
+        room.id,
+        &user.id,
+        title,
+        &options,
+        &event_at,
+        location,
+    )
+    .await?;
+    super::room::finalize_message_send(&state, &room, &user, message_id, title, None).await?;
     Ok((axum::http::StatusCode::OK, "").into_response())
 }
 

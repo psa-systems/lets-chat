@@ -564,3 +564,54 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         "peak concurrent push sends = {peak}, expected > 1 (sends are serial - the cap is not being exercised)"
     );
 }
+
+// --- LC-476: politeness gate -------------------------------------------------
+
+#[tokio::test]
+async fn broadcast_gate_blocks_non_privileged_author_admin_passes() {
+    // Restrict @here/@channel to admins. A plain member's @channel is dropped
+    // (no mention rows); the site admin still broadcasts.
+    let t = setup_app_with_users("viewer", &["alice", "bob"]).await;
+    let alice = t.other_users["alice"].clone();
+    let alice_session = db::auth::create_session(&t.auth, &alice).await.unwrap();
+
+    sqlx::query("UPDATE rooms SET broadcast_allowed_for='admins_only' WHERE id=1")
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // Plain member: gated -> zero broadcast rows.
+    let st = post_message(&t.app, &alice_session, 1, "everyone @channel").await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let mid = last_message_id(&t.chat, 1).await;
+    assert!(
+        mention_user_ids(&t.chat, mid).await.is_empty(),
+        "gated member must write no broadcast mention rows"
+    );
+
+    // Site admin (the viewer): still allowed.
+    let st = post_message(&t.app, &t.viewer_session, 1, "everyone @channel").await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let mid2 = last_message_id(&t.chat, 1).await;
+    assert!(
+        !mention_user_ids(&t.chat, mid2).await.is_empty(),
+        "admin must still be able to broadcast"
+    );
+}
+
+#[tokio::test]
+async fn broadcast_gate_all_policy_allows_everyone() {
+    // Default 'all' policy: a plain member's @channel resolves normally.
+    let t = setup_app_with_users("viewer", &["alice", "bob"]).await;
+    let alice = t.other_users["alice"].clone();
+    let alice_session = db::auth::create_session(&t.auth, &alice).await.unwrap();
+
+    let st = post_message(&t.app, &alice_session, 1, "hi @channel").await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let mid = last_message_id(&t.chat, 1).await;
+    // Reaches the other members (viewer + bob), excluding the author alice.
+    assert!(
+        !mention_user_ids(&t.chat, mid).await.is_empty(),
+        "default 'all' policy lets a member broadcast"
+    );
+}

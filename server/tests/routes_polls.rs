@@ -452,3 +452,66 @@ async fn non_member_cannot_vote() {
         "no vote recorded"
     );
 }
+
+// LC-491: events are polls with event_at + fixed RSVP options; RSVP reuses the
+// vote path and the event surfaces in the iCal source query.
+#[tokio::test]
+async fn create_event_makes_poll_with_event_at_and_rsvp() {
+    let t = app().await;
+    let room = seed_room(&t).await;
+    let (status, body) = send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/room/{room}/event"),
+        "title=Launch+party&event_at=2030-01-02T18%3A30%3A00Z&location=HQ",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let mid = latest_message_id(&t.chat, room).await;
+    let poll = db::polls::get(&t.chat, mid)
+        .await
+        .unwrap()
+        .expect("poll row");
+    assert_eq!(poll.event_at.as_deref(), Some("2030-01-02 18:30:00"));
+    assert_eq!(poll.event_location.as_deref(), Some("HQ"));
+    let opts = option_ids(&t.chat, mid).await;
+    assert_eq!(opts.len(), 3, "Going / Maybe / Can't go");
+
+    // RSVP reuses the poll vote path.
+    let (vst, _) = send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/poll/{mid}/vote"),
+        &format!("option_id={}", opts[0]),
+    )
+    .await;
+    assert_eq!(vst, StatusCode::OK);
+    assert_eq!(
+        db::polls::user_votes(&t.chat, mid, &t.alice).await.unwrap(),
+        vec![opts[0]]
+    );
+
+    // Surfaces in the iCal source query.
+    let events = db::polls::events_for_room(&t.chat, room).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].1, "Launch party");
+    assert_eq!(events[0].2, "2030-01-02 18:30:00");
+}
+
+#[tokio::test]
+async fn create_event_rejects_invalid_time() {
+    let t = app().await;
+    let room = seed_room(&t).await;
+    let (status, _) = send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/room/{room}/event"),
+        "title=X&event_at=not-a-date",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

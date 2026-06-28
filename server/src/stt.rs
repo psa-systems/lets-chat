@@ -17,6 +17,12 @@
 //! IMAP relays): the request is NOT run through the LC-210 public-IP SSRF
 //! filter, precisely so it can reach a `localhost`/internal STT service. Never
 //! point `LETS_CHAT_STT_URL` at an untrusted host.
+//!
+//! LC-483: the same endpoint also transcribes uploaded VOICE MESSAGES (an audio
+//! attachment carrying a waveform), off the request path in
+//! `routes::room::maybe_transcribe_voice_message`. So configuring STT now sends
+//! both call audio AND voice-message audio to the endpoint - relevant to load /
+//! cost on a metered engine.
 
 use async_trait::async_trait;
 

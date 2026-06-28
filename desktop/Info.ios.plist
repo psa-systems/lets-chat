@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iOS-only Info.plist overlay (LC-136).
+
+  Tauri 2 merges this file into the generated `gen/apple/<app>_iOS/Info.plist`
+  during `tauri ios build` / `tauri ios dev`, so the keys survive Xcode-project
+  regeneration (we never hand-edit the generated plist). The macOS counterpart,
+  if ever needed, is a sibling `Info.plist`; this `.ios.plist` is applied to the
+  iOS target only.
+
+  WKWebView surfaces getUserMedia consent through the OS permission prompt, and
+  iOS REFUSES to show that prompt (silently denying the capture) unless the app
+  declares a usage-description string for each requested device. These two keys
+  cover the 1:1 voice/video WebRTC call paths:
+
+    - NSMicrophoneUsageDescription -> microphone capture (voice + video calls)
+    - NSCameraUsageDescription     -> camera capture (video calls)
+
+  No code-side permission hook is needed on iOS (unlike the Linux WebKit2GTK and
+  Windows WebView2 paths in src/main.rs): with these strings present iOS shows
+  exactly one OS-level prompt on first capture and remembers the grant across
+  launches.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>lets-chat needs microphone access for voice and video calls.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>lets-chat needs camera access for video calls.</string>
+</dict>
+</plist>

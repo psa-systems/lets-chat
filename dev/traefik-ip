@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Print the dev Traefik container's current IPv4 on network-traefik-public.
+#
+# `just dev-web` feeds this to the chat container's `extra_hosts` (as
+# TRAEFIK_PUBLIC_IP) so the server-to-server Bunyip SSO discovery call resolves
+# the issuer host to the right Traefik without a hardcoded IP - which drifts
+# whenever network-traefik-public is recreated and broke startup before
+# (chore/dev-web-traefik-ip). Scans the network for whichever attached
+# container is Traefik, so it does not assume the container's exact name.
+#
+# Prints nothing (exit 0) on any failure; compose then falls back to its
+# default so a bare `docker compose up` outside the recipe still works.
+docker network inspect network-traefik-public \
+  --format '{{ range .Containers }}{{ .Name }} {{ .IPv4Address }}
+{{ end }}' 2>/dev/null \
+  | awk 'tolower($1) ~ /traefik/ { sub(/\/.*/, "", $2); print $2; exit }'
