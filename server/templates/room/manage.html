@@ -104,6 +104,11 @@
       </form>
     </div>
 
+    {# ===== Workflow automations (LC-495) ===== #}
+    {% if room.room_type != "dm" %}
+    {% include "partials/room_automations.html" %}
+    {% endif %}
+
     {# ===== Integrations ===== #}
     <div class="card lc-set-card">
       <div class="lc-set-card-head">
