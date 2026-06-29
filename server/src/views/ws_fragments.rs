@@ -396,6 +396,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceSignal { .. }
         | ChatEvent::VoiceMuteChanged { .. }
         | ChatEvent::VoiceScreenChanged { .. }
+        // LC-494: stage roster re-rendered per recipient in the WS send task.
+        | ChatEvent::StageChanged { .. }
         // LC-393: transcription control + captions are rendered per recipient
         // in the WS send task (to_user_id targeting), like the call signals.
         | ChatEvent::TranscriptStarted { .. }
