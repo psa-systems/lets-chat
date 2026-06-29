@@ -212,6 +212,17 @@
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
+  // LC-493: a huddle root ([data-lc-huddle]) stays hidden until the viewer is
+  // on the line OR someone else is (so an idle group room shows nothing but the
+  // header "Huddle" button). Voice-channel roots have no [data-lc-huddle] and
+  // are always visible. Cheap + idempotent; called wherever join state or the
+  // participant set changes.
+  function applyHuddleVisibility() {
+    if (!root || !root.hasAttribute('data-lc-huddle')) return;
+    var active = joined || Object.keys(participants).length > 0;
+    root.classList.toggle('hidden', !active);
+  }
+
   function showJoinedUi(on) {
     var preview = q('[data-lc-voice-preview]');
     var g = grid();
@@ -229,6 +240,7 @@
     toggle(q('[data-lc-transcript-panel-toggle]'), on); // LC-402 transcript drawer
     updateCount();
     updateWaiting();
+    applyHuddleVisibility(); // LC-493
   }
   function toggle(el, show) { if (el) el.classList[show ? 'remove' : 'add']('hidden'); }
 
@@ -294,6 +306,7 @@
       chip.appendChild(nm);
       names.appendChild(chip);
     });
+    applyHuddleVisibility(); // LC-493
   }
 
   // ---- active-speaker detection (LC-402) -----------------------------
@@ -1014,6 +1027,7 @@
     };
     joined = false;
     seedParticipantsFromDom();
+    applyHuddleVisibility(); // LC-493: reveal the bar if a huddle is already live
   }
 
   function scan() {
