@@ -1120,6 +1120,13 @@ pub struct RoomPage<'a> {
     /// empty string when the room is not eligible. Threaded as HTML like
     /// `pinned_strip_html` so the page handler owns the per-viewer query.
     pub room_seen_bar_html: String,
+    /// LC-493: huddle support. `huddle_enabled` is true for non-DM rooms (the
+    /// ad-hoc audio mesh attaches to the text room); `ice_servers` is the JSON
+    /// ICE config for the WebRTC mesh; `huddle_participants` seeds the bar with
+    /// anyone already on the line so a fresh page load shows the active huddle.
+    pub huddle_enabled: bool,
+    pub ice_servers: &'a str,
+    pub huddle_participants: Vec<crate::views::voice::VoiceParticipant>,
 }
 
 impl RoomPage<'_> {
