@@ -1,0 +1,79 @@
+{# LC-495: workflow automations section on the room manage page. Self-contained
+   card keyed by #lc-automations; the create / toggle / delete handlers return
+   this whole partial and HTMX swaps it via outerHTML, so the list stays current
+   without a full reload. Included by room/manage.html and rendered standalone
+   by views::room_automations::RoomAutomationsFragment - both expose `room` and
+   `automations`. #}
+<div id="lc-automations" class="card lc-set-card">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "room-automations-heading"|t }}</h3>
+    <p class="lc-set-card-desc">{{ "room-automations-intro"|t }}</p>
+  </div>
+
+  {% if automations.is_empty() %}
+  <p class="lc-set-help">{{ "room-automations-empty"|t }}</p>
+  {% else %}
+  <ul class="divide-y divide-border">
+    {% for a in automations %}
+    <li class="py-3 first:pt-0 flex items-start justify-between gap-2">
+      <div class="min-w-0">
+        <div class="text-sm font-medium flex items-center gap-2">
+          {% if a.enabled %}<span class="lc-pill lc-pill--on">{{ "room-automations-on"|t }}</span>{% else %}<span class="lc-pill lc-pill--off">{{ "room-automations-off"|t }}</span>{% endif %}
+          {% if let Some(n) = a.name %}<span class="truncate">{{ n }}</span>{% endif %}
+        </div>
+        <div class="text-xs text-content-muted mt-0.5">
+          {% if a.trigger_kind == "reaction_added" %}{{ "room-automations-trigger-reaction"|t }}{% else %}{{ "room-automations-trigger-message"|t }}{% endif %}
+          {% if let Some(m) = a.match_text %}<code class="font-mono bg-surface-sunken px-1 rounded">{{ m }}</code>{% else %}<span class="italic">{{ "room-automations-any"|t }}</span>{% endif %}
+          {{ "room-automations-then-post"|t }}
+        </div>
+        <div class="text-xs text-content-subtle mt-0.5 truncate">{{ a.action_preview }}</div>
+      </div>
+      <div class="flex items-center gap-1 flex-none">
+        <button type="button"
+                hx-post="/room/{{ room.id }}/automations/{{ a.id }}/toggle"
+                hx-vals='{"enabled": "{% if a.enabled %}0{% else %}1{% endif %}"}'
+                hx-target="#lc-automations" hx-swap="outerHTML"
+                class="btn btn-secondary btn-sm">{% if a.enabled %}{{ "room-automations-disable"|t }}{% else %}{{ "room-automations-enable"|t }}{% endif %}</button>
+        <button type="button"
+                hx-delete="/room/{{ room.id }}/automations/{{ a.id }}"
+                hx-target="#lc-automations" hx-swap="outerHTML"
+                hx-confirm="{{ "room-automations-delete-confirm"|t }}"
+                class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface">{{ "room-automations-delete"|t }}</button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {# Create a new rule. Resets on success so the manager can add several. #}
+  <form hx-post="/room/{{ room.id }}/automations"
+        hx-target="#lc-automations" hx-swap="outerHTML"
+        hx-disabled-elt="find button[type=submit]"
+        hx-on::after-request="if(event.detail.successful) this.reset()"
+        class="lc-set-form border-t border-border pt-4 mt-4">
+    <span class="lc-set-label">{{ "room-automations-new-heading"|t }}</span>
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-help" for="lc-auto-name">{{ "room-automations-name-label"|t }}</label>
+      <input id="lc-auto-name" name="name" class="input" maxlength="80" placeholder="{{ "room-automations-name-ph"|t }}">
+    </div>
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-help" for="lc-auto-trigger">{{ "room-automations-when-label"|t }}</label>
+      <select id="lc-auto-trigger" name="trigger_kind" class="input">
+        <option value="message_posted">{{ "room-automations-trigger-message"|t }}</option>
+        <option value="reaction_added">{{ "room-automations-trigger-reaction"|t }}</option>
+      </select>
+    </div>
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-help" for="lc-auto-match">{{ "room-automations-match-label"|t }}</label>
+      <input id="lc-auto-match" name="match_text" class="input" maxlength="200" placeholder="{{ "room-automations-match-ph"|t }}">
+    </div>
+    <div class="lc-set-field">
+      <label class="lc-set-help" for="lc-auto-body">{{ "room-automations-do-label"|t }}</label>
+      <textarea id="lc-auto-body" name="action_body" class="input" rows="3" required placeholder="{{ "room-automations-do-ph"|t }}"></textarea>
+      <p class="lc-set-help">{{ "room-automations-vars-help"|t }}</p>
+    </div>
+    <div class="lc-set-actions">
+      <button type="submit" class="btn btn-primary btn-sm">{{ "room-automations-create"|t }}</button>
+    </div>
+  </form>
+</div>

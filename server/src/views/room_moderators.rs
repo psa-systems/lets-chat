@@ -4,6 +4,7 @@ use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 use crate::models::{Room, User};
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
+use crate::views::room_automations::AutomationRow;
 
 /// One row in the existing-overrides table.
 pub struct RoomOverrideEntry {
@@ -55,6 +56,10 @@ pub struct RoomModeratorsPage<'a> {
     pub assistant_available: bool,
     /// LC-494: whether "stage" mode is enabled for this room.
     pub stage_enabled: bool,
+    /// LC-495: this room's workflow-automation rules (shown via the included
+    /// `partials/room_automations.html`; empty for DMs, where the section is
+    /// hidden).
+    pub automations: &'a [AutomationRow],
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
