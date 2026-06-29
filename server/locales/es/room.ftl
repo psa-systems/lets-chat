@@ -288,6 +288,14 @@ room-broadcast-who = Quien puede usar @here / @channel
 room-broadcast-all = Todos (predeterminado)
 room-broadcast-mods = Solo moderadores
 room-broadcast-admins = Solo administradores
+# LC-492: interruptor del asistente de IA en el canal (pagina de gestion).
+room-assistant-heading = Asistente de IA
+room-assistant-intro = Permite que los miembros hagan preguntas al asistente de IA de la sala con
+room-assistant-unconfigured = Aun no hay un LLM configurado en este servidor, asi que el asistente no respondera hasta que un operador defina LETS_CHAT_LLM_URL.
+room-assistant-on-label = Activado.
+room-assistant-on-text = Los miembros pueden usar /ask en esta sala.
+room-assistant-off-label = Desactivado.
+room-assistant-off-text = /ask esta desactivado en esta sala.
 room-mods-overrides-heading = Excepciones actuales
 room-mods-overrides-empty = Aun no hay excepciones.
 room-mods-granted-by = otorgado por

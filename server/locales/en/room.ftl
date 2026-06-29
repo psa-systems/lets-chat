@@ -288,6 +288,14 @@ room-broadcast-who = Who can use @here / @channel
 room-broadcast-all = Everyone (default)
 room-broadcast-mods = Moderators only
 room-broadcast-admins = Admins only
+# LC-492: in-channel AI assistant toggle (room manage page).
+room-assistant-heading = AI assistant
+room-assistant-intro = Let members ask the room's AI assistant questions with
+room-assistant-unconfigured = No LLM is configured on this server yet, so the assistant will not answer until an operator sets LETS_CHAT_LLM_URL.
+room-assistant-on-label = On.
+room-assistant-on-text = Members can use /ask in this room.
+room-assistant-off-label = Off.
+room-assistant-off-text = /ask is disabled in this room.
 room-mods-overrides-heading = Current overrides
 room-mods-overrides-empty = No overrides yet.
 room-mods-granted-by = granted by
