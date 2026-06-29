@@ -10,6 +10,7 @@ room-composer-send-failed = No se pudo enviar.
 room-composer-retry = Reintentar
 room-composer-attach-file = Adjuntar archivo
 room-composer-record-voice = Grabar mensaje de voz
+room-composer-record-clip = Grabar videoclip
 room-composer-message-placeholder = Mensaje
 room-composer-create-poll = Crear encuesta
 room-composer-create-event = Crear evento

@@ -89,3 +89,14 @@ js-conn-degraded = Connection: degraded
 js-conn-reconnecting = Reconnecting...
 js-conn-failed = Connection lost
 js-settings-save-error = Could not save. Please try again.
+
+# LC-496: async video-clip recorder
+js-clip-choose = Record a clip:
+js-clip-camera = Camera
+js-clip-screen = Screen
+js-clip-unsupported = Video recording is not supported in this browser
+js-clip-denied = Camera or screen access denied
+js-clip-denied-help = Allow access in your browser's site settings, then try again.
+js-clip-start-failed = Could not start recording.
+js-clip-empty = Recording was empty
+js-clip-uploading = Uploading clip...
