@@ -17,3 +17,34 @@
             class="btn btn-secondary btn-sm">{{ "room-cancel"|t }}</button>
   </div>
 </form>
+{# LC-498: wiki-editing presence heartbeat. While the editor textarea is
+   focused, send a `wiki_editing` frame on focus + every 3s + on input, so other
+   viewers see an "X is editing the wiki" banner. The server evicts the presence
+   ~5s after the last frame, so blurring / saving / navigating clears the banner
+   shortly after (mirrors the typing indicator; there is no explicit stop frame). #}
+<script>
+(function(){
+  var form = document.currentScript.previousElementSibling;
+  var ta = form && form.querySelector('textarea[name=body]');
+  if (!ta) return;
+  var room = {{ room_id }};
+  function ping(){
+    var ws = window.__lcWS;
+    if (!ws || ws.readyState !== 1) return;
+    try { ws.send(JSON.stringify({ type: 'wiki_editing', room_id: room })); } catch (e) {}
+  }
+  function startHeartbeat(){
+    ping();
+    if (window.__lcWikiHb) clearInterval(window.__lcWikiHb);
+    window.__lcWikiHb = setInterval(ping, 3000);
+  }
+  function stopHeartbeat(){
+    if (window.__lcWikiHb) { clearInterval(window.__lcWikiHb); window.__lcWikiHb = null; }
+  }
+  ta.addEventListener('focus', startHeartbeat);
+  ta.addEventListener('blur', stopHeartbeat);
+  ta.addEventListener('input', ping);
+  // autofocus may already have focused the textarea by the time this runs.
+  if (document.activeElement === ta) startHeartbeat();
+})();
+</script>
