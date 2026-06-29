@@ -1,0 +1,69 @@
+{# LC-494: stage control plane. Speakers vs listeners + request-to-speak, with
+   host controls (approve raised hands / remove speakers). Live-swapped by id on
+   StageChanged; a connection not viewing this room drops the swap. Controls
+   send WS frames (stage.js); the panel is hidden until the room has stage mode
+   on AND someone is on the stage OR the viewer can start it. Audio is NOT here -
+   it lands in the LC-512 SFU follow-up; the note keeps that explicit. #}
+<div id="lc-stage-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}
+     data-lc-stage data-room-id="{{ room_id }}"
+     class="border-t border-border bg-surface-sunken px-4 py-2 text-sm">
+  <div class="flex items-center gap-2">
+    <span class="text-xs font-semibold uppercase tracking-wide text-content-muted">{{ "stage-label"|t }}</span>
+    {% if self.total() > 0 %}<span class="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-content-muted">{{ self.total() }}</span>{% endif %}
+    <div class="ml-auto flex items-center gap-1">
+      {% if !is_participant %}
+      <button type="button" data-lc-stage-join class="btn btn-primary btn-sm">{{ "stage-join"|t }}</button>
+      {% else %}
+      {% if is_speaker %}
+      <button type="button" data-lc-stage-step-down class="btn btn-secondary btn-sm">{{ "stage-step-down"|t }}</button>
+      {% else if hand_raised %}
+      <button type="button" data-lc-stage-lower-hand class="btn btn-secondary btn-sm">{{ "stage-lower-hand"|t }}</button>
+      {% else %}
+      <button type="button" data-lc-stage-raise-hand class="btn btn-primary btn-sm">{{ "stage-raise-hand"|t }}</button>
+      {% endif %}
+      <button type="button" data-lc-stage-leave class="btn btn-ghost btn-sm">{{ "stage-leave"|t }}</button>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Speakers #}
+  <div class="mt-2">
+    <div class="text-xs text-content-muted">{{ "stage-speakers"|t }}</div>
+    {% if speakers.is_empty() %}
+    <div class="text-xs text-content-subtle">{{ "stage-no-speakers"|t }}</div>
+    {% else %}
+    <ul class="mt-1 flex flex-wrap gap-2">
+      {% for m in speakers %}
+      <li class="flex items-center gap-1.5 rounded-full bg-surface-elevated px-2 py-1">
+        <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
+        <span class="text-xs">{{ m.label }}</span>
+        {% if is_host %}<button type="button" data-lc-stage-demote="{{ m.user_id }}" class="text-xs text-danger hover:underline" title="{{ "stage-remove-speaker"|t }}">&times;</button>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {# Listeners (raised hands surfaced first to the host) #}
+  <div class="mt-2">
+    <div class="text-xs text-content-muted">{{ "stage-listeners"|t }}</div>
+    {% if listeners.is_empty() %}
+    <div class="text-xs text-content-subtle">{{ "stage-no-listeners"|t }}</div>
+    {% else %}
+    <ul class="mt-1 flex flex-wrap gap-2">
+      {% for m in listeners %}
+      <li class="flex items-center gap-1.5 rounded-full {% if m.hand_raised %}bg-warning-surface text-warning{% else %}bg-surface-elevated{% endif %} px-2 py-1">
+        {% if m.hand_raised %}<span aria-hidden="true">&#9995;</span>{% endif %}
+        <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
+        <span class="text-xs">{{ m.label }}</span>
+        {% if is_host && m.hand_raised %}<button type="button" data-lc-stage-promote="{{ m.user_id }}" class="text-xs text-accent hover:underline">{{ "stage-approve"|t }}</button>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {# Honest scope note: the roster + request-to-speak work, but audio needs the
+     SFU media server (LC-512). Without it, this is the control plane only. #}
+  <p class="mt-2 text-xs text-content-subtle">{{ "stage-audio-soon"|t }}</p>
+</div>

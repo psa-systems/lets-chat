@@ -1,0 +1,125 @@
+//! LC-494: stage control plane (speakers vs listeners + request-to-speak).
+//!
+//! This is the non-media half of the "Stage" feature: roles, the live roster,
+//! and request-to-speak, all over the existing WebSocket. The actual audio
+//! needs an SFU and lands in the LC-512 follow-up. State is ephemeral, in the
+//! hub (`StageState`), like voice presence.
+//!
+//! Frames arrive in `routes::ws` (`ClientFrame::Stage*`); this module builds
+//! the per-viewer roster panel rendered initially by `get_room` and live-swapped
+//! on every `ChatEvent::StageChanged`.
+
+use askama::Template;
+
+use crate::db;
+use crate::models::User;
+use crate::state::AppState;
+use crate::views::stage::{StageMember, StagePanel};
+
+/// A room is stage-eligible when stage mode is on and it is a group room (not a
+/// DM). The caller still verifies access separately.
+pub(crate) async fn stage_enabled(state: &AppState, room_id: i64) -> bool {
+    match db::chat::get_room(&state.chat, room_id).await {
+        Ok(Some(r)) => {
+            r.room_type != "dm"
+                && db::chat::get_room_stage_enabled(&state.chat, room_id)
+                    .await
+                    .unwrap_or(false)
+        }
+        _ => false,
+    }
+}
+
+/// True when `user` may host the stage (grant/revoke the floor): same set as
+/// room management (enclave owner/admin or room moderator / site admin).
+pub(crate) async fn is_host(state: &AppState, user: &User, room_id: i64) -> bool {
+    super::room_rbac::require_can_manage(state, user, room_id)
+        .await
+        .is_ok()
+}
+
+/// Build the per-viewer stage panel for `room_id`. Renders even when the stage
+/// is empty (so the viewer sees a "Join stage" button); the roster comes from
+/// the hub and labels are resolved in one bulk auth lookup.
+pub(crate) async fn build_panel(
+    state: &AppState,
+    viewer: &User,
+    room_id: i64,
+    oob: bool,
+) -> StagePanel {
+    let roster = state.hub.stage_roster(room_id).unwrap_or_default();
+    let host = is_host(state, viewer, room_id).await;
+
+    let ids: Vec<&str> = roster.participants.iter().map(|s| s.as_str()).collect();
+    let labels = if ids.is_empty() {
+        Default::default()
+    } else {
+        db::auth::display_names_for_ids(&state.auth, &ids)
+            .await
+            .unwrap_or_default()
+    };
+    let label_for = |uid: &str| -> String {
+        labels
+            .get(uid)
+            .map(|(uname, dname)| match dname.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => uname.clone(),
+            })
+            .unwrap_or_else(|| uid.to_string())
+    };
+
+    let mut speakers: Vec<StageMember> = roster
+        .speakers
+        .iter()
+        .map(|uid| StageMember {
+            user_id: uid.clone(),
+            label: label_for(uid),
+            hand_raised: false,
+        })
+        .collect();
+    speakers.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+
+    let mut listeners: Vec<StageMember> = roster
+        .participants
+        .iter()
+        .filter(|uid| !roster.speakers.contains(*uid))
+        .map(|uid| StageMember {
+            user_id: uid.clone(),
+            label: label_for(uid),
+            hand_raised: roster.hands.contains(uid),
+        })
+        .collect();
+    // Raised hands first (so a host sees pending requests up top), then by name.
+    listeners.sort_by(|a, b| {
+        b.hand_raised
+            .cmp(&a.hand_raised)
+            .then(a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+    });
+
+    let is_participant = roster.participants.contains(&viewer.id);
+    let is_speaker = roster.speakers.contains(&viewer.id);
+    let hand_raised = roster.hands.contains(&viewer.id);
+
+    StagePanel {
+        room_id,
+        speakers,
+        listeners,
+        is_host: host,
+        is_participant,
+        is_speaker,
+        hand_raised,
+        oob,
+    }
+}
+
+/// Render the stage panel as an OOB swap for one viewer, or `None` when the
+/// room is not stage-eligible (so no swap is emitted).
+pub(crate) async fn render_panel(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
+    if !stage_enabled(state, room_id).await {
+        return None;
+    }
+    build_panel(state, viewer, room_id, true)
+        .await
+        .render()
+        .ok()
+}

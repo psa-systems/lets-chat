@@ -547,6 +547,16 @@ pub async fn get_room(
         }
     }
 
+    // LC-494: stage mode (control plane). Pre-render the per-viewer roster panel
+    // for stage-enabled group rooms.
+    let stage_enabled =
+        room.room_type != "dm" && db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
+    let stage_panel_html = if stage_enabled {
+        askama::Template::render(&super::stage::build_panel(&state, &user, room_id, false).await)?
+    } else {
+        String::new()
+    };
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -575,6 +585,8 @@ pub async fn get_room(
         huddle_enabled,
         ice_servers: &state.ice_servers,
         huddle_participants,
+        stage_enabled,
+        stage_panel_html,
     };
     let body = html(&page)?;
     let mut response = body.into_response();

@@ -366,6 +366,13 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    /// LC-494: the stage control-plane roster changed (join/leave, hand
+    /// raised/lowered, promote/demote). Broadcast to the room; each client
+    /// re-renders the stage panel for itself (host controls are per-viewer).
+    /// Carries no payload - recipients read the current roster from the hub.
+    StageChanged {
+        room_id: i64,
+    },
     /// Sent only to a freshly-joined participant: the users already in the
     /// channel. The joiner opens a peer connection to each and sends the
     /// offer. `peers` is a list of `(user_id, username)` pairs.
