@@ -1,11 +1,12 @@
 use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use futures::StreamExt;
 use std::collections::HashMap;
+use std::io::SeekFrom;
 use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
@@ -19,6 +20,12 @@ use crate::state::AppState;
 
 /// Default upload cap when settings.max_upload_bytes is missing or unparseable.
 const DEFAULT_MAX_UPLOAD_BYTES: i64 = 10 * 1024 * 1024;
+
+/// LC-496: floor for video-clip uploads. Clips are recorded in-browser and are
+/// far larger than images, so they get their own cap (the larger of this floor
+/// and the operator's `max_upload_bytes`) rather than the image-sized default.
+/// The per-user storage quota still applies on top.
+const CLIP_MAX_BYTES: i64 = 64 * 1024 * 1024;
 
 /// Resolve max upload size from settings.db, falling back to 10 MiB.
 async fn max_upload_bytes(state: &AppState) -> i64 {
@@ -59,6 +66,22 @@ fn allowed_voice_mime(sniffed: &str) -> Option<(&'static str, &'static str)> {
         "application/ogg" | "audio/ogg" | "video/ogg" => Some(("audio/ogg", "ogg")),
         "video/mp4" | "audio/mp4" | "audio/m4a" => Some(("audio/mp4", "m4a")),
         "audio/mpeg" => Some(("audio/mpeg", "mp3")),
+        _ => None,
+    }
+}
+
+/// LC-496: when the client flags an upload as a recorded video clip
+/// (`kind=clip`), the sniffed type is the container the browser's
+/// `MediaRecorder` produced from a camera or screen-share stream - WebM
+/// (Chrome/Firefox) or MP4/QuickTime (Safari). Map the recognised video
+/// containers to a canonical `video/*` MIME + storage extension; anything else
+/// returns `None` and the caller rejects with 415. Magic-byte sniffing ran
+/// first, so this only ever sees a real media container.
+fn allowed_clip_mime(sniffed: &str) -> Option<(&'static str, &'static str)> {
+    match sniffed {
+        "video/webm" | "video/x-matroska" | "audio/webm" => Some(("video/webm", "webm")),
+        "video/mp4" | "audio/mp4" => Some(("video/mp4", "mp4")),
+        "video/quicktime" => Some(("video/quicktime", "mov")),
         _ => None,
     }
 }
@@ -140,6 +163,13 @@ pub async fn post_upload(
             _ => continue,
         }
         let is_voice = upload_kind.as_deref() == Some("voice");
+        // LC-496: video clips get a larger cap (see CLIP_MAX_BYTES).
+        let is_clip = upload_kind.as_deref() == Some("clip");
+        let effective_max = if is_clip {
+            CLIP_MAX_BYTES.max(max_bytes)
+        } else {
+            max_bytes
+        };
         let original_filename = field
             .file_name()
             .map(sanitize_filename)
@@ -163,7 +193,7 @@ pub async fn post_upload(
                 }
             };
             total = total.saturating_add(chunk.len() as i64);
-            if total > max_bytes {
+            if total > effective_max {
                 overflow = true;
                 break;
             }
@@ -184,7 +214,7 @@ pub async fn post_upload(
             let _ = tokio::fs::remove_file(&tmp_path).await;
             return Ok((
                 StatusCode::PAYLOAD_TOO_LARGE,
-                format!("file exceeds {max_bytes}-byte limit"),
+                format!("file exceeds {effective_max}-byte limit"),
             )
                 .into_response());
         }
@@ -239,6 +269,18 @@ pub async fn post_upload(
                     return Ok((
                         StatusCode::UNSUPPORTED_MEDIA_TYPE,
                         format!("unsupported voice format: {mime_type}"),
+                    )
+                        .into_response());
+                }
+            }
+        } else if is_clip {
+            match allowed_clip_mime(&mime_type) {
+                Some((m, e)) => (e, m.to_string()),
+                None => {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Ok((
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        format!("unsupported clip format: {mime_type}"),
                     )
                         .into_response());
                 }
@@ -391,6 +433,7 @@ pub async fn get_file(
     OptionalUser(maybe_user): OptionalUser,
     Path(file_id): Path<i64>,
     Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let Some(user) = maybe_user else {
         return Ok((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
@@ -451,16 +494,50 @@ pub async fn get_file(
             )
         };
 
+    let disposition = format!(
+        "inline; filename=\"{}\"",
+        sanitize_disposition_filename(&row.filename)
+    );
+
+    // LC-496: honor a single-range `Range: bytes=...` request with a 206 so
+    // inline <video> playback can seek (Safari's MP4 player requires this; WebM
+    // works without it but benefits too). A missing/unsatisfiable/multi-range
+    // header falls through to the full 200 below. `Accept-Ranges: bytes` is
+    // always advertised so the browser knows seeking is possible.
+    if let Some((start, end)) = parse_range(&headers, content_length) {
+        let mut file = File::open(&path)
+            .await
+            .map_err(|_| AppError::Internal("upload file missing on disk".into()))?;
+        file.seek(SeekFrom::Start(start))
+            .await
+            .map_err(|e| AppError::Internal(format!("seek upload: {e}")))?;
+        let chunk_len = end - start + 1;
+        // Disambiguate from `futures::StreamExt::take` (also in scope).
+        let stream = ReaderStream::new(AsyncReadExt::take(file, chunk_len));
+        let body = Body::from_stream(stream);
+        return Ok((
+            StatusCode::PARTIAL_CONTENT,
+            [
+                (header::CONTENT_TYPE, content_type),
+                (header::CONTENT_DISPOSITION, disposition),
+                (header::CONTENT_LENGTH, chunk_len.to_string()),
+                (
+                    header::CONTENT_RANGE,
+                    format!("bytes {start}-{end}/{content_length}"),
+                ),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+                (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
+            ],
+            body,
+        )
+            .into_response());
+    }
+
     let file = File::open(&path)
         .await
         .map_err(|_| AppError::Internal("upload file missing on disk".into()))?;
     let stream = ReaderStream::new(file);
     let body = Body::from_stream(stream);
-
-    let disposition = format!(
-        "inline; filename=\"{}\"",
-        sanitize_disposition_filename(&row.filename)
-    );
 
     Ok((
         StatusCode::OK,
@@ -468,11 +545,48 @@ pub async fn get_file(
             (header::CONTENT_TYPE, content_type),
             (header::CONTENT_DISPOSITION, disposition),
             (header::CONTENT_LENGTH, content_length.to_string()),
+            (header::ACCEPT_RANGES, "bytes".to_string()),
             (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
         ],
         body,
     )
         .into_response())
+}
+
+/// Parse a single HTTP byte-range request against a known total length.
+/// Supports `bytes=start-end`, `bytes=start-` and the suffix form
+/// `bytes=-N`. Returns inclusive `(start, end)` clamped to the file, or `None`
+/// for a missing, malformed, multi-range, or unsatisfiable header (the caller
+/// then serves the whole file).
+fn parse_range(headers: &HeaderMap, total: u64) -> Option<(u64, u64)> {
+    if total == 0 {
+        return None;
+    }
+    let raw = headers.get(header::RANGE)?.to_str().ok()?;
+    let spec = raw.strip_prefix("bytes=")?;
+    if spec.contains(',') {
+        return None; // single range only
+    }
+    let (s, e) = spec.split_once('-')?;
+    let (start, end) = if s.is_empty() {
+        let n: u64 = e.parse().ok()?;
+        if n == 0 {
+            return None;
+        }
+        (total.saturating_sub(n), total - 1)
+    } else {
+        let start: u64 = s.parse().ok()?;
+        let end: u64 = if e.is_empty() {
+            total - 1
+        } else {
+            e.parse().ok()?
+        };
+        (start, end.min(total - 1))
+    };
+    if start > end || start >= total {
+        return None;
+    }
+    Some((start, end))
 }
 
 // LC-77 commit 5: sha256_bytes + sha256_file moved to `crate::uploads`
@@ -499,4 +613,58 @@ fn sanitize_filename(s: &str) -> String {
 /// quoted form is good enough for inline display).
 fn sanitize_disposition_filename(s: &str) -> String {
     s.replace(['\\', '"'], "_")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hdrs(range: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(header::RANGE, range.parse().unwrap());
+        h
+    }
+
+    #[test]
+    fn range_open_ended_and_closed() {
+        assert_eq!(parse_range(&hdrs("bytes=0-99"), 1000), Some((0, 99)));
+        assert_eq!(parse_range(&hdrs("bytes=500-"), 1000), Some((500, 999)));
+    }
+
+    #[test]
+    fn range_suffix_form() {
+        assert_eq!(parse_range(&hdrs("bytes=-100"), 1000), Some((900, 999)));
+        // suffix larger than the file clamps to the whole file
+        assert_eq!(parse_range(&hdrs("bytes=-5000"), 1000), Some((0, 999)));
+    }
+
+    #[test]
+    fn range_end_is_clamped_to_eof() {
+        assert_eq!(parse_range(&hdrs("bytes=0-99999"), 1000), Some((0, 999)));
+    }
+
+    #[test]
+    fn range_rejects_unsatisfiable_and_malformed() {
+        assert_eq!(parse_range(&hdrs("bytes=2000-3000"), 1000), None); // start past EOF
+        assert_eq!(parse_range(&hdrs("bytes=0-0,5-9"), 1000), None); // multi-range
+        assert_eq!(parse_range(&hdrs("items=0-1"), 1000), None); // wrong unit
+        assert_eq!(parse_range(&hdrs("bytes=abc-def"), 1000), None); // non-numeric
+        assert_eq!(parse_range(&HeaderMap::new(), 1000), None); // no header
+        assert_eq!(parse_range(&hdrs("bytes=0-10"), 0), None); // empty file
+    }
+
+    #[test]
+    fn clip_mime_allowlist() {
+        assert_eq!(
+            allowed_clip_mime("video/webm"),
+            Some(("video/webm", "webm"))
+        );
+        assert_eq!(allowed_clip_mime("video/mp4"), Some(("video/mp4", "mp4")));
+        assert_eq!(
+            allowed_clip_mime("video/quicktime"),
+            Some(("video/quicktime", "mov"))
+        );
+        assert_eq!(allowed_clip_mime("image/png"), None);
+        assert_eq!(allowed_clip_mime("application/pdf"), None);
+    }
 }
