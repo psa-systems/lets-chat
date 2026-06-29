@@ -726,6 +726,65 @@ pub async fn set_room_posting_policy(
 /// LC-476: the room's `@here`/`@channel` broadcast policy. Read on demand
 /// (not carried on the `Room` struct) - mirrors `get_room_retention_days`.
 /// A missing row yields `'all'` (the permissive default).
+/// LC-492: whether the in-channel AI assistant (`/ask`) is enabled for a room.
+pub async fn get_room_assistant_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT assistant_enabled FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-492: toggle the assistant for a room. Returns rows affected (0 = no such
+/// room).
+pub async fn set_room_assistant_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    enabled: bool,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET assistant_enabled = ? WHERE id = ?")
+        .bind(enabled as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+/// LC-492: lightweight room-scoped FTS retrieval for the AI assistant. Returns
+/// up to `limit` `(author_user_id, body)` pairs from the room ranked by FTS
+/// relevance to `fts_query` (already sanitized via `sanitize_fts_query`).
+/// Deleted / quarantined / system messages are excluded. Unlike
+/// `search_messages_filtered` this skips access scoping: the caller (the `/ask`
+/// dispatcher) has already passed the room access + posting gates.
+pub async fn fts_room_context(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    fts_query: &str,
+    limit: i64,
+) -> Result<Vec<(String, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT m.user_id, m.body \
+           FROM messages_fts \
+           JOIN messages m ON m.id = messages_fts.rowid \
+          WHERE messages_fts MATCH ? AND m.room_id = ? \
+            AND m.deleted_at IS NULL AND m.quarantined = 0 AND m.is_system = 0 \
+          ORDER BY messages_fts.rank \
+          LIMIT ?",
+    )
+    .bind(fts_query)
+    .bind(room_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("user_id"), r.get("body")))
+        .collect())
+}
+
 pub async fn get_room_broadcast_policy(
     pool: &sqlx::SqlitePool,
     room_id: i64,
