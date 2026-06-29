@@ -148,6 +148,7 @@ pub async fn get_page(
 
     let retention_days = db::chat::get_room_retention_days(&state.chat, room_id).await?;
     let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
+    let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
 
     html(&RoomModeratorsPage {
         user: &user,
@@ -158,6 +159,8 @@ pub async fn get_page(
         posting_policy: &room.posting_allowed_for,
         broadcast_policy: &broadcast_policy,
         retention_days,
+        assistant_enabled,
+        assistant_available: state.llm_available(),
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -290,6 +293,52 @@ pub async fn post_broadcast_policy(
     db::moderation::log_mod_action(
         &state.chat,
         "room_broadcast_policy",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "room-policy-saved",
+        )))?
+        .into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+#[derive(Deserialize)]
+pub struct AssistantForm {
+    /// `"1"`/`"true"`/`"on"` enables; anything else disables.
+    #[serde(default)]
+    pub enabled: String,
+}
+
+/// POST /room/{id}/assistant
+///
+/// LC-492: toggle the in-channel AI assistant (`/ask`) for this room. Same
+/// authorization (`require_can_manage`) + audit + dual-mode response shape as
+/// the policy toggles. Only takes effect when the operator has configured an
+/// LLM, but the opt-in is independent so a manager can pre-enable it.
+pub async fn post_assistant(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<AssistantForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let enabled = matches!(form.enabled.trim(), "1" | "true" | "on" | "yes");
+    let n = db::chat::set_room_assistant_enabled(&state.chat, room_id, enabled).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"assistant_enabled":{enabled}}}"#);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_assistant_toggle",
         "",
         &user.id,
         None,

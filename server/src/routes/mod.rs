@@ -30,6 +30,7 @@ mod activity;
 mod admin;
 mod api;
 mod api_tokens;
+mod assistant;
 mod auth;
 mod avatar;
 mod bookmarks;
@@ -1366,6 +1367,8 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/broadcast-policy",
             post(room_rbac::post_broadcast_policy),
         )
+        // LC-492: per-room AI assistant toggle.
+        .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
         .route(
             "/room/{room_id}/retention/preview",
             get(retention::get_preview),

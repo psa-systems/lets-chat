@@ -48,6 +48,11 @@ pub struct RoomModeratorsPage<'a> {
     /// template uses this to pre-fill the form and label the
     /// current state.
     pub retention_days: Option<i64>,
+    /// LC-492: whether the in-channel AI assistant (`/ask`) is enabled here.
+    pub assistant_enabled: bool,
+    /// LC-492: whether the operator has configured an LLM at all. When false the
+    /// toggle still saves but a hint explains the assistant won't function yet.
+    pub assistant_available: bool,
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
