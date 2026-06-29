@@ -236,6 +236,12 @@ pub(crate) async fn try_dispatch(
             "remind" => {
                 handle_remind(state, room, user, rest).await?;
             }
+            "ask" => {
+                // LC-492: in-channel AI assistant. Posts the answer as the
+                // assistant bot; errors (not configured / disabled / rate
+                // limited) surface to the asker's composer.
+                super::assistant::handle_ask(state, room, user, rest).await?;
+            }
             _ => return Ok(None),
         }
         // LC-228: form is `hx-swap="none"` so the rendered ComposerFragment
