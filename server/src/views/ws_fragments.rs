@@ -52,6 +52,19 @@ pub struct TypingFragment<'a> {
 #[template(path = "ws/stopped_typing.html")]
 pub struct StoppedTypingFragment;
 
+/// LC-498: "X is editing the wiki" presence banner (mirrors the typing
+/// fragment). Recipient-independent, so like typing it renders one shared
+/// string for all viewers.
+#[derive(Template)]
+#[template(path = "ws/wiki_editing.html")]
+pub struct WikiEditingFragment<'a> {
+    pub username: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "ws/wiki_stopped_editing.html")]
+pub struct WikiStoppedEditingFragment;
+
 /// LC-179: OOB reveal of the /inbox "new unread - refresh" bar
 /// (`#lc-inbox-refresh`). Dropped on connections not on /inbox.
 #[derive(Template)]
@@ -327,6 +340,10 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         .ok(),
         ChatEvent::UserTyping { username, .. } => TypingFragment { username }.render().ok(),
         ChatEvent::UserStoppedTyping { .. } => StoppedTypingFragment.render().ok(),
+        ChatEvent::WikiEditing { username, .. } => {
+            WikiEditingFragment { username }.render().ok()
+        }
+        ChatEvent::WikiStoppedEditing { .. } => WikiStoppedEditingFragment.render().ok(),
         ChatEvent::ThreadTyping {
             parent_id,
             username,

@@ -18,7 +18,10 @@
    / no-JS. Content tabs (About / Pinned / Files) are read-oriented; the
    Preferences tab holds personal-only settings (your nickname). Room admin
    actions (posting policy, retention, overrides, delete) live on /manage. #}
-<div class="flex-1 overflow-y-auto" data-lc-roominfo>
+{# LC-498: subscribe the About page to the room so it receives the wiki-editing
+   presence events. Other room broadcasts also arrive but harmlessly drop (their
+   OOB targets are absent on this page). #}
+<div class="flex-1 overflow-y-auto" data-lc-roominfo data-lc-live-room="{{ room.id }}">
   <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
   <div class="lc-set-shell">
     <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "room-info-tabs-aria"|t }}">
@@ -69,6 +72,10 @@
         <div class="card lc-set-card">
           <div class="lc-set-card-head">
             <h3 class="lc-set-card-title">{{ "room-info-wiki-heading"|t }}</h3>
+            {# LC-498: live "X is editing the wiki" banner. Sits outside
+               #wiki-content so it survives the edit/view fragment swaps; OOB
+               events target it by id. #}
+            <div id="wiki-editing" class="text-xs text-content-muted" aria-live="polite"></div>
           </div>
           <div id="wiki-content" class="space-y-2">
             {% if wiki_html.is_empty() %}

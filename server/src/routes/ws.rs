@@ -40,6 +40,10 @@ enum ClientFrame {
     Typing { room_id: i64 },
     #[serde(rename = "thread_typing")]
     ThreadTyping { room_id: i64, parent_id: i64 },
+    /// LC-498: heartbeat sent while a user has the room wiki editor focused.
+    /// Drives the "X is editing the wiki" presence banner (mirrors `typing`).
+    #[serde(rename = "wiki_editing")]
+    WikiEditing { room_id: i64 },
     /// WebRTC 1:1 call signaling. Relayed verbatim to the other member of
     /// the DM room; the server validates membership and never inspects
     /// `payload`. See [`ChatEvent::CallSignal`].
@@ -656,6 +660,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         ClientFrame::ThreadTyping { room_id, parent_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
                                 state.hub.notify_thread_typing(conn_id, room_id, parent_id);
+                                super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+                            }
+                        }
+                        ClientFrame::WikiEditing { room_id } => {
+                            if subscribed.lock().unwrap().contains(&room_id) {
+                                state.hub.notify_wiki_editing(conn_id, room_id);
                                 super::touch_user_and_maybe_broadcast(&state, &user.id).await;
                             }
                         }

@@ -63,6 +63,20 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    /// LC-498: someone is actively editing this room's wiki (presence only -
+    /// true co-editing is deferred). Broadcast to the room except the editor so
+    /// other viewers of the room About page see an "X is editing the wiki"
+    /// banner. Transient, no DB; mirrors `UserTyping`.
+    WikiEditing {
+        room_id: i64,
+        user_id: String,
+        username: String,
+    },
+    /// LC-498: the wiki editor went idle / blurred / saved; clears the banner.
+    WikiStoppedEditing {
+        room_id: i64,
+        user_id: String,
+    },
     RoomMemberAdded {
         room_id: i64,
         user_id: String,
