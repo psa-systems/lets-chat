@@ -296,6 +296,14 @@ room-assistant-on-label = On.
 room-assistant-on-text = Members can use /ask in this room.
 room-assistant-off-label = Off.
 room-assistant-off-text = /ask is disabled in this room.
+# LC-494: stage-mode toggle (room manage page).
+room-stage-heading = Stage mode
+room-stage-intro = Turn this room into a stage with speakers and listeners, where people request to speak.
+room-stage-audio-note = Roles and request-to-speak ship now; large-audience audio needs a media server (coming soon).
+room-stage-on-label = On.
+room-stage-on-text = This room shows the stage roster.
+room-stage-off-label = Off.
+room-stage-off-text = Stage mode is disabled in this room.
 room-mods-overrides-heading = Current overrides
 room-mods-overrides-empty = No overrides yet.
 room-mods-granted-by = granted by

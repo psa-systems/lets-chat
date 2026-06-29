@@ -84,6 +84,7 @@ mod settings;
 mod shame_tags;
 mod sidebar_categories;
 mod slash;
+mod stage;
 mod starred_rooms;
 mod status;
 mod summary;
@@ -1369,6 +1370,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // LC-492: per-room AI assistant toggle.
         .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
+        // LC-494: per-room stage-mode toggle.
+        .route("/room/{room_id}/stage", post(room_rbac::post_stage))
         .route(
             "/room/{room_id}/retention/preview",
             get(retention::get_preview),
