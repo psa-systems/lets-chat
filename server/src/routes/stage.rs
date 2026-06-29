@@ -10,8 +10,13 @@
 //! on every `ChatEvent::StageChanged`.
 
 use askama::Template;
+use axum::extract::{Path, State};
+use axum::Json;
 
+use crate::auth::AuthUser;
 use crate::db;
+use crate::error::AppError;
+use crate::livekit::{self, LiveKitConfig};
 use crate::models::User;
 use crate::state::AppState;
 use crate::views::stage::{StageMember, StagePanel};
@@ -108,6 +113,7 @@ pub(crate) async fn build_panel(
         is_participant,
         is_speaker,
         hand_raised,
+        livekit_available: livekit::available(),
         oob,
     }
 }
@@ -122,4 +128,65 @@ pub(crate) async fn render_panel(state: &AppState, viewer: &User, room_id: i64) 
         .await
         .render()
         .ok()
+}
+
+#[derive(serde::Serialize)]
+pub struct StageTokenResponse {
+    /// Browser-facing LiveKit signaling URL.
+    pub url: String,
+    /// Short-lived LiveKit access token (JWT) scoped to this stage room.
+    pub token: String,
+    /// Whether this token grants mic publishing (true = speaker/host).
+    pub can_publish: bool,
+}
+
+/// GET /room/{id}/stage/token  (LC-512)
+///
+/// Mint a LiveKit access token for the caller to join this room's stage. Gated
+/// on: LiveKit configured, stage mode on, room access, and the caller currently
+/// on the stage roster. Publish rights are derived live from the roster - a
+/// speaker or host may publish; a listener may only subscribe - so the client
+/// re-fetches this after a promote/demote to pick up its new permission.
+pub async fn get_token(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+) -> Result<Json<StageTokenResponse>, AppError> {
+    let Some(cfg) = LiveKitConfig::from_env() else {
+        return Err(AppError::BadRequest(
+            "Stage audio is not configured on this server.".into(),
+        ));
+    };
+    if !stage_enabled(&state, room_id).await {
+        return Err(AppError::BadRequest(
+            "Stage mode is off for this room.".into(),
+        ));
+    }
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    // Must be on the stage roster to get audio (join via the control plane first).
+    if !state.hub.stage_has_participant(room_id, &user.id) {
+        return Err(AppError::BadRequest(
+            "Join the stage before connecting audio.".into(),
+        ));
+    }
+    // Publish rights follow the live roster: speakers publish; a host may always
+    // publish (they grant themselves the floor implicitly).
+    let roster = state.hub.stage_roster(room_id).unwrap_or_default();
+    let can_publish = roster.speakers.contains(&user.id) || is_host(&state, &user, room_id).await;
+
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    let name = match user.display_name.as_deref() {
+        Some(n) if !n.trim().is_empty() => n.to_string(),
+        _ => user.username.clone(),
+    };
+    let token = livekit::mint_token(&cfg, room_id, &user.id, &name, can_publish, now)
+        .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;
+    Ok(Json(StageTokenResponse {
+        url: cfg.url,
+        token,
+        can_publish,
+    }))
 }

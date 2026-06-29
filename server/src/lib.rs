@@ -16,6 +16,7 @@ pub mod http_client;
 pub mod i18n;
 pub mod last_visited;
 pub mod links;
+pub mod livekit;
 pub mod llm;
 pub mod mail;
 pub mod models;
