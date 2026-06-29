@@ -6,6 +6,10 @@
    it lands in the LC-512 SFU follow-up; the note keeps that explicit. #}
 <div id="lc-stage-{{ room_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}
      data-lc-stage data-room-id="{{ room_id }}"
+     {# LC-512: media reconciliation state for stage_media.js (LiveKit). #}
+     data-lc-stage-livekit="{% if livekit_available %}1{% else %}0{% endif %}"
+     data-lc-stage-joined="{% if is_participant %}1{% else %}0{% endif %}"
+     data-lc-stage-speaker="{% if is_speaker %}1{% else %}0{% endif %}"
      class="border-t border-border bg-surface-sunken px-4 py-2 text-sm">
   <div class="flex items-center gap-2">
     <span class="text-xs font-semibold uppercase tracking-wide text-content-muted">{{ "stage-label"|t }}</span>
@@ -63,7 +67,9 @@
     {% endif %}
   </div>
 
-  {# Honest scope note: the roster + request-to-speak work, but audio needs the
-     SFU media server (LC-512). Without it, this is the control plane only. #}
+  {# LC-512: when LiveKit is configured the audio is live (stage_media.js
+     connects on join); otherwise this is the control plane only. #}
+  {% if !livekit_available %}
   <p class="mt-2 text-xs text-content-subtle">{{ "stage-audio-soon"|t }}</p>
+  {% endif %}
 </div>
