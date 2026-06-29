@@ -232,6 +232,15 @@
         <path d="M5.5 9.5a.75.75 0 00-1.5 0 6 6 0 005.25 5.954V17.5H7.75a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H10.75v-2.046A6 6 0 0016 9.5a.75.75 0 00-1.5 0 4.5 4.5 0 01-9 0z"/>
       </svg>
     </button>
+    {# LC-496: record an async video clip (camera or screen) with auto-transcription. #}
+    <button type="button" id="lc-clip" data-lc-tip="{{ "room-composer-record-clip"|t }}" data-lc-tip-pos="top"
+      class="lc-composer-btn"
+      aria-label="{{ "room-composer-record-clip"|t }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+        <path d="M1 5.25A2.25 2.25 0 013.25 3h9.5A2.25 2.25 0 0115 5.25v9.5A2.25 2.25 0 0112.75 17h-9.5A2.25 2.25 0 011 14.75v-9.5z"/>
+        <path d="M16.5 7.5l2.05-1.37a.75.75 0 011.17.62v6.5a.75.75 0 01-1.17.62L16.5 12.5v-5z"/>
+      </svg>
+    </button>
     {# LC-399: live markdown highlight overlay. The textarea stays the single
        source of truth (all the composer autocompletes / draft autosave /
        optimistic echo / voice / caret-restore JS read & write textarea[name=body]);
@@ -1396,6 +1405,272 @@
     }
     resetUi();
     releaseStream();
+  }
+  var root = document.currentScript.closest('[data-lc-cleanup-root]')
+          || document.currentScript.parentElement;
+  root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+})();
+</script>
+<script>
+// LC-496: async video-clip recorder (Loom-style). Records a camera or screen
+// stream with MediaRecorder and uploads the container through the same
+// /api/upload endpoint (kind=clip). The returned file_id is stashed in the
+// shared hidden #composer input[name=file_id], so the normal form submit
+// carries it - identical to the voice + file-attach flows, and mutually
+// exclusive with them (they share the one attachment slot). The clip's audio is
+// transcribed server-side (when STT is configured), exactly like a voice
+// message.
+(function(){
+  var MAX_SECONDS = 300; // 5-minute hard cap, matching voice messages
+
+  var clipBtn = document.getElementById('lc-clip');
+  var staged = document.getElementById('lc-staged');
+  var errSlot = document.getElementById('lc-upload-error');
+  var hidden = document.querySelector('#composer input[name=file_id]');
+  if (!clipBtn || !staged || !errSlot || !hidden) return;
+
+  var mediaRecorder = null;
+  var mediaStream = null;
+  var chunks = [];
+  var startedAt = 0;
+  var tickTimer = null;
+  var capTimer = null;
+  var recording = false;
+  var cancelled = false;
+  var clipUrl = null; // object URL for the local preview <video>
+
+  function fmtTime(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function pickMimeType(){
+    var prefs = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+      for (var i = 0; i < prefs.length; i++) {
+        if (MediaRecorder.isTypeSupported(prefs[i])) return prefs[i];
+      }
+    }
+    return '';
+  }
+
+  function releaseStream(){
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(function(t){ t.stop(); });
+      mediaStream = null;
+    }
+  }
+  function revokeClipUrl(){
+    if (clipUrl) { try { URL.revokeObjectURL(clipUrl); } catch (e) {} clipUrl = null; }
+  }
+  function resetUi(){
+    recording = false;
+    clipBtn.classList.remove('is-recording');
+    clipBtn.setAttribute('aria-pressed', 'false');
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (capTimer) { clearTimeout(capTimer); capTimer = null; }
+  }
+
+  function showError(msg, help, retryFn){
+    staged.textContent = '';
+    var html = '<div class="lc-rec-error">' +
+      '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="lc-rec-error-icon"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>' +
+      '<div class="lc-rec-error-body"><span>' + msg + '</span>' +
+      (help ? '<span class="lc-rec-error-help">' + help + '</span>' : '') +
+      '</div>';
+    if (retryFn) html += '<button type="button" class="lc-rec-error-retry">' + window.__lcS('voiceRetry', 'Retry') + '</button>';
+    html += '</div>';
+    errSlot.innerHTML = html;
+    if (retryFn) {
+      var btn = errSlot.querySelector('.lc-rec-error-retry');
+      if (btn) btn.addEventListener('click', function(){ errSlot.textContent = ''; retryFn(); });
+    }
+  }
+
+  // Source chooser: clip recording needs a camera-vs-screen decision up front.
+  function chooseSource(){
+    if (window.__lcClearAttach) window.__lcClearAttach();
+    errSlot.textContent = '';
+    staged.innerHTML =
+      '<div class="lc-rec" role="group">' +
+        '<span class="lc-rec-label">' + window.__lcS('clipChoose', 'Record a clip:') + '</span>' +
+        '<span class="lc-rec-actions">' +
+          '<button type="button" id="lc-clip-cam" class="lc-rec-stop">' + window.__lcS('clipCamera', 'Camera') + '</button>' +
+          '<button type="button" id="lc-clip-screen" class="lc-rec-stop">' + window.__lcS('clipScreen', 'Screen') + '</button>' +
+          '<button type="button" id="lc-clip-cancel" class="lc-rec-cancel">' + window.__lcS('voiceRecCancel', 'Cancel') + '</button>' +
+        '</span>' +
+      '</div>';
+    document.getElementById('lc-clip-cam').addEventListener('click', function(){ start('camera'); });
+    document.getElementById('lc-clip-screen').addEventListener('click', function(){ start('screen'); });
+    document.getElementById('lc-clip-cancel').addEventListener('click', function(){ staged.textContent = ''; });
+  }
+
+  function showRecording(stream){
+    staged.innerHTML =
+      '<div class="lc-recpreview">' +
+        '<video class="lc-clip-preview max-w-sm max-h-64 rounded border border-border bg-black" muted autoplay playsinline></video>' +
+        '<div class="lc-rec" role="status">' +
+          '<span class="lc-rec-dot" aria-hidden="true"></span>' +
+          '<span class="lc-rec-label">' + window.__lcS('voiceRecording', 'Recording') + '</span>' +
+          '<span class="lc-rec-time" id="lc-clip-time">0:00</span>' +
+          '<span class="lc-rec-actions">' +
+            '<button type="button" id="lc-clip-stop" class="lc-rec-stop">' + window.__lcS('voiceRecStop', 'Stop') + '</button>' +
+            '<button type="button" id="lc-clip-discard" class="lc-rec-cancel">' + window.__lcS('voiceRecCancel', 'Cancel') + '</button>' +
+          '</span>' +
+        '</div>' +
+      '</div>';
+    var v = staged.querySelector('.lc-clip-preview');
+    if (v) { v.srcObject = stream; }
+    document.getElementById('lc-clip-stop').addEventListener('click', function(){ stop(false); });
+    document.getElementById('lc-clip-discard').addEventListener('click', function(){ stop(true); });
+  }
+
+  function renderPreview(fileId){
+    revokeClipUrl();
+    staged.innerHTML =
+      '<div class="lc-recpreview">' +
+        '<video src="/api/files/' + fileId + '" controls preload="metadata" class="max-w-sm max-h-64 rounded border border-border bg-black"></video>' +
+        '<div class="lc-recpreview-actions">' +
+          '<button type="button" class="lc-recpreview-btn" id="lc-clip-redo">' +
+            '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 4.5V2.25a.25.25 0 00-.41-.19L5.5 5.5l4.09 3.44a.25.25 0 00.41-.19V6.5a3.5 3.5 0 11-3.5 3.5.75.75 0 00-1.5 0 5 5 0 105-5z"/></svg>' +
+            '<span>' + window.__lcS('voiceReRecord', 'Re-record') + '</span>' +
+          '</button>' +
+          '<button type="button" class="lc-recpreview-btn lc-recpreview-btn--danger" id="lc-clip-remove">' +
+            '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1a1 1 0 00-.96.73L7.5 3H4a.75.75 0 000 1.5h.42l.81 11.36A2.25 2.25 0 007.47 18h5.06a2.25 2.25 0 002.24-2.14L15.58 4.5H16A.75.75 0 0016 3h-3.5l-.29-1.27A1 1 0 0011.25 1h-2.5zM9 7.25a.75.75 0 011.5 0v6a.75.75 0 01-1.5 0v-6z" clip-rule="evenodd"/></svg>' +
+            '<span>' + window.__lcS('voiceRemove', 'Remove') + '</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    var redo = document.getElementById('lc-clip-redo');
+    var remove = document.getElementById('lc-clip-remove');
+    if (redo) redo.addEventListener('click', function(){ if (window.__lcClearAttach) window.__lcClearAttach(); chooseSource(); });
+    if (remove) remove.addEventListener('click', function(){ if (window.__lcClearAttach) window.__lcClearAttach(); });
+  }
+
+  function tick(){
+    var el = document.getElementById('lc-clip-time');
+    if (el) el.textContent = fmtTime((Date.now() - startedAt) / 1000);
+  }
+
+  async function start(source){
+    errSlot.textContent = '';
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      showError(window.__lcS('clipUnsupported', 'Video recording is not supported in this browser'));
+      return;
+    }
+    try {
+      if (source === 'screen') {
+        if (!navigator.mediaDevices.getDisplayMedia) {
+          showError(window.__lcS('clipUnsupported', 'Video recording is not supported in this browser'));
+          return;
+        }
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      } else {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }
+    } catch (e) {
+      showError(
+        window.__lcS('clipDenied', 'Camera or screen access denied'),
+        window.__lcS('clipDeniedHelp', "Allow access in your browser's site settings, then try again.")
+      );
+      return;
+    }
+    // If the user stops the screen share from the browser chrome, finish.
+    mediaStream.getVideoTracks().forEach(function(t){
+      t.addEventListener('ended', function(){ if (recording) stop(false); });
+    });
+    var mimeType = pickMimeType();
+    try {
+      mediaRecorder = mimeType
+        ? new MediaRecorder(mediaStream, { mimeType: mimeType })
+        : new MediaRecorder(mediaStream);
+    } catch (e) {
+      releaseStream();
+      showError(window.__lcS('clipStartFailed', 'Could not start recording.'));
+      return;
+    }
+    chunks = [];
+    cancelled = false;
+    mediaRecorder.addEventListener('dataavailable', function(e){
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    });
+    mediaRecorder.addEventListener('stop', onStop);
+    mediaRecorder.start();
+    recording = true;
+    startedAt = Date.now();
+    clipBtn.classList.add('is-recording');
+    clipBtn.setAttribute('aria-pressed', 'true');
+    showRecording(mediaStream);
+    tickTimer = setInterval(tick, 250);
+    capTimer = setTimeout(function(){ stop(false); }, MAX_SECONDS * 1000);
+  }
+
+  function stop(isCancel){
+    if (!recording || !mediaRecorder) return;
+    cancelled = isCancel;
+    resetUi();
+    try { mediaRecorder.stop(); } catch (e) {}
+  }
+
+  async function onStop(){
+    releaseStream();
+    var type = (mediaRecorder && mediaRecorder.mimeType) || 'video/webm';
+    var blob = new Blob(chunks, { type: type });
+    chunks = [];
+    if (cancelled) { staged.textContent = ''; return; }
+    if (blob.size === 0) { showError(window.__lcS('clipEmpty', 'Recording was empty')); return; }
+    uploadBlob(blob, type);
+  }
+
+  async function uploadBlob(blob, type){
+    errSlot.textContent = '';
+    window.__lcUploadBusy = true;
+    if (window.__lcRefreshSend) window.__lcRefreshSend();
+    staged.innerHTML =
+      '<div class="lc-rec lc-rec--busy" role="status">' +
+        '<span class="lc-rec-spinner" aria-hidden="true"></span>' +
+        '<span class="lc-rec-label">' + window.__lcS('clipUploading', 'Uploading clip...') + '</span>' +
+      '</div>';
+    var fd = new FormData();
+    fd.append('kind', 'clip');
+    var ext = type.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+    fd.append('file', blob, 'clip.' + ext);
+    try {
+      var res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      window.__lcUploadBusy = false;
+      if (!res.ok) {
+        var msg = (await res.text()) || window.__lcS('uploadFailedStatus', 'Upload failed: %status%').replace('%status%', res.status);
+        showError(msg, null, function(){ uploadBlob(blob, type); });
+        if (window.__lcRefreshSend) window.__lcRefreshSend();
+        return;
+      }
+      var data = await res.json();
+      hidden.value = data.file_id;
+      renderPreview(data.file_id);
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
+    } catch (e) {
+      window.__lcUploadBusy = false;
+      showError(window.__lcS('uploadFailed', 'Upload failed'), null, function(){ uploadBlob(blob, type); });
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
+    }
+  }
+
+  clipBtn.addEventListener('click', function(){
+    if (recording) stop(false);
+    else chooseSource();
+  });
+
+  function teardown(){
+    cancelled = true;
+    window.__lcUploadBusy = false;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop(); } catch (e) {}
+    }
+    resetUi();
+    releaseStream();
+    revokeClipUrl();
   }
   var root = document.currentScript.closest('[data-lc-cleanup-root]')
           || document.currentScript.parentElement;
