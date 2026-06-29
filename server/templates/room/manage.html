@@ -64,6 +64,27 @@
       </form>
     </div>
 
+    {# ===== AI assistant (LC-492) ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-assistant-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-assistant-intro"|t }} <code class="font-mono bg-surface-sunken px-1 rounded">/ask</code></p>
+      </div>
+      {% if !assistant_available %}
+      <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
+      {% endif %}
+      <form hx-post="/room/{{ room.id }}/assistant"
+            hx-target="#lc-asst-status" hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+        <input type="hidden" name="enabled" value="{% if assistant_enabled %}0{% else %}1{% endif %}">
+        <div class="lc-set-toggle-row">
+          <span class="text-sm">{% if assistant_enabled %}<strong>{{ "room-assistant-on-label"|t }}</strong> {{ "room-assistant-on-text"|t }}{% else %}<strong>{{ "room-assistant-off-label"|t }}</strong> {{ "room-assistant-off-text"|t }}{% endif %}</span>
+          <button type="submit" class="lc-switch" role="switch" aria-checked="{% if assistant_enabled %}true{% else %}false{% endif %}" aria-label="{{ "room-assistant-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+        </div>
+        <span id="lc-asst-status" class="lc-set-status" role="status" aria-live="polite"></span>
+      </form>
+    </div>
+
     {# ===== Integrations ===== #}
     <div class="card lc-set-card">
       <div class="lc-set-card-head">
