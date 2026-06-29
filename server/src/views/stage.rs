@@ -30,6 +30,9 @@ pub struct StagePanel {
     pub is_speaker: bool,
     /// The viewer has a raised hand.
     pub hand_raised: bool,
+    /// LC-512: stage audio (LiveKit) is configured, so the client should connect
+    /// the media transport when the viewer is on the stage.
+    pub livekit_available: bool,
     /// True when this fragment is an OOB live swap (vs the initial page render).
     pub oob: bool,
 }

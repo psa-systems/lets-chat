@@ -1372,6 +1372,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
         // LC-494: per-room stage-mode toggle.
         .route("/room/{room_id}/stage", post(room_rbac::post_stage))
+        // LC-512: LiveKit access token for stage audio.
+        .route("/room/{room_id}/stage/token", get(stage::get_token))
         .route(
             "/room/{room_id}/retention/preview",
             get(retention::get_preview),

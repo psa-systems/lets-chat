@@ -77,14 +77,24 @@ build-css:
     cd server && ../dev/bun install --frozen-lockfile
     cd server && ../dev/bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
+# LC-512: vendor the LiveKit browser SDK same-origin (no CDN at runtime, no CSP
+# change). Pinned version; the output is gitignored + produced at build time
+# like tailwind-built.css. Stage audio is inert until this asset + a LiveKit
+# server are present, so this is best-effort (build does not fail without net).
+livekit_version := "2.5.0"
+[group('build')]
+vendor-js:
+    mkdir -p server/assets/vendor
+    curl -fsSL "https://cdn.jsdelivr.net/npm/livekit-client@{{ livekit_version }}/dist/livekit-client.umd.min.js" -o server/assets/vendor/livekit-client.umd.min.js || echo "warning: could not vendor livekit-client (stage audio will be inert)"
+
 # Build release binary (standalone)
 [group('build')]
-build: build-css
+build: build-css vendor-js
     ./dev/cargo build --release -p lets-chat-server
 
 # Build release binary (saas)
 [group('build')]
-build-saas: build-css
+build-saas: build-css vendor-js
     ./dev/cargo build --release -p lets-chat-server --no-default-features --features saas
 
 # Build Docker image (standalone)
