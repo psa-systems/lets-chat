@@ -33,6 +33,7 @@ pub mod pinned;
 pub mod reminders;
 pub mod report;
 pub mod room;
+pub mod room_automations;
 pub mod room_info;
 pub mod room_moderators;
 pub mod scheduled;

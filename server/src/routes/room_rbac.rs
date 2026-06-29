@@ -150,6 +150,13 @@ pub async fn get_page(
     let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
     let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
     let stage_enabled = db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
+    // LC-495: workflow-automation rules for the included automations section.
+    let automations: Vec<crate::views::room_automations::AutomationRow> =
+        db::automations::list_for_room(&state.chat, room_id)
+            .await?
+            .into_iter()
+            .map(crate::views::room_automations::AutomationRow::from_rule)
+            .collect();
 
     html(&RoomModeratorsPage {
         user: &user,
@@ -163,6 +170,7 @@ pub async fn get_page(
         assistant_enabled,
         assistant_available: state.llm_available(),
         stage_enabled,
+        automations: &automations,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,

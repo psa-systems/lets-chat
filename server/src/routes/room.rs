@@ -898,6 +898,21 @@ pub async fn post_message(
         });
     }
 
+    // LC-495: run this room's workflow automations for the new message off the
+    // request path. A matched rule posts as the `automation` bot. There is no
+    // re-trigger risk: the engine is invoked only here (and the reaction
+    // handler), never inside `finalize_message_send`, and it ignores bot
+    // authors. Quarantined / slash-handled posts already returned above, so
+    // they never reach this point.
+    {
+        let st = state.clone();
+        let author = user.clone();
+        let body_owned = body.to_string();
+        tokio::spawn(async move {
+            crate::automations::on_message_posted(&st, room_id, &author, &body_owned).await;
+        });
+    }
+
     // LC-228: form is `hx-swap="none"` (composer.html:11), so any returned
     // body is discarded by htmx. Skip the ~5 KB ComposerFragment render +
     // serialization and return 204. The user-visible effects already

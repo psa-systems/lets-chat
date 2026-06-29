@@ -32,6 +32,7 @@ mod api;
 mod api_tokens;
 mod assistant;
 mod auth;
+mod automations;
 mod avatar;
 mod bookmarks;
 mod branding;
@@ -1372,6 +1373,19 @@ pub fn build_router(state: AppState) -> Router {
         .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
         // LC-494: per-room stage-mode toggle.
         .route("/room/{room_id}/stage", post(room_rbac::post_stage))
+        // LC-495: per-room workflow automations (manage-page CRUD).
+        .route(
+            "/room/{room_id}/automations",
+            post(automations::post_create),
+        )
+        .route(
+            "/room/{room_id}/automations/{automation_id}/toggle",
+            post(automations::post_toggle),
+        )
+        .route(
+            "/room/{room_id}/automations/{automation_id}",
+            axum::routing::delete(automations::delete_automation),
+        )
         // LC-512: LiveKit access token for stage audio.
         .route("/room/{room_id}/stage/token", get(stage::get_token))
         .route(
