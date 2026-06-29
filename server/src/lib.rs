@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod automations;
 pub mod backup;
 pub mod bg;
 pub mod bridge_avatar;
