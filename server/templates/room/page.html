@@ -26,6 +26,10 @@
     </div>
     {# LC-489: group-room "Seen by" avatar stack (small rooms, opt-in). #}
     {{ room_seen_bar_html|safe }}
+    {# LC-494: stage control plane (large-audience audio; opt-in per room). #}
+    {% if stage_enabled %}
+    {{ stage_panel_html|safe }}
+    {% endif %}
     {# LC-493: ad-hoc huddle bar (group rooms only; hidden until active). #}
     {% if huddle_enabled %}
     {% include "room/huddle.html" %}

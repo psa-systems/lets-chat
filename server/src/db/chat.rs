@@ -753,6 +753,33 @@ pub async fn set_room_assistant_enabled(
     Ok(res.rows_affected())
 }
 
+/// LC-494: whether "stage" mode (large-audience audio) is enabled for a room.
+pub async fn get_room_stage_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT stage_enabled FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-494: toggle stage mode for a room. Returns rows affected (0 = no such
+/// room).
+pub async fn set_room_stage_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    enabled: bool,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET stage_enabled = ? WHERE id = ?")
+        .bind(enabled as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
 /// LC-492: lightweight room-scoped FTS retrieval for the AI assistant. Returns
 /// up to `limit` `(author_user_id, body)` pairs from the room ranked by FTS
 /// relevance to `fts_query` (already sanitized via `sanitize_fts_query`).

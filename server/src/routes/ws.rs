@@ -79,6 +79,24 @@ enum ClientFrame {
     /// peers can pin that participant's tile to the stage.
     #[serde(rename = "voice_screen")]
     VoiceScreen { room_id: i64, sharing: bool },
+    /// LC-494: stage control plane. Join/leave as a listener, request or
+    /// withdraw the floor, step down from speaking, and (host-only) grant or
+    /// revoke another participant's floor. Each mutates the ephemeral hub
+    /// roster and broadcasts a `StageChanged` to the room.
+    #[serde(rename = "stage_join")]
+    StageJoin { room_id: i64 },
+    #[serde(rename = "stage_leave")]
+    StageLeave { room_id: i64 },
+    #[serde(rename = "stage_raise_hand")]
+    StageRaiseHand { room_id: i64 },
+    #[serde(rename = "stage_lower_hand")]
+    StageLowerHand { room_id: i64 },
+    #[serde(rename = "stage_step_down")]
+    StageStepDown { room_id: i64 },
+    #[serde(rename = "stage_promote")]
+    StagePromote { room_id: i64, user_id: String },
+    #[serde(rename = "stage_demote")]
+    StageDemote { room_id: i64, user_id: String },
 }
 
 /// Recognized `kind` discriminators for a call signal. Anything else is
@@ -539,6 +557,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::VoiceLeft { .. }
                                 | ChatEvent::VoiceMuteChanged { .. }
                                 | ChatEvent::VoiceScreenChanged { .. } => render_voice_event(&e),
+                                // LC-494: re-render the stage roster per viewer
+                                // (host controls + own-state differ per viewer).
+                                ChatEvent::StageChanged { room_id } => {
+                                    super::stage::render_panel(&send_state, &send_user, *room_id)
+                                        .await
+                                }
                                 ChatEvent::VoiceRoster { to_user_id, .. }
                                 | ChatEvent::VoiceSignal { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
@@ -698,6 +722,30 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 );
                             }
                         }
+                        // LC-494: stage control plane. Self-actions require room
+                        // access + stage mode; promote/demote additionally
+                        // require host. Every mutation broadcasts StageChanged.
+                        ClientFrame::StageJoin { room_id } => {
+                            handle_stage_self(&state, &user, room_id, StageAction::Join).await;
+                        }
+                        ClientFrame::StageLeave { room_id } => {
+                            handle_stage_self(&state, &user, room_id, StageAction::Leave).await;
+                        }
+                        ClientFrame::StageRaiseHand { room_id } => {
+                            handle_stage_self(&state, &user, room_id, StageAction::RaiseHand).await;
+                        }
+                        ClientFrame::StageLowerHand { room_id } => {
+                            handle_stage_self(&state, &user, room_id, StageAction::LowerHand).await;
+                        }
+                        ClientFrame::StageStepDown { room_id } => {
+                            handle_stage_self(&state, &user, room_id, StageAction::StepDown).await;
+                        }
+                        ClientFrame::StagePromote { room_id, user_id } => {
+                            handle_stage_host(&state, &user, room_id, &user_id, true).await;
+                        }
+                        ClientFrame::StageDemote { room_id, user_id } => {
+                            handle_stage_host(&state, &user, room_id, &user_id, false).await;
+                        }
                     }
                 }
             }
@@ -718,6 +766,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // transcription session this user started (close + notify + post the
         // saved notice). Idempotent against a peer's explicit /end.
         super::transcripts::finalize_open_for_user(&state, &uid).await;
+        // LC-494: the user's last tab closed, so drop them from any stage and
+        // refresh the roster for everyone still viewing those rooms.
+        for room_id in state.hub.stage_leave_all(&uid) {
+            state
+                .hub
+                .broadcast_to_room(room_id, &ChatEvent::StageChanged { room_id });
+        }
         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: uid,
             status: "offline".to_string(),
@@ -2035,6 +2090,67 @@ fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
             super::transcripts::finalize_open_for_room(&st, room_id).await;
         });
     }
+}
+
+/// LC-494: stage self-actions (the actor operates on their own membership).
+enum StageAction {
+    Join,
+    Leave,
+    RaiseHand,
+    LowerHand,
+    StepDown,
+}
+
+/// Apply a stage self-action for `user` in `room_id`, then broadcast the new
+/// roster. Gated on room access + stage mode (a DM or stage-off room no-ops).
+async fn handle_stage_self(state: &AppState, user: &User, room_id: i64, action: StageAction) {
+    if !super::stage::stage_enabled(state, room_id).await {
+        return;
+    }
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin)
+        .await
+        .unwrap_or(false)
+    {
+        return;
+    }
+    match action {
+        StageAction::Join => state.hub.stage_join(room_id, &user.id),
+        StageAction::Leave => state.hub.stage_leave(room_id, &user.id),
+        StageAction::RaiseHand => {
+            state.hub.stage_raise_hand(room_id, &user.id);
+        }
+        StageAction::LowerHand => state.hub.stage_lower_hand(room_id, &user.id),
+        StageAction::StepDown => state.hub.stage_demote(room_id, &user.id),
+    }
+    state
+        .hub
+        .broadcast_to_room(room_id, &ChatEvent::StageChanged { room_id });
+}
+
+/// LC-494: host grants (`promote`) or revokes (`!promote`) the floor for
+/// `target` in `room_id`. Requires the actor be a stage host.
+async fn handle_stage_host(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    target: &str,
+    promote: bool,
+) {
+    if !super::stage::stage_enabled(state, room_id).await {
+        return;
+    }
+    if !super::stage::is_host(state, user, room_id).await {
+        return;
+    }
+    if promote {
+        state.hub.stage_promote(room_id, target);
+    } else {
+        state.hub.stage_demote(room_id, target);
+    }
+    state
+        .hub
+        .broadcast_to_room(room_id, &ChatEvent::StageChanged { room_id });
 }
 
 /// Relay one mesh signal (offer/answer/ice) to a specific peer in the same

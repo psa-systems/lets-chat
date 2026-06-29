@@ -53,6 +53,8 @@ pub struct RoomModeratorsPage<'a> {
     /// LC-492: whether the operator has configured an LLM at all. When false the
     /// toggle still saves but a hint explains the assistant won't function yet.
     pub assistant_available: bool,
+    /// LC-494: whether "stage" mode is enabled for this room.
+    pub stage_enabled: bool,
     pub sidebar_categories: &'a [SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],

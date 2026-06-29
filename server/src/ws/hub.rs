@@ -91,6 +91,21 @@ pub struct Hub {
     /// race) is resolved server-side: the first invite wins, the second is
     /// converted into an incoming UI for its sender by replaying the winner.
     ringing: DashMap<i64, RingingSlot>,
+    /// LC-494: ephemeral "stage" control-plane state per room (speaker/listener
+    /// roles + raised hands). Keyed by `room_id`; participants are keyed by
+    /// user_id (a person is on stage regardless of how many tabs they have).
+    /// No media here - the audio transport lands in the LC-512 SFU follow-up.
+    stages: DashMap<i64, StageState>,
+}
+
+/// LC-494: the live roster of one stage room. `participants` is everyone on the
+/// stage (speakers + listeners); `speakers` is the subset granted the floor;
+/// `hands` is listeners who requested to speak.
+#[derive(Default, Clone)]
+pub struct StageState {
+    pub participants: HashSet<String>,
+    pub speakers: HashSet<String>,
+    pub hands: HashSet<String>,
 }
 
 impl Default for Hub {
@@ -111,6 +126,7 @@ impl Hub {
             voice_rooms: DashMap::new(),
             voice_conn: DashMap::new(),
             ringing: DashMap::new(),
+            stages: DashMap::new(),
         }
     }
 
@@ -263,6 +279,95 @@ impl Hub {
             .get(&conn_id)
             .map(|r| *r == room_id)
             .unwrap_or(false)
+    }
+
+    // ---- LC-494 stage control plane -----------------------------------
+
+    /// Join `user_id` to stage `room_id` as a listener (idempotent).
+    pub fn stage_join(&self, room_id: i64, user_id: &str) {
+        self.stages
+            .entry(room_id)
+            .or_default()
+            .participants
+            .insert(user_id.to_string());
+    }
+
+    /// Remove `user_id` from stage `room_id` entirely (leave / disconnect).
+    /// Drops the room entry once empty so an idle stage holds no state.
+    pub fn stage_leave(&self, room_id: i64, user_id: &str) {
+        if let Some(mut s) = self.stages.get_mut(&room_id) {
+            s.participants.remove(user_id);
+            s.speakers.remove(user_id);
+            s.hands.remove(user_id);
+        }
+        self.stages.retain(|_, s| !s.participants.is_empty());
+    }
+
+    /// Remove `user_id` from every stage they are in. Called on the user's last
+    /// disconnect (a person leaves the stage when their final tab closes).
+    /// Returns the room ids they were removed from so the caller can broadcast a
+    /// `StageChanged` to each.
+    pub fn stage_leave_all(&self, user_id: &str) -> Vec<i64> {
+        let mut affected = Vec::new();
+        for mut s in self.stages.iter_mut() {
+            if s.participants.remove(user_id) {
+                affected.push(*s.key());
+            }
+            s.speakers.remove(user_id);
+            s.hands.remove(user_id);
+        }
+        self.stages.retain(|_, s| !s.participants.is_empty());
+        affected
+    }
+
+    /// Listener requests the floor. No-op if not a participant or already a
+    /// speaker. Returns true if a hand was newly raised.
+    pub fn stage_raise_hand(&self, room_id: i64, user_id: &str) -> bool {
+        if let Some(mut s) = self.stages.get_mut(&room_id) {
+            if s.participants.contains(user_id) && !s.speakers.contains(user_id) {
+                return s.hands.insert(user_id.to_string());
+            }
+        }
+        false
+    }
+
+    /// Withdraw a raised hand (idempotent).
+    pub fn stage_lower_hand(&self, room_id: i64, user_id: &str) {
+        if let Some(mut s) = self.stages.get_mut(&room_id) {
+            s.hands.remove(user_id);
+        }
+    }
+
+    /// Grant the floor (host action). Promotes a participant to speaker and
+    /// clears any raised hand. No-op if they are not on the stage.
+    pub fn stage_promote(&self, room_id: i64, user_id: &str) {
+        if let Some(mut s) = self.stages.get_mut(&room_id) {
+            if s.participants.contains(user_id) {
+                s.speakers.insert(user_id.to_string());
+                s.hands.remove(user_id);
+            }
+        }
+    }
+
+    /// Revoke the floor (host action, or a speaker stepping down): back to
+    /// listener.
+    pub fn stage_demote(&self, room_id: i64, user_id: &str) {
+        if let Some(mut s) = self.stages.get_mut(&room_id) {
+            s.speakers.remove(user_id);
+        }
+    }
+
+    /// True when `user_id` is currently on stage `room_id`.
+    pub fn stage_has_participant(&self, room_id: i64, user_id: &str) -> bool {
+        self.stages
+            .get(&room_id)
+            .map(|s| s.participants.contains(user_id))
+            .unwrap_or(false)
+    }
+
+    /// Snapshot of stage `room_id`'s roster, or `None` if no one is on it.
+    pub fn stage_roster(&self, room_id: i64) -> Option<StageState> {
+        self.stages.get(&room_id).map(|s| s.clone())
     }
 
     /// Register a new connection. Returns (conn_id, broadcast::Receiver,
