@@ -104,6 +104,14 @@ voice-jump-live = Jump to live
 voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
 voice-in-call = In call
+# LC-493: ad-hoc huddles (group text rooms).
+huddle-label = Huddle
+huddle-start-tip = Start or join a huddle
+huddle-join = Join huddle
+huddle-in-call = In huddle
+huddle-empty = No one's in the huddle yet.
+huddle-lobby-one = is in the huddle
+huddle-lobby-other = in the huddle
 transcript-open = Open
 transcript-copy = Copy
 transcript-copied = Copied

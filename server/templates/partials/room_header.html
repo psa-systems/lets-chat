@@ -34,6 +34,18 @@
         class="w-48 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
       <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
     </form>
+    {# LC-493: start/join an ad-hoc huddle in this group room. data-lc-voice-join
+       is the same delegated trigger voice.js uses; it drives the hidden huddle
+       root mounted above the composer. DMs (1:1 call path) and voice channels
+       (already the mesh) don't show it. #}
+    {% if room.room_type != "dm" && !room.is_voice %}
+    <button type="button" data-lc-voice-join
+            data-lc-tip="{{ "huddle-start-tip"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "huddle-start-tip"|t }}"
+            class="lc-header-action">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/></svg>
+      <span>{{ "huddle-label"|t }}</span>
+    </button>
+    {% endif %}
     {# LC-325: jump-to-date. The full room history is already in #messages, so
        this is a client-side scroll-to (auto_scroll.html wires it up). #}
     <div class="relative" data-lc-jumpdate-root>

@@ -1978,8 +1978,11 @@ async fn handle_voice_join(
     conn_id: ConnId,
     room_id: i64,
 ) {
+    // LC-493: the mesh serves both enclave voice channels (`is_voice`) and
+    // ad-hoc huddles attached to a group text room. DMs keep their dedicated
+    // 1:1 call path, so they are excluded here.
     match db::chat::get_room(&state.chat, room_id).await {
-        Ok(Some(r)) if r.is_voice => {}
+        Ok(Some(r)) if r.room_type != "dm" => {}
         _ => return,
     }
     let is_admin = user.role == "admin";
