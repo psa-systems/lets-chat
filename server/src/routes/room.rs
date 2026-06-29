@@ -526,6 +526,27 @@ pub async fn get_room(
         })?
     };
 
+    // LC-493: huddle support for group (non-DM) rooms. Seed the bar with anyone
+    // already on the line so a fresh load shows an in-progress huddle.
+    let huddle_enabled = room.room_type != "dm";
+    let mut huddle_participants = Vec::new();
+    if huddle_enabled {
+        for uid in state.hub.voice_room_users(room_id) {
+            let label = db::auth::find_user_by_id(&state.auth, &uid)
+                .await?
+                .map(|r| {
+                    r.display_name
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or(r.username)
+                })
+                .unwrap_or_else(|| "(unknown)".to_string());
+            huddle_participants.push(crate::views::voice::VoiceParticipant {
+                user_id: uid,
+                label,
+            });
+        }
+    }
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -551,6 +572,9 @@ pub async fn get_room(
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
         room_seen_bar_html,
+        huddle_enabled,
+        ice_servers: &state.ice_servers,
+        huddle_participants,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
