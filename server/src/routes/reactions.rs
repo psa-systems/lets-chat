@@ -117,6 +117,17 @@ pub async fn toggle_reaction(
             }),
         )
         .await;
+
+        // LC-495: run reaction_added workflow automations off the request path
+        // (additions only). A matched rule posts as the automation bot; bot
+        // reactors are ignored and the engine never re-enters itself.
+        let st = state.clone();
+        let reactor = user.clone();
+        let emoji_owned = emoji.clone();
+        let rid = m.room_id;
+        tokio::spawn(async move {
+            crate::automations::on_reaction_added(&st, rid, &reactor, &emoji_owned).await;
+        });
     }
 
     let custom_emojis =
