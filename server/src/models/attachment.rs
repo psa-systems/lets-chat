@@ -34,6 +34,13 @@ impl Attachment {
         self.mime_type.starts_with("audio/")
     }
 
+    /// LC-496: a recorded video clip (camera or screen). Rendered as an inline
+    /// `<video>` player; its audio is server-transcribed like a voice message,
+    /// so the same `transcript` field carries the result.
+    pub fn is_video(&self) -> bool {
+        self.mime_type.starts_with("video/")
+    }
+
     /// LC-507: a GIF (picker-posted or user-uploaded). The timeline serves the
     /// animated original for these rather than the still first-frame preview the
     /// pipeline produces, so posted GIFs autoplay inline (Slack/Discord-style)
