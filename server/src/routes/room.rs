@@ -959,9 +959,14 @@ pub async fn maybe_transcribe_voice_message(
     let Some((row, _room)) = db::uploads::get_upload(&state.chat, upload_id).await? else {
         return Ok(());
     };
-    // Voice message == audio attachment carrying a waveform. Anything else
-    // (image, pdf, plain audio file without a waveform) is not transcribed.
-    if !row.mime_type.starts_with("audio/") || row.waveform.is_none() {
+    // Transcribable == a voice message (audio attachment carrying a waveform)
+    // OR an LC-496 video clip (a video attachment). Anything else (image, pdf,
+    // plain audio file without a waveform) is skipped. For clips the recorded
+    // container is forwarded to the STT endpoint as-is; OpenAI-compatible
+    // engines demux the audio track themselves.
+    let is_voice = row.mime_type.starts_with("audio/") && row.waveform.is_some();
+    let is_clip = row.mime_type.starts_with("video/");
+    if !is_voice && !is_clip {
         return Ok(());
     }
     if row.transcript.is_some() {
