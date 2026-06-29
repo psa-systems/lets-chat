@@ -76,6 +76,9 @@ pub enum RateLimitKind {
     /// traffic (federated Matrix rooms can be chatty) does not share a
     /// counter with human posting.
     BridgeMessage,
+    /// LC-492: per-user cap on the in-channel AI assistant (`/ask`). Keyed by
+    /// the asking user_id. Bounds LLM cost/load; over-limit asks are refused.
+    AssistantAsk,
 }
 
 impl RateLimitKind {
@@ -90,6 +93,7 @@ impl RateLimitKind {
             RateLimitKind::EmailMentionNotification => "emn",
             RateLimitKind::RemoteControlRequest => "rcr",
             RateLimitKind::BridgeMessage => "brm",
+            RateLimitKind::AssistantAsk => "ask",
         }
     }
 }
