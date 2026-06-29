@@ -106,12 +106,17 @@ impl SttClient for ReqwestSttClient {
     async fn transcribe(&self, audio: Vec<u8>, content_type: &str) -> Result<String, SttError> {
         // Extension matters to some engines that sniff by filename; webm/opus is
         // what MediaRecorder produces by default.
-        let filename = if content_type.contains("ogg") {
+        // LC-496: clips are video containers (video/webm|mp4|quicktime); voice
+        // messages are audio containers. Either way the filename extension must
+        // match the container so engines that sniff by name route it correctly.
+        let filename = if content_type.contains("quicktime") || content_type.contains("mov") {
+            "clip.mov"
+        } else if content_type.contains("ogg") {
             "audio.ogg"
         } else if content_type.contains("mp4") || content_type.contains("mpeg") {
-            "audio.mp4"
+            "media.mp4"
         } else {
-            "audio.webm"
+            "media.webm"
         };
         let part = reqwest::multipart::Part::bytes(audio)
             .file_name(filename)

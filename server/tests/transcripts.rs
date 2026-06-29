@@ -877,6 +877,48 @@ async fn voice_message_is_transcribed_and_attached() {
     );
 }
 
+/// LC-496: a video clip (a `video/*` upload, no waveform) is transcribed the
+/// same way a voice message is - the container is forwarded to STT and the
+/// transcript lands on the attachment the message render reads.
+#[tokio::test]
+async fn video_clip_is_transcribed_and_attached() {
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
+        canned: "clip transcript text".into(),
+    })))
+    .await;
+
+    let rel = "lc496-clip.webm";
+    std::fs::write(db::uploads_dir().join(rel), b"fake-video-bytes").unwrap();
+    let upload_id = db::uploads::insert_upload(
+        &s.chat,
+        &s.b_id,
+        "clip.webm",
+        "video/webm",
+        16,
+        rel,
+        None, // clips carry no waveform
+    )
+    .await
+    .unwrap();
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "clip")
+        .await
+        .unwrap();
+    db::uploads::link_upload_to_message(&s.chat, upload_id, mid)
+        .await
+        .unwrap();
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    let atts = db::uploads::attachments_for_message(&s.chat, mid)
+        .await
+        .unwrap();
+    assert_eq!(atts.len(), 1);
+    assert!(atts[0].is_video(), "rendered as a video clip");
+    assert_eq!(atts[0].transcript.as_deref(), Some("clip transcript text"));
+}
+
 /// A non-voice upload (image: no waveform) is never sent to STT, even with a
 /// working client configured.
 #[tokio::test]

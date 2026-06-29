@@ -87,3 +87,14 @@ js-conn-degraded = Conexión: degradada
 js-conn-reconnecting = Reconectando...
 js-conn-failed = Conexión perdida
 js-settings-save-error = No se pudo guardar. Inténtalo de nuevo.
+
+# LC-496: grabador de videoclips asincronos
+js-clip-choose = Grabar un clip:
+js-clip-camera = Camara
+js-clip-screen = Pantalla
+js-clip-unsupported = La grabacion de video no es compatible con este navegador
+js-clip-denied = Acceso a camara o pantalla denegado
+js-clip-denied-help = Permite el acceso en la configuracion del sitio de tu navegador y vuelve a intentarlo.
+js-clip-start-failed = No se pudo iniciar la grabacion.
+js-clip-empty = La grabacion estaba vacia
+js-clip-uploading = Subiendo clip...
