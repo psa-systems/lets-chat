@@ -5,6 +5,7 @@ pub mod anti_spam;
 pub mod api_tokens;
 pub mod apns_subscriptions;
 pub mod auth;
+pub mod automations;
 pub mod bookmarks;
 pub mod branding;
 pub mod bridge_avatar_proxies;
