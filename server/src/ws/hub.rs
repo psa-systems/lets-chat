@@ -80,6 +80,11 @@ pub struct Hub {
     /// Kept separate from `typing` so room-composer typing and thread-composer
     /// typing don't bleed into each other's UI surfaces.
     thread_typing: DashMap<(i64, i64, String), std::time::Instant>,
+    /// LC-498: (room_id, user_id) -> last "editing the wiki" Instant. Ephemeral
+    /// presence like `typing` (no DB); drives the "X is editing the wiki" banner
+    /// on the room About page. This is the presence-only slice of live wiki
+    /// co-editing - true concurrent editing (CRDT/OT) is deferred.
+    wiki_editing: DashMap<(i64, String), std::time::Instant>,
     /// room_id -> conn_ids currently joined to that enclave voice channel.
     /// Ephemeral presence, like `typing` - never persisted to the DB.
     voice_rooms: DashMap<i64, HashSet<ConnId>>,
@@ -123,6 +128,7 @@ impl Hub {
             user_conns: DashMap::new(),
             typing: DashMap::new(),
             thread_typing: DashMap::new(),
+            wiki_editing: DashMap::new(),
             voice_rooms: DashMap::new(),
             voice_conn: DashMap::new(),
             ringing: DashMap::new(),
@@ -585,6 +591,57 @@ impl Hub {
         }
     }
 
+    /// LC-498: record a "editing the wiki" heartbeat for a connection. Mirrors
+    /// `notify_typing`: broadcasts `WikiEditing` to the room (excluding the
+    /// editor) on the first frame, then evicts after 5s of silence. The client
+    /// heartbeats every ~3s while the wiki editor is focused, so the banner
+    /// stays up through reading/thinking pauses and clears shortly after the
+    /// editor blurs, saves, or navigates away.
+    pub fn notify_wiki_editing(self: &Arc<Self>, conn_id: ConnId, room_id: i64) {
+        let (user_id, username) = match self.connections.get(&conn_id) {
+            Some(c) => (c.user_id.clone(), c.username.clone()),
+            None => return,
+        };
+
+        let key = (room_id, user_id.clone());
+        let is_new = !self.wiki_editing.contains_key(&key);
+        self.wiki_editing
+            .insert(key.clone(), std::time::Instant::now());
+
+        if is_new {
+            let event = ChatEvent::WikiEditing {
+                room_id,
+                user_id: user_id.clone(),
+                username,
+            };
+            self.broadcast_to_room_except(room_id, &event, conn_id);
+        }
+
+        let hub = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            if let Some(entry) = hub.wiki_editing.get(&key) {
+                if entry.elapsed() >= std::time::Duration::from_secs(5) {
+                    drop(entry);
+                    hub.stop_wiki_editing(room_id, &user_id);
+                }
+            }
+        });
+    }
+
+    /// Remove a user's wiki-editing state for a room and broadcast
+    /// `WikiStoppedEditing` so viewers clear the banner.
+    pub fn stop_wiki_editing(&self, room_id: i64, user_id: &str) {
+        let key = (room_id, user_id.to_string());
+        if self.wiki_editing.remove(&key).is_some() {
+            let event = ChatEvent::WikiStoppedEditing {
+                room_id,
+                user_id: user_id.to_string(),
+            };
+            self.broadcast_to_room(room_id, &event);
+        }
+    }
+
     /// Thread-scoped typing. Mirrors `notify_typing` but keys on parent_id so
     /// the thread panel and room composer have distinct indicator state.
     pub fn notify_thread_typing(self: &Arc<Self>, conn_id: ConnId, room_id: i64, parent_id: i64) {
@@ -677,5 +734,58 @@ mod tests {
         let hub = Hub::new();
         // No connections / no subscription; must not panic.
         hub.unsubscribe_user_from_topic("ghost", "enclave:1");
+    }
+
+    // LC-498: a wiki-editing heartbeat broadcasts WikiEditing to the room except
+    // the editor's own connection; stop_wiki_editing broadcasts WikiStoppedEditing
+    // to everyone (incl. the editor) and is idempotent.
+    #[tokio::test]
+    async fn wiki_editing_presence_excludes_editor_and_clears() {
+        let hub = std::sync::Arc::new(Hub::new());
+        let (editor, mut editor_rx, _) = hub.connect("u1", "alice");
+        let (viewer, mut viewer_rx, _) = hub.connect("u2", "bob");
+        hub.subscribe(editor, 7);
+        hub.subscribe(viewer, 7);
+
+        hub.notify_wiki_editing(editor, 7);
+        // Viewer sees the banner event; editor does not (except-self).
+        assert!(
+            matches!(
+                viewer_rx.try_recv(),
+                Ok(ChatEvent::WikiEditing { room_id: 7, .. })
+            ),
+            "viewer receives WikiEditing"
+        );
+        assert!(
+            editor_rx.try_recv().is_err(),
+            "editor must not receive its own WikiEditing"
+        );
+
+        // A second heartbeat is not a new session, so no duplicate broadcast.
+        hub.notify_wiki_editing(editor, 7);
+        assert!(
+            viewer_rx.try_recv().is_err(),
+            "no re-broadcast while the session is already live"
+        );
+
+        hub.stop_wiki_editing(7, "u1");
+        assert!(
+            matches!(
+                viewer_rx.try_recv(),
+                Ok(ChatEvent::WikiStoppedEditing { room_id: 7, .. })
+            ),
+            "viewer receives WikiStoppedEditing"
+        );
+        assert!(
+            matches!(
+                editor_rx.try_recv(),
+                Ok(ChatEvent::WikiStoppedEditing { room_id: 7, .. })
+            ),
+            "stop is broadcast to the whole room incl. the editor"
+        );
+
+        // Idempotent: a second stop with no live session broadcasts nothing.
+        hub.stop_wiki_editing(7, "u1");
+        assert!(viewer_rx.try_recv().is_err());
     }
 }
