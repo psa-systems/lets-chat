@@ -1127,6 +1127,11 @@ pub struct RoomPage<'a> {
     pub huddle_enabled: bool,
     pub ice_servers: &'a str,
     pub huddle_participants: Vec<crate::views::voice::VoiceParticipant>,
+    /// LC-494: stage mode (large-audience audio control plane). `stage_enabled`
+    /// gates the panel; `stage_panel_html` is the pre-rendered roster (empty
+    /// string when off), threaded as HTML like the seen bar.
+    pub stage_enabled: bool,
+    pub stage_panel_html: String,
 }
 
 impl RoomPage<'_> {

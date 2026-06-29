@@ -296,6 +296,14 @@ room-assistant-on-label = Activado.
 room-assistant-on-text = Los miembros pueden usar /ask en esta sala.
 room-assistant-off-label = Desactivado.
 room-assistant-off-text = /ask esta desactivado en esta sala.
+# LC-494: interruptor del modo escenario (pagina de gestion).
+room-stage-heading = Modo escenario
+room-stage-intro = Convierte esta sala en un escenario con oradores y oyentes, donde la gente pide la palabra.
+room-stage-audio-note = Los roles y la peticion de palabra ya estan; el audio para audiencias grandes necesita un servidor de medios (proximamente).
+room-stage-on-label = Activado.
+room-stage-on-text = Esta sala muestra la lista del escenario.
+room-stage-off-label = Desactivado.
+room-stage-off-text = El modo escenario esta desactivado en esta sala.
 room-mods-overrides-heading = Excepciones actuales
 room-mods-overrides-empty = Aun no hay excepciones.
 room-mods-granted-by = otorgado por
