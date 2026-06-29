@@ -1,0 +1,4 @@
+{# LC-498: wiki-editing presence banner. OOB-swapped into #wiki-editing on the
+   room About page. Like ws/typing.html this is recipient-independent (rendered
+   once for all viewers), so the text is not localized. #}
+<div id="wiki-editing" hx-swap-oob="innerHTML"><span class="lc-set-help italic">{{ username }} is editing the wiki...</span></div>
