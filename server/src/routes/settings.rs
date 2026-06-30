@@ -182,7 +182,12 @@ pub async fn get_settings(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
-    let current_session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
+    // LC-514: `current_session` is the raw cookie value; the row id is
+    // now the SHA-256 hash. Compare hashes when marking `is_current` so
+    // the settings UI keeps highlighting the row that issued the request.
+    let current_session = jar
+        .get(SESSION_COOKIE)
+        .map(|c| db::auth::hash_session_token(c.value()));
     let sessions = build_session_views(&state, &user.id, current_session.as_deref()).await?;
     let storage_usage_bytes = db::quota::sum_user_usage(&state.chat, &user.id).await?;
     let storage_quota_bytes = db::quota::get_user_quota(&state.chat, &user.id).await?;
@@ -491,7 +496,10 @@ pub async fn post_session_revoke(
     current: Option<axum::extract::Extension<CurrentSessionId>>,
 ) -> Result<Response, AppError> {
     if let Some(axum::extract::Extension(CurrentSessionId(cur))) = current {
-        if cur == session_id {
+        // LC-514: `session_id` here is the row id, which is now the
+        // SHA-256 hex of the original cookie. `CurrentSessionId` still
+        // carries the raw cookie value, so hash it before comparing.
+        if db::auth::hash_session_token(&cur) == session_id {
             return Err(AppError::BadRequest(
                 "Use Log out to end the current session.".to_string(),
             ));
