@@ -156,7 +156,14 @@ pub async fn open_chat_pool() -> SqlitePool {
 }
 
 pub async fn open_auth_pool() -> SqlitePool {
-    init_pool("auth", sqlx::migrate!("./migrations/auth")).await
+    let pool = init_pool("auth", sqlx::migrate!("./migrations/auth")).await;
+    // LC-514: in-place hash any pre-migration sessions rows whose `id`
+    // is still the raw cookie token. Runs at most once per database
+    // (gated by the `sessions_hash_migration_marker` table); idempotent.
+    if let Err(e) = crate::db::auth::backfill_sessions_hashed_at_rest(&pool).await {
+        tracing::error!(error = %e, "LC-514: sessions hash backfill failed");
+    }
+    pool
 }
 
 pub async fn open_settings_pool() -> SqlitePool {
