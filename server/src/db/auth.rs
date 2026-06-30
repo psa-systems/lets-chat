@@ -526,11 +526,17 @@ pub async fn create_session_with_origin(
         .map(char::from)
         .collect();
 
+    // LC-514: store SHA-256(token) as `sessions.id` so a read-only DB
+    // compromise yields no usable cookies. The plaintext is returned to
+    // the caller and lands in the browser's session cookie; every
+    // subsequent lookup re-hashes the presented value and matches by
+    // the hash. See `hash_session_token` for the in-flight invariant.
+    let hashed = hash_session_token(&token);
     sqlx::query(
         "INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, last_seen_at) \
          VALUES (?, ?, datetime('now', '+30 days'), ?, ?, datetime('now'))",
     )
-    .bind(&token)
+    .bind(&hashed)
     .bind(user_id)
     .bind(user_agent)
     .bind(ip)
@@ -540,15 +546,99 @@ pub async fn create_session_with_origin(
     Ok(token)
 }
 
+/// LC-514: SHA-256 hex of the raw cookie token. Stored as `sessions.id`
+/// so a DB compromise yields no usable sessions. Lookups MUST re-hash
+/// the presented cookie value before comparing.
+///
+/// Idempotent on an already-hashed input: a 64-char lowercase hex string
+/// re-hashes to a different value, which is fine - the lookup site only
+/// ever sees raw cookie tokens from the browser (never re-hashes a hash).
+/// The one-time backfill in `backfill_sessions_hashed_at_rest` skips rows
+/// that already look like the SHA-256 hex shape via `is_sha256_hex` so
+/// existing valid sessions are migrated exactly once.
+pub fn hash_session_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    let bytes = hasher.finalize();
+    hex::encode(bytes)
+}
+
+/// LC-514: whether `s` matches the SHA-256 hex shape (64 lowercase hex
+/// chars). Used by the in-place backfill to skip rows that have already
+/// been re-hashed by a previous server start.
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+/// LC-514: in-place re-hash of pre-migration session rows.
+///
+/// Runs at most once per database (gated by the
+/// `sessions_hash_migration_marker` table). Walks every row whose `id`
+/// does NOT already look like a SHA-256 hex string and UPDATEs `id` to
+/// `SHA-256(id)`. The cookie in flight still carries the original
+/// plaintext, so a freshly-migrated DB matches incoming cookies via the
+/// new lookup logic. New sessions minted post-migration always store
+/// the hash via `create_session_with_origin`.
+///
+/// Idempotent: re-runs on a fully-hashed table do nothing because every
+/// row passes `is_sha256_hex`. The marker also flips to `completed=1`
+/// after the first successful run so subsequent starts skip the full
+/// scan entirely.
+pub async fn backfill_sessions_hashed_at_rest(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    use sqlx::Row;
+    let already: Option<(i64,)> =
+        sqlx::query_as("SELECT completed FROM sessions_hash_migration_marker WHERE id = 1")
+            .fetch_optional(pool)
+            .await?;
+    if matches!(already, Some((1,))) {
+        return Ok(());
+    }
+
+    let rows = sqlx::query("SELECT id FROM sessions")
+        .fetch_all(pool)
+        .await?;
+    let mut migrated: u64 = 0;
+    for row in rows {
+        let id: String = row.get("id");
+        if is_sha256_hex(&id) {
+            continue;
+        }
+        let hashed = hash_session_token(&id);
+        let res = sqlx::query("UPDATE sessions SET id = ? WHERE id = ?")
+            .bind(&hashed)
+            .bind(&id)
+            .execute(pool)
+            .await?;
+        migrated += res.rows_affected();
+    }
+
+    sqlx::query("UPDATE sessions_hash_migration_marker SET completed = 1 WHERE id = 1")
+        .execute(pool)
+        .await?;
+
+    tracing::info!(
+        target: "auth",
+        migrated,
+        "LC-514: sessions table re-hashed at rest"
+    );
+    Ok(())
+}
+
 /// Bump `last_seen_at` for a live session. Called from the auth middleware on
 /// every authed request; throttled by `LAST_SEEN_REFRESH_SECONDS` so the write
 /// rate stays well below the read rate.
+///
+/// LC-514: `session_id` is the raw cookie value; hash it to find the row.
 pub async fn touch_session_last_seen(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<(), sqlx::Error> {
+    let hashed = hash_session_token(session_id);
     sqlx::query("UPDATE sessions SET last_seen_at = datetime('now') WHERE id = ?")
-        .bind(session_id)
+        .bind(&hashed)
         .execute(pool)
         .await?;
     Ok(())
@@ -595,13 +685,27 @@ pub async fn list_sessions_for_user(
 /// Delete a single session, scoped to the owning user. Returns `true` if a
 /// row was actually removed. The user-scope guard prevents one user from
 /// revoking another user's session by guessing or replaying a session ID.
+/// LC-514: caller may pass either the raw cookie or the already-hashed
+/// row id (e.g. from `list_sessions_for_user`, which returns the stored
+/// `id` which is itself the hash). We always re-hash if the value looks
+/// like a raw token (NOT already a 64-char hex); already-hashed inputs
+/// are passed through. This keeps the settings UI's "Sign out this
+/// session" button working without changing the visible shape.
+fn lookup_session_id(presented: &str) -> String {
+    if is_sha256_hex(presented) {
+        presented.to_string()
+    } else {
+        hash_session_token(presented)
+    }
+}
+
 pub async fn delete_session_for_user(
     pool: &SqlitePool,
     session_id: &str,
     user_id: &str,
 ) -> Result<bool, sqlx::Error> {
     let res = sqlx::query("DELETE FROM sessions WHERE id = ? AND user_id = ?")
-        .bind(session_id)
+        .bind(lookup_session_id(session_id))
         .bind(user_id)
         .execute(pool)
         .await?;
@@ -628,7 +732,7 @@ pub async fn get_user_by_session(
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
     )
-    .bind(session_id)
+    .bind(hash_session_token(session_id))
     .fetch_optional(pool)
     .await?;
 
@@ -679,7 +783,7 @@ pub async fn set_user_theme(
 
 pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE id = ?")
-        .bind(session_id)
+        .bind(lookup_session_id(session_id))
         .execute(pool)
         .await?;
     Ok(())
