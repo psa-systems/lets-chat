@@ -20,6 +20,17 @@ jobs:
     steps:
       - name: Clone the repository
         uses: https://code.forgejo.org/actions/checkout@v5
+        with:
+          # Full history so the migration-immutability guard can compute the
+          # merge-base with origin/main (LC-515).
+          fetch-depth: 0
+
+      - name: Migration immutability guard
+        # Committed migrations are immutable: sqlx verifies each migration's
+        # checksum on startup, so editing, renaming, or deleting one already on
+        # main breaks every deployed database. Reject such changes at PR time.
+        # See ci-build/check-migration-immutability.nu and LC-515 / DEV-395.
+        run: nu ci-build/check-migration-immutability.nu
 
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
