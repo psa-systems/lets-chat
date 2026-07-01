@@ -30,7 +30,11 @@ async fn list_returns_only_owners_sessions_with_origin() {
         .await
         .unwrap();
     assert_eq!(rows.len(), 2);
-    let with_ua = rows.iter().find(|r| r.id == a1).unwrap();
+    // LC-514: create_session* returns the raw cookie token, but the stored
+    // `sessions.id` (hence SessionRow.id) is SHA-256(token). Correlate on the
+    // hash, the same way the settings UI marks the current session.
+    let a1_id = db::auth::hash_session_token(&a1);
+    let with_ua = rows.iter().find(|r| r.id == a1_id).unwrap();
     assert_eq!(
         with_ua.user_agent.as_deref(),
         Some("Mozilla/5.0 Firefox/121")
@@ -85,8 +89,10 @@ async fn expired_sessions_are_filtered_out() {
     let dead = db::auth::create_session(&pool, &alice).await.unwrap();
 
     // Force one session into the past so list_sessions_for_user must skip it.
+    // LC-514: the row key is SHA-256(token), so hash the raw token returned by
+    // create_session before matching it in a WHERE id = ? clause.
     sqlx::query("UPDATE sessions SET expires_at = datetime('now', '-1 day') WHERE id = ?")
-        .bind(&dead)
+        .bind(db::auth::hash_session_token(&dead))
         .execute(&pool)
         .await
         .unwrap();
@@ -95,7 +101,7 @@ async fn expired_sessions_are_filtered_out() {
         .await
         .unwrap();
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].id, live);
+    assert_eq!(rows[0].id, db::auth::hash_session_token(&live));
 }
 
 #[tokio::test]
@@ -104,9 +110,13 @@ async fn touch_last_seen_updates_column() {
     let alice = db::auth::create_user(&pool, "alice", "hash").await.unwrap();
     let s = db::auth::create_session(&pool, &alice).await.unwrap();
 
+    // LC-514: the row key is SHA-256(token). touch_session_last_seen takes the
+    // raw cookie and hashes it internally, but the direct backdate UPDATE and
+    // the row correlation below must hash the token themselves.
+    let s_id = db::auth::hash_session_token(&s);
     // Backdate so we can detect that the touch moved the timestamp forward.
     sqlx::query("UPDATE sessions SET last_seen_at = '2000-01-01 00:00:00' WHERE id = ?")
-        .bind(&s)
+        .bind(&s_id)
         .execute(&pool)
         .await
         .unwrap();
@@ -116,7 +126,7 @@ async fn touch_last_seen_updates_column() {
     let rows = db::auth::list_sessions_for_user(&pool, &alice)
         .await
         .unwrap();
-    let row = rows.iter().find(|r| r.id == s).unwrap();
+    let row = rows.iter().find(|r| r.id == s_id).unwrap();
     let ts = row.last_seen_at.as_deref().unwrap();
     assert_ne!(ts, "2000-01-01 00:00:00");
     assert!(ts.starts_with("20"));
