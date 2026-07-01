@@ -184,10 +184,6 @@ async fn main() {
         llm_client,
     };
 
-    if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
-        tracing::warn!(error = %e, "enclave backfill failed at startup");
-    }
-
     // Eagerly load syntect's bundled syntax and theme sets on a blocking
     // thread before we start serving traffic. The deserialization takes
     // several seconds; doing it lazily inside the first markdown render

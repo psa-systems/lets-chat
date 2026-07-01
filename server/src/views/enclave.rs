@@ -16,6 +16,13 @@ pub struct EnclaveMemberView {
     pub role: EnclaveRole,
 }
 
+/// LC-516: one selectable bot in the "add a bot" picker on the members panel.
+/// Only site bots that are not already members of the enclave are listed.
+pub struct EnclaveBotOption {
+    pub id: String,
+    pub label: String,
+}
+
 /// LC-336: empty-state placeholder shown by `get_landing` only when the enclave
 /// has no openable rooms. The full landing menu was removed; create-chat now
 /// lives on the sidebar `+` and member management in settings.
@@ -119,6 +126,8 @@ pub struct EnclaveSettingsPage<'a> {
     pub user: &'a User,
     pub enclave: &'a Enclave,
     pub members: &'a [EnclaveMemberView],
+    /// LC-516: site bots not already in this enclave, for the add-bot picker.
+    pub bots: &'a [EnclaveBotOption],
     pub bans: &'a [EnclaveBanView],
     pub groups: &'a [EnclaveGroupView],
     pub emojis: &'a [CustomEmoji],

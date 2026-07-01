@@ -54,6 +54,9 @@ enclave-room-type-public = publica
 enclave-room-type-private = privada
 enclave-add-room = Anadir sala
 enclave-invite-placeholder = Invitar por nombre de usuario...
+# LC-516: agregar un bot (que no puede aceptar invitaciones) directamente al enclave.
+enclave-add-bot-title = Agregar un bot
+enclave-add-bot-button = Agregar bot
 enclave-empty-no-rooms = Aun no hay chats.
 enclave-empty-hint = Usa el + junto a SALAS en la barra lateral para anadir un chat.
 
