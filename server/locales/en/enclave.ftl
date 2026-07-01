@@ -54,6 +54,9 @@ enclave-room-type-public = public
 enclave-room-type-private = private
 enclave-add-room = Add room
 enclave-invite-placeholder = Invite by username...
+# LC-516: add a bot (which cannot accept invitations) directly to the enclave.
+enclave-add-bot-title = Add a bot
+enclave-add-bot-button = Add bot
 enclave-empty-no-rooms = No chats yet.
 enclave-empty-hint = Use the + next to ROOMS in the sidebar to add a chat.
 

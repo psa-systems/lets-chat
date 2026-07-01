@@ -55,6 +55,11 @@ pub async fn get_home(
     let pending_invites = crate::db::enclave::list_invitations_for_user(&state.chat, &user.id)
         .await?
         .len();
+    // LC-516: when the user belongs to no enclaves, Home shows an inline
+    // create-enclave prompt in place of the removed auto-default enclave.
+    let has_enclaves = !crate::db::enclave::list_enclaves_for_user(&state.chat, &user.id)
+        .await?
+        .is_empty();
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -68,6 +73,7 @@ pub async fn get_home(
         asset_version: &state.asset_version,
         flash_error: None,
         pending_invites,
+        has_enclaves,
     };
     let body = html(&page)?;
     Ok(body.into_response())
