@@ -18,6 +18,7 @@ mod common;
 
 struct TestApp {
     app: Router,
+    auth: SqlitePool,
     chat: SqlitePool,
     alice_id: String,
     alice_session: String,
@@ -76,6 +77,7 @@ async fn setup() -> TestApp {
     let app = routes::build_router(state);
     TestApp {
         app,
+        auth,
         chat,
         alice_id,
         alice_session,
@@ -215,4 +217,43 @@ async fn add_bot_rejects_non_bot_user() {
             .is_none(),
         "a non-bot user must not be added via the add-bot route",
     );
+}
+
+#[tokio::test]
+async fn add_bot_rejects_disabled_bot() {
+    let t = setup().await;
+    let eid = db::enclave::create_enclave(&t.chat, "alicetown", None, &t.alice_id)
+        .await
+        .unwrap();
+    // Disabling a bot (via /admin/bots/{id}/disable) site-bans it; such a bot
+    // must not be addable to an enclave.
+    sqlx::query("UPDATE users SET is_banned=1 WHERE id=?")
+        .bind(&t.bot_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+
+    let status = post_form(
+        &t.app,
+        &t.alice_session,
+        &format!("/enclave/{eid}/members/add-bot"),
+        format!("bot_id={}", t.bot_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        db::enclave::get_membership(&t.chat, eid, &t.bot_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "a disabled bot must not be added",
+    );
+}
+
+#[tokio::test]
+async fn create_enclave_rejects_overlong_name() {
+    let t = setup().await;
+    let long = "x".repeat(81);
+    let status = post_form(&t.app, &t.bob_session, "/enclaves", format!("name={long}")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
