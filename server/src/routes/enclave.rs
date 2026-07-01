@@ -152,6 +152,7 @@ pub fn router() -> Router<AppState> {
             post(post_member_role),
         )
         .route("/enclave/{id}/members/{user_id}/kick", post(post_kick))
+        .route("/enclave/{id}/members/add-bot", post(post_add_bot))
         .route("/enclave/{id}/rooms", post(post_create_room))
         .route("/enclave/{id}/rooms/{room_id}/edit", post(post_edit_room))
         .route(
@@ -747,6 +748,21 @@ pub async fn get_settings(
     let can_delete = enclave_can_delete(role, &user.role);
     let members = db::enclave::list_members(&state.chat, id).await?;
     let member_views = resolve_member_views(&state, members).await?;
+    // LC-516: site bots not already in this enclave, for the add-bot picker.
+    let member_ids: std::collections::HashSet<&str> =
+        member_views.iter().map(|m| m.user_id.as_str()).collect();
+    let bots: Vec<crate::views::enclave::EnclaveBotOption> = db::auth::list_bots(&state.auth)
+        .await?
+        .into_iter()
+        .filter(|b| !member_ids.contains(b.id.as_str()))
+        .map(|b| {
+            let label = match b.display_name.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => format!("@{}", b.username),
+            };
+            crate::views::enclave::EnclaveBotOption { id: b.id, label }
+        })
+        .collect();
     let emojis = db::custom_emojis::list_for_enclave(&state.chat, id).await?;
 
     // LC-340: resolve a display label per banned user for the ban-list section.
@@ -807,6 +823,7 @@ pub async fn get_settings(
         user: &user,
         enclave: &enclave,
         members: &member_views,
+        bots: &bots,
         bans: &bans,
         groups: &groups,
         emojis: &emojis,
@@ -1030,6 +1047,52 @@ pub async fn post_kick(
     state
         .hub
         .unsubscribe_user_from_topic(&target, &format!("enclave:{id}"));
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+}
+
+#[derive(Deserialize)]
+pub struct AddBotForm {
+    pub bot_id: String,
+}
+
+/// POST /enclave/{id}/members/add-bot - LC-516: an enclave manager adds a bot
+/// (`users.is_bot=1`) directly as a member. Bots cannot accept invitations, and
+/// the removed General auto-join was previously the only path a bot entered an
+/// enclave, so managers need a direct add here. Same manage-gate as invite.
+pub async fn post_add_bot(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    axum::Form(form): axum::Form<AddBotForm>,
+) -> Result<impl IntoResponse, AppError> {
+    require_manage(&state, &user, id).await?;
+    let bot_id = form.bot_id.trim();
+    let Some(bot) = db::auth::find_user_by_id(&state.auth, bot_id).await? else {
+        return Err(AppError::BadRequest("bot not found".into()));
+    };
+    // Only bots may be added this way; humans join via invite/discover so the
+    // acceptance + ban checks in those flows are not bypassed.
+    if !bot.is_bot {
+        return Err(AppError::BadRequest("not a bot".into()));
+    }
+    if db::enclave::is_enclave_banned(&state.chat, id, &bot.id).await? {
+        return Err(AppError::Forbidden);
+    }
+    if db::enclave::get_membership(&state.chat, id, &bot.id)
+        .await?
+        .is_some()
+    {
+        return Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")));
+    }
+    db::enclave::add_member(&state.chat, id, &bot.id, EnclaveRole::Member).await?;
+    broadcast_enclave_topic(
+        &state,
+        id,
+        &ChatEvent::EnclaveMemberAdded {
+            enclave_id: id,
+            user_id: bot.id.clone(),
+        },
+    );
     Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
 }
 

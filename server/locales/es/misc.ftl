@@ -18,6 +18,11 @@ home-action-discover-title = Descubrir o crear un enclave
 home-action-discover-desc = Únete a una comunidad o crea la tuya.
 home-action-invitations-title = Ver invitaciones
 home-action-invitations-desc = Mira los enclaves a los que te han invitado.
+# LC-516: aviso en línea para crear un enclave cuando el usuario no tiene ninguno.
+home-create-enclave-title = Crea tu primer enclave
+home-create-enclave-desc = Los enclaves son tus espacios para salas y personas.
+home-create-enclave-name-placeholder = Nombre del enclave
+home-create-enclave-button = Crear
 
 ## Message search results
 search-no-results = Sin resultados.
