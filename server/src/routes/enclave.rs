@@ -207,6 +207,11 @@ pub async fn post_create(
     if name.is_empty() {
         return Err(AppError::BadRequest("name required".into()));
     }
+    // LC-516: cap name length server-side (the Home create form's maxlength is a
+    // client-side hint only, and the discover create form has no cap).
+    if name.chars().count() > 80 {
+        return Err(AppError::BadRequest("name too long".into()));
+    }
     let id = match db::enclave::create_enclave(
         &state.chat,
         name,
@@ -754,7 +759,7 @@ pub async fn get_settings(
     let bots: Vec<crate::views::enclave::EnclaveBotOption> = db::auth::list_bots(&state.auth)
         .await?
         .into_iter()
-        .filter(|b| !member_ids.contains(b.id.as_str()))
+        .filter(|b| !b.is_banned && !member_ids.contains(b.id.as_str()))
         .map(|b| {
             let label = match b.display_name.as_deref() {
                 Some(n) if !n.trim().is_empty() => n.to_string(),
@@ -1074,6 +1079,10 @@ pub async fn post_add_bot(
     // acceptance + ban checks in those flows are not bypassed.
     if !bot.is_bot {
         return Err(AppError::BadRequest("not a bot".into()));
+    }
+    // A disabled bot is site-banned with its tokens revoked; do not add it.
+    if bot.is_banned {
+        return Err(AppError::BadRequest("bot is disabled".into()));
     }
     if db::enclave::is_enclave_banned(&state.chat, id, &bot.id).await? {
         return Err(AppError::Forbidden);

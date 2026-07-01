@@ -55,11 +55,11 @@ pub async fn get_home(
     let pending_invites = crate::db::enclave::list_invitations_for_user(&state.chat, &user.id)
         .await?
         .len();
-    // LC-516: when the user belongs to no enclaves, Home shows an inline
-    // create-enclave prompt in place of the removed auto-default enclave.
-    let has_enclaves = !crate::db::enclave::list_enclaves_for_user(&state.chat, &user.id)
-        .await?
-        .is_empty();
+    // LC-516: the user belongs to at least one enclave iff the switcher carries
+    // any non-Home entry (the Home tile has id None; each enclave tile has id
+    // Some(_)). load_chrome already fetched the enclave list to build the
+    // switcher, so derive the flag from it instead of querying again.
+    let has_enclaves = switcher.iter().any(|e| e.id.is_some());
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
