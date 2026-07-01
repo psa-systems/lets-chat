@@ -55,6 +55,11 @@ pub async fn get_home(
     let pending_invites = crate::db::enclave::list_invitations_for_user(&state.chat, &user.id)
         .await?
         .len();
+    // LC-516: the user belongs to at least one enclave iff the switcher carries
+    // any non-Home entry (the Home tile has id None; each enclave tile has id
+    // Some(_)). load_chrome already fetched the enclave list to build the
+    // switcher, so derive the flag from it instead of querying again.
+    let has_enclaves = switcher.iter().any(|e| e.id.is_some());
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -68,6 +73,7 @@ pub async fn get_home(
         asset_version: &state.asset_version,
         flash_error: None,
         pending_invites,
+        has_enclaves,
     };
     let body = html(&page)?;
     Ok(body.into_response())

@@ -76,6 +76,9 @@ pub async fn get_dm(
             asset_version: &state.asset_version,
             flash_error: Some(&msg),
             pending_invites: 0,
+            // LC-516: this is a DM-error render, not the empty Home; suppress
+            // the create-enclave prompt so it doesn't clutter the error page.
+            has_enclaves: true,
         };
         return Ok(html(&page)?.into_response());
     }
@@ -118,6 +121,9 @@ pub async fn get_dm(
                     asset_version: &state.asset_version,
                     flash_error: Some(&msg),
                     pending_invites: 0,
+                    // LC-516: DM-error render, not the empty Home; suppress the
+                    // create-enclave prompt here.
+                    has_enclaves: true,
                 };
                 return Ok(html(&page)?.into_response());
             }

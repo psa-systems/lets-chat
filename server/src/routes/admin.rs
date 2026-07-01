@@ -2650,10 +2650,6 @@ pub async fn post_bots(
         }
         Err(e) => return Err(AppError::from(e)),
     };
-    // Backfill the bot into the General enclave so it can be added to rooms.
-    if let Err(e) = db::enclave::backfill_general_membership(&state.auth, &state.chat).await {
-        tracing::warn!(error = %e, "bot general backfill failed");
-    }
     let plaintext = crate::auth::generate_api_token();
     let hash = crate::auth::hash_api_token(secret, &plaintext);
     // Roll back the bot row if token minting fails, so a failed create does
