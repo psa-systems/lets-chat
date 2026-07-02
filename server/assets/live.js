@@ -121,4 +121,72 @@
       evt.detail.headers['X-LC-Current-Enclave'] = m[1];
     }
   });
+
+  // LC-528: read a message aloud via the browser SpeechSynthesis API. Entirely
+  // client-side - no route, no LLM. Clicking the "Read aloud" menu item speaks
+  // the message's rendered text; clicking it again (or reading another message)
+  // stops. When the browser has no speech synthesis, the item is hidden by the
+  // `.lc-no-tts` CSS rule instead of failing silently on click.
+  var synth = window.speechSynthesis;
+  if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') {
+    document.documentElement.classList.add('lc-no-tts');
+  } else {
+    // The single in-flight read: the button that started it, its original
+    // label, and the message id (so we can stop if that message leaves the DOM).
+    var reading = null;
+
+    function stopReading() {
+      if (!reading) return;
+      var btn = reading.btn;
+      var orig = reading.origLabel;
+      reading = null;
+      // cancel() fires the utterance 'end' handler, which is now a no-op
+      // because `reading` is already null.
+      synth.cancel();
+      if (btn && btn.isConnected) btn.textContent = orig;
+    }
+
+    document.body.addEventListener('click', function (evt) {
+      var btn = evt.target.closest('[data-lc-read-aloud]');
+      if (!btn) return;
+      evt.preventDefault();
+      // Toggle off if this same button is the one currently reading.
+      var wasThis = reading && reading.btn === btn;
+      stopReading();
+      if (wasThis) return;
+
+      var id = btn.getAttribute('data-lc-read-aloud');
+      var body = document.querySelector('#msg-' + CSS.escape(id) + ' .lc-md');
+      var text = body ? body.innerText.trim() : '';
+      if (!text) return;
+
+      var u = new SpeechSynthesisUtterance(text);
+      var docLang = document.documentElement.lang;
+      if (docLang) u.lang = docLang;
+      var origLabel = btn.textContent;
+      var stopLabel = btn.getAttribute('data-lc-reading-label') || origLabel;
+      u.onend = function () {
+        // Only reset if this utterance is still the active one (a newer read
+        // or an explicit stop clears `reading` first).
+        if (reading && reading.utterance === u) {
+          var b = reading.btn;
+          reading = null;
+          if (b && b.isConnected) b.textContent = origLabel;
+        }
+      };
+      u.onerror = u.onend;
+      reading = { btn: btn, origLabel: origLabel, id: id, utterance: u };
+      btn.textContent = stopLabel;
+      synth.speak(u);
+    });
+
+    // Stop if the message being read is swapped out of the DOM (deleted,
+    // room switch, reconnect soft-refresh). htmx swaps don't reload the page,
+    // so speech would otherwise keep playing with a stale button reference.
+    document.body.addEventListener('htmx:afterSettle', function () {
+      if (reading && !document.getElementById('msg-' + reading.id)) stopReading();
+    });
+    // Belt-and-suspenders for a real navigation away from the app.
+    window.addEventListener('pagehide', function () { synth.cancel(); });
+  }
 })();
