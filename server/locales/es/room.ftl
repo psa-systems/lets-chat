@@ -204,6 +204,9 @@ room-ack-done = Confirmado
 room-ack-count-prefix = Confirmado por
 room-msg-remind = Recordar
 room-msg-mark-unread = Marcar como no leído
+# LC-528: read a message aloud (browser speech synthesis)
+room-msg-read-aloud = Leer en voz alta
+room-msg-stop-reading = Detener lectura
 room-msg-forward = Reenviar
 room-msg-report = Denunciar
 room-msg-edit = Editar

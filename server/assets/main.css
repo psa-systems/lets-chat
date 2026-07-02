@@ -1138,6 +1138,10 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    also covers live-swapped message fragments, since the rule is ancestor-based). */
 .lc-llm-only { display: none; }
 [data-lc-llm] .lc-menu-item.lc-llm-only { display: flex; }
+/* LC-528: hide the "Read aloud" item when the browser has no SpeechSynthesis.
+   live.js sets .lc-no-tts on <html> once at load; the ancestor rule also covers
+   live-swapped message fragments. */
+.lc-no-tts .lc-read-aloud { display: none; }
 .lc-translation-block {
     margin-top: 0.25rem;
     border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
