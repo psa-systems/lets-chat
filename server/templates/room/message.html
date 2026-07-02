@@ -212,6 +212,18 @@
         <button role="menuitem" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">{{ "room-msg-translate"|t }}</button>
         {# LC-286: mark this conversation unread from here. #}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
+        {# LC-528: read this message aloud via the browser SpeechSynthesis API.
+           Pure client-side (delegated handler in live.js) - no route, no LLM.
+           Reads the rendered text of this message and toggles to a stop label
+           while speaking. Only for messages with a text body. The whole item is
+           CSS-hidden (.lc-no-tts on <html>, set by live.js) when the browser has
+           no speech synthesis. #}
+        {% if !message.body.is_empty() %}
+        <button type="button" role="menuitem"
+          data-lc-read-aloud="{{ message.id }}"
+          data-lc-reading-label="{{ "room-msg-stop-reading"|t }}"
+          class="lc-menu-item lc-read-aloud">{{ "room-msg-read-aloud"|t }}</button>
+        {% endif %}
         {# LC-278: forward this message to another room/DM. #}
         <button role="menuitem" hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-forward"|t }}</button>
         {# LC-334: report to moderators (not on own / synthetic-actor messages). #}
