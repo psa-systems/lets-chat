@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "kudos-title"|t }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2">
+    <h1 class="font-semibold">{{ "kudos-title"|t }}</h1>
+    <p class="lc-small text-content-muted">{{ "kudos-window"|t }}</p>
+  </header>
+  <div class="flex-1 overflow-y-auto p-4">
+    {% if receivers.is_empty() && givers.is_empty() %}
+    <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
+    {% else %}
+    <div class="mx-auto grid max-w-2xl gap-6 sm:grid-cols-2">
+      <section>
+        <h2 class="lc-section-label mb-2">{{ "kudos-most-appreciated"|t }}</h2>
+        {% if receivers.is_empty() %}
+        <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
+        {% else %}
+        <ol class="space-y-1">
+          {% for row in receivers %}
+          <li class="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
+            <span class="w-5 shrink-0 tabular-nums text-content-subtle">{{ row.rank }}</span>
+            <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
+            <span class="shrink-0 tabular-nums text-content-muted">{{ row.count }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+      </section>
+      <section>
+        <h2 class="lc-section-label mb-2">{{ "kudos-most-generous"|t }}</h2>
+        {% if givers.is_empty() %}
+        <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
+        {% else %}
+        <ol class="space-y-1">
+          {% for row in givers %}
+          <li class="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
+            <span class="w-5 shrink-0 tabular-nums text-content-subtle">{{ row.rank }}</span>
+            <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
+            <span class="shrink-0 tabular-nums text-content-muted">{{ row.count }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+      </section>
+    </div>
+    <p class="mx-auto mt-4 max-w-2xl text-xs text-content-subtle">{{ "kudos-hint"|t }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

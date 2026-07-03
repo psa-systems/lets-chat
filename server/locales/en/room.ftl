@@ -466,3 +466,13 @@ room-highlights-jump = Jump to message
 room-highlights-reactions = reactions
 partials-room-highlights = Highlights
 partials-room-highlights-title = Reaction highlights
+
+## LC-526: kudos / recognition
+kudos-recognition-prefix = 🎉 Kudos to
+kudos-title = Kudos leaderboard
+kudos-window = Kudos in the past 30 days
+kudos-empty = No kudos yet. Give some with /kudos @user.
+kudos-most-appreciated = Most appreciated
+kudos-most-generous = Most generous
+kudos-hint = Give kudos in any channel with /kudos @user <reason>.
+sidebar-link-kudos = Kudos
