@@ -1,0 +1,22 @@
+{# LC-532: composer AI writing-assistant result panel. Swapped into
+   #composer-ai-panel. The suggestion renders as PLAIN TEXT (it is applied back
+   into the composer as raw markdown source, not rendered HTML). The mode chips
+   re-run on the current draft (hx-include the composer form). #}
+<div data-lc-ai-panel class="mt-2 rounded-lg border border-border bg-surface-elevated p-2 text-sm">
+  <div class="mb-1.5 flex flex-wrap gap-1">
+    {% for a in actions %}
+    <button type="button"
+            hx-post="/room/{{ room_id }}/compose-assist"
+            hx-vals='{"action":"{{ a.id }}"}'
+            hx-include="closest form"
+            hx-target="#composer-ai-panel" hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            class="rounded px-1.5 py-0.5 text-xs {% if a.active %}bg-accent-surface text-accent{% else %}text-content-muted hover:bg-surface-sunken{% endif %}">{{ a.label }}</button>
+    {% endfor %}
+  </div>
+  <div data-lc-ai-suggestion class="whitespace-pre-wrap break-words rounded border border-border bg-surface px-2 py-1.5 text-content">{{ suggestion }}</div>
+  <div class="mt-1.5 flex items-center gap-2">
+    <button type="button" data-lc-ai-apply class="btn btn-primary btn-sm">{{ "compose-assist-use"|t }}</button>
+    <button type="button" data-lc-ai-dismiss class="text-xs text-content-muted hover:underline">{{ "compose-assist-dismiss"|t }}</button>
+  </div>
+</div>
