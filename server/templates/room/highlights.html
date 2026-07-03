@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "room-highlights-title"|t }} {{ room_label }} - lets-chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+    <div class="min-w-0">
+      <h1 class="font-semibold truncate">{{ "room-highlights-title"|t }} {{ room_label }}</h1>
+      <p class="lc-small text-content-muted truncate">{{ "room-highlights-window"|t }}</p>
+    </div>
+    <a href="{{ back_path }}" class="text-sm text-accent hover:underline">{{ "room-pins-back"|t }}</a>
+  </header>
+  <div class="flex-1 overflow-y-auto">
+    {% if rows.is_empty() %}
+    <p class="p-4 text-sm text-content-muted">{{ "room-highlights-empty"|t }}</p>
+    {% else %}
+    <ul class="divide-y divide-border">
+      {% for r in rows %}
+      <li class="px-4 py-3">
+        <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
+          <span><span class="font-medium text-content-muted">{{ r.author_label }}</span> &middot; {{ r.created_at }}</span>
+          <a href="/m/{{ r.message_id }}" class="text-accent hover:underline shrink-0">{{ "room-highlights-jump"|t }}</a>
+        </div>
+        <div class="mt-1 whitespace-pre-wrap text-sm text-content">{{ r.snippet }}</div>
+        <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+          {% for e in r.emojis %}
+          <span class="inline-flex items-center gap-1 rounded-full border border-border bg-surface-sunken px-1.5 py-0.5">
+            <span>{{ e.0 }}</span><span class="tabular-nums text-content-muted">{{ e.1 }}</span>
+          </span>
+          {% endfor %}
+          <span class="ml-1 text-content-subtle tabular-nums">{{ r.total }} {{ "room-highlights-reactions"|t }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
