@@ -466,3 +466,6 @@ room-highlights-jump = Jump to message
 room-highlights-reactions = reactions
 partials-room-highlights = Highlights
 partials-room-highlights-title = Reaction highlights
+
+## LC-526: kudos / recognition
+kudos-recognition-prefix = 🎉 Kudos to
