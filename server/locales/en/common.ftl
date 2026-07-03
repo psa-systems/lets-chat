@@ -277,6 +277,8 @@ settings-pref-login-alerts = Email me when a new device signs in to my account
 settings-pref-login-alerts-help = Sent the first time a browser or IP signs in. No alert is sent for devices already on file.
 settings-pref-email-activity = Email me for each mention and direct message
 settings-pref-email-activity-help = One email per event (not batched like the digest). If the operator has email-ingress configured, replying to the email posts your response back to the chat as you. Capped at 20 emails per minute per recipient.
+settings-pref-kudos-optout = Hide me from the kudos leaderboard
+settings-pref-kudos-optout-help = You can still give and receive kudos; you just won't appear on the /kudos leaderboard.
 settings-save-preferences = Save preferences
 # LC-304: highlight words
 settings-keyword-heading = Highlight words

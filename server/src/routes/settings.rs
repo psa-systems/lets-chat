@@ -119,6 +119,9 @@ pub struct SettingsForm {
     /// substantially (single-event vs hourly batch).
     #[serde(default)]
     pub notify_email_activity_enabled: Option<String>,
+    /// LC-526 follow-up: opt out of the public kudos leaderboard.
+    #[serde(default)]
+    pub kudos_leaderboard_opt_out: Option<String>,
 }
 
 /// LC-88: the DND fields split out of a `UserRecord` for form rendering.
@@ -253,6 +256,7 @@ pub async fn get_settings(
         push_available: state.push_available(),
         email,
         email_available: state.mail_available(),
+        kudos_opt_out: db::auth::get_kudos_opt_out(&state.auth, &user.id).await?,
         sessions: &sessions,
         session_revoked: q.session_revoked.is_some(),
         storage_usage_display,
@@ -662,6 +666,12 @@ pub async fn post_settings(
     // no-op when state.mailer is None.
     let email_activity = form.notify_email_activity_enabled.is_some() && state.mail_available();
     db::auth::set_notify_email_activity_enabled(&state.auth, &user.id, email_activity).await?;
+    db::auth::set_kudos_opt_out(
+        &state.auth,
+        &user.id,
+        form.kudos_leaderboard_opt_out.is_some(),
+    )
+    .await?;
 
     if let Some(r) = hx_feedback(
         &headers,
