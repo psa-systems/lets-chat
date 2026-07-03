@@ -24,7 +24,7 @@ async fn leaderboard_ranks_and_scopes_to_enclave() {
             .unwrap();
     }
 
-    let recv = top_receivers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 10, &[]).await.unwrap();
     assert_eq!(recv.len(), 2);
     assert_eq!(recv[0].user_id, "alice");
     assert_eq!(recv[0].count, 2);
@@ -32,18 +32,18 @@ async fn leaderboard_ranks_and_scopes_to_enclave() {
     assert_eq!(recv[1].count, 1);
     assert!(recv.iter().all(|l| l.user_id != "dave"));
 
-    let give = top_givers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let give = top_givers(&pool, &[1], "-30 days", 10, &[]).await.unwrap();
     assert_eq!(give.len(), 3); // bob, carol, alice each gave once
     assert_eq!(give.iter().map(|l| l.count).sum::<i64>(), 3);
 
     // Scoping to enclave 2 yields only dave.
-    let recv2 = top_receivers(&pool, &[2], "-30 days", 10).await.unwrap();
+    let recv2 = top_receivers(&pool, &[2], "-30 days", 10, &[]).await.unwrap();
     assert_eq!(recv2.len(), 1);
     assert_eq!(recv2[0].user_id, "dave");
     assert_eq!(recv2[0].count, 5);
 
     // No enclaves -> nothing.
-    assert!(top_receivers(&pool, &[], "-30 days", 10)
+    assert!(top_receivers(&pool, &[], "-30 days", 10, &[])
         .await
         .unwrap()
         .is_empty());
@@ -64,7 +64,7 @@ async fn window_excludes_old_kudos() {
     .await
     .unwrap();
 
-    let recv = top_receivers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 10, &[]).await.unwrap();
     assert_eq!(recv.len(), 1);
     assert_eq!(recv[0].user_id, "alice");
 }
@@ -77,6 +77,6 @@ async fn respects_limit() {
             .await
             .unwrap();
     }
-    let recv = top_receivers(&pool, &[1], "-30 days", 3).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 3, &[]).await.unwrap();
     assert_eq!(recv.len(), 3);
 }
