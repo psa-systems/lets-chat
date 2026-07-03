@@ -469,3 +469,10 @@ partials-room-highlights-title = Reacciones destacadas
 
 ## LC-526: kudos / recognition
 kudos-recognition-prefix = 🎉 Kudos para
+kudos-title = Tabla de kudos
+kudos-window = Kudos en los últimos 30 días
+kudos-empty = Aún no hay kudos. Da algunos con /kudos @usuario.
+kudos-most-appreciated = Más apreciados
+kudos-most-generous = Más generosos
+kudos-hint = Da kudos en cualquier canal con /kudos @usuario <motivo>.
+sidebar-link-kudos = Kudos

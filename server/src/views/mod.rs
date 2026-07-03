@@ -21,6 +21,7 @@ pub mod highlights;
 pub mod home;
 pub mod hovercard;
 pub mod inbox;
+pub mod kudos;
 pub mod layout;
 pub mod login_alert;
 pub mod maintenance;
