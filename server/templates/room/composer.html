@@ -131,6 +131,8 @@
   <div id="lc-composer-net" class="hidden mb-1 text-xs text-warning"></div>
   <div id="lc-broadcast-count" class="mb-1 text-xs text-content-muted px-1 min-h-[1rem]"></div>
   <div id="composer-quote-bar"></div>
+  {# LC-532: AI writing-assistant result panel (empty until an assist runs). #}
+  <div id="composer-ai-panel" class="empty:hidden"></div>
   <div id="lc-upload-error" role="alert" class="mb-1 text-xs text-danger"></div>
   <!-- data-lc-skip-focus opts this slot out of the global afterSwap focus
        handler in layout.html. The combobox pattern keeps focus in the
@@ -316,6 +318,25 @@
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
         <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z"/>
+      </svg>
+    </button>
+    {# LC-532: AI writing assistant. CSS-gated on an LLM being configured
+       ([data-lc-llm] page root); posts the current draft and shows rewrite
+       suggestions in #composer-ai-panel. The default action is "rephrase";
+       the panel offers the other modes. #}
+    <button
+      type="button"
+      data-lc-tip="{{ "compose-assist-tip"|t }}" data-lc-tip-pos="top"
+      aria-label="{{ "compose-assist-tip"|t }}"
+      class="lc-composer-btn lc-composer-ai"
+      hx-post="/room/{{ room.id }}/compose-assist"
+      hx-vals='{"action":"rephrase"}'
+      hx-include="closest form"
+      hx-target="#composer-ai-panel" hx-swap="innerHTML"
+      hx-disabled-elt="this"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+        <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5zM4.5 12.5a.5.5 0 01.474.342l.53 1.59 1.59.53a.5.5 0 010 .948l-1.59.53-.53 1.59a.5.5 0 01-.948 0l-.53-1.59-1.59-.53a.5.5 0 010-.948l1.59-.53.53-1.59A.5.5 0 014.5 12.5z"/>
       </svg>
     </button>
     {# LC-491: create an RSVP event (a poll with a start time + Going/Maybe/No). #}
