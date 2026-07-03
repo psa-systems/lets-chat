@@ -430,6 +430,7 @@ async fn search_filters_by_author() {
         author_id: Some("alice".into()),
         before: None,
         after: None,
+        ..Default::default()
     };
     let res = lets_chat::db::chat::search_messages_filtered(
         &pool,
@@ -478,6 +479,7 @@ async fn search_filters_by_date_range() {
         author_id: None,
         before: Some("2022-01-01".into()),
         after: None,
+        ..Default::default()
     };
     let res = lets_chat::db::chat::search_messages_filtered(
         &pool,
@@ -499,6 +501,7 @@ async fn search_filters_by_date_range() {
         author_id: None,
         before: None,
         after: Some("2022-01-01".into()),
+        ..Default::default()
     };
     let res = lets_chat::db::chat::search_messages_filtered(
         &pool,
@@ -514,4 +517,121 @@ async fn search_filters_by_date_range() {
     .unwrap();
     assert_eq!(res.len(), 1);
     assert_eq!(res[0].message_id, new);
+}
+
+// LC-530: has:file / has:link / in:thread search refinements.
+#[tokio::test]
+async fn test_search_filters_has_file_link_thread() {
+    use lets_chat::db::chat::{
+        create_room, insert_message, sanitize_fts_query, search_messages_filtered, SearchFilters,
+    };
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let room = create_room(&pool, "search-filters", None, "public", None, Some(g))
+        .await
+        .unwrap();
+
+    // Four messages all matching the term "report".
+    let _plain = insert_message(&pool, room, "user-1", "report plain")
+        .await
+        .unwrap();
+    let file_msg = insert_message(&pool, room, "user-1", "report with attachment")
+        .await
+        .unwrap();
+    let link_msg = insert_message(&pool, room, "user-1", "report see https://example.com")
+        .await
+        .unwrap();
+    // A thread reply (parent_id set) via raw SQL; the FTS insert trigger still fires.
+    let reply = sqlx::query(
+        "INSERT INTO messages (room_id, user_id, body, parent_id) VALUES (?, 'user-1', 'report reply', ?)",
+    )
+    .bind(room)
+    .bind(_plain)
+    .execute(&pool)
+    .await
+    .unwrap()
+    .last_insert_rowid();
+    // Attach a file to file_msg.
+    sqlx::query(
+        "INSERT INTO file_uploads (uploader_id, message_id, filename, mime_type, size_bytes, storage_path) \
+         VALUES ('user-1', ?, 'a.png', 'image/png', 1, 'x')",
+    )
+    .bind(file_msg)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let fts = sanitize_fts_query("report").unwrap();
+
+    // No refinements: all four match.
+    let all = search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &SearchFilters::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(all.len(), 4);
+
+    // has:file -> only the message with an attachment.
+    let r = search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &SearchFilters {
+            has_file: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].message_id, file_msg);
+
+    // has:link -> only the message with an http(s) URL.
+    let r = search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &SearchFilters {
+            has_link: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].message_id, link_msg);
+
+    // in:thread -> only the reply (parent_id set).
+    let r = search_messages_filtered(
+        &pool,
+        &fts,
+        None,
+        Some(g),
+        false,
+        "user-1",
+        false,
+        &SearchFilters {
+            in_thread: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].message_id, reply);
 }

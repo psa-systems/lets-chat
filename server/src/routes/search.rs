@@ -105,9 +105,9 @@ pub async fn get_search(
     // LC-280: pull operator tokens (from:/before:/after:) out of the query; the
     // remainder is the FTS text. Operators refine a text query - a query that is
     // ONLY operators leaves empty text and collapses the popover, same as today.
-    let (text, from_name, before, after) = parse_operators(trimmed);
+    let parsed = parse_operators(trimmed);
 
-    let fts_query = match db::chat::sanitize_fts_query(&text) {
+    let fts_query = match db::chat::sanitize_fts_query(&parsed.text) {
         Some(q) => q,
         None => return Ok(empty_popover()),
     };
@@ -116,7 +116,7 @@ pub async fn get_search(
 
     // LC-280: resolve from:<username> to an author id; an unknown user can match
     // nothing, so collapse rather than ignore the filter.
-    let author_id = if let Some(name) = &from_name {
+    let author_id = if let Some(name) = &parsed.from_name {
         match db::auth::find_user_by_username(&state.auth, name).await? {
             Some(rec) => Some(rec.id),
             None => return Ok(empty_popover()),
@@ -126,8 +126,11 @@ pub async fn get_search(
     };
     let filters = db::chat::SearchFilters {
         author_id,
-        before,
-        after,
+        before: parsed.before,
+        after: parsed.after,
+        has_file: parsed.has_file,
+        has_link: parsed.has_link,
+        in_thread: parsed.in_thread,
     };
 
     // LC-268: room-scoped search (the room-header box) takes precedence over an
@@ -224,36 +227,57 @@ pub async fn get_search(
     html(&fragment)
 }
 
-/// LC-280: split a raw query into (free_text, from, before, after). Recognized
-/// `key:value` tokens (`from:`, `before:`, `after:`) are pulled out; everything
-/// else stays as free text. `before`/`after` values must be `YYYY-MM-DD` or the
-/// token is left in the text (so a stray `before:foo` does not silently filter).
-/// Last occurrence of a given operator wins.
-fn parse_operators(raw: &str) -> (String, Option<String>, Option<String>, Option<String>) {
+/// LC-280 + LC-530: a raw query split into free text plus operator refinements.
+#[derive(Default)]
+struct ParsedQuery {
+    text: String,
+    from_name: Option<String>,
+    before: Option<String>,
+    after: Option<String>,
+    has_file: bool,
+    has_link: bool,
+    in_thread: bool,
+}
+
+/// Split a raw query into free text plus operator refinements. Recognized
+/// `key:value` tokens (`from:`, `before:`, `after:`, `has:file`, `has:link`,
+/// `in:thread`) are pulled out; everything else stays as free text. Date values
+/// must be `YYYY-MM-DD`, and `has:`/`in:` values must be known, or the token is
+/// left in the text (so a stray `before:foo` / `has:whatever` does not silently
+/// filter). Last occurrence of a given operator wins.
+fn parse_operators(raw: &str) -> ParsedQuery {
+    let mut out = ParsedQuery::default();
     let mut text: Vec<&str> = Vec::new();
-    let mut from_name = None;
-    let mut before = None;
-    let mut after = None;
     for tok in raw.split_whitespace() {
         if let Some(v) = tok.strip_prefix("from:") {
             if !v.is_empty() {
-                from_name = Some(v.to_string());
+                out.from_name = Some(v.to_string());
                 continue;
             }
         } else if let Some(v) = tok.strip_prefix("before:") {
             if is_ymd(v) {
-                before = Some(v.to_string());
+                out.before = Some(v.to_string());
                 continue;
             }
         } else if let Some(v) = tok.strip_prefix("after:") {
             if is_ymd(v) {
-                after = Some(v.to_string());
+                out.after = Some(v.to_string());
                 continue;
             }
+        } else if tok == "has:file" {
+            out.has_file = true;
+            continue;
+        } else if tok == "has:link" {
+            out.has_link = true;
+            continue;
+        } else if tok == "in:thread" {
+            out.in_thread = true;
+            continue;
         }
         text.push(tok);
     }
-    (text.join(" "), from_name, before, after)
+    out.text = text.join(" ");
+    out
 }
 
 /// True iff `s` parses as a `YYYY-MM-DD` calendar date.
@@ -267,19 +291,36 @@ mod tests {
 
     #[test]
     fn parses_operators_and_leaves_text() {
-        let (text, from, before, after) =
-            parse_operators("from:alice before:2024-01-15 hello world");
-        assert_eq!(text, "hello world");
-        assert_eq!(from.as_deref(), Some("alice"));
-        assert_eq!(before.as_deref(), Some("2024-01-15"));
-        assert_eq!(after, None);
+        let p = parse_operators("from:alice before:2024-01-15 hello world");
+        assert_eq!(p.text, "hello world");
+        assert_eq!(p.from_name.as_deref(), Some("alice"));
+        assert_eq!(p.before.as_deref(), Some("2024-01-15"));
+        assert_eq!(p.after, None);
     }
 
     #[test]
     fn invalid_date_stays_as_text() {
-        let (text, _, before, _) = parse_operators("before:nope cat");
-        assert_eq!(text, "before:nope cat");
-        assert_eq!(before, None);
+        let p = parse_operators("before:nope cat");
+        assert_eq!(p.text, "before:nope cat");
+        assert_eq!(p.before, None);
+    }
+
+    #[test]
+    fn parses_has_and_in_operators() {
+        let p = parse_operators("has:file has:link in:thread report");
+        assert_eq!(p.text, "report");
+        assert!(p.has_file);
+        assert!(p.has_link);
+        assert!(p.in_thread);
+    }
+
+    #[test]
+    fn unknown_has_in_value_stays_as_text() {
+        let p = parse_operators("has:whatever in:box cat");
+        assert_eq!(p.text, "has:whatever in:box cat");
+        assert!(!p.has_file);
+        assert!(!p.has_link);
+        assert!(!p.in_thread);
     }
 
     #[test]
