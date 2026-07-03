@@ -269,6 +269,7 @@ pub async fn get_room(
     // LC-66: which message ids are polls, so the loop only builds poll views
     // for actual polls (one query instead of a per-message probe).
     let poll_ids = db::polls::poll_message_ids(&state.chat, &message_ids).await?;
+    let followup_ids = db::followups::followup_message_ids(&state.chat, &message_ids).await?;
 
     // Bulk-load mention rows so each MessageView can render @username chips
     // without an N+1 query.
@@ -409,6 +410,14 @@ pub async fn get_room(
             is_system: m.is_system,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            },
+            follow_up: if followup_ids.contains(&m.id) {
+                crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
                     .ok()
                     .flatten()
@@ -2276,6 +2285,15 @@ pub async fn patch_message(
             .await
             .ok()
             .flatten(),
+        follow_up: crate::views::room::build_follow_up_view(
+            &state.chat,
+            &state.auth,
+            m.id,
+            &user.id,
+        )
+        .await
+        .ok()
+        .flatten(),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };
@@ -2353,6 +2371,7 @@ pub async fn get_thread_panel(
     // LC-66: polls among the parent + replies, so the loop builds poll views
     // only for actual polls.
     let poll_ids = db::polls::poll_message_ids(&state.chat, &all_ids).await?;
+    let followup_ids = db::followups::followup_message_ids(&state.chat, &all_ids).await?;
 
     let parent_quote_preview = match parent.quote_id {
         Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
@@ -2397,6 +2416,14 @@ pub async fn get_thread_panel(
         is_system: parent.is_system,
         poll: if poll_ids.contains(&parent.id) {
             crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        },
+        follow_up: if followup_ids.contains(&parent.id) {
+            crate::views::room::build_follow_up_view(&state.chat, &state.auth, parent.id, &user.id)
                 .await
                 .ok()
                 .flatten()
@@ -2468,6 +2495,14 @@ pub async fn get_thread_panel(
             is_system: r.is_system,
             poll: if poll_ids.contains(&r_id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            },
+            follow_up: if followup_ids.contains(&r_id) {
+                crate::views::room::build_follow_up_view(&state.chat, &state.auth, r_id, &user.id)
                     .await
                     .ok()
                     .flatten()

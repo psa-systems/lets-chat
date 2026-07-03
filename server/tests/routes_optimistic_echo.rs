@@ -381,6 +381,7 @@ fn user_view(body: &str) -> MessageView {
         suppress_quote_preview: false,
         is_system: false,
         poll: None,
+        follow_up: None,
         author_is_bot: false,
         actor: MessageActor::User,
         channels: vec![],
