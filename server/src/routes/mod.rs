@@ -42,6 +42,7 @@ mod bunyip_sso;
 mod call;
 mod canned;
 mod channel_complete;
+mod compose_assist;
 mod custom_emojis;
 mod dm;
 mod dm_mute;
@@ -1314,6 +1315,10 @@ pub fn build_router(state: AppState) -> Router {
         // LC-488: GIF picker search + post.
         .route("/api/gifs", get(gif::search))
         .route("/room/{room_id}/gif", post(gif::post_gif))
+        .route(
+            "/room/{room_id}/compose-assist",
+            post(compose_assist::post_assist),
+        )
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/follow-up/{item_id}/toggle", post(followups::post_toggle))
         .route("/follow-up/{item_id}/claim", post(followups::post_claim))
