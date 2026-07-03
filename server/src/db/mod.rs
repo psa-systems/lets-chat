@@ -23,6 +23,7 @@ pub mod highlights;
 pub mod imap_config;
 pub mod imap_poll_status;
 pub mod inbox;
+pub mod kudos;
 pub mod mentions;
 pub mod moderation;
 pub mod notification_keywords;

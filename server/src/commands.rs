@@ -49,6 +49,13 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/remind <15m|1h|3h|1d> <text>",
         admin_only: false,
     },
+    // LC-526: recognition. Posts a kudos card and tallies the leaderboard.
+    BuiltinCommand {
+        name: "kudos",
+        description: "Give someone kudos (see the leaderboard at /kudos).",
+        usage: "/kudos @user <reason>",
+        admin_only: false,
+    },
     // LC-492: in-channel AI assistant. Functions only when the operator has
     // configured an LLM and the room has the assistant enabled.
     BuiltinCommand {
