@@ -1172,11 +1172,10 @@ pub async fn set_kudos_opt_out(
 /// for excluding them from the aggregate (the leaderboard lives in a different
 /// db, so the exclusion is applied as a NOT IN list rather than a join).
 pub async fn kudos_opted_out_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
-    let rows = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM users WHERE kudos_leaderboard_opt_out = 1",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows =
+        sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE kudos_leaderboard_opt_out = 1")
+            .fetch_all(pool)
+            .await?;
     Ok(rows)
 }
 
