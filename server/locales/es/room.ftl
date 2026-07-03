@@ -476,3 +476,13 @@ kudos-most-appreciated = Más apreciados
 kudos-most-generous = Más generosos
 kudos-hint = Da kudos en cualquier canal con /kudos @usuario <motivo>.
 sidebar-link-kudos = Kudos
+
+## LC-532: composer AI writing assistant
+compose-assist-tip = Asistente de redacción con IA
+compose-assist-use = Usar esto
+compose-assist-dismiss = Descartar
+compose-assist-action-rephrase = Reformular
+compose-assist-action-grammar = Corregir gramática
+compose-assist-action-concise = Conciso
+compose-assist-action-friendly = Amigable
+compose-assist-action-formal = Formal

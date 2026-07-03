@@ -1138,6 +1138,10 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    also covers live-swapped message fragments, since the rule is ancestor-based). */
 .lc-llm-only { display: none; }
 [data-lc-llm] .lc-menu-item.lc-llm-only { display: flex; }
+/* LC-532: composer AI writing-assistant button, revealed only when an LLM is
+   configured (same [data-lc-llm] page-root gate as the translate item). */
+.lc-composer-ai { display: none; }
+[data-lc-llm] .lc-composer-ai { display: inline-flex; }
 /* LC-528: hide the "Read aloud" item when the browser has no SpeechSynthesis.
    live.js sets .lc-no-tts on <html> once at load; the ancestor rule also covers
    live-swapped message fragments. */
