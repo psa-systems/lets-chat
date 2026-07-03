@@ -1626,6 +1626,12 @@ pub struct SearchFilters {
     pub before: Option<String>,
     /// Only messages on/after this date (`created_at >= after`).
     pub after: Option<String>,
+    /// LC-530: only messages with at least one file attachment (`has:file`).
+    pub has_file: bool,
+    /// LC-530: only messages whose body contains an http(s) URL (`has:link`).
+    pub has_link: bool,
+    /// LC-530: only messages that are a thread reply (`in:thread`).
+    pub in_thread: bool,
 }
 
 /// Plain full-text search (no operator refinements). Thin shim over
@@ -1686,6 +1692,23 @@ pub async fn search_messages_filtered(
     } else {
         ""
     };
+    // LC-530: bind-free boolean refinements (has:file / has:link / in:thread).
+    // No `?`, so they do not affect the positional bind order below.
+    let has_file_clause = if filters.has_file {
+        "AND EXISTS (SELECT 1 FROM file_uploads fu WHERE fu.message_id = m.id)"
+    } else {
+        ""
+    };
+    let has_link_clause = if filters.has_link {
+        "AND (m.body LIKE '%http://%' OR m.body LIKE '%https://%')"
+    } else {
+        ""
+    };
+    let in_thread_clause = if filters.in_thread {
+        "AND m.parent_id IS NOT NULL"
+    } else {
+        ""
+    };
 
     let scope_clause = if enclave_id_filter.is_some() {
         // Inside an enclave: rooms in that enclave only, and either site admin
@@ -1741,6 +1764,9 @@ pub async fn search_messages_filtered(
            {author_clause} \
            {before_clause} \
            {after_clause} \
+           {has_file_clause} \
+           {has_link_clause} \
+           {in_thread_clause} \
          ORDER BY messages_fts.rank \
          LIMIT 50"
     );

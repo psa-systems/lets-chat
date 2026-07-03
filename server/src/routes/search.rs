@@ -128,6 +128,7 @@ pub async fn get_search(
         author_id,
         before,
         after,
+        ..Default::default()
     };
 
     // LC-268: room-scoped search (the room-header box) takes precedence over an
