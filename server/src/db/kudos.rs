@@ -40,14 +40,16 @@ pub async fn record(
 }
 
 /// Top kudos receivers within `enclave_ids` since `window` (a SQLite datetime
-/// modifier like `"-30 days"`). Empty `enclave_ids` yields no rows.
+/// modifier like `"-30 days"`). Empty `enclave_ids` yields no rows. `exclude`
+/// is the set of user ids opted out of the public board (LC-526 follow-up).
 pub async fn top_receivers(
     pool: &SqlitePool,
     enclave_ids: &[i64],
     window: &str,
     limit: i64,
+    exclude: &[String],
 ) -> sqlx::Result<Vec<Leader>> {
-    leaderboard(pool, "receiver_id", enclave_ids, window, limit).await
+    leaderboard(pool, "receiver_id", enclave_ids, window, limit, exclude).await
 }
 
 /// Top kudos givers, mirror of [`top_receivers`].
@@ -56,8 +58,9 @@ pub async fn top_givers(
     enclave_ids: &[i64],
     window: &str,
     limit: i64,
+    exclude: &[String],
 ) -> sqlx::Result<Vec<Leader>> {
-    leaderboard(pool, "giver_id", enclave_ids, window, limit).await
+    leaderboard(pool, "giver_id", enclave_ids, window, limit, exclude).await
 }
 
 /// Shared aggregate over a giver/receiver column. `column` is a fixed internal
@@ -68,21 +71,34 @@ async fn leaderboard(
     enclave_ids: &[i64],
     window: &str,
     limit: i64,
+    exclude: &[String],
 ) -> sqlx::Result<Vec<Leader>> {
     if enclave_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders = std::iter::repeat_n("?", enclave_ids.len())
+    let enclave_ph = std::iter::repeat_n("?", enclave_ids.len())
         .collect::<Vec<_>>()
         .join(",");
+    let exclude_clause = if exclude.is_empty() {
+        String::new()
+    } else {
+        let ph = std::iter::repeat_n("?", exclude.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("AND {column} NOT IN ({ph}) ")
+    };
     let sql = format!(
         "SELECT {column} AS uid, COUNT(*) AS c FROM kudos \
-         WHERE enclave_id IN ({placeholders}) AND created_at >= datetime('now', ?) \
+         WHERE enclave_id IN ({enclave_ph}) {exclude_clause}\
+         AND created_at >= datetime('now', ?) \
          GROUP BY {column} ORDER BY c DESC, uid LIMIT ?",
     );
     let mut q = sqlx::query(&sql);
     for id in enclave_ids {
         q = q.bind(id);
+    }
+    for uid in exclude {
+        q = q.bind(uid);
     }
     q = q.bind(window).bind(limit);
     let rows = q.fetch_all(pool).await?;
