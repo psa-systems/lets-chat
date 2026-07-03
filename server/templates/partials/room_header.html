@@ -109,6 +109,15 @@
       </svg>
       <span>{{ "partials-room-info"|t }}</span>
     </a>
+    {# LC-529: reaction highlights recap for this room. #}
+    <a href="/room/{{ room.id }}/highlights"
+       class="lc-header-action"
+       data-lc-tip="{{ "partials-room-highlights-title"|t }}" data-lc-tip-pos="bottom">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clip-rule="evenodd"/>
+      </svg>
+      <span>{{ "partials-room-highlights"|t }}</span>
+    </a>
     {% if can_manage_overrides %}
     <a href="/room/{{ room.id }}/manage"
        class="lc-header-action"

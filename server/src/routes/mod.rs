@@ -54,6 +54,7 @@ mod feeds;
 mod followups;
 mod forward;
 mod gif;
+mod highlights;
 mod home;
 mod inbox;
 mod mentions;
@@ -1270,6 +1271,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/dm/{peer_id}/mute", post(dm_mute::post_dm_mute))
         .route("/dm/{peer_id}/pins", get(pinned::get_dm_pins))
         .route("/room/{room_id}/pins", get(pinned::get_room_pins))
+        .route(
+            "/room/{room_id}/highlights",
+            get(highlights::get_room_highlights),
+        )
         .route(
             "/messages/{message_id}/pin",
             post(pinned::post_pin).delete(pinned::delete_pin),
