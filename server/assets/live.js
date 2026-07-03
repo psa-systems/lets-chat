@@ -189,4 +189,30 @@
     // Belt-and-suspenders for a real navigation away from the app.
     window.addEventListener('pagehide', function () { synth.cancel(); });
   }
+
+  // LC-532: composer AI writing-assistant apply / dismiss. The result panel
+  // (server-rendered into #composer-ai-panel) carries the suggestion as plain
+  // text; "Use this" writes it into the composer textarea and fires an input
+  // event so the autosize / highlight / draft-autosave hooks pick it up.
+  document.body.addEventListener('click', function (evt) {
+    var apply = evt.target.closest && evt.target.closest('[data-lc-ai-apply]');
+    if (apply) {
+      var panel = apply.closest('[data-lc-ai-panel]');
+      var sug = panel && panel.querySelector('[data-lc-ai-suggestion]');
+      var form = apply.closest('form');
+      var ta = form && form.querySelector('textarea[name="body"]');
+      if (sug && ta) {
+        ta.value = sug.textContent;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.focus();
+      }
+      if (panel) panel.innerHTML = '';
+      return;
+    }
+    var dismiss = evt.target.closest && evt.target.closest('[data-lc-ai-dismiss]');
+    if (dismiss) {
+      var p = dismiss.closest('[data-lc-ai-panel]');
+      if (p) p.innerHTML = '';
+    }
+  });
 })();
