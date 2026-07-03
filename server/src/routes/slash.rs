@@ -236,6 +236,9 @@ pub(crate) async fn try_dispatch(
             "remind" => {
                 handle_remind(state, room, user, rest).await?;
             }
+            "kudos" => {
+                handle_kudos(state, room, user, rest).await?;
+            }
             "ask" => {
                 // LC-492: in-channel AI assistant. Posts the answer as the
                 // assistant bot; errors (not configured / disabled / rate
@@ -323,6 +326,63 @@ async fn handle_remind(
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     db::reminders::insert(&state.chat, &user.id, new_id, &remind_at).await?;
+    Ok(())
+}
+
+/// Max chars kept from a kudos reason (bounds the rendered message body, in
+/// the spirit of LC-153's markdown length caps).
+const KUDOS_REASON_MAX: usize = 500;
+
+/// `/kudos @user <reason>`: record a kudos and post a recognition message that
+/// mentions the receiver (so the existing mention pipeline notifies them). The
+/// reason is optional. Self-kudos and unknown users are rejected.
+async fn handle_kudos(
+    state: &AppState,
+    room: &Room,
+    user: &User,
+    rest: &str,
+) -> Result<(), AppError> {
+    let rest = rest.trim();
+    let (target, reason) = match rest.split_once(char::is_whitespace) {
+        Some((t, r)) => (t, r.trim()),
+        None => (rest, ""),
+    };
+    let uname = target.trim().strip_prefix('@').unwrap_or(target.trim());
+    if uname.is_empty() {
+        return Err(AppError::BadRequest("usage: /kudos @user <reason>".into()));
+    }
+    let receiver = db::auth::find_user_by_username(&state.auth, uname)
+        .await?
+        .ok_or_else(|| AppError::BadRequest(format!("no such user @{uname}")))?;
+    if receiver.id == user.id {
+        return Err(AppError::BadRequest("you can't give yourself kudos".into()));
+    }
+
+    let reason_capped: Option<String> = if reason.is_empty() {
+        None
+    } else {
+        Some(reason.chars().take(KUDOS_REASON_MAX).collect())
+    };
+    let prefix = crate::i18n::translate_current("kudos-recognition-prefix");
+    let body = match &reason_capped {
+        Some(r) => format!("{prefix} @{}: {r}", receiver.username),
+        None => format!("{prefix} @{}", receiver.username),
+    };
+
+    let new_id = db::chat::insert_message(&state.chat, room.id, &user.id, &body).await?;
+    super::room::finalize_message_send(state, room, user, new_id, &body, None).await?;
+
+    let enclave_id = super::enclave_for_room(state, room.id).await?;
+    db::kudos::record(
+        &state.chat,
+        &user.id,
+        &receiver.id,
+        room.id,
+        enclave_id,
+        reason_capped.as_deref(),
+        Some(new_id),
+    )
+    .await?;
     Ok(())
 }
 
