@@ -399,6 +399,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::Mentioned { .. }
         | ChatEvent::Reminder { .. }
         | ChatEvent::PollUpdated { .. }
+        | ChatEvent::FollowUpUpdated { .. }
         | ChatEvent::MentionCleared { .. }
         | ChatEvent::RoomNotifyPrefsChanged { .. }
         | ChatEvent::DmMuteChanged { .. }

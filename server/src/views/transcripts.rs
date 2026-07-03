@@ -95,6 +95,9 @@ pub struct TranscriptPage<'a> {
     pub llm_teaser: bool,
     /// LC-396: the rendered (markdown -> HTML) summary, if one exists.
     pub summary_html: Option<String>,
+    /// LC-527: true when the summary has parseable "## Action items", so the
+    /// "Create follow-up tasks" button is offered.
+    pub has_action_items: bool,
 }
 
 /// LC-396: the htmx response after generating a summary - the rendered summary
@@ -104,4 +107,12 @@ pub struct TranscriptPage<'a> {
 pub struct TranscriptSummaryFragment {
     pub transcript_id: i64,
     pub summary_html: String,
+    /// LC-527: see `TranscriptPage::has_action_items`.
+    pub has_action_items: bool,
 }
+
+/// LC-527: confirmation swapped into `#lc-transcript-followups` after the
+/// follow-up tasks are posted to the room.
+#[derive(Template)]
+#[template(path = "transcripts/followups_created.html")]
+pub struct FollowUpsCreatedFragment {}

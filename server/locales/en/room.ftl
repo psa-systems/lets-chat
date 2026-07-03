@@ -448,3 +448,12 @@ room-automations-do-label = Then post
 room-automations-do-ph = The message to post
 room-automations-vars-help = Placeholders, each wrapped in curly braces: user, text, emoji.
 room-automations-create = Create automation
+
+## LC-527: follow-up tasks (from a call transcript's action items)
+followup-card-title = Follow-up tasks
+followup-create-button = Create follow-up tasks
+followup-created = Follow-up tasks posted to the room.
+followup-claim = Claim
+followup-assigned-you = You
+followup-toggle-aria = Toggle done
+followup-done-suffix = done

@@ -621,6 +621,13 @@ pub async fn show(
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .map(|md| crate::views::markdown::render(md, &[], &[]));
+    // LC-527: offer the "Create follow-up tasks" button only when the summary
+    // has parseable action items.
+    let has_action_items = session
+        .summary
+        .as_deref()
+        .map(|md| !super::followups::parse_action_items(md).is_empty())
+        .unwrap_or(false);
 
     let (
         sidebar_categories,
@@ -652,6 +659,7 @@ pub async fn show(
         llm_available: state.llm_available(),
         llm_teaser: !state.llm_available() && user.role == "admin",
         summary_html,
+        has_action_items,
     })
 }
 
@@ -711,10 +719,47 @@ pub async fn summary(
     };
     db::transcripts::set_summary(&state.chat, transcript_id, &md).await?;
     let summary_html = crate::views::markdown::render(&md, &[], &[]);
+    let has_action_items = !super::followups::parse_action_items(&md).is_empty();
     html(&crate::views::transcripts::TranscriptSummaryFragment {
         transcript_id,
         summary_html,
+        has_action_items,
     })
+}
+
+/// POST /transcripts/{id}/follow-ups
+/// LC-527: turn the transcript summary's "## Action items" into a trackable
+/// checklist posted to the call's room. Gated like the summary; 400 when the
+/// summary has no action items yet. Returns a small confirmation fragment.
+pub async fn create_followups(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+
+    let items = super::followups::parse_action_items(session.summary.as_deref().unwrap_or(""));
+    if items.is_empty() {
+        return Err(AppError::BadRequest(
+            "this transcript has no action items to turn into tasks".into(),
+        ));
+    }
+    let title = crate::i18n::translate_current("followup-card-title");
+    let message_id = db::followups::create(
+        &state.chat,
+        room.id,
+        &user.id,
+        &title,
+        Some(transcript_id),
+        &items,
+    )
+    .await?;
+    super::room::finalize_message_send(&state, &room, &user, message_id, &title, None).await?;
+    html(&crate::views::transcripts::FollowUpsCreatedFragment {})
 }
 
 #[derive(Deserialize)]

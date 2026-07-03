@@ -94,6 +94,9 @@ pub struct MessageView {
     /// interactive options block beneath the body (the question lives in
     /// the body). `None` for ordinary messages.
     pub poll: Option<PollView>,
+    /// LC-527: `Some(...)` when this message anchors a follow-up task list.
+    /// Renders an interactive checklist beneath the body. `None` otherwise.
+    pub follow_up: Option<FollowUpView>,
     /// LC-73: true when the author is a bot. Renders a "bot" badge next to
     /// the username.
     pub author_is_bot: bool,
@@ -203,6 +206,69 @@ pub async fn build_poll_view(
         options,
         event_at: poll.event_at,
         event_location: poll.event_location,
+    }))
+}
+
+/// LC-527: a follow-up task list rendered beneath its anchor message. Built by
+/// [`build_follow_up_view`]; the template renders each item as a checkbox row
+/// with a self-claim control. `done_count`/`total` drive the progress caption.
+pub struct FollowUpView {
+    pub message_id: i64,
+    pub items: Vec<FollowUpItemView>,
+    pub done_count: usize,
+    pub total: usize,
+}
+
+pub struct FollowUpItemView {
+    pub id: i64,
+    pub text: String,
+    pub done: bool,
+    /// Display label of the current assignee, or `None` when unclaimed.
+    pub assignee_label: Option<String>,
+    /// True when the viewer is the assignee (drives the claim/release toggle).
+    pub assigned_to_me: bool,
+}
+
+/// Assemble a [`FollowUpView`] for `message_id` as seen by `viewer_id`, or
+/// `None` when the message is not a follow-up list. Resolves assignee display
+/// names from the auth pool.
+pub async fn build_follow_up_view(
+    chat_pool: &sqlx::SqlitePool,
+    auth_pool: &sqlx::SqlitePool,
+    message_id: i64,
+    viewer_id: &str,
+) -> Result<Option<FollowUpView>, sqlx::Error> {
+    if db::followups::get(chat_pool, message_id).await?.is_none() {
+        return Ok(None);
+    }
+    let raw = db::followups::items(chat_pool, message_id).await?;
+    let done_count = raw.iter().filter(|i| i.done).count();
+    let total = raw.len();
+    let mut items = Vec::with_capacity(total);
+    for it in raw {
+        let assigned_to_me = it.assignee_id.as_deref() == Some(viewer_id);
+        let assignee_label = match it.assignee_id.as_deref() {
+            None => None,
+            Some(uid) => Some(
+                db::auth::find_user_by_id(auth_pool, uid)
+                    .await?
+                    .map(|u| u.display_name.unwrap_or(u.username))
+                    .unwrap_or_else(|| "(unknown)".to_string()),
+            ),
+        };
+        items.push(FollowUpItemView {
+            id: it.id,
+            text: it.text,
+            done: it.done,
+            assignee_label,
+            assigned_to_me,
+        });
+    }
+    Ok(Some(FollowUpView {
+        message_id,
+        items,
+        done_count,
+        total,
     }))
 }
 
@@ -1250,6 +1316,23 @@ pub struct PollUpdateFragment<'a> {
 #[template(path = "partials/poll_block.html")]
 pub struct PollBlockFragment<'a> {
     pub poll: &'a PollView,
+}
+
+/// LC-527: OOB update of a follow-up block, pushed to the room over the WS
+/// after an item is toggled or (un)claimed.
+#[derive(Template)]
+#[template(path = "ws/followup_update.html")]
+pub struct FollowUpUpdateFragment<'a> {
+    pub follow_up: &'a FollowUpView,
+}
+
+/// LC-527: the follow-up block on its own (no OOB wrapper), returned to the
+/// acting user as the direct response to a toggle / claim (hx-swap=innerHTML
+/// into `#followup-{id}`).
+#[derive(Template)]
+#[template(path = "partials/followup_block.html")]
+pub struct FollowUpBlockFragment<'a> {
+    pub follow_up: &'a FollowUpView,
 }
 
 /// Right-side thread drawer. Replaces `#thread-panel` outerHTML when opened.
