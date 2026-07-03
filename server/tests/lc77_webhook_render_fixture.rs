@@ -61,6 +61,7 @@ fn synthetic_view(actor: MessageActor, username: &str, body: &str) -> MessageVie
         suppress_quote_preview: false,
         is_system: false,
         poll: None,
+        follow_up: None,
         author_is_bot: false,
         actor,
         channels: vec![],

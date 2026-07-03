@@ -1,0 +1,41 @@
+{# LC-527: follow-up task checklist. Expects a `follow_up`
+   (views::room::FollowUpView) in scope. Used inside the message bubble
+   (wrapped in #followup-{id}) and by the OOB update fragment. The header lives
+   in the message body, rendered above this block (like a poll question). #}
+<div class="mt-2 space-y-1 max-w-md">
+  {% for item in follow_up.items %}
+  <div class="flex items-start gap-2 rounded border border-border px-3 py-2 text-sm">
+    {# Done toggle. Any room member can check / uncheck (collaborative). #}
+    <button type="button"
+            hx-post="/follow-up/{{ item.id }}/toggle"
+            hx-target="#followup-{{ follow_up.message_id }}"
+            hx-swap="innerHTML"
+            aria-pressed="{% if item.done %}true{% else %}false{% endif %}"
+            aria-label="{{ "followup-toggle-aria"|t }}"
+            class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border {% if item.done %}border-accent bg-accent-surface text-accent{% else %}border-border{% endif %}">
+      {% if item.done %}<svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>{% endif %}
+    </button>
+    <div class="min-w-0 flex-1">
+      <span class="{% if item.done %}line-through text-content-muted{% endif %}">{{ item.text }}</span>
+      {# Self-claim toggle. Self-claim only: clicking assigns the item to you (or
+         releases it if you already hold it). #}
+      <div class="mt-0.5">
+        <button type="button"
+                hx-post="/follow-up/{{ item.id }}/claim"
+                hx-target="#followup-{{ follow_up.message_id }}"
+                hx-swap="innerHTML"
+                class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs {% if item.assigned_to_me %}bg-accent-surface text-accent{% else %}text-content-subtle hover:text-content-muted hover:underline{% endif %}">
+          {% if item.assigned_to_me %}
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ "followup-assigned-you"|t }}
+          {% else if let Some(label) = item.assignee_label.as_ref() %}
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ label }}
+          {% else %}
+          {{ "followup-claim"|t }}
+          {% endif %}
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <div class="text-xs text-content-subtle">{{ follow_up.done_count }}/{{ follow_up.total }} {{ "followup-done-suffix"|t }}</div>
+</div>

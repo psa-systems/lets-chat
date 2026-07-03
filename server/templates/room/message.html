@@ -300,6 +300,12 @@
     {% include "partials/poll_block.html" %}
   </div>
   {% endif %}
+  {# LC-527: follow-up task checklist, id-keyed so live toggle/claim OOB swaps land. #}
+  {% if let Some(follow_up) = message.follow_up.as_ref() %}
+  <div id="followup-{{ follow_up.message_id }}">
+    {% include "partials/followup_block.html" %}
+  </div>
+  {% endif %}
   <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}

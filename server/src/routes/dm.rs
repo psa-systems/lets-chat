@@ -180,6 +180,7 @@ pub async fn get_dm(
     // LC-66: polls among these messages, so the loop skips build_poll_view
     // for ordinary messages.
     let poll_ids = db::polls::poll_message_ids(&state.chat, &message_ids).await?;
+    let followup_ids = db::followups::followup_message_ids(&state.chat, &message_ids).await?;
     // Bulk-load the set of currently-pinned message ids so the bubble's
     // hover menu shows Pin vs Unpin without an N+1 lookup.
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
@@ -290,6 +291,14 @@ pub async fn get_dm(
             is_system: m.is_system,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            },
+            follow_up: if followup_ids.contains(&m.id) {
+                crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
                     .ok()
                     .flatten()

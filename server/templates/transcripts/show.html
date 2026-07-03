@@ -28,6 +28,16 @@
                 hx-target="#lc-transcript-summary" hx-swap="innerHTML"
                 hx-disabled-elt="this"
                 class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-regenerate"|t }}</button>
+        {# LC-527: turn the action items into a trackable checklist posted to the room. #}
+        <div id="lc-transcript-followups">
+          {% if has_action_items %}
+          <button type="button"
+                  hx-post="/transcripts/{{ transcript_id }}/follow-ups"
+                  hx-target="#lc-transcript-followups" hx-swap="innerHTML"
+                  hx-disabled-elt="this"
+                  class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "followup-create-button"|t }}</button>
+          {% endif %}
+        </div>
         {% else %}
         <button type="button"
                 hx-post="/transcripts/{{ transcript_id }}/summary"

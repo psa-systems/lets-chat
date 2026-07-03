@@ -51,6 +51,7 @@ mod emoji_complete;
 mod enclave;
 mod export;
 mod feeds;
+mod followups;
 mod forward;
 mod gif;
 mod home;
@@ -569,6 +570,15 @@ pub(crate) async fn load_message_view_for_viewer(
             .await
             .ok()
             .flatten(),
+        follow_up: crate::views::room::build_follow_up_view(
+            &state.chat,
+            &state.auth,
+            m.id,
+            &viewer.id,
+        )
+        .await
+        .ok()
+        .flatten(),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     })
@@ -1299,6 +1309,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/gifs", get(gif::search))
         .route("/room/{room_id}/gif", post(gif::post_gif))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
+        .route("/follow-up/{item_id}/toggle", post(followups::post_toggle))
+        .route("/follow-up/{item_id}/claim", post(followups::post_claim))
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
@@ -1613,6 +1625,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/transcripts/{transcript_id}/summary",
             post(transcripts::summary),
+        )
+        .route(
+            "/transcripts/{transcript_id}/follow-ups",
+            post(transcripts::create_followups),
         )
         // LC-441: DELETE on a row removes that one transcript.
         .route(
