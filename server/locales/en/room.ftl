@@ -457,3 +457,12 @@ followup-claim = Claim
 followup-assigned-you = You
 followup-toggle-aria = Toggle done
 followup-done-suffix = done
+
+## LC-529: reaction highlights recap
+room-highlights-title = Highlights
+room-highlights-window = Most-reacted in the past 7 days
+room-highlights-empty = No reactions in the past 7 days yet.
+room-highlights-jump = Jump to message
+room-highlights-reactions = reactions
+partials-room-highlights = Highlights
+partials-room-highlights-title = Reaction highlights

@@ -19,6 +19,7 @@ pub mod email_ingress_drops;
 pub mod enclave;
 pub mod fcm_subscriptions;
 pub mod followups;
+pub mod highlights;
 pub mod imap_config;
 pub mod imap_poll_status;
 pub mod inbox;

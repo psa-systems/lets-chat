@@ -457,3 +457,12 @@ followup-claim = Reclamar
 followup-assigned-you = Tú
 followup-toggle-aria = Marcar como hecha
 followup-done-suffix = hechas
+
+## LC-529: reaction highlights recap
+room-highlights-title = Destacados
+room-highlights-window = Lo más reaccionado en los últimos 7 días
+room-highlights-empty = Aún no hay reacciones en los últimos 7 días.
+room-highlights-jump = Ir al mensaje
+room-highlights-reactions = reacciones
+partials-room-highlights = Destacados
+partials-room-highlights-title = Reacciones destacadas
