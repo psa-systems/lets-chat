@@ -290,6 +290,12 @@
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-activity"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-activity-help"|t }}</span>{% endif %}</span>
             </label>
+            {# LC-526 follow-up: opt out of the public kudos leaderboard. #}
+            <label class="lc-toggle">
+              <input type="checkbox" name="kudos_leaderboard_opt_out" value="1" {% if kudos_opt_out %}checked{% endif %}>
+              <span class="lc-toggle-track" aria-hidden="true"></span>
+              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-kudos-optout"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-kudos-optout-help"|t }}</span></span>
+            </label>
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-save-preferences"|t }}</span></button>
               <span id="st-prefs" class="lc-set-status" role="status" aria-live="polite"></span>
