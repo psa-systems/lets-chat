@@ -272,6 +272,8 @@ settings-pref-login-alerts = Enviarme un correo cuando un nuevo dispositivo inic
 settings-pref-login-alerts-help = Se envía la primera vez que un navegador o IP inicia sesión. No se envía alerta para dispositivos ya registrados.
 settings-pref-email-activity = Enviarme un correo por cada mención y mensaje directo
 settings-pref-email-activity-help = Un correo por evento (no agrupado como el resumen). Si el operador tiene configurada la entrada por correo, responder al correo publica tu respuesta en el chat en tu nombre. Limitado a 20 correos por minuto por destinatario.
+settings-pref-kudos-optout = Ocultarme de la tabla de kudos
+settings-pref-kudos-optout-help = Podrás seguir dando y recibiendo kudos; solo no aparecerás en la tabla de /kudos.
 settings-save-preferences = Guardar preferencias
 # LC-304: highlight words
 settings-keyword-heading = Palabras destacadas

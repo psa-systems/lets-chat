@@ -43,6 +43,9 @@ pub struct UserSettingsPage<'a> {
     /// the email-digest checkbox and the help-text branch that explains
     /// why opting in is currently a no-op.
     pub email_available: bool,
+    /// LC-526 follow-up: whether the viewer has opted out of the public kudos
+    /// leaderboard (drives the settings toggle's checked state).
+    pub kudos_opt_out: bool,
     /// Live sessions for this user, sorted newest activity first. The row
     /// matching the request's session cookie has `is_current = true` so the
     /// template can mark it and disable its revoke button.

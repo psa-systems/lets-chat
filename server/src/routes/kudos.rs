@@ -44,8 +44,11 @@ pub async fn get_leaderboard(
         .map(|e| e.id)
         .collect();
 
-    let receivers = db::kudos::top_receivers(&state.chat, &enclave_ids, WINDOW, LIMIT).await?;
-    let givers = db::kudos::top_givers(&state.chat, &enclave_ids, WINDOW, LIMIT).await?;
+    // LC-526 follow-up: hide users who opted out of the public board.
+    let excluded = db::auth::kudos_opted_out_ids(&state.auth).await?;
+    let receivers =
+        db::kudos::top_receivers(&state.chat, &enclave_ids, WINDOW, LIMIT, &excluded).await?;
+    let givers = db::kudos::top_givers(&state.chat, &enclave_ids, WINDOW, LIMIT, &excluded).await?;
 
     // One bulk label lookup covering both lists.
     let mut unique: HashSet<&str> = HashSet::new();

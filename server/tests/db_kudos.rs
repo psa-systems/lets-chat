@@ -24,7 +24,9 @@ async fn leaderboard_ranks_and_scopes_to_enclave() {
             .unwrap();
     }
 
-    let recv = top_receivers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 10, &[])
+        .await
+        .unwrap();
     assert_eq!(recv.len(), 2);
     assert_eq!(recv[0].user_id, "alice");
     assert_eq!(recv[0].count, 2);
@@ -32,18 +34,20 @@ async fn leaderboard_ranks_and_scopes_to_enclave() {
     assert_eq!(recv[1].count, 1);
     assert!(recv.iter().all(|l| l.user_id != "dave"));
 
-    let give = top_givers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let give = top_givers(&pool, &[1], "-30 days", 10, &[]).await.unwrap();
     assert_eq!(give.len(), 3); // bob, carol, alice each gave once
     assert_eq!(give.iter().map(|l| l.count).sum::<i64>(), 3);
 
     // Scoping to enclave 2 yields only dave.
-    let recv2 = top_receivers(&pool, &[2], "-30 days", 10).await.unwrap();
+    let recv2 = top_receivers(&pool, &[2], "-30 days", 10, &[])
+        .await
+        .unwrap();
     assert_eq!(recv2.len(), 1);
     assert_eq!(recv2[0].user_id, "dave");
     assert_eq!(recv2[0].count, 5);
 
     // No enclaves -> nothing.
-    assert!(top_receivers(&pool, &[], "-30 days", 10)
+    assert!(top_receivers(&pool, &[], "-30 days", 10, &[])
         .await
         .unwrap()
         .is_empty());
@@ -64,9 +68,45 @@ async fn window_excludes_old_kudos() {
     .await
     .unwrap();
 
-    let recv = top_receivers(&pool, &[1], "-30 days", 10).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 10, &[])
+        .await
+        .unwrap();
     assert_eq!(recv.len(), 1);
     assert_eq!(recv[0].user_id, "alice");
+}
+
+#[tokio::test]
+async fn exclude_hides_opted_out_users() {
+    let pool = common::chat_pool().await;
+    record(&pool, "g", "alice", 10, Some(1), None, None)
+        .await
+        .unwrap();
+    record(&pool, "g", "alice", 10, Some(1), None, None)
+        .await
+        .unwrap();
+    record(&pool, "g", "bob", 10, Some(1), None, None)
+        .await
+        .unwrap();
+
+    // No exclusion: alice (2) then bob (1).
+    let all = top_receivers(&pool, &[1], "-30 days", 10, &[])
+        .await
+        .unwrap();
+    assert_eq!(all.len(), 2);
+
+    // Excluding alice leaves only bob.
+    let excl = vec!["alice".to_string()];
+    let filtered = top_receivers(&pool, &[1], "-30 days", 10, &excl)
+        .await
+        .unwrap();
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].user_id, "bob");
+
+    // The exclusion also applies to the givers list.
+    let g = top_givers(&pool, &[1], "-30 days", 10, &["g".to_string()])
+        .await
+        .unwrap();
+    assert!(g.is_empty());
 }
 
 #[tokio::test]
@@ -77,6 +117,8 @@ async fn respects_limit() {
             .await
             .unwrap();
     }
-    let recv = top_receivers(&pool, &[1], "-30 days", 3).await.unwrap();
+    let recv = top_receivers(&pool, &[1], "-30 days", 3, &[])
+        .await
+        .unwrap();
     assert_eq!(recv.len(), 3);
 }
