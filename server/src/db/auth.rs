@@ -1140,6 +1140,46 @@ pub async fn set_notify_email_activity_enabled(
     Ok(())
 }
 
+/// LC-526 follow-up: whether the user has opted out of the public kudos
+/// leaderboard. Queried on demand (settings render); not carried on the User
+/// projection since it is needed in only two places.
+pub async fn get_kudos_opt_out(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> =
+        sqlx::query_scalar("SELECT kudos_leaderboard_opt_out FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-526 follow-up: set the kudos-leaderboard opt-out flag.
+pub async fn set_kudos_opt_out(
+    pool: &SqlitePool,
+    user_id: &str,
+    opt_out: bool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET kudos_leaderboard_opt_out = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(opt_out as i32)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// LC-526 follow-up: ids of all users who opted out of the kudos leaderboard,
+/// for excluding them from the aggregate (the leaderboard lives in a different
+/// db, so the exclusion is applied as a NOT IN list rather than a join).
+pub async fn kudos_opted_out_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM users WHERE kudos_leaderboard_opt_out = 1",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Bulk-resolve display fields for a set of user ids in a single query.
 /// Returns a map keyed by user id with `(username, display_name)`.
 /// Missing ids are absent from the map; callers fall back to the raw id
