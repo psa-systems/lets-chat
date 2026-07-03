@@ -1,0 +1,5 @@
+{# LC-527: OOB update of a follow-up checklist after an item is toggled or
+   (un)claimed. Mirrors ws/poll_update.html. #}
+<div id="followup-{{ follow_up.message_id }}" hx-swap-oob="innerHTML">
+  {% include "partials/followup_block.html" %}
+</div>

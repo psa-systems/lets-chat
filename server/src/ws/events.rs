@@ -134,6 +134,12 @@ pub enum ChatEvent {
         message_id: i64,
         room_id: i64,
     },
+    /// LC-527: a follow-up checklist changed (an item toggled or (un)claimed).
+    /// Re-rendered per-viewer so `assigned_to_me` highlighting stays correct.
+    FollowUpUpdated {
+        message_id: i64,
+        room_id: i64,
+    },
     EnclaveMemberAdded {
         enclave_id: i64,
         user_id: String,

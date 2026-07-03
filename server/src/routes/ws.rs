@@ -265,6 +265,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::PollUpdated { message_id, .. } => {
                                     render_poll(&send_state, *message_id, &send_user.id).await
                                 }
+                                ChatEvent::FollowUpUpdated { message_id, .. } => {
+                                    render_follow_up(&send_state, *message_id, &send_user.id).await
+                                }
                                 ChatEvent::DmRead { user_id, room_id, last_read_message_id, read_at } => {
                                     render_dm_read(
                                         &send_state,
@@ -1055,6 +1058,17 @@ async fn render_poll(state: &AppState, message_id: i64, user_id: &str) -> Option
         .ok()
 }
 
+/// LC-527: re-render a follow-up checklist (`#followup-{id}`) for one recipient.
+async fn render_follow_up(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+    let view =
+        crate::views::room::build_follow_up_view(&state.chat, &state.auth, message_id, user_id)
+            .await
+            .ok()??;
+    crate::views::room::FollowUpUpdateFragment { follow_up: &view }
+        .render()
+        .ok()
+}
+
 async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
     let m = db::chat::get_message(&state.chat, message_id)
         .await
@@ -1241,6 +1255,15 @@ async fn render_new_message(
             .await
             .ok()
             .flatten(),
+        follow_up: crate::views::room::build_follow_up_view(
+            &state.chat,
+            &state.auth,
+            message.id,
+            &viewer.id,
+        )
+        .await
+        .ok()
+        .flatten(),
         author_is_bot,
         actor,
     };
@@ -1396,6 +1419,15 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
             .await
             .ok()
             .flatten(),
+        follow_up: crate::views::room::build_follow_up_view(
+            &state.chat,
+            &state.auth,
+            m.id,
+            &viewer.id,
+        )
+        .await
+        .ok()
+        .flatten(),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };
@@ -1493,6 +1525,15 @@ async fn render_thread_reply(
             .await
             .ok()
             .flatten(),
+        follow_up: crate::views::room::build_follow_up_view(
+            &state.chat,
+            &state.auth,
+            message.id,
+            &viewer.id,
+        )
+        .await
+        .ok()
+        .flatten(),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };

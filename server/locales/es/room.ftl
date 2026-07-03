@@ -448,3 +448,12 @@ room-automations-do-label = Entonces publica
 room-automations-do-ph = El mensaje a publicar
 room-automations-vars-help = Marcadores, cada uno entre llaves: user, text, emoji.
 room-automations-create = Crear automatizacion
+
+## LC-527: follow-up tasks (from a call transcript's action items)
+followup-card-title = Tareas de seguimiento
+followup-create-button = Crear tareas de seguimiento
+followup-created = Tareas de seguimiento publicadas en la sala.
+followup-claim = Reclamar
+followup-assigned-you = Tú
+followup-toggle-aria = Marcar como hecha
+followup-done-suffix = hechas
