@@ -17,6 +17,7 @@ pub mod error_page;
 pub mod feeds;
 pub mod forward;
 pub mod gif;
+pub mod highlights;
 pub mod home;
 pub mod hovercard;
 pub mod inbox;
