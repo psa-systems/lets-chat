@@ -57,6 +57,7 @@ mod gif;
 mod highlights;
 mod home;
 mod inbox;
+mod kudos;
 mod mentions;
 mod notify_prefs;
 mod pinned;
@@ -1319,6 +1320,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/slash-commands", get(slash::get_autocomplete))
         .route("/inbox", get(inbox::get_inbox))
         .route("/activity", get(activity::get_activity))
+        // LC-526: kudos leaderboard.
+        .route("/kudos", get(kudos::get_leaderboard))
         // LC-250: mark every conversation read in one action.
         .route("/read-all", post(read_all::post_read_all))
         .route("/room/{room_id}/read", post(read_all::post_room_read))
