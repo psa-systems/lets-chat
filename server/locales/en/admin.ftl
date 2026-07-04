@@ -56,7 +56,7 @@ admin-backup-create-5 = trees. Each entry is sha256'd into a
 admin-backup-create-6 = so a later restore can verify integrity. The server keeps serving while the snapshot runs. Large deployments may take a minute or two; the response begins streaming as soon as the archive finishes building on disk.
 admin-backup-download = Download backup
 admin-backup-restore-heading = Restore from archive
-admin-backup-restore-note = Upload a previously-downloaded backup. The server validates the manifest + per-file sha256, refuses archives built on a different lets-chat version, then stages the contents in a sibling directory. A restart finalizes the swap.
+admin-backup-restore-note = Upload a previously-downloaded backup. The server validates the manifest + per-file sha256, refuses archives built on a different Let's Chat version, then stages the contents in a sibling directory. A restart finalizes the swap.
 admin-backup-stage-confirm = Stage this archive for restore? On the next server restart the current data will be replaced.
 admin-backup-stage = Stage restore
 admin-backup-stage-note = The restart step is the confirmation gate; staging alone does not touch the live data directory.
@@ -85,7 +85,7 @@ admin-bots-empty = No bots yet.
 
 admin-bridges-title = Bridges
 admin-bridges-heading = Bridges
-admin-bridges-intro = Protocol bridges run OUT OF PROCESS as separate daemons (matrix-appservice-bridge or similar) and post foreign-protocol messages into a lets-chat room via the API. Registering a bridge here creates the bot user, mints its bridge-scoped API token, and stores its sealed daemon config. The daemon authenticates with the token; lets-chat tracks heartbeats but does not run the daemon. Removing a bridge stops new traffic but leaves historical bridged messages renderable.
+admin-bridges-intro = Protocol bridges run OUT OF PROCESS as separate daemons (matrix-appservice-bridge or similar) and post foreign-protocol messages into a Let's Chat room via the API. Registering a bridge here creates the bot user, mints its bridge-scoped API token, and stores its sealed daemon config. The daemon authenticates with the token; Let's Chat tracks heartbeats but does not run the daemon. Removing a bridge stops new traffic but leaves historical bridged messages renderable.
 admin-bridges-no-secret = Bridges need a server secret key to seal daemon configuration.
 admin-bridges-created-prefix = Bridge bot
 admin-bridges-created-suffix = created. Copy its API token now - it will not be shown again.
@@ -297,7 +297,7 @@ admin-settings-smtp-note-5 = Earlier builds rendered an SMTP form here that wrot
 admin-settings-smtp-note-6 = but was never read by the mailer; the form has been removed and any stale rows are cleared by the next migration.
 admin-settings-imap-heading = Email ingress (IMAP poll)
 admin-settings-imap-saved = IMAP settings saved. Restart the server to pick up the new configuration.
-admin-settings-imap-intro-1 = Lets-chat polls this mailbox every 5 minutes; messages addressed to
+admin-settings-imap-intro-1 = Let's Chat polls this mailbox every 5 minutes; messages addressed to
 admin-settings-imap-intro-2 = post to their target room as the synthetic email actor. Set up a dedicated mailbox at your provider and point this form at it. The password is encrypted at rest under
 admin-settings-imap-intro-3 = After saving, restart the server: the spawn gate reads this row at startup, not per tick.
 admin-settings-imap-host = IMAP host
@@ -314,7 +314,7 @@ admin-settings-imap-ingress-domain-note-1 = The
 admin-settings-imap-ingress-domain-note-2 = half of the address an external sender mails. Per-room inbox addresses become
 admin-settings-imap-dead-letter = Dead-letter folder (optional)
 admin-settings-imap-dead-letter-note-1 = When set, dropped messages are UID-COPYd into this IMAP folder before being marked
-admin-settings-imap-dead-letter-note-2 = on the source. You must create the folder at your IMAP provider; lets-chat does not auto-create it. Empty = off (drops are diagnosed by log only).
+admin-settings-imap-dead-letter-note-2 = on the source. You must create the folder at your IMAP provider; Let's Chat does not auto-create it. Empty = off (drops are diagnosed by log only).
 admin-settings-imap-enable = Enable IMAP poll
 admin-settings-imap-enable-note = Off until you have verified the configuration. The poll loop refuses to spawn on missing fields; check server logs after restart.
 admin-settings-imap-save = Save IMAP settings
