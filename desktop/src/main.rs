@@ -82,7 +82,7 @@ fn main() {
     set_linux_gtk_env();
 
     let url = config::initial_server_url();
-    let title = format!("lets-chat v{VERSION} ({GIT_HASH})");
+    let title = format!("Let's Chat v{VERSION} ({GIT_HASH})");
 
     // Probe the configured server before pointing the webview at it.
     // Without this, a misconfigured or down server gives the user a blank
@@ -242,12 +242,12 @@ fn remote_url_pattern(url: &str) -> Option<String> {
 fn build_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/icon-square-128.png"))?;
     let show_item = MenuItem::with_id(app, "show", "Show window", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit lets-chat", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Let's Chat", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
     TrayIconBuilder::with_id("main")
         .icon(icon)
-        .tooltip("lets-chat")
+        .tooltip("Let's Chat")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

@@ -56,7 +56,7 @@ admin-backup-create-5 = . Cada entrada se hace sha256 en un
 admin-backup-create-6 = para que una restauracion posterior pueda verificar la integridad. El servidor sigue sirviendo mientras se ejecuta la instantanea. Los despliegues grandes pueden tardar uno o dos minutos; la respuesta empieza a transmitirse en cuanto el archivo termina de construirse en disco.
 admin-backup-download = Descargar copia de seguridad
 admin-backup-restore-heading = Restaurar desde archivo
-admin-backup-restore-note = Sube una copia de seguridad descargada previamente. El servidor valida el manifiesto + sha256 por archivo, rechaza archivos creados en una version distinta de lets-chat, y luego prepara el contenido en un directorio hermano. Un reinicio finaliza el intercambio.
+admin-backup-restore-note = Sube una copia de seguridad descargada previamente. El servidor valida el manifiesto + sha256 por archivo, rechaza archivos creados en una version distinta de Let's Chat, y luego prepara el contenido en un directorio hermano. Un reinicio finaliza el intercambio.
 admin-backup-stage-confirm = Preparar este archivo para restaurar? En el proximo reinicio del servidor los datos actuales seran reemplazados.
 admin-backup-stage = Preparar restauracion
 admin-backup-stage-note = El paso de reinicio es la puerta de confirmacion; preparar por si solo no toca el directorio de datos en vivo.
@@ -85,7 +85,7 @@ admin-bots-empty = Aun no hay bots.
 
 admin-bridges-title = Puentes
 admin-bridges-heading = Puentes
-admin-bridges-intro = Los puentes de protocolo se ejecutan FUERA DEL PROCESO como demonios separados y publican mensajes de protocolos externos en una sala de lets-chat mediante la API. Registrar un puente aqui crea el usuario bot, emite su token API con alcance de puente, y guarda su configuracion de demonio sellada. El demonio se autentica con el token; lets-chat hace seguimiento de los latidos pero no ejecuta el demonio. Eliminar un puente detiene el trafico nuevo pero deja los mensajes historicos renderizables.
+admin-bridges-intro = Los puentes de protocolo se ejecutan FUERA DEL PROCESO como demonios separados y publican mensajes de protocolos externos en una sala de Let's Chat mediante la API. Registrar un puente aqui crea el usuario bot, emite su token API con alcance de puente, y guarda su configuracion de demonio sellada. El demonio se autentica con el token; Let's Chat hace seguimiento de los latidos pero no ejecuta el demonio. Eliminar un puente detiene el trafico nuevo pero deja los mensajes historicos renderizables.
 admin-bridges-no-secret = Los puentes necesitan una clave secreta del servidor para sellar la configuracion del demonio.
 admin-bridges-created-prefix = Bot de puente
 admin-bridges-created-suffix = creado. Copia su token API ahora - no se mostrara de nuevo.
@@ -297,7 +297,7 @@ admin-settings-smtp-note-5 = Las versiones anteriores mostraban aqui un formular
 admin-settings-smtp-note-6 = pero que el sistema de correo nunca leia; el formulario se ha eliminado y la siguiente migracion limpia cualquier fila obsoleta.
 admin-settings-imap-heading = Entrada de correo (sondeo IMAP)
 admin-settings-imap-saved = Ajustes de IMAP guardados. Reinicia el servidor para aplicar la nueva configuracion.
-admin-settings-imap-intro-1 = Lets-chat sondea este buzon cada 5 minutos; los mensajes dirigidos a
+admin-settings-imap-intro-1 = Let's Chat sondea este buzon cada 5 minutos; los mensajes dirigidos a
 admin-settings-imap-intro-2 = se publican en su sala destino como el actor de correo sintetico. Configura un buzon dedicado en tu proveedor y apunta este formulario a el. La contrasena se cifra en reposo bajo
 admin-settings-imap-intro-3 = Tras guardar, reinicia el servidor: la puerta de arranque lee esta fila al inicio, no en cada ciclo.
 admin-settings-imap-host = Host IMAP
@@ -314,7 +314,7 @@ admin-settings-imap-ingress-domain-note-1 = La mitad
 admin-settings-imap-ingress-domain-note-2 = de la direccion a la que escribe un remitente externo. Las direcciones de buzon por sala se convierten en
 admin-settings-imap-dead-letter = Carpeta de mensajes muertos (opcional)
 admin-settings-imap-dead-letter-note-1 = Cuando se define, los mensajes descartados se copian con UID-COPY a esta carpeta IMAP antes de marcarse como
-admin-settings-imap-dead-letter-note-2 = en el origen. Debes crear la carpeta en tu proveedor IMAP; lets-chat no la crea automaticamente. Vacio = desactivado (los descartes solo se diagnostican por el registro).
+admin-settings-imap-dead-letter-note-2 = en el origen. Debes crear la carpeta en tu proveedor IMAP; Let's Chat no la crea automaticamente. Vacio = desactivado (los descartes solo se diagnostican por el registro).
 admin-settings-imap-enable = Activar el sondeo IMAP
 admin-settings-imap-enable-note = Desactivado hasta que hayas verificado la configuracion. El bucle de sondeo se niega a arrancar si faltan campos; revisa los registros del servidor tras reiniciar.
 admin-settings-imap-save = Guardar ajustes de IMAP

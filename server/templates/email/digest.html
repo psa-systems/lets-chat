@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-<p>You have unread activity in lets-chat. Here is a summary of what you missed while you were away.</p>
+<p>You have unread activity in Let's Chat. Here is a summary of what you missed while you were away.</p>
 
 {% if !dm_sections.is_empty() %}
 <h2 style="border-bottom: 1px solid #ccc; padding-bottom: 4px;">Direct messages</h2>
@@ -33,14 +33,14 @@
 
 {% if overflow_count > 0 %}
 <p style="margin-top: 16px; font-style: italic; color: #666;">
-  ...and {{ overflow_count }} more.{% if !server_url.is_empty() %} <a href="{{ server_url }}/">Open lets-chat</a> to see them.{% else %} Open lets-chat to see them.{% endif %}
+  ...and {{ overflow_count }} more.{% if !server_url.is_empty() %} <a href="{{ server_url }}/">Open Let's Chat</a> to see them.{% else %} Open Let's Chat to see them.{% endif %}
 </p>
 {% endif %}
 
 <hr style="margin-top: 24px; border: none; border-top: 1px solid #eee;">
 <p style="font-size: 12px; color: #999;">
   You are receiving this because email digests are enabled for your account.
-  {% if !server_url.is_empty() %}<a href="{{ server_url }}/settings" style="color: #999;">Change your notification preferences</a>.{% else %}Change your notification preferences in the lets-chat settings page.{% endif %}
+  {% if !server_url.is_empty() %}<a href="{{ server_url }}/settings" style="color: #999;">Change your notification preferences</a>.{% else %}Change your notification preferences in the Let's Chat settings page.{% endif %}
 </p>
 </body>
 </html>
