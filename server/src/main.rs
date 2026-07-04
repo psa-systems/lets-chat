@@ -194,6 +194,7 @@ async fn main() {
 
     spawn_idle_scanner(state.clone());
     spawn_status_expiry_scanner(state.clone());
+    spawn_mute_expiry_scanner(state.clone());
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
@@ -296,6 +297,26 @@ fn spawn_status_expiry_scanner(state: AppState) {
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "custom status expiry scan failed"),
+            }
+        }
+    });
+}
+
+/// LC-535: every 60s, null out timed mutes whose `muted_until` has passed so
+/// the admin table and exports stop reporting an expired mute. Enforcement at
+/// the posting gates already honours expiry (`User::mute_in_effect`); this is
+/// purely DB truthfulness. Modeled on `spawn_status_expiry_scanner`; the 60s
+/// granularity matches the coarsest useful mute duration step.
+fn spawn_mute_expiry_scanner(state: AppState) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match db::auth::clear_expired_mutes(&state.auth).await {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!(cleared = n, "expired mutes cleared"),
+                Err(e) => tracing::warn!(error = %e, "mute expiry scan failed"),
             }
         }
     });
