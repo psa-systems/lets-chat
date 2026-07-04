@@ -618,11 +618,12 @@ pub async fn post_message(
     }
     check_message_length(body)?;
 
-    // Banned/muted users cannot post anywhere.
+    // Banned/muted users cannot post anywhere. LC-535: a timed mute stops
+    // blocking once its expiry passes, decided by `mute_in_effect`.
     if user.is_banned {
         return Err(AppError::Forbidden);
     }
-    if user.is_muted {
+    if user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
 
@@ -2611,7 +2612,7 @@ pub async fn post_thread_reply(
         return Err(AppError::BadRequest("message body cannot be empty".into()));
     }
     check_message_length(body)?;
-    if user.is_banned || user.is_muted {
+    if user.is_banned || user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
 
