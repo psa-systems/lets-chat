@@ -40,6 +40,32 @@
       </form>
     </div>
 
+    {# ===== Slowmode (LC-534) ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-slowmode-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-slowmode-intro"|t }}</p>
+      </div>
+      <form hx-post="/room/{{ room.id }}/slowmode"
+            hx-target="#lc-sm-status" hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+        <div class="lc-set-field lc-set-field--narrow">
+          <label class="lc-set-label" for="lc-sm">{{ "room-slowmode-label"|t }}</label>
+          <select id="lc-sm" name="seconds" class="input">
+            <option value="0" {% if slowmode_seconds == 0 %}selected{% endif %}>{{ "room-slowmode-off"|t }}</option>
+            <option value="5" {% if slowmode_seconds == 5 %}selected{% endif %}>{{ "room-slowmode-5s"|t }}</option>
+            <option value="10" {% if slowmode_seconds == 10 %}selected{% endif %}>{{ "room-slowmode-10s"|t }}</option>
+            <option value="30" {% if slowmode_seconds == 30 %}selected{% endif %}>{{ "room-slowmode-30s"|t }}</option>
+            <option value="60" {% if slowmode_seconds == 60 %}selected{% endif %}>{{ "room-slowmode-60s"|t }}</option>
+          </select>
+        </div>
+        <div class="lc-set-actions">
+          <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "room-save"|t }}</span></button>
+          <span id="lc-sm-status" class="lc-set-status" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+
     {# ===== Broadcast mentions (LC-476) ===== #}
     <div class="card lc-set-card">
       <div class="lc-set-card-head">
