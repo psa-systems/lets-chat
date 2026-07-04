@@ -1,6 +1,6 @@
 {
-  "name": "lets-chat",
-  "short_name": "lets-chat",
+  "name": "Let's Chat",
+  "short_name": "Let's Chat",
   "description": "Self-hosted team chat.",
   "start_url": "/",
   "scope": "/",

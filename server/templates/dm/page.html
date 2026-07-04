@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}@{{ peer.username }} - lets-chat{% endblock %}
+{% block title %}@{{ peer.username }} - Let's Chat{% endblock %}
 
 {% block main %}
 <div class="flex flex-1 overflow-hidden"{% if llm_available %} data-lc-llm{% endif %} data-lc-live-room="{{ room.id }}">
