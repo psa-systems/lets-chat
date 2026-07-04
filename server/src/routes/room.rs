@@ -697,6 +697,27 @@ pub async fn post_message(
         return Err(AppError::Forbidden);
     }
 
+    // LC-534: per-channel slowmode. A minimum interval between a member's posts,
+    // set by a room manager. Checked after the posting-policy gate (a user who
+    // cannot post at all is not slowmoded) and only when enabled, so non-slowmode
+    // rooms pay nothing. Moderators are exempt.
+    let slowmode = db::chat::get_room_slowmode(&state.chat, room_id).await?;
+    if slowmode > 0
+        && !db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role).await?
+    {
+        let key = format!("{room_id}:{}", user.id);
+        if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check_cooldown(
+            crate::rate_limit::RateLimitKind::Slowmode,
+            &key,
+            slowmode,
+        ) {
+            return Err(AppError::TooManyRequests(
+                format!("slow mode is on here; wait {retry_after}s before posting again"),
+                retry_after,
+            ));
+        }
+    }
+
     // For DMs, refuse the send if either user has blocked the other. The
     // peer is the other room member.
     if room.room_type == "dm" {

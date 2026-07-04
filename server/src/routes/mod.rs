@@ -1390,6 +1390,7 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/posting-policy",
             post(room_rbac::post_posting_policy),
         )
+        .route("/room/{room_id}/slowmode", post(room_rbac::post_slowmode))
         .route(
             "/room/{room_id}/broadcast-policy",
             post(room_rbac::post_broadcast_policy),
