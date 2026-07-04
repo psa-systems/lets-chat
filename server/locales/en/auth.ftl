@@ -42,5 +42,5 @@ reset-submit = Save new password
 ## Email verification result
 verify-email-page-title = Email verification
 verify-email-title = Email verification
-verify-email-open-link = Open lets-chat
+verify-email-open-link = Open Let's Chat
 verify-email-signin-link = Sign in

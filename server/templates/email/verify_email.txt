@@ -1,6 +1,6 @@
 Hi,
 
-Please confirm this email address belongs to your lets-chat account by opening
+Please confirm this email address belongs to your Let's Chat account by opening
 the link below:
 
   {{ link }}

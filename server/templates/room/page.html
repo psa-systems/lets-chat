@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}#{{ room.name }} - lets-chat{% endblock %}
+{% block title %}#{{ room.name }} - Let's Chat{% endblock %}
 
 {% block main %}
 <div class="flex flex-1 overflow-hidden"{% if llm_available %} data-lc-llm{% endif %} data-lc-live-room="{{ room.id }}"{% if let Some(eid) = sidebar_current_enclave %} data-lc-live-topic="enclave:{{ eid }}"{% endif %}>

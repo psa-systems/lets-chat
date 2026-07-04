@@ -40,5 +40,5 @@ reset-submit = Guardar nueva contraseña
 ## Email verification result
 verify-email-page-title = Verificación de correo
 verify-email-title = Verificación de correo
-verify-email-open-link = Abrir lets-chat
+verify-email-open-link = Abrir Let's Chat
 verify-email-signin-link = Iniciar sesión

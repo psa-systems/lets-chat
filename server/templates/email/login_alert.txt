@@ -1,6 +1,6 @@
 Hi {{ username }},
 
-A new sign-in to your lets-chat account was just recorded:
+A new sign-in to your Let's Chat account was just recorded:
 
   Device: {{ device_label }}
 {% if !ip.is_empty() -%}
