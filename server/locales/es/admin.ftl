@@ -408,6 +408,15 @@ admin-userrow-delete-confirm-suffix = Esto no se puede deshacer.
 # LC-510: confirmaciones de acciones destructivas + estados vacios de tablas
 admin-userrow-ban-confirm = Banear a este usuario? No podra iniciar sesion ni publicar.
 admin-userrow-mute-confirm = Silenciar a este usuario? No podra publicar.
+# LC-535: presets de duracion de silencio temporal + etiqueta de expiracion
+admin-userrow-mute-15m = 15 minutos
+admin-userrow-mute-1h = 1 hora
+admin-userrow-mute-8h = 8 horas
+admin-userrow-mute-24h = 24 horas
+admin-userrow-mute-7d = 7 dias
+admin-userrow-mute-permanent = Permanente
+admin-userrow-muted-until = hasta
+admin-userrow-muted-utc = UTC
 admin-invites-revoke-confirm = Revocar este codigo de invitacion? Ya no se podra usar.
 admin-users-empty = Aun no hay usuarios.
 admin-invites-empty = Aun no hay codigos de invitacion.
