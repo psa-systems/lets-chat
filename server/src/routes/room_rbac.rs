@@ -148,6 +148,7 @@ pub async fn get_page(
 
     let retention_days = db::chat::get_room_retention_days(&state.chat, room_id).await?;
     let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
+    let slowmode_seconds = db::chat::get_room_slowmode(&state.chat, room_id).await?;
     let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
     let stage_enabled = db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
     // LC-495: workflow-automation rules for the included automations section.
@@ -166,6 +167,7 @@ pub async fn get_page(
         candidates: &candidates,
         posting_policy: &room.posting_allowed_for,
         broadcast_policy: &broadcast_policy,
+        slowmode_seconds,
         retention_days,
         assistant_enabled,
         assistant_available: state.llm_available(),
@@ -270,6 +272,55 @@ pub async fn post_posting_policy(
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current(
             "room-policy-saved",
+        )))?
+        .into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+/// Allowed slowmode presets (seconds). Kept `<= 60` (the rate-limiter window)
+/// so the shared sweep never drops an active cooldown early.
+const SLOWMODE_PRESETS: &[u32] = &[0, 5, 10, 30, 60];
+
+#[derive(Deserialize)]
+pub struct SlowmodeForm {
+    /// One of `SLOWMODE_PRESETS` (seconds); anything else 400s.
+    pub seconds: u32,
+}
+
+/// POST /room/{id}/slowmode
+///
+/// LC-534: set the per-channel slowmode interval. Same authorization as the
+/// posting policy (`require_can_manage`); writes a `mod_actions` audit row.
+pub async fn post_slowmode(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<SlowmodeForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    if !SLOWMODE_PRESETS.contains(&form.seconds) {
+        return Err(AppError::BadRequest("invalid slowmode value".into()));
+    }
+    let n = db::chat::set_room_slowmode(&state.chat, room_id, form.seconds).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"slowmode_seconds":{}}}"#, form.seconds);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_slowmode",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "room-slowmode-saved",
         )))?
         .into_response());
     }

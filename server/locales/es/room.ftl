@@ -486,3 +486,14 @@ compose-assist-action-grammar = Corregir gramática
 compose-assist-action-concise = Conciso
 compose-assist-action-friendly = Amigable
 compose-assist-action-formal = Formal
+
+## LC-534: per-channel slowmode
+room-slowmode-heading = Modo lento
+room-slowmode-intro = Limita con qué frecuencia puede publicar cada miembro en este canal. Los moderadores están exentos.
+room-slowmode-label = Espera entre mensajes
+room-slowmode-off = Desactivado
+room-slowmode-5s = 5 segundos
+room-slowmode-10s = 10 segundos
+room-slowmode-30s = 30 segundos
+room-slowmode-60s = 1 minuto
+room-slowmode-saved = Modo lento actualizado.
