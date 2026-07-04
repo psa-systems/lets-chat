@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 
 /// Fixed window length for every kind. Matches the operator-facing
@@ -79,6 +80,9 @@ pub enum RateLimitKind {
     /// LC-492: per-user cap on the in-channel AI assistant (`/ask`). Keyed by
     /// the asking user_id. Bounds LLM cost/load; over-limit asks are refused.
     AssistantAsk,
+    /// LC-534: per-channel slowmode. Cooldown (not per-minute count) keyed by
+    /// `{room_id}:{user_id}`; checked via `check_cooldown`.
+    Slowmode,
 }
 
 impl RateLimitKind {
@@ -94,6 +98,7 @@ impl RateLimitKind {
             RateLimitKind::RemoteControlRequest => "rcr",
             RateLimitKind::BridgeMessage => "brm",
             RateLimitKind::AssistantAsk => "ask",
+            RateLimitKind::Slowmode => "slow",
         }
     }
 }
@@ -209,6 +214,55 @@ impl RateLimits {
         Outcome::Allow
     }
 
+    /// LC-534: per-post cooldown (slowmode). Enforces a minimum interval
+    /// between actions for `key`. `cooldown_seconds = 0` disables (always
+    /// `Allow`). On `Allow` the key's timestamp advances to now; the first
+    /// action for a key is always allowed. Shares the map with [`check`]; the
+    /// distinct kind tag keeps the keyspaces separate.
+    ///
+    /// Cooldowns MUST be `<= WINDOW`: the shared `sweep_expired` evicts entries
+    /// older than `WINDOW`, so a longer cooldown could be dropped while still
+    /// active (letting a user post early). Callers cap the value accordingly.
+    pub fn check_cooldown(
+        &self,
+        kind: RateLimitKind,
+        key: &str,
+        cooldown_seconds: u32,
+    ) -> Outcome {
+        if cooldown_seconds == 0 {
+            return Outcome::Allow;
+        }
+        if self
+            .check_counter
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(SWEEP_EVERY)
+        {
+            self.sweep_expired();
+        }
+        let composite = format!("{}:{}", kind.tag(), key);
+        let now = Instant::now();
+        let cooldown = Duration::from_secs(cooldown_seconds as u64);
+        match self.map.entry(composite) {
+            Entry::Occupied(mut e) => {
+                let elapsed = now.duration_since(e.get().start);
+                if elapsed < cooldown {
+                    return Outcome::Deny {
+                        retry_after: (cooldown - elapsed).as_secs().max(1),
+                    };
+                }
+                e.get_mut().start = now;
+                Outcome::Allow
+            }
+            Entry::Vacant(v) => {
+                v.insert(WindowState {
+                    start: now,
+                    count: 0,
+                });
+                Outcome::Allow
+            }
+        }
+    }
+
     /// Drop entries whose windows have fully elapsed. Public so a
     /// future background task can call it on a schedule, but the
     /// opportunistic call inside `check` is sufficient for normal
@@ -242,6 +296,36 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(r.check(RateLimitKind::Message, "alice", 0), Outcome::Allow);
         }
+    }
+
+    #[test]
+    fn cooldown_allows_first_then_denies() {
+        let r = RateLimits::new();
+        // Disabled cooldown always allows.
+        for _ in 0..10 {
+            assert_eq!(
+                r.check_cooldown(RateLimitKind::Slowmode, "1:alice", 0),
+                Outcome::Allow
+            );
+        }
+        // First post allowed; an immediate second is denied within the window.
+        assert_eq!(
+            r.check_cooldown(RateLimitKind::Slowmode, "1:bob", 30),
+            Outcome::Allow
+        );
+        match r.check_cooldown(RateLimitKind::Slowmode, "1:bob", 30) {
+            Outcome::Deny { retry_after } => assert!(retry_after >= 1 && retry_after <= 30),
+            o => panic!("expected Deny, got {o:?}"),
+        }
+        // A different key (other user / room) is independent.
+        assert_eq!(
+            r.check_cooldown(RateLimitKind::Slowmode, "1:carol", 30),
+            Outcome::Allow
+        );
+        assert_eq!(
+            r.check_cooldown(RateLimitKind::Slowmode, "2:bob", 30),
+            Outcome::Allow
+        );
     }
 
     #[test]

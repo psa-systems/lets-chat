@@ -723,6 +723,29 @@ pub async fn set_room_posting_policy(
     Ok(res.rows_affected())
 }
 
+/// LC-534: the room's slowmode interval in seconds (0 = off).
+pub async fn get_room_slowmode(pool: &sqlx::SqlitePool, room_id: i64) -> Result<u32, sqlx::Error> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT slowmode_seconds FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0).max(0) as u32)
+}
+
+/// LC-534: set the room's slowmode interval in seconds. Returns rows updated.
+pub async fn set_room_slowmode(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    seconds: u32,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET slowmode_seconds = ? WHERE id = ?")
+        .bind(seconds as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
 /// LC-476: the room's `@here`/`@channel` broadcast policy. Read on demand
 /// (not carried on the `Room` struct) - mirrors `get_room_retention_days`.
 /// A missing row yields `'all'` (the permissive default).
