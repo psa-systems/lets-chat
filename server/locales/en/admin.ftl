@@ -408,6 +408,15 @@ admin-userrow-delete-confirm-suffix = This cannot be undone.
 # LC-510: destructive-action confirmations + table empty states
 admin-userrow-ban-confirm = Ban this user? They will be unable to sign in or post.
 admin-userrow-mute-confirm = Mute this user? They will be unable to post.
+# LC-535: timed-mute duration presets + expiry label
+admin-userrow-mute-15m = 15 minutes
+admin-userrow-mute-1h = 1 hour
+admin-userrow-mute-8h = 8 hours
+admin-userrow-mute-24h = 24 hours
+admin-userrow-mute-7d = 7 days
+admin-userrow-mute-permanent = Permanent
+admin-userrow-muted-until = until
+admin-userrow-muted-utc = UTC
 admin-invites-revoke-confirm = Revoke this invite code? It can no longer be used.
 admin-users-empty = No users yet.
 admin-invites-empty = No invite codes yet.

@@ -98,7 +98,7 @@ pub async fn post_forward(
     if !db::chat::is_room_accessible(&state.chat, src.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
-    if user.is_banned || user.is_muted {
+    if user.is_banned || user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
 

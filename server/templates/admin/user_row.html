@@ -12,7 +12,7 @@
   </td>
   <td class="text-xs">
     {% if u.is_banned %}<span class="font-medium text-danger">{{ "admin-userrow-banned"|t }}</span>{% else %}<span class="text-content-muted">{{ "admin-userrow-active"|t }}</span>{% endif %}
-    {% if u.is_muted %} <span class="font-medium text-warning">{{ "admin-userrow-muted"|t }}</span>{% endif %}
+    {% if u.is_muted %} <span class="font-medium text-warning">{{ "admin-userrow-muted"|t }}</span>{% if let Some(until) = u.muted_until %} <span class="text-content-muted">{{ "admin-userrow-muted-until"|t }} {{ until }} {{ "admin-userrow-muted-utc"|t }}</span>{% endif %}{% endif %}
   </td>
   <td class="text-xs">
     <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
@@ -32,7 +32,17 @@
       {% if u.is_muted %}
       <button hx-post="/admin/users/{{ u.id }}/unmute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="btn btn-sm btn-ghost">{{ "admin-userrow-unmute"|t }}</button>
       {% else %}
-      <button hx-post="/admin/users/{{ u.id }}/mute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-mute-confirm"|t }}" class="btn btn-sm btn-warning-outline">{{ "admin-userrow-mute"|t }}</button>
+      <form hx-post="/admin/users/{{ u.id }}/mute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-mute-confirm"|t }}" class="inline-flex gap-1 items-center">
+        <select name="duration" class="rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+          <option value="15m">{{ "admin-userrow-mute-15m"|t }}</option>
+          <option value="1h">{{ "admin-userrow-mute-1h"|t }}</option>
+          <option value="8h">{{ "admin-userrow-mute-8h"|t }}</option>
+          <option value="24h">{{ "admin-userrow-mute-24h"|t }}</option>
+          <option value="7d">{{ "admin-userrow-mute-7d"|t }}</option>
+          <option value="permanent">{{ "admin-userrow-mute-permanent"|t }}</option>
+        </select>
+        <button type="submit" class="btn btn-sm btn-warning-outline">{{ "admin-userrow-mute"|t }}</button>
+      </form>
       {% endif %}
       <button hx-post="/admin/users/{{ u.id }}/delete" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-delete-confirm-prefix"|t }} {{ u.username }}? {{ "admin-userrow-delete-confirm-suffix"|t }}" class="btn btn-sm btn-danger-outline">{{ "admin-userrow-delete"|t }}</button>
     </div>

@@ -245,7 +245,7 @@ async fn post_message(
 ) -> Result<Json<ApiMessage>, AppError> {
     auth.require_not_bridge()?;
     auth.require(SCOPE_MESSAGES_WRITE)?;
-    if auth.user.is_banned || auth.user.is_muted {
+    if auth.user.is_banned || auth.user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
     let body = payload.body.trim();
@@ -306,7 +306,7 @@ async fn post_bridge_message(
     Json(payload): Json<PostBridgeMessageBody>,
 ) -> Result<Json<ApiMessage>, AppError> {
     auth.require(SCOPE_BRIDGE_POST)?;
-    if auth.user.is_banned || auth.user.is_muted {
+    if auth.user.is_banned || auth.user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
     // LC-78-AVATAR-PROXY: validate + hash the foreign avatar URL up-front.

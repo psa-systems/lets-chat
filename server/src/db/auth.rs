@@ -982,6 +982,24 @@ pub async fn unmute_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::E
     Ok(())
 }
 
+/// LC-535: null out every timed mute whose `muted_until` has passed, so the
+/// admin table and exports stop reporting an expired mute. A NULL
+/// `muted_until` is a permanent mute and is never touched. Both the stored
+/// value and `datetime('now')` are UTC `YYYY-MM-DD HH:MM:SS` strings, so the
+/// lexical `<` comparison is chronological. Returns the number of rows
+/// cleared. Posting gates already honour expiry via `User::mute_in_effect`,
+/// so this sweep is purely for DB truthfulness, not enforcement.
+pub async fn clear_expired_mutes(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET is_muted = 0, muted_until = NULL, mute_reason = NULL, \
+         updated_at = datetime('now') \
+         WHERE is_muted = 1 AND muted_until IS NOT NULL AND muted_until < datetime('now')",
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 pub async fn update_user_profile(
     pool: &SqlitePool,
     user_id: &str,

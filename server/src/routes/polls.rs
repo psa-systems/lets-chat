@@ -144,7 +144,7 @@ async fn require_post_access(
     user: &User,
     room_id: i64,
 ) -> Result<crate::models::Room, AppError> {
-    if user.is_banned || user.is_muted {
+    if user.is_banned || user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
     let room = db::chat::get_room(&state.chat, room_id)

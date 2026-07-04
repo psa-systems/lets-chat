@@ -93,7 +93,7 @@ pub async fn post_gif(
         return Err(AppError::BadRequest("GIF picker is not configured".into()));
     }
     // Mirror the poll/event posting gate.
-    if user.is_banned || user.is_muted {
+    if user.is_banned || user.mute_in_effect() {
         return Err(AppError::Forbidden);
     }
     let room = db::chat::get_room(&state.chat, room_id)
