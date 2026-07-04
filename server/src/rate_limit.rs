@@ -223,12 +223,7 @@ impl RateLimits {
     /// Cooldowns MUST be `<= WINDOW`: the shared `sweep_expired` evicts entries
     /// older than `WINDOW`, so a longer cooldown could be dropped while still
     /// active (letting a user post early). Callers cap the value accordingly.
-    pub fn check_cooldown(
-        &self,
-        kind: RateLimitKind,
-        key: &str,
-        cooldown_seconds: u32,
-    ) -> Outcome {
+    pub fn check_cooldown(&self, kind: RateLimitKind, key: &str, cooldown_seconds: u32) -> Outcome {
         if cooldown_seconds == 0 {
             return Outcome::Allow;
         }
@@ -314,7 +309,7 @@ mod tests {
             Outcome::Allow
         );
         match r.check_cooldown(RateLimitKind::Slowmode, "1:bob", 30) {
-            Outcome::Deny { retry_after } => assert!(retry_after >= 1 && retry_after <= 30),
+            Outcome::Deny { retry_after } => assert!((1..=30).contains(&retry_after)),
             o => panic!("expected Deny, got {o:?}"),
         }
         // A different key (other user / room) is independent.
