@@ -59,6 +59,9 @@ pub struct AdminUserView {
     pub role: String,
     pub is_banned: bool,
     pub is_muted: bool,
+    /// LC-535: UTC expiry of a timed mute, or `None` for a permanent mute
+    /// (or when not muted). Rendered next to the "Muted" badge.
+    pub muted_until: Option<String>,
     /// LC-93: pre-formatted "N.NN MiB" string of the user's current
     /// upload usage (excludes system messages).
     pub usage_display: String,

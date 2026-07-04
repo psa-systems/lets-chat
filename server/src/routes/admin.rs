@@ -745,6 +745,7 @@ pub async fn get_users(
             role: r.role,
             is_banned: r.is_banned,
             is_muted: r.is_muted,
+            muted_until: r.muted_until,
             usage_display: format_bytes_mib(usage_bytes),
             quota_mib_value: bytes_to_mib_input(quota_bytes),
         });
@@ -815,17 +816,56 @@ pub async fn post_unban(
     render_user_row(&state, &user_id).await
 }
 
+/// LC-535: mute-duration presets. `permanent` (the default) leaves
+/// `muted_until` NULL; every other value resolves to a UTC
+/// `YYYY-MM-DD HH:MM:SS` expiry `n` from now.
+#[derive(Deserialize, Default)]
+pub struct MuteForm {
+    #[serde(default)]
+    pub duration: String,
+}
+
+/// Map a mute-duration preset to its `muted_until` value: `None` for a
+/// permanent mute (the empty/`permanent` default), `Some(timestamp)` for a
+/// timed one. Returns `Err` for an unrecognised preset so a typo never
+/// silently downgrades to a permanent mute.
+fn resolve_mute_until(duration: &str) -> Result<Option<String>, AppError> {
+    let dur = match duration {
+        "" | "permanent" => return Ok(None),
+        "15m" => chrono::Duration::minutes(15),
+        "1h" => chrono::Duration::hours(1),
+        "8h" => chrono::Duration::hours(8),
+        "24h" => chrono::Duration::hours(24),
+        "7d" => chrono::Duration::days(7),
+        _ => return Err(AppError::BadRequest("invalid mute duration".into())),
+    };
+    let until = (chrono::Utc::now() + dur)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    Ok(Some(until))
+}
+
 pub async fn post_mute(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
     Path(user_id): Path<String>,
+    Form(form): Form<MuteForm>,
 ) -> Result<Html, AppError> {
-    db::auth::mute_user(&state.auth, &user_id, None, None).await?;
-    db::moderation::log_mod_action(&state.chat, "mute", &user_id, &actor.id, None, None, None)
-        .await?;
+    let muted_until = resolve_mute_until(&form.duration)?;
+    db::auth::mute_user(&state.auth, &user_id, muted_until.as_deref(), None).await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "mute",
+        &user_id,
+        &actor.id,
+        muted_until.as_deref(),
+        None,
+        None,
+    )
+    .await?;
     state.hub.broadcast_global(&ChatEvent::UserMuted {
         user_id: user_id.clone(),
-        muted_until: None,
+        muted_until,
     });
     render_user_row(&state, &user_id).await
 }
@@ -923,6 +963,7 @@ pub(crate) async fn build_admin_user_view(
         role: record.role,
         is_banned: record.is_banned,
         is_muted: record.is_muted,
+        muted_until: record.muted_until,
         usage_display: format_bytes_mib(usage_bytes),
         quota_mib_value: bytes_to_mib_input(quota_bytes),
     }))
