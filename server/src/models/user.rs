@@ -129,6 +129,16 @@ impl User {
         }
     }
 
+    /// LC-535: whether the global posting mute is currently in force. A NULL
+    /// `muted_until` is a permanent mute; a non-NULL one auto-expires once the
+    /// wall clock passes it. The background sweep (`clear_expired_mutes`) nulls
+    /// the row shortly after, but every posting gate checks here so a user is
+    /// never blocked past their own expiry. An unparseable timestamp fails safe
+    /// to "still muted" rather than silently lifting the mute.
+    pub fn mute_in_effect(&self) -> bool {
+        self.is_muted && mute_active(self.muted_until.as_deref(), chrono::Utc::now())
+    }
+
     /// Presence status to render in the avatar badge. LC-88: an active Do Not
     /// Disturb shows the "do not disturb" (red) dot regardless of the stored
     /// presence status, so others can see the user is quiet.
@@ -138,6 +148,21 @@ impl User {
         } else {
             &self.status
         }
+    }
+}
+
+/// LC-535: is a mute with the given `muted_until` still active at `now`?
+/// `None` is a permanent mute (always active). A non-NULL value is the UTC
+/// `YYYY-MM-DD HH:MM:SS` string written by `mute_user`; once `now` reaches it
+/// the mute has lifted. An unparseable string fails safe to active so a
+/// corrupt timestamp can never silently unmute someone.
+fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> bool {
+    match muted_until {
+        None => true,
+        Some(s) => match chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+            Ok(dt) => now < dt.and_utc(),
+            Err(_) => true,
+        },
     }
 }
 
@@ -178,5 +203,35 @@ impl From<UserRecord> for User {
             density: r.density,
             dnd_active,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mute_active;
+    use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn permanent_mute_never_expires() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 4, 12, 0, 0).unwrap();
+        assert!(mute_active(None, now));
+    }
+
+    #[test]
+    fn timed_mute_active_before_and_lifted_after() {
+        let until = "2026-07-04 12:00:00";
+        let before = Utc.with_ymd_and_hms(2026, 7, 4, 11, 59, 59).unwrap();
+        let after = Utc.with_ymd_and_hms(2026, 7, 4, 12, 0, 1).unwrap();
+        assert!(
+            mute_active(Some(until), before),
+            "still muted before expiry"
+        );
+        assert!(!mute_active(Some(until), after), "lifted after expiry");
+    }
+
+    #[test]
+    fn unparseable_timestamp_stays_muted() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 4, 12, 0, 0).unwrap();
+        assert!(mute_active(Some("not-a-date"), now));
     }
 }
