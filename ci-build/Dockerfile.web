@@ -70,7 +70,7 @@ COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY --from=css /app/server/assets/tailwind-built.css server/assets/tailwind-built.css
 # A BuildKit cache mount keeps the release target dir warm across `--build`
 # runs so a source edit recompiles only the changed crates instead of the
-# whole app crate every time (the dominant cost in local `just dev-web`
+# whole app crate every time (the dominant cost in local `just run`
 # iteration). The mount shadows the cargo-chef-cooked target COPY'd above,
 # so on a cold cache (every CI build; the first local build) we seed it from
 # /app/target-cooked with `cp -a` to preserve mtimes and keep cargo's

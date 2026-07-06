@@ -100,18 +100,13 @@ just dev-web-local
 
 Then open `http://localhost:18080`.
 
-Or with Docker + Traefik (requires a configured domain):
+To build and run the production-shape image instead:
 
 ```nu
-just dev-web
+just run
 ```
 
-`just dev-web` serves at `https://${USER}-chat.a8n.run` behind the shared Traefik and needs a working Bunyip OP. The compose file (`compose.dev-web.yml`) wires the SSO vars and two dev-only escape hatches; first-time setup also requires, outside this repo:
-
-1. **An OIDC client for lets-chat on the dev Bunyip OP.** Register a confidential `client_secret_basic` client whose `redirect_uris` includes `https://${USER}-chat.a8n.run/auth/bunyip/callback`, then put its id/secret in `compose.dev-web.yml`. The committed bunyip-api seed only registers the static staging host, so the per-developer dev redirect must be added against the running dev OP DB.
-2. **A hosts entry so the browser resolves the app over the Nebula overlay.** Add `${USER}-chat.a8n.run` to the same `/etc/hosts` line as the other dev hosts (the Nebula IP), or the name falls through to public DNS and Traefik returns 404.
-
-Two dev-only flags in `compose.dev-web.yml` cover the dev OP's posture and are documented inline there: `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS=1` (the dev OP serves a self-signed cert; reqwest's bundled rustls roots reject it with no env-only remedy) and an `extra_hosts` pin of the issuer host to the dev Traefik container (server-to-server SSO calls must hit the Nebula-side Traefik, not the public IP). Neither is for production.
+That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://127.0.0.1:8080`. Supply the mandatory Bunyip SSO vars (and any optional features) with an env file: copy `.env.standalone`, fill it in, and either add `env_file: [.env.standalone]` to `compose.yml` or pass `--env-file .env.standalone`.
 
 Run `just --list` to see all available recipes.
 

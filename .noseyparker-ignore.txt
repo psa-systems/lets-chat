@@ -1,4 +1,4 @@
-# AGE recipients are public keys, not secrets.
-.sops.yaml
-*-secrets.yml
-archived/
+# LC-521: no paths are ignored by the Nosey Parker scan in this repo. The
+# Docker-inherited patterns (.sops.yaml, *-secrets.yml, archived/) were removed
+# because none of those files exist here. Add a path only with a documented
+# false-positive reason.
