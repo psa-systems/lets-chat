@@ -106,6 +106,29 @@ pub async fn get_hovercard(
         None
     };
 
+    // LC-533: pronouns / links / local time share the bio privacy gate (the
+    // timezone in particular is location-ish, so it stays behind the same wall).
+    let (pronouns, links, local_time) = if show_bio {
+        let pronouns = rec.pronouns.filter(|p| !p.trim().is_empty());
+        let links = rec
+            .profile_links
+            .as_deref()
+            .map(|raw| {
+                crate::models::user::profile_link_list(raw)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let local_time = rec
+            .timezone
+            .as_deref()
+            .and_then(|tz| crate::models::user::local_time_in(tz, chrono::Utc::now()));
+        (pronouns, links, local_time)
+    } else {
+        (None, Vec::new(), None)
+    };
+
     let fragment = crate::views::hovercard::HovercardFragment {
         user_id: rec.id,
         username: rec.username,
@@ -115,6 +138,9 @@ pub async fn get_hovercard(
         custom_status: rec.custom_status,
         is_bot: rec.is_bot,
         bio,
+        pronouns,
+        links,
+        local_time,
         can_message,
     };
     html(&fragment)
