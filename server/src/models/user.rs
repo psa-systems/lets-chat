@@ -59,6 +59,12 @@ pub struct UserRecord {
     pub theme: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
     pub density: Option<String>,
+    /// LC-533: short pronoun string (e.g. "she/her"), or NULL. Capped on write.
+    pub pronouns: Option<String>,
+    /// LC-533: newline-separated http(s) profile links, validated on write.
+    pub profile_links: Option<String>,
+    /// LC-533: IANA timezone name for the profile "local time" line, or NULL.
+    pub timezone: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -97,6 +103,12 @@ pub struct User {
     pub theme: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
     pub density: Option<String>,
+    /// LC-533: short pronoun string (e.g. "she/her"), or None.
+    pub pronouns: Option<String>,
+    /// LC-533: newline-separated http(s) profile links (validated on write).
+    pub profile_links: Option<String>,
+    /// LC-533: IANA timezone name for the "local time" line, or None.
+    pub timezone: Option<String>,
     /// LC-88: true when Do Not Disturb is currently active (manual pause or a
     /// schedule window). Computed at projection time from the record's DND
     /// columns against the wall clock; surfaces the "do not disturb" badge.
@@ -166,6 +178,66 @@ fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) ->
     }
 }
 
+/// LC-533: write-path caps for the profile extras. Enforced by the settings
+/// handler; the hovercard trusts the stored value.
+pub const MAX_PRONOUNS_CHARS: usize = 40;
+pub const MAX_PROFILE_LINKS: usize = 5;
+pub const MAX_LINK_CHARS: usize = 200;
+
+/// LC-533: validate and normalise the free-text links box. Input is one URL
+/// per line; blank lines are dropped. Each surviving line must be an http(s)
+/// URL within the length cap, and there is a hard cap on the count. Returns the
+/// normalised newline-joined string (`None` when empty) or a human-readable
+/// error for `settings_error`. Only the scheme + length are checked here; the
+/// stored value is rendered as an href, so the scheme allowlist is what keeps a
+/// `javascript:`/`data:` URL out of the anchor.
+pub fn validate_profile_links(input: &str) -> Result<Option<String>, String> {
+    let mut links: Vec<&str> = Vec::new();
+    for line in input.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.chars().count() > MAX_LINK_CHARS {
+            return Err(format!(
+                "A profile link exceeds {MAX_LINK_CHARS} characters."
+            ));
+        }
+        if !(t.starts_with("http://") || t.starts_with("https://")) {
+            return Err("Profile links must start with http:// or https://.".to_string());
+        }
+        links.push(t);
+    }
+    if links.len() > MAX_PROFILE_LINKS {
+        return Err(format!(
+            "At most {MAX_PROFILE_LINKS} profile links are allowed."
+        ));
+    }
+    if links.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(links.join("\n")))
+    }
+}
+
+/// LC-533: split a stored links blob into individual URLs for rendering.
+/// Defensive: re-drops any blank/non-http(s) line so a value written before a
+/// future validation change can never render a bad href.
+pub fn profile_link_list(raw: &str) -> Vec<&str> {
+    raw.lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("http://") || l.starts_with("https://"))
+        .collect()
+}
+
+/// LC-533: current wall-clock time in the user's IANA timezone, formatted for
+/// the hovercard (e.g. "3:45 PM EDT"). `None` when the tz is empty or unknown,
+/// so an unset or stale timezone simply hides the line.
+pub fn local_time_in(tz_name: &str, now: chrono::DateTime<chrono::Utc>) -> Option<String> {
+    let tz: chrono_tz::Tz = tz_name.parse().ok()?;
+    Some(now.with_timezone(&tz).format("%-I:%M %p %Z").to_string())
+}
+
 impl From<UserRecord> for User {
     fn from(r: UserRecord) -> Self {
         // Compute DND state against the current instant before the record is
@@ -201,6 +273,9 @@ impl From<UserRecord> for User {
             locale: r.locale,
             theme: r.theme,
             density: r.density,
+            pronouns: r.pronouns,
+            profile_links: r.profile_links,
+            timezone: r.timezone,
             dnd_active,
         }
     }
@@ -233,5 +308,49 @@ mod tests {
     fn unparseable_timestamp_stays_muted() {
         let now = Utc.with_ymd_and_hms(2026, 7, 4, 12, 0, 0).unwrap();
         assert!(mute_active(Some("not-a-date"), now));
+    }
+
+    // LC-533 profile extras.
+    use super::{local_time_in, profile_link_list, validate_profile_links, MAX_PROFILE_LINKS};
+
+    #[test]
+    fn links_validated_normalised_and_capped() {
+        // Blank lines dropped, order preserved, whitespace trimmed.
+        assert_eq!(
+            validate_profile_links("  https://a.example  \n\nhttp://b.example\n"),
+            Ok(Some("https://a.example\nhttp://b.example".to_string()))
+        );
+        // Empty input clears the field.
+        assert_eq!(validate_profile_links("   \n  "), Ok(None));
+        // Non-http(s) scheme rejected (keeps javascript:/data: out of hrefs).
+        assert!(validate_profile_links("javascript:alert(1)").is_err());
+        assert!(validate_profile_links("ftp://x.example").is_err());
+        // Over the count cap.
+        let many = (0..MAX_PROFILE_LINKS + 1)
+            .map(|i| format!("https://s{i}.example"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(validate_profile_links(&many).is_err());
+    }
+
+    #[test]
+    fn link_list_defensively_drops_bad_lines() {
+        let stored = "https://ok.example\njavascript:bad\n\nhttp://ok2.example";
+        assert_eq!(
+            profile_link_list(stored),
+            vec!["https://ok.example", "http://ok2.example"]
+        );
+    }
+
+    #[test]
+    fn local_time_formats_known_tz_and_hides_unknown() {
+        // 2026-07-04 16:00:00 UTC is 12:00 PM in New York (EDT, UTC-4).
+        let now = Utc.with_ymd_and_hms(2026, 7, 4, 16, 0, 0).unwrap();
+        assert_eq!(
+            local_time_in("America/New_York", now),
+            Some("12:00 PM EDT".to_string())
+        );
+        assert_eq!(local_time_in("", now), None);
+        assert_eq!(local_time_in("Not/AZone", now), None);
     }
 }
