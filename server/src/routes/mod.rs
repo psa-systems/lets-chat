@@ -91,6 +91,7 @@ mod sidebar_categories;
 mod slash;
 mod stage;
 mod starred_rooms;
+mod stats;
 mod status;
 mod summary;
 mod switcher;
@@ -1327,6 +1328,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/activity", get(activity::get_activity))
         // LC-526: kudos leaderboard.
         .route("/kudos", get(kudos::get_leaderboard))
+        // LC-536: personal member-stats recap.
+        .route("/stats", get(stats::get_stats))
         // LC-250: mark every conversation read in one action.
         .route("/read-all", post(read_all::post_read_all))
         .route("/room/{room_id}/read", post(read_all::post_room_read))

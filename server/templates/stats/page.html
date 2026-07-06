@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ "stats-title"|t }} - Let's Chat{% endblock %}
+
+{% block main %}
+<div class="flex flex-1 flex-col overflow-hidden">
+  <header class="border-b border-border px-4 py-2">
+    <h1 class="font-semibold">{{ "stats-title"|t }}</h1>
+    <p class="lc-small text-content-muted">{{ "stats-subtitle"|t }}</p>
+  </header>
+  <div class="flex-1 overflow-y-auto p-4">
+    <div class="mx-auto max-w-2xl">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ messages_sent }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-messages-sent"|t }}</div>
+        </div>
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ active_days }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-active-days"|t }}</div>
+        </div>
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ kudos_received }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-kudos-received"|t }}</div>
+        </div>
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ reactions_received }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-reactions-received"|t }}</div>
+        </div>
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ reactions_given }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-reactions-given"|t }}</div>
+        </div>
+        {% if member_since != "" %}
+        <div class="rounded border border-border px-3 py-3">
+          <div class="text-2xl font-semibold tabular-nums">{{ member_since }}</div>
+          <div class="lc-small text-content-muted">{{ "stats-member-since"|t }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <section class="mt-6">
+        <h2 class="lc-section-label mb-2">{{ "stats-top-channels"|t }}</h2>
+        {% if top_rooms.is_empty() %}
+        <p class="text-sm text-content-muted">{{ "stats-top-channels-empty"|t }}</p>
+        {% else %}
+        <ol class="space-y-1">
+          {% for room in top_rooms %}
+          <li class="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
+            <span class="w-5 shrink-0 tabular-nums text-content-subtle">{{ loop.index }}</span>
+            <span class="min-w-0 flex-1 truncate">{{ room.name }}</span>
+            <span class="shrink-0 tabular-nums text-content-muted">{{ room.count }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+      </section>
+
+      <p class="mt-4 text-xs text-content-subtle">{{ "stats-hint"|t }}</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
