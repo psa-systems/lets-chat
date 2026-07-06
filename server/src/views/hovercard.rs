@@ -22,6 +22,13 @@ pub struct HovercardFragment {
     pub is_bot: bool,
     /// Bio, already privacy-gated by the handler (None = do not show).
     pub bio: Option<String>,
+    /// LC-533: pronoun string, privacy-gated (None = do not show).
+    pub pronouns: Option<String>,
+    /// LC-533: http(s) profile links, privacy-gated (empty = none to show).
+    pub links: Vec<String>,
+    /// LC-533: viewer-time-of-request local time in the profile's tz, formatted
+    /// (e.g. "3:45 PM EDT"). Privacy-gated; None when unset/unknown.
+    pub local_time: Option<String>,
     /// Render the "Message" link to /dm/{user_id}.
     pub can_message: bool,
 }

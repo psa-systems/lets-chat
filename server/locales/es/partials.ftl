@@ -63,6 +63,7 @@ partials-voice-transcript = Transcripcion
 
 ## Profile hovercard (LC-298)
 hovercard-message = Mensaje
+hovercard-local-time = Hora local
 
 ## Broadcast count
 partials-broadcast-notify-prefix = Esto notificará a
