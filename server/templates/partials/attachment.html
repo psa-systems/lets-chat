@@ -39,15 +39,31 @@
      raw file in a new tab). #}
   <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer">
     {# LC-507: GIFs serve the animated original so they autoplay inline; the
-       still first-frame preview rendition is for non-animated images only. #}
+       still first-frame preview rendition is for non-animated images only.
+       LC-537: alt is the author's text when set, else the filename. #}
     {% if a.is_gif() %}
-    <img src="{{ a.url }}" alt="{{ a.filename }}"
+    <img src="{{ a.url }}" alt="{{ a.alt() }}"
          class="max-w-sm max-h-96 rounded border border-border">
     {% else %}
-    <img src="{{ a.url }}?size=preview" alt="{{ a.filename }}"
+    <img src="{{ a.url }}?size=preview" alt="{{ a.alt() }}"
          class="max-w-sm max-h-96 rounded border border-border">
     {% endif %}
   </a>
+  {# LC-537: the author can add / edit alt text after posting. Disclosure keeps
+     it out of the way; no-JS friendly (plain form submit falls back). #}
+  {% if message.can_edit %}
+  <details class="lc-alt-editor mt-1">
+    <summary class="cursor-pointer text-xs text-accent hover:underline">{% if a.has_alt() %}{{ "attachment-alt-edit"|t }}{% else %}{{ "attachment-alt-add"|t }}{% endif %}</summary>
+    <form method="post" action="/api/files/{{ a.id }}/alt"
+          hx-post="/api/files/{{ a.id }}/alt" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML"
+          class="mt-1 flex items-start gap-1">
+      <input type="text" name="alt" maxlength="1000" value="{% if let Some(t) = a.alt_text.as_ref() %}{{ t }}{% endif %}"
+             placeholder="{{ "attachment-alt-placeholder"|t }}"
+             class="input flex-1 text-xs" aria-label="{{ "attachment-alt-label"|t }}">
+      <button type="submit" class="btn btn-sm btn-secondary">{{ "attachment-alt-save"|t }}</button>
+    </form>
+  </details>
+  {% endif %}
 </div>
 {% else %}
 {# LC-500: clean download card (icon + truncated name + human size), matching
