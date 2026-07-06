@@ -43,6 +43,7 @@ pub mod search;
 pub mod settings;
 pub mod shame_tags;
 pub mod stage;
+pub mod stats;
 pub mod summary;
 pub mod switcher;
 pub mod transcripts;

@@ -476,6 +476,18 @@ kudos-most-appreciated = Most appreciated
 kudos-most-generous = Most generous
 kudos-hint = Give kudos in any channel with /kudos @user <reason>.
 sidebar-link-kudos = Kudos
+stats-title = Your stats
+stats-subtitle = A recap of your activity so far
+stats-messages-sent = Messages sent
+stats-active-days = Active days
+stats-kudos-received = Kudos received
+stats-reactions-received = Reactions received
+stats-reactions-given = Reactions given
+stats-member-since = Member since
+stats-top-channels = Top channels
+stats-top-channels-empty = No channel activity yet.
+stats-hint = Only you can see your stats.
+sidebar-link-stats = Your stats
 
 ## LC-532: composer AI writing assistant
 compose-assist-tip = AI writing assistant
