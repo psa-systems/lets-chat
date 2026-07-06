@@ -1,4 +1,0 @@
-# AGE recipients are public keys, not secrets.
-\.sops\.yaml
-.*-secrets\.yml
-archived/
