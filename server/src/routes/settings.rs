@@ -885,6 +885,11 @@ pub async fn post_profile(
         &user.id,
         display_name.as_deref(),
         bio.as_deref(),
+        // LC-533: pronouns / links / timezone parse + validation wired in the
+        // next commit; pass-through None keeps existing behavior for now.
+        None,
+        None,
+        None,
     )
     .await?;
 
