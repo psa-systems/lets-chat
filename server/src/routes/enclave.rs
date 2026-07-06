@@ -54,6 +54,11 @@ fn flash_message(code: Option<&str>, name: Option<&str>) -> Option<String> {
             Some(n) => format!("Room \"{n}\" already exists. Pick a different name."),
             None => "That room name is already taken. Pick a different name.".to_string(),
         }),
+        // LC-544: invalid / revoked / expired invite code, redirected here from
+        // post_join_by_code instead of a raw 400.
+        "invalid_invite_code" => Some(
+            "That invite code is invalid, revoked, or expired. Double-check it and try again, or browse the public enclaves below.".to_string(),
+        ),
         _ => None,
     }
 }
@@ -507,7 +512,12 @@ pub async fn post_join_by_code(
     let Some(enclave) =
         db::enclave::get_enclave_by_invite_code(&state.chat, form.code.trim()).await?
     else {
-        return Err(AppError::BadRequest("invalid or revoked code".into()));
+        // LC-544: an invalid / revoked / expired code (all collapse to `None`
+        // here) lands the user back on the discover page with a friendly,
+        // actionable banner instead of a raw 400 error page. The discover page
+        // is itself the next step: the join form is there to retry a mistyped
+        // code, and the public-enclave list is a way forward.
+        return Ok(Redirect::to("/enclaves/discover?error=invalid_invite_code"));
     };
     // LC-339: a user banned from this enclave (e.g. by Coyote Mode) cannot rejoin.
     if db::enclave::is_enclave_banned(&state.chat, enclave.id, &user.id).await? {

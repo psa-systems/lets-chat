@@ -304,8 +304,66 @@ async fn join_by_invite_code_adds_member() {
     // The owner is already a member; we just verify the endpoint succeeds.
 }
 
+/// Create an enclave as `sess`, generate its invite code, and return
+/// `(enclave_id, code)` by parsing the code back off the settings page
+/// (`data-lc-copy="..."`). The creator is the enclave owner, so the
+/// manage-gated settings page and invite-code generation both pass.
+async fn create_enclave_with_code(app: &Router, sess: &str, name: &str) -> (i64, String) {
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("name={name}")))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let gen_code = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{id}/invite-code"))
+        .header("cookie", cookie(sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::empty())
+        .unwrap();
+    app.clone().oneshot(gen_code).await.unwrap();
+
+    let settings = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/enclave/{id}/settings"))
+        .header("cookie", cookie(sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(settings).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    let marker = "data-lc-copy=\"";
+    let start = s
+        .find(marker)
+        .expect("invite code missing from settings page")
+        + marker.len();
+    let end = s[start..].find('"').unwrap();
+    let code = s[start..start + end].to_string();
+    assert!(!code.is_empty(), "parsed invite code is empty");
+    (id, code)
+}
+
+// LC-544: an invalid / revoked / expired code no longer shows a raw 400. It
+// redirects (303) back to the discover page with a friendly, actionable
+// banner. These three tests cover the invalid, revoked, and valid paths.
+
 #[tokio::test]
-async fn join_by_invalid_invite_code_400() {
+async fn join_by_invalid_invite_code_redirects_to_discover() {
     let (app, sess) = app_with_user("user").await;
     let req = Request::builder()
         .method(Method::POST)
@@ -315,7 +373,73 @@ async fn join_by_invalid_invite_code_400() {
         .body(Body::from("code=nonsense"))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    let loc = res.headers().get("location").unwrap().to_str().unwrap();
+    assert_eq!(loc, "/enclaves/discover?error=invalid_invite_code");
+}
+
+#[tokio::test]
+async fn join_by_revoked_invite_code_redirects_to_discover() {
+    let (app, s1, _id1, s2, _id2) = app_with_two_users().await;
+    // Alice owns an enclave with a live code; Bob captures it.
+    let (id, code) = create_enclave_with_code(&app, &s1, "rotate").await;
+
+    // Alice rotates the code, revoking the old one.
+    let rotate = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{id}/invite-code"))
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::empty())
+        .unwrap();
+    app.clone().oneshot(rotate).await.unwrap();
+
+    // Bob tries the now-revoked code: friendly redirect, not a 400.
+    let join = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves/join")
+        .header("cookie", cookie(&s2))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("code={code}")))
+        .unwrap();
+    let res = app.clone().oneshot(join).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    let loc = res.headers().get("location").unwrap().to_str().unwrap();
+    assert_eq!(loc, "/enclaves/discover?error=invalid_invite_code");
+}
+
+#[tokio::test]
+async fn join_by_valid_invite_code_adds_member_and_redirects_to_enclave() {
+    let (app, s1, _id1, s2, _id2) = app_with_two_users().await;
+    // Alice owns an enclave with a live code; Bob is not a member.
+    let (id, code) = create_enclave_with_code(&app, &s1, "welcome").await;
+
+    let join = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves/join")
+        .header("cookie", cookie(&s2))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("code={code}")))
+        .unwrap();
+    let res = app.clone().oneshot(join).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    let loc = res.headers().get("location").unwrap().to_str().unwrap();
+    assert_eq!(loc, format!("/enclave/{id}"));
+
+    // Bob is now a member: the enclave landing renders for him (200 or a
+    // redirect into a room, both of which a non-member would get 403 for).
+    let landing = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/enclave/{id}"))
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(landing).await.unwrap();
+    assert!(
+        res.status() == StatusCode::OK || res.status().is_redirection(),
+        "member must reach enclave landing, got {}",
+        res.status()
+    );
 }
 
 #[tokio::test]
