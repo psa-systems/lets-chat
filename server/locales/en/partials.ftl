@@ -61,6 +61,13 @@ partials-status-online = Online
 partials-voice-play = Play voice message
 partials-voice-transcript = Transcript
 
+## Image alt text (LC-537)
+attachment-alt-add = Add alt text
+attachment-alt-edit = Edit alt text
+attachment-alt-label = Alt text
+attachment-alt-placeholder = Describe this image
+attachment-alt-save = Save
+
 ## Profile hovercard (LC-298)
 hovercard-message = Message
 hovercard-local-time = Local time
