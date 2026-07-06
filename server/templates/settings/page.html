@@ -122,6 +122,26 @@
               <label class="lc-set-label" for="lc-bio">{{ "settings-bio"|t }}</label>
               <textarea id="lc-bio" class="input" name="bio" maxlength="500" rows="3">{% if let Some(b) = user.bio.as_ref() %}{{ b }}{% endif %}</textarea>
             </div>
+            {# LC-533: public-profile extras shown on the hovercard. #}
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-pronouns">{{ "settings-pronouns"|t }}</label>
+              <input id="lc-pronouns" class="input" type="text" name="pronouns" maxlength="40" placeholder="{{ "settings-pronouns-placeholder"|t }}" value="{% if let Some(p) = user.pronouns.as_ref() %}{{ p }}{% endif %}">
+            </div>
+            <div class="lc-set-field">
+              <label class="lc-set-label" for="lc-links">{{ "settings-links"|t }}</label>
+              <textarea id="lc-links" class="input" name="profile_links" rows="3" placeholder="{{ "settings-links-placeholder"|t }}">{% if let Some(l) = user.profile_links.as_ref() %}{{ l }}{% endif %}</textarea>
+              <p class="lc-set-help">{{ "settings-links-help"|t }}</p>
+            </div>
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-profile-tz">{{ "settings-profile-timezone"|t }}</label>
+              <select id="lc-profile-tz" class="input" name="timezone">
+                <option value="" {% if profile_timezone == "" %}selected{% endif %}>{{ "settings-profile-timezone-none"|t }}</option>
+                {% for tz in timezones %}
+                <option value="{{ tz.name }}" {% if tz.name == profile_timezone %}selected{% endif %}>{{ tz.name }}</option>
+                {% endfor %}
+              </select>
+              <p class="lc-set-help">{{ "settings-profile-timezone-help"|t }}</p>
+            </div>
             {# LC-432: status sits immediately after Save (so it clearly belongs
                to the save), Remove avatar is pushed to the far right. #}
             <div class="lc-set-actions">

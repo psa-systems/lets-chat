@@ -76,6 +76,10 @@ pub struct UserSettingsPage<'a> {
     pub dnd_weekend_start: String,
     pub dnd_weekend_end: String,
     pub timezones: Vec<TzOption>,
+    /// LC-533: the user's saved profile timezone (empty when unset), so the
+    /// profile-form tz picker can pre-select it. Shares the `timezones` list
+    /// with the DND picker; distinct from `dnd_timezone` (quiet-hours tz).
+    pub profile_timezone: String,
     /// LC-100: available UI locales for the language picker, plus a synthetic
     /// "system" option (empty code) for the Accept-Language fallback.
     pub locales: Vec<LocaleOption>,

@@ -273,6 +273,7 @@ pub async fn get_settings(
         dnd_weekend_start: dnd.weekend_start,
         dnd_weekend_end: dnd.weekend_end,
         timezones,
+        profile_timezone: user.timezone.clone().unwrap_or_default(),
         locales,
         keywords,
         personal_emojis,
@@ -794,6 +795,10 @@ pub async fn post_profile(
 ) -> Result<Response, AppError> {
     let mut display_name: Option<String> = None;
     let mut bio: Option<String> = None;
+    // LC-533: profile extras. Validated inline as the fields arrive.
+    let mut pronouns: Option<String> = None;
+    let mut profile_links: Option<String> = None;
+    let mut timezone: Option<String> = None;
     let mut avatar_bytes: Option<Vec<u8>> = None;
     let mut email_present = false;
     let mut email: Option<String> = None;
@@ -841,6 +846,55 @@ pub async fn post_profile(
                     Some(trimmed.to_string())
                 };
             }
+            // LC-533: short pronoun string.
+            "pronouns" => {
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("pronouns: {e}")))?;
+                let trimmed = v.trim();
+                if trimmed.chars().count() > crate::models::user::MAX_PRONOUNS_CHARS {
+                    return Ok(settings_error(
+                        &headers,
+                        &format!(
+                            "Pronouns exceed {} characters.",
+                            crate::models::user::MAX_PRONOUNS_CHARS
+                        ),
+                    ));
+                }
+                pronouns = if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                };
+            }
+            // LC-533: one http(s) URL per line; validated + normalised.
+            "profile_links" => {
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("profile_links: {e}")))?;
+                match crate::models::user::validate_profile_links(&v) {
+                    Ok(links) => profile_links = links,
+                    Err(msg) => return Ok(settings_error(&headers, &msg)),
+                }
+            }
+            // LC-533: IANA timezone for the profile "local time" line. Empty
+            // clears it; a non-empty value must be a known zone.
+            "timezone" => {
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("timezone: {e}")))?;
+                let trimmed = v.trim();
+                if trimmed.is_empty() {
+                    timezone = None;
+                } else if trimmed.parse::<chrono_tz::Tz>().is_ok() {
+                    timezone = Some(trimmed.to_string());
+                } else {
+                    return Ok(settings_error(&headers, "Unknown timezone."));
+                }
+            }
             "email" => {
                 email_present = true;
                 let v = field
@@ -885,11 +939,9 @@ pub async fn post_profile(
         &user.id,
         display_name.as_deref(),
         bio.as_deref(),
-        // LC-533: pronouns / links / timezone parse + validation wired in the
-        // next commit; pass-through None keeps existing behavior for now.
-        None,
-        None,
-        None,
+        pronouns.as_deref(),
+        profile_links.as_deref(),
+        timezone.as_deref(),
     )
     .await?;
 
