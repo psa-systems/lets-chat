@@ -49,6 +49,7 @@ pub mod shame_tags;
 pub mod sidebar_categories;
 pub mod slash;
 pub mod starred_rooms;
+pub mod stats;
 pub mod thread_followers;
 pub mod transcripts;
 pub mod translations;
