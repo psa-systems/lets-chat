@@ -374,8 +374,35 @@ async fn join_by_invalid_invite_code_redirects_to_discover() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::SEE_OTHER);
-    let loc = res.headers().get("location").unwrap().to_str().unwrap();
+    let loc = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     assert_eq!(loc, "/enclaves/discover?error=invalid_invite_code");
+
+    // Follow the redirect and confirm the discover page actually renders the
+    // friendly banner. Asserting the Location alone would stay green even if
+    // the flash_message arm were removed (the fix and the arm are coupled only
+    // by the `invalid_invite_code` string), leaving the user a blank page.
+    let follow = Request::builder()
+        .method(Method::GET)
+        .uri(&loc)
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(follow).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        s.contains("invalid, revoked, or expired"),
+        "discover page must render the friendly invalid-invite-code banner"
+    );
 }
 
 #[tokio::test]
