@@ -12,7 +12,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [v0.1.0] - 2026-06-24
 
-First tagged release. lets-chat previously shipped only as the `latest` OCI image built off `main`; v0.1.0 is the seed version cut to a tag so deployments can pin a release (`dev.a8n.run/a8n-tools-private/lets-chat:v0.1.0`) and the desktop self-updater has a baseline. This entry is the operator-visible snapshot of everything in `main` at the tag, folding the prior **Pre-release** seed (snapshot 2026-05-30) together with the operator-action changes that landed after it.
+First tagged release. lets-chat previously shipped only as the `latest` OCI image built off `main`; v0.1.0 is the seed version cut to a tag so deployments can pin a release (e.g. `lets-chat:v0.1.0` in your OCI registry) and the desktop self-updater has a baseline. This entry is the operator-visible snapshot of everything in `main` at the tag, folding the prior **Pre-release** seed (snapshot 2026-05-30) together with the operator-action changes that landed after it.
 
 ### Security
 

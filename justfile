@@ -182,37 +182,19 @@ compose_env := 'GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo un
 # developer on the host.
 compose_uid := 'HOST_UID="$(id -u)" HOST_GID="$(id -g)"'
 
-# Start development server (web, standalone) via Docker Compose with Traefik
-[group('dev')]
-dev-web:
-    @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    TRAEFIK_PUBLIC_IP="$(./dev/traefik-ip)" {{ compose_env }} docker compose --file compose.dev-web.yml up --build
+# Build and run the production-shape image via Docker Compose (compose.yml) on
+# http://127.0.0.1:8080. Supply the required Bunyip SSO vars (and any optional
+# features) with an env file: copy .env.standalone, fill it in, then run
+# `just run` after adding `env_file: [.env.standalone]` to compose.yml or pass
+# `--env-file .env.standalone` on the command line.
+[group('run')]
+run:
+    {{ compose_env }} docker compose --file compose.yml up --build
 
-# Stop dev-web container
-[group('dev')]
-dev-web-down:
-    docker compose --file compose.dev-web.yml down
-
-# Stop dev-web container and remove the data volume
-[group('dev')]
-dev-web-clean:
-    docker compose --file compose.dev-web.yml down --volumes
-
-# Start development server (web, saas) via Docker Compose with Traefik
-[group('dev')]
-dev-web-saas:
-    @echo "Web: https://{{ env('USER') }}-chat.a8n.run"
-    {{ compose_env }} docker compose --file compose.dev-web-saas.yml up --build
-
-# Stop dev-web-saas container
-[group('dev')]
-dev-web-saas-down:
-    docker compose --file compose.dev-web-saas.yml down
-
-# Stop dev-web-saas container and remove the data volume
-[group('dev')]
-dev-web-saas-clean:
-    docker compose --file compose.dev-web-saas.yml down --volumes
+# Stop the compose.yml container
+[group('run')]
+run-down:
+    docker compose --file compose.yml down
 
 # Start development server (web, standalone) locally on http://localhost:18080
 [group('dev')]
@@ -336,7 +318,7 @@ fmt:
 
 # ── Cleanup ────────────────────────────────────────────────────────────────
 
-# Tear down THIS repo's entire dev footprint: bring down every dev compose stack (web, web-saas, web-local, web-local-saas, desktop) with their networks and project-scoped volumes, remove the fixed-name cargo/data volumes the `dev/cargo` + `dev/server-up` wrappers create, and delete local build/runtime artifacts (target/, data/, artifacts/ desktop bundles). Supersedes the per-mode dev-web*-clean recipes (each only `down --volumes` for one stack); this one teardown covers every mode at once. Scoped to this repo, safe on a shared host (no host-global prune).
+# Tear down THIS repo's entire dev footprint: bring down every dev compose stack (web-local, web-local-saas, desktop) plus the compose.yml run stack with their networks and project-scoped volumes, remove the fixed-name cargo/data volumes the `dev/cargo` + `dev/server-up` wrappers create, and delete local build/runtime artifacts (target/, data/, artifacts/ desktop bundles). Supersedes the per-mode dev-web*-clean recipes (each only `down --volumes` for one stack); this one teardown covers every mode at once. Scoped to this repo, safe on a shared host (no host-global prune).
 [group: 'cleanup']
 dev-clean:
     #!/usr/bin/env nu
@@ -345,8 +327,6 @@ dev-clean:
     # volumes (cargo-registry/cargo-git/target/data, lets-chat-data) without
     # needing to spell the project-prefixed volume names out by hand.
     let compose_files = [
-        "compose.dev-web.yml"
-        "compose.dev-web-saas.yml"
         "compose.dev-web-local.yml"
         "compose.dev-web-local-saas.yml"
         "compose.dev-desktop.yml"

@@ -1,8 +1,8 @@
 # Email ingress
 
-LC-77 lets external senders mail a chat room directly. An operator-configured IMAP mailbox is polled every 5 minutes; messages addressed to `<token>@<ingress-domain>` post to their target room as a synthetic "Email" actor (no real user impersonation, no DM link, "email" badge in the rendered row).
+Email ingress lets external senders mail a chat room directly. An operator-configured IMAP mailbox is polled every 5 minutes; messages addressed to `<token>@<ingress-domain>` post to their target room as a synthetic "Email" actor (no real user impersonation, no DM link, "email" badge in the rendered row).
 
-**LC-77-REPLY (#201, shipped):** lets-chat sends per-message notification emails for mentions and DMs to users who opt in at `/settings` (stage 1), and the IMAP poll loop consumes replies to those notification emails and posts them to chat as the real user (stage 2). See "Notification emails" and "Reply-by-email" below.
+**Notification emails and reply-by-email (shipped):** lets-chat sends per-message notification emails for mentions and DMs to users who opt in at `/settings` (stage 1), and the IMAP poll loop consumes replies to those notification emails and posts them to chat as the real user (stage 2). See "Notification emails" and "Reply-by-email" below.
 
 ## What this is, and what it isn't
 
@@ -10,7 +10,7 @@ LC-77 lets external senders mail a chat room directly. An operator-configured IM
 
 **Isn't**: an SMTP server. lets-chat does not bind port 25 or 587 and does not own MX for any domain. The operator provides a mailbox at their mail provider; lets-chat polls it via IMAP.
 
-**Is also** (LC-77-REPLY stage 2, shipped): a reply-by-email path. A user replying to a chat notification email has their reply posted to the room as themselves; see "Reply-by-email" below. This was the formerly-deferred half of LC-77 and is now shipped (#201).
+**Is also** (reply-by-email stage 2, shipped): a reply-by-email path. A user replying to a chat notification email has their reply posted to the room as themselves; see "Reply-by-email" below. This was the formerly-deferred half of the feature and is now shipped.
 
 ## Threat model
 
@@ -85,8 +85,8 @@ Every dropped message logs at `WARN` with `target: "email_ingress::drop"`. The `
 | `revoked_inbox` | The token matched, but the inbox has been revoked by an admin. | Tell the sender to use a fresh inbox (created via the per-room admin page). |
 | `loop_detected` | The message looked machine-generated (Auto-Submitted, Precedence: bulk/list/junk, X-Autoreply, X-Autorespond, or List-Id). | This is a deliberate drop. **`List-Id`-tagged mail is dropped even when the sender is a legitimate automated tool that happens to tag itself as a list** - that's the v1 posture; if your monitoring tool tags itself with `List-Id`, see the "Not supported" section below. |
 | `rate_limited` | Inbox exceeded 60 messages per minute. | The sender is misbehaving; throttle at the source. |
-| `reply_expired` | A `reply-<token>@<ingress-domain>` reply (LC-77-REPLY) matched no live reply token: the 7-day TTL elapsed, or the token was already consumed by an earlier reply (one-shot). | The user replied too late, or replied twice to the same notification. They can post a fresh message or reply to a newer notification. |
-| `duplicate` | The message's RFC 5322 `Message-ID:` was already processed (exactly-once dedup, LC-77-MID-DEDUP); nothing is posted. | Normal on a wire-identical replay (e.g. a crash between post and `\Seen`). No action - the dedup is working as designed. |
+| `reply_expired` | A `reply-<token>@<ingress-domain>` reply matched no live reply token: the 7-day TTL elapsed, or the token was already consumed by an earlier reply (one-shot). | The user replied too late, or replied twice to the same notification. They can post a fresh message or reply to a newer notification. |
+| `duplicate` | The message's RFC 5322 `Message-ID:` was already processed (exactly-once dedup); nothing is posted. | Normal on a wire-identical replay (e.g. a crash between post and `\Seen`). No action - the dedup is working as designed. |
 | `internal_error` | Catch-all (DB, disk, IMAP transport). | Check `detail`; usually a transient. If persistent, investigate the lets-chat data dir or the IMAP provider. |
 
 Attachment drops are logged separately at `INFO` with `target: "email_ingress::attachment_drop"` and `reason` ∈ {`over_size`, `disallowed_mime`, `sniff_failed`, `image_pipeline`, `io`, `db`}. The parent message still posts; the bad attachment is the only thing dropped.
@@ -105,7 +105,7 @@ Attachment drops are logged separately at `INFO` with `target: "email_ingress::a
 
 "Hardcoded" means: changing requires a code change + release. The admin UI does not expose these. If you need a different value, file a followup.
 
-## Notification emails (LC-77-REPLY stage 1)
+## Notification emails (stage 1)
 
 lets-chat sends a notification email to a user for each `@username` mention or DM they receive, gated by per-user opt-in. The email body shows the sender, the room, a 140-char snippet, and a CTA link back to the message. If email-ingress is configured on the deployment, the email also carries a `Reply-To: reply-<token>@<ingress-domain>` header; the inbound resolver that consumes those replies is stage 2 (shipped; see "Reply-by-email" below).
 
@@ -147,7 +147,7 @@ When an email is dispatched, a row is inserted in `chat.db::reply_tokens` mappin
 
 Same SMTP env vars as the digest and the other outbound email surfaces (mention/DM notifications). No new operator-side setup. The `Reply-To` header is automatic; if `imap_inbox_config.ingress_domain` is unset (no email-ingress configured), the notification email still sends without a Reply-To and the recipient can't reply-back.
 
-## Reply-by-email (LC-77-REPLY stage 2)
+## Reply-by-email (stage 2)
 
 The IMAP poll loop now consumes replies to the stage-1 notification emails. A reply addressed to `reply-<token>@<ingress-domain>` is resolved against the `chat.db::reply_tokens` table, the user's quote/signature is stripped, and the reply posts to the original message's room as a real-user message (NOT as the email-inbox synthetic actor).
 
@@ -205,7 +205,7 @@ Errs on the side of leaving extra text in chat (a missed strip is recoverable; a
 - **Bouncing failed messages.** No bounce email is ever generated. The operator's only diagnostic is the structured log. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
 - **Voice-format attachments.** Email attachments cannot be voice messages in v1; voice has a `MediaRecorder` origin emails don't produce.
 
-## Dead-letter folder (LC-77-DEAD-LETTER)
+## Dead-letter folder
 
 Optional: if you set an IMAP folder name in the admin IMAP settings as the dead-letter folder, every dropped message is `UID COPY`d into that folder before being marked `\Seen` on the source UID. You then have a per-drop record of the raw message (headers, body, attachments) in the folder, recoverable via any IMAP client.
 
@@ -224,7 +224,7 @@ Every `ProcessOutcome::Dropped` from `process_polled_message` plus the two pre-p
 ### Failure modes
 
 - The dead-letter folder doesn't exist OR the IMAP server denies COPY. lets-chat logs at INFO under `target=email_ingress::dead_letter` with the error and proceeds with the `\Seen` STORE. A misconfigured dead-letter folder cannot block the queue.
-- The dead-letter COPY succeeds but the `\Seen` STORE then fails (rare; FETCH succeeded so the session is alive). On the next tick the UID is UNSEEN again, gets re-fetched, re-processed (no double-post thanks to LC-77-MID-DEDUP), re-dead-lettered. You'd see two copies in the dead-letter folder. Cost: storage, not correctness.
+- The dead-letter COPY succeeds but the `\Seen` STORE then fails (rare; FETCH succeeded so the session is alive). On the next tick the UID is UNSEEN again, gets re-fetched, re-processed (no double-post thanks to Message-ID dedup), re-dead-lettered. You'd see two copies in the dead-letter folder. Cost: storage, not correctness.
 
 ### Anti-scope
 
@@ -232,7 +232,7 @@ Every `ProcessOutcome::Dropped` from `process_polled_message` plus the two pre-p
 - No auto-cleanup of the dead-letter folder. Configure your IMAP provider's retention if you want the folder pruned.
 - Per-attachment drops (attachments rejected by the upload pipeline; the parent message still posts) are NOT dead-lettered. The dead-letter surface only covers message-level drops.
 
-## Duplicate suppression (LC-77-MID-DEDUP)
+## Duplicate suppression
 
 The poll loop's posture is still always-`\Seen`-after-attempt so a poison message never retries forever. The dedup layer is a SECOND defense for the rare race where a crash lands between (process) and (STORE +Seen) on the same UID: the next tick would re-fetch the same UID and otherwise re-post the message a second time.
 
@@ -269,7 +269,7 @@ The hash is computed as `HMAC-SHA256(LETS_CHAT_SECRET_KEY, message_id_plaintext)
 - **The ingress address is a bearer secret.** Anyone who learns it can post to the room. Treat it like a webhook URL: don't paste it into shared docs without thinking, don't log it in your monitoring tool's outbound history.
 - **To rotate**: create a new inbox in the per-room admin page, then revoke the old one. Mail to the old address starts dropping with `reason=revoked_inbox` on the next poll tick.
 - **The IMAP password is stored AES-256-GCM-sealed in `settings.db`.** Same pattern as the VAPID keypair. A `settings.db` leak does not yield a usable IMAP password without `LETS_CHAT_SECRET_KEY` from the operator's environment.
-- **SMTP credentials (outbound digest / verification / notification mail) are configured via environment variables (`LETS_CHAT_SMTP_*`), not stored at rest.** LC-77-SMTP-SEAL (shipped) removed the legacy plaintext SMTP columns from `settings.db` (migration `settings/0006_drop_smtp_settings.sql`), so there is no SMTP secret in the database to leak. Email ingress reads the AES-256-GCM-sealed IMAP password separately, under `LETS_CHAT_SECRET_KEY`.
+- **SMTP credentials (outbound digest / verification / notification mail) are configured via environment variables (`LETS_CHAT_SMTP_*`), not stored at rest.** The SMTP-seal change (shipped) removed the legacy plaintext SMTP columns from `settings.db` (migration `settings/0006_drop_smtp_settings.sql`), so there is no SMTP secret in the database to leak. Email ingress reads the AES-256-GCM-sealed IMAP password separately, under `LETS_CHAT_SECRET_KEY`.
 
 ## Related modules
 

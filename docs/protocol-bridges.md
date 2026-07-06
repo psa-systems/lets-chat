@@ -1,6 +1,6 @@
-# Protocol bridges (LC-78)
+# Protocol bridges
 
-LC-78 lets an out-of-process daemon translate between lets-chat and a foreign protocol (Matrix in v1; IRC and XMPP defer freely on the same schema). The lets-chat server provides the registration surface, a scoped API for the daemon to post / heartbeat, and an outgoing-webhook stream the daemon subscribes to for outbound events. The daemon itself is documented but NOT shipped: an operator runs `matrix-appservice-bridge` or any community daemon configured against this API.
+Protocol bridges let an out-of-process daemon translate between lets-chat and a foreign protocol (Matrix in v1; IRC and XMPP defer freely on the same schema). The lets-chat server provides the registration surface, a scoped API for the daemon to post / heartbeat, and an outgoing-webhook stream the daemon subscribes to for outbound events. The daemon itself is documented but NOT shipped: an operator runs `matrix-appservice-bridge` or any community daemon configured against this API.
 
 ## Loop-break: read this first
 
@@ -18,7 +18,7 @@ LC-78 lets an out-of-process daemon translate between lets-chat and a foreign pr
 
 ## What this is, and what it isn't
 
-**Is**: a registration + transport surface. The server holds the bridge row (room, kind, sealed daemon config, bot identity, heartbeat status), exposes `POST /api/v1/bridges/{id}/messages` for the daemon to inject foreign messages, exposes `POST /api/v1/bridges/{id}/heartbeat` for liveness, and fires LC-75 outgoing webhooks the daemon subscribes to for outbound events.
+**Is**: a registration + transport surface. The server holds the bridge row (room, kind, sealed daemon config, bot identity, heartbeat status), exposes `POST /api/v1/bridges/{id}/messages` for the daemon to inject foreign messages, exposes `POST /api/v1/bridges/{id}/heartbeat` for liveness, and fires outgoing webhooks the daemon subscribes to for outbound events.
 
 **Isn't**: a Matrix appservice. lets-chat does not implement the Matrix Client-Server or Appservice protocols, does not federate, does not handle E2EE, and does not own state for the Matrix room. All Matrix-side state lives in the homeserver; lets-chat-side state lives in the chat room. The daemon is the translator and persists nothing of its own beyond what's needed to identify itself.
 
@@ -26,7 +26,7 @@ LC-78 lets an out-of-process daemon translate between lets-chat and a foreign pr
 
 ## v2 release-notes header: foreign-avatar proxy is ON by default
 
-> **Behavior change on upgrade.** LC-78-AVATAR-PROXY ships with foreign-avatar fetching **enabled by default**. The v1 reject-non-null behavior is preserved behind the `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` env var; set this BEFORE upgrading if you want v1's posture back. Daemons that observed v1's 400 may now start submitting `foreign_avatar` URLs (some daemon configs disabled the field client-side based on the v1 reject; if you bumped your daemon's config to omit the field, upgrading the server alone is sufficient).
+> **Behavior change on upgrade.** The foreign-avatar proxy ships with fetching **enabled by default**. The v1 reject-non-null behavior is preserved behind the `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` env var; set this BEFORE upgrading if you want v1's posture back. Daemons that observed v1's 400 may now start submitting `foreign_avatar` URLs (some daemon configs disabled the field client-side based on the v1 reject; if you bumped your daemon's config to omit the field, upgrading the server alone is sufficient).
 >
 > The proxy fetches each foreign avatar exactly once, caches the bytes server-side, and serves them from a same-origin URL (`/media/bridge-avatar-proxy/{hash}`). Viewers' browsers never hit the foreign homeserver. The structural side-channel closure: the foreign URL never appears in rendered HTML, only the opaque sha256 hash does. Reading the HTML reveals nothing about which homeservers the room bridges with.
 
@@ -35,11 +35,11 @@ LC-78 lets an out-of-process daemon translate between lets-chat and a foreign pr
 | Capability | Status | Notes |
 |---|---|---|
 | Matrix → lets-chat new messages | yes (v1) | Daemon POSTs `/api/v1/bridges/{id}/messages` with `body` + `foreign_name`. |
-| lets-chat → Matrix new messages | yes (v1) | Daemon subscribes to LC-75 `message.posted` and translates. |
+| lets-chat → Matrix new messages | yes (v1) | Daemon subscribes to `message.posted` and translates. |
 | Matrix per-user actor identity in lets-chat | yes (v1) | `foreign_name` snapshots on the row; "alice (via matrix)" renders. |
 | Foreign avatars | **proxied (v2)** | Server fetches once via `bridge_avatar::fetch_and_cache`, magic-byte-sniffs, re-encodes through the uploads pipeline (EXIF / XMP / IPTC strip), stores on disk, serves from `/media/bridge-avatar-proxy/{hash}`. Pending fetch and failed fetch both 404 from the proxy endpoint; the `<img onerror>` falls back to initials. v1's reject behavior is restored by `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false`. |
-| Edits / deletes (either direction) | **deferred** | LC-75 fires `message.edited` and `message.deleted` with the `actor` block, so the daemon CAN see them; v1 daemons are expected to ignore. Pushing Matrix `m.replace` events to lets-chat needs an `/api/v1/bridges/{id}/messages/{mid}/edit` endpoint that v1 does not ship. |
-| Reactions | **deferred** | LC-75 fires `reaction.added`; v1 daemon ignores. Matrix reaction model differs from lets-chat's. |
+| Edits / deletes (either direction) | **deferred** | The outgoing-webhook stream fires `message.edited` and `message.deleted` with the `actor` block, so the daemon CAN see them; v1 daemons are expected to ignore. Pushing Matrix `m.replace` events to lets-chat needs an `/api/v1/bridges/{id}/messages/{mid}/edit` endpoint that v1 does not ship. |
+| Reactions | **deferred** | The outgoing-webhook stream fires `reaction.added`; v1 daemon ignores. Matrix reaction model differs from lets-chat's. |
 | Threads | **deferred** | Matrix threading model differs. |
 | File / attachment relay | **deferred** | Each direction is its own sub-protocol. |
 | Identity mapping (`@alice:matrix.org` → lets-chat user) | **rejected** | Account linking is a security surface (impersonation). v1 keeps foreign users as display-only synthetic actors. |
@@ -52,11 +52,11 @@ LC-78 lets an out-of-process daemon translate between lets-chat and a foreign pr
 
 - **The bot's role tier denies everything else.** Even if an operator mistakenly grants a bridge-role token `messages:write` or `messages:read`, the server's per-endpoint `require_not_bridge()` gate rejects the call with 403. Verified by `routes_bridge_role_isolation`.
 
-- **`config_encrypted` is a real credential.** The Matrix homeserver shared secret (or equivalent for other protocols) is stored AES-256-GCM-sealed under `LETS_CHAT_SECRET_KEY` with a separate nonce column, same convention as `imap_inbox_config` (LC-77) and `vapid_keys`. A chat.db leak cannot reconstruct usable Matrix tokens.
+- **`config_encrypted` is a real credential.** The Matrix homeserver shared secret (or equivalent for other protocols) is stored AES-256-GCM-sealed under `LETS_CHAT_SECRET_KEY` with a separate nonce column, same convention as `imap_inbox_config` and `vapid_keys`. A chat.db leak cannot reconstruct usable Matrix tokens.
 
-- **Foreign avatars are proxied through lets-chat (v2).** The viewer's browser never hits the foreign homeserver: lets-chat fetches each foreign avatar URL exactly once (`bridge_avatar::fetch_and_cache`), magic-byte-sniffs the bytes (Content-Type header is ignored), re-encodes through the uploads pipeline so EXIF / XMP / IPTC / PNG text chunks are stripped, and serves from a same-origin `/media/bridge-avatar-proxy/{hash}` URL. The `hash` is sha256 of the canonical foreign URL; the URL itself never appears in rendered HTML. SSRF-guarded at submit time AND at fetch time: the fetch runs through `http_client::outbound_get`, whose connect-time public-only resolver returns exactly the addresses reqwest connects on, so a DNS rebind to a private address is refused at connect rather than left as an open window (LC-152-TOCTOU, #286; same posture on the LC-75 outgoing-webhook delivery path). 1 MiB byte cap, 5-second fetch timeout. The image-decoder spike (`spike_image_decoder_hostile_corpus`) confirms `image 0.25` does not panic on hostile inputs at the cap, and `spawn_blocking` adds a second layer of panic isolation. v1's reject-non-null posture is restored by `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false`.
+- **Foreign avatars are proxied through lets-chat (v2).** The viewer's browser never hits the foreign homeserver: lets-chat fetches each foreign avatar URL exactly once (`bridge_avatar::fetch_and_cache`), magic-byte-sniffs the bytes (Content-Type header is ignored), re-encodes through the uploads pipeline so EXIF / XMP / IPTC / PNG text chunks are stripped, and serves from a same-origin `/media/bridge-avatar-proxy/{hash}` URL. The `hash` is sha256 of the canonical foreign URL; the URL itself never appears in rendered HTML. SSRF-guarded at submit time AND at fetch time: the fetch runs through `http_client::outbound_get`, whose connect-time public-only resolver returns exactly the addresses reqwest connects on, so a DNS rebind to a private address is refused at connect rather than left as an open window (same posture on the outgoing-webhook delivery path). 1 MiB byte cap, 5-second fetch timeout. The image-decoder spike (`spike_image_decoder_hostile_corpus`) confirms `image 0.25` does not panic on hostile inputs at the cap, and `spawn_blocking` adds a second layer of panic isolation. v1's reject-non-null posture is restored by `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false`.
 
-- **Cookie login refuses bots.** A bridge bot has `is_bot = 1`; the cookie-login flow rejects it (LC-73 invariant). The bot can ONLY authenticate via the scoped API token. There is no path that turns a leaked bot token into a session.
+- **Cookie login refuses bots.** A bridge bot has `is_bot = 1`; the cookie-login flow rejects it (an invariant). The bot can ONLY authenticate via the scoped API token. There is no path that turns a leaked bot token into a session.
 
 - **The per-message actor override is privilege-isolated.** `bridge:post` is a strictly more powerful scope than `messages:write`: the caller chooses the rendered display name. The endpoint sits on its own route (`/api/v1/bridges/{id}/messages`) gated to its own scope and rejects any token that holds `messages:write` but not `bridge:post`. The separation IS the security boundary.
 
@@ -84,15 +84,15 @@ Content-Type: application/json
 
 Validation:
 
-- `body`: trimmed, non-empty, bounded by the LC-153 message length cap.
+- `body`: trimmed, non-empty, bounded by the message length cap.
 - `foreign_name`: trimmed, non-empty, max 256 bytes.
-- `foreign_avatar`: accepted by default (v2). A non-null URL is fetched once, proxied, and served same-origin (see the avatar-proxy notes above). It is rejected with HTTP 400 and an `LC-78-AVATAR-PROXY` token in the error body ONLY when the operator has set `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` (or `0`/`no`/`off`) to restore v1's reject-non-null posture. A URL over the length cap is rejected with HTTP 400 regardless of the proxy setting.
+- `foreign_avatar`: accepted by default (v2). A non-null URL is fetched once, proxied, and served same-origin (see the avatar-proxy notes above). It is rejected with HTTP 400 (the error body names `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED`) ONLY when the operator has set `LETS_CHAT_BRIDGE_AVATAR_PROXY_ENABLED=false` (or `0`/`no`/`off`) to restore v1's reject-non-null posture. A URL over the length cap is rejected with HTTP 400 regardless of the proxy setting.
 
 Effects:
 
 - Inserts a `messages` row with `bridge_id`, `bridge_foreign_name`, `bridge_kind` snapshotted from the bridge row + POST body.
 - Broadcasts to connected lets-chat clients as a normal HTMX OOB fragment with the synthetic actor.
-- Fires LC-75 `message.posted` with the `actor` block (see below).
+- Fires `message.posted` with the `actor` block (see below).
 
 ### Heartbeating
 
@@ -108,7 +108,7 @@ Optional `{"error": "homeserver unreachable"}` body to surface a daemon-side fau
 
 ### Outgoing-webhook payload
 
-Subscribe an outgoing webhook (LC-75) at `/admin/outgoing-webhooks` to whichever events the daemon needs. The payload now carries an `actor` block on every message-* and reaction.added event:
+Subscribe an outgoing webhook at `/admin/outgoing-webhooks` to whichever events the daemon needs. The payload now carries an `actor` block on every message-* and reaction.added event:
 
 ```json
 {
@@ -129,9 +129,9 @@ Subscribe an outgoing webhook (LC-75) at `/admin/outgoing-webhooks` to whichever
 Shapes:
 
 - User-authored: `"actor": {"kind": "user", "user_id": "..."}`.
-- Webhook-authored (LC-74): `"actor": {"kind": "webhook", "webhook_id": N}`.
-- Email-ingress-authored (LC-77): `"actor": {"kind": "email_inbox", "email_inbox_id": N}`.
-- Bridge-authored (LC-78): `"actor": {"kind": "bridge", "bridge_id": N}`. Same shape on `message.edited` and `message.deleted` events for messages the bridge originally posted (the actor describes the ORIGINAL author, not the editor/deleter).
+- Webhook-authored: `"actor": {"kind": "webhook", "webhook_id": N}`.
+- Email-ingress-authored: `"actor": {"kind": "email_inbox", "email_inbox_id": N}`.
+- Bridge-authored: `"actor": {"kind": "bridge", "bridge_id": N}`. Same shape on `message.edited` and `message.deleted` events for messages the bridge originally posted (the actor describes the ORIGINAL author, not the editor/deleter).
 
 ## Operator workflow
 
@@ -158,7 +158,7 @@ Removing a bridge from `/admin/bridges`:
 - `bridge_foreign_name` and `bridge_kind` snapshots PERSIST so historical messages still render with the foreign actor identity.
 - Does NOT ban the bot or revoke its API token. The token's scopes are bridge-only and now have no bridge to act on; disable the bot via `/admin/bots` if you want explicit cleanup.
 
-This is the LC-78 v1 design: stop-new, not delete-history. The principle: the wrong choice made in code (stop-new flipped to delete-history later) is reversible via an additive admin branch; the wrong choice made in data (history hard-deleted on every removal) is permanent. If your deployment ever needs strict delete-history semantics, it's an additive follow-up, not a destructive change to v1.
+This is the v1 design: stop-new, not delete-history. The principle: the wrong choice made in code (stop-new flipped to delete-history later) is reversible via an additive admin branch; the wrong choice made in data (history hard-deleted on every removal) is permanent. If your deployment ever needs strict delete-history semantics, it's an additive follow-up, not a destructive change to v1.
 
 ## Known gaps
 
