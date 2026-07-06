@@ -1,6 +1,6 @@
-# Desktop self-update signing (LC-210-BINARY-INTEGRITY, #277)
+# Desktop self-update signing
 
-The desktop self-updater (`desktop/src/update.rs`) downloads a release binary and replaces the running executable in place. LC-210 SSRF-guarded the *fetch* (every redirect hop is validated against a public-IP filter), but the SSRF guard does not make the downloaded bytes *trustworthy*: a redirect to a public attacker-controlled host, a compromised package mirror, or a TLS-trust break would still serve a binary that the updater would execute. This document describes the signing layer that closes that gap, and how an operator provisions it.
+The desktop self-updater (`desktop/src/update.rs`) downloads a release binary and replaces the running executable in place. The updater SSRF-guards the *fetch* (every redirect hop is validated against a public-IP filter), but the SSRF guard does not make the downloaded bytes *trustworthy*: a redirect to a public attacker-controlled host, a compromised package mirror, or a TLS-trust break would still serve a binary that the updater would execute. This document describes the signing layer that closes that gap, and how an operator provisions it.
 
 ## Chain of trust
 

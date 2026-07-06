@@ -1,6 +1,6 @@
 # UI conventions
 
-Shared front-end patterns every new surface should inherit instead of re-deriving. Born out of the LC-148 audit's C3 finding (each new surface silently re-implements a concept rather than reusing it). Keep this list short; when a pattern here changes, update the doc in the same PR.
+Shared front-end patterns every new surface should inherit instead of re-deriving. Born out of a recurring problem: each new surface silently re-implements a concept rather than reusing it. Keep this list short; when a pattern here changes, update the doc in the same PR.
 
 ## Typography scale (LC-365)
 
@@ -30,7 +30,7 @@ Spacing stays on Tailwind's default 4px scale - compose from it rather than inve
 
 ## Live updates
 
-A new page that shows mutable data should update over the WebSocket without a manual reload (LC-148 gap C1, closed by the LC-156 epic). The recipe, end to end:
+A new page that shows mutable data should update over the WebSocket without a manual reload. The recipe, end to end:
 
 1. **Extract the mutable region into an Askama partial** (e.g. `enclave/members_items.html`, `saved/items.html`) and include it from the full page wrapped in a stable id (`<div id="lc-saved-list">{% include ... %}</div>`). If the page handler builds rows with non-trivial logic, factor that into a `pub(crate)` row-builder so the page and the live render share it.
 2. **Add a live OOB fragment** (`server/templates/ws/<name>_live.html`) that includes the SAME partial inside `<... id="<same-id>" hx-swap-oob="outerHTML">`, with a matching `#[derive(Template)]` struct in `views::ws_fragments` (or the surface's view module).

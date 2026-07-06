@@ -137,7 +137,7 @@ impl BunyipSsoClient {
             .timeout(Duration::from_secs(10))
             .user_agent(concat!("lets-chat/", env!("CARGO_PKG_VERSION")));
         // DEV-ONLY escape hatch. The dev OP (bunyip) sits behind a Traefik that
-        // serves a self-signed default cert for *.a8n.run, and reqwest's
+        // serves a self-signed default cert for its wildcard domain, and reqwest's
         // rustls-tls uses bundled webpki roots that ignore the system CA store,
         // so server-to-server discovery/JWKS/token calls fail TLS verification
         // with no env- or mount-only remedy. When this flag is truthy we accept

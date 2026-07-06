@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "ssh://git@git.a8n.run/a8n-tools/lets-chat.git"
+    "url": "https://example.com/lets-chat.git"
   },
   "keywords": [],
   "author": "",
