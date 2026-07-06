@@ -1,6 +1,0 @@
-# LC-521: no paths are excluded from the TruffleHog scan in this repo. The
-# Docker-inherited patterns (.sops.yaml, *-secrets.yml, archived/) were removed
-# because none of those files exist here. TruffleHog runs with --only-verified,
-# so the LC-471 favicon base64 false positive (which only trips the unverified
-# kingfisher rule) does not apply here. Add a path only with a documented
-# false-positive reason.
