@@ -40,6 +40,12 @@ pub enum ChatEvent {
         message_id: i64,
         room_id: i64,
     },
+    /// LC-537: an image's alt text was added/edited; re-render the whole
+    /// message for every viewer (the alt lives inside the attachment fragment).
+    AttachmentAltChanged {
+        message_id: i64,
+        room_id: i64,
+    },
     MessageDeleted {
         message_id: i64,
         room_id: i64,

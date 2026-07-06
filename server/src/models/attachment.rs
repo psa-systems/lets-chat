@@ -23,11 +23,31 @@ pub struct Attachment {
     /// attachment is not a voice message. Rendered as escaped text, so it is
     /// safe to render directly.
     pub transcript: Option<String>,
+    /// LC-537: author-provided alt text for accessibility. `None` when the
+    /// uploader has not set one; the renderer then falls back to the filename.
+    pub alt_text: Option<String>,
 }
 
 impl Attachment {
     pub fn is_image(&self) -> bool {
         self.mime_type.starts_with("image/")
+    }
+
+    /// LC-537: effective `alt` attribute for an image: the author's alt text
+    /// when set and non-blank, otherwise the filename (v1 behaviour).
+    pub fn alt(&self) -> &str {
+        match self.alt_text.as_deref() {
+            Some(t) if !t.trim().is_empty() => t,
+            _ => &self.filename,
+        }
+    }
+
+    /// LC-537: whether the author has set explicit alt text (drives the "edit"
+    /// vs "add" label on the alt-text control).
+    pub fn has_alt(&self) -> bool {
+        self.alt_text
+            .as_deref()
+            .is_some_and(|t| !t.trim().is_empty())
     }
 
     pub fn is_audio(&self) -> bool {
@@ -82,5 +102,39 @@ impl Attachment {
             Some(d) => format!("{d:.3}"),
             None => String::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Attachment;
+
+    fn img(alt: Option<&str>) -> Attachment {
+        Attachment {
+            id: 1,
+            filename: "cat.png".into(),
+            mime_type: "image/png".into(),
+            size_bytes: 10,
+            url: "/api/files/1".into(),
+            waveform: None,
+            voice_duration: None,
+            transcript: None,
+            alt_text: alt.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn alt_prefers_alt_text_then_falls_back_to_filename() {
+        assert_eq!(img(Some("a napping cat")).alt(), "a napping cat");
+        assert_eq!(img(None).alt(), "cat.png");
+        // A blank / whitespace alt is treated as unset (fallback to filename).
+        assert_eq!(img(Some("   ")).alt(), "cat.png");
+    }
+
+    #[test]
+    fn has_alt_true_only_for_non_blank() {
+        assert!(img(Some("desc")).has_alt());
+        assert!(!img(None).has_alt());
+        assert!(!img(Some("  ")).has_alt());
     }
 }

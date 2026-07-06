@@ -17,6 +17,19 @@ use crate::db;
 use crate::db::uploads::WaveformBlob;
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::views::room::SingleMessageFragment;
+use crate::views::{html, Html};
+use crate::ws::events::ChatEvent;
+
+/// LC-537: cap on author-provided image alt text. Matches the composer input's
+/// `maxlength`; alt is rendered as an attribute, so this bounds it on write.
+const MAX_ALT_CHARS: usize = 1000;
+
+#[derive(serde::Deserialize)]
+pub struct AltForm {
+    #[serde(default)]
+    pub alt: String,
+}
 
 /// Default upload cap when settings.max_upload_bytes is missing or unparseable.
 const DEFAULT_MAX_UPLOAD_BYTES: i64 = 10 * 1024 * 1024;
@@ -613,6 +626,66 @@ fn sanitize_filename(s: &str) -> String {
 /// quoted form is good enough for inline display).
 fn sanitize_disposition_filename(s: &str) -> String {
     s.replace(['\\', '"'], "_")
+}
+
+/// `POST /api/files/{id}/alt` - set (or clear) an image's alt text. Only the
+/// uploader may edit; the change re-renders the parent message for every viewer
+/// over the WS, and returns the freshly rendered message fragment to the editor.
+pub async fn post_file_alt(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(file_id): Path<i64>,
+    axum::Form(form): axum::Form<AltForm>,
+) -> Result<Html, AppError> {
+    let (upload, room_id) = db::uploads::get_upload(&state.chat, file_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // Author-only, mirroring message edit. Non-uploaders get 403.
+    if upload.uploader_id != user.id {
+        return Err(AppError::Forbidden);
+    }
+    if !upload.mime_type.starts_with("image/") {
+        return Err(AppError::BadRequest(
+            "alt text applies only to images".into(),
+        ));
+    }
+    let alt = form.alt.trim();
+    if alt.chars().count() > MAX_ALT_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "Alt text exceeds {MAX_ALT_CHARS} characters."
+        )));
+    }
+    // An unattached (orphan) upload has no message to re-render; reject rather
+    // than silently setting alt on a row the timeline never shows.
+    let (Some(message_id), Some(room_id)) = (upload.message_id, room_id) else {
+        return Err(AppError::BadRequest("attachment is not posted yet".into()));
+    };
+
+    let alt_opt = if alt.is_empty() { None } else { Some(alt) };
+    db::uploads::set_upload_alt_text(&state.chat, file_id, alt_opt).await?;
+
+    state.hub.broadcast_to_room(
+        room_id,
+        &ChatEvent::AttachmentAltChanged {
+            message_id,
+            room_id,
+        },
+    );
+
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;
+    let view = super::load_message_view_for_viewer(
+        &state,
+        &user,
+        message_id,
+        pinned_ids.contains(&message_id),
+        is_bookmarked,
+    )
+    .await?;
+    html(&SingleMessageFragment {
+        message: &view,
+        oob: false,
+    })
 }
 
 #[cfg(test)]

@@ -240,7 +240,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                                 ChatEvent::MessageEdited { message_id, .. }
                                 | ChatEvent::MessageRegrouped { message_id, .. }
-                                | ChatEvent::VoiceTranscribed { message_id, .. } => {
+                                | ChatEvent::VoiceTranscribed { message_id, .. }
+                                | ChatEvent::AttachmentAltChanged { message_id, .. } => {
                                     render_edited_message(&send_state, *message_id, &send_user).await
                                 }
                                 ChatEvent::ReactionAdded { message_id, .. }
