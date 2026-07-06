@@ -16,15 +16,32 @@
       {% if is_bot %}
       <span class="text-[10px] font-bold uppercase tracking-wide border border-border bg-surface-elevated text-content-muted rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
       {% endif %}
+      {# LC-533: pronouns sit next to the name, de-emphasised. #}
+      {% if let Some(p) = pronouns.as_ref() %}
+      <span class="text-xs text-content-muted truncate">{{ p }}</span>
+      {% endif %}
     </div>
     <div class="text-xs text-content-muted truncate">@{{ username }}</div>
     {% if let Some(cs) = custom_status.as_ref() %}
     <div class="mt-0.5 text-xs text-content truncate">{{ cs }}</div>
     {% endif %}
+    {# LC-533: current local time in the profile owner's timezone. #}
+    {% if let Some(lt) = local_time.as_ref() %}
+    <div class="mt-0.5 text-xs text-content-muted truncate">{{ "hovercard-local-time"|t }}: {{ lt }}</div>
+    {% endif %}
   </div>
 </div>
 {% if let Some(b) = bio.as_ref() %}
 <p class="mt-2 text-xs text-content-muted whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{{ b }}</p>
+{% endif %}
+{# LC-533: profile links. Rendered as same-tab-blocking external anchors; the
+   http(s) scheme was enforced on write and re-checked on read. #}
+{% if !links.is_empty() %}
+<ul class="mt-2 space-y-0.5">
+  {% for link in links %}
+  <li class="truncate"><a href="{{ link }}" target="_blank" rel="noopener noreferrer nofollow" class="text-xs text-accent hover:underline break-all">{{ link }}</a></li>
+  {% endfor %}
+</ul>
 {% endif %}
 {% if can_message %}
 <a href="/dm/{{ user_id }}" class="mt-3 block w-full text-center rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-content hover:bg-accent-hover">{{ "hovercard-message"|t }}</a>

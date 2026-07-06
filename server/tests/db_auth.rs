@@ -155,13 +155,58 @@ async fn test_search_users_matches_username_substring_case_insensitive() {
     assert_eq!(hits[0].username, "Alice");
 }
 
+// LC-533: update_user_profile persists and later clears the three profile
+// extras (pronouns / links / timezone) alongside display_name + bio.
+#[tokio::test]
+async fn test_update_user_profile_round_trips_extras() {
+    let pool = setup_pool().await;
+    let id = lets_chat::db::auth::create_user(&pool, "prof", "h")
+        .await
+        .unwrap();
+
+    lets_chat::db::auth::update_user_profile(
+        &pool,
+        &id,
+        Some("Prof Ile"),
+        Some("hi"),
+        Some("they/them"),
+        Some("https://a.example\nhttps://b.example"),
+        Some("America/New_York"),
+    )
+    .await
+    .unwrap();
+
+    let rec = lets_chat::db::auth::find_user_by_id(&pool, &id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rec.pronouns.as_deref(), Some("they/them"));
+    assert_eq!(
+        rec.profile_links.as_deref(),
+        Some("https://a.example\nhttps://b.example")
+    );
+    assert_eq!(rec.timezone.as_deref(), Some("America/New_York"));
+
+    // Clearing every extra nulls the columns (does not leave stale values).
+    lets_chat::db::auth::update_user_profile(&pool, &id, Some("Prof Ile"), None, None, None, None)
+        .await
+        .unwrap();
+    let rec = lets_chat::db::auth::find_user_by_id(&pool, &id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rec.pronouns, None);
+    assert_eq!(rec.profile_links, None);
+    assert_eq!(rec.timezone, None);
+}
+
 #[tokio::test]
 async fn test_search_users_matches_display_name() {
     let pool = setup_pool().await;
     let id = lets_chat::db::auth::create_user(&pool, "u1", "h")
         .await
         .unwrap();
-    lets_chat::db::auth::update_user_profile(&pool, &id, Some("Jane Doe"), None)
+    lets_chat::db::auth::update_user_profile(&pool, &id, Some("Jane Doe"), None, None, None, None)
         .await
         .unwrap();
     lets_chat::db::auth::create_user(&pool, "other", "h")

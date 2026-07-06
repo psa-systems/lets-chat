@@ -76,16 +76,25 @@ async fn setup() -> Setup {
     db::auth::set_profile_public(&auth, &private_id, false)
         .await
         .unwrap();
-    sqlx::query("UPDATE users SET display_name='Pub Lic', bio='hello from public bio' WHERE id=?")
-        .bind(&public_id)
-        .execute(&auth)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE users SET bio='secret private bio' WHERE id=?")
-        .bind(&private_id)
-        .execute(&auth)
-        .await
-        .unwrap();
+    // LC-533: both carry the profile extras so the card + privacy-gate paths
+    // can be asserted. New York is EDT (UTC-4) in July, London BST (UTC+1).
+    sqlx::query(
+        "UPDATE users SET display_name='Pub Lic', bio='hello from public bio', \
+         pronouns='they/them', profile_links='https://pub.example', \
+         timezone='America/New_York' WHERE id=?",
+    )
+    .bind(&public_id)
+    .execute(&auth)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE users SET bio='secret private bio', pronouns='she/her', \
+         profile_links='https://priv.example', timezone='Europe/London' WHERE id=?",
+    )
+    .bind(&private_id)
+    .execute(&auth)
+    .await
+    .unwrap();
 
     let admin_session = db::auth::create_session(&auth, &admin_id).await.unwrap();
     let member_session = db::auth::create_session(&auth, &member_id).await.unwrap();
@@ -134,6 +143,16 @@ async fn public_card_shows_name_username_and_bio() {
         body.contains("hello from public bio"),
         "bio missing: {body}"
     );
+    // LC-533: public profile extras are visible.
+    assert!(body.contains("they/them"), "pronouns missing: {body}");
+    assert!(
+        body.contains("https://pub.example"),
+        "profile link missing: {body}"
+    );
+    assert!(
+        body.contains("PM EDT") || body.contains("AM EDT"),
+        "local time (EDT) missing: {body}"
+    );
     // A messageable target offers the Message link.
     assert!(
         body.contains(&format!("/dm/{}", s.public_id)),
@@ -151,6 +170,13 @@ async fn private_bio_hidden_from_other_member() {
         !body.contains("secret private bio"),
         "private bio leaked to non-admin non-self: {body}"
     );
+    // LC-533: the extras share the bio gate, so none leak to a stranger.
+    assert!(!body.contains("she/her"), "private pronouns leaked: {body}");
+    assert!(
+        !body.contains("https://priv.example"),
+        "private link leaked: {body}"
+    );
+    assert!(!body.contains("BST"), "private local time leaked: {body}");
     // Private-profile stranger with no existing DM: no Message link.
     assert!(
         !body.contains(&format!("/dm/{}", s.private_id)),
