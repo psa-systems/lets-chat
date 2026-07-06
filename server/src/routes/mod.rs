@@ -1606,6 +1606,8 @@ pub fn build_router(state: AppState) -> Router {
             post(uploads::post_upload).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/files/{id}", get(uploads::get_file))
+        // LC-537: author-only image alt-text editor.
+        .route("/api/files/{id}/alt", post(uploads::post_file_alt))
         .route(
             "/media/bridge-avatar-proxy/{hash}",
             get(bridge_avatar_media::get_bridge_avatar),

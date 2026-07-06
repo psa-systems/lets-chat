@@ -364,6 +364,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::MessageRegrouped { .. }
         // LC-483: rendered per recipient in the WS send task (re-render message).
         | ChatEvent::VoiceTranscribed { .. }
+        // LC-537: same - re-render the whole message for the alt-text change.
+        | ChatEvent::AttachmentAltChanged { .. }
         | ChatEvent::ReactionAdded { .. }
         | ChatEvent::ReactionRemoved { .. }
         | ChatEvent::AckRequiredChanged { .. }
