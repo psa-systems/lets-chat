@@ -149,6 +149,11 @@ enclave-settings-delete-confirm = Eliminar permanentemente este enclave y todas 
 enclave-settings-member-demote = Degradar
 enclave-settings-member-promote = Ascender
 enclave-settings-member-kick = Expulsar
+# LC-551: confianza de miembro graduada.
+enclave-settings-member-trust-new = Nuevo
+enclave-settings-member-new-title = Los miembros nuevos tienen un límite de frecuencia hasta que publican lo suficiente para graduarse.
+enclave-settings-member-trust = Dar confianza
+enclave-settings-member-untrust = Restablecer a nuevo
 enclave-settings-member-transfer = Transferir
 enclave-settings-member-transfer-confirm-prefix = Transferir la propiedad a
 enclave-settings-member-transfer-confirm-suffix = ?
