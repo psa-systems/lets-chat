@@ -126,6 +126,7 @@ async fn build_harness() -> Harness {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     Harness {
         state,

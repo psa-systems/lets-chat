@@ -38,6 +38,9 @@ pub struct DmPage<'a> {
     /// LC-486: an operator LLM is configured. Drives `data-lc-llm` on the page
     /// root, which CSS-gates the per-message Translate action.
     pub llm_available: bool,
+    /// LC-549: an operator embeddings endpoint is configured; drives
+    /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
+    pub embeddings_available: bool,
     /// LC-488: the GIF picker is configured. Drives the composer GIF button.
     pub gif_available: bool,
     /// LC-511: see `RoomPage::gif_teaser`. Giphy unconfigured but the viewer is a

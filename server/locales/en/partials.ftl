@@ -129,6 +129,8 @@ partials-room-info-title = View room info, description, and wiki
 partials-room-info-docs-title = Room info / docs / wiki
 partials-room-info = Info
 partials-room-search-placeholder = Search this room...
+# LC-549: opt-in semantic (embedding) search toggle in the room-header search.
+partials-room-search-semantic = Semantic
 partials-room-moderators-title = Manage per-room moderators
 partials-room-moderators = Moderators
 # LC-325: jump-to-date control.

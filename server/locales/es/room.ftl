@@ -513,6 +513,12 @@ compose-assist-action-formal = Formal
 room-msg-suggest-reply = Sugerir respuesta
 suggest-reply-heading = Toca un borrador para añadirlo a tu mensaje
 
+## LC-549: búsqueda semántica / de mensajes relacionados
+room-msg-related = Buscar relacionados
+related-heading = Mensajes relacionados
+related-subheading = Ordenados por significado, no por palabras clave
+related-empty = No se encontraron mensajes muy relacionados.
+
 ## LC-534: per-channel slowmode
 room-slowmode-heading = Modo lento
 room-slowmode-intro = Limita con qué frecuencia puede publicar cada miembro en este canal. Los moderadores están exentos.

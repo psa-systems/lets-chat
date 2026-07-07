@@ -216,6 +216,12 @@
         {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" class="lc-menu-item lc-llm-only">{{ "room-msg-suggest-reply"|t }}</button>
         {% endif %}
+        {# LC-549: find messages related to this one by embedding similarity.
+           Gated on [data-lc-embeddings] (an operator embeddings endpoint), like
+           the LLM-gated items above. Result fills the shared #thread-panel slot. #}
+        {% if !message.body.is_empty() %}
+        <button role="menuitem" hx-get="/messages/{{ message.id }}/related" hx-target="#thread-panel" hx-swap="outerHTML" hx-disabled-elt="this" class="lc-menu-item lc-embeddings-only">{{ "room-msg-related"|t }}</button>
+        {% endif %}
         {# LC-286: mark this conversation unread from here. #}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
         {# LC-528: read this message aloud via the browser SpeechSynthesis API.

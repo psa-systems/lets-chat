@@ -58,6 +58,7 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -117,6 +118,7 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
     (app, s1, id1, s2, id2)

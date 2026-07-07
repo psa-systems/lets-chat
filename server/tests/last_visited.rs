@@ -50,6 +50,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     (routes::build_router(state), session, user_id)
 }

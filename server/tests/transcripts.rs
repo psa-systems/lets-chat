@@ -170,6 +170,7 @@ async fn setup_with_clients(
         bunyip_sso: None,
         stt_client,
         llm_client,
+        embedding_client: None,
     };
     Setup {
         app: routes::build_router(state.clone()),

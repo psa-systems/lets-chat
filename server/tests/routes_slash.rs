@@ -72,6 +72,7 @@ async fn app() -> TestApp {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     // Room in an enclave Alice owns; add Bob as a member too.
     let eid = db::enclave::create_enclave(&chat, "Acme", None, &alice)

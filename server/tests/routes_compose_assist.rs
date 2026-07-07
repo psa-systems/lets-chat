@@ -61,6 +61,7 @@ async fn app(llm: Option<Arc<dyn lets_chat::llm::LlmClient>>) -> TestApp {
         bunyip_sso: None,
         stt_client: None,
         llm_client: llm,
+        embedding_client: None,
     };
     db::enclave::create_enclave(&chat, "Acme", None, &alice)
         .await

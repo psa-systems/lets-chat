@@ -1142,6 +1142,15 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    configured (same [data-lc-llm] page-root gate as the translate item). */
 .lc-composer-ai { display: none; }
 [data-lc-llm] .lc-composer-ai { display: inline-flex; }
+/* LC-549: "Find related" menu item, revealed only when an operator embeddings
+   endpoint is configured ([data-lc-embeddings] page root, ancestor-based so it
+   covers live-swapped message fragments). Independent of the LLM gate. */
+.lc-embeddings-only { display: none; }
+[data-lc-embeddings] .lc-menu-item.lc-embeddings-only { display: flex; }
+/* LC-549: the room-search "Semantic" toggle, shown only when embeddings are
+   configured (same page-root gate). */
+.lc-semantic-toggle { display: none; }
+[data-lc-embeddings] .lc-semantic-toggle { display: flex; }
 /* LC-528: hide the "Read aloud" item when the browser has no SpeechSynthesis.
    live.js sets .lc-no-tts on <html> once at load; the ancestor rule also covers
    live-swapped message fragments. */
