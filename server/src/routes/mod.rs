@@ -1256,6 +1256,10 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/thread/{parent_id}/follow",
             post(room::post_thread_follow).delete(room::delete_thread_follow),
         )
+        .route(
+            "/room/{room_id}/thread/{parent_id}/mute",
+            post(room::post_thread_mute).delete(room::delete_thread_mute),
+        )
         .route("/thread-panel", delete(room::close_thread_panel))
         // LC-484: AI "catch me up" summaries (threads + channel unread range).
         .route(

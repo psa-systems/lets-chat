@@ -1,0 +1,19 @@
+{# LC-546: thread Mute/Muted toggle. Included by the thread panel header and
+   re-rendered by the mute/unmute endpoints (swaps itself outerHTML). When
+   muted, the button unmutes (hx-delete) and vice versa. Muting a thread stops
+   its reply notifications even while you remain an auto-followed participant. #}
+{% if muted %}
+<button type="button"
+  hx-delete="/room/{{ room_id }}/thread/{{ parent_id }}/mute"
+  hx-swap="outerHTML"
+  aria-pressed="true"
+  class="text-xs rounded px-2 py-0.5 bg-surface-sunken text-content-muted hover:bg-surface-sunken/80"
+  title="{{ "room-thread-muted-title"|t }}">{{ "room-thread-muted"|t }}</button>
+{% else %}
+<button type="button"
+  hx-post="/room/{{ room_id }}/thread/{{ parent_id }}/mute"
+  hx-swap="outerHTML"
+  aria-pressed="false"
+  class="text-xs rounded px-2 py-0.5 text-content-muted hover:text-content hover:bg-surface-sunken"
+  title="{{ "room-thread-mute-title"|t }}">{{ "room-thread-mute"|t }}</button>
+{% endif %}
