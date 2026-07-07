@@ -2710,11 +2710,20 @@ async fn notify_thread_followers(
         Ok(f) => f,
         Err(_) => return,
     };
+    // LC-546: a muter of this thread is dropped from the fan-out even though
+    // replying auto-followed them. Mute wins over follow. One bulk lookup; the
+    // muter set is small (only members who explicitly silenced this thread).
+    let muted: std::collections::HashSet<String> =
+        db::thread_muters::muters(&state.chat, parent_id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
     let snippet = build_snippet(body);
     let author_label = author_label(author);
     let mut events: Vec<(String, ChatEvent)> = Vec::new();
     for uid in followers {
-        if uid == author.id {
+        if uid == author.id || muted.contains(&uid) {
             continue;
         }
         // The follower must still be able to see the room. is_room_accessible
