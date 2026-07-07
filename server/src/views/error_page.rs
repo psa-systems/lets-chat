@@ -16,9 +16,16 @@ pub struct ErrorPage<'a> {
     /// Localized status heading (e.g. "Not found", "Forbidden", "Server
     /// error"). Plain text, no markup.
     pub status_heading: &'a str,
-    /// Optional variant-specific detail. Plain text; HTML-escaped by Askama.
-    /// `None` renders the heading + back link only.
-    pub message: Option<&'a str>,
+    /// LC-552: friendly, localized description of what happened, keyed by the
+    /// error variant. Always present, so even a bare 404 / 403 reads as human
+    /// copy rather than an empty heading.
+    pub description: &'a str,
+    /// LC-552: the caller's specific, curated reason (e.g. "Pin cap reached
+    /// (max 50)"), shown as a secondary line when present. `None` for the
+    /// no-detail variants and, crucially, for `Internal` - so sqlx / askama /
+    /// panic text never reaches the client. HTML-escaped by Askama; clamped by
+    /// the caller.
+    pub detail: Option<&'a str>,
     /// Where the "Back" button navigates to. `AppError::IntoResponse`
     /// always sets `/`; the auth middleware redirects unauthed visitors
     /// to `/login` from there, so a single value works for both cases.
