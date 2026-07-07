@@ -14,6 +14,9 @@ pub struct EnclaveMemberView {
     pub user_id: String,
     pub label: String,
     pub role: EnclaveRole,
+    /// LC-551: `"new"` or `"trusted"`. Owners/admins are always effectively
+    /// trusted; the template only surfaces the pill/control for `member` rows.
+    pub trust: String,
 }
 
 /// LC-516: one selectable bot in the "add a bot" picker on the members panel.
