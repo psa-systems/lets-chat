@@ -393,6 +393,21 @@
         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM10.75 6a.75.75 0 00-1.5 0v4c0 .2.08.39.22.53l2.5 2.5a.75.75 0 101.06-1.06L10.75 9.69V6z" clip-rule="evenodd"/>
       </svg>
     </button>
+    {# LC-547: ephemeral / self-destruct timer. A plain <select> rides the
+       axum::Form post as `ttl`; empty = permanent (the default). A non-empty
+       choice stamps expires_at on the sent message and an unconditional 60s
+       sweep hard-deletes it once the timer passes. Server-side token allowlist
+       (models::message::ephemeral_expires_at) is the source of truth. #}
+    <select name="ttl"
+      class="lc-composer-ttl self-center rounded border border-border bg-surface-elevated text-xs text-content-muted px-1 py-1"
+      data-lc-tip="{{ "room-composer-ttl-label"|t }}" data-lc-tip-pos="top"
+      aria-label="{{ "room-composer-ttl-label"|t }}">
+      <option value="">{{ "room-composer-ttl-off"|t }}</option>
+      <option value="5m">{{ "room-composer-ttl-5m"|t }}</option>
+      <option value="1h">{{ "room-composer-ttl-1h"|t }}</option>
+      <option value="1d">{{ "room-composer-ttl-1d"|t }}</option>
+      <option value="7d">{{ "room-composer-ttl-7d"|t }}</option>
+    </select>
     <button
       id="composer-send"
       type="submit"
