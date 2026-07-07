@@ -83,6 +83,10 @@ pub enum RateLimitKind {
     /// LC-534: per-channel slowmode. Cooldown (not per-minute count) keyed by
     /// `{room_id}:{user_id}`; checked via `check_cooldown`.
     Slowmode,
+    /// LC-551: new-member posting cooldown. A freshly-joined ("new") enclave
+    /// member is held to a minimum interval between posts until they graduate to
+    /// "trusted". Cooldown keyed by `{enclave_id}:{user_id}`; via `check_cooldown`.
+    NewMemberPost,
 }
 
 impl RateLimitKind {
@@ -99,6 +103,7 @@ impl RateLimitKind {
             RateLimitKind::BridgeMessage => "brm",
             RateLimitKind::AssistantAsk => "ask",
             RateLimitKind::Slowmode => "slow",
+            RateLimitKind::NewMemberPost => "newm",
         }
     }
 }
