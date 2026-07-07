@@ -90,6 +90,19 @@ error-status-internal = Error del servidor
 ## (La etiqueta "Volver al inicio" se comparte con el 404 de nivel de router
 ## a través de la clave existente `not-found-back-home`; LC-220 no la duplica.)
 
+## LC-552: descripciones claras y humanas bajo el titulo del estado, para que
+## incluso un 404 / 403 se lea como texto real. El motivo especifico de quien
+## llama (p. ej. "Pin cap reached (max 50)") aun se muestra como linea
+## secundaria; solo la variante interna oculta su detalle. Una por variante.
+error-desc-not-found = No encontramos esa pagina. Puede que se haya movido o eliminado, o que el enlace sea incorrecto.
+error-desc-forbidden = No tienes acceso a eso. Si crees que es un error, comprueba que iniciaste sesion con la cuenta correcta.
+error-desc-unauthorized = Necesitas iniciar sesion para ver esto. Inicia sesion e intentalo de nuevo.
+error-desc-conflict = No se pudo guardar porque coincide con algo que ya existe. Prueba con otro valor.
+error-desc-bad-request = No pudimos procesar esa solicitud. Revisa lo que ingresaste e intentalo otra vez.
+error-desc-payload-too-large = Ese archivo es demasiado grande. Intentalo de nuevo con uno mas pequeno.
+error-desc-too-many-requests = Estas haciendo eso demasiado rapido. Espera un momento e intentalo de nuevo.
+error-desc-internal = Algo salio mal de nuestro lado. El problema quedo registrado; intentalo de nuevo en un rato.
+
 ## Poll modal
 poll-create-title = Crear encuesta
 poll-close-dialog = Cerrar diálogo

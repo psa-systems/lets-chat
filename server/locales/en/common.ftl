@@ -95,6 +95,19 @@ error-status-internal = Server error
 ## (Back-to-home label is shared with the router-level 404 via the
 ## existing `not-found-back-home` key; LC-220 does not duplicate it.)
 
+## LC-552: friendly, human descriptions shown under the status heading, so even
+## a bare 404 / 403 reads as real copy. A caller's curated reason (e.g. "Pin cap
+## reached (max 50)") still renders as a secondary line; only the truly-internal
+## variant hides its detail. One description per AppError variant.
+error-desc-not-found = We could not find that page. It may have been moved or removed, or the link might be wrong.
+error-desc-forbidden = You do not have access to that. If you think this is a mistake, make sure you are signed in to the right account.
+error-desc-unauthorized = You need to be signed in to view this. Sign in and try again.
+error-desc-conflict = That could not be saved because it clashes with something that already exists. Try a different value.
+error-desc-bad-request = We could not process that request. Double-check what you entered and give it another try.
+error-desc-payload-too-large = That upload is too large. Try again with a smaller file.
+error-desc-too-many-requests = You are doing that a little too quickly. Wait a moment, then try again.
+error-desc-internal = Something went wrong on our end. The problem has been logged; please try again in a little while.
+
 ## Poll modal
 poll-create-title = Create poll
 poll-close-dialog = Close dialog
