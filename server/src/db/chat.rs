@@ -590,6 +590,24 @@ pub async fn insert_message_quoted(
     Ok(result.last_insert_rowid())
 }
 
+/// LC-547: stamp a message's self-destruct time. `expires_at` is a
+/// `"%Y-%m-%d %H:%M:%S"` UTC string (see [`crate::models::message::ephemeral_expires_at`]);
+/// the unconditional ephemeral sweep hard-deletes the row once that time is in
+/// the past. Called by `post_message` only when the sender attached a TTL, so a
+/// message without a timer keeps its default NULL (permanent).
+pub async fn set_message_expiry(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    expires_at: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE messages SET expires_at = ? WHERE id = ?")
+        .bind(expires_at)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn create_room(
     pool: &sqlx::SqlitePool,
     name: &str,
