@@ -90,6 +90,12 @@ pub(crate) async fn resolve_member_views(
     state: &AppState,
     members: Vec<EnclaveMembership>,
 ) -> Result<Vec<EnclaveMemberView>, AppError> {
+    // LC-551: one batch lookup of member trust for the whole list (all members
+    // share the same enclave).
+    let trust = match members.first() {
+        Some(m) => db::enclave::trust_map(&state.chat, m.enclave_id).await?,
+        None => std::collections::HashMap::new(),
+    };
     let mut out = Vec::with_capacity(members.len());
     for m in members {
         let label = match db::auth::find_user_by_id(&state.auth, &m.user_id).await? {
@@ -99,10 +105,15 @@ pub(crate) async fn resolve_member_views(
             },
             None => m.user_id.clone(),
         };
+        let trust = trust
+            .get(&m.user_id)
+            .cloned()
+            .unwrap_or_else(|| "trusted".to_string());
         out.push(EnclaveMemberView {
             user_id: m.user_id,
             label,
             role: m.role,
+            trust,
         });
     }
     Ok(out)
@@ -155,6 +166,11 @@ pub fn router() -> Router<AppState> {
         .route(
             "/enclave/{id}/members/{user_id}/role",
             post(post_member_role),
+        )
+        // LC-551: promote a member to trusted / reset to new.
+        .route(
+            "/enclave/{id}/members/{user_id}/trust",
+            post(post_member_trust),
         )
         .route("/enclave/{id}/members/{user_id}/kick", post(post_kick))
         .route("/enclave/{id}/members/add-bot", post(post_add_bot))
@@ -1017,6 +1033,49 @@ pub async fn post_member_role(
         ));
     }
     db::enclave::update_role(&state.chat, id, &target, new_role).await?;
+    broadcast_enclave_topic(
+        &state,
+        id,
+        &ChatEvent::EnclaveMemberRoleChanged {
+            enclave_id: id,
+            user_id: target.clone(),
+        },
+    );
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+}
+
+#[derive(Deserialize)]
+pub struct TrustForm {
+    pub trust: String,
+}
+
+/// POST /enclave/{id}/members/{user_id}/trust - LC-551: an enclave manager
+/// promotes a member to `trusted` (lifting the new-member posting cooldown) or
+/// resets them to `new`. Same manage gate as the role control. Owners are never
+/// "new", so the owner row's control is hidden; a forged POST is harmless (the
+/// column does not affect owner/admin posting).
+pub async fn post_member_trust(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, target)): Path<(i64, String)>,
+    axum::Form(form): axum::Form<TrustForm>,
+) -> Result<impl IntoResponse, AppError> {
+    let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
+    if !enclave_can_manage_admins(m.map(|x| x.role), &user.role) {
+        return Err(AppError::Forbidden);
+    }
+    let trusted = match form.trust.as_str() {
+        "trusted" => true,
+        "new" => false,
+        _ => return Err(AppError::BadRequest("invalid trust level".into())),
+    };
+    if db::enclave::get_membership(&state.chat, id, &target)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    db::enclave::set_trust(&state.chat, id, &target, trusted).await?;
     broadcast_enclave_topic(
         &state,
         id,

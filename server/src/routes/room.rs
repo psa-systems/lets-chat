@@ -728,6 +728,33 @@ pub async fn post_message(
         }
     }
 
+    // LC-551: graduated trust. A "new" (ungraduated) enclave member who is not
+    // owner/admin is held to a minimum interval between posts until they earn
+    // trust (graduation happens after a successful send, below). Blunts drive-by
+    // spam from a freshly-joined account without throttling established members.
+    // DMs (no enclave) and already-trusted members pay nothing. Captured here so
+    // the same boolean drives the post-send graduation check.
+    let new_member_enclave: Option<i64> = match enclave_id_opt {
+        Some(eid) if db::enclave::is_new_member(&state.chat, eid, &user.id).await? => Some(eid),
+        _ => None,
+    };
+    if let Some(eid) = new_member_enclave {
+        let key = format!("{eid}:{}", user.id);
+        if let crate::rate_limit::Outcome::Deny { retry_after } = state.rate_limits.check_cooldown(
+            crate::rate_limit::RateLimitKind::NewMemberPost,
+            &key,
+            db::enclave::NEW_MEMBER_COOLDOWN_SECS,
+        ) {
+            return Err(AppError::TooManyRequests(
+                format!(
+                    "new members here can post once every {}s; wait {retry_after}s",
+                    db::enclave::NEW_MEMBER_COOLDOWN_SECS
+                ),
+                retry_after,
+            ));
+        }
+    }
+
     // For DMs, refuse the send if either user has blocked the other. The
     // peer is the other room member.
     if room.room_type == "dm" {
@@ -946,6 +973,22 @@ pub async fn post_message(
                 tracing::warn!(error = %e, message_id = new_id, "message embedding failed");
             }
         });
+    }
+
+    // LC-551: graduate the poster to "trusted" once they have posted enough in
+    // this enclave, then re-render the settings member list so the trust pill
+    // updates live. Only runs for a member who was "new" at the top of this send,
+    // so established members and DMs pay nothing.
+    if let Some(eid) = new_member_enclave {
+        if db::enclave::maybe_graduate(&state.chat, eid, &user.id).await? {
+            state.hub.broadcast_to_topic(
+                &format!("enclave:{eid}"),
+                &ChatEvent::EnclaveMemberRoleChanged {
+                    enclave_id: eid,
+                    user_id: user.id.clone(),
+                },
+            );
+        }
     }
 
     // LC-339/LC-341: Coyote Mode bot-burst detection. For enclave rooms, run
