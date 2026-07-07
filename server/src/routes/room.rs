@@ -594,6 +594,7 @@ pub async fn get_room(
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
+        embeddings_available: state.embeddings_available(),
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
@@ -930,6 +931,21 @@ pub async fn post_message(
                 }
             });
         }
+    }
+
+    // LC-549: background text embedding for semantic / related search. Off the
+    // request path (a network round-trip to the embeddings endpoint) and only
+    // when configured and the message has a text body. Best-effort: a failure
+    // just means this message won't surface in semantic results, so it never
+    // fails the send.
+    if state.embeddings_available() && !body.trim().is_empty() {
+        let st = state.clone();
+        let text = body.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = super::related::embed_message(&st, new_id, room_id, &text).await {
+                tracing::warn!(error = %e, message_id = new_id, "message embedding failed");
+            }
+        });
     }
 
     // LC-339/LC-341: Coyote Mode bot-burst detection. For enclave rooms, run
@@ -2568,6 +2584,7 @@ pub async fn get_thread_panel(
         is_following,
         is_muted,
         llm_available: state.llm_available(),
+        embeddings_available: state.embeddings_available(),
     };
     html(&fragment)
 }

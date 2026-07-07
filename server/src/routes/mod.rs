@@ -66,6 +66,7 @@ mod polls;
 mod push;
 mod reactions;
 mod read_all;
+mod related;
 mod reminders;
 mod report;
 mod retention;
@@ -1330,6 +1331,8 @@ pub fn build_router(state: AppState) -> Router {
             "/messages/{message_id}/suggest-reply",
             post(suggest_reply::post_suggest_reply),
         )
+        // LC-549: embeddings-backed related messages for this message.
+        .route("/messages/{message_id}/related", get(related::get_related))
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/follow-up/{item_id}/toggle", post(followups::post_toggle))
         .route("/follow-up/{item_id}/claim", post(followups::post_claim))

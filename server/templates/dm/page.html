@@ -3,7 +3,7 @@
 {% block title %}@{{ peer.username }} - Let's Chat{% endblock %}
 
 {% block main %}
-<div class="flex flex-1 overflow-hidden"{% if llm_available %} data-lc-llm{% endif %} data-lc-live-room="{{ room.id }}">
+<div class="flex flex-1 overflow-hidden"{% if llm_available %} data-lc-llm{% endif %}{% if embeddings_available %} data-lc-embeddings{% endif %} data-lc-live-room="{{ room.id }}">
   <div class="flex flex-col flex-1 overflow-hidden">
     {% let mute_mode = mute_mode.as_str() %}
     {% include "partials/dm_header.html" %}
