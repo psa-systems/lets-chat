@@ -131,6 +131,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
     (app, session_token, user_id)
@@ -230,6 +231,7 @@ async fn upload_anonymous_redirects_to_login() {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
 
@@ -332,6 +334,7 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
     (app, sess_a, id_a, sess_b, id_b)

@@ -157,6 +157,19 @@ async fn main() {
             None => None,
         };
 
+    // LC-549: optional text-embeddings endpoint for semantic / related-message
+    // search. Enabled by LETS_CHAT_EMBEDDINGS_URL; absent = FTS-only search.
+    let embedding_client: Option<std::sync::Arc<dyn lets_chat::embeddings::EmbeddingClient>> =
+        match lets_chat::embeddings::EmbeddingsConfig::from_env() {
+            Some(cfg) => {
+                tracing::info!(target: "embeddings", url = %cfg.url, model = %cfg.model, "semantic search enabled");
+                Some(std::sync::Arc::new(
+                    lets_chat::embeddings::ReqwestEmbeddingClient::new(cfg),
+                ))
+            }
+            None => None,
+        };
+
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         auth: auth_pool,
@@ -182,6 +195,7 @@ async fn main() {
         bunyip_sso,
         stt_client,
         llm_client,
+        embedding_client,
     };
 
     // Eagerly load syntect's bundled syntax and theme sets on a blocking

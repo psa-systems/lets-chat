@@ -139,6 +139,7 @@ async fn setup_app_with_users_and_client(
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
     TestApp {
@@ -532,6 +533,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let app = routes::build_router(state);
 
