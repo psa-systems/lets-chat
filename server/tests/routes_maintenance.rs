@@ -80,6 +80,7 @@ async fn app() -> TestApp {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     let _ = member_id;
     let app = routes::build_router(state);

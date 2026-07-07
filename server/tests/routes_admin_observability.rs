@@ -74,6 +74,7 @@ async fn setup() -> Fixture {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     Fixture {
         app: routes::build_router(state),

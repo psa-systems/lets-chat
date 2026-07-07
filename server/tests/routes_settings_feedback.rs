@@ -40,6 +40,7 @@ async fn setup() -> (Router, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     (routes::build_router(state), session)
 }

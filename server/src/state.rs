@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 use crate::auth::LastSeenLedger;
 use crate::bg::BgWriter;
 use crate::db::vapid::VapidKeypair;
+use crate::embeddings::EmbeddingClient;
 use crate::llm::LlmClient;
 use crate::mail::Mailer;
 use crate::oidc::BunyipSsoClient;
@@ -84,6 +85,12 @@ pub struct AppState {
     /// `LETS_CHAT_LLM_URL` is set; gates the "Summarize" action on the
     /// transcript page. `None` (default) hides it.
     pub llm_client: Option<Arc<dyn LlmClient>>,
+    /// LC-549: optional text-embeddings endpoint for semantic / related-message
+    /// search. `Some` when `LETS_CHAT_EMBEDDINGS_URL` is set; gates the
+    /// per-message "Find related" action and the opt-in semantic search mode,
+    /// and drives background embedding of new messages. `None` (default) hides
+    /// the features and search stays on the FTS keyword path.
+    pub embedding_client: Option<Arc<dyn EmbeddingClient>>,
 }
 
 impl AppState {
@@ -105,6 +112,12 @@ impl AppState {
     /// LC-396: true when an LLM endpoint is configured (transcript summaries).
     pub fn llm_available(&self) -> bool {
         self.llm_client.is_some()
+    }
+    /// LC-549: true when a text-embeddings endpoint is configured, so the
+    /// "Find related" action and semantic search mode are available (search
+    /// otherwise degrades to FTS keyword matching).
+    pub fn embeddings_available(&self) -> bool {
+        self.embedding_client.is_some()
     }
     /// Whether session and pending-auth cookies should carry the `Secure`
     /// attribute. WebKit2GTK (Tauri desktop on Linux) and Safari reject

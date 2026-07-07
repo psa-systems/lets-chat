@@ -121,6 +121,7 @@ async fn setup() -> Setup {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     Setup {
         app: routes::build_router(state),
