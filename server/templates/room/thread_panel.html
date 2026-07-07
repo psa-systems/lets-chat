@@ -12,6 +12,9 @@
       {% let parent_id = parent.id %}
       {% let following = is_following %}
       {% include "partials/thread_follow_button.html" %}
+      {# LC-546: mute/unmute this thread to silence its reply notifications. #}
+      {% let muted = is_muted %}
+      {% include "partials/thread_mute_button.html" %}
       {# LC-484: AI summary of this thread (root + replies), gated on an
          operator LLM. Result swaps into #thread-summary-{parent} below. #}
       {% if llm_available %}
