@@ -1,0 +1,34 @@
+{# LC-549: "Related messages" panel. Occupies the shared right-side
+   #thread-panel slot (one drawer at a time), reusing the thread panel's close
+   affordance (DELETE /thread-panel). Rows are jump links to #msg-{id} in the
+   room, mirroring the search results list. #}
+<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight">{{ "related-heading"|t }}</div>
+      <div class="text-xs text-content-muted truncate">{{ "related-subheading"|t }}</div>
+    </div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-content-subtle hover:text-content-muted flex-none"
+      aria-label="{{ "room-thread-close"|t }}"
+    >&#10005;</button>
+  </header>
+  <div class="flex-1 overflow-y-auto p-2">
+    {% if items.is_empty() %}
+    <p class="p-3 text-sm text-content-muted">{{ "related-empty"|t }}</p>
+    {% else %}
+    <div role="list" class="flex flex-col gap-1">
+      {% for it in items %}
+      <a href="/room/{{ it.room_id }}#msg-{{ it.message_id }}" role="listitem"
+         class="block rounded border border-border bg-surface px-2 py-1.5 hover:border-accent hover:bg-surface-sunken">
+        <div class="text-xs text-content-muted">{{ it.author }} - {{ it.created_at }}</div>
+        <div class="text-sm break-words line-clamp-3">{{ it.snippet }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</aside>
