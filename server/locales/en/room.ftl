@@ -513,6 +513,12 @@ compose-assist-action-formal = Formal
 room-msg-suggest-reply = Suggest reply
 suggest-reply-heading = Tap a draft to add it to your message
 
+## LC-549: semantic / related-message search
+room-msg-related = Find related
+related-heading = Related messages
+related-subheading = Ranked by meaning, not keywords
+related-empty = No closely related messages found.
+
 ## LC-534: per-channel slowmode
 room-slowmode-heading = Slowmode
 room-slowmode-intro = Limit how often each member can post in this channel. Moderators are exempt.

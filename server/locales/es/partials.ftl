@@ -129,6 +129,8 @@ partials-room-info-title = Ver información, descripción y wiki de la sala
 partials-room-info-docs-title = Información / documentos / wiki de la sala
 partials-room-info = Información
 partials-room-search-placeholder = Buscar en esta sala...
+# LC-549: opt-in semantic (embedding) search toggle in the room-header search.
+partials-room-search-semantic = Semántica
 partials-room-moderators-title = Gestionar moderadores de la sala
 partials-room-moderators = Moderadores
 # LC-325: control de salto a fecha.
