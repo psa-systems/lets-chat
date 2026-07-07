@@ -1344,6 +1344,8 @@ pub struct ThreadPanelFragment<'a> {
     pub replies: &'a [MessageView],
     /// LC-310: whether the viewer follows this thread (drives the toggle).
     pub is_following: bool,
+    /// LC-546: whether the viewer has muted this thread (drives the mute toggle).
+    pub is_muted: bool,
     /// LC-484: gates the "Summarize" action (operator LLM configured).
     pub llm_available: bool,
 }
@@ -1356,6 +1358,16 @@ pub struct ThreadFollowFragment {
     pub room_id: i64,
     pub parent_id: i64,
     pub following: bool,
+}
+
+/// LC-546: the thread Mute/Muted toggle button, included by the thread panel
+/// and re-rendered by the mute/unmute endpoints.
+#[derive(Template)]
+#[template(path = "partials/thread_mute_button.html")]
+pub struct ThreadMuteFragment {
+    pub room_id: i64,
+    pub parent_id: i64,
+    pub muted: bool,
 }
 
 /// Empty thread panel container, used to close the drawer.
