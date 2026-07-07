@@ -70,6 +70,7 @@ mod reminders;
 mod report;
 mod retention;
 pub(crate) mod room;
+mod suggest_reply;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
@@ -1323,6 +1324,11 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/room/{room_id}/compose-assist",
             post(compose_assist::post_assist),
+        )
+        // LC-548: draft 2-3 tappable replies to a received message.
+        .route(
+            "/messages/{message_id}/suggest-reply",
+            post(suggest_reply::post_suggest_reply),
         )
         .route("/poll/{message_id}/vote", post(polls::post_vote))
         .route("/follow-up/{item_id}/toggle", post(followups::post_toggle))
