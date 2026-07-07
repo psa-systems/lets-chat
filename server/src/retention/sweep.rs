@@ -154,6 +154,68 @@ pub async fn sweep_once(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
     }
 }
 
+/// LC-547: hard-delete ephemeral messages whose self-destruct time has passed.
+///
+/// Deliberately NOT gated by the operator retention flag: a per-message
+/// `expires_at` is the sender's intent, not an operator policy, so it must run
+/// unconditionally (see `main::spawn_ephemeral_sweeper`). Same
+/// `BEGIN IMMEDIATE` transaction shape as [`sweep_once`] and reuses
+/// [`hard_delete_messages`], so the content is removed at rest rather than
+/// tombstoned. Returns the directly-purged `(message_id, room_id)` pairs; the
+/// caller broadcasts `MessagePurged` for each after the commit, outside the
+/// writer-lock critical section. Bounded by [`SWEEP_LIMIT`] per tick.
+pub async fn sweep_expired_ephemeral(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
+    let mut conn = pool.acquire().await?;
+    sqlx::query("BEGIN IMMEDIATE TRANSACTION")
+        .execute(&mut *conn)
+        .await?;
+
+    let result: Result<SweepStats, sqlx::Error> = async {
+        let rows = sqlx::query(
+            "SELECT id, room_id FROM messages \
+             WHERE expires_at IS NOT NULL \
+               AND expires_at <= datetime('now') \
+             ORDER BY expires_at ASC \
+             LIMIT ?",
+        )
+        .bind(SWEEP_LIMIT)
+        .fetch_all(&mut *conn)
+        .await?;
+
+        if rows.is_empty() {
+            return Ok(SweepStats::default());
+        }
+
+        let purged: Vec<(i64, i64)> = rows
+            .iter()
+            .map(|r| (r.get::<i64, _>("id"), r.get::<i64, _>("room_id")))
+            .collect();
+        let ids: Vec<i64> = purged.iter().map(|(id, _)| *id).collect();
+        let rooms_touched: std::collections::HashSet<i64> =
+            purged.iter().map(|(_, room_id)| *room_id).collect();
+
+        let deleted = hard_delete_messages(&mut *conn, &ids).await?;
+        Ok(SweepStats {
+            rooms_touched: rooms_touched.len(),
+            messages_deleted: deleted,
+            purged,
+            flag_disabled: false,
+        })
+    }
+    .await;
+
+    match result {
+        Ok(stats) => {
+            sqlx::query("COMMIT").execute(&mut *conn).await?;
+            Ok(stats)
+        }
+        Err(e) => {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            Err(e)
+        }
+    }
+}
+
 /// Hard-delete a pre-filtered set of message ids.
 ///
 /// Returns the number of `messages` rows actually deleted. Rows removed
