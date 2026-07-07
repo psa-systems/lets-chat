@@ -13,8 +13,22 @@
     {% else %}
     <span class="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-content-muted">{{ m.role.as_str() }}</span>
     {% endif %}
+    {# LC-551: trust pill for plain members - "new" (ungraduated, posting-rate
+       limited) or "trusted". Owners/admins are always effectively trusted, so no
+       pill is shown for them. #}
+    {% if m.role.as_str() == "member" && m.trust == "new" %}
+    <span class="inline-flex items-center rounded-full bg-warning-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning" title="{{ "enclave-settings-member-new-title"|t }}">{{ "enclave-settings-member-trust-new"|t }}</span>
+    {% endif %}
     {% if can_delete && m.role.as_str() != "owner" %}
     <div class="ml-auto flex items-center gap-1.5 flex-none">
+      {# LC-551: promote a new member to trusted, or reset a member to new. #}
+      {% if m.role.as_str() == "member" %}
+      <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/trust">
+        <button name="trust" value="{% if m.trust == "new" %}trusted{% else %}new{% endif %}" type="submit" class="btn btn-secondary btn-sm">
+          {% if m.trust == "new" %}{{ "enclave-settings-member-trust"|t }}{% else %}{{ "enclave-settings-member-untrust"|t }}{% endif %}
+        </button>
+      </form>
+      {% endif %}
       <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/role">
         <button name="role" value="{% if m.role.as_str() == "admin" %}member{% else %}admin{% endif %}" type="submit" class="btn btn-secondary btn-sm">
           {% if m.role.as_str() == "admin" %}{{ "enclave-settings-member-demote"|t }}{% else %}{{ "enclave-settings-member-promote"|t }}{% endif %}

@@ -149,6 +149,11 @@ enclave-settings-delete-confirm = Permanently delete this enclave and all rooms?
 enclave-settings-member-demote = Demote
 enclave-settings-member-promote = Promote
 enclave-settings-member-kick = Kick
+# LC-551: graduated member trust.
+enclave-settings-member-trust-new = New
+enclave-settings-member-new-title = New members are rate-limited until they post enough to graduate.
+enclave-settings-member-trust = Trust
+enclave-settings-member-untrust = Reset to new
 enclave-settings-member-transfer = Transfer
 enclave-settings-member-transfer-confirm-prefix = Transfer ownership to
 enclave-settings-member-transfer-confirm-suffix = ?
