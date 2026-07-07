@@ -263,7 +263,20 @@ fn render_inner(
         }
         Event::End(TagEnd::CodeBlock) => {
             let lang = in_code_block.take().unwrap_or_default();
-            let html = highlight_code(&code_buf, &lang);
+            // LC-550: a ```mermaid fence renders as a client-side diagram (the
+            // vendored mermaid.js enhancement finds the container and swaps in an
+            // SVG), NOT syntax-highlighted code. The `info string` may carry
+            // attributes after the language (e.g. "mermaid foo"), so match the
+            // first token case-insensitively.
+            let is_mermaid = lang
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w.eq_ignore_ascii_case("mermaid"));
+            let html = if is_mermaid {
+                mermaid_block(&code_buf)
+            } else {
+                highlight_code(&code_buf, &lang)
+            };
             Some(Event::Html(html.into()))
         }
         Event::Text(t) if in_code_block.is_some() => {
@@ -472,6 +485,22 @@ fn highlight_code(code: &str, lang: &str) -> String {
     wrap_code_block(&inner)
 }
 
+/// LC-550: render a `mermaid` fenced block as a progressive-enhancement
+/// container. The diagram source is emitted HTML-escaped inside a `<pre>`; the
+/// vendored `mermaid.js` loader reads it via `textContent` (which decodes the
+/// entities back to the raw source), renders an SVG, and replaces the container.
+/// With JS disabled or the render failed, the `<pre>` source stays visible as a
+/// readable fallback. The output is deterministic from the source, so it caches
+/// like any other rendered block and carries no localized text.
+fn mermaid_block(code: &str) -> String {
+    format!(
+        "<div class=\"lc-mermaid\" data-lc-mermaid>\
+         <pre class=\"lc-mermaid-src\">{}</pre>\
+         </div>",
+        html_escape(code)
+    )
+}
+
 /// LC-329: wrap a rendered `<pre>` code block with a copy affordance. The
 /// button is ICON-ONLY and carries no localized text, so the content-keyed
 /// markdown cache (keyed on body/mentions/emojis, NOT locale) stays correct
@@ -498,6 +527,50 @@ mod tests {
         let out = render("**bold** and *italic*", &[], &[]);
         assert!(out.contains("<strong>bold</strong>"), "no bold: {out}");
         assert!(out.contains("<em>italic</em>"), "no italic: {out}");
+    }
+
+    // LC-550: a ```mermaid fence becomes a client-render container, not a
+    // syntax-highlighted code block.
+    #[test]
+    fn mermaid_fence_becomes_diagram_container() {
+        let out = render("```mermaid\ngraph TD; A-->B\n```", &[], &[]);
+        assert!(out.contains("data-lc-mermaid"), "no container: {out}");
+        assert!(out.contains("lc-mermaid-src"), "no source pre: {out}");
+        // Source is escaped and preserved for the loader's textContent read.
+        assert!(out.contains("A--&gt;B"), "source not escaped/kept: {out}");
+        // NOT routed through the highlighter.
+        assert!(!out.contains("lc-codeblock"), "should not highlight: {out}");
+    }
+
+    // Diagram source arrives from other users; it must be escaped so it cannot
+    // inject markup even before mermaid's own strict sanitizer runs.
+    #[test]
+    fn mermaid_source_is_escaped() {
+        let out = render(
+            "```mermaid\ngraph TD; A[\"<script>x</script>\"]\n```",
+            &[],
+            &[],
+        );
+        assert!(!out.contains("<script>x"), "raw script leaked: {out}");
+        assert!(out.contains("&lt;script&gt;x"), "not escaped: {out}");
+    }
+
+    // A case-variant / attributed info string still counts as mermaid.
+    #[test]
+    fn mermaid_info_string_variants_match() {
+        let out = render("```Mermaid\nsequenceDiagram\nA->>B: hi\n```", &[], &[]);
+        assert!(
+            out.contains("data-lc-mermaid"),
+            "case-insensitive fail: {out}"
+        );
+    }
+
+    // A non-mermaid fence keeps the normal highlighted code path.
+    #[test]
+    fn non_mermaid_fence_still_highlights() {
+        let out = render("```rust\nlet x = 1;\n```", &[], &[]);
+        assert!(out.contains("lc-codeblock"), "no code block: {out}");
+        assert!(!out.contains("data-lc-mermaid"), "wrongly mermaid: {out}");
     }
 
     #[test]
