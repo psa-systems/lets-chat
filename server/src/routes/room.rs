@@ -2539,12 +2539,15 @@ pub async fn get_thread_panel(
     // LC-310: whether the viewer follows this thread (drives the toggle).
     let is_following =
         db::thread_followers::is_following(&state.chat, &user.id, message_id).await?;
+    // LC-546: whether the viewer has muted this thread (drives the mute toggle).
+    let is_muted = db::thread_muters::is_muted(&state.chat, &user.id, message_id).await?;
 
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
         replies: &replies,
         is_following,
+        is_muted,
         llm_available: state.llm_available(),
     };
     html(&fragment)
@@ -2595,6 +2598,54 @@ async fn thread_follow_toggle(
         room_id,
         parent_id,
         following: follow,
+    })
+}
+
+/// POST /room/{room_id}/thread/{parent_id}/mute - silence a thread's reply
+/// notifications for the viewer. DELETE unmutes. Both re-render the toggle
+/// button. Same access + parent gate as the follow handler.
+pub async fn post_thread_mute(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    thread_mute_toggle(&state, &user, room_id, parent_id, true).await
+}
+
+pub async fn delete_thread_mute(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    thread_mute_toggle(&state, &user, room_id, parent_id, false).await
+}
+
+async fn thread_mute_toggle(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    parent_id: i64,
+    mute: bool,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let parent = db::chat::get_message(&state.chat, parent_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if parent.room_id != room_id || parent.parent_id.is_some() {
+        return Err(AppError::NotFound);
+    }
+    if mute {
+        db::thread_muters::mute(&state.chat, &user.id, parent_id, room_id).await?;
+    } else {
+        db::thread_muters::unmute(&state.chat, &user.id, parent_id).await?;
+    }
+    html(&crate::views::room::ThreadMuteFragment {
+        room_id,
+        parent_id,
+        muted: mute,
     })
 }
 
@@ -2710,11 +2761,20 @@ async fn notify_thread_followers(
         Ok(f) => f,
         Err(_) => return,
     };
+    // LC-546: a muter of this thread is dropped from the fan-out even though
+    // replying auto-followed them. Mute wins over follow. One bulk lookup; the
+    // muter set is small (only members who explicitly silenced this thread).
+    let muted: std::collections::HashSet<String> =
+        db::thread_muters::muters(&state.chat, parent_id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
     let snippet = build_snippet(body);
     let author_label = author_label(author);
     let mut events: Vec<(String, ChatEvent)> = Vec::new();
     for uid in followers {
-        if uid == author.id {
+        if uid == author.id || muted.contains(&uid) {
             continue;
         }
         // The follower must still be able to see the room. is_room_accessible

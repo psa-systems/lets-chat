@@ -51,6 +51,7 @@ pub mod slash;
 pub mod starred_rooms;
 pub mod stats;
 pub mod thread_followers;
+pub mod thread_muters;
 pub mod transcripts;
 pub mod translations;
 pub mod uploads;
