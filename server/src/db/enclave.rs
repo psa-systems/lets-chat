@@ -173,8 +173,13 @@ pub async fn backfill_general_membership(
         } else {
             "member"
         };
+        // LC-551: the general enclave is everyone's default home, not a gated
+        // community, and these are pre-existing (established) users - insert them
+        // as `trusted` so the new-member posting cooldown never applies here. The
+        // "new" trust level is earned when JOINING a community enclave via invite
+        // code / discover (see `post_join_by_code`), not in general.
         sqlx::query(
-            "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role, trust) VALUES (?, ?, ?, 'trusted')",
         )
         .bind(general_id)
         .bind(&id)
@@ -706,6 +711,101 @@ pub async fn list_members(
         });
     }
     Ok(out)
+}
+
+/// LC-551: minimum seconds between posts for a "new" (ungraduated) member.
+pub const NEW_MEMBER_COOLDOWN_SECS: u32 = 15;
+/// LC-551: a new member graduates to "trusted" once they have posted at least
+/// this many (non-deleted) messages anywhere in the enclave.
+pub const GRADUATE_AFTER_POSTS: i64 = 5;
+
+/// LC-551: true when `user_id` is a `member` (not owner/admin) of `enclave_id`
+/// whose trust is still `new`. Owners/admins and non-members are never "new".
+/// Drives the new-member posting cooldown and the graduation check.
+pub async fn is_new_member(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT 1 FROM enclave_members \
+         WHERE enclave_id = ? AND user_id = ? AND role = 'member' AND trust = 'new'",
+    )
+    .bind(enclave_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// LC-551: set a member's trust to `trusted` (true) or `new` (false).
+pub async fn set_trust(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+    trusted: bool,
+) -> Result<(), sqlx::Error> {
+    let trust = if trusted { "trusted" } else { "new" };
+    sqlx::query("UPDATE enclave_members SET trust = ? WHERE enclave_id = ? AND user_id = ?")
+        .bind(trust)
+        .bind(enclave_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-551: `user_id -> trust` for every member of `enclave_id`, for the member
+/// management list (avoids a per-row query).
+pub async fn trust_map(
+    pool: &SqlitePool,
+    enclave_id: i64,
+) -> Result<std::collections::HashMap<String, String>, sqlx::Error> {
+    let rows = sqlx::query("SELECT user_id, trust FROM enclave_members WHERE enclave_id = ?")
+        .bind(enclave_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<String, _>("user_id"), r.get::<String, _>("trust")))
+        .collect())
+}
+
+/// LC-551: count a user's non-deleted messages across all rooms in an enclave.
+/// The graduation threshold is measured against this.
+pub async fn count_enclave_messages_by_user(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<i64, sqlx::Error> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages m JOIN rooms r ON r.id = m.room_id \
+         WHERE r.enclave_id = ? AND m.user_id = ? AND m.deleted_at IS NULL",
+    )
+    .bind(enclave_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+/// LC-551: graduate a new member to `trusted` once they have posted enough.
+/// Returns `true` if this call performed the promotion (so the caller can
+/// broadcast a member-list re-render). A no-op for non-new members or members
+/// still below [`GRADUATE_AFTER_POSTS`].
+pub async fn maybe_graduate(
+    pool: &SqlitePool,
+    enclave_id: i64,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    if !is_new_member(pool, enclave_id, user_id).await? {
+        return Ok(false);
+    }
+    if count_enclave_messages_by_user(pool, enclave_id, user_id).await? < GRADUATE_AFTER_POSTS {
+        return Ok(false);
+    }
+    set_trust(pool, enclave_id, user_id, true).await?;
+    Ok(true)
 }
 
 /// True when `a` and `b` share at least one enclave. Used to gate
