@@ -509,6 +509,10 @@ compose-assist-action-concise = Conciso
 compose-assist-action-friendly = Amigable
 compose-assist-action-formal = Formal
 
+## LC-548: AI suggested replies
+room-msg-suggest-reply = Sugerir respuesta
+suggest-reply-heading = Toca un borrador para añadirlo a tu mensaje
+
 ## LC-534: per-channel slowmode
 room-slowmode-heading = Modo lento
 room-slowmode-intro = Limita con qué frecuencia puede publicar cada miembro en este canal. Los moderadores están exentos.
