@@ -25,6 +25,7 @@
         hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
         hx-target="#lc-room-search-results"
         hx-swap="innerHTML"
+        hx-include="#lc-semantic-{{ room.id }}"
         data-lc-search
         data-lc-search-results="#lc-room-search-results"
         role="combobox"
@@ -32,6 +33,20 @@
         aria-controls="lc-room-search-results"
         aria-autocomplete="list"
         class="w-48 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+      {# LC-549: opt-in semantic (embedding) search. CSS-hidden unless an operator
+         embeddings endpoint is configured ([data-lc-embeddings] page root).
+         Toggling it re-runs the current query in semantic mode; the server
+         degrades to FTS if embeddings are unavailable. #}
+      <label class="lc-semantic-toggle mt-1 flex items-center gap-1 text-xs text-content-muted">
+        <input type="checkbox" id="lc-semantic-{{ room.id }}" name="semantic" value="1"
+               hx-get="/search?room_id={{ room.id }}"
+               hx-trigger="change"
+               hx-include="[name='q']"
+               hx-target="#lc-room-search-results"
+               hx-swap="innerHTML"
+               class="h-3 w-3 rounded border-border">
+        {{ "partials-room-search-semantic"|t }}
+      </label>
       <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
     </form>
     {# LC-493: start/join an ad-hoc huddle in this group room. data-lc-voice-join
