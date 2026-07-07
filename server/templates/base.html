@@ -333,6 +333,9 @@
   <script src="/assets/roominfo.js?v={{ asset_version }}" defer></script>
   <script src="/assets/enclave_settings.js?v={{ asset_version }}" defer></script>
   <script src="/assets/branding.js?v={{ asset_version }}" defer></script>
+  {# LC-550: mermaid diagram enhancement. The loader is tiny; the ~3.5MB vendored
+     bundle it pulls loads lazily, only on pages that actually contain a diagram. #}
+  <script src="/assets/mermaid.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-ext="response-targets" class="{% block body_class %}h-screen overflow-hidden{% endblock %} bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
