@@ -203,6 +203,7 @@ async fn main() {
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
     spawn_message_retention_sweeper(state.clone());
+    spawn_ephemeral_sweeper(state.clone());
     lets_chat::email_ingress::poll::spawn_email_poll(state.clone());
 
     let app = routes::build_router(state);
@@ -645,6 +646,47 @@ fn spawn_message_retention_sweeper(state: AppState) {
                         tracing::warn!(error = %e2, "retention sweep status write failed");
                     }
                 }
+            }
+        }
+    });
+}
+
+/// LC-547: unconditional 60-second sweep that hard-deletes messages whose
+/// self-destruct time (`expires_at`) has passed and broadcasts `MessagePurged`
+/// so connected clients drop the node from the DOM. Unlike
+/// `spawn_message_retention_sweeper`, this is never env-gated: a per-message TTL
+/// is the sender's intent, not an operator policy, so it always runs. The
+/// 60-second cadence bounds how long an expired message lingers server-side (a
+/// 5-minute timer disappears within a minute of expiry). Skips the first tick
+/// so it does not fire during cold start, mirroring the sibling sweepers.
+/// Broadcasting happens after the transaction commits (see
+/// `sweep_expired_ephemeral`), keeping channel writes out of the writer-lock
+/// critical section.
+fn spawn_ephemeral_sweeper(state: AppState) {
+    const TICK_SECS: u64 = 60;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::retention::sweep::sweep_expired_ephemeral(&state.chat).await {
+                Ok(stats) => {
+                    for (message_id, room_id) in &stats.purged {
+                        let event = lets_chat::ws::events::ChatEvent::MessagePurged {
+                            message_id: *message_id,
+                            room_id: *room_id,
+                        };
+                        state.hub.broadcast_to_room(*room_id, &event);
+                    }
+                    if stats.messages_deleted > 0 {
+                        tracing::info!(
+                            rooms = stats.rooms_touched,
+                            messages = stats.messages_deleted,
+                            "ephemeral sweep complete",
+                        );
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "ephemeral sweep failed"),
             }
         }
     });
