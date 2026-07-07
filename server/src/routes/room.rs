@@ -115,6 +115,14 @@ pub struct MessageForm {
     /// send).
     #[serde(default)]
     pub client_id: Option<String>,
+    /// LC-547: optional self-destruct TTL token from the composer's timer
+    /// select (`"5m"` / `"1h"` / `"1d"` / `"7d"`, or `""` for permanent). The
+    /// composer always submits the field; `post_message` maps it through
+    /// `models::message::ephemeral_expires_at`, which rejects anything outside
+    /// the closed token set, so a blank or forged value leaves the message
+    /// permanent.
+    #[serde(default)]
+    pub ttl: Option<String>,
 }
 
 fn empty_string_as_none<'de, D>(de: D) -> Result<Option<i64>, D::Error>
@@ -822,6 +830,17 @@ pub async fn post_message(
             .await?;
     if let Some(file_id) = form.file_id {
         db::uploads::link_upload_to_message(&state.chat, file_id, new_id).await?;
+    }
+    // LC-547: ephemeral / self-destruct. When the composer attached a timer,
+    // stamp the message's expiry now; the unconditional ephemeral sweep
+    // hard-deletes it once the time passes. An empty or unrecognized token
+    // yields None here, leaving the message permanent.
+    if let Some(expires_at) = form
+        .ttl
+        .as_deref()
+        .and_then(|t| crate::models::message::ephemeral_expires_at(t, chrono::Utc::now()))
+    {
+        db::chat::set_message_expiry(&state.chat, new_id, &expires_at).await?;
     }
     super::touch_user_and_maybe_broadcast(&state, &user.id).await;
 
