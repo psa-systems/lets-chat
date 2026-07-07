@@ -71,6 +71,59 @@ pub struct SearchQuery {
     /// LC-268: scope the search to a single room (the room-header search box).
     /// When set, takes precedence over `enclave_id`.
     pub room_id: Option<i64>,
+    /// LC-549: opt-in semantic mode (the room-header "Semantic" toggle). Ranks by
+    /// embedding similarity instead of FTS keywords. Requires `room_id` and a
+    /// configured embeddings endpoint; otherwise the search degrades to FTS.
+    #[serde(default)]
+    pub semantic: Option<String>,
+}
+
+/// LC-549: how many semantic hits to surface, and the minimum cosine similarity
+/// to count as a hit (drop near-orthogonal noise).
+const SEMANTIC_LIMIT: usize = 20;
+const SEMANTIC_MIN_SIMILARITY: f32 = 0.15;
+
+/// Truthy check for a checkbox-style query flag ("1" / "on" / "true").
+fn flag_on(v: &Option<String>) -> bool {
+    matches!(v.as_deref(), Some("1") | Some("on") | Some("true"))
+}
+
+/// LC-549: semantic ranking over one room's stored embeddings. Returns `None`
+/// (so the caller degrades to FTS) when embeddings are unavailable or the query
+/// cannot be embedded; `Some(rows)` otherwise (possibly empty). Room access is
+/// enforced by the caller before this runs.
+async fn semantic_rows(
+    state: &AppState,
+    room_id: i64,
+    query_text: &str,
+) -> Option<Vec<crate::models::SearchResult>> {
+    let client = state.embedding_client.clone()?;
+    let query_vec = match client.embed(query_text).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "semantic search embed failed; falling back to FTS");
+            return None;
+        }
+    };
+    let candidates = db::message_embeddings::list_for_room(&state.chat, room_id, None)
+        .await
+        .ok()?;
+    let mut scored: Vec<(i64, f32)> = candidates
+        .into_iter()
+        .map(|c| {
+            (
+                c.message_id,
+                crate::embeddings::cosine_similarity(&query_vec, &c.vec),
+            )
+        })
+        .filter(|(_, s)| *s >= SEMANTIC_MIN_SIMILARITY)
+        .collect();
+    scored.sort_by(|a, b| b.1.total_cmp(&a.1));
+    scored.truncate(SEMANTIC_LIMIT);
+    let ids: Vec<i64> = scored.into_iter().map(|(id, _)| id).collect();
+    db::chat::search_results_for_ids(&state.chat, room_id, &ids)
+        .await
+        .ok()
 }
 
 /// GET /search?q=... - full-text search over messages the caller can read.
@@ -86,6 +139,7 @@ pub async fn get_search(
         q,
         enclave_id,
         room_id,
+        semantic,
     }): Query<SearchQuery>,
 ) -> Result<Html, AppError> {
     let query = q.unwrap_or_default();
@@ -106,13 +160,37 @@ pub async fn get_search(
     // remainder is the FTS text. Operators refine a text query - a query that is
     // ONLY operators leaves empty text and collapses the popover, same as today.
     let parsed = parse_operators(trimmed);
+    let is_admin = user.role == "admin";
+
+    // LC-549: opt-in semantic mode. Room-scoped only (the room-header toggle);
+    // access-check the room, then rank embeddings. On any miss - embeddings not
+    // configured, the query cannot be embedded, or a DB error - fall through to
+    // the FTS keyword path below so search always returns something.
+    if flag_on(&semantic) && state.embeddings_available() {
+        if let Some(rid) = room_id {
+            if !db::chat::is_room_accessible(&state.chat, rid, &user.id, is_admin).await? {
+                return Err(AppError::Forbidden);
+            }
+            let query_text = if parsed.text.trim().is_empty() {
+                trimmed
+            } else {
+                parsed.text.as_str()
+            };
+            if let Some(rows) = semantic_rows(&state, rid, query_text).await {
+                let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+                let rows: Vec<_> = rows
+                    .into_iter()
+                    .filter(|r| !blocked.contains(&r.user_id))
+                    .collect();
+                return render_results(&state, &user, trimmed, rows).await;
+            }
+        }
+    }
 
     let fts_query = match db::chat::sanitize_fts_query(&parsed.text) {
         Some(q) => q,
         None => return Ok(empty_popover()),
     };
-
-    let is_admin = user.role == "admin";
 
     // LC-280: resolve from:<username> to an author id; an unknown user can match
     // nothing, so collapse rather than ignore the filter.
@@ -173,6 +251,19 @@ pub async fn get_search(
     .filter(|r| !blocked_authors.contains(&r.user_id))
     .collect();
 
+    render_results(&state, &user, trimmed, rows).await
+}
+
+/// Turn ranked `models::SearchResult` rows (from FTS or LC-549 semantic ranking)
+/// into the rendered popover fragment, mapping DM hits to `/dm/{peer}` links and
+/// room hits to `#room` labels. Shared by both search paths so the DM/label
+/// logic stays in one place.
+async fn render_results(
+    state: &AppState,
+    user: &crate::models::User,
+    trimmed: &str,
+    rows: Vec<crate::models::SearchResult>,
+) -> Result<Html, AppError> {
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
     // search excludes DMs entirely, so this map is only consulted for non-
     // admin callers, but we build it unconditionally for simplicity.

@@ -71,6 +71,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     (routes::build_router(state), session)
 }

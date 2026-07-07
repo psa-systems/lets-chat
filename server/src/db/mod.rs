@@ -25,6 +25,7 @@ pub mod imap_poll_status;
 pub mod inbox;
 pub mod kudos;
 pub mod mentions;
+pub mod message_embeddings;
 pub mod moderation;
 pub mod notification_keywords;
 pub mod notifications;

@@ -1857,3 +1857,52 @@ pub async fn search_messages_filtered(
         })
         .collect())
 }
+
+/// LC-549: fetch `SearchResult` rows for a specific set of message ids within one
+/// room, returned in the given id order. Used by semantic search after cosine
+/// ranking has chosen the ids. Room access is enforced by the caller (the
+/// semantic path already gates on `is_room_accessible`); deleted / quarantined
+/// rows are filtered so a stale embedding never surfaces a removed message.
+pub async fn search_results_for_ids(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    ids: &[i64],
+) -> Result<Vec<SearchResult>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT m.id AS message_id, m.room_id, r.name AS room_name, \
+                m.body, m.user_id, m.created_at \
+         FROM messages m JOIN rooms r ON r.id = m.room_id \
+         WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0 \
+           AND m.id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql).bind(room_id);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut by_id: std::collections::HashMap<i64, SearchResult> =
+        std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        let mid: i64 = r.get("message_id");
+        by_id.insert(
+            mid,
+            SearchResult {
+                message_id: mid,
+                room_id: r.get("room_id"),
+                room_name: r.get("room_name"),
+                body: r.get("body"),
+                user_id: r.get("user_id"),
+                author_name: r.get::<String, _>("user_id"),
+                created_at: r.get("created_at"),
+            },
+        );
+    }
+    // Preserve the caller's rank order.
+    Ok(ids.iter().filter_map(|id| by_id.remove(id)).collect())
+}

@@ -1169,6 +1169,9 @@ pub struct RoomPage<'a> {
     pub initial_draft: &'a str,
     /// LC-484: gates the header "Catch me up" action (operator LLM configured).
     pub llm_available: bool,
+    /// LC-549: an operator embeddings endpoint is configured; drives
+    /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
+    pub embeddings_available: bool,
     /// LC-506: LLM unconfigured but the viewer is a site admin - show the AI
     /// actions disabled with a "set LETS_CHAT_LLM_URL" hint (discoverability).
     pub llm_teaser: bool,
@@ -1348,6 +1351,9 @@ pub struct ThreadPanelFragment<'a> {
     pub is_muted: bool,
     /// LC-484: gates the "Summarize" action (operator LLM configured).
     pub llm_available: bool,
+    /// LC-549: an operator embeddings endpoint is configured; drives
+    /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
+    pub embeddings_available: bool,
 }
 
 /// LC-310: the thread Follow/Following toggle button, included by the thread

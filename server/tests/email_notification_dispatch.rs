@@ -103,6 +103,7 @@ async fn setup(with_mailer: bool, verified: bool, opted_in: bool) -> Fixture {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
 
     Fixture {

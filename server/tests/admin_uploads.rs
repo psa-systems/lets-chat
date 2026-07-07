@@ -65,6 +65,7 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
         bunyip_sso: None,
         stt_client: None,
         llm_client: None,
+        embedding_client: None,
     };
     (routes::build_router(state), session, chat)
 }

@@ -64,6 +64,7 @@ async fn app() -> TestApp {
         bunyip_sso: None,
         stt_client: None,
         llm_client: Some(mock),
+        embedding_client: None,
     };
     db::enclave::create_enclave(&chat, "Acme", None, &alice)
         .await
