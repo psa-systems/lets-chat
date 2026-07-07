@@ -1,0 +1,20 @@
+{# LC-548: AI suggested-reply chips. Swapped into #composer-ai-panel (same slot
+   as the LC-532 writing assistant), so it reuses the data-lc-ai-apply /
+   data-lc-ai-dismiss handlers in live.js. Each chip carries its full draft in a
+   [data-lc-ai-suggestion] span; tapping it writes that text into the composer
+   textarea (never auto-sent). The drafts are PLAIN TEXT applied as raw markdown
+   source, not rendered HTML. #}
+<div data-lc-ai-panel class="mt-2 rounded-lg border border-border bg-surface-elevated p-2 text-sm">
+  <div class="mb-1.5 text-xs text-content-muted">{{ "suggest-reply-heading"|t }}</div>
+  <div class="flex flex-col gap-1">
+    {% for s in suggestions %}
+    <button type="button" data-lc-ai-apply
+            class="w-full rounded border border-border bg-surface px-2 py-1.5 text-left text-content hover:border-accent hover:bg-surface-sunken">
+      <span data-lc-ai-suggestion class="whitespace-pre-wrap break-words">{{ s.text }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  <div class="mt-1.5">
+    <button type="button" data-lc-ai-dismiss class="text-xs text-content-muted hover:underline">{{ "compose-assist-dismiss"|t }}</button>
+  </div>
+</div>

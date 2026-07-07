@@ -210,6 +210,12 @@
            covers live-swapped message fragments). Result swaps into the
            per-message #translation-{id} block under the body. #}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">{{ "room-msg-translate"|t }}</button>
+        {# LC-548: draft tappable replies to a received message. Same [data-lc-llm]
+           page-root gate as translate; hidden on own / synthetic-actor messages
+           (you reply to others, not yourself). Result fills #composer-ai-panel. #}
+        {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+        <button role="menuitem" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" class="lc-menu-item lc-llm-only">{{ "room-msg-suggest-reply"|t }}</button>
+        {% endif %}
         {# LC-286: mark this conversation unread from here. #}
         <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
         {# LC-528: read this message aloud via the browser SpeechSynthesis API.
