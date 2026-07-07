@@ -198,7 +198,12 @@
     var apply = evt.target.closest && evt.target.closest('[data-lc-ai-apply]');
     if (apply) {
       var panel = apply.closest('[data-lc-ai-panel]');
-      var sug = panel && panel.querySelector('[data-lc-ai-suggestion]');
+      // LC-548: the suggested-reply panel renders several chips, each its own
+      // apply button carrying its draft; prefer the chip-local suggestion and
+      // fall back to the panel-level one (LC-532 single-suggestion assistant).
+      var sug =
+        (apply.querySelector && apply.querySelector('[data-lc-ai-suggestion]')) ||
+        (panel && panel.querySelector('[data-lc-ai-suggestion]'));
       var form = apply.closest('form');
       var ta = form && form.querySelector('textarea[name="body"]');
       if (sug && ta) {
