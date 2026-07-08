@@ -185,17 +185,23 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
  * migrates templates onto them, and LC-191/LC-192 add the
  * `[data-theme="dark"]` / high-contrast palettes here. */
 :root {
+    /* LC-554 (Blue Harbor): the neutral ramp is blue-tinted rather than the
+       old cool slate. The accent stays #2563eb (the pre-existing brand
+       default) so this is a surface/text/border retune, not an accent change.
+       Muted/subtle text and borders are a touch darker than the old slate,
+       which also nudges contrast up (muted #52657a ~5.6:1 on --surface vs the
+       old #64748b ~4.6:1). */
     /* Surfaces */
-    --surface:          #f8fafc; /* app background (was slate-50) */
-    --surface-elevated: #ffffff; /* cards, panels, dialogs (was white) */
-    --surface-sunken:   #f1f5f9; /* inputs, code, inset rows (was slate-100) */
+    --surface:          #f7fbff; /* app background (blue-tinted near-white) */
+    --surface-elevated: #ffffff; /* cards, panels, dialogs */
+    --surface-sunken:   #edf6ff; /* inputs, code, inset rows */
     /* Text */
-    --content:          #0f172a; /* primary text (was slate-900) */
-    --content-muted:    #64748b; /* secondary text (was slate-500) */
-    --content-subtle:   #94a3b8; /* tertiary / placeholder (was slate-400) */
+    --content:          #071426; /* primary text (near-black navy) */
+    --content-muted:    #52657a; /* secondary text */
+    --content-subtle:   #8193a8; /* tertiary / placeholder */
     /* Lines */
-    --border:           #e2e8f0; /* default borders (was slate-200) */
-    --border-strong:    #cbd5e1; /* emphasized borders (was slate-300) */
+    --border:           #d8e6f5; /* default borders */
+    --border-strong:    #b9cde3; /* emphasized borders */
     /* Accent (chases the operator brand color) */
     --accent:           var(--brand-primary);
     --accent-hover:     var(--brand-accent);
@@ -271,14 +277,19 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    only token-using surfaces (body, and anything already migrated) recolor.
    LC-192 adds the high-contrast variants. */
 [data-theme="dark"] {
-    --surface:          #0f172a; /* slate-900 */
-    --surface-elevated: #1e293b; /* slate-800 */
-    --surface-sunken:   #020617; /* slate-950 */
-    --content:          #e2e8f0; /* slate-200 */
-    --content-muted:    #94a3b8; /* slate-400 */
-    --content-subtle:   #64748b; /* slate-500 */
-    --border:           #334155; /* slate-700 */
-    --border-strong:    #475569; /* slate-600 */
+    /* LC-554 (Blue Harbor): navy dark theme, replacing the old slate-900 base.
+       Same token contract; surfaces step from #071a2f (page) up to #0b2542
+       (elevated) and down to #041326 (sunken). Text ramp is blue-tinted white.
+       Accent still tracks --brand-primary; --ring stays blue-400 for contrast
+       on the navy ground. */
+    --surface:          #071a2f; /* navy page background */
+    --surface-elevated: #0b2542; /* cards, panels, dialogs */
+    --surface-sunken:   #041326; /* inputs, code, inset rows */
+    --content:          #eaf4ff; /* primary text */
+    --content-muted:    #9fb6d0; /* secondary text */
+    --content-subtle:   #6f89a5; /* tertiary / placeholder */
+    --border:           #17395c; /* default borders */
+    --border-strong:    #24517c; /* emphasized borders */
     --accent:           var(--brand-primary);
     --accent-hover:     var(--brand-accent);
     --accent-content:   #ffffff;
@@ -309,12 +320,11 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #2d1003;
     --warning-border:           #78350f; /* amber-900 */
     --warning-surface-content:  var(--content);
-    /* LC-222: dim brand-tinted panel that sits visibly against slate-900
-       surface; mirrors LC-215's --danger-surface dim shade for dark
-       theme. `--accent-surface-content` flips to `--content` (slate-200)
-       so text reads against the dim blue-900 surface; using --accent
-       (blue-600) here would be ~1.9:1 contrast and fail WCAG AA. */
-    --accent-surface:           #1e3a8a; /* blue-900 */
+    /* LC-222: dim brand-tinted panel that sits visibly against the navy
+       surface; LC-554 retints it to Blue Harbor's #123e73. `--accent-surface-content`
+       flips to `--content` (#eaf4ff) so text reads against the dim blue
+       surface; using --accent (blue-600) here would fail WCAG AA. */
+    --accent-surface:           #123e73;
     --accent-surface-content:   var(--content);
     /* LC-225: dim emerald / sky / violet tinted badges for the webhook /
        email / bridge actor chips. Content flips to `--content` so text
@@ -341,7 +351,14 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    a thicker focus ring (see the [data-theme^="hc-"] :focus-visible rule below).
    State colors use the darker/lighter 700-ish shades so they pass AA against
    the surface. Auto-selected on `prefers-contrast: more` when theme = System
-   (resolved in the base.html bootstrap). */
+   (resolved in the base.html bootstrap).
+
+   LC-554 (Blue Harbor): the hc themes are DELIBERATELY left un-retinted. High
+   contrast is a contrast-first, brand-hue-neutral posture (pure black/white
+   surfaces + borders); blue-tinting them the way :root and [data-theme=dark]
+   were retuned would lower contrast and defeat their purpose. Their accent is
+   already blue (blue-700 on hc-light, blue-300 on hc-dark) and already AAA, so
+   Blue Harbor needs no change here. */
 [data-theme="hc-light"] {
     --surface:          #ffffff;
     --surface-elevated: #ffffff;
