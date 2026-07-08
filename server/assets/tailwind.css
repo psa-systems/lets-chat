@@ -99,4 +99,26 @@
   .lc-empty-wrap {
     @apply flex flex-col items-center justify-center gap-3 px-4 py-10 text-center;
   }
+
+  /* LC-562: page-width + layout normalization. Older utility pages pick
+     inconsistent `max-w-*` values; these give three canonical content widths
+     plus shared padding/stack helpers so similar pages line up. All three width
+     helpers center the column (`mx-auto`) and go full-width on mobile; a caller
+     inside a flex shell can still override. `narrow` = login/error/short forms,
+     `medium` = settings/content, `wide` = admin tables. */
+  .lc-page-narrow {
+    @apply mx-auto w-full max-w-lg;
+  }
+  .lc-page-medium {
+    @apply mx-auto w-full max-w-3xl;
+  }
+  .lc-page-wide {
+    @apply mx-auto w-full max-w-5xl;
+  }
+  .lc-page-pad {
+    @apply px-4 py-6 sm:px-6;
+  }
+  .lc-page-stack {
+    @apply flex flex-col gap-6;
+  }
 }
