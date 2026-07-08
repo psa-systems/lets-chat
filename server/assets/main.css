@@ -265,11 +265,14 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        chrome surface independent of the page theme; these tokens give it a
        theme-aware identity (idle tile, hover tile, icon color) instead of the
        hardcoded slate-* it used before. Active state reuses --accent. */
-    --rail-surface:        #0f172a; /* slate-900 */
-    --rail-tile:           #334155; /* slate-700 */
-    --rail-tile-hover:     #475569; /* slate-600 */
+    /* LC-560: aligned to the Blue Harbor navy family so the rail + the navy
+       sidebar read as one cohesive dark chrome. The rail sits darkest (#041326),
+       left of the #071a2f sidebar. */
+    --rail-surface:        #041326; /* darkest navy */
+    --rail-tile:           #0b2542; /* navy idle tile */
+    --rail-tile-hover:     #123e73; /* navy hover tile */
     --rail-content:        #ffffff;
-    --rail-content-muted:  #94a3b8; /* slate-400 */
+    --rail-content-muted:  #9fb6d0; /* navy-muted */
     /* LC-554 (Blue Harbor) phase 1b: room sidebar (the w-64 nav column, distinct
        from the w-16 enclave rail above). These tokens give the sidebar its own
        dark-navy chrome identity so it reads as a dark shell over the light page
@@ -1505,6 +1508,44 @@ math {
 }
 [data-lc-pin-toggle][aria-expanded="false"] [data-lc-pin-chevron] {
     transform: rotate(-90deg);
+}
+
+/* LC-560 (Blue Harbor): the room sidebar is dark-navy chrome in every theme. It
+   is wired by REDEFINING the semantic tokens on the container to the --sidebar-*
+   family (LC-554 phase 1b), so every descendant utility (bg-surface-sunken,
+   text-content, border-border, hover:bg-surface-elevated, the .lc-* component
+   classes) recolors to navy automatically - no markup change inside the OOB-
+   swapped fragments, which keeps every hx-swap-oob target id + structure intact.
+   The navy ramp maps naturally: surface = base column, elevated = hover/menus,
+   sunken = insets. --accent is intentionally NOT overridden so accent fills
+   (unread badges, pressed toggles, the active-row left bar) keep the brand blue;
+   only --accent-surface flips to a raised navy so the active row reads as a
+   quiet lift, not a bright light-blue chip. */
+.lc-sidebar {
+    --surface:          var(--sidebar-surface);
+    --surface-elevated: var(--sidebar-elevated);
+    --surface-sunken:   var(--sidebar-sunken);
+    --content:          var(--sidebar-content);
+    --content-muted:    var(--sidebar-muted);
+    --content-subtle:   var(--sidebar-muted);
+    --border:           var(--sidebar-border);
+    --border-strong:    var(--sidebar-border);
+    --accent-surface:         var(--sidebar-elevated);
+    --accent-surface-content: var(--sidebar-content);
+    background-color: var(--sidebar-surface);
+    color: var(--sidebar-content);
+}
+/* The global .lc-room-row-active colors its label with --accent (brand blue),
+   which is too dark on the raised navy; flip it to the light sidebar content so
+   the active room label stays readable. The accent left-bar (box-shadow on the
+   base rule) is kept, so the brand-blue active indicator still reads. */
+.lc-sidebar .lc-room-row-active {
+    color: var(--sidebar-content);
+}
+/* The search input has no explicit placeholder color; default browser placeholder
+   is too faint on navy, so pin it to the muted sidebar token. */
+.lc-sidebar input::placeholder {
+    color: var(--sidebar-muted);
 }
 
 /* LC-270: collapse the room sidebar to the enclave rail on desktop. The wide
