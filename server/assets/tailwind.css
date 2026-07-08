@@ -60,4 +60,43 @@
     @apply rounded-md border border-border bg-surface-elevated px-3 py-2
            text-sm text-content shadow-lg;
   }
+
+  /* LC-555: inline alert / callout. Base `.alert` sets the bordered soft-surface
+     box + icon-friendly layout; one `.alert-*` modifier sets the tokenized
+     colors so it recolors per theme. Replaces the ad-hoc `bg-*-50` boxes older
+     templates hand-rolled. Note: `danger` has no `-surface-content` token (by
+     design - LC-215), so `.alert-danger` uses `text-danger` for its copy;
+     `success`/`warning` have dedicated `-surface-content` foregrounds. `info` is
+     the neutral variant (no accent-border token exists, and a neutral note reads
+     cleanly in all four themes). */
+  .alert {
+    @apply flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm;
+  }
+  .alert-success {
+    @apply border-success-border bg-success-surface text-success-surface-content;
+  }
+  .alert-warning {
+    @apply border-warning-border bg-warning-surface text-warning-surface-content;
+  }
+  .alert-danger {
+    @apply border-danger-border bg-danger-surface text-danger;
+  }
+  .alert-info {
+    @apply border-border-strong bg-surface-sunken text-content;
+  }
+
+  /* LC-555: layout helpers for the utility/admin pages. `.lc-toolbar` is a quiet
+     inset control strip (filter/action bars); `.lc-action-row` is a wrapping,
+     right-aligned button cluster (card/form footers); `.lc-empty-wrap` centers
+     an empty state within a card or section. */
+  .lc-toolbar {
+    @apply flex flex-wrap items-center gap-1.5 rounded-md border border-border
+           bg-surface-sunken px-2 py-1.5;
+  }
+  .lc-action-row {
+    @apply flex flex-wrap items-center justify-end gap-2 pt-1;
+  }
+  .lc-empty-wrap {
+    @apply flex flex-col items-center justify-center gap-3 px-4 py-10 text-center;
+  }
 }
