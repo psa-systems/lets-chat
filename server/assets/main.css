@@ -2301,6 +2301,16 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     height: 1.25rem;
     width: 1.25rem;
 }
+/* LC-565: keyboard focus ring on the composer controls, matching the app-wide
+   :focus-visible idiom (.lc-set-tab / .lc-cbtn / .lc-switch). These icon
+   buttons previously fell back to the UA default outline, inconsistent with
+   the rest of the redesigned chrome. --ring is defined in all four themes. */
+.lc-fmt-btn:focus-visible,
+.lc-composer-btn:focus-visible,
+.lc-composer-send:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ring);
+}
 
 /* LC-399: live markdown highlight overlay for the composer. The .lc-mdback
    backdrop renders the styled text and the box chrome; the .lc-mdinput textarea

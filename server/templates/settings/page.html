@@ -53,7 +53,7 @@
       {# No-JS fallback flash (JS submits get a toast + inline status instead of
          a redirect, so these only show on a full-page POST without htmx). #}
       {% if saved %}<div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "settings-saved"|t }}</div>{% endif %}
-      {% if let Some(e) = error.as_ref() %}<div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-surface-content" role="alert">{{ e }}</div>{% endif %}
+      {% if let Some(e) = error.as_ref() %}<div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger" role="alert">{{ e }}</div>{% endif %}
       {% if session_revoked %}<div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "settings-session-revoked"|t }}</div>{% endif %}
       {# ===== Profile ===== #}
       <section id="lc-panel-profile" role="tabpanel" aria-labelledby="lc-tab-profile" data-lc-tabpanel="profile" class="lc-set-panel">
