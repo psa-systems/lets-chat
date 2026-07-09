@@ -26,9 +26,9 @@
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
-    {{ "room-feeds-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
-    {{ "room-feeds-unavailable-2"|t }}
+  <div class="alert alert-warning">
+    <span>{{ "room-feeds-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
+    {{ "room-feeds-unavailable-2"|t }}</span>
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/feeds" class="flex flex-wrap items-end gap-3 border rounded p-4">
