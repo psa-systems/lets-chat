@@ -11,8 +11,9 @@
     </form>
   </td>
   <td class="text-xs">
-    {% if u.is_banned %}<span class="font-medium text-danger">{{ "admin-userrow-banned"|t }}</span>{% else %}<span class="text-content-muted">{{ "admin-userrow-active"|t }}</span>{% endif %}
-    {% if u.is_muted %} <span class="font-medium text-warning">{{ "admin-userrow-muted"|t }}</span>{% if let Some(until) = u.muted_until %} <span class="text-content-muted">{{ "admin-userrow-muted-until"|t }} {{ until }} {{ "admin-userrow-muted-utc"|t }}</span>{% endif %}{% endif %}
+    {# LC-561: ban / mute / active state as unified status chips (.lc-pill). #}
+    {% if u.is_banned %}<span class="lc-pill lc-pill--danger">{{ "admin-userrow-banned"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-userrow-active"|t }}</span>{% endif %}
+    {% if u.is_muted %} <span class="lc-pill lc-pill--warning">{{ "admin-userrow-muted"|t }}</span>{% if let Some(until) = u.muted_until %} <span class="text-content-muted">{{ "admin-userrow-muted-until"|t }} {{ until }} {{ "admin-userrow-muted-utc"|t }}</span>{% endif %}{% endif %}
   </td>
   <td class="text-xs">
     <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
