@@ -1552,6 +1552,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/settings/language", post(settings::post_language))
         .route("/settings/appearance", post(settings::post_appearance))
         .route("/settings/theme", post(settings::post_theme))
+        .route("/settings/palette", post(settings::post_palette))
         .route("/settings/keywords", post(settings::post_keyword_add))
         .route(
             "/settings/keywords/delete",
