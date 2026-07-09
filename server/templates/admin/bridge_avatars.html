@@ -36,7 +36,7 @@
 </dl>
 
 {% if stats.pending_stale > 0 %}
-<div class="mb-4 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
+<div class="alert alert-warning mb-4">
   {{ "admin-bridge-avatars-stale-pending-prefix"|t }} {{ stats.pending_stale }} {{ "admin-bridge-avatars-stale-pending-suffix"|t }}
 </div>
 {% endif %}
