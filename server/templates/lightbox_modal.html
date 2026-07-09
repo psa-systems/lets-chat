@@ -15,7 +15,12 @@
           class="shrink-0 text-white text-3xl leading-none px-2">&lsaquo;</button>
   <figure class="flex flex-col items-center gap-2 min-w-0">
     <img data-lc-lightbox-img src="" alt="" class="lc-lightbox-img rounded">
-    <figcaption data-lc-lightbox-caption class="text-sm text-slate-300 text-center break-words"></figcaption>
+    {# LC-557: the caption sits on the permanently-dark lightbox scrim (bg-black/60,
+       theme-independent by design so the image reads on any theme), so it uses a
+       muted light `text-white/70` rather than a theme-adaptive `--content` token,
+       which would go dark-on-black under the light theme. Same reason the close /
+       prev / next controls stay `text-white`. Drops the raw slate-palette leftover. #}
+    <figcaption data-lc-lightbox-caption class="text-sm text-white/70 text-center break-words"></figcaption>
   </figure>
   <button type="button" data-lc-lightbox-next aria-label="{{ "lightbox-next"|t }}" hidden
           class="shrink-0 text-white text-3xl leading-none px-2">&rsaquo;</button>
