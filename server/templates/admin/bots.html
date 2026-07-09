@@ -62,7 +62,7 @@
       <tr>
         <td class="font-mono text-xs">{{ b.username }}</td>
         <td class="text-xs text-content-muted">{{ b.created_at }}</td>
-        <td class="text-xs">{% if b.disabled %}<span class="font-medium text-danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="text-content-muted">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
+        <td class="text-xs">{% if b.disabled %}<span class="lc-pill lc-pill--danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
         <td class="lc-table-actions">
           {% if !b.disabled %}
           <form method="post" action="/admin/bots/{{ b.id }}/disable"
