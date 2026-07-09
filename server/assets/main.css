@@ -779,8 +779,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     border-radius: 2px;
 }
 /* LC-192: thicker, offset focus ring in high-contrast themes. */
-[data-theme="hc-light"] :focus-visible,
-[data-theme="hc-dark"] :focus-visible {
+[data-mode="hc-light"] :focus-visible,
+[data-mode="hc-dark"] :focus-visible {
     outline-width: 3px;
     outline-offset: 3px;
 }
