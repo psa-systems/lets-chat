@@ -2312,6 +2312,29 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     box-shadow: 0 0 0 2px var(--ring);
 }
 
+/* Touch-device tap targets (WCAG 2.5.5). Guarded on `pointer: coarse` so
+   mouse / trackpad layouts keep the denser icon sizing. The redesign's icon
+   controls are 28-36px; on touch they get a 44px MINIMUM.
+   Height is bumped everywhere - it can never cause horizontal overflow. Width
+   is only bumped where the container absorbs it: .lc-set-tab is already >=44px
+   wide (full-width column, or nowrap text tabs in the mobile scroll rail), so
+   min-height alone makes it a true 44px target. The composer button rows and
+   the room-header action cluster are fixed-width dense single lines (up to ~10
+   icon buttons + the textarea / the room title), so forcing 44px WIDTH there
+   overflows a ~360px viewport; those get height only. Full 44x44 on those dense
+   rows needs a mobile reflow (wrap / overflow menu / hide-secondary), tracked
+   as follow-up. 44px tall x >=28px wide still clears the 24px WCAG 2.5.8 AA
+   floor on both axes. */
+@media (pointer: coarse) {
+    .lc-set-tab,
+    .lc-header-action,
+    .lc-fmt-btn,
+    .lc-composer-btn,
+    .lc-composer-send {
+        min-height: 44px;
+    }
+}
+
 /* LC-399: live markdown highlight overlay for the composer. The .lc-mdback
    backdrop renders the styled text and the box chrome; the .lc-mdinput textarea
    sits on top transparent (text + background) with a visible caret. The two
