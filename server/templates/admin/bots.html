@@ -6,7 +6,7 @@
 <p class="mb-4 text-sm text-content-muted">{{ "admin-bots-intro"|t }}</p>
 
 {% if let Some(err) = error %}
-<div class="mb-4 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger" role="alert">{{ err }}</div>
+<div class="mb-4 alert alert-danger" role="alert">{{ err }}</div>
 {% endif %}
 
 {% if let Some(tok) = new_token %}
@@ -19,8 +19,8 @@
 {% endif %}
 
 {% if !available %}
-<div class="mb-4 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
-  {{ "admin-bots-no-secret-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>) {{ "admin-bots-no-secret-2"|t }}
+<div class="alert alert-warning mb-4">
+  <span>{{ "admin-bots-no-secret-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>) {{ "admin-bots-no-secret-2"|t }}</span>
 </div>
 {% else %}
 <div class="card lc-set-card mb-5">

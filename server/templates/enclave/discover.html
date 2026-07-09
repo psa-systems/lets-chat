@@ -6,7 +6,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   {% if let Some(msg) = flash_error %}
-  <div class="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger">
+  <div class="alert alert-danger">
     {{ msg }}
   </div>
   {% endif %}
