@@ -85,14 +85,18 @@
         <td class="font-mono text-xs">{{ b.kind }}</td>
         <td class="font-mono text-xs">{{ b.bot_username }}</td>
         <td>
+          {# LC-561: unified status chip (.lc-pill). Was a hand-rolled inline-block
+             chip; the old "errored" variant used a non-existent
+             text-danger-surface-content token (danger has no -surface-content),
+             so it rendered colorless. #}
           {% if b.status == "healthy" %}
-          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-success-surface text-success-surface-content">{{ b.status }}</span>
+          <span class="lc-pill lc-pill--success">{{ b.status }}</span>
           {% else if b.status == "errored" %}
-          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-danger-surface text-danger-surface-content">{{ b.status }}</span>
+          <span class="lc-pill lc-pill--danger">{{ b.status }}</span>
           {% else if b.status == "stale" %}
-          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-warning-surface text-warning-surface-content">{{ b.status }}</span>
+          <span class="lc-pill lc-pill--warning">{{ b.status }}</span>
           {% else %}
-          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-surface-sunken text-content-muted">{{ b.status }}</span>
+          <span class="lc-pill lc-pill--neutral">{{ b.status }}</span>
           {% endif %}
           {% if let Some(err) = b.last_error.as_ref() %}
           <div class="text-xs text-danger mt-1 break-all">{{ err }}</div>
