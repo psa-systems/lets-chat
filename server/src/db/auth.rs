@@ -775,14 +775,28 @@ pub async fn set_user_density(
     Ok(())
 }
 
-/// LC-191: set (or clear, with `None`) a user's preferred UI theme.
-pub async fn set_user_theme(
+/// LC-541: set (or clear, with `None`) a user's preferred UI mode.
+pub async fn set_user_theme_mode(
     pool: &SqlitePool,
     user_id: &str,
-    theme: Option<&str>,
+    mode: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE users SET theme = ? WHERE id = ?")
-        .bind(theme)
+    sqlx::query("UPDATE users SET theme_mode = ? WHERE id = ?")
+        .bind(mode)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-541: set (or clear, with `None`) a user's preferred palette.
+pub async fn set_user_theme_palette(
+    pool: &SqlitePool,
+    user_id: &str,
+    palette: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET theme_palette = ? WHERE id = ?")
+        .bind(palette)
         .bind(user_id)
         .execute(pool)
         .await?;

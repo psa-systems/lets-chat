@@ -588,7 +588,7 @@ pub async fn post_appearance(
         d @ ("comfortable" | "compact") => d,
         _ => "comfortable",
     };
-    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
     db::auth::set_user_density(&state.auth, &user.id, Some(density)).await?;
     if let Some(r) = hx_feedback(
         &headers,
@@ -624,7 +624,7 @@ pub async fn post_theme(
         t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
         _ => "system",
     };
-    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
     let cookie = format!("lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax");
     Ok((
         axum::http::StatusCode::NO_CONTENT,
