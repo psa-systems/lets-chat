@@ -4,7 +4,7 @@ module.exports = {
   // LC-190: theme is driven by `<html data-theme="...">` (set no-flash by the
   // bootstrap in LC-191). `dark:` variants key off the dark theme; the primary
   // mechanism is the token utilities below, which recolor via CSS vars.
-  darkMode: ["selector", '[data-theme="dark"]'],
+  darkMode: ["selector", '[data-mode~="dark"]'],
   theme: {
     extend: {
       // LC-190: semantic design tokens -> Tailwind color utilities, mapped to
