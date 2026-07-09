@@ -387,8 +387,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    contrast is a contrast-first, brand-hue-neutral posture (pure black/white
    surfaces + borders); blue-tinting them the way :root and [data-theme=dark]
    were retuned would lower contrast and defeat their purpose. Their accent is
-   already blue (blue-700 on hc-light, blue-300 on hc-dark) and already AAA, so
-   Blue Harbor needs no change here. */
+   blue (blue-800 on hc-light after the LC-541 Task 11 AAA nudge - blue-700 was
+   6.70:1, below the 7:1 AAA floor - and blue-300 on hc-dark) and AAA. */
 [data-mode="hc-light"] {
     /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #15803d; /* green-700 */
@@ -431,8 +431,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --content-subtle:   #374151; /* gray-700 */
     --border:           #000000;
     --border-strong:    #000000;
-    --accent:           #1d4ed8; /* blue-700: >=AA on white as text/fill */
-    --accent-hover:     #1e40af; /* blue-800 */
+    --accent:           #1e40af; /* LC-541 T11: blue-800, AAA on white (blue-700 was 6.70:1) */
+    --accent-hover:     #1e3a8a; /* blue-900 */
     --accent-content:   #ffffff;
     /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
        maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
@@ -535,7 +535,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    The hc-light / hc-dark surface/text/border/rail/sidebar tokens are inherited
    verbatim from Blue Harbor's contrast-first HC blocks (near-white / near-black,
    already AAA and palette-neutral); only the accent family carries palette
-   identity. Accent/accent-content pairs get AAA-verified + nudged in Task 11. */
+   identity. Accent/accent-content pairs are AAA-verified by
+   server/scripts/contrast-check.mjs and nudged where needed (LC-541 Task 11). */
 
 /* Cobalt */
 [data-theme="cobalt"] {
@@ -564,8 +565,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
   --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
   --border:#000000; --border-strong:#000000;
-  --accent:#0f62fe; --accent-hover:#0043ce; --accent-content:#ffffff;
-  --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#4589ff;
+  --accent:#0043ce; --accent-hover:#002d9c; --accent-content:#ffffff;
+  --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#000000;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -575,8 +576,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
-  --accent:#4589ff; --accent-hover:#78a9ff; --accent-content:#031022;
-  --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#78a9ff;
+  --accent:#78a9ff; --accent-hover:#a6c8ff; --accent-content:#031022;
+  --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -611,7 +612,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
   --border:#000000; --border-strong:#000000;
   --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
-  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -622,7 +623,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
-  --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#60a5fa;
+  --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -634,7 +635,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#fbfdff; --surface-elevated:#ffffff; --surface-sunken:#f0f7ff;
   --content:#0f172a; --content-muted:#5f7288; --content-subtle:#92a3b5;
   --border:#e1edf8; --border-strong:#c4d7eb;
-  --accent:#0284c7; --accent-hover:#0369a1; --accent-content:#ffffff;
+  --accent:#0369a1; --accent-hover:#075985; --accent-content:#ffffff;
   --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#0ea5e9;
   --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc4d6; --sidebar-border:#174764;
@@ -656,8 +657,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
   --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
   --border:#000000; --border-strong:#000000;
-  --accent:#0284c7; --accent-hover:#0369a1; --accent-content:#ffffff;
-  --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#0ea5e9;
+  --accent:#075985; --accent-hover:#0c4a6e; --accent-content:#ffffff;
+  --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#000000;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -668,7 +669,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#38bdf8; --accent-hover:#7dd3fc; --accent-content:#031522;
-  --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#38bdf8;
+  --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -680,7 +681,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#f5fcff; --surface-elevated:#ffffff; --surface-sunken:#e8f7fb;
   --content:#071b24; --content-muted:#56707a; --content-subtle:#8aa0a9;
   --border:#d3eaf0; --border-strong:#afd1dc;
-  --accent:#0891b2; --accent-hover:#0e7490; --accent-content:#ffffff;
+  --accent:#0e7490; --accent-hover:#155e75; --accent-content:#ffffff;
   --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#06b6d4;
   --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-sunken:#020f15;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc6d0; --sidebar-border:#164150;
@@ -702,8 +703,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
   --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
   --border:#000000; --border-strong:#000000;
-  --accent:#0891b2; --accent-hover:#0e7490; --accent-content:#ffffff;
-  --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#06b6d4;
+  --accent:#155e75; --accent-hover:#164e63; --accent-content:#ffffff;
+  --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#000000;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -714,7 +715,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#22d3ee; --accent-hover:#67e8f9; --accent-content:#021014;
-  --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#22d3ee;
+  --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -748,8 +749,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
   --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
   --border:#000000; --border-strong:#000000;
-  --accent:#1d4ed8; --accent-hover:#1e3a8a; --accent-content:#ffffff;
-  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
+  --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
@@ -760,7 +761,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#050a1a;
-  --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#60a5fa;
+  --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
