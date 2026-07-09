@@ -207,42 +207,42 @@
                 <label class="lc-palette-swatch" data-palette="blue-harbor">
                   <input type="radio" name="palette" value="blue-harbor" class="sr-only"
                          {% if user.theme_palette_or_default() == "blue-harbor" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-blue-harbor"|t }}</span>
                 </label>
                 <label class="lc-palette-swatch" data-palette="cobalt">
                   <input type="radio" name="palette" value="cobalt" class="sr-only"
                          {% if user.theme_palette_or_default() == "cobalt" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-cobalt"|t }}</span>
                 </label>
                 <label class="lc-palette-swatch" data-palette="ink-ice">
                   <input type="radio" name="palette" value="ink-ice" class="sr-only"
                          {% if user.theme_palette_or_default() == "ink-ice" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-ink-ice"|t }}</span>
                 </label>
                 <label class="lc-palette-swatch" data-palette="arctic">
                   <input type="radio" name="palette" value="arctic" class="sr-only"
                          {% if user.theme_palette_or_default() == "arctic" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-arctic"|t }}</span>
                 </label>
                 <label class="lc-palette-swatch" data-palette="deep-sea">
                   <input type="radio" name="palette" value="deep-sea" class="sr-only"
                          {% if user.theme_palette_or_default() == "deep-sea" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-deep-sea"|t }}</span>
                 </label>
                 <label class="lc-palette-swatch" data-palette="royal-navy">
                   <input type="radio" name="palette" value="royal-navy" class="sr-only"
                          {% if user.theme_palette_or_default() == "royal-navy" %}checked{% endif %}
-                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value)">
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-royal-navy"|t }}</span>
                 </label>
