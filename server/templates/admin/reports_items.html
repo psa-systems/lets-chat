@@ -13,7 +13,7 @@
   <li class="card p-3">
     <div class="flex items-center justify-between gap-2 mb-1">
       <div class="flex items-center gap-2">
-        <span class="rounded bg-danger-surface text-danger-surface-content text-xs px-1.5 py-0.5 uppercase tracking-wide">
+        <span class="rounded bg-danger-surface text-danger text-xs px-1.5 py-0.5 uppercase tracking-wide">
           {% if r.category == "spam" %}{{ "report-category-spam"|t }}
           {%- else if r.category == "harassment" %}{{ "report-category-harassment"|t }}
           {%- else if r.category == "inappropriate" %}{{ "report-category-inappropriate"|t }}

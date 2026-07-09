@@ -144,7 +144,7 @@
       <div class="flex justify-between"><span class="text-content-muted">{{ "admin-settings-ingress-consecutive-failures"|t }}</span><span class="font-mono {% if s.consecutive_failures > 0 %}text-danger{% endif %}">{{ s.consecutive_failures }}</span></div>
       <div class="flex justify-between"><span class="text-content-muted">{{ "admin-settings-ingress-last-tick"|t }}</span><span class="font-mono">{{ s.last_fetched }} / {{ s.last_posted }} / {{ s.last_dropped }}</span></div>
       {% if let Some(err) = s.last_error %}
-      <div class="rounded-md border border-danger-border bg-danger-surface px-2 py-1.5 text-danger-surface-content text-xs">
+      <div class="rounded-md border border-danger-border bg-danger-surface px-2 py-1.5 text-danger text-xs">
         {{ "admin-settings-ingress-last-error"|t }} <span class="font-mono">{{ err }}</span>
       </div>
       {% endif %}
@@ -252,7 +252,7 @@
       <div class="flex justify-between"><span class="text-content-muted">{{ "admin-settings-retention-total-deleted"|t }}</span><span class="font-mono">{{ s.total_messages_deleted }}</span></div>
       <div class="flex justify-between"><span class="text-content-muted">{{ "admin-settings-retention-runs"|t }}</span><span class="font-mono">{{ s.runs }}</span></div>
       {% if let Some(err) = s.last_error %}
-      <div class="rounded-md border border-danger-border bg-danger-surface px-2 py-1.5 text-danger-surface-content text-xs">
+      <div class="rounded-md border border-danger-border bg-danger-surface px-2 py-1.5 text-danger text-xs">
         {{ "admin-settings-retention-last-error"|t }} <span class="font-mono">{{ err }}</span>
       </div>
       {% endif %}
