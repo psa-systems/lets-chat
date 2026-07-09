@@ -16,8 +16,8 @@
       <h3 class="lc-set-card-title">{{ "admin-settings-maintenance-heading"|t }}</h3>
     </div>
     {% if maintenance_enabled %}
-    <div class="mb-3 rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
-      <strong>{{ "admin-settings-maintenance-on-title"|t }}</strong> {{ "admin-settings-maintenance-on-body"|t }}
+    <div class="alert alert-warning mb-3">
+      <span><strong>{{ "admin-settings-maintenance-on-title"|t }}</strong> {{ "admin-settings-maintenance-on-body"|t }}</span>
     </div>
     {% endif %}
     <form class="lc-set-form" method="post" action="/admin/maintenance"
@@ -74,7 +74,7 @@
       </p>
     </div>
     {% if imap_saved %}
-    <div class="mb-3 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "admin-settings-imap-saved"|t }}</div>
+    <div class="mb-3 alert alert-success">{{ "admin-settings-imap-saved"|t }}</div>
     {% endif %}
     <form class="lc-set-form" method="post" action="/admin/settings/imap"
           hx-post="/admin/settings/imap" hx-target="#st-imap" hx-swap="innerHTML" hx-disabled-elt="this">
@@ -192,10 +192,10 @@
       <h3 class="lc-set-card-title">{{ "admin-settings-uploads-heading"|t }}</h3>
     </div>
     {% if let Some(n) = regenerated %}
-    <div class="mb-3 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
+    <div class="mb-3 alert alert-success">{{ "admin-settings-uploads-generated-prefix"|t }} {{ n }} {{ "admin-settings-uploads-generated-suffix"|t }}</div>
     {% endif %}
     {% if let Some(n) = purged %}
-    <div class="mb-3 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
+    <div class="mb-3 alert alert-success">{{ "admin-settings-uploads-purged-prefix"|t }} {{ n }} {{ "admin-settings-uploads-purged-suffix"|t }}</div>
     {% endif %}
     <div class="space-y-2 text-sm">
       <div class="flex justify-between"><span class="text-content-muted">{{ "admin-settings-uploads-disk-size"|t }}</span><span class="font-mono">{{ uploads_total_display }}</span></div>

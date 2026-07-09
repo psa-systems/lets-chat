@@ -27,9 +27,9 @@
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
-    {{ "room-webhooks-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
-    {{ "room-webhooks-unavailable-2"|t }}
+  <div class="alert alert-warning">
+    <span>{{ "room-webhooks-unavailable-1"|t }} (<code>LETS_CHAT_SECRET_KEY</code>).
+    {{ "room-webhooks-unavailable-2"|t }}</span>
   </div>
   {% else %}
   <form method="post" action="/room/{{ room.id }}/webhooks" class="space-y-3 border rounded p-4">

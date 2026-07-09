@@ -5,7 +5,7 @@
 {% block admin_main %}
 <div class="lc-admin-narrow">
   {% if saved %}
-  <div class="rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content">{{ "admin-antispam-saved"|t }}</div>
+  <div class="alert alert-success">{{ "admin-antispam-saved"|t }}</div>
   {% endif %}
 
   <form method="post" action="/admin/anti-spam"

@@ -5,11 +5,11 @@
 {% block admin_main %}
 <div class="lc-admin-narrow">
   {% if restore_pending %}
-  <div class="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-content">
-    <strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
+  <div class="alert alert-warning">
+    <span><strong>{{ "admin-backup-staged-title"|t }}</strong> {{ "admin-backup-staged-1"|t }}
     <code>.replaced-{timestamp}</code>{{ "admin-backup-staged-2"|t }}
     <code>.restore-pending</code> {{ "admin-backup-staged-3"|t }}
-    <code>.staged-restore</code> {{ "admin-backup-staged-4"|t }}
+    <code>.staged-restore</code> {{ "admin-backup-staged-4"|t }}</span>
   </div>
   {% endif %}
 
@@ -40,7 +40,7 @@
       <p class="lc-set-card-desc">{{ "admin-backup-restore-note"|t }}</p>
     </div>
     {% if let Some(err) = error %}
-    <div class="mb-3 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger" role="alert">{{ err }}</div>
+    <div class="mb-3 alert alert-danger" role="alert">{{ err }}</div>
     {% endif %}
     <form method="post" action="/admin/restore" enctype="multipart/form-data" class="lc-set-form"
           onsubmit="return confirm('{{ "admin-backup-stage-confirm"|t }}')">

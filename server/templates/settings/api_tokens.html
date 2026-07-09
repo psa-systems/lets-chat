@@ -26,9 +26,9 @@
   {% endif %}
 
   {% if !available %}
-  <div class="p-3 rounded bg-warning-surface border border-warning-border text-warning-surface-content text-sm">
-    {{ "api-tokens-disabled-prefix"|t }}
-    (<code>LETS_CHAT_SECRET_KEY</code>){{ "api-tokens-disabled-suffix"|t }}
+  <div class="alert alert-warning">
+    <span>{{ "api-tokens-disabled-prefix"|t }}
+    (<code>LETS_CHAT_SECRET_KEY</code>){{ "api-tokens-disabled-suffix"|t }}</span>
   </div>
   {% else %}
   <form method="post" action="/settings/api-tokens" class="space-y-3 border rounded-lg p-4">
