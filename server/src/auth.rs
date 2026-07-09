@@ -205,14 +205,17 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE};
     let user = req.extensions().get::<User>();
     let user_locale = user.and_then(|u| u.locale.clone());
-    // LC-191: keep the `lc-theme` cookie (which the no-flash bootstrap reads
+    // LC-191: keep the `lc-mode` cookie (which the no-flash bootstrap reads
     // before paint) in sync with the saved `users.theme_mode`. This is what
     // carries the preference cross-device: a fresh device has no cookie, so the
-    // first authed response stamps it from the server pref.
-    let user_theme = user.and_then(|u| u.theme_mode.clone());
-    // LC-194: density rides the same cross-device mechanism as theme.
+    // first authed response stamps it from the server pref. LC-541 adds the
+    // same treatment for `lc-palette` / `users.theme_palette`.
+    let user_mode = user.and_then(|u| u.theme_mode.clone());
+    let user_palette = user.and_then(|u| u.theme_palette.clone());
+    // LC-194: density rides the same cross-device mechanism as mode/palette.
     let user_density = user.and_then(|u| u.density.clone());
-    let existing_theme = read_cookie(req.headers(), "lc-theme");
+    let existing_mode = read_cookie(req.headers(), "lc-mode");
+    let existing_palette = read_cookie(req.headers(), "lc-palette");
     let existing_density = read_cookie(req.headers(), "lc-density");
     let accept = req
         .headers()
@@ -238,10 +241,23 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
             }
         };
     sync(
-        "lc-theme",
-        &user_theme,
-        &existing_theme,
+        "lc-mode",
+        &user_mode,
+        &existing_mode,
         &["light", "dark", "hc-light", "hc-dark", "system"],
+    );
+    sync(
+        "lc-palette",
+        &user_palette,
+        &existing_palette,
+        &[
+            "blue-harbor",
+            "cobalt",
+            "ink-ice",
+            "arctic",
+            "deep-sea",
+            "royal-navy",
+        ],
     );
     sync(
         "lc-density",
