@@ -206,10 +206,10 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     let user = req.extensions().get::<User>();
     let user_locale = user.and_then(|u| u.locale.clone());
     // LC-191: keep the `lc-theme` cookie (which the no-flash bootstrap reads
-    // before paint) in sync with the saved `users.theme`. This is what carries
-    // the preference cross-device: a fresh device has no cookie, so the first
-    // authed response stamps it from the server pref.
-    let user_theme = user.and_then(|u| u.theme.clone());
+    // before paint) in sync with the saved `users.theme_mode`. This is what
+    // carries the preference cross-device: a fresh device has no cookie, so the
+    // first authed response stamps it from the server pref.
+    let user_theme = user.and_then(|u| u.theme_mode.clone());
     // LC-194: density rides the same cross-device mechanism as theme.
     let user_density = user.and_then(|u| u.density.clone());
     let existing_theme = read_cookie(req.headers(), "lc-theme");
