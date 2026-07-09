@@ -55,8 +55,12 @@ pub struct UserRecord {
     /// LC-100: preferred UI locale code (e.g. "en", "es"), or NULL to fall
     /// back to the request's Accept-Language.
     pub locale: Option<String>,
-    /// LC-191: preferred UI theme ("light"/"dark"/"system"), or NULL = system.
-    pub theme: Option<String>,
+    /// LC-541: preferred UI mode ("light"/"dark"/"hc-light"/"hc-dark"/"system"),
+    /// or NULL = system. (Renamed from `theme` when the palette axis was added.)
+    pub theme_mode: Option<String>,
+    /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
+    /// "deep-sea"/"royal-navy"), or NULL = blue-harbor.
+    pub theme_palette: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
     pub density: Option<String>,
     /// LC-533: short pronoun string (e.g. "she/her"), or NULL. Capped on write.
@@ -99,8 +103,12 @@ pub struct User {
     pub is_bot: bool,
     /// LC-100: preferred UI locale code, or None for Accept-Language fallback.
     pub locale: Option<String>,
-    /// LC-191: preferred UI theme ("light"/"dark"/"system"), or None = system.
-    pub theme: Option<String>,
+    /// LC-541: preferred UI mode ("light"/"dark"/"hc-light"/"hc-dark"/"system"),
+    /// or None = system. (Renamed from `theme` when the palette axis was added.)
+    pub theme_mode: Option<String>,
+    /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
+    /// "deep-sea"/"royal-navy"), or None = blue-harbor.
+    pub theme_palette: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
     pub density: Option<String>,
     /// LC-533: short pronoun string (e.g. "she/her"), or None.
@@ -116,12 +124,21 @@ pub struct User {
 }
 
 impl User {
-    /// LC-191: saved theme preference, defaulting to "system" when unset.
-    /// Used by the Settings appearance picker to mark the selected option.
-    pub fn theme_or_system(&self) -> &str {
-        match self.theme.as_deref() {
+    /// LC-541: saved mode preference, defaulting to "system" when unset.
+    pub fn theme_mode_or_system(&self) -> &str {
+        match self.theme_mode.as_deref() {
             Some(t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system")) => t,
             _ => "system",
+        }
+    }
+
+    /// LC-541: saved palette preference, defaulting to "blue-harbor" when unset.
+    pub fn theme_palette_or_default(&self) -> &str {
+        match self.theme_palette.as_deref() {
+            Some(
+                p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy"),
+            ) => p,
+            _ => "blue-harbor",
         }
     }
 
@@ -271,7 +288,8 @@ impl From<UserRecord> for User {
             totp_enabled: r.totp_enabled,
             is_bot: r.is_bot,
             locale: r.locale,
-            theme: r.theme,
+            theme_mode: r.theme_mode,
+            theme_palette: r.theme_palette,
             density: r.density,
             pronouns: r.pronouns,
             profile_links: r.profile_links,
@@ -352,5 +370,74 @@ mod tests {
         );
         assert_eq!(local_time_in("", now), None);
         assert_eq!(local_time_in("Not/AZone", now), None);
+    }
+}
+
+#[cfg(test)]
+mod theme_tests {
+    use super::User;
+
+    fn user_with(mode: Option<&str>, palette: Option<&str>) -> User {
+        User {
+            id: "u1".to_string(),
+            username: "u1".to_string(),
+            display_name: None,
+            role: "user".to_string(),
+            is_muted: false,
+            muted_until: None,
+            is_banned: false,
+            ban_reason: None,
+            banned_until: None,
+            created_at: String::new(),
+            read_receipts_enabled: true,
+            bio: None,
+            avatar_ext: None,
+            status: "active".to_string(),
+            custom_status: None,
+            last_active_at: String::new(),
+            is_profile_public: false,
+            notify_browser_enabled: false,
+            notify_sound_enabled: false,
+            notify_push_enabled: false,
+            notify_email_digest_enabled: false,
+            notify_login_alerts_enabled: false,
+            notify_email_activity_enabled: false,
+            totp_enabled: false,
+            is_bot: false,
+            locale: None,
+            theme_mode: mode.map(str::to_string),
+            theme_palette: palette.map(str::to_string),
+            density: None,
+            pronouns: None,
+            profile_links: None,
+            timezone: None,
+            dnd_active: false,
+        }
+    }
+
+    #[test]
+    fn mode_defaults_to_system() {
+        assert_eq!(user_with(None, None).theme_mode_or_system(), "system");
+        assert_eq!(user_with(Some("dark"), None).theme_mode_or_system(), "dark");
+        assert_eq!(
+            user_with(Some("bogus"), None).theme_mode_or_system(),
+            "system"
+        );
+    }
+
+    #[test]
+    fn palette_defaults_to_blue_harbor() {
+        assert_eq!(
+            user_with(None, None).theme_palette_or_default(),
+            "blue-harbor"
+        );
+        assert_eq!(
+            user_with(None, Some("cobalt")).theme_palette_or_default(),
+            "cobalt"
+        );
+        assert_eq!(
+            user_with(None, Some("bogus")).theme_palette_or_default(),
+            "blue-harbor"
+        );
     }
 }

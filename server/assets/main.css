@@ -178,12 +178,13 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
  * for surface / text / border / state colors. Tailwind maps utilities onto
  * them (see tailwind.config.js theme.extend.colors), so `bg-surface`,
  * `text-content`, `border-border`, `bg-accent`, etc. recolor automatically
- * when `<html data-theme>` changes.
+ * when `<html data-theme>` (palette) or `data-mode` (light/dark/hc-light/
+ * hc-dark) changes.
  *
  * The `:root` (light) values are the slate/white palette the templates
  * already hardcode, so introducing the tokens is visually a no-op; LC-193
  * migrates templates onto them, and LC-191/LC-192 add the
- * `[data-theme="dark"]` / high-contrast palettes here. */
+ * `[data-mode="dark"]` / high-contrast palettes here. */
 :root {
     /* LC-554 (Blue Harbor): the neutral ramp is blue-tinted rather than the
        old cool slate. The accent stays #2563eb (the pre-existing brand
@@ -238,7 +239,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     /* Both `*-surface-content` values are hardcoded darker shades (emerald-700,
        amber-700) instead of `var(--success)` / `var(--warning)`. Saturated
        --success (green-600 #16a34a) and --warning (amber-600 #d97706) on
-       the soft green-50 / amber-50 surfaces are ~3:1 contrast — fail WCAG
+       the soft green-50 / amber-50 surfaces are ~3:1 contrast - fail WCAG
        AA for normal text. The darker emerald-700 / amber-700 shades give
        ~5.5:1 / ~5:1 and pass AA. */
     --success-surface:          #f0fdf4; /* green-50 */
@@ -293,23 +294,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    Applies app-wide once LC-193 migrates templates onto the tokens; until then
    only token-using surfaces (body, and anything already migrated) recolor.
    LC-192 adds the high-contrast variants. */
-[data-theme="dark"] {
-    /* LC-554 (Blue Harbor): navy dark theme, replacing the old slate-900 base.
-       Same token contract; surfaces step from #071a2f (page) up to #0b2542
-       (elevated) and down to #041326 (sunken). Text ramp is blue-tinted white.
-       Accent still tracks --brand-primary; --ring stays blue-400 for contrast
-       on the navy ground. */
-    --surface:          #071a2f; /* navy page background */
-    --surface-elevated: #0b2542; /* cards, panels, dialogs */
-    --surface-sunken:   #041326; /* inputs, code, inset rows */
-    --content:          #eaf4ff; /* primary text */
-    --content-muted:    #9fb6d0; /* secondary text */
-    --content-subtle:   #6f89a5; /* tertiary / placeholder */
-    --border:           #17395c; /* default borders */
-    --border-strong:    #24517c; /* emphasized borders */
-    --accent:           var(--brand-primary);
-    --accent-hover:     var(--brand-accent);
-    --accent-content:   #ffffff;
+[data-mode="dark"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #22c55e;
     --success-content:  #052e16;
     --warning:          #f59e0b;
@@ -329,7 +315,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        Surfaces sit just darker than `--success-content` / `--warning-content`
        (which are also green-950 / amber-950 in dark) so the two never
        compose silently invisible if anyone writes `bg-success-surface
-       text-success-content` by accident — same posture as LC-215 fixed
+       text-success-content` by accident - same posture as LC-215 fixed
        for danger. */
     --success-surface:          #031b0d;
     --success-border:           #14532d; /* green-900 */
@@ -337,12 +323,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #2d1003;
     --warning-border:           #78350f; /* amber-900 */
     --warning-surface-content:  var(--content);
-    /* LC-222: dim brand-tinted panel that sits visibly against the navy
-       surface; LC-554 retints it to Blue Harbor's #123e73. `--accent-surface-content`
-       flips to `--content` (#eaf4ff) so text reads against the dim blue
-       surface; using --accent (blue-600) here would fail WCAG AA. */
-    --accent-surface:           #123e73;
-    --accent-surface-content:   var(--content);
     /* LC-225: dim emerald / sky / violet tinted badges for the webhook /
        email / bridge actor chips. Content flips to `--content` so text
        reads on the dim per-hue surface. */
@@ -352,6 +332,32 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            var(--content);
     --bridge-surface:           #2e1065; /* violet-950 */
     --bridge-content:           var(--content);
+    color-scheme: dark; /* native form controls + scrollbars go dark */
+}
+[data-theme="blue-harbor"][data-mode="dark"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    /* LC-554 (Blue Harbor): navy dark theme, replacing the old slate-900 base.
+       Same token contract; surfaces step from #071a2f (page) up to #0b2542
+       (elevated) and down to #041326 (sunken). Text ramp is blue-tinted white.
+       Accent still tracks --brand-primary; --ring stays blue-400 for contrast
+       on the navy ground. */
+    --surface:          #071a2f; /* navy page background */
+    --surface-elevated: #0b2542; /* cards, panels, dialogs */
+    --surface-sunken:   #041326; /* inputs, code, inset rows */
+    --content:          #eaf4ff; /* primary text */
+    --content-muted:    #9fb6d0; /* secondary text */
+    --content-subtle:   #6f89a5; /* tertiary / placeholder */
+    --border:           #17395c; /* default borders */
+    --border-strong:    #24517c; /* emphasized borders */
+    --accent:           var(--brand-primary);
+    --accent-hover:     var(--brand-accent);
+    --accent-content:   #ffffff;
+    /* LC-222: dim brand-tinted panel that sits visibly against the navy
+       surface; LC-554 retints it to Blue Harbor's #123e73. `--accent-surface-content`
+       flips to `--content` (#eaf4ff) so text reads against the dim blue
+       surface; using --accent (blue-600) here would fail WCAG AA. */
+    --accent-surface:           #123e73;
+    --accent-surface-content:   var(--content);
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     /* LC-366: rail sits one step darker than the page surface (slate-950 vs
        slate-900) so it still reads as distinct chrome in dark mode. */
@@ -369,34 +375,24 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #eaf4ff;
     --sidebar-muted:       #9fb6d0;
     --sidebar-border:      #17395c;
-    color-scheme: dark; /* native form controls + scrollbars go dark */
 }
 
 /* LC-192: high-contrast palettes. Maximal text/surface contrast (AAA for body
    text), pure-black/white borders (always visible, no low-contrast greys), and
-   a thicker focus ring (see the [data-theme^="hc-"] :focus-visible rule below).
-   State colors use the darker/lighter 700-ish shades so they pass AA against
-   the surface. Auto-selected on `prefers-contrast: more` when theme = System
-   (resolved in the base.html bootstrap).
+   a thicker focus ring (see the `[data-mode="hc-light"]` / `[data-mode="hc-dark"]`
+   :focus-visible rules below). State colors use the darker/lighter 700-ish
+   shades so they pass AA against the surface. Auto-selected on
+   `prefers-contrast: more` when theme = System (resolved in the base.html
+   bootstrap).
 
    LC-554 (Blue Harbor): the hc themes are DELIBERATELY left un-retinted. High
    contrast is a contrast-first, brand-hue-neutral posture (pure black/white
-   surfaces + borders); blue-tinting them the way :root and [data-theme=dark]
-   were retuned would lower contrast and defeat their purpose. Their accent is
-   already blue (blue-700 on hc-light, blue-300 on hc-dark) and already AAA, so
-   Blue Harbor needs no change here. */
-[data-theme="hc-light"] {
-    --surface:          #ffffff;
-    --surface-elevated: #ffffff;
-    --surface-sunken:   #f5f5f5;
-    --content:          #000000;
-    --content-muted:    #1f2937; /* gray-800: AAA on white, not a faint grey */
-    --content-subtle:   #374151; /* gray-700 */
-    --border:           #000000;
-    --border-strong:    #000000;
-    --accent:           #1d4ed8; /* blue-700: >=AA on white as text/fill */
-    --accent-hover:     #1e40af; /* blue-800 */
-    --accent-content:   #ffffff;
+   surfaces + borders); blue-tinting them the way :root and the dark-mode
+   block were retuned would lower contrast and defeat their purpose. Their accent is
+   blue (blue-800 on hc-light after the LC-541 Task 11 AAA nudge - blue-700 was
+   6.70:1, below the 7:1 AAA floor - and blue-300 on hc-dark) and AAA. */
+[data-mode="hc-light"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #15803d; /* green-700 */
     --success-content:  #ffffff;
     --warning:          #b45309; /* amber-700 */
@@ -417,10 +413,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #fef3c7; /* amber-100 */
     --warning-border:           #b45309; /* amber-700 */
     --warning-surface-content:  var(--warning);
-    /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
-       maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
-    --accent-surface:           #dbeafe; /* blue-100 */
-    --accent-surface-content:   var(--accent);
     /* LC-225: hc-light keeps bright actor-badge surfaces with darker
        content text for AA contrast. */
     --webhook-surface:          #d1fae5; /* emerald-100 */
@@ -429,6 +421,25 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            #0369a1; /* sky-700 */
     --bridge-surface:           #ede9fe; /* violet-100 */
     --bridge-content:           #6d28d9; /* violet-700 */
+    color-scheme: light;
+}
+[data-theme="blue-harbor"][data-mode="hc-light"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    --surface:          #ffffff;
+    --surface-elevated: #ffffff;
+    --surface-sunken:   #f5f5f5;
+    --content:          #000000;
+    --content-muted:    #1f2937; /* gray-800: AAA on white, not a faint grey */
+    --content-subtle:   #374151; /* gray-700 */
+    --border:           #000000;
+    --border-strong:    #000000;
+    --accent:           #1e40af; /* LC-541 T11: blue-800, AAA on white (blue-700 was 6.70:1) */
+    --accent-hover:     #1e3a8a; /* blue-900 */
+    --accent-content:   #ffffff;
+    /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
+       maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
+    --accent-surface:           #dbeafe; /* blue-100 */
+    --accent-surface-content:   var(--accent);
     --ring:             #000000;
     /* LC-366: hc-light rail stays black-chrome with maximal-contrast white
        icons; idle tiles use a dark grey so they separate from the surface
@@ -446,20 +457,9 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
     --sidebar-border:      #ffffff;
-    color-scheme: light;
 }
-[data-theme="hc-dark"] {
-    --surface:          #000000;
-    --surface-elevated: #0a0a0a;
-    --surface-sunken:   #000000;
-    --content:          #ffffff;
-    --content-muted:    #e5e7eb; /* gray-200 */
-    --content-subtle:   #d1d5db; /* gray-300 */
-    --border:           #ffffff;
-    --border-strong:    #ffffff;
-    --accent:           #93c5fd; /* blue-300: high contrast on black */
-    --accent-hover:     #bfdbfe; /* blue-200 */
-    --accent-content:   #000000;
+[data-mode="hc-dark"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #4ade80; /* green-400 */
     --success-content:  #000000;
     --warning:          #fbbf24; /* amber-400 */
@@ -483,11 +483,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #0a0a0a;
     --warning-border:           #fde68a; /* amber-200 */
     --warning-surface-content:  var(--warning);
-    /* LC-222: hc-dark accent surface uses the same near-black as
-       --surface-elevated for parity; --accent (blue-300) on it gives
-       ~9.5:1 contrast. */
-    --accent-surface:           #0a0a0a;
-    --accent-surface-content:   var(--accent);
     /* LC-225: hc-dark uses near-black surfaces with bright per-kind text
        colors (emerald-400 / sky-300 / violet-400) for ~9:1 contrast. */
     --webhook-surface:          #0a0a0a;
@@ -496,6 +491,26 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            #7dd3fc; /* sky-300 */
     --bridge-surface:           #0a0a0a;
     --bridge-content:           #c4b5fd; /* violet-300 */
+    color-scheme: dark;
+}
+[data-theme="blue-harbor"][data-mode="hc-dark"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    --surface:          #000000;
+    --surface-elevated: #0a0a0a;
+    --surface-sunken:   #000000;
+    --content:          #ffffff;
+    --content-muted:    #e5e7eb; /* gray-200 */
+    --content-subtle:   #d1d5db; /* gray-300 */
+    --border:           #ffffff;
+    --border-strong:    #ffffff;
+    --accent:           #93c5fd; /* blue-300: high contrast on black */
+    --accent-hover:     #bfdbfe; /* blue-200 */
+    --accent-content:   #000000;
+    /* LC-222: hc-dark accent surface uses the same near-black as
+       --surface-elevated for parity; --accent (blue-300) on it gives
+       ~9.5:1 contrast. */
+    --accent-surface:           #0a0a0a;
+    --accent-surface-content:   var(--accent);
     --ring:             #ffffff;
     /* LC-366: hc-dark rail is pure black with white icons; idle tiles use a
        dark grey so they read against the black surface. */
@@ -512,7 +527,247 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
     --sidebar-border:      #ffffff;
-    color-scheme: dark;
+}
+
+/* LC-541 Phase 1: five non-default palettes. Each defines the palette-VARYING
+   surface/text/border/accent/ring/rail/sidebar tokens for its four modes
+   (light / dark / hc-light / hc-dark). The palette-CONSTANT status + actor-badge
+   tokens come from the [data-mode="..."] blocks above and are NOT redefined here.
+   These blocks follow :root (same specificity) so they win when data-theme is set.
+   The hc-light / hc-dark surface/text/border/rail/sidebar tokens are inherited
+   verbatim from Blue Harbor's contrast-first HC blocks (near-white / near-black,
+   already AAA and palette-neutral); only the accent family carries palette
+   identity. Accent/accent-content pairs are AAA-verified by
+   server/scripts/contrast-check.mjs and nudged where needed (LC-541 Task 11). */
+
+/* Cobalt */
+[data-theme="cobalt"] {
+  --surface:#f5f9ff; --surface-elevated:#ffffff; --surface-sunken:#eaf3ff;
+  --content:#08111f; --content-muted:#53657c; --content-subtle:#8494aa;
+  --border:#d4e3f7; --border-strong:#aec8eb;
+  --accent:#0f62fe; --accent-hover:#0043ce; --accent-content:#ffffff;
+  --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#4589ff;
+  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-sunken:#031022;
+  --sidebar-content:#eff6ff; --sidebar-muted:#9db4d1; --sidebar-border:#143d70;
+  --rail-surface:#031022; --rail-tile:#0a2750; --rail-tile-hover:#0043ce;
+  --rail-content:#ffffff; --rail-content-muted:#9db4d1;
+}
+[data-theme="cobalt"][data-mode="dark"] {
+  --surface:#061932; --surface-elevated:#0a2750; --surface-sunken:#031022;
+  --content:#eff6ff; --content-muted:#9db4d1; --content-subtle:#6f86a3;
+  --border:#143d70; --border-strong:#1e5a9e;
+  --accent:#4589ff; --accent-hover:#78a9ff; --accent-content:#031022;
+  --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#78a9ff;
+  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-sunken:#031022;
+  --sidebar-content:#eff6ff; --sidebar-muted:#9db4d1; --sidebar-border:#143d70;
+  --rail-surface:#031022; --rail-tile:#0a2750; --rail-tile-hover:#78a9ff;
+  --rail-content:#ffffff; --rail-content-muted:#9db4d1;
+}
+[data-theme="cobalt"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#0043ce; --accent-hover:#002d9c; --accent-content:#ffffff;
+  --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="cobalt"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#78a9ff; --accent-hover:#a6c8ff; --accent-content:#031022;
+  --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+
+/* Ink + Ice */
+[data-theme="ink-ice"] {
+  --surface:#f8fbfd; --surface-elevated:#ffffff; --surface-sunken:#eef5fa;
+  --content:#0b1623; --content-muted:#586879; --content-subtle:#8997a7;
+  --border:#dce7ef; --border-strong:#bfccd8;
+  --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
+  --sidebar-surface:#07111f; --sidebar-elevated:#0d1b2d; --sidebar-sunken:#030914;
+  --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
+  --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#1e3a8a;
+  --rail-content:#ffffff; --rail-content-muted:#9aaec4;
+}
+[data-theme="ink-ice"][data-mode="dark"] {
+  --surface:#07111f; --surface-elevated:#0d1b2d; --surface-sunken:#030914;
+  --content:#edf6ff; --content-muted:#9aaec4; --content-subtle:#687f98;
+  --border:#1b334f; --border-strong:#2b4d72;
+  --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
+  --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#60a5fa;
+  --sidebar-surface:#07111f; --sidebar-elevated:#0d1b2d; --sidebar-sunken:#030914;
+  --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
+  --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#93c5fd;
+  --rail-content:#ffffff; --rail-content-muted:#9aaec4;
+}
+[data-theme="ink-ice"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="ink-ice"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
+  --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+
+/* Arctic Messenger */
+[data-theme="arctic"] {
+  --surface:#fbfdff; --surface-elevated:#ffffff; --surface-sunken:#f0f7ff;
+  --content:#0f172a; --content-muted:#5f7288; --content-subtle:#92a3b5;
+  --border:#e1edf8; --border-strong:#c4d7eb;
+  --accent:#0369a1; --accent-hover:#075985; --accent-content:#ffffff;
+  --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#0ea5e9;
+  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
+  --sidebar-content:#ecfeff; --sidebar-muted:#9bc4d6; --sidebar-border:#174764;
+  --rail-surface:#031522; --rail-tile:#0a2c47; --rail-tile-hover:#0369a1;
+  --rail-content:#ffffff; --rail-content-muted:#9bc4d6;
+}
+[data-theme="arctic"][data-mode="dark"] {
+  --surface:#062033; --surface-elevated:#0a2c47; --surface-sunken:#031522;
+  --content:#ecfeff; --content-muted:#9bc4d6; --content-subtle:#6f9aad;
+  --border:#174764; --border-strong:#246487;
+  --accent:#38bdf8; --accent-hover:#7dd3fc; --accent-content:#031522;
+  --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#38bdf8;
+  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
+  --sidebar-content:#ecfeff; --sidebar-muted:#9bc4d6; --sidebar-border:#174764;
+  --rail-surface:#031522; --rail-tile:#0a2c47; --rail-tile-hover:#7dd3fc;
+  --rail-content:#ffffff; --rail-content-muted:#9bc4d6;
+}
+[data-theme="arctic"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#075985; --accent-hover:#0c4a6e; --accent-content:#ffffff;
+  --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="arctic"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#38bdf8; --accent-hover:#7dd3fc; --accent-content:#031522;
+  --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+
+/* Deep Sea Cyan */
+[data-theme="deep-sea"] {
+  --surface:#f5fcff; --surface-elevated:#ffffff; --surface-sunken:#e8f7fb;
+  --content:#071b24; --content-muted:#56707a; --content-subtle:#8aa0a9;
+  --border:#d3eaf0; --border-strong:#afd1dc;
+  --accent:#0e7490; --accent-hover:#155e75; --accent-content:#ffffff;
+  --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#06b6d4;
+  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-sunken:#020f15;
+  --sidebar-content:#ecfeff; --sidebar-muted:#9bc6d0; --sidebar-border:#164150;
+  --rail-surface:#020f15; --rail-tile:#082836; --rail-tile-hover:#0e7490;
+  --rail-content:#ffffff; --rail-content-muted:#9bc6d0;
+}
+[data-theme="deep-sea"][data-mode="dark"] {
+  --surface:#041923; --surface-elevated:#082836; --surface-sunken:#020f15;
+  --content:#ecfeff; --content-muted:#9bc6d0; --content-subtle:#6f98a3;
+  --border:#164150; --border-strong:#236173;
+  --accent:#22d3ee; --accent-hover:#67e8f9; --accent-content:#021014;
+  --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#22d3ee;
+  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-sunken:#020f15;
+  --sidebar-content:#ecfeff; --sidebar-muted:#9bc6d0; --sidebar-border:#164150;
+  --rail-surface:#020f15; --rail-tile:#082836; --rail-tile-hover:#67e8f9;
+  --rail-content:#ffffff; --rail-content-muted:#9bc6d0;
+}
+[data-theme="deep-sea"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#155e75; --accent-hover:#164e63; --accent-content:#ffffff;
+  --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="deep-sea"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#22d3ee; --accent-hover:#67e8f9; --accent-content:#021014;
+  --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+
+/* Royal Navy */
+[data-theme="royal-navy"] {
+  --surface:#f6f8ff; --surface-elevated:#ffffff; --surface-sunken:#edf2ff;
+  --content:#0b1026; --content-muted:#5c6680; --content-subtle:#8b94ad;
+  --border:#dae2f5; --border-strong:#bbc8e5;
+  --accent:#1d4ed8; --accent-hover:#1e3a8a; --accent-content:#ffffff;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
+  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-sunken:#050a1a;
+  --sidebar-content:#eff3ff; --sidebar-muted:#a3aed0; --sidebar-border:#23306a;
+  --rail-surface:#050a1a; --rail-tile:#101b45; --rail-tile-hover:#1e3a8a;
+  --rail-content:#ffffff; --rail-content-muted:#a3aed0;
+}
+[data-theme="royal-navy"][data-mode="dark"] {
+  --surface:#080f2a; --surface-elevated:#101b45; --surface-sunken:#050a1a;
+  --content:#eff3ff; --content-muted:#a3aed0; --content-subtle:#737fa5;
+  --border:#23306a; --border-strong:#35479a;
+  --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#050a1a;
+  --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#60a5fa;
+  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-sunken:#050a1a;
+  --sidebar-content:#eff3ff; --sidebar-muted:#a3aed0; --sidebar-border:#23306a;
+  --rail-surface:#050a1a; --rail-tile:#101b45; --rail-tile-hover:#93c5fd;
+  --rail-content:#ffffff; --rail-content-muted:#a3aed0;
+}
+[data-theme="royal-navy"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
+  --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="royal-navy"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#050a1a;
+  --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
 }
 
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
@@ -527,8 +782,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     border-radius: 2px;
 }
 /* LC-192: thicker, offset focus ring in high-contrast themes. */
-[data-theme="hc-light"] :focus-visible,
-[data-theme="hc-dark"] :focus-visible {
+[data-mode="hc-light"] :focus-visible,
+[data-mode="hc-dark"] :focus-visible {
     outline-width: 3px;
     outline-offset: 3px;
 }

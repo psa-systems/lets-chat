@@ -28,14 +28,16 @@
     return loading;
   }
 
-  // Match the app theme so diagrams read correctly in light and dark. The theme
-  // toggle stamps data-theme on <html>; fall back to the OS preference.
+  // Match the app mode so diagrams read correctly in light and dark. The
+  // bootstrap stamps data-mode on <html> (data-theme now holds the palette,
+  // not the mode); fall back to the OS preference.
   function mermaidTheme() {
-    var t = document.documentElement.getAttribute('data-theme');
-    if (!t && window.matchMedia) {
-      t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    var mode = document.documentElement.getAttribute('data-mode');
+    if (!mode && window.matchMedia) {
+      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    return t === 'dark' ? 'dark' : 'default';
+    var isDark = mode === 'dark' || mode === 'hc-dark';
+    return isDark ? 'dark' : 'default';
   }
 
   var initialized = false;

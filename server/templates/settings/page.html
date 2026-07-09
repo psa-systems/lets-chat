@@ -198,15 +198,65 @@
           <form method="post" action="/settings/appearance"
                 hx-post="/settings/appearance" hx-target="#st-appearance" hx-swap="innerHTML"
                 hx-disabled-elt="find button[type=submit]" class="lc-set-form">
-            <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-theme">{{ "settings-appearance"|t }}</label>
-              <select id="lc-theme" class="input" name="theme" aria-label="{{ "settings-appearance"|t }}"
-                      onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)">
-                <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
-                <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
-                <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
-                <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
-                <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
+            {# LC-541: six-palette picker. Askama has no literal-array {% for %}
+               and |t needs a static string key, so the six swatches are
+               unrolled explicit labels rather than a loop. #}
+            <fieldset class="lc-set-field">
+              <legend class="lc-set-label">{{ "settings-palette"|t }}</legend>
+              <div class="lc-palette-grid" role="radiogroup" aria-label="{{ "settings-palette"|t }}">
+                <label class="lc-palette-swatch" data-palette="blue-harbor">
+                  <input type="radio" name="palette" value="blue-harbor" class="sr-only"
+                         {% if user.theme_palette_or_default() == "blue-harbor" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-blue-harbor"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="cobalt">
+                  <input type="radio" name="palette" value="cobalt" class="sr-only"
+                         {% if user.theme_palette_or_default() == "cobalt" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-cobalt"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="ink-ice">
+                  <input type="radio" name="palette" value="ink-ice" class="sr-only"
+                         {% if user.theme_palette_or_default() == "ink-ice" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-ink-ice"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="arctic">
+                  <input type="radio" name="palette" value="arctic" class="sr-only"
+                         {% if user.theme_palette_or_default() == "arctic" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-arctic"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="deep-sea">
+                  <input type="radio" name="palette" value="deep-sea" class="sr-only"
+                         {% if user.theme_palette_or_default() == "deep-sea" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-deep-sea"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="royal-navy">
+                  <input type="radio" name="palette" value="royal-navy" class="sr-only"
+                         {% if user.theme_palette_or_default() == "royal-navy" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-royal-navy"|t }}</span>
+                </label>
+              </div>
+            </fieldset>
+            <div class="lc-set-field">
+              <label class="lc-set-label" for="lc-mode">{{ "settings-mode"|t }}</label>
+              <select id="lc-mode" class="input" name="theme" aria-label="{{ "settings-mode"|t }}"
+                      onchange="window.__lcSetMode&&window.__lcSetMode(this.value==='system'?'':this.value)">
+                <option value="system"{% if user.theme_mode_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
+                <option value="light"{% if user.theme_mode_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
+                <option value="dark"{% if user.theme_mode_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
+                <option value="hc-light"{% if user.theme_mode_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
+                <option value="hc-dark"{% if user.theme_mode_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
               </select>
             </div>
             <div class="lc-set-field lc-set-field--narrow">

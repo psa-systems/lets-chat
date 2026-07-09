@@ -569,11 +569,15 @@ pub struct AppearanceForm {
     /// LC-194: "comfortable" / "compact".
     #[serde(default)]
     pub density: String,
+    /// LC-541: "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy".
+    #[serde(default)]
+    pub palette: String,
 }
 
-/// POST /settings/appearance - save the UI theme + density preferences. The
-/// locale middleware syncs the lc-theme / lc-density cookies from these, so the
-/// no-flash bootstrap picks them up on the redirect.
+/// POST /settings/appearance - save the UI mode + palette + density
+/// preferences. The locale middleware syncs the lc-mode / lc-palette /
+/// lc-density cookies from these, so the no-flash bootstrap picks them up on
+/// the redirect.
 pub async fn post_appearance(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -588,8 +592,15 @@ pub async fn post_appearance(
         d @ ("comfortable" | "compact") => d,
         _ => "comfortable",
     };
-    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
+    let palette = match form.palette.trim() {
+        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy") => {
+            Some(p)
+        }
+        _ => None, // empty or unknown -> clear -> blue-harbor default
+    };
+    db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
     db::auth::set_user_density(&state.auth, &user.id, Some(density)).await?;
+    db::auth::set_user_theme_palette(&state.auth, &user.id, palette).await?;
     if let Some(r) = hx_feedback(
         &headers,
         crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
@@ -609,12 +620,12 @@ pub struct ThemeForm {
 }
 
 /// LC-292: POST /settings/theme - the sidebar quick-toggle's persist endpoint.
-/// Saves only the theme (no density), and returns 204 with a `lc-theme` cookie
+/// Saves only the theme (no density), and returns 204 with a `lc-mode` cookie
 /// so the very next navigation reads the correct value (no flash-of-old-theme).
 /// The no-flash bootstrap + `resolve_locale` middleware otherwise mirror this
-/// cookie from `users.theme`; setting it here just closes the one-load gap for
-/// the fire-and-forget fetch path (the redirect-based appearance form gets this
-/// for free). An invalid value falls back to "system" rather than 500ing.
+/// cookie from `users.theme_mode`; setting it here just closes the one-load gap
+/// for the fire-and-forget fetch path (the redirect-based appearance form gets
+/// this for free). An invalid value falls back to "system" rather than 500ing.
 pub async fn post_theme(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -624,8 +635,35 @@ pub async fn post_theme(
         t @ ("light" | "dark" | "hc-light" | "hc-dark" | "system") => t,
         _ => "system",
     };
-    db::auth::set_user_theme(&state.auth, &user.id, Some(theme)).await?;
-    let cookie = format!("lc-theme={theme}; Path=/; Max-Age=31536000; SameSite=Lax");
+    db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
+    let cookie = format!("lc-mode={theme}; Path=/; Max-Age=31536000; SameSite=Lax");
+    Ok((
+        axum::http::StatusCode::NO_CONTENT,
+        [(axum::http::header::SET_COOKIE, cookie)],
+    )
+        .into_response())
+}
+
+#[derive(serde::Deserialize)]
+pub struct PaletteForm {
+    /// "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy".
+    #[serde(default)]
+    pub palette: String,
+}
+
+/// LC-541: POST /settings/palette - the appearance picker's palette persist.
+/// Returns 204 + an `lc-palette` cookie so the next navigation has no flash.
+pub async fn post_palette(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<PaletteForm>,
+) -> Result<Response, AppError> {
+    let palette = match form.palette.trim() {
+        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy") => p,
+        _ => "blue-harbor",
+    };
+    db::auth::set_user_theme_palette(&state.auth, &user.id, Some(palette)).await?;
+    let cookie = format!("lc-palette={palette}; Path=/; Max-Age=31536000; SameSite=Lax");
     Ok((
         axum::http::StatusCode::NO_CONTENT,
         [(axum::http::header::SET_COOKIE, cookie)],
