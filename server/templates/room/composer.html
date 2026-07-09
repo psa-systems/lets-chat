@@ -124,7 +124,12 @@
   data-lc-echo-failed="{{ "room-composer-send-failed"|t }}"
   data-lc-echo-retry="{{ "room-composer-retry"|t }}"
   data-lc-echo-discard="{{ "room-composer-echo-discard"|t }}"
-  class="border-t border-border px-2 pt-2 lc-pb-safe"
+  {# LC-559: the composer is an elevated, lifted card (rounded, bordered, faint
+     shadow, gapped off the timeline) instead of a flush top-border strip, so it
+     reads as a distinct input zone. Surface-elevated sits one step lighter than
+     the timeline in every theme; the quiet formatting toolbar and the sole
+     accent-filled Send square (LC-380) already match the redesign mock. #}
+  class="mx-2 mb-2 rounded-xl border border-border bg-surface-elevated shadow-sm px-2 pt-2 lc-pb-safe"
 >
   <div id="lc-staged" aria-live="polite" aria-atomic="false" class="mb-1 text-xs text-content-muted"></div>
   <!-- LC-98: offline-outbox status, toggled by /assets/outbox.js. -->
