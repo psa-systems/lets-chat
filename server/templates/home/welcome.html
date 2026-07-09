@@ -18,9 +18,9 @@
   <div class="min-h-full flex items-center justify-center p-6">
     <section class="w-full max-w-md">
       {% if let Some(msg) = flash_error %}
-      <div class="mb-6 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger" role="alert">
-        {{ msg }}
-      </div>
+      {# LC-564: shared alert component, matching the login error (was a
+         hand-rolled danger box with the same tokens). #}
+      <div class="alert alert-danger mb-6" role="alert">{{ msg }}</div>
       {% endif %}
       <div class="text-center">
         <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent-surface text-accent-surface-content">
