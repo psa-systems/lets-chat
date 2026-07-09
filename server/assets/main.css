@@ -293,23 +293,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    Applies app-wide once LC-193 migrates templates onto the tokens; until then
    only token-using surfaces (body, and anything already migrated) recolor.
    LC-192 adds the high-contrast variants. */
-[data-theme="dark"] {
-    /* LC-554 (Blue Harbor): navy dark theme, replacing the old slate-900 base.
-       Same token contract; surfaces step from #071a2f (page) up to #0b2542
-       (elevated) and down to #041326 (sunken). Text ramp is blue-tinted white.
-       Accent still tracks --brand-primary; --ring stays blue-400 for contrast
-       on the navy ground. */
-    --surface:          #071a2f; /* navy page background */
-    --surface-elevated: #0b2542; /* cards, panels, dialogs */
-    --surface-sunken:   #041326; /* inputs, code, inset rows */
-    --content:          #eaf4ff; /* primary text */
-    --content-muted:    #9fb6d0; /* secondary text */
-    --content-subtle:   #6f89a5; /* tertiary / placeholder */
-    --border:           #17395c; /* default borders */
-    --border-strong:    #24517c; /* emphasized borders */
-    --accent:           var(--brand-primary);
-    --accent-hover:     var(--brand-accent);
-    --accent-content:   #ffffff;
+[data-mode="dark"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #22c55e;
     --success-content:  #052e16;
     --warning:          #f59e0b;
@@ -337,12 +322,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #2d1003;
     --warning-border:           #78350f; /* amber-900 */
     --warning-surface-content:  var(--content);
-    /* LC-222: dim brand-tinted panel that sits visibly against the navy
-       surface; LC-554 retints it to Blue Harbor's #123e73. `--accent-surface-content`
-       flips to `--content` (#eaf4ff) so text reads against the dim blue
-       surface; using --accent (blue-600) here would fail WCAG AA. */
-    --accent-surface:           #123e73;
-    --accent-surface-content:   var(--content);
     /* LC-225: dim emerald / sky / violet tinted badges for the webhook /
        email / bridge actor chips. Content flips to `--content` so text
        reads on the dim per-hue surface. */
@@ -352,6 +331,32 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            var(--content);
     --bridge-surface:           #2e1065; /* violet-950 */
     --bridge-content:           var(--content);
+    color-scheme: dark; /* native form controls + scrollbars go dark */
+}
+[data-theme="blue-harbor"][data-mode="dark"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    /* LC-554 (Blue Harbor): navy dark theme, replacing the old slate-900 base.
+       Same token contract; surfaces step from #071a2f (page) up to #0b2542
+       (elevated) and down to #041326 (sunken). Text ramp is blue-tinted white.
+       Accent still tracks --brand-primary; --ring stays blue-400 for contrast
+       on the navy ground. */
+    --surface:          #071a2f; /* navy page background */
+    --surface-elevated: #0b2542; /* cards, panels, dialogs */
+    --surface-sunken:   #041326; /* inputs, code, inset rows */
+    --content:          #eaf4ff; /* primary text */
+    --content-muted:    #9fb6d0; /* secondary text */
+    --content-subtle:   #6f89a5; /* tertiary / placeholder */
+    --border:           #17395c; /* default borders */
+    --border-strong:    #24517c; /* emphasized borders */
+    --accent:           var(--brand-primary);
+    --accent-hover:     var(--brand-accent);
+    --accent-content:   #ffffff;
+    /* LC-222: dim brand-tinted panel that sits visibly against the navy
+       surface; LC-554 retints it to Blue Harbor's #123e73. `--accent-surface-content`
+       flips to `--content` (#eaf4ff) so text reads against the dim blue
+       surface; using --accent (blue-600) here would fail WCAG AA. */
+    --accent-surface:           #123e73;
+    --accent-surface-content:   var(--content);
     --ring:             #60a5fa; /* lighter ring for contrast on dark */
     /* LC-366: rail sits one step darker than the page surface (slate-950 vs
        slate-900) so it still reads as distinct chrome in dark mode. */
@@ -369,7 +374,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #eaf4ff;
     --sidebar-muted:       #9fb6d0;
     --sidebar-border:      #17395c;
-    color-scheme: dark; /* native form controls + scrollbars go dark */
 }
 
 /* LC-192: high-contrast palettes. Maximal text/surface contrast (AAA for body
@@ -385,18 +389,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    were retuned would lower contrast and defeat their purpose. Their accent is
    already blue (blue-700 on hc-light, blue-300 on hc-dark) and already AAA, so
    Blue Harbor needs no change here. */
-[data-theme="hc-light"] {
-    --surface:          #ffffff;
-    --surface-elevated: #ffffff;
-    --surface-sunken:   #f5f5f5;
-    --content:          #000000;
-    --content-muted:    #1f2937; /* gray-800: AAA on white, not a faint grey */
-    --content-subtle:   #374151; /* gray-700 */
-    --border:           #000000;
-    --border-strong:    #000000;
-    --accent:           #1d4ed8; /* blue-700: >=AA on white as text/fill */
-    --accent-hover:     #1e40af; /* blue-800 */
-    --accent-content:   #ffffff;
+[data-mode="hc-light"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #15803d; /* green-700 */
     --success-content:  #ffffff;
     --warning:          #b45309; /* amber-700 */
@@ -417,10 +411,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #fef3c7; /* amber-100 */
     --warning-border:           #b45309; /* amber-700 */
     --warning-surface-content:  var(--warning);
-    /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
-       maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
-    --accent-surface:           #dbeafe; /* blue-100 */
-    --accent-surface-content:   var(--accent);
     /* LC-225: hc-light keeps bright actor-badge surfaces with darker
        content text for AA contrast. */
     --webhook-surface:          #d1fae5; /* emerald-100 */
@@ -429,6 +419,25 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            #0369a1; /* sky-700 */
     --bridge-surface:           #ede9fe; /* violet-100 */
     --bridge-content:           #6d28d9; /* violet-700 */
+    color-scheme: light;
+}
+[data-theme="blue-harbor"][data-mode="hc-light"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    --surface:          #ffffff;
+    --surface-elevated: #ffffff;
+    --surface-sunken:   #f5f5f5;
+    --content:          #000000;
+    --content-muted:    #1f2937; /* gray-800: AAA on white, not a faint grey */
+    --content-subtle:   #374151; /* gray-700 */
+    --border:           #000000;
+    --border-strong:    #000000;
+    --accent:           #1d4ed8; /* blue-700: >=AA on white as text/fill */
+    --accent-hover:     #1e40af; /* blue-800 */
+    --accent-content:   #ffffff;
+    /* LC-222: hc-light accent surface keeps the bright blue-100 tint with
+       maximal-contrast on top via --accent (blue-700, ~6.5:1 on blue-100). */
+    --accent-surface:           #dbeafe; /* blue-100 */
+    --accent-surface-content:   var(--accent);
     --ring:             #000000;
     /* LC-366: hc-light rail stays black-chrome with maximal-contrast white
        icons; idle tiles use a dark grey so they separate from the surface
@@ -446,20 +455,9 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
     --sidebar-border:      #ffffff;
-    color-scheme: light;
 }
-[data-theme="hc-dark"] {
-    --surface:          #000000;
-    --surface-elevated: #0a0a0a;
-    --surface-sunken:   #000000;
-    --content:          #ffffff;
-    --content-muted:    #e5e7eb; /* gray-200 */
-    --content-subtle:   #d1d5db; /* gray-300 */
-    --border:           #ffffff;
-    --border-strong:    #ffffff;
-    --accent:           #93c5fd; /* blue-300: high contrast on black */
-    --accent-hover:     #bfdbfe; /* blue-200 */
-    --accent-content:   #000000;
+[data-mode="hc-dark"] {
+    /* LC-541 Phase 1: palette-CONSTANT status + actor-badge tokens (keyed by mode only, shared across every palette). Values unchanged. */
     --success:          #4ade80; /* green-400 */
     --success-content:  #000000;
     --warning:          #fbbf24; /* amber-400 */
@@ -483,11 +481,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-surface:          #0a0a0a;
     --warning-border:           #fde68a; /* amber-200 */
     --warning-surface-content:  var(--warning);
-    /* LC-222: hc-dark accent surface uses the same near-black as
-       --surface-elevated for parity; --accent (blue-300) on it gives
-       ~9.5:1 contrast. */
-    --accent-surface:           #0a0a0a;
-    --accent-surface-content:   var(--accent);
     /* LC-225: hc-dark uses near-black surfaces with bright per-kind text
        colors (emerald-400 / sky-300 / violet-400) for ~9:1 contrast. */
     --webhook-surface:          #0a0a0a;
@@ -496,6 +489,26 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --email-content:            #7dd3fc; /* sky-300 */
     --bridge-surface:           #0a0a0a;
     --bridge-content:           #c4b5fd; /* violet-300 */
+    color-scheme: dark;
+}
+[data-theme="blue-harbor"][data-mode="hc-dark"] {
+    /* LC-541 Phase 1: palette-VARYING surface/text/border/accent/ring/rail/sidebar tokens for the Blue Harbor palette. Values unchanged. */
+    --surface:          #000000;
+    --surface-elevated: #0a0a0a;
+    --surface-sunken:   #000000;
+    --content:          #ffffff;
+    --content-muted:    #e5e7eb; /* gray-200 */
+    --content-subtle:   #d1d5db; /* gray-300 */
+    --border:           #ffffff;
+    --border-strong:    #ffffff;
+    --accent:           #93c5fd; /* blue-300: high contrast on black */
+    --accent-hover:     #bfdbfe; /* blue-200 */
+    --accent-content:   #000000;
+    /* LC-222: hc-dark accent surface uses the same near-black as
+       --surface-elevated for parity; --accent (blue-300) on it gives
+       ~9.5:1 contrast. */
+    --accent-surface:           #0a0a0a;
+    --accent-surface-content:   var(--accent);
     --ring:             #ffffff;
     /* LC-366: hc-dark rail is pure black with white icons; idle tiles use a
        dark grey so they read against the black surface. */
@@ -512,7 +525,6 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
     --sidebar-border:      #ffffff;
-    color-scheme: dark;
 }
 
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
