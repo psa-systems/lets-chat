@@ -18,7 +18,9 @@
     <div class="text-sm text-content-muted prose prose-sm max-w-none text-left">{{ brand_body_html|safe }}</div>
     {% endif %}
     {% if let Some(err) = sso_error %}
-    <div class="text-sm text-red-600" role="alert">{{ err }}</div>
+    {# LC-564: shared alert component (was a raw red text utility), so the login
+       error themes with the rest of the app and matches the welcome flash. #}
+    <div class="alert alert-danger text-left" role="alert">{{ err }}</div>
     {% endif %}
     <a href="/auth/bunyip/start" class="btn btn-primary w-full">Sign in with Bunyip</a>
     <p class="text-xs text-content-subtle">You will be redirected to {{ bunyip_issuer_host }} to sign in.</p>
