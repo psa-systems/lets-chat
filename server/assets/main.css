@@ -178,12 +178,13 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
  * for surface / text / border / state colors. Tailwind maps utilities onto
  * them (see tailwind.config.js theme.extend.colors), so `bg-surface`,
  * `text-content`, `border-border`, `bg-accent`, etc. recolor automatically
- * when `<html data-theme>` changes.
+ * when `<html data-theme>` (palette) or `data-mode` (light/dark/hc-light/
+ * hc-dark) changes.
  *
  * The `:root` (light) values are the slate/white palette the templates
  * already hardcode, so introducing the tokens is visually a no-op; LC-193
  * migrates templates onto them, and LC-191/LC-192 add the
- * `[data-theme="dark"]` / high-contrast palettes here. */
+ * `[data-mode="dark"]` / high-contrast palettes here. */
 :root {
     /* LC-554 (Blue Harbor): the neutral ramp is blue-tinted rather than the
        old cool slate. The accent stays #2563eb (the pre-existing brand
@@ -378,15 +379,16 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 
 /* LC-192: high-contrast palettes. Maximal text/surface contrast (AAA for body
    text), pure-black/white borders (always visible, no low-contrast greys), and
-   a thicker focus ring (see the [data-theme^="hc-"] :focus-visible rule below).
-   State colors use the darker/lighter 700-ish shades so they pass AA against
-   the surface. Auto-selected on `prefers-contrast: more` when theme = System
-   (resolved in the base.html bootstrap).
+   a thicker focus ring (see the `[data-mode="hc-light"]` / `[data-mode="hc-dark"]`
+   :focus-visible rules below). State colors use the darker/lighter 700-ish
+   shades so they pass AA against the surface. Auto-selected on
+   `prefers-contrast: more` when theme = System (resolved in the base.html
+   bootstrap).
 
    LC-554 (Blue Harbor): the hc themes are DELIBERATELY left un-retinted. High
    contrast is a contrast-first, brand-hue-neutral posture (pure black/white
-   surfaces + borders); blue-tinting them the way :root and [data-theme=dark]
-   were retuned would lower contrast and defeat their purpose. Their accent is
+   surfaces + borders); blue-tinting them the way :root and the dark-mode
+   block were retuned would lower contrast and defeat their purpose. Their accent is
    blue (blue-800 on hc-light after the LC-541 Task 11 AAA nudge - blue-700 was
    6.70:1, below the 7:1 AAA floor - and blue-300 on hc-dark) and AAA. */
 [data-mode="hc-light"] {

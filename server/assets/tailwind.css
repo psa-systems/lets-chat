@@ -160,6 +160,7 @@
     color: var(--content-muted);
     text-align: center;
   }
+  /* LC-541: preview swatch colors duplicate main.css palette tokens (a swatch cannot render a non-active palette via inherited vars); keep in sync if a palette is retuned. */
   .lc-palette-swatch[data-palette="blue-harbor"] .lc-palette-preview {
     background: linear-gradient(135deg, #071a2f 0 40%, #f7fbff 40% 70%, #2563eb 70% 100%);
   }

@@ -575,8 +575,9 @@ pub struct AppearanceForm {
 }
 
 /// POST /settings/appearance - save the UI mode + palette + density
-/// preferences. The locale middleware syncs the lc-theme / lc-density cookies
-/// from these, so the no-flash bootstrap picks them up on the redirect.
+/// preferences. The locale middleware syncs the lc-mode / lc-palette /
+/// lc-density cookies from these, so the no-flash bootstrap picks them up on
+/// the redirect.
 pub async fn post_appearance(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,

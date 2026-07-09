@@ -1,17 +1,21 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./templates/**/*.html", "./src/**/*.rs", "./assets/**/*.js", "!./assets/vendor/**"],
-  // LC-190: theme is driven by `<html data-theme="...">` (set no-flash by the
-  // bootstrap in LC-191). `dark:` variants key off the dark theme; the primary
-  // mechanism is the token utilities below, which recolor via CSS vars.
-  darkMode: ["selector", '[data-mode~="dark"]'],
+  // LC-190/LC-541: two independent axes on `<html>`, set no-flash by the
+  // bootstrap in LC-191/LC-541. `data-mode` (light/dark/hc-light/hc-dark)
+  // drives `dark:` variants below - `$=` (ends-with) so `hc-dark` matches
+  // too, not just the literal `dark`; `data-theme` selects the color
+  // palette. The primary mechanism is the token utilities below, which
+  // recolor via CSS vars.
+  darkMode: ["selector", '[data-mode$="dark"]'],
   theme: {
     extend: {
       // LC-190: semantic design tokens -> Tailwind color utilities, mapped to
       // the CSS vars in assets/main.css so `bg-surface`, `text-content`,
       // `border-border`, `bg-accent text-accent-content`, etc. recolor per
-      // `data-theme`. `extend` (not override) keeps the raw slate/white
-      // palette available for templates not yet migrated (LC-193).
+      // `data-mode` (light/dark/hc-light/hc-dark) and `data-theme` (the
+      // active color palette). `extend` (not override) keeps the raw
+      // slate/white palette available for templates not yet migrated (LC-193).
       colors: {
         surface: {
           DEFAULT: "var(--surface)",
