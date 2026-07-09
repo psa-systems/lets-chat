@@ -16,7 +16,7 @@
     </div>
     <div class="flex gap-2">
       <form method="post" action="/invitations/{{ pair.0.id }}/accept">
-        <button type="submit" class="bg-success text-white rounded px-3 py-1 text-sm">{{ "invitations-accept"|t }}</button>
+        <button type="submit" class="bg-success text-success-content rounded px-3 py-1 text-sm">{{ "invitations-accept"|t }}</button>
       </form>
       <form method="post" action="/invitations/{{ pair.0.id }}/decline">
         <button type="submit" class="bg-surface-sunken rounded px-3 py-1 text-sm">{{ "invitations-decline"|t }}</button>
