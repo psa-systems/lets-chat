@@ -3726,6 +3726,15 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 }
 .lc-pill--off { background: var(--surface-sunken); color: var(--content-muted); }
 .lc-pill--on { background: var(--danger-surface); color: var(--danger); }
+/* LC-561: semantic status-chip variants on the shared pill, so admin tables
+   (bridge health, ban / mute state, bot enablement) render one consistent chip
+   vocabulary instead of three ad-hoc idioms. `--on` / `--off` stay for the
+   retention toggle pill. Danger has no `-surface-content` token (LC-215), so
+   the danger chip takes `--danger` for its text, matching `.alert-danger`. */
+.lc-pill--neutral { background: var(--surface-sunken); color: var(--content-muted); }
+.lc-pill--success { background: var(--success-surface); color: var(--success-surface-content); }
+.lc-pill--warning { background: var(--warning-surface); color: var(--warning-surface-content); }
+.lc-pill--danger  { background: var(--danger-surface); color: var(--danger); }
 
 /* LC-479: /saved label filter chips. Toggle button styled as a pill; the
    active chip (aria-pressed=true) uses the accent surface. */
