@@ -44,6 +44,10 @@ mod canned;
 mod channel_complete;
 mod compose_assist;
 mod custom_emojis;
+// LC-541: developer-only theme/component gallery (debug builds answer it, a
+// release build 404s inside the handler). Declared unconditionally so `just
+// check` compiles it in every profile.
+mod dev;
 mod dm;
 mod dm_mute;
 mod drafts;
@@ -1670,6 +1674,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
+        // LC-541: dev-only theme/component gallery. Registered unconditionally;
+        // the handler 404s in release builds.
+        .route("/dev/theme-gallery", get(dev::theme_gallery))
         .route("/branding/logo", get(branding::get_global_logo))
         .route("/branding/favicon", get(branding::get_global_favicon))
         .route(
