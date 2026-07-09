@@ -238,7 +238,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     /* Both `*-surface-content` values are hardcoded darker shades (emerald-700,
        amber-700) instead of `var(--success)` / `var(--warning)`. Saturated
        --success (green-600 #16a34a) and --warning (amber-600 #d97706) on
-       the soft green-50 / amber-50 surfaces are ~3:1 contrast — fail WCAG
+       the soft green-50 / amber-50 surfaces are ~3:1 contrast - fail WCAG
        AA for normal text. The darker emerald-700 / amber-700 shades give
        ~5.5:1 / ~5:1 and pass AA. */
     --success-surface:          #f0fdf4; /* green-50 */
@@ -314,7 +314,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        Surfaces sit just darker than `--success-content` / `--warning-content`
        (which are also green-950 / amber-950 in dark) so the two never
        compose silently invisible if anyone writes `bg-success-surface
-       text-success-content` by accident — same posture as LC-215 fixed
+       text-success-content` by accident - same posture as LC-215 fixed
        for danger. */
     --success-surface:          #031b0d;
     --success-border:           #14532d; /* green-900 */
