@@ -121,4 +121,58 @@
   .lc-page-stack {
     @apply flex flex-col gap-6;
   }
+
+  /* LC-541: six-palette swatch radiogroup (settings > Appearance). Each
+     `.lc-palette-swatch` label wraps an sr-only radio; `:has(:checked)` draws
+     the selected ring so no JS is needed to toggle a class. Degrades
+     gracefully without `:has()` support - the radio still works, only the
+     ring is missing. */
+  .lc-palette-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .lc-palette-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+  .lc-palette-swatch:has(:checked) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-surface);
+  }
+  .lc-palette-preview {
+    width: 100%;
+    height: 2rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+  }
+  .lc-palette-name {
+    font-size: 0.75rem;
+    color: var(--content-muted);
+    text-align: center;
+  }
+  .lc-palette-swatch[data-palette="blue-harbor"] .lc-palette-preview {
+    background: linear-gradient(135deg, #071a2f 0 40%, #f7fbff 40% 70%, #2563eb 70% 100%);
+  }
+  .lc-palette-swatch[data-palette="cobalt"] .lc-palette-preview {
+    background: linear-gradient(135deg, #061932 0 40%, #f5f9ff 40% 70%, #0f62fe 70% 100%);
+  }
+  .lc-palette-swatch[data-palette="ink-ice"] .lc-palette-preview {
+    background: linear-gradient(135deg, #07111f 0 40%, #f8fbfd 40% 70%, #1e40af 70% 100%);
+  }
+  .lc-palette-swatch[data-palette="arctic"] .lc-palette-preview {
+    background: linear-gradient(135deg, #062033 0 40%, #fbfdff 40% 70%, #0284c7 70% 100%);
+  }
+  .lc-palette-swatch[data-palette="deep-sea"] .lc-palette-preview {
+    background: linear-gradient(135deg, #041923 0 40%, #f5fcff 40% 70%, #0891b2 70% 100%);
+  }
+  .lc-palette-swatch[data-palette="royal-navy"] .lc-palette-preview {
+    background: linear-gradient(135deg, #080f2a 0 40%, #f6f8ff 40% 70%, #1d4ed8 70% 100%);
+  }
 }

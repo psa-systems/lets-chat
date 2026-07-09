@@ -25,6 +25,15 @@ theme-light = Light
 theme-dark = Dark
 theme-hc-light = High contrast (light)
 theme-hc-dark = High contrast (dark)
+# LC-541: six-palette picker (settings > Appearance)
+settings-palette = Palette
+settings-mode = Mode
+palette-blue-harbor = Blue Harbor
+palette-cobalt = Cobalt Workspace
+palette-ink-ice = Ink + Ice
+palette-arctic = Arctic Messenger
+palette-deep-sea = Deep Sea Cyan
+palette-royal-navy = Royal Navy
 settings-density = Density
 density-comfortable = Comfortable
 density-compact = Compact
