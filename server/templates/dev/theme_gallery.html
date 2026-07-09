@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LC theme gallery</title>
+  {# LC-541: standalone dev page (does not extend base.html). Loads the same two
+     stylesheets base.html does so the token blocks + component classes resolve.
+     No ?v=asset_version cache-bust: this struct carries no asset_version and the
+     assets are served static. #}
+  <link rel="stylesheet" href="/assets/tailwind-built.css">
+  <link rel="stylesheet" href="/assets/main.css">
+</head>
+<body style="background:#6b7280; margin:0; padding:1rem; font-family:system-ui,sans-serif;">
+{% for p in palettes %}{% for m in modes %}
+<section class="theme-cell" data-theme="{{ p }}" data-mode="{{ m }}"
+         style="background:var(--surface); color:var(--content); border:1px solid var(--border); padding:1rem; margin:.5rem; border-radius:.5rem; display:inline-block; width:320px; vertical-align:top;">
+  <h3 style="color:var(--content-muted); font-size:.8rem;">{{ p }} / {{ m }}</h3>
+  <div class="lc-action-row" style="display:flex; gap:.4rem; flex-wrap:wrap; margin:.5rem 0;">
+    <button class="btn btn-primary">Primary</button>
+    <button class="btn btn-secondary">Secondary</button>
+    <button class="btn btn-ghost">Ghost</button>
+    <button class="btn btn-danger">Danger</button>
+  </div>
+  <input class="input" placeholder="Input" style="margin:.25rem 0;">
+  <div class="card" style="padding:.5rem; margin:.25rem 0;">Card</div>
+  <div class="alert alert-success">Success</div>
+  <div class="alert alert-warning">Warning</div>
+  <div class="alert alert-danger">Danger</div>
+  <div class="alert alert-info">Info</div>
+  <table class="lc-table"><tbody><tr class="lc-table-row"><td class="lc-table-cell">Table row</td></tr></tbody></table>
+  <span class="bg-webhook-surface text-webhook-content" style="padding:.1rem .4rem; border-radius:.25rem;">webhook</span>
+</section>
+{% endfor %}{% endfor %}
+</body>
+</html>
