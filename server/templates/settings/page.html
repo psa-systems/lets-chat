@@ -202,11 +202,11 @@
               <label class="lc-set-label" for="lc-theme">{{ "settings-appearance"|t }}</label>
               <select id="lc-theme" class="input" name="theme" aria-label="{{ "settings-appearance"|t }}"
                       onchange="window.__lcSetTheme&&window.__lcSetTheme(this.value==='system'?'':this.value)">
-                <option value="system"{% if user.theme_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
-                <option value="light"{% if user.theme_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
-                <option value="dark"{% if user.theme_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
-                <option value="hc-light"{% if user.theme_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
-                <option value="hc-dark"{% if user.theme_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
+                <option value="system"{% if user.theme_mode_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
+                <option value="light"{% if user.theme_mode_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
+                <option value="dark"{% if user.theme_mode_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
+                <option value="hc-light"{% if user.theme_mode_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
+                <option value="hc-dark"{% if user.theme_mode_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
               </select>
             </div>
             <div class="lc-set-field lc-set-field--narrow">

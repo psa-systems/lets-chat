@@ -95,7 +95,7 @@ async fn valid_theme_persists_and_sets_cookie() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(user.theme.as_deref(), Some("dark"));
+    assert_eq!(user.theme_mode.as_deref(), Some("dark"));
 }
 
 #[tokio::test]
@@ -107,7 +107,7 @@ async fn high_contrast_theme_is_accepted() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(user.theme.as_deref(), Some("hc-dark"));
+    assert_eq!(user.theme_mode.as_deref(), Some("hc-dark"));
 }
 
 #[tokio::test]
@@ -119,7 +119,7 @@ async fn invalid_theme_falls_back_to_system_not_500() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(user.theme.as_deref(), Some("system"));
+    assert_eq!(user.theme_mode.as_deref(), Some("system"));
 }
 
 #[tokio::test]
