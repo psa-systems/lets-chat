@@ -34,6 +34,7 @@ palette-ink-ice = Ink + Ice
 palette-arctic = Arctic Messenger
 palette-deep-sea = Deep Sea Cyan
 palette-royal-navy = Royal Navy
+palette-amethyst = Amethyst
 settings-density = Density
 density-comfortable = Comfortable
 density-compact = Compact

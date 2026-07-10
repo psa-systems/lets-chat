@@ -1,0 +1,54 @@
+{# LC-568: persistent room Details panel, right column. Coexists with the
+   full-page /room/{id}/info route (that route stays as the deep-dive view;
+   this is the always-visible glance summary). Rendered inline as part of
+   RoomPage - `room`, `mute_mode`, `member_count`, `has_pinned` are all
+   RoomPage fields already in scope via {% include %}. #}
+<aside id="details-panel" class="w-72 shrink-0 border-l border-border bg-surface-elevated overflow-y-auto">
+  <header class="border-b border-border px-3 py-2">
+    <h2 class="font-semibold">{{ "room-details-title"|t }}</h2>
+  </header>
+  <dl class="px-3 py-2 space-y-3 text-sm">
+    <div class="flex items-center justify-between gap-2">
+      <dt class="text-content-muted">{{ "room-details-created"|t }}</dt>
+      <dd class="text-content">{{ room.created_at }}</dd>
+    </div>
+    <div class="flex items-center justify-between gap-2">
+      <dt class="text-content-muted">{{ "room-details-members"|t }}</dt>
+      <dd class="text-content">{{ member_count }}</dd>
+    </div>
+    {# LC-568: reuses the header's notify dropdown (`room/notify_dropdown.html`,
+       included once in `partials/room_header.html`) instead of duplicating its
+       markup/ids/hx-post wiring here. This row shows the current value and,
+       on click, opens the SAME functional dropdown via its existing toggle
+       button - one control, one source of truth for the mute state. #}
+    <div class="flex items-center justify-between gap-2">
+      <dt class="text-content-muted">{{ "room-details-notifications"|t }}</dt>
+      <dd>
+        <button type="button"
+                class="text-content hover:underline"
+                aria-label="{{ "room-details-notifications"|t }}"
+                onclick="var t=document.getElementById('lc-notify-toggle-{{ room.id }}'); if (t) { t.click(); t.scrollIntoView({block: 'nearest'}); }">
+          {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}
+        </button>
+      </dd>
+    </div>
+    <div class="flex items-center justify-between gap-2">
+      <dt class="text-content-muted">{{ "room-details-pinned"|t }}</dt>
+      <dd class="text-content">{% if has_pinned %}{{ "room-details-pinned-yes"|t }}{% else %}{{ "room-details-pinned-no"|t }}{% endif %}</dd>
+    </div>
+  </dl>
+  {# LC-568: leaving only revokes access for `private` rooms - `public` room
+     access comes from enclave membership, not `room_members`, so a leave
+     button there would look actionable but not actually remove the room from
+     view (see `db::chat::search_messages_filtered`'s scope_clause). Hidden
+     rather than shown-disabled to avoid a dead-looking control. #}
+  {% if room.room_type == "private" %}
+  <div class="border-t border-border px-3 py-2">
+    <form method="post" action="/room/{{ room.id }}/leave"
+          data-lc-confirm="{{ "room-details-leave-confirm"|t }}"
+          onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
+      <button type="submit" class="btn btn-danger btn-sm w-full">{{ "room-details-leave"|t }}</button>
+    </form>
+  </div>
+  {% endif %}
+</aside>
