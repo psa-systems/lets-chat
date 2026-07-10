@@ -179,6 +179,9 @@
   .lc-palette-swatch[data-palette="royal-navy"] .lc-palette-preview {
     background: linear-gradient(135deg, #080f2a 0 40%, #f6f8ff 40% 70%, #1d4ed8 70% 100%);
   }
+  .lc-palette-swatch[data-palette="amethyst"] .lc-palette-preview {
+    background: linear-gradient(135deg, #1a1030 0 40%, #faf8ff 40% 70%, #7c3aed 70% 100%);
+  }
 
   /* LC-541: tokenized data table for the dev theme/component gallery (Task
      11) and, in a later phase, utility/admin pages. Explicit classes rather

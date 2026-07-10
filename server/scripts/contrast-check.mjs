@@ -30,6 +30,7 @@ const PALETTES = [
   "arctic",
   "deep-sea",
   "royal-navy",
+  "amethyst",
 ];
 const MODES = ["light", "dark", "hc-light", "hc-dark"];
 

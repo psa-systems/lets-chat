@@ -770,6 +770,54 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
 }
 
+/* Amethyst - the violet palette (LC mockup pixel-match). Same token contract as
+   cobalt; hc-light/hc-dark inherit blue-harbor's contrast-first neutral surfaces
+   and only carry violet identity in the accent family. */
+[data-theme="amethyst"] {
+  --surface:#faf8ff; --surface-elevated:#ffffff; --surface-sunken:#f3eeff;
+  --content:#160f24; --content-muted:#5b5270; --content-subtle:#8a80a3;
+  --border:#e6ddf7; --border-strong:#cebfec;
+  --accent:#7c3aed; --accent-hover:#6d28d9; --accent-content:#ffffff;
+  --accent-surface:#ede4ff; --accent-surface-content:#6d28d9; --ring:#8b5cf6;
+  --sidebar-surface:#1a1030; --sidebar-elevated:#241640; --sidebar-sunken:#120a22;
+  --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
+  --rail-surface:#120a22; --rail-tile:#241640; --rail-tile-hover:#6d28d9;
+  --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
+}
+[data-theme="amethyst"][data-mode="dark"] {
+  --surface:#1a1030; --surface-elevated:#241640; --surface-sunken:#120a22;
+  --content:#f3eeff; --content-muted:#b6a9d1; --content-subtle:#8776a3;
+  --border:#33245a; --border-strong:#4a3680;
+  --accent:#a78bfa; --accent-hover:#c4b5fd; --accent-content:#120a22;
+  --accent-surface:#3a2a6b; --accent-surface-content:#ede4ff; --ring:#c4b5fd;
+  --sidebar-surface:#120a22; --sidebar-elevated:#241640; --sidebar-sunken:#0d0719;
+  --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
+  --rail-surface:#0d0719; --rail-tile:#241640; --rail-tile-hover:#c4b5fd;
+  --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
+}
+[data-theme="amethyst"][data-mode="hc-light"] {
+  --surface:#ffffff; --surface-elevated:#ffffff; --surface-sunken:#f5f5f5;
+  --content:#000000; --content-muted:#1f2937; --content-subtle:#374151;
+  --border:#000000; --border-strong:#000000;
+  --accent:#6b21a8; --accent-hover:#581c87; --accent-content:#ffffff;
+  --accent-surface:#ede4ff; --accent-surface-content:#6b21a8; --ring:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+[data-theme="amethyst"][data-mode="hc-dark"] {
+  --surface:#000000; --surface-elevated:#0a0a0a; --surface-sunken:#000000;
+  --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
+  --border:#ffffff; --border-strong:#ffffff;
+  --accent:#d8b4fe; --accent-hover:#e9d5ff; --accent-content:#000000;
+  --accent-surface:#2e1065; --accent-surface-content:#d8b4fe; --ring:#ffffff;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
+  --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
+  --rail-content:#ffffff; --rail-content-muted:#ffffff;
+}
+
 /* Global keyboard-focus indicator. Applies on Tab / arrow / programmatic
    focus but NOT on plain mouse clicks (`:focus-visible` heuristic). Pinned
    to blue-600 so it matches the per-component `focus:ring-blue-500` already

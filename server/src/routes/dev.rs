@@ -1,6 +1,6 @@
 //! LC-541: developer-only theme/component gallery.
 //!
-//! Renders every shared component across all six palettes x four modes so a
+//! Renders every shared component across all seven palettes x four modes so a
 //! human can eyeball the token contract (surface/content/border/accent/state
 //! colors) after a palette edit. Gated to debug builds via
 //! `cfg!(debug_assertions)`; a release binary answers 404, so this is never a
@@ -33,6 +33,7 @@ pub async fn theme_gallery(State(_state): State<AppState>) -> Response {
             "arctic",
             "deep-sea",
             "royal-navy",
+            "amethyst",
         ],
         modes: vec!["light", "dark", "hc-light", "hc-dark"],
     };
