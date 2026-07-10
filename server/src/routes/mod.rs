@@ -1250,6 +1250,8 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/notify-prefs",
             post(notify_prefs::post_notify_prefs),
         )
+        // LC-568: self-serve leave, driven by the Details panel danger action.
+        .route("/room/{room_id}/leave", post(room::post_leave_room))
         .route(
             "/room/{room_id}/thread/{message_id}",
             get(room::get_thread_panel),
