@@ -1201,6 +1201,14 @@ pub struct RoomPage<'a> {
     /// string when off), threaded as HTML like the seen bar.
     pub stage_enabled: bool,
     pub stage_panel_html: String,
+    /// LC-568: number of rows in `room_members` for this room, surfaced to
+    /// the Details panel's "Members" row.
+    pub member_count: usize,
+    /// LC-568: whether the room has at least one pinned message, surfaced
+    /// to the Details panel's "Pinned" row. Computed independently of
+    /// `pinned_strip_html` (that fragment always renders a wrapper div even
+    /// with zero pins, so it can't be used as an emptiness signal).
+    pub has_pinned: bool,
 }
 
 impl RoomPage<'_> {
