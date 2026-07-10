@@ -25,9 +25,9 @@
 #lc-conn-status[data-state="reconnecting"]      { opacity: 1; }
 #lc-conn-status[data-state="failed-long"]       { opacity: 1; }
 #lc-conn-status[data-state="connected-flash"]   { opacity: 1; }
-#lc-conn-status[data-state="reconnecting"]    #lc-conn-status-pill { background-color: #fef3c7; color: #78350f; }
-#lc-conn-status[data-state="failed-long"]     #lc-conn-status-pill { background-color: #fee2e2; color: #7f1d1d; }
-#lc-conn-status[data-state="connected-flash"] #lc-conn-status-pill { background-color: #dcfce7; color: #14532d; }
+#lc-conn-status[data-state="reconnecting"]    #lc-conn-status-pill { background-color: var(--warning-surface); color: var(--warning-surface-content); }
+#lc-conn-status[data-state="failed-long"]     #lc-conn-status-pill { background-color: var(--danger-surface); color: var(--danger); }
+#lc-conn-status[data-state="connected-flash"] #lc-conn-status-pill { background-color: var(--success-surface); color: var(--success-surface-content); }
 #lc-conn-status[data-state="reconnecting"]    #lc-conn-status-spinner,
 #lc-conn-status[data-state="failed-long"]     #lc-conn-status-spinner { display: inline-flex; }
 </style>
