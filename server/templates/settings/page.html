@@ -198,9 +198,9 @@
           <form method="post" action="/settings/appearance"
                 hx-post="/settings/appearance" hx-target="#st-appearance" hx-swap="innerHTML"
                 hx-disabled-elt="find button[type=submit]" class="lc-set-form">
-            {# LC-541: six-palette picker. Askama has no literal-array {% for %}
-               and |t needs a static string key, so the six swatches are
-               unrolled explicit labels rather than a loop. #}
+            {# LC-541/LC-567: seven-palette picker. Askama has no literal-array
+               {% for %} and |t needs a static string key, so the seven swatches
+               are unrolled explicit labels rather than a loop. #}
             <fieldset class="lc-set-field">
               <legend class="lc-set-label">{{ "settings-palette"|t }}</legend>
               <div class="lc-palette-grid" role="radiogroup" aria-label="{{ "settings-palette"|t }}">
@@ -245,6 +245,13 @@
                          onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
                   <span class="lc-palette-preview" aria-hidden="true"></span>
                   <span class="lc-palette-name">{{ "palette-royal-navy"|t }}</span>
+                </label>
+                <label class="lc-palette-swatch" data-palette="amethyst">
+                  <input type="radio" name="palette" value="amethyst" class="sr-only"
+                         {% if user.theme_palette_or_default() == "amethyst" %}checked{% endif %}
+                         onchange="window.__lcSetPalette&&window.__lcSetPalette(this.value);fetch('/settings/palette',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'palette='+encodeURIComponent(this.value)})">
+                  <span class="lc-palette-preview" aria-hidden="true"></span>
+                  <span class="lc-palette-name">{{ "palette-amethyst"|t }}</span>
                 </label>
               </div>
             </fieldset>
