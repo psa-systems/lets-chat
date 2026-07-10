@@ -811,7 +811,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --content:#ffffff; --content-muted:#e5e7eb; --content-subtle:#d1d5db;
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#d8b4fe; --accent-hover:#e9d5ff; --accent-content:#000000;
-  --accent-surface:#0a0a0a; --accent-surface-content:#d8b4fe; --ring:#ffffff;
+  --accent-surface:#2e1065; --accent-surface-content:#d8b4fe; --ring:#ffffff;
   --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
