@@ -1,0 +1,36 @@
+---
+# LOCAL-DEV-ONLY overlay: layer ON TOP of compose.dev-web-local.yml to boot
+# lets-chat-server without the full bunyip dev-sso stack.
+#
+#   docker compose -f compose.dev-web-local.yml -f compose.dev-web-local-mock-sso.yml up
+#   (or: `just dev-web-local-mock`)
+#
+# Since the LC-22 cutover the server refuses to start unless a Bunyip SSO OP
+# answers discovery + JWKS at boot. This overlay adds a tiny mock OP
+# (dev/mock-oidc.py) and points the four LETS_CHAT_BUNYIP_SSO_* vars at it, so
+# the server boots and unauthenticated debug routes render - most usefully
+# GET /dev/theme-gallery for palette/component screenshots.
+#
+# The mock CANNOT authenticate a real login, so authed pages (the room view,
+# the Details panel) still need the real bunyip dev-sso stack. NEVER use this
+# overlay outside local dev.
+services:
+
+  app:
+    environment:
+      LETS_CHAT_BUNYIP_SSO_ISSUER: http://mock-oidc:9000
+      LETS_CHAT_BUNYIP_SSO_CLIENT_ID: mock-client
+      LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: mock-secret
+      LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: http://localhost:18080/auth/bunyip/callback
+    depends_on:
+      - mock-oidc
+
+  mock-oidc:
+    image: python:3-alpine
+    container_name: dev-lets-chat-mock-oidc-${USER}
+    restart: "no"
+    volumes:
+      - ./dev/mock-oidc.py:/mock-oidc.py:ro
+    command:
+      - python3
+      - /mock-oidc.py

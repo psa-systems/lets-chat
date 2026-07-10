@@ -201,6 +201,18 @@ run-down:
 dev-web-local: build-css
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml up
 
+# Start the local dev server with a mock OIDC OP (no bunyip needed). DEV ONLY:
+# boots the server for unauthenticated debug routes (e.g. /dev/theme-gallery).
+# Authed pages still need the real bunyip dev-sso stack. See dev/mock-oidc.py.
+[group('dev')]
+dev-web-local-mock: build-css
+    {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml --file compose.dev-web-local-mock-sso.yml up
+
+# Stop the mock-OIDC local dev server (both overlay containers)
+[group('dev')]
+dev-web-local-mock-down:
+    docker compose --file compose.dev-web-local.yml --file compose.dev-web-local-mock-sso.yml down
+
 # Stop the local dev server container
 [group('dev')]
 dev-web-local-down:
