@@ -521,6 +521,14 @@ pub async fn get_room(
         .await?
         .render()?;
 
+    // LC-568: Details panel "Members" / "Pinned" rows. Cheap direct queries
+    // rather than reusing pinned_strip_html (that fragment always renders a
+    // wrapper div, even with zero pins, so it's not an emptiness signal).
+    let member_count = db::chat::list_room_member_ids(&state.chat, room_id)
+        .await?
+        .len();
+    let has_pinned = db::pinned::count_for_room(&state.chat, room_id).await? > 0;
+
     // LC-64: server-persisted draft restore + 60-day lazy cleanup.
     // The helper deletes the row in the same call if it is stale, so
     // the user sees an empty composer (and the row is gone) without a
@@ -605,6 +613,8 @@ pub async fn get_room(
         huddle_participants,
         stage_enabled,
         stage_panel_html,
+        member_count,
+        has_pinned,
     };
     let body = html(&page)?;
     let mut response = body.into_response();
