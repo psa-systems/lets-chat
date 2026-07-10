@@ -569,7 +569,7 @@ pub struct AppearanceForm {
     /// LC-194: "comfortable" / "compact".
     #[serde(default)]
     pub density: String,
-    /// LC-541: "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy".
+    /// LC-541: "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy" / "amethyst".
     #[serde(default)]
     pub palette: String,
 }
@@ -593,9 +593,8 @@ pub async fn post_appearance(
         _ => "comfortable",
     };
     let palette = match form.palette.trim() {
-        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy") => {
-            Some(p)
-        }
+        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy"
+        | "amethyst") => Some(p),
         _ => None, // empty or unknown -> clear -> blue-harbor default
     };
     db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
@@ -646,7 +645,7 @@ pub async fn post_theme(
 
 #[derive(serde::Deserialize)]
 pub struct PaletteForm {
-    /// "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy".
+    /// "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy" / "amethyst".
     #[serde(default)]
     pub palette: String,
 }
@@ -659,7 +658,8 @@ pub async fn post_palette(
     axum::Form(form): axum::Form<PaletteForm>,
 ) -> Result<Response, AppError> {
     let palette = match form.palette.trim() {
-        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy") => p,
+        p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy"
+        | "amethyst") => p,
         _ => "blue-harbor",
     };
     db::auth::set_user_theme_palette(&state.auth, &user.id, Some(palette)).await?;

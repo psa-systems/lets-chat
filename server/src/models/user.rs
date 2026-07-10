@@ -59,7 +59,7 @@ pub struct UserRecord {
     /// or NULL = system. (Renamed from `theme` when the palette axis was added.)
     pub theme_mode: Option<String>,
     /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
-    /// "deep-sea"/"royal-navy"), or NULL = blue-harbor.
+    /// "deep-sea"/"royal-navy"/"amethyst"), or NULL = blue-harbor.
     pub theme_palette: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
     pub density: Option<String>,
@@ -107,7 +107,7 @@ pub struct User {
     /// or None = system. (Renamed from `theme` when the palette axis was added.)
     pub theme_mode: Option<String>,
     /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
-    /// "deep-sea"/"royal-navy"), or None = blue-harbor.
+    /// "deep-sea"/"royal-navy"/"amethyst"), or None = blue-harbor.
     pub theme_palette: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
     pub density: Option<String>,
@@ -136,7 +136,8 @@ impl User {
     pub fn theme_palette_or_default(&self) -> &str {
         match self.theme_palette.as_deref() {
             Some(
-                p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy"),
+                p @ ("blue-harbor" | "cobalt" | "ink-ice" | "arctic" | "deep-sea" | "royal-navy"
+                | "amethyst"),
             ) => p,
             _ => "blue-harbor",
         }
