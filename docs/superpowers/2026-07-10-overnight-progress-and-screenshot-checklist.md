@@ -31,9 +31,15 @@ Fine spacing/radii/typography nudging of the rail, sidebar, timeline, composer, 
 ### Deliberately-raw colors I did NOT touch (would be wrong to convert)
 Lightbox scrim (documented LC-557 decision), modal `bg-black/50` backdrops, video letterbox black, brand-preview card, email templates (email clients cannot use CSS vars), and `layout.html`'s video/voice call overlay (18 raw classes - a call UI being dark is often intentional; needs your call).
 
+## Boot verification done overnight
+
+`just dev-web-local` was run: the binary **compiled cleanly (2m34s) and started**, then exited at a pre-existing config gate, NOT a regression:
+`ERROR bunyip SSO config invalid; refusing to start - LETS_CHAT_BUNYIP_SSO_ISSUER is required`.
+Per LC-22 (CHANGELOG/README), Bunyip SSO is the sole sign-in path; the server refuses to start unless all four `LETS_CHAT_BUNYIP_SSO_*` vars are set AND the OIDC provider is reachable at startup (discovery + JWKS). So a full boot needs your SSO env/OP (e.g. via `.env.standalone`, present locally). The code path up to that gate is verified sound.
+
 ## Morning screenshot checklist
 
-Boot: `just dev-web-local` -> http://localhost:18080. To see amethyst: Settings -> Appearance -> pick Amethyst; or visit `/dev/theme-gallery` (debug-only) for all palettes at once.
+Boot: ensure the four `LETS_CHAT_BUNYIP_SSO_*` vars are set and the OP is reachable (your usual `.env.standalone` / dev setup), then `just dev-web-local` -> http://localhost:18080. To see amethyst: Settings -> Appearance -> pick Amethyst; or visit `/dev/theme-gallery` (debug-only) for all palettes at once.
 
 Verify each in the FOUR target states - {blue-harbor, amethyst} x {light, dark}:
 
