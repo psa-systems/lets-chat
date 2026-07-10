@@ -70,6 +70,39 @@ pub async fn post_preview(
     )))
 }
 
+/// `POST /room/{room_id}/leave`
+///
+/// LC-568: self-serve leave, driven by the Details panel's danger action.
+/// Only meaningful for `private` rooms: `public`-room access is derived from
+/// enclave membership (see `db::chat::search_messages_filtered`'s
+/// `scope_clause`), not `room_members`, so removing the row would not
+/// actually revoke access. The template only renders the button for private
+/// rooms; this handler rejects any other room type as defense against a
+/// hand-crafted POST. Mirrors `routes::enclave::post_leave` (self-removal +
+/// star cleanup) without that handler's owner-transfer edge case, which
+/// doesn't apply to rooms.
+pub async fn post_leave_room(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    if room.room_type != "private" {
+        return Err(AppError::BadRequest(
+            "only private rooms support leaving".into(),
+        ));
+    }
+    db::chat::remove_room_member(&state.chat, room_id, &user.id).await?;
+    db::starred_rooms::forget_room(&state.auth, &user.id, room_id).await?;
+    Ok(Redirect::to("/"))
+}
+
 /// `GET /messages/{message_id}/raw`
 ///
 /// LC-282: the raw markdown source of a message, as `text/plain`, for the
