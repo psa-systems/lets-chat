@@ -46,6 +46,9 @@
   </div>
   <aside id="thread-panel" class="hidden"></aside>
   <aside id="history-panel" class="hidden"></aside>
+  {# LC-568: persistent Details summary, mounted below/after the toggled
+     thread and history panels in the right column. #}
+  {% include "room/details_panel.html" %}
 </div>
 {# LC-156: WS room subscription is handled declaratively by live.js via the
    data-lc-live-room attribute on the page root above. #}
