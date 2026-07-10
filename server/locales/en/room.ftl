@@ -529,3 +529,14 @@ room-slowmode-10s = 10 seconds
 room-slowmode-30s = 30 seconds
 room-slowmode-60s = 1 minute
 room-slowmode-saved = Slowmode updated.
+
+## LC-568: Details panel (right column, below the thread panel)
+room-details-title = Details
+room-details-created = Created
+room-details-members = Members
+room-details-notifications = Notifications
+room-details-pinned = Pinned
+room-details-pinned-yes = Yes
+room-details-pinned-no = No
+room-details-leave = Leave room
+room-details-leave-confirm = Leave this room? You'll need a new invite to rejoin.
