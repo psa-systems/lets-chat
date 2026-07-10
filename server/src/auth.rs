@@ -257,6 +257,7 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
             "arctic",
             "deep-sea",
             "royal-navy",
+            "amethyst",
         ],
     );
     sync(
