@@ -26,46 +26,46 @@
   <span class="lc-sysevent-ico" aria-hidden="true">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c.41 1.163 1.162 2.255 2.124 3.217.962.962 2.054 1.715 3.217 2.124l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg>
   </span>
-  <span class="lc-sysevent-text"><span class="font-medium">{{ message.label() }}</span> {{ message.system_html()|safe }}</span>
+  <span class="lc-sysevent-text"><span class="font-bold">{{ message.label() }}</span> {{ message.system_html()|safe }}</span>
   <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-sysevent-time">{{ message.created_at }}</time>
 </div>
 {% else %}
-<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-4 {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-3 rounded-[10px] {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
   {# LC-377: grouped (follow-up) messages hide the author header; a compact HH:MM
      reveals in the avatar gutter on row hover so the time is still reachable. #}
   {% if message.is_follow_up %}
   <time data-lc-ts data-lc-ts-mode="time" datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-followup-ts">{{ message.created_at }}</time>
   {% endif %}
   {% if !message.is_follow_up %}
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-3">
     {% match message.actor %}
     {% when crate::views::message_actor::MessageActor::Webhook with (webhook_avatar_url) %}
     {# LC-74: webhook author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = webhook_avatar_url %}
-    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
     {% else %}
-    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-bold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-webhook-surface text-webhook-content rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = email_avatar_url %}
-    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
     {% else %}
-    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-bold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-email-surface text-email-content rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::Bridge with (bridge_meta) %}
     {# LC-78: protocol-bridge author - no user to DM. The kind is shown in the badge so a viewer can see which network the foreign actor came from. #}
     {# LC-78-AVATAR-PROXY: when avatar_url (the proxy cache key) is Some, render <img> pointing at our same-origin proxy endpoint. onerror falls back to initials so a pending / failed fetch degrades gracefully without a page refresh. Falls back to initials immediately when the daemon submitted no foreign_avatar. #}
     {% if let Some(hash) = bridge_meta.avatar_url %}
-    <img src="/media/bridge-avatar-proxy/{{ hash }}" alt="" loading="lazy" class="h-6 w-6 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    <img src="/media/bridge-avatar-proxy/{{ hash }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
     {% else %}
-    <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-bold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-bridge-surface text-bridge-content rounded px-1 py-0.5" title="{{ "room-msg-bridge-title"|t }}">{{ "room-msg-bridge-badge"|t }} {{ bridge_meta.kind }}</span>
     {% when crate::views::message_actor::MessageActor::User %}
     {% let avatar_user_id = message.user_id.clone() %}
@@ -73,12 +73,12 @@
     {% let avatar_ext = message.avatar_ext.clone() %}
     {% let avatar_status = message.status.clone() %}
     {% let avatar_custom_status = message.custom_status.clone() %}
-    {% let avatar_size = "h-6 w-6 text-xs" %}
+    {% let avatar_size = "h-9 w-9 text-sm" %}
     {% include "partials/avatar.html" %}
     {% if message.user_id != message.viewer_id %}
     <a href="/dm/{{ message.user_id }}" data-lc-hovercard="{{ message.user_id }}" class="font-medium text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
     {% else %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-bold">{{ message.label() }}</span>
     {% endif %}
     {% if message.author_is_bot %}
     <span class="text-[10px] font-bold uppercase tracking-wide border border-border bg-surface-elevated text-content-muted rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
@@ -255,7 +255,7 @@
   {# LC-377: content column indented `pl-8` (avatar width + gap) so the body,
      quote, attachments, reactions, and meta align under the author name rather
      than under the avatar. The author header above stays in the left gutter. #}
-  <div class="pl-8">
+  <div class="pl-12">
   {# LC-460: inline quoted-reply pointer. The reply-arrow icon + "Replying to"
      label make the parent relationship explicit and distinct from a thread (the
      reply-count chip below); the whole chip jumps to the quoted message.
@@ -318,7 +318,7 @@
     {% include "partials/followup_block.html" %}
   </div>
   {% endif %}
-  <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-1{% endif %}">
+  <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-2{% endif %}">
     {% let message_id = message.id %}
     {% let reactions = message.reactions.as_slice() %}
     {% include "partials/reaction_bar.html" %}
