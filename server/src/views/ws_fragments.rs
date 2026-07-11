@@ -149,6 +149,10 @@ pub struct SidebarUpdateFragment<'a> {
     pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
+    // LC-576: the sidebar's org row reads the current enclave's display name off
+    // the switcher list (the page structs already carry it; this fragment renders
+    // the same partial, so it needs it too).
+    pub switcher: &'a [crate::views::layout::SwitcherEntry],
 }
 
 /// LC-173: OOB swap of the sidebar self block (`#sidebar-self`) when the user

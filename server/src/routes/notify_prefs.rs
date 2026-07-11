@@ -68,9 +68,11 @@ pub async fn post_notify_prefs(
     };
     let can_manage_overrides = crate::perms::room_can_manage_overrides(enclave_role, &user.role);
 
+    let is_starred = db::starred_rooms::is_starred(&state.auth, &user.id, room.id).await?;
     let fragment = RoomHeaderFragment {
         room: &room,
         mute_mode: mode.as_str(),
+        is_starred,
         can_manage_overrides,
         llm_available: state.llm_available(),
         llm_teaser: !state.llm_available() && user.role == "admin",
