@@ -4,20 +4,51 @@
 Since the LC-22 cutover, lets-chat-server refuses to start unless a Bunyip SSO
 OP answers discovery + JWKS at boot (server/src/main.rs, server/src/oidc). That
 makes `just dev-web-local` unbootable without the full bunyip dev-sso stack,
-which blocks pure-UI work (e.g. screenshotting the theme gallery).
+which blocks pure-UI work.
 
-This server answers just enough for BunyipSsoClient::initialize() to succeed:
-  GET /.well-known/openid-configuration  -> discovery doc (issuer must match)
-  GET /jwks.json                         -> one Ed25519 (OKP/EdDSA) key
+LC-577: this now implements a real authorization-code flow, so the mock stack
+can complete a login and every AUTHENTICATED page (room view, /settings, the
+home dashboard, the thread and details panels) renders and can be screenshotted
+without bunyip. It previously served only discovery + JWKS with a dummy key and
+could not authenticate at all, which left nearly the whole product unverifiable.
 
-It CANNOT authenticate a real login (the key is a dummy 32 zero bytes and there
-is no authorize/token flow), so only unauthenticated debug routes render, most
-usefully GET /dev/theme-gallery. NEVER use this outside local dev.
+Endpoints:
+  GET  /.well-known/openid-configuration -> discovery doc (issuer must match)
+  GET  /jwks.json                        -> the REAL Ed25519 public key
+  GET  /authorize                        -> redirects straight back with a code
+  POST /token                            -> code -> EdDSA-signed id_token
+
+There is no login form and no consent: this is a stub, and it authenticates a
+single fixed identity (override with MOCK_SSO_SUB / MOCK_SSO_EMAIL /
+MOCK_SSO_USERNAME). The `sub` is stable across restarts so repeated boots reuse
+the same account instead of provisioning a new one each time.
+
+PKCE: the client sends code_challenge/code_challenge_method=S256. The mock
+accepts and does NOT verify the verifier - it is a local-dev stub, not a
+conformance target. The server's own OIDC verification path is left fully
+intact and exercised: the id_token is really signed and really validated.
+
+NEVER use this outside local dev.
 """
+
+import base64
 import http.server
 import json
+import os
+import secrets
+import time
+import urllib.parse
 
-ISSUER = "http://mock-oidc:9000"
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+ISSUER = os.environ.get("MOCK_SSO_ISSUER", "http://mock-oidc:9000")
+KID = "mock-dev-1"
+
+SUB = os.environ.get("MOCK_SSO_SUB", "mock-dev-user-1")
+EMAIL = os.environ.get("MOCK_SSO_EMAIL", "dev@example.test")
+USERNAME = os.environ.get("MOCK_SSO_USERNAME", "devuser")
 
 DISCOVERY = {
     "issuer": ISSUER,
@@ -25,10 +56,40 @@ DISCOVERY = {
     "token_endpoint": ISSUER + "/token",
     "userinfo_endpoint": ISSUER + "/userinfo",
     "jwks_uri": ISSUER + "/jwks.json",
+    "response_types_supported": ["code"],
+    "subject_types_supported": ["public"],
+    "id_token_signing_alg_values_supported": ["EdDSA"],
+    "scopes_supported": ["openid", "email", "profile"],
+    "token_endpoint_auth_methods_supported": [
+        "client_secret_basic",
+        "client_secret_post",
+    ],
+    "code_challenge_methods_supported": ["S256"],
 }
 
-# One Ed25519 JWK. x = base64url-nopad of 32 zero bytes (43 'A's) -> decodes to
-# exactly 32 bytes, satisfying fetch_jwks (kty=OKP, crv=Ed25519, alg=EdDSA).
+# A REAL Ed25519 keypair, derived from a FIXED seed rather than generated fresh.
+# The server fetches JWKS once at boot and caches it, so a per-process random key
+# would invalidate that cache every time this container restarted and force an
+# app restart in lockstep. A fixed seed keeps the published key stable, so the
+# mock can be restarted on its own. It is a hardcoded dev key by design: it
+# signs nothing outside this local-only stack.
+MOCK_SEED = b"lets-chat-local-dev-mock-oidc-32"  # exactly 32 bytes
+PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(MOCK_SEED)
+PUBLIC_RAW = PRIVATE_KEY.public_key().public_bytes(
+    encoding=serialization.Encoding.Raw,
+    format=serialization.PublicFormat.Raw,
+)
+PRIVATE_PEM = PRIVATE_KEY.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+
+
+def b64u(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
 JWKS = {
     "keys": [
         {
@@ -36,30 +97,122 @@ JWKS = {
             "crv": "Ed25519",
             "alg": "EdDSA",
             "use": "sig",
-            "kid": "mock-dev-1",
-            "x": "A" * 43,
+            "kid": KID,
+            "x": b64u(PUBLIC_RAW),
         }
     ]
 }
 
+# code -> {"nonce": str, "aud": str}. In-memory and single-use.
+CODES = {}
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def _json(self, obj):
+    def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path.startswith("/.well-known/openid-configuration"):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/.well-known/openid-configuration"):
             self._json(DISCOVERY)
-        elif self.path.startswith("/jwks"):
+        elif parsed.path.startswith("/jwks"):
             self._json(JWKS)
+        elif parsed.path == "/authorize":
+            self._authorize(urllib.parse.parse_qs(parsed.query))
+        elif parsed.path == "/userinfo":
+            # The callback fetches /userinfo after the token exchange and rejects
+            # the login if its `sub` differs from the id_token's, so this must
+            # serve the SAME identity (see routes/bunyip_sso.rs).
+            self._json(
+                {
+                    "sub": SUB,
+                    "email": EMAIL,
+                    "email_verified": True,
+                    "preferred_username": USERNAME,
+                    "name": USERNAME,
+                }
+            )
         else:
             self.send_response(404)
             self.end_headers()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/token":
+            length = int(self.headers.get("Content-Length") or 0)
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            self._token(form)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _authorize(self, q):
+        """No login form, no consent: mint a code and bounce straight back."""
+        redirect_uri = (q.get("redirect_uri") or [""])[0]
+        if not redirect_uri:
+            self._json({"error": "invalid_request"}, status=400)
+            return
+        code = secrets.token_urlsafe(24)
+        CODES[code] = {
+            "nonce": (q.get("nonce") or [""])[0],
+            "aud": (q.get("client_id") or [""])[0],
+        }
+        params = {"code": code}
+        state = (q.get("state") or [""])[0]
+        if state:
+            params["state"] = state
+        sep = "&" if urllib.parse.urlparse(redirect_uri).query else "?"
+        self.send_response(302)
+        self.send_header(
+            "Location", redirect_uri + sep + urllib.parse.urlencode(params)
+        )
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _token(self, form):
+        code = (form.get("code") or [""])[0]
+        # Single-use: pop so a replayed code fails, as a real OP would.
+        entry = CODES.pop(code, None)
+        if entry is None:
+            self._json({"error": "invalid_grant"}, status=400)
+            return
+        # The client id may arrive in the body or via Basic auth; fall back to
+        # whatever /authorize saw so the `aud` claim always matches the client.
+        aud = (form.get("client_id") or [""])[0] or entry["aud"]
+        now = int(time.time())
+        claims = {
+            "iss": ISSUER,
+            "aud": aud,
+            "sub": SUB,
+            "email": EMAIL,
+            "email_verified": True,
+            "preferred_username": USERNAME,
+            "name": USERNAME,
+            "iat": now,
+            "exp": now + 3600,
+        }
+        if entry["nonce"]:
+            claims["nonce"] = entry["nonce"]
+        id_token = jwt.encode(
+            claims,
+            PRIVATE_PEM,
+            algorithm="EdDSA",
+            headers={"kid": KID},
+        )
+        self._json(
+            {
+                "access_token": secrets.token_urlsafe(24),
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "id_token": id_token,
+            }
+        )
 
     def log_message(self, *args):
         pass
