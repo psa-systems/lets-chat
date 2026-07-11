@@ -6,7 +6,9 @@
      {# LC-244: localized "Today" label the client uses when inserting a day
         divider above a live-arriving message (live sends are always today UTC). #}
      data-lc-day-today="{{ "room-day-today"|t }}"
-     class="flex-1 overflow-y-auto">
+     {# LC-569: the timeline supplies the 20px side gutter so message rows can be
+        inset rounded cards (they carry their own 12px padding + 10px radius). #}
+     class="flex-1 overflow-y-auto px-5">
   {% let oob = false %}
   {% for message in messages %}
   {% include "room/message.html" %}

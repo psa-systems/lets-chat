@@ -30,6 +30,50 @@
   <div class="alert alert-info">Info</div>
   <table class="lc-table"><tbody><tr class="lc-table-row"><td class="lc-table-cell">Table row</td></tr></tbody></table>
   <span class="bg-webhook-surface text-webhook-content" style="padding:.1rem .4rem; border-radius:.25rem;">webhook</span>
+
+  {# LC-569: the chat surface. The room view needs a real login, so the components
+     reconciled to the prototype are mirrored here to stay screenshot-verifiable
+     across every palette x mode without auth. #}
+  <h4 style="color:var(--content-subtle); font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; margin:.9rem 0 .35rem;">chat</h4>
+
+  {# sidebar: active row (solid accent) + resting row, on the navy sidebar ramp #}
+  <div class="lc-sidebar" style="padding:.4rem; border-radius:.5rem;">
+    <div class="lc-room-row lc-room-row-active" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
+      <span style="opacity:.75;">#</span><span>product</span><span class="lc-count-pill">2</span>
+    </div>
+    <div class="lc-room-row" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
+      <span style="color:var(--content-muted);">#</span><span>design</span><span class="lc-count-pill">1</span>
+    </div>
+  </div>
+
+  {# timeline: day divider, message row (36px avatar, bold name), reactions, unread divider #}
+  <div class="lc-day-divider"><span class="lc-day-rule"></span><span class="lc-day-chip">Today</span><span class="lc-day-rule"></span></div>
+  <div class="group relative px-3 py-2 rounded-[10px] hover:bg-surface-sunken">
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content flex items-center justify-center font-semibold">A</div>
+      <span class="font-bold">Alice Johnson</span>
+      <span class="lc-caption">9:15 AM</span>
+    </div>
+    <div class="pl-12">
+      <div class="lc-md leading-snug mt-1">Hey team, the research synthesis is done.</div>
+      <div class="flex flex-wrap gap-1.5 items-center mt-2">
+        <button class="text-xs rounded-full border px-2 py-0.5 tabular-nums bg-accent-surface text-accent-surface-content border-accent font-medium">&#128077; 8</button>
+        <button class="text-xs rounded-full border px-2 py-0.5 tabular-nums bg-surface-elevated border-border text-content-muted">&#10084;&#65039; 4</button>
+      </div>
+    </div>
+    <div class="lc-msg-actions" style="position:absolute; top:.25rem; right:.5rem; display:flex; gap:.1rem; background:var(--surface-elevated); border:1px solid var(--border); border-radius:.5rem; padding:.15rem;">
+      <button class="lc-msg-action">&#8617;</button><button class="lc-msg-action">&#9786;</button><button class="lc-msg-action">&#8230;</button>
+    </div>
+  </div>
+  <div class="lc-day-divider"><span class="lc-day-rule lc-day-rule-danger"></span><span class="lc-day-chip lc-day-chip-danger">New messages</span><span class="lc-day-rule lc-day-rule-danger"></span></div>
+
+  {# composer: toolbar button + send #}
+  <div style="display:flex; align-items:center; gap:.35rem; border:1px solid var(--border); background:var(--surface-elevated); border-radius:.75rem; padding:.5rem; margin-top:.5rem;">
+    <button class="lc-fmt-btn"><b>B</b></button>
+    <button class="lc-fmt-btn"><i>I</i></button>
+    <span style="flex:1;"></span>
+    <button class="lc-composer-send">&#10148;</button>
+  </div>
 </section>
 {% endfor %}{% endfor %}
 </body>

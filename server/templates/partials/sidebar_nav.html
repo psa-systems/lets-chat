@@ -56,7 +56,7 @@
           <button type="submit" class="w-full text-left lc-section-label hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
             <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
-            <span data-lc-unread class="text-xs bg-accent text-accent-content rounded px-2 normal-case">{{ category.unread_total }}</span>
+            <span data-lc-unread class="lc-count-pill normal-case">{{ category.unread_total }}</span>
             {% endif %}
             {% if category.collapsed && category.mention_total > 0 %}
             <span data-lc-mention class="text-[10px] font-bold uppercase bg-danger text-danger-content rounded px-1.5">@{{ category.mention_total }}</span>

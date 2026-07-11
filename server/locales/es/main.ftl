@@ -36,6 +36,11 @@ settings-density = Densidad
 density-comfortable = Cómoda
 density-compact = Compacta
 # LC-327: tamaño del texto de los mensajes (escala de lectura, local al dispositivo)
+settings-scale = Escala
+scale-compact = Compacta
+scale-default = Predeterminada
+scale-large = Grande
+scale-xl = Muy grande
 settings-textsize = Tamaño del texto
 textsize-small = Pequeño
 textsize-normal = Normal
