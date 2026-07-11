@@ -11,6 +11,9 @@ use crate::models::Room;
 pub struct RoomHeaderFragment<'a> {
     pub room: &'a Room,
     pub mute_mode: &'a str,
+    /// LC-576: the header's favorite star; recomputed here so it does not reset
+    /// to unstarred when the notify-prefs POST swaps the whole header.
+    pub is_starred: bool,
     /// LC-84: gates the "Moderators" link in the header. Same value the
     /// `RoomPage` view computed; recomputed here on the notify-prefs
     /// swap path so the link does not vanish when the user toggles mute.

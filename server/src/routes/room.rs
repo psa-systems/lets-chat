@@ -615,9 +615,16 @@ pub async fn get_room(
         String::new()
     };
 
+    // LC-576: the header's favorite star needs this room's own starred state.
+    // The sidebar rows get it as a per-section literal (the starred section
+    // hardcodes true), so there was no per-room flag to read; derive it from the
+    // starred list already loaded for the sidebar rather than re-querying.
+    let is_starred = sidebar_starred_rooms.iter().any(|r| r.id == room.id);
+
     let page = RoomPage {
         user: &user,
         room: &room,
+        is_starred,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,

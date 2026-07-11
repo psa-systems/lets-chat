@@ -1132,6 +1132,10 @@ mod tests {
 pub struct RoomPage<'a> {
     pub user: &'a User,
     pub room: &'a Room,
+    /// LC-576: whether the VIEWER has starred this room, for the header's
+    /// favorite star. The sidebar rows take `is_starred` as a per-section
+    /// literal, so this is the only per-room source of truth on the page.
+    pub is_starred: bool,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
