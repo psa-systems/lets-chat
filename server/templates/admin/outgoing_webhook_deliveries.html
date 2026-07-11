@@ -2,11 +2,15 @@
 
 {% block title %}{{ "admin-deliveries-title"|t }} - Admin - Let's Chat{% endblock %}
 
-{% block admin_main %}
-<div class="mb-4 flex items-center justify-between gap-2">
-  <span class="text-sm text-content-muted">{{ "admin-deliveries-webhook"|t }} #{{ webhook_id }}</span>
-  <a href="/admin/outgoing-webhooks" class="btn btn-secondary btn-sm flex-none">{{ "admin-deliveries-back"|t }}</a>
+{% block admin_header_desc %}<p class="lc-admin-desc">{{ "admin-deliveries-webhook"|t }} #{{ webhook_id }}</p>{% endblock %}
+
+{% block admin_header_actions %}
+<div class="lc-action-row">
+  <a href="/admin/outgoing-webhooks" class="btn btn-secondary btn-sm">{{ "admin-deliveries-back"|t }}</a>
 </div>
+{% endblock %}
+
+{% block admin_main %}
 
 {% if deliveries.is_empty() %}
 {% let empty_text_key = "admin-deliveries-empty" %}
