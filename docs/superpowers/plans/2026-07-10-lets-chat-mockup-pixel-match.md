@@ -412,59 +412,120 @@ git commit -m "fix(room): align Details panel to comp
 
 Each task below is a visual reconciliation: read the current template, open the matching region in the static reference + comp, and adjust spacing/radii/token usage until the screenshot matches. There is no unit test for pixel layout; the gate is the screenshot diff. Work one region at a time and commit per region so regressions are bisectable. Prefer changing token-backed utility classes over hardcoding hex - if a color must change, change the token, not the element.
 
+### Phase 3 scope revision (2026-07-10 - verified gap assessment, LITERAL pixel-match decision)
+
+A read-only region-by-region gap assessment against the six comps + the static reference was run on 2026-07-10 (branch history: this supersedes the "fine nudging" framing above). **Two things changed the scope:**
+
+1. **The gaps are not all "nudges."** Four regions have STRUCTURAL / archetype mismatches that require markup restructuring, not just token/spacing tweaks. Only the timeline and details panel are mostly spacing-level.
+2. **Direction chosen: LITERAL pixel-match.** The running app is deliberately feature-richer than the comps (multi-enclave switcher, huddles, catch-me-up, polls, scheduling, semantic search, 7-row nav, per-message overflow menus). A literal match means these extra affordances must be HIDDEN or RELOCATED out of the chat surface so the rendered result matches the comps. Each task below calls out what must be hidden/removed. Feature-hiding must be reversible (prefer a flag / CSS `hidden` / config gate over deletion) and NEEDS ITS OWN YT SUB-TICKET under LC-553, because hiding shipped functionality is a product decision beyond a CSS pass. Flag any feature-hide to the user before deleting server routes.
+
+**Gap severity scorecard (verified 2026-07-10):**
+
+| Region | Verdict | Nature of gap |
+|---|---|---|
+| Shell widths (rail 64 / sidebar 256) | MATCH | correct |
+| Amethyst palette (4 blocks, contrast 84/84) | MATCH | shipped Phase 1 |
+| Connection banner (tokenized) | MATCH | shipped Phase 4 |
+| Rail | STRUCTURAL | enclave switcher vs fixed single-org nav rail |
+| Right column | STRUCTURAL | two columns (384+288) vs one 360px stacked-card column |
+| Composer | STRUCTURAL | inverted/split 2-row vs input + single toolbar |
+| Header | MAJOR | 6-9 labeled actions vs 3 icons + avatar stack + star |
+| Sidebar | MAJOR | own-profile head + extra nav/tabs; active-row token blocked |
+| Timeline | MIXED | geometry off + unread banner missing + wrong divider color |
+| Details panel | CLOSE | exists (Phase 2) but wrong button/layout/chevron/visibility |
+
+Task numbering below is unchanged; each Task's Step 1 now carries the VERIFIED current-vs-target deltas (exact px / token / weight) so the implementer does not re-derive them. Screenshots still gate acceptance in all four states {blue-harbor, amethyst} x {light, dark}.
+
 ### Task 11: Rail region
 
-**Files:** Modify `server/templates/partials/enclave_switcher.html` (+ `.lc-rail-*` rules in `main.css` if spacing/size is off).
+**Files:** Modify `server/templates/partials/enclave_switcher.html`, `partials/sidebar_self.html` (avatar relocation), `.lc-rail-*` rules in `main.css`. **STRUCTURAL - needs LC-553 sub-ticket (archetype change + feature relocation).**
 
-- [ ] **Step 1:** Screenshot current rail vs `mockups/*` rail (icon tile size 40px, radius 12px, active-tile state, unread badge on the messages tile, green presence dot on the avatar, bottom help + avatar). Reference region: `.rail*` in the static reference.
-- [ ] **Step 2:** Adjust tile sizing/radius/gap and active/hover states to match. Keep colors on `--rail-*` tokens.
+**Verified gap (2026-07-10):** the current rail is a DYNAMIC multi-enclave switcher (Discord-style workspace list); the comp is a FIXED single-org nav rail. Token wiring is correct (dark values match the reference exactly); the gap is structural/geometric.
+- Container MATCHES: `w-16` (64px), `py-3` (12px), `gap-2` (8px), bg `--rail-surface`. Keep.
+- MISSING entirely (comp has, rail lacks): accent logo tile (40x40, radius 12px, bg `--accent`, top); ACME org tile with green presence dot; the 5 global nav icons (people / calendar / files / pins / globe, each 40x40, radius 10px, `--rail-content-muted`); bottom help "?"; user avatar-in-rail (34px round + green dot - currently lives in the sidebar footer via `sidebar_self.html`, must move here).
+- Tile geometry off: current tiles `w-11 h-11` (44px) radius ~15px vs target 40px / radius 12px; hover/active add a radius-morph (0.95rem->1.375rem) + accent bg + Discord left-indicator pill (`.lc-rail-tile::before`) that the flat comp tiles do NOT have.
+- Badge token wrong: unread badge uses `--danger`/`--danger-content`; comp uses `--accent`/`--accent-content` (min 16px).
+- LITERAL-MATCH -> HIDE/RELOCATE (flag to user first): the dynamic enclave list, Home house-tile, per-enclave settings gear, Discover "+" tile, `.lc-rail-divider`, sidebar-collapse chevron, and the left-indicator pill. Replace with the fixed logo + org tile + 5 nav icons + messages tile + help + avatar layout.
+- [ ] **Step 2:** Rebuild the rail markup to the fixed-nav layout; set tile sizing/radius/gap and active/hover (color-only active per comp). Keep colors on `--rail-*` tokens; switch the badge to `--accent`.
 - [ ] **Step 3:** Re-screenshot in all four states; confirm match.
 - [ ] **Step 4:** Commit: `style(rail): match comp spacing and states` + `#LC-553`.
 
 ### Task 12: Sidebar region
 
-**Files:** Modify `server/templates/partials/sidebar.html`, `partials/sidebar_nav.html`, `partials/sidebar_room_row.html`, `partials/sidebar_peer_row.html`.
+**Files:** Modify `server/templates/partials/sidebar.html`, `partials/sidebar_nav.html`, `partials/sidebar_room_row.html`, `partials/sidebar_peer_row.html`, `partials/unread_badge.html`; `.lc-sidebar` + `.lc-room-row-active` rules in `main.css`. **MAJOR - needs LC-553 sub-ticket (head restructure + feature-hide).**
 
-- [ ] **Step 1:** Screenshot current sidebar vs comp: section headers (uppercase, muted, letter-spacing), room row padding/radius, active-row tint (`--accent-surface`/`--accent-surface-content`), unread count pills (right-aligned, pill shape; active row uses solid `--accent`), `#` hash glyph color, DM avatar size, "Invite people" footer with top border. Reference region: `.sidebar*` / `.sb-*`.
-- [ ] **Step 2:** Reconcile to match; keep colors on `--sidebar-*` / `--accent*` tokens.
+**Verified gap (2026-07-10):**
+- Container MATCHES: `w-64` (256px), `.lc-sidebar` bg/color/border. Keep.
+- Head is the WRONG content: comp head = "Let's Chat" brand title (18px/700) + collapse `<<`, then an "Acme Corp" org row (15px/600 + chevron, padding 6px 16px 12px). Current head holds the own-user profile block + account-menu (`sidebar_self.html`) + `#status-picker`. Add the brand title + org row; relocate own-profile to the rail (Task 11).
+- BLOCKER token bug: `.lc-sidebar` remaps `--accent-surface` -> `--sidebar-elevated` and `--accent-surface-content` -> `--sidebar-content` (main.css ~1836). This makes the comp's SOLID `--accent` active-row fill impossible - active rows render as a subtle elevated tint. Also `.lc-room-row-active` currently uses `--surface-elevated` bg + accent text + a left inset bar (weight 600). Target: bg solid `--accent-surface` (the real blue), color `--accent-surface-content`, weight 700, no left bar. Fix requires NOT remapping accent-surface inside `.lc-sidebar`.
+- Count pills wrong: `unread_badge.html` is always `bg-accent` at rest, radius 4px, no min-size. Target: neutral `--sidebar-elevated` pill (min 20px, radius 10px) at rest, flipping to solid `--accent` only on the active row.
+- Search off: `#sidebar-search-input` radius 4px, no sunken bg, no `⌘K` kbd; comp wants sunken bg, radius 8px, `⌘K` hint, plus a 34px accent "+" square beside it (currently only a plain-text `+` in the Rooms header).
+- Minor: section header padding `px-2 py-0.5` (8/2) vs 4/8; room row `rounded-md` (6px) / `gap-2.5` (10px) vs 8px/8px; DM avatar 24px vs 22px.
+- MISSING: bordered "Invite people" footer (person+ icon, padding 12px 16px) - was moved into the account menu; re-add.
+- LITERAL-MATCH -> HIDE (flag to user): the Messages/People segmented search tabs; the entire 7-row "Navigation" section (Inbox/Activity/Saved/Scheduled/Kudos/Stats/Transcripts); the unread-only filter + mark-all-read buttons; per-row hover controls (mark-read/star/move-category); draft/mention/voice badges; collapsible category chevrons + rename/delete/drag. Rename sections to static Favorites / Team / Projects / Direct Messages (comp) or keep the app's category names as a lower-fidelity compromise (user's call).
+- [ ] **Step 2:** Reconcile to match; keep colors on `--sidebar-*` / `--accent*` tokens; stop the `--accent-surface` remap so the active row can render solid.
 - [ ] **Step 3:** Re-screenshot all four states.
 - [ ] **Step 4:** Commit: `style(sidebar): match comp rows, sections, unread pills` + `#LC-553`.
 
 ### Task 13: Timeline region
 
-**Files:** Modify `server/templates/room/messages.html`, `room/message.html` (+ message/reaction/hover-action rules in `main.css`).
+**Files:** Modify `server/templates/room/messages.html`, `room/message.html`, `partials/reaction_bar.html` (+ `.lc-day-*`, `.lc-msg-*`, `.lc-react-*` rules in `main.css`). **MIXED - mostly nudges + 2 missing elements + 1 wrong-color; LC-553 sub-ticket.**
 
-- [ ] **Step 1:** Screenshot current timeline vs comp: message row gap/padding, avatar 36px, name+time baseline, bulleted-list rendering, reaction pills (rounded, bordered; "reacted" state tinted `--accent-surface`; trailing add-reaction chip), the pinned/selected message accent bar (`box-shadow: inset 3px 0 0 var(--accent)` + `--surface-sunken`), the hover action bar (reply/emoji/bookmark/more, top-right, appears on hover), the "New messages" divider (accent text + accent hairline), the "Today" day divider, and the unread banner ("2 unread messages" / "Mark as read" on `--accent-surface`). Reference region: `.timeline`, `.msg`, `.react`, `.hoveract`, `.newdiv`, `.banner`.
-- [ ] **Step 2:** Reconcile each element.
+**Verified gap (2026-07-10):**
+- MISSING: the unread BANNER ("x 2 unread messages" + "Mark as read >" on `--accent-surface`, margin 16px 20px 0, padding 12px 16px, radius 10px) has NO counterpart - the app has a floating jump-pill + a mid-stream inline divider instead. Build it new at top of timeline.
+- WRONG COLOR FAMILY: the "New messages" divider renders as a DANGER-red pill (`.lc-day-chip-danger`/`.lc-day-rule-danger`, label "Unread messages") - comp wants `--accent` plain text 12px/600 + accent hairlines at opacity .5, label "New messages".
+- Day divider: current is a bordered UPPERCASE pill (`.lc-day-chip`, 11px); comp wants bare 12px `--content-subtle` text with plain hairlines (no chip).
+- Row geometry: `px-4 py-2` (16/8) no radius; comp wants padding 8px 12px, radius 10px, flex gap 12px. Avatar `h-6 w-6` (24px) vs 36px. Name `font-medium` (~500) vs 700. Time uses `--content-muted` vs `--content-subtle`.
+- MISSING: pinned/selected message state (comp: bg `--surface-sunken` + `box-shadow: inset 3px 0 0 --accent`). Only `.lc-mentioned` has an accent wash today; `is_pinned` just flips a menu label.
+- Reaction pills: resting bg `--surface-sunken` vs comp `--surface-elevated`; container gap 4px vs 6px, `mt-1` vs `mt-2`, radius-full vs 14px. "reacted/on" state MATCHES. Add-reaction chip present (minor bg diff).
+- Bulleted list padding 24px vs 18px; inline mention color OK but not weight-600.
+- LITERAL-MATCH -> HIDE (flag to user): the comp's clean rows have none of the app's per-message chrome - system-event rows, "edited"/history button, seen caption, reply-count chip, ack bar, quote/reply chip, quick-react bar, thread+flag icons in the hover bar, and the large overflow "..." menu. Reduce the hover action bar to reply/emoji/bookmark/more (28x26, radius 8px) per comp; move the rest behind "more" or hide.
+- [ ] **Step 2:** Reconcile each element; build the unread banner; re-tone the New-messages divider to accent.
 - [ ] **Step 3:** Re-screenshot all four states.
 - [ ] **Step 4:** Commit: `style(timeline): match comp message rows, reactions, dividers` + `#LC-553`.
 
 ### Task 14: Composer region
 
-**Files:** Modify `server/templates/room/composer.html`.
+**Files:** Modify `server/templates/room/composer.html` (composer chrome ~L115-427), `.lc-fmt-btn`/`.lc-composer-*`/`.lc-mdinput` rules in `main.css`. **STRUCTURAL - inverted/split layout; needs LC-553 sub-ticket + feature-hide.**
 
-- [ ] **Step 1:** Screenshot current composer vs comp: outer border/radius (12px), placeholder "Message #product", formatting toolbar (B / I / S / code / link / ul / ol / attach) with a separator, right cluster (emoji / @ / send), send button as a filled `--accent` square. Reference region: `.composer`.
-- [ ] **Step 2:** Reconcile spacing, icon set, and the send button.
+**Verified gap (2026-07-10):**
+- Structure inverted+split: comp = borderless input on top, ONE toolbar row below. App = a formatting row ABOVE a separately-bordered/rounded textarea that is flanked inline by a SECOND action row. Rebuild to input-flush-in-wrapper + single toolbar.
+- Wrapper MATCHES radius (`rounded-xl` 12px) + bg (`bg-surface-elevated`); margins wrong: `mx-2 mb-2` (8/8/0) vs 12px 20px 20px; drop the extra `shadow-sm`.
+- Input padding 8/12 vs 14/16/6; placeholder token `--content-muted` vs `--content-subtle` (textarea is its own bordered box today - make it flush).
+- Toolbar composition: MISSING the vertical separator, the ordered-list button, and the `@`-mention button; strike/code/link order differs; attach + emoji live in the wrong rows. Add the `ml-auto` right cluster (emoji / @ / send).
+- Sizes: toolbar buttons `.lc-fmt-btn` 28px vs 30px; send `.lc-composer-send` 36px vs 34px (tokens/glyph already correct: accent bg, accent-content, paper-plane, radius 8px). Toolbar gap 4px vs 2px.
+- LITERAL-MATCH -> HIDE (flag to user): blockquote btn, Write/Preview toggle, live char-counter, record-voice, record-clip/video, poll, AI writing-assist, RSVP event, GIF picker, schedule-send, and the TTL `<select>`. Comp toolbar is only B I S | code link ul ol attach ... emoji @ send.
+- [ ] **Step 2:** Rebuild to input-on-top + single toolbar; reconcile spacing, icon set, separator, right cluster, and the send button.
 - [ ] **Step 3:** Re-screenshot all four states.
 - [ ] **Step 4:** Commit: `style(composer): match comp toolbar and send button` + `#LC-553`.
 
-### Task 15: Thread panel region
+### Task 15: Right column (Thread + Details) region
 
-**Files:** Modify `server/templates/room/thread_panel.html`.
+**Files:** Modify `server/templates/room/page.html` (right-column shell), `room/thread_panel.html`, `room/details_panel.html`, `room/thread_reply_inner.html`; card/panel rules in `main.css`. **STRUCTURAL - right-column shell rewrite; covers BOTH Thread and Details (Phase 2 details panel does NOT fully match). Needs LC-553 sub-ticket.**
 
-- [ ] **Step 1:** Screenshot current thread panel vs comp: header ("Thread", "3 of 8", prev/next arrows in a bordered group, close X), "In reply to <name>" (name in accent), the source message, "3 replies" label, reply rows (30px avatar, name+time, text), and the "Reply in thread..." box with emoji + send. Reference region: `.panel` (thread), `.tmsg`, `.reply-box`.
-- [ ] **Step 2:** Reconcile.
+**Verified gap (2026-07-10):**
+- SHELL WRONG: comp = ONE 360px right column (border-left, bg `--surface`, scrolls) holding two STACKED cards (`.panel`: margin 14px, border 1px `--border`, radius 12px, bg `--surface-elevated`). App = separate sibling flex columns: `#thread-panel` `w-96` (384px, hidden until htmx-swapped) + `#details-panel` `w-72` (288px, always visible) -> side-by-side 672px when both open, no card framing. Rebuild as one 360px column with two margin/radius/elevated cards; make the thread card persistent-slot per comp.
+- Thread header: MISSING the "3 of 8" position counter and the bordered prev/next arrow group (radius 7px); title `font-semibold` (600/~14px) vs 700/15px. Extra follow/mute/Summarize buttons present (hide for literal match). Close X OK.
+- "Replies to <name>": name NOT accent-colored (comp: name in `--accent`); string differs ("Replies to" vs "In reply to").
+- Thread message rows: avatar 24px vs 30px; name weight 500 vs 700; time 12px `--content-muted` vs 11px `--content-subtle`; text 14px vs 13px. "N replies" label is 11px UPPERCASE with rule dividers vs comp plain 12px muted.
+- Reply box: `rounded border` (~4px, no sunken bg) vs comp radius 9px + bg `--surface-sunken`; emoji picker MISSING (send only); extra composer-cue + error chrome (hide).
+- DETAILS panel (Phase 2, verify - does NOT fully match): "Leave room" is a filled `btn-danger` (solid red bg) + no icon + hidden on PUBLIC rooms; comp wants a red-TEXT link (`--danger`, 600) with icon, shown always. Notifications row MISSING its dropdown chevron. Rows use `justify-between` + `px-3 py-2` vs comp fixed 110px key column + padding 10px 16px, value not weight-500, 14px vs 13px. Header "Details" 600/~14px vs 700/15px.
+- [ ] **Step 2:** Rebuild the 360px stacked-card shell; reconcile Thread + Details to the deltas above.
 - [ ] **Step 3:** Re-screenshot all four states.
-- [ ] **Step 4:** Commit: `style(thread): match comp thread panel` + `#LC-553`.
+- [ ] **Step 4:** Commit: `style(thread): match comp thread + details right column` + `#LC-553`.
 
 ### Task 16: Header region
 
-**Files:** Modify `server/templates/partials/room_header.html`.
+**Files:** Modify `server/templates/partials/room_header.html`; `.lc-header*`/`.lc-h1` rules in `main.css`. **MAJOR - collapse action set + add 3 missing elements. Needs LC-553 sub-ticket + feature-hide.**
 
-- [ ] **Step 1:** Screenshot current header vs comp: `#` + room name + star, description subline, right cluster (overlapping member avatar stack with "+23", search, add-member, overflow). Reference region: `.hdr`.
-- [ ] **Step 2:** Reconcile the avatar stack overlap and icon spacing.
+**Verified gap (2026-07-10):**
+- Container: `.lc-header` uses `justify-between` gap 8px padding 8/16 min-h 48px; comp wants gap 12px padding 14px 20px with the right cluster on `margin-left:auto` gap 14px. Room name `.lc-h1` weight 600 vs 700; "#" prefix OK (subtle). Description subline size/color OK.
+- MISSING three elements: the member avatar STACK (28px round, overlap -8px, 2px `--surface` border), the "+23" overflow count, and the star/favorite toggle beside the room name (member count exists only in the details panel today).
+- Right cluster is the wrong model: comp = 3 compact ICON buttons (search / add-member person+ / overflow kebab) at 16px. App renders 6-9 LABELED buttons + an expanded inline search FIELD + a semantic-search toggle; action icons are 20px not 16px, gap 4px not 14px.
+- LITERAL-MATCH -> HIDE/COLLAPSE (flag to user): fold huddle, jump-to-date, catch-me-up, info, highlights, manage, and notify-dropdown into the kebab overflow; replace the inline search field with a search ICON that expands on click; add the add-member person+ icon.
+- [ ] **Step 2:** Add the avatar stack, "+23", and star; collapse actions to the 3-icon comp model; reconcile spacing/weights.
 - [ ] **Step 3:** Re-screenshot all four states.
-- [ ] **Step 4:** Commit: `style(header): match comp title bar and avatar stack` + `#LC-553`.
+- [ ] **Step 4:** Commit: `style(header): match comp title bar, avatar stack, collapsed actions` + `#LC-553`.
 
 ---
 
