@@ -38,11 +38,15 @@
 
   {# sidebar: active row (solid accent) + resting row, on the navy sidebar ramp #}
   <div class="lc-sidebar" style="padding:.4rem; border-radius:.5rem;">
+    {# LC-576: mirror the REAL row markup (the leading glyph and the draft pencil
+       carry text-content-subtle) rather than inlining the intended colors. An
+       inline style cannot regress, so the earlier hand-colored copy could not
+       show that those utilities failed to invert against the accent fill. #}
     <div class="lc-room-row lc-room-row-active" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
-      <span style="opacity:.75;">#</span><span>product</span><span class="lc-count-pill">2</span>
+      <span class="w-6 text-center shrink-0 text-content-subtle">#</span><span>product</span><span class="ml-1 text-content-subtle">&#9998;</span><span class="lc-count-pill">2</span>
     </div>
     <div class="lc-room-row" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
-      <span style="color:var(--content-muted);">#</span><span>design</span><span class="lc-count-pill">1</span>
+      <span class="w-6 text-center shrink-0 text-content-subtle">#</span><span>design</span><span class="ml-1 text-content-subtle">&#9998;</span><span class="lc-count-pill">1</span>
     </div>
   </div>
 

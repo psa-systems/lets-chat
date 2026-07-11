@@ -38,15 +38,17 @@
      aria-label="{{ "switcher-discover"|t }}" data-lc-tip="{{ "switcher-discover"|t }}" data-lc-tip-pos="right">
     +
   </a>
-  {# LC-270: collapse the room sidebar to this rail (desktop only). State is
-     device-local in localStorage; the no-flash bootstrap in base.html applies
-     it and __lcToggleSidebar flips it. Chevron rotates via CSS when collapsed. #}
-  <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
+  {# LC-270 / LC-576: the EXPAND control. The primary collapse chevron now lives
+     in the sidebar head next to the title (prototype .sb-head); this one is its
+     counterpart and is shown only while the sidebar is collapsed, since the
+     collapsed #sidebar is display:none and takes its own chevron with it. It
+     points right (">>", expand) - no rotate rule, it has exactly one state. #}
+  <button type="button" data-lc-sidebar-toggle data-lc-sidebar-expand aria-controls="sidebar" aria-expanded="false"
           onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
           aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="right"
-          class="lc-rail-gear hidden md:flex w-11 h-11 rounded-xl items-center justify-center">
-    <svg data-lc-sidebar-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-      <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L9.06 10l3.71 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.06.02z" clip-rule="evenodd"/>
+          class="lc-rail-gear w-11 h-11 rounded-xl items-center justify-center">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+      <path fill-rule="evenodd" d="M4.21 5.23a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L7.94 10 4.23 6.29a.75.75 0 01-.02-1.06zm6 0a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L13.94 10l-3.71-3.71a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
     </svg>
   </button>
 </nav>

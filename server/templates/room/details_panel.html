@@ -7,34 +7,39 @@
   <header class="border-b border-border px-3 py-2">
     <h2 class="font-semibold">{{ "room-details-title"|t }}</h2>
   </header>
-  <dl class="px-3 py-2 space-y-3 text-sm">
-    <div class="flex items-center justify-between gap-2">
-      <dt class="text-content-muted">{{ "room-details-created"|t }}</dt>
-      <dd class="text-content">{{ room.created_at }}</dd>
+  {# LC-576: rows adopt the prototype's card language - each fact is an inset
+     rounded-[10px] card on --surface inside the elevated panel, with an
+     uppercase .lc-section-label key and a font-medium value. Same radius as the
+     message row, so the right rail and the timeline read as one design system
+     (it was previously a flat dl of muted-grey key/value lines). #}
+  <dl class="p-3 space-y-2 text-sm">
+    <div class="flex items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3 py-2">
+      <dt class="lc-section-label">{{ "room-details-created"|t }}</dt>
+      <dd class="text-content font-medium">{{ room.created_at }}</dd>
     </div>
-    <div class="flex items-center justify-between gap-2">
-      <dt class="text-content-muted">{{ "room-details-members"|t }}</dt>
-      <dd class="text-content">{{ member_count }}</dd>
+    <div class="flex items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3 py-2">
+      <dt class="lc-section-label">{{ "room-details-members"|t }}</dt>
+      <dd class="text-content font-medium tabular-nums">{{ member_count }}</dd>
     </div>
     {# LC-568: reuses the header's notify dropdown (`room/notify_dropdown.html`,
        included once in `partials/room_header.html`) instead of duplicating its
        markup/ids/hx-post wiring here. This row shows the current value and,
        on click, opens the SAME functional dropdown via its existing toggle
        button - one control, one source of truth for the mute state. #}
-    <div class="flex items-center justify-between gap-2">
-      <dt class="text-content-muted">{{ "room-details-notifications"|t }}</dt>
+    <div class="flex items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3 py-2">
+      <dt class="lc-section-label">{{ "room-details-notifications"|t }}</dt>
       <dd>
         <button type="button"
-                class="text-content hover:underline"
+                class="text-content font-medium hover:underline"
                 aria-label="{{ "room-details-notifications"|t }}"
                 onclick="var t=document.getElementById('lc-notify-toggle-{{ room.id }}'); if (t) { t.click(); t.scrollIntoView({block: 'nearest'}); }">
           {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}
         </button>
       </dd>
     </div>
-    <div class="flex items-center justify-between gap-2">
-      <dt class="text-content-muted">{{ "room-details-pinned"|t }}</dt>
-      <dd class="text-content">{% if has_pinned %}{{ "room-details-pinned-yes"|t }}{% else %}{{ "room-details-pinned-no"|t }}{% endif %}</dd>
+    <div class="flex items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3 py-2">
+      <dt class="lc-section-label">{{ "room-details-pinned"|t }}</dt>
+      <dd class="text-content font-medium">{% if has_pinned %}{{ "room-details-pinned-yes"|t }}{% else %}{{ "room-details-pinned-no"|t }}{% endif %}</dd>
     </div>
   </dl>
   {# LC-568: leaving only revokes access for `private` rooms - `public` room
