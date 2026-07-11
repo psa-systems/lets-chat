@@ -3,14 +3,17 @@
 {% block title %}#{{ room.name }} {{ "room-info-title-suffix"|t }} - Let's Chat{% endblock %}
 
 {% block main %}
-<header class="border-b border-border px-4 py-2 flex items-center justify-between gap-3">
+{# LC-569: room-info hero, matching the prototype: an accent-surface hash badge,
+   the room name, its topic, and a meta line, with the actions on the right. #}
+<header class="border-b border-border px-5 py-4 flex items-start gap-4">
+  <div class="lc-info-badge" aria-hidden="true">#</div>
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">#{{ room.name }}</h1>
+    <h1 class="text-xl font-extrabold truncate">{{ room.name }}</h1>
     {% if let Some(topic) = room.topic.as_ref() %}
-    <p class="text-xs text-content-muted truncate">{{ topic }}</p>
+    <p class="text-sm text-content-muted mt-1 truncate">{{ topic }}</p>
     {% endif %}
   </div>
-  <a href="/room/{{ room.id }}" class="btn btn-secondary btn-sm flex-none">{{ "room-info-back-to-chat"|t }}</a>
+  <a href="/room/{{ room.id }}" class="btn btn-secondary btn-sm flex-none ml-auto">{{ "room-info-back-to-chat"|t }}</a>
 </header>
 {# LC-449 / LC-454: room About page on the settings shell. Client-side tabs
    (roominfo.js) keep all panels in the DOM and toggle visibility, hash +

@@ -3941,3 +3941,17 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-swatch::-webkit-color-swatch-wrapper { padding: 3px; }
 .lc-swatch::-webkit-color-swatch { border: none; border-radius: 0.25rem; }
 .lc-swatch::-moz-color-swatch { border: none; border-radius: 0.25rem; }
+
+/* LC-569: room-info hero badge (matches the prototype's accent-surface hash tile). */
+.lc-info-badge {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 0.875rem;
+    background-color: var(--accent-surface);
+    color: var(--accent-surface-content);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
