@@ -50,9 +50,21 @@
      topic_subscribe_allowed gates this on the admin role; pages without a
      matching id-keyed OOB target drop the swap harmlessly. #}
   <div class="lc-admin-content" data-lc-live-topic="admin">
+    {# LC-572: shared admin page-header. The title is still derived from `section`;
+       pages layer an optional intro, a right-aligned primary action, and a
+       filter/toolbar row by overriding the three sub-blocks below. Each defaults
+       to empty, so title-only pages render exactly as before. Actions adopt
+       `.lc-action-row`, filters adopt `.lc-toolbar` (both previously dead). #}
     {% block admin_header %}
     <header class="lc-admin-header">
-      <h1 class="lc-admin-title">{% if section == "settings" %}{{ "admin-nav-settings"|t }}{% else if section == "users" %}{{ "admin-nav-users"|t }}{% else if section == "invites" %}{{ "admin-nav-invites"|t }}{% else if section == "rooms" %}{{ "admin-nav-rooms"|t }}{% else if section == "enclaves" %}{{ "admin-nav-enclaves"|t }}{% else if section == "anti_spam" %}{{ "admin-nav-anti-spam"|t }}{% else if section == "link_filter" %}{{ "admin-nav-link-filter"|t }}{% else if section == "quarantine" %}{{ "admin-nav-quarantine"|t }}{% else if section == "branding" %}{{ "admin-nav-branding"|t }}{% else if section == "backup" %}{{ "admin-nav-backup"|t }}{% else if section == "modlog" %}{{ "admin-nav-modlog"|t }}{% else if section == "reports" %}{{ "admin-nav-reports"|t }}{% else if section == "analytics" %}{{ "admin-nav-analytics"|t }}{% else if section == "slash_commands" %}{{ "admin-nav-commands"|t }}{% else if section == "bots" %}{{ "admin-nav-bots"|t }}{% else if section == "outgoing_webhooks" %}{{ "admin-nav-webhooks"|t }}{% else if section == "bridges" %}{{ "admin-nav-bridges"|t }}{% endif %}</h1>
+      <div class="lc-admin-header-bar">
+        <div class="lc-admin-header-heading">
+          <h1 class="lc-admin-title">{% if section == "settings" %}{{ "admin-nav-settings"|t }}{% else if section == "users" %}{{ "admin-nav-users"|t }}{% else if section == "invites" %}{{ "admin-nav-invites"|t }}{% else if section == "rooms" %}{{ "admin-nav-rooms"|t }}{% else if section == "enclaves" %}{{ "admin-nav-enclaves"|t }}{% else if section == "anti_spam" %}{{ "admin-nav-anti-spam"|t }}{% else if section == "link_filter" %}{{ "admin-nav-link-filter"|t }}{% else if section == "quarantine" %}{{ "admin-nav-quarantine"|t }}{% else if section == "branding" %}{{ "admin-nav-branding"|t }}{% else if section == "backup" %}{{ "admin-nav-backup"|t }}{% else if section == "modlog" %}{{ "admin-nav-modlog"|t }}{% else if section == "reports" %}{{ "admin-nav-reports"|t }}{% else if section == "analytics" %}{{ "admin-nav-analytics"|t }}{% else if section == "slash_commands" %}{{ "admin-nav-commands"|t }}{% else if section == "bots" %}{{ "admin-nav-bots"|t }}{% else if section == "outgoing_webhooks" %}{{ "admin-nav-webhooks"|t }}{% else if section == "bridges" %}{{ "admin-nav-bridges"|t }}{% endif %}</h1>
+          {% block admin_header_desc %}{% endblock %}
+        </div>
+        {% block admin_header_actions %}{% endblock %}
+      </div>
+      {% block admin_header_filters %}{% endblock %}
     </header>
     {% endblock %}
     <div class="lc-admin-main">
