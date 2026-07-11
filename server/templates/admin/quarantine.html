@@ -2,8 +2,9 @@
 
 {% block title %}{{ "admin-quarantine-title"|t }} - Admin - Let's Chat{% endblock %}
 
+{% block admin_header_desc %}<p class="lc-admin-desc">{{ "admin-quarantine-intro"|t }}</p>{% endblock %}
+
 {% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">{{ "admin-quarantine-intro"|t }}</p>
 
 {% if entries.is_empty() %}
 {% let empty_text_key = "admin-quarantine-empty" %}

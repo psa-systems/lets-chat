@@ -2,12 +2,15 @@
 
 {% block title %}{{ "admin-slash-title"|t }} - Admin - Let's Chat{% endblock %}
 
-{% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">
+{% block admin_header_desc %}
+<p class="lc-admin-desc">
   {{ "admin-slash-intro-1"|t }}
   <code>static_text</code> {{ "admin-slash-intro-2"|t }} <code>{args}</code> {{ "admin-slash-intro-3"|t }}
   <code>webhook_post</code> {{ "admin-slash-intro-4"|t }}
 </p>
+{% endblock %}
+
+{% block admin_main %}
 
 {% if let Some(err) = error %}
 <div class="mb-4 alert alert-danger" role="alert">{{ err }}</div>

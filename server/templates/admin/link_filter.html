@@ -2,13 +2,16 @@
 
 {% block title %}{{ "admin-linkfilter-title"|t }} - Admin - Let's Chat{% endblock %}
 
-{% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">
+{% block admin_header_desc %}
+<p class="lc-admin-desc">
   {{ "admin-linkfilter-intro-1"|t }}
   (<code>example.com</code>) {{ "admin-linkfilter-intro-2"|t }} <code>*</code>
   (<code>*.example.com</code>, <code>*.tk</code>). {{ "admin-linkfilter-intro-3"|t }}
   {{ "admin-linkfilter-intro-4"|t }} <a href="/admin/anti-spam" class="text-accent hover:underline">{{ "admin-linkfilter-intro-link"|t }}</a>.
 </p>
+{% endblock %}
+
+{% block admin_main %}
 
 {% if let Some(err) = error %}
 <div class="mb-4 alert alert-danger" role="alert">{{ err }}</div>
