@@ -1857,13 +1857,10 @@ math {
     background-color: var(--sidebar-surface);
     color: var(--sidebar-content);
 }
-/* The global .lc-room-row-active colors its label with --accent (brand blue),
-   which is too dark on the raised navy; flip it to the light sidebar content so
-   the active room label stays readable. The accent left-bar (box-shadow on the
-   base rule) is kept, so the brand-blue active indicator still reads. */
-.lc-sidebar .lc-room-row-active {
-    color: var(--sidebar-content);
-}
+/* LC-569: the active row is now a solid --accent fill, so its label takes
+   --accent-content (which is not remapped inside .lc-sidebar) and reads on the
+   accent. The old override forced --sidebar-content for the accent-text-on-navy
+   treatment that the solid fill replaces. */
 /* The search input has no explicit placeholder color; default browser placeholder
    is too faint on navy, so pin it to the muted sidebar token. */
 .lc-sidebar input::placeholder {
@@ -2186,8 +2183,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 1.5rem;
-    width: 1.5rem;
+    height: 1.625rem;
+    width: 1.75rem;
     border-radius: 0.375rem;
     color: var(--content-muted);
     cursor: pointer;
@@ -2221,7 +2218,7 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-followup-ts {
     position: absolute;
     left: 0;
-    width: 3rem;
+    width: 3.75rem;
     padding-right: 0.5rem;
     text-align: right;
     font-size: 0.625rem;
@@ -2244,33 +2241,39 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 0;
 }
 .lc-day-rule {
     flex: 1 1 0%;
     height: 1px;
     background-color: var(--border);
 }
+/* LC-569: the day divider is bare text between hairlines (no bordered pill,
+   no uppercase), matching the comps and the prototype. */
 .lc-day-chip {
     flex: none;
-    border-radius: 9999px;
-    border: 1px solid var(--border);
-    background-color: var(--surface-elevated);
-    padding: 0.125rem 0.625rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    padding: 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
     color: var(--content-subtle);
 }
-/* Unread-separator variant (server-rendered only): same pill shape, danger-toned. */
+/* LC-569: the unread separator is the ACCENT "new messages" divider, not a
+   danger-red pill: accent text between accent hairlines. */
 .lc-day-rule-danger {
-    background-color: var(--danger-border);
+    background-color: var(--accent);
+    opacity: 0.5;
 }
 .lc-day-chip-danger {
-    border-color: var(--danger-border);
-    background-color: var(--danger-surface);
-    color: var(--danger);
+    border: none;
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--accent);
 }
 
 /* LC-434: call/system events - a centered, muted timeline row distinct from
@@ -2315,8 +2318,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 1.75rem;
-    min-width: 1.75rem;
+    height: 1.875rem;
+    min-width: 1.875rem;
     padding: 0 0.375rem;
     border-radius: 0.375rem;
     color: var(--content-muted);
@@ -2354,8 +2357,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     align-items: center;
     justify-content: center;
     flex: none;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2.125rem;
+    width: 2.125rem;
     border-radius: 0.5rem;
     background-color: var(--accent);
     color: var(--accent-content);
@@ -2489,11 +2492,33 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    active state. The inset shadow bar follows the rounded corners and shifts no
    layout. Paired in the row templates with a bold-unread / muted-room treatment
    driven by per-row conditionals. */
+/* LC-569: the active room row is a SOLID accent fill with accent-content text
+   (this is what the comps and the prototype show), not a raised tint with accent
+   text plus a left bar. The unread pill inverts on it so it stays legible. */
 .lc-room-row-active {
-    background-color: var(--surface-elevated);
-    color: var(--accent);
+    background-color: var(--accent);
+    color: var(--accent-content);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 0 var(--accent);
+}
+.lc-room-row-active .lc-count-pill {
+    background-color: var(--accent-content);
+    color: var(--accent);
+}
+
+/* LC-569: unread count pill. Neutral at rest (inside .lc-sidebar the surface
+   tokens resolve to the sidebar ramp), accent only via the active row above. */
+.lc-count-pill {
+    margin-left: auto;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    display: inline-grid;
+    place-items: center;
 }
 
 /* LC-371: device-local collapsible sidebar groups (Starred / Channels / DMs).
