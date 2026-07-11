@@ -3408,6 +3408,19 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     padding: 0.625rem 1.25rem;
 }
 .lc-admin-title { font-size: 1rem; font-weight: 600; color: var(--content); }
+/* LC-572: shared admin page-header. The bar sits the title/description block
+   against an optional right-aligned action cluster and wraps on narrow widths;
+   the filter/toolbar block (if any) renders on its own row under the bar. */
+.lc-admin-header-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.lc-admin-header-heading { min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.lc-admin-desc { font-size: 0.875rem; line-height: 1.4; color: var(--content-muted); }
+.lc-admin-header > .lc-toolbar { margin-top: 0.625rem; }
 .lc-admin-main { flex: 1 1 auto; padding: 1.5rem 1.25rem 4rem; }
 /* A redesigned page caps form content; tables stay full-width. */
 .lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }
