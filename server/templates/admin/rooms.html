@@ -2,8 +2,9 @@
 
 {% block title %}{{ "admin-rooms-title"|t }} - Admin - Let's Chat{% endblock %}
 
+{% block admin_header_desc %}<p class="lc-admin-desc">{{ "admin-rooms-intro"|t }}</p>{% endblock %}
+
 {% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">{{ "admin-rooms-intro"|t }}</p>
 
 {% if rooms_admin.is_empty() %}
 {% let empty_text_key = "admin-rooms-empty" %}
