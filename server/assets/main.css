@@ -962,7 +962,11 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    shows the sunken background (the Tailwind :hover utility wins). */
 .lc-mentioned {
     box-shadow: inset 3px 0 0 0 var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    /* LC-558: wash tracks the palette's --accent-surface token (was a hard-coded
+       accent 8% mix that ignored the token and read too faint). ~55% keeps it
+       obvious without going radioactive; the 3px bar stays the primary signal,
+       and hover still wins with the sunken background. */
+    background: color-mix(in srgb, var(--accent-surface) 55%, transparent);
 }
 
 /* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
@@ -1964,6 +1968,11 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-body    { font-size: 0.875rem;  font-weight: 400; line-height: 1.5; }
 .lc-small   { font-size: 0.75rem;   font-weight: 400; line-height: 1.45; }
 .lc-caption { font-size: 0.75rem;   font-weight: 400; line-height: 1.35; color: var(--content-muted); }
+/* LC-558: message-header timestamp. Sits next to the (now font-semibold) author
+   name; smaller + one step subtler than .lc-caption so the "who / when" split
+   reads cleanly. tabular-nums keeps HH:MM steady. Separate from .lc-caption,
+   which is shared by other surfaces. */
+.lc-msg-time { font-size: 0.6875rem; font-weight: 400; line-height: 1.35; color: var(--content-subtle); font-variant-numeric: tabular-nums; }
 /* Uppercase muted group label (sidebar section headers, Slack/Discord style). */
 .lc-section-label {
     font-size: 0.6875rem;
@@ -2239,7 +2248,9 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: var(--content-subtle);
+    /* LC-558: content-muted (was content-subtle) so the day label clears WCAG AA
+       on the elevated pill instead of hovering near the floor. */
+    color: var(--content-muted);
 }
 /* Unread-separator variant (server-rendered only): same pill shape, danger-toned. */
 .lc-day-rule-danger {
@@ -2289,12 +2300,39 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    denser format toolbar (.lc-fmt-btn) and the larger bottom action row
    (.lc-composer-btn), both muted-to-content with a sunken hover. The primary
    Send (.lc-composer-send) is a filled-accent square that anchors the row. */
+/* LC-574: single composer control bar under a full-width input. Wraps on narrow
+   widths so the row never overflows and every control can reach a 44px touch
+   target; the right cluster (counter, Preview, ttl, Send) keeps to the trailing
+   edge via margin-left:auto and stays together as the bar wraps. */
+.lc-composer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.125rem;
+    padding-top: 0.125rem;
+    color: var(--content-muted);
+}
+.lc-composer-bar-right {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.lc-composer-sep {
+    flex: none;
+    width: 1px;
+    height: 1.25rem;
+    margin: 0 0.35rem;
+    background: var(--border);
+}
+/* LC-574: unify the two composer button sizes (were 28px / 36px) so they align
+   on one bar. Both classes are composer-only. */
 .lc-fmt-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 1.75rem;
-    min-width: 1.75rem;
+    height: 2rem;
+    min-width: 2rem;
     padding: 0 0.375rem;
     border-radius: 0.375rem;
     color: var(--content-muted);
@@ -2314,8 +2352,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     align-items: center;
     justify-content: center;
     flex: none;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2rem;
+    width: 2rem;
     border-radius: 0.5rem;
     color: var(--content-muted);
 }
@@ -2332,8 +2370,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     align-items: center;
     justify-content: center;
     flex: none;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2rem;
+    width: 2rem;
     border-radius: 0.5rem;
     background-color: var(--accent);
     color: var(--accent-content);
@@ -2370,16 +2408,37 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    the room-header action cluster are fixed-width dense single lines (up to ~10
    icon buttons + the textarea / the room title), so forcing 44px WIDTH there
    overflows a ~360px viewport; those get height only. Full 44x44 on those dense
-   rows needs a mobile reflow (wrap / overflow menu / hide-secondary), tracked
-   as follow-up. 44px tall x >=28px wide still clears the 24px WCAG 2.5.8 AA
-   floor on both axes. */
+   rows needs a mobile reflow. LC-574 did that reflow for the composer (the
+   .lc-composer-bar now wraps under a full-width input), so the composer buttons
+   below take a full 44x44 min-width too. The room-header action cluster
+   (.lc-header-action) still does not wrap, so it stays height-only - it clears
+   the 24px WCAG 2.5.8 AA floor on both axes. The call bar (.lc-cbtn) is the
+   other true-44x44 case: its inner cluster scrolls horizontally on mobile. */
 @media (pointer: coarse) {
     .lc-set-tab,
     .lc-header-action,
     .lc-fmt-btn,
     .lc-composer-btn,
-    .lc-composer-send {
+    .lc-composer-send,
+    .lc-cbtn {
         min-height: 44px;
+    }
+    /* LC-574: the composer control bar wraps, so its buttons can take a 44px
+       min-width without overflowing - completing the dense-row 44x44 the LC-573
+       decision had deferred for the composer. */
+    .lc-fmt-btn,
+    .lc-composer-btn,
+    .lc-composer-send {
+        min-width: 44px;
+    }
+    /* LC-573: call-control buttons (.lc-cbtn) were omitted from the height rule
+       in PR #535. They also collapse to icon-only on a narrow bar (@container
+       lc-callbar), so add min-width for a true 44x44; justify-content centres
+       the icon in the widened box. Safe because .lc-callbar-controls scrolls
+       horizontally rather than forcing page overflow. */
+    .lc-cbtn {
+        min-width: 44px;
+        justify-content: center;
     }
 }
 
@@ -2399,7 +2458,11 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     box-sizing: border-box;
     width: 100%;
     margin: 0;
-    border: 1px solid var(--border);
+    /* LC-574: borderless - the composer card already frames the input. The 1px
+       width is kept (transparent) so .lc-mdback and .lc-mdinput stay metric-
+       identical and the markdown highlight overlay never drifts; focus shows a
+       ring instead (see .lc-mdinput:focus). */
+    border: 1px solid transparent;
     border-radius: 0.5rem;
     padding: 0.5rem 0.75rem;
     font-family: inherit;
@@ -2434,8 +2497,9 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 }
 .lc-mdinput:focus {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
+    /* LC-574: borderless input - a 2px ring shows focus (matches the LC-565
+       focus-ring idiom) without a resting border. */
+    box-shadow: 0 0 0 2px var(--ring);
 }
 .lc-mdinput::placeholder {
     color: var(--content-muted);
@@ -3408,6 +3472,19 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     padding: 0.625rem 1.25rem;
 }
 .lc-admin-title { font-size: 1rem; font-weight: 600; color: var(--content); }
+/* LC-572: shared admin page-header. The bar sits the title/description block
+   against an optional right-aligned action cluster and wraps on narrow widths;
+   the filter/toolbar block (if any) renders on its own row under the bar. */
+.lc-admin-header-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.lc-admin-header-heading { min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.lc-admin-desc { font-size: 0.875rem; line-height: 1.4; color: var(--content-muted); }
+.lc-admin-header > .lc-toolbar { margin-top: 0.625rem; }
 .lc-admin-main { flex: 1 1 auto; padding: 1.5rem 1.25rem 4rem; }
 /* A redesigned page caps form content; tables stay full-width. */
 .lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }

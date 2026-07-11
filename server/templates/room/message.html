@@ -46,7 +46,7 @@
     {% else %}
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-webhook-surface text-webhook-content rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
@@ -55,7 +55,7 @@
     {% else %}
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-email-surface text-email-content rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::Bridge with (bridge_meta) %}
     {# LC-78: protocol-bridge author - no user to DM. The kind is shown in the badge so a viewer can see which network the foreign actor came from. #}
@@ -65,7 +65,7 @@
     {% else %}
     <div class="h-6 w-6 text-xs rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
     {% endif %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-bridge-surface text-bridge-content rounded px-1 py-0.5" title="{{ "room-msg-bridge-title"|t }}">{{ "room-msg-bridge-badge"|t }} {{ bridge_meta.kind }}</span>
     {% when crate::views::message_actor::MessageActor::User %}
     {% let avatar_user_id = message.user_id.clone() %}
@@ -76,15 +76,15 @@
     {% let avatar_size = "h-6 w-6 text-xs" %}
     {% include "partials/avatar.html" %}
     {% if message.user_id != message.viewer_id %}
-    <a href="/dm/{{ message.user_id }}" data-lc-hovercard="{{ message.user_id }}" class="font-medium text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
+    <a href="/dm/{{ message.user_id }}" data-lc-hovercard="{{ message.user_id }}" class="font-semibold text-accent hover:underline" title="{{ "room-msg-dm-title"|t }} {{ message.username }}">{{ message.label() }}</a>
     {% else %}
-    <span class="font-medium">{{ message.label() }}</span>
+    <span class="font-semibold">{{ message.label() }}</span>
     {% endif %}
     {% if message.author_is_bot %}
     <span class="text-[10px] font-bold uppercase tracking-wide border border-border bg-surface-elevated text-content-muted rounded px-1 py-0.5" title="{{ "room-msg-bot-title"|t }}">{{ "room-msg-bot-badge"|t }}</span>
     {% endif %}
     {% endmatch %}
-    <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-caption">{{ message.created_at }}</time>
+    <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-msg-time">{{ message.created_at }}</time>
     {% if message.edited_at.is_some() %}
     <button
       hx-get="/messages/{{ message.id }}/history"
@@ -102,7 +102,7 @@
      overflow menu (native <details> + .lc-menu-item rows), with the destructive
      Delete separated at the bottom. The .lc-msg-actions :has() rule in main.css
      keeps the chip visible while a menu is open. #}
-  <span class="lc-msg-actions absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5 text-xs bg-surface-elevated border border-border shadow-sm px-1 py-0.5 rounded-md">
+  <span class="lc-msg-actions absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5 text-xs bg-surface-elevated shadow-md px-1 py-0.5 rounded-lg">
     {# LC-302: quick-reaction bar - filled client-side from the LC-288 recent
        emoji MRU (or defaults) on first row hover; one tap reacts via the same
        toggle endpoint as the picker. #}
