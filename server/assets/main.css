@@ -847,6 +847,15 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     height: 100dvh;
 }
 
+/* LC-569: UI scaling. The whole app is rem-based (Tailwind utilities + the .lc-*
+   layer), so scaling the root font-size scales type AND spacing together, which
+   is what the "Scaling" appearance setting does. Stamped on <html> before paint
+   by the base.html bootstrap (data-scale), so there is no flash. */
+html[data-scale="compact"] { font-size: 14.5px; }
+html[data-scale="default"] { font-size: 16px; }
+html[data-scale="large"]   { font-size: 18px; }
+html[data-scale="xl"]      { font-size: 20px; }
+
 /* Thin, button-less, thumb-only scrollbars that appear on hover of the scroll
    area. Neutral translucent grey so they read on any palette + mode. */
 * { scrollbar-width: thin; scrollbar-color: transparent transparent; }

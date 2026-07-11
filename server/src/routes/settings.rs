@@ -569,6 +569,9 @@ pub struct AppearanceForm {
     /// LC-194: "comfortable" / "compact".
     #[serde(default)]
     pub density: String,
+    /// LC-569: "compact" / "default" / "large" / "xl".
+    #[serde(default)]
+    pub scale: String,
     /// LC-541: "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy" / "amethyst".
     #[serde(default)]
     pub palette: String,
@@ -600,6 +603,11 @@ pub async fn post_appearance(
     db::auth::set_user_theme_mode(&state.auth, &user.id, Some(theme)).await?;
     db::auth::set_user_density(&state.auth, &user.id, Some(density)).await?;
     db::auth::set_user_theme_palette(&state.auth, &user.id, palette).await?;
+    let scale = match form.scale.trim() {
+        s @ ("compact" | "default" | "large" | "xl") => s,
+        _ => "default",
+    };
+    db::auth::set_user_theme_scale(&state.auth, &user.id, Some(scale)).await?;
     if let Some(r) = hx_feedback(
         &headers,
         crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(
@@ -664,6 +672,33 @@ pub async fn post_palette(
     };
     db::auth::set_user_theme_palette(&state.auth, &user.id, Some(palette)).await?;
     let cookie = format!("lc-palette={palette}; Path=/; Max-Age=31536000; SameSite=Lax");
+    Ok((
+        axum::http::StatusCode::NO_CONTENT,
+        [(axum::http::header::SET_COOKIE, cookie)],
+    )
+        .into_response())
+}
+
+#[derive(serde::Deserialize)]
+pub struct ScaleForm {
+    /// "compact" / "default" / "large" / "xl".
+    #[serde(default)]
+    pub scale: String,
+}
+
+/// LC-569: POST /settings/scale - the appearance picker's UI-scale persist.
+/// Returns 204 + an `lc-scale` cookie so the next navigation has no flash.
+pub async fn post_scale(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<ScaleForm>,
+) -> Result<Response, AppError> {
+    let scale = match form.scale.trim() {
+        s @ ("compact" | "default" | "large" | "xl") => s,
+        _ => "default",
+    };
+    db::auth::set_user_theme_scale(&state.auth, &user.id, Some(scale)).await?;
+    let cookie = format!("lc-scale={scale}; Path=/; Max-Age=31536000; SameSite=Lax");
     Ok((
         axum::http::StatusCode::NO_CONTENT,
         [(axum::http::header::SET_COOKIE, cookie)],

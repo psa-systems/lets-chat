@@ -67,7 +67,7 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
     )
@@ -91,7 +91,7 @@ pub async fn find_user_by_username(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -117,7 +117,7 @@ pub async fn find_user_by_id(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE id = ?",
     )
@@ -169,6 +169,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         locale: r.get("locale"),
         theme_mode: r.get("theme_mode"),
         theme_palette: r.get("theme_palette"),
+        theme_scale: r.get("theme_scale"),
         density: r.get("density"),
         pronouns: r.get("pronouns"),
         profile_links: r.get("profile_links"),
@@ -734,7 +735,7 @@ pub async fn get_user_by_session(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.density, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.density, \
          u.pronouns, u.profile_links, u.timezone \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -803,6 +804,20 @@ pub async fn set_user_theme_palette(
     Ok(())
 }
 
+/// LC-569: set (or clear, with `None`) a user's preferred UI scale.
+pub async fn set_user_theme_scale(
+    pool: &SqlitePool,
+    user_id: &str,
+    scale: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET theme_scale = ? WHERE id = ?")
+        .bind(scale)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE id = ?")
         .bind(lookup_session_id(session_id))
@@ -831,7 +846,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
          pronouns, profile_links, timezone \
          FROM users ORDER BY created_at ASC",
     )
@@ -1355,7 +1370,7 @@ pub async fn search_users(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
          pronouns, profile_links, timezone \
          FROM users \
          WHERE is_banned = 0 \
@@ -1610,7 +1625,7 @@ pub async fn list_blocked_users(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.density, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.density, \
          u.pronouns, u.profile_links, u.timezone \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
