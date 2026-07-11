@@ -962,7 +962,11 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
    shows the sunken background (the Tailwind :hover utility wins). */
 .lc-mentioned {
     box-shadow: inset 3px 0 0 0 var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    /* LC-558: wash tracks the palette's --accent-surface token (was a hard-coded
+       accent 8% mix that ignored the token and read too faint). ~55% keeps it
+       obvious without going radioactive; the 3px bar stays the primary signal,
+       and hover still wins with the sunken background. */
+    background: color-mix(in srgb, var(--accent-surface) 55%, transparent);
 }
 
 /* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
@@ -1964,6 +1968,11 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-body    { font-size: 0.875rem;  font-weight: 400; line-height: 1.5; }
 .lc-small   { font-size: 0.75rem;   font-weight: 400; line-height: 1.45; }
 .lc-caption { font-size: 0.75rem;   font-weight: 400; line-height: 1.35; color: var(--content-muted); }
+/* LC-558: message-header timestamp. Sits next to the (now font-semibold) author
+   name; smaller + one step subtler than .lc-caption so the "who / when" split
+   reads cleanly. tabular-nums keeps HH:MM steady. Separate from .lc-caption,
+   which is shared by other surfaces. */
+.lc-msg-time { font-size: 0.6875rem; font-weight: 400; line-height: 1.35; color: var(--content-subtle); font-variant-numeric: tabular-nums; }
 /* Uppercase muted group label (sidebar section headers, Slack/Discord style). */
 .lc-section-label {
     font-size: 0.6875rem;
@@ -2239,7 +2248,9 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: var(--content-subtle);
+    /* LC-558: content-muted (was content-subtle) so the day label clears WCAG AA
+       on the elevated pill instead of hovering near the floor. */
+    color: var(--content-muted);
 }
 /* Unread-separator variant (server-rendered only): same pill shape, danger-toned. */
 .lc-day-rule-danger {
