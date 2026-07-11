@@ -37,7 +37,9 @@
     </div>
   </header>
   {# LC-460: the thread root, visually marked as the parent the replies hang off. #}
-  <div class="border-b border-border px-3 py-2 bg-surface">
+  {# LC-576: px-2 side gutter (the timeline's px-5 at panel scale) so the row's
+     own rounded card insets instead of running edge to edge. #}
+  <div class="border-b border-border px-2 py-2 bg-surface">
     {% let parent_message = parent %}
     {% let message = parent_message %}
     {% include "room/thread_reply_inner.html" %}
@@ -55,7 +57,7 @@
   </div>
   {% endif %}
   {# LC-460: a left rail nests the replies under the root. #}
-  <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto py-1">
+  <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto px-2 py-1">
     {% for r in replies %}
     {% let message = r %}
     {% include "room/thread_reply_inner.html" %}
@@ -110,7 +112,9 @@
         autocomplete="off"
         autofocus
         placeholder="{{ "room-thread-reply-placeholder"|t }}"
-        class="flex-1 resize-none overflow-y-auto rounded border px-3 py-1.5 text-sm max-h-32"
+        {# LC-576: the same .lc-mdinput the main composer uses, instead of an
+           ad-hoc `rounded border` that never picked up the token surface. #}
+        class="lc-mdinput flex-1 max-h-32"
         oninput="
           /* LC-229: rAF-coalesced auto-resize + cached send button, mirroring
              the main composer. Separate rAF handle so the thread panel and
@@ -140,7 +144,9 @@
       <button
         type="submit"
         disabled
-        class="thread-send rounded bg-accent px-2 py-1.5 text-accent-content hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        {# LC-576: the same .lc-composer-send as the main composer (32px square,
+           rounded-lg, accent fill) instead of a hand-rolled variant. #}
+        class="thread-send lc-composer-send"
         aria-label="{{ "room-thread-send-reply"|t }}"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
