@@ -214,9 +214,12 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
     let user_palette = user.and_then(|u| u.theme_palette.clone());
     // LC-194: density rides the same cross-device mechanism as mode/palette.
     let user_density = user.and_then(|u| u.density.clone());
+    // LC-569: UI scale rides the same mechanism.
+    let user_scale = user.and_then(|u| u.theme_scale.clone());
     let existing_mode = read_cookie(req.headers(), "lc-mode");
     let existing_palette = read_cookie(req.headers(), "lc-palette");
     let existing_density = read_cookie(req.headers(), "lc-density");
+    let existing_scale = read_cookie(req.headers(), "lc-scale");
     let accept = req
         .headers()
         .get(ACCEPT_LANGUAGE)
@@ -265,6 +268,12 @@ pub async fn resolve_locale(req: axum::extract::Request, next: Next) -> Response
         &user_density,
         &existing_density,
         &["comfortable", "compact"],
+    );
+    sync(
+        "lc-scale",
+        &user_scale,
+        &existing_scale,
+        &["compact", "default", "large", "xl"],
     );
     resp
 }

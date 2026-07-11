@@ -61,6 +61,8 @@ pub struct UserRecord {
     /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
     /// "deep-sea"/"royal-navy"/"amethyst"), or NULL = blue-harbor.
     pub theme_palette: Option<String>,
+    /// LC-569: preferred UI scale ("compact"/"default"/"large"/"xl"), or NULL = default.
+    pub theme_scale: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
     pub density: Option<String>,
     /// LC-533: short pronoun string (e.g. "she/her"), or NULL. Capped on write.
@@ -109,6 +111,8 @@ pub struct User {
     /// LC-541: preferred palette ("blue-harbor"/"cobalt"/"ink-ice"/"arctic"/
     /// "deep-sea"/"royal-navy"/"amethyst"), or None = blue-harbor.
     pub theme_palette: Option<String>,
+    /// LC-569: preferred UI scale ("compact"/"default"/"large"/"xl"), or None = default.
+    pub theme_scale: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
     pub density: Option<String>,
     /// LC-533: short pronoun string (e.g. "she/her"), or None.
@@ -140,6 +144,14 @@ impl User {
                 | "amethyst"),
             ) => p,
             _ => "blue-harbor",
+        }
+    }
+
+    /// LC-569: saved UI scale preference, defaulting to "default" when unset.
+    pub fn theme_scale_or_default(&self) -> &str {
+        match self.theme_scale.as_deref() {
+            Some(s @ ("compact" | "default" | "large" | "xl")) => s,
+            _ => "default",
         }
     }
 
@@ -291,6 +303,7 @@ impl From<UserRecord> for User {
             locale: r.locale,
             theme_mode: r.theme_mode,
             theme_palette: r.theme_palette,
+            theme_scale: r.theme_scale,
             density: r.density,
             pronouns: r.pronouns,
             profile_links: r.profile_links,
@@ -408,6 +421,7 @@ mod theme_tests {
             locale: None,
             theme_mode: mode.map(str::to_string),
             theme_palette: palette.map(str::to_string),
+            theme_scale: None,
             density: None,
             pronouns: None,
             profile_links: None,

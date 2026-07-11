@@ -39,6 +39,11 @@ settings-density = Density
 density-comfortable = Comfortable
 density-compact = Compact
 # LC-327: message text size (device-local reading scale)
+settings-scale = Scaling
+scale-compact = Compact
+scale-default = Default
+scale-large = Large
+scale-xl = Extra large
 settings-textsize = Text size
 textsize-small = Small
 textsize-normal = Normal
