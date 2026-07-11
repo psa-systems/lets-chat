@@ -98,12 +98,11 @@
       {% endif %}{% endif %}
     </div>
   </div>
-  <div class="px-4 pb-3">
-    <div id="sidebar-self" class="flex items-center gap-2">
-      {% include "partials/sidebar_self.html" %}
-    </div>
-    <div id="status-picker" class="mt-2"></div>
-  </div>
+  {# LC-576: the identity block (avatar / display name / @handle / status) used to
+     sit here, above the nav. The prototype has no such block in the sidebar: the
+     avatar in the rail IS the profile control. It moved to the rail foot
+     (partials/enclave_switcher.html) along with the #status-picker slot the
+     account menu targets - keeping both would have been the same control twice. #}
   <script>
   (function(){
     // LC-369: segmented search-tab switcher. One document-level delegated

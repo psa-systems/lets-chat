@@ -2050,12 +2050,55 @@ math {
     color: var(--rail-content);
 }
 .lc-rail-util svg { height: 1.125rem; width: 1.125rem; }
-.lc-rail-avatar {
-    display: grid;
-    place-items: center;
+/* LC-576: the profile control in the rail foot. partials/sidebar_self.html is
+   reused verbatim (so the account menu + the own_profile_live OOB swap keep
+   working); these rules collapse its trigger to the avatar alone and fly the
+   popovers out to the RIGHT of the 64px rail, where they have room. */
+.lc-rail-self {
     flex: none;
     margin-bottom: 0.25rem;
+}
+/* Trigger: avatar only - drop the name / @handle / status text column and the
+   chevron. Target the TEXT column (span.min-w-0) explicitly: avatar.html's own
+   root is `<span class="relative inline-block shrink-0">`, which carries no
+   `rounded-full`, so a negative selector like :not([class*="rounded-full"])
+   matches the AVATAR and hides it - which is exactly what it did. */
+.lc-rail-self #own-avatar-wrapper {
+    width: auto;
+    padding: 0.125rem;
+    gap: 0;
     border-radius: 9999px;
+}
+.lc-rail-self #own-avatar-wrapper > span.min-w-0,
+.lc-rail-self [data-lc-account-chevron] {
+    display: none;
+}
+.lc-rail-self #own-avatar-wrapper:hover { background-color: var(--rail-tile); }
+/* Menu: out to the right, anchored to the rail foot rather than below the
+   trigger (there is no room below - it is the last thing in the rail). */
+.lc-rail-self #lc-account-menu {
+    left: calc(100% + 0.5rem);
+    right: auto;
+    top: auto;
+    bottom: 0;
+    margin-top: 0;
+    width: 15rem;
+}
+/* The status picker swaps in here; same fly-out treatment. */
+.lc-rail-statuspicker {
+    position: relative;
+    flex: none;
+}
+.lc-rail-statuspicker:not(:empty) > * {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    bottom: 0;
+    z-index: 50;
+    width: 15rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
 }
 
 /* LC-270: collapse the room sidebar to the enclave rail on desktop. The wide
@@ -2287,6 +2330,37 @@ html[data-lc-details="collapsed"] [data-lc-details-chevron] {
 }
 .lc-rail-tile.lc-rail-active::before {
     height: 2.25rem;
+}
+
+
+
+/* LC-576: the enclave stack is the rail's only scroll region, so the foot
+   utilities (settings / shortcuts / avatar) stay pinned and reachable no matter
+   how many enclaves the user is in. flex:1 + min-height:0 is what lets it
+   actually shrink inside the flex column rather than overflowing it. */
+.lc-rail-scroll {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+}
+
+/* LC-576: the Let's Chat brand mark at the head of the rail (prototype .rail-logo).
+   An accent-filled tile, so it reads as the product's own mark and not as another
+   enclave in the stack below it. */
+.lc-rail-brand {
+    display: grid;
+    place-items: center;
+    flex: none;
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 0.75rem;
+    background-color: var(--accent);
+    color: var(--accent-content);
 }
 
 /* LC-576: the rail's discover/create `+` - a bare action glyph with no tile fill,
