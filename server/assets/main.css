@@ -2370,16 +2370,30 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    the room-header action cluster are fixed-width dense single lines (up to ~10
    icon buttons + the textarea / the room title), so forcing 44px WIDTH there
    overflows a ~360px viewport; those get height only. Full 44x44 on those dense
-   rows needs a mobile reflow (wrap / overflow menu / hide-secondary), tracked
-   as follow-up. 44px tall x >=28px wide still clears the 24px WCAG 2.5.8 AA
-   floor on both axes. */
+   rows needs a mobile reflow (wrap / overflow menu / hide-secondary). LC-573
+   decision: keep those dense rows height-only - they clear the 24px WCAG 2.5.8
+   AA floor on both axes (44px tall x >=28px wide), and full 44px WIDTH (AAA
+   2.5.5) is not pursued because the reflow would harm the primary typing UX.
+   The call bar is the exception below: it is a dedicated control strip whose
+   inner cluster scrolls horizontally on mobile (the outer .lc-callbar wraps),
+   so a 44px min-WIDTH there cannot overflow the page - it gets a true 44x44. */
 @media (pointer: coarse) {
     .lc-set-tab,
     .lc-header-action,
     .lc-fmt-btn,
     .lc-composer-btn,
-    .lc-composer-send {
+    .lc-composer-send,
+    .lc-cbtn {
         min-height: 44px;
+    }
+    /* LC-573: call-control buttons (.lc-cbtn) were omitted from the height rule
+       in PR #535. They also collapse to icon-only on a narrow bar (@container
+       lc-callbar), so add min-width for a true 44x44; justify-content centres
+       the icon in the widened box. Safe because .lc-callbar-controls scrolls
+       horizontally rather than forcing page overflow. */
+    .lc-cbtn {
+        min-width: 44px;
+        justify-content: center;
     }
 }
 
