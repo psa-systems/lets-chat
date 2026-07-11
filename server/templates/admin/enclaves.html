@@ -2,8 +2,9 @@
 
 {% block title %}{{ "admin-enclaves-title"|t }} - Admin - Let's Chat{% endblock %}
 
+{% block admin_header_desc %}<p class="lc-admin-desc">{{ "admin-enclaves-intro"|t }}</p>{% endblock %}
+
 {% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">{{ "admin-enclaves-intro"|t }}</p>
 
 {% if enclaves.is_empty() %}
 {% let empty_text_key = "admin-enclaves-empty" %}

@@ -2,28 +2,31 @@
 
 {% block title %}{{ "admin-analytics-title"|t }} - Admin - Let's Chat{% endblock %}
 
+{# LC-572: date range + recompute moved into the shared header's filter slot
+   (.lc-toolbar). The page-title is rendered once by the admin shell, so the
+   old in-body <h1> is dropped. Inactive pills go ghost (no fill) so they read
+   correctly on the toolbar's sunken background; the active pill keeps accent. #}
+{% block admin_header_filters %}
+<div class="lc-toolbar">
+  <nav class="flex gap-1 text-sm" aria-label="{{ "admin-analytics-date-range"|t }}">
+    <a href="/admin/analytics?days=7"
+       class="px-2 py-1 rounded {% if range_days == 7 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">7d</a>
+    <a href="/admin/analytics?days=30"
+       class="px-2 py-1 rounded {% if range_days == 30 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">30d</a>
+    <a href="/admin/analytics?days=90"
+       class="px-2 py-1 rounded {% if range_days == 90 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">90d</a>
+  </nav>
+  <form method="post" action="/admin/analytics/recompute" class="ml-auto">
+    <input type="hidden" name="days" value="{{ range_days }}">
+    <button type="submit"
+            class="text-sm rounded px-3 py-1 text-content-muted hover:text-content"
+            title="{{ "admin-analytics-recompute-title-prefix"|t }} ({{ today }})">{{ "admin-analytics-recompute"|t }}</button>
+  </form>
+</div>
+{% endblock %}
+
 {% block admin_main %}
 <div class="max-w-5xl space-y-6">
-  <div class="flex items-center justify-between gap-3 flex-wrap">
-    <h1 class="text-xl font-semibold">{{ "admin-analytics-heading"|t }}</h1>
-    <div class="flex items-center gap-3">
-      <nav class="flex gap-1 text-sm" aria-label="{{ "admin-analytics-date-range"|t }}">
-        <a href="/admin/analytics?days=7"
-           class="px-2 py-1 rounded {% if range_days == 7 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">7d</a>
-        <a href="/admin/analytics?days=30"
-           class="px-2 py-1 rounded {% if range_days == 30 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">30d</a>
-        <a href="/admin/analytics?days=90"
-           class="px-2 py-1 rounded {% if range_days == 90 %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface-sunken text-content-muted{% endif %}">90d</a>
-      </nav>
-      <form method="post" action="/admin/analytics/recompute">
-        <input type="hidden" name="days" value="{{ range_days }}">
-        <button type="submit"
-                class="text-sm bg-surface-sunken hover:bg-surface-sunken rounded px-3 py-1"
-                title="{{ "admin-analytics-recompute-title-prefix"|t }} ({{ today }})">{{ "admin-analytics-recompute"|t }}</button>
-      </form>
-    </div>
-  </div>
-
   <p class="text-xs text-content-muted">{{ "admin-analytics-counts-note"|t }}</p>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

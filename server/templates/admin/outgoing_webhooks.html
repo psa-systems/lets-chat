@@ -2,13 +2,16 @@
 
 {% block title %}{{ "admin-webhooks-title"|t }} - Admin - Let's Chat{% endblock %}
 
-{% block admin_main %}
-<p class="mb-4 text-sm text-content-muted">
+{% block admin_header_desc %}
+<p class="lc-admin-desc">
   {{ "admin-webhooks-intro-1"|t }} <code>POST</code> {{ "admin-webhooks-intro-2"|t }}
   <code>{"version":"1","event":"...","room_id":N,"data":{...}}</code> {{ "admin-webhooks-intro-3"|t }}
   <code>X-LetsChat-Signature: sha256=&lt;hmac&gt;</code> {{ "admin-webhooks-intro-4"|t }}
   <code>X-LetsChat-Timestamp</code>. {{ "admin-webhooks-intro-5"|t }}
 </p>
+{% endblock %}
+
+{% block admin_main %}
 
 {% if let Some(err) = error %}
 <div class="mb-4 alert alert-danger" role="alert">{{ err }}</div>
