@@ -3,7 +3,7 @@
    this is the always-visible glance summary). Rendered inline as part of
    RoomPage - `room`, `mute_mode`, `member_count`, `has_pinned` are all
    RoomPage fields already in scope via {% include %}. #}
-<aside id="details-panel" class="w-72 shrink-0 border-l border-border bg-surface-elevated overflow-y-auto">
+<div id="details-panel" class="lc-panel">
   <header class="border-b border-border px-3 py-2">
     <h2 class="font-semibold">{{ "room-details-title"|t }}</h2>
   </header>
@@ -63,4 +63,4 @@
     </form>
   </div>
   {% endif %}
-</aside>
+</div>

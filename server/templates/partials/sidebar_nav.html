@@ -156,9 +156,18 @@
       </div>
     </section>
     {% endif %}
+    {# LC-576: the create-category form used to sit permanently open at the foot of
+       the room list - a text input and an Add button taking a whole block of the
+       sidebar, for an occasional manager-only action the prototype has no
+       equivalent of. It is now a collapsed disclosure: one quiet line that opens
+       the same form on click. Native <details>, so no JS, and the form and its
+       hx-wiring are unchanged. #}
     {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
-    <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2 border-t border-border">
-      <input type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required class="flex-1 min-w-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
-      <button type="submit" class="shrink-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">+ {{ "sidebar-category-add"|t }}</button>
-    </form>
+    <details class="lc-sb-newcat">
+      <summary class="lc-section-label">+ {{ "sidebar-category-add"|t }}</summary>
+      <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="flex gap-1 px-2 pt-2">
+        <input type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required class="flex-1 min-w-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+        <button type="submit" class="shrink-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">+ {{ "sidebar-category-add"|t }}</button>
+      </form>
+    </details>
     {% endif %}{% endif %}

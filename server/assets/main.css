@@ -1858,6 +1858,33 @@ math {
     color: var(--sidebar-muted);
 }
 
+/* LC-576: the right column (prototype .rightcol) - ONE rail that owns the single
+   border and the scroll, holding the thread / history / details panels as
+   subcards (.lc-panel, prototype .panel: 14px margin, 12px radius, elevated on
+   the column's plain surface). Previously each panel was its own full-bleed
+   aside with its own border-l, so an open thread read as a second rail bolted
+   onto the details rail instead of one rail of cards. */
+.lc-rightcol {
+    width: 22.5rem;
+    flex: 0 0 22.5rem;
+    border-left: 1px solid var(--border);
+    background-color: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.lc-panel {
+    margin: 0.875rem;
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--surface-elevated);
+    overflow: hidden;
+}
+/* The thread panel scrolls its own replies list, so it must be able to shrink
+   inside the column rather than growing the column's scroll height forever. */
+.lc-rightcol > .lc-panel.flex { min-height: 0; max-height: calc(100vh - 8rem); }
+
 /* LC-576: sidebar head - product title + collapse chevron, matching the
    prototype's .sb-head / .sb-title (16px 16px 10px, 18px/700). */
 .lc-sidebar-head {
@@ -1981,26 +2008,55 @@ math {
 .lc-sidebar-foot {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.625rem;
     flex: none;
-    padding: 0.5rem 0.75rem;
+    padding: 0.75rem 1rem;
     border-top: 1px solid var(--border);
-}
-.lc-sidebar-foot-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 2rem;
-    width: 2rem;
-    border-radius: 0.375rem;
     color: var(--content-muted);
+    font-size: 0.875rem;
     cursor: pointer;
 }
-.lc-sidebar-foot-btn:hover {
-    background-color: var(--surface-elevated);
-    color: var(--content);
+.lc-sidebar-foot:hover { color: var(--content); }
+.lc-sidebar-foot svg { height: 1.125rem; width: 1.125rem; flex: none; }
+
+
+/* LC-576: collapsed create-category disclosure at the foot of the room list. */
+.lc-sb-newcat {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.5rem 0;
+    border-top: 1px solid var(--border);
 }
-.lc-sidebar-foot-btn svg { height: 1.125rem; width: 1.125rem; }
+.lc-sb-newcat > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.125rem 0;
+}
+.lc-sb-newcat > summary::-webkit-details-marker { display: none; }
+.lc-sb-newcat > summary:hover { color: var(--content); }
+
+/* LC-576: rail utilities at the foot (prototype: gear, help, avatar stacked). */
+.lc-rail-util {
+    display: grid;
+    place-items: center;
+    height: 2.25rem;
+    width: 2.25rem;
+    flex: none;
+    border-radius: 0.625rem;
+    color: var(--rail-content-muted);
+    cursor: pointer;
+}
+.lc-rail-util:hover {
+    background-color: var(--rail-tile);
+    color: var(--rail-content);
+}
+.lc-rail-util svg { height: 1.125rem; width: 1.125rem; }
+.lc-rail-avatar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    margin-bottom: 0.25rem;
+    border-radius: 9999px;
+}
 
 /* LC-270: collapse the room sidebar to the enclave rail on desktop. The wide
    #sidebar hides; the w-16 enclave switcher stays as the rail. Desktop only:
@@ -2204,10 +2260,13 @@ html[data-lc-details="collapsed"] [data-lc-details-chevron] {
     background-color: var(--rail-tile-hover);
     border-radius: 1.375rem;
 }
+/* LC-576: the active tile RECOLORS but keeps its rounded-square shape - it used
+   to also morph to a circle, so selecting an enclave changed its silhouette. The
+   circle is a hover affordance only (see :hover above), which still applies to
+   the active tile on hover. */
 .lc-rail-tile.lc-rail-active {
     background-color: var(--accent);
     color: var(--accent-content);
-    border-radius: 1.375rem;
 }
 /* Left indicator pill (Discord pattern). Sits in the rail gutter to the left of
    the tile: 0 height at rest, a short stub on hover, tallest when active. */
@@ -2229,6 +2288,20 @@ html[data-lc-details="collapsed"] [data-lc-details-chevron] {
 .lc-rail-tile.lc-rail-active::before {
     height: 2.25rem;
 }
+
+/* LC-576: the rail's discover/create `+` - a bare action glyph with no tile fill,
+   so it does not read as another enclave in the stack. */
+.lc-rail-add {
+    flex: none;
+    color: var(--rail-content-muted);
+    border-radius: 0.95rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.lc-rail-add:hover {
+    color: var(--rail-content);
+    background-color: var(--rail-tile);
+}
+
 /* Settings gear on the active enclave tile + the collapse chevron: muted rail
    icons that brighten on hover. */
 .lc-rail-gear {

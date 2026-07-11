@@ -44,11 +44,18 @@
     </div>
     {% endif %}
   </div>
-  <aside id="thread-panel" class="hidden"></aside>
-  <aside id="history-panel" class="hidden"></aside>
-  {# LC-568: persistent Details summary, mounted below/after the toggled
-     thread and history panels in the right column. #}
-  {% include "room/details_panel.html" %}
+  {# LC-576: ONE right column (prototype .rightcol) holding the thread, history
+     and details panels as subcards, instead of three independent full-bleed
+     asides each drawing its own border-l - which made them read as separate
+     rails stacked side by side rather than one rail of cards. The column owns
+     the single border and the scroll; the panels inside are .lc-panel cards. #}
+  <aside id="rightcol" class="lc-rightcol">
+    <div id="thread-panel" class="hidden"></div>
+    <div id="history-panel" class="hidden"></div>
+    {# LC-568: persistent Details summary, mounted below the toggled thread and
+       history panels in the right column. #}
+    {% include "room/details_panel.html" %}
+  </aside>
 </div>
 {# LC-156: WS room subscription is handled declaratively by live.js via the
    data-lc-live-room attribute on the page root above. #}
