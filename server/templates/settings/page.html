@@ -274,6 +274,19 @@
                 <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
               </select>
             </div>
+            {# LC-569: UI scaling. Scales the whole interface (root rem), persisted
+               server-side like mode/palette so it follows the account across devices.
+               Distinct from the device-local message text size below. #}
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-scale">{{ "settings-scale"|t }}</label>
+              <select id="lc-scale" class="input" name="scale" aria-label="{{ "settings-scale"|t }}"
+                      onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})">
+                <option value="compact"{% if user.theme_scale_or_default() == "compact" %} selected{% endif %}>{{ "scale-compact"|t }}</option>
+                <option value="default"{% if user.theme_scale_or_default() == "default" %} selected{% endif %}>{{ "scale-default"|t }}</option>
+                <option value="large"{% if user.theme_scale_or_default() == "large" %} selected{% endif %}>{{ "scale-large"|t }}</option>
+                <option value="xl"{% if user.theme_scale_or_default() == "xl" %} selected{% endif %}>{{ "scale-xl"|t }}</option>
+              </select>
+            </div>
             {# LC-327: device-local text size (localStorage), not submitted. #}
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>

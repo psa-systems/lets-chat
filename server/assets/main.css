@@ -216,7 +216,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        readable against the dim blue-900 surface (text-accent on dark
        accent-surface fails WCAG AA). */
     --accent-surface:           #dbeafe; /* blue-100 */
-    --accent-surface-content:   var(--accent);
+    --accent-surface-content:   #1d4ed8;
     /* Semantic state colors (each with a readable foreground) */
     --success:          #16a34a;
     --success-content:  #ffffff;
@@ -370,7 +370,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        #071a2f page (same posture as the rail above) so it still reads as
        distinct chrome; text ramp matches the page. */
     --sidebar-surface:     #041326; /* one step darker than the navy page */
-    --sidebar-elevated:    #071a2f; /* raised / hover rows */
+    --sidebar-elevated:    #16283b; /* raised / hover rows */
     --sidebar-sunken:      #020c18; /* search field, inset */
     --sidebar-content:     #eaf4ff;
     --sidebar-muted:       #9fb6d0;
@@ -543,7 +543,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* Cobalt */
 [data-theme="cobalt"] {
   --surface:#f5f9ff; --surface-elevated:#ffffff; --surface-sunken:#eaf3ff;
-  --content:#08111f; --content-muted:#53657c; --content-subtle:#8494aa;
+  --content:#08111f; --content-muted:#53657c; --content-subtle:#7f8ea3;
   --border:#d4e3f7; --border-strong:#aec8eb;
   --accent:#0f62fe; --accent-hover:#0043ce; --accent-content:#ffffff;
   --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#4589ff;
@@ -589,11 +589,11 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* Ink + Ice */
 [data-theme="ink-ice"] {
   --surface:#f8fbfd; --surface-elevated:#ffffff; --surface-sunken:#eef5fa;
-  --content:#0b1623; --content-muted:#586879; --content-subtle:#8997a7;
+  --content:#0b1623; --content-muted:#586879; --content-subtle:#8491a0;
   --border:#dce7ef; --border-strong:#bfccd8;
   --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
-  --sidebar-surface:#07111f; --sidebar-elevated:#0d1b2d; --sidebar-sunken:#030914;
+  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-sunken:#030914;
   --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
   --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#1e3a8a;
   --rail-content:#ffffff; --rail-content-muted:#9aaec4;
@@ -604,7 +604,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#1b334f; --border-strong:#2b4d72;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
   --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#60a5fa;
-  --sidebar-surface:#07111f; --sidebar-elevated:#0d1b2d; --sidebar-sunken:#030914;
+  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-sunken:#030914;
   --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
   --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#93c5fd;
   --rail-content:#ffffff; --rail-content-muted:#9aaec4;
@@ -635,8 +635,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* Arctic Messenger */
 [data-theme="arctic"] {
   --surface:#fbfdff; --surface-elevated:#ffffff; --surface-sunken:#f0f7ff;
-  --content:#0f172a; --content-muted:#5f7288; --content-subtle:#92a3b5;
-  --border:#e1edf8; --border-strong:#c4d7eb;
+  --content:#0f172a; --content-muted:#5f7288; --content-subtle:#8493a4;
+  --border:#d8e4ee; --border-strong:#c4d7eb;
   --accent:#0369a1; --accent-hover:#075985; --accent-content:#ffffff;
   --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#0ea5e9;
   --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
@@ -681,7 +681,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* Deep Sea Cyan */
 [data-theme="deep-sea"] {
   --surface:#f5fcff; --surface-elevated:#ffffff; --surface-sunken:#e8f7fb;
-  --content:#071b24; --content-muted:#56707a; --content-subtle:#8aa0a9;
+  --content:#071b24; --content-muted:#56707a; --content-subtle:#7f949c;
   --border:#d3eaf0; --border-strong:#afd1dc;
   --accent:#0e7490; --accent-hover:#155e75; --accent-content:#ffffff;
   --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#06b6d4;
@@ -727,7 +727,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
 /* Royal Navy */
 [data-theme="royal-navy"] {
   --surface:#f6f8ff; --surface-elevated:#ffffff; --surface-sunken:#edf2ff;
-  --content:#0b1026; --content-muted:#5c6680; --content-subtle:#8b94ad;
+  --content:#0b1026; --content-muted:#5c6680; --content-subtle:#858ea6;
   --border:#dae2f5; --border-strong:#bbc8e5;
   --accent:#1d4ed8; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
@@ -779,7 +779,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#e6ddf7; --border-strong:#cebfec;
   --accent:#7c3aed; --accent-hover:#6d28d9; --accent-content:#ffffff;
   --accent-surface:#ede4ff; --accent-surface-content:#6d28d9; --ring:#8b5cf6;
-  --sidebar-surface:#1a1030; --sidebar-elevated:#241640; --sidebar-sunken:#120a22;
+  --sidebar-surface:#1a1030; --sidebar-elevated:#2b1d46; --sidebar-sunken:#120a22;
   --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
   --rail-surface:#120a22; --rail-tile:#241640; --rail-tile-hover:#6d28d9;
   --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
@@ -790,7 +790,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#33245a; --border-strong:#4a3680;
   --accent:#a78bfa; --accent-hover:#c4b5fd; --accent-content:#120a22;
   --accent-surface:#3a2a6b; --accent-surface-content:#ede4ff; --ring:#c4b5fd;
-  --sidebar-surface:#120a22; --sidebar-elevated:#241640; --sidebar-sunken:#0d0719;
+  --sidebar-surface:#120a22; --sidebar-elevated:#2b1d46; --sidebar-sunken:#0d0719;
   --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
   --rail-surface:#0d0719; --rail-tile:#241640; --rail-tile-hover:#c4b5fd;
   --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
@@ -847,22 +847,41 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     height: 100dvh;
 }
 
+/* LC-569: UI scaling. The whole app is rem-based (Tailwind utilities + the .lc-*
+   layer), so scaling the root font-size scales type AND spacing together, which
+   is what the "Scaling" appearance setting does. Stamped on <html> before paint
+   by the base.html bootstrap (data-scale), so there is no flash. */
+html[data-scale="compact"] { font-size: 14.5px; }
+html[data-scale="default"] { font-size: 16px; }
+html[data-scale="large"]   { font-size: 18px; }
+html[data-scale="xl"]      { font-size: 20px; }
+
+/* Thin, button-less, thumb-only scrollbars that appear on hover of the scroll
+   area. Neutral translucent grey so they read on any palette + mode. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: rgba(128,128,128,.42) transparent; }
+
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 11px;
+    height: 11px;
 }
 
 ::-webkit-scrollbar-track {
     background: transparent;
 }
 
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; } /* no up/down triangles */
+::-webkit-scrollbar-corner { background: transparent; }
+
 ::-webkit-scrollbar-thumb {
-    background: #d1d5db;
-    border-radius: 3px;
+    background: transparent;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
-}
+:hover::-webkit-scrollbar-thumb { background: rgba(128,128,128,.42); background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,.68); background-clip: content-box; }
 
 /* Message body rendered as markdown.
  *
@@ -1842,13 +1861,10 @@ math {
     background-color: var(--sidebar-surface);
     color: var(--sidebar-content);
 }
-/* The global .lc-room-row-active colors its label with --accent (brand blue),
-   which is too dark on the raised navy; flip it to the light sidebar content so
-   the active room label stays readable. The accent left-bar (box-shadow on the
-   base rule) is kept, so the brand-blue active indicator still reads. */
-.lc-sidebar .lc-room-row-active {
-    color: var(--sidebar-content);
-}
+/* LC-569: the active row is now a solid --accent fill, so its label takes
+   --accent-content (which is not remapped inside .lc-sidebar) and reads on the
+   accent. The old override forced --sidebar-content for the accent-text-on-navy
+   treatment that the solid fill replaces. */
 /* The search input has no explicit placeholder color; default browser placeholder
    is too faint on navy, so pin it to the muted sidebar token. */
 .lc-sidebar input::placeholder {
@@ -2017,6 +2033,9 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    itself (not the scrolling tile column) as its visual anchor. */
 #switcher {
     background-color: var(--rail-surface);
+    /* Seam so the rail reads as distinct chrome from the sidebar even when both
+       are near-black (every dark/hc state, identical #000 in hc). LC contrast fix. */
+    border-right: 1px solid var(--sidebar-border);
 }
 .lc-rail-tile {
     position: relative;
@@ -2173,8 +2192,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 1.5rem;
-    width: 1.5rem;
+    height: 1.625rem;
+    width: 1.75rem;
     border-radius: 0.375rem;
     color: var(--content-muted);
     cursor: pointer;
@@ -2208,7 +2227,7 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-followup-ts {
     position: absolute;
     left: 0;
-    width: 3rem;
+    width: 3.75rem;
     padding-right: 0.5rem;
     text-align: right;
     font-size: 0.625rem;
@@ -2231,13 +2250,15 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 0;
 }
 .lc-day-rule {
     flex: 1 1 0%;
     height: 1px;
     background-color: var(--border);
 }
+/* LC-569: the day divider is bare text between hairlines (no bordered pill,
+   no uppercase), matching the comps and the prototype. */
 .lc-day-chip {
     flex: none;
     border-radius: 9999px;
@@ -2252,14 +2273,21 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
        on the elevated pill instead of hovering near the floor. */
     color: var(--content-muted);
 }
-/* Unread-separator variant (server-rendered only): same pill shape, danger-toned. */
+/* LC-569: the unread separator is the ACCENT "new messages" divider, not a
+   danger-red pill: accent text between accent hairlines. */
 .lc-day-rule-danger {
-    background-color: var(--danger-border);
+    background-color: var(--accent);
+    opacity: 0.5;
 }
 .lc-day-chip-danger {
-    border-color: var(--danger-border);
-    background-color: var(--danger-surface);
-    color: var(--danger);
+    border: none;
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--accent);
 }
 
 /* LC-434: call/system events - a centered, muted timeline row distinct from
@@ -2531,11 +2559,33 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    active state. The inset shadow bar follows the rounded corners and shifts no
    layout. Paired in the row templates with a bold-unread / muted-room treatment
    driven by per-row conditionals. */
+/* LC-569: the active room row is a SOLID accent fill with accent-content text
+   (this is what the comps and the prototype show), not a raised tint with accent
+   text plus a left bar. The unread pill inverts on it so it stays legible. */
 .lc-room-row-active {
-    background-color: var(--surface-elevated);
-    color: var(--accent);
+    background-color: var(--accent);
+    color: var(--accent-content);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 0 var(--accent);
+}
+.lc-room-row-active .lc-count-pill {
+    background-color: var(--accent-content);
+    color: var(--accent);
+}
+
+/* LC-569: unread count pill. Neutral at rest (inside .lc-sidebar the surface
+   tokens resolve to the sidebar ramp), accent only via the active row above. */
+.lc-count-pill {
+    margin-left: auto;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    display: inline-grid;
+    place-items: center;
 }
 
 /* LC-371: device-local collapsible sidebar groups (Starred / Channels / DMs).
@@ -3971,3 +4021,17 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-swatch::-webkit-color-swatch-wrapper { padding: 3px; }
 .lc-swatch::-webkit-color-swatch { border: none; border-radius: 0.25rem; }
 .lc-swatch::-moz-color-swatch { border: none; border-radius: 0.25rem; }
+
+/* LC-569: room-info hero badge (matches the prototype's accent-surface hash tile). */
+.lc-info-badge {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 0.875rem;
+    background-color: var(--accent-surface);
+    color: var(--accent-surface-content);
+    font-size: 1.5rem;
+    font-weight: 700;
+}

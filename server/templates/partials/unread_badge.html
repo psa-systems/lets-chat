@@ -1,5 +1,5 @@
 {% if unread > 0 && mute_mode == "none" %}
-<span id="unread-{{ kind }}-{{ id }}" data-lc-unread class="ml-auto text-xs bg-accent text-accent-content rounded px-2">{{ unread }}</span>
+<span id="unread-{{ kind }}-{{ id }}" data-lc-unread class="lc-count-pill">{{ unread }}</span>
 {% else %}
 <span id="unread-{{ kind }}-{{ id }}" data-lc-unread></span>
 {% endif %}
