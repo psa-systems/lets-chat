@@ -90,17 +90,14 @@
 
   /* LC-555: layout helpers for the utility/admin pages. `.lc-toolbar` is a quiet
      inset control strip (filter/action bars); `.lc-action-row` is a wrapping,
-     right-aligned button cluster (card/form footers); `.lc-empty-wrap` centers
-     an empty state within a card or section. */
+     right-aligned button cluster (card/form footers). Empty states use the
+     shipped `.lc-empty` (main.css) via `partials/empty_state.html`. */
   .lc-toolbar {
     @apply flex flex-wrap items-center gap-1.5 rounded-md border border-border
            bg-surface-sunken px-2 py-1.5;
   }
   .lc-action-row {
     @apply flex flex-wrap items-center justify-end gap-2 pt-1;
-  }
-  .lc-empty-wrap {
-    @apply flex flex-col items-center justify-center gap-3 px-4 py-10 text-center;
   }
 
   /* LC-562: page-width + layout normalization. Older utility pages pick
