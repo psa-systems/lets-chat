@@ -44,6 +44,11 @@ scale-compact = Compact
 scale-default = Default
 scale-large = Large
 scale-xl = Extra large
+# LC-575: "Open on" landing preference
+settings-home-landing = Open on
+settings-home-landing-help = Where you land after signing in.
+home-landing-last-room = Last room
+home-landing-home = Home dashboard
 settings-textsize = Text size
 textsize-small = Small
 textsize-normal = Normal

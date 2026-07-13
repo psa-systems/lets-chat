@@ -287,6 +287,18 @@
                 <option value="xl"{% if user.theme_scale_or_default() == "xl" %} selected{% endif %}>{{ "scale-xl"|t }}</option>
               </select>
             </div>
+            {# LC-575: "Open on" landing preference. Submitted with the appearance
+               form (server-persisted); chooses whether logging in drops you into
+               your last room or onto the Home dashboard. Default "last-room"
+               keeps today's behavior for everyone who never touches it. #}
+            <div class="lc-set-field lc-set-field--narrow">
+              <label class="lc-set-label" for="lc-home-landing">{{ "settings-home-landing"|t }}</label>
+              <select id="lc-home-landing" class="input" name="home_landing" aria-label="{{ "settings-home-landing"|t }}">
+                <option value="last-room"{% if user.home_landing_or_default() == "last-room" %} selected{% endif %}>{{ "home-landing-last-room"|t }}</option>
+                <option value="home"{% if user.home_landing_or_default() == "home" %} selected{% endif %}>{{ "home-landing-home"|t }}</option>
+              </select>
+              <p class="lc-set-help">{{ "settings-home-landing-help"|t }}</p>
+            </div>
             {# LC-327: device-local text size (localStorage), not submitted. #}
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-textsize-select">{{ "settings-textsize"|t }}</label>

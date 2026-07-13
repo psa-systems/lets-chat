@@ -41,4 +41,58 @@ pub struct WelcomePage<'a> {
     /// LC-516: false when the user belongs to no enclaves; drives the inline
     /// "create your first enclave" prompt that replaced the auto-default enclave.
     pub has_enclaves: bool,
+    /// LC-575: when true, render the Home dashboard card grid (the user has at
+    /// least one accessible room or DM). When false the onboarding welcome /
+    /// empty-state renders instead, exactly as before.
+    pub show_dashboard: bool,
+    /// LC-575: dashboard cards. Each is capped server-side; empty slices render
+    /// an "all caught up" state per card. See `routes::home::get_home`.
+    pub catch_up: &'a [CatchUpRow],
+    pub mentions: &'a [MentionRow],
+    pub threads: &'a [ThreadRow],
+    pub dms: &'a [DmRow],
+    pub drafts: &'a [DraftRow],
+}
+
+/// LC-575: one channel-with-unread row on the dashboard "Catch up" card.
+pub struct CatchUpRow {
+    pub room_id: i64,
+    pub name: String,
+    /// One-line preview of the newest unread message.
+    pub preview: String,
+    pub unread: i64,
+}
+
+/// LC-575: one "you were mentioned" summary row (per room) on the Mentions card.
+pub struct MentionRow {
+    pub room_id: i64,
+    pub name: String,
+    pub count: i64,
+}
+
+/// LC-575: one followed-thread row on the Threads card. Links into the room
+/// anchored at the thread's root message (`/room/{room_id}#msg-{parent_id}`).
+pub struct ThreadRow {
+    pub room_id: i64,
+    pub parent_id: i64,
+    pub room_name: String,
+    pub preview: String,
+    pub unread: i64,
+}
+
+/// LC-575: one recent-DM row on the Direct messages card.
+pub struct DmRow {
+    pub peer_id: String,
+    pub label: String,
+    /// First character seeds the initials avatar when `avatar_ext` is None.
+    pub username: String,
+    pub avatar_ext: Option<String>,
+    pub unread: i64,
+}
+
+/// LC-575: one draft row on the Drafts card. `href` already resolves to the
+/// right deep-link (`/dm/{peer}` for DM drafts, `/room/{id}` for channels).
+pub struct DraftRow {
+    pub href: String,
+    pub label: String,
 }

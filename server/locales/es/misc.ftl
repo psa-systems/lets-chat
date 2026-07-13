@@ -18,6 +18,22 @@ home-action-discover-title = Descubrir o crear un enclave
 home-action-discover-desc = Únete a una comunidad o crea la tuya.
 home-action-invitations-title = Ver invitaciones
 home-action-invitations-desc = Mira los enclaves a los que te han invitado.
+# LC-575: tarjetas del panel de inicio (ponerse al día).
+home-dash-heading = Ponte al día
+home-dash-subtitle = Lo que pasó en tu espacio de trabajo desde la última vez que estuviste aquí.
+home-dash-catchup = Canales sin leer
+home-dash-mentions = Menciones
+home-dash-threads = Hilos
+home-dash-dms = Mensajes directos
+home-dash-drafts = Borradores
+home-dash-empty-catchup = No hay canales sin leer. Estás al día.
+home-dash-empty-mentions = No hay menciones sin leer.
+home-dash-empty-threads = No hay hilos seguidos con respuestas nuevas.
+home-dash-empty-dms = No hay mensajes directos sin leer.
+home-dash-empty-drafts = No hay borradores guardados.
+home-dash-unread-aria = sin leer
+home-dash-mentions-aria = menciones
+home-dash-replies-aria = respuestas nuevas
 # LC-516: aviso en línea para crear un enclave cuando el usuario no tiene ninguno.
 home-create-enclave-title = Crea tu primer enclave
 home-create-enclave-desc = Los enclaves son tus espacios para salas y personas.
