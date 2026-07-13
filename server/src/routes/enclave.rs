@@ -31,6 +31,8 @@ fn flash_ok_message(code: Option<&str>) -> Option<String> {
         "updated" => translate_current("enclave-flash-updated"),
         "unbanned" => translate_current("enclave-flash-unbanned"),
         "transferred" => translate_current("enclave-flash-transferred"),
+        // LC-542: inline enclave-icon save.
+        "icon_updated" => translate_current("enclave-flash-icon-updated"),
         _ => return None,
     })
 }
@@ -59,6 +61,8 @@ fn flash_message(code: Option<&str>, name: Option<&str>) -> Option<String> {
         "invalid_invite_code" => Some(
             "That invite code is invalid, revoked, or expired. Double-check it and try again, or browse the public enclaves below.".to_string(),
         ),
+        // LC-542: icon form submitted without a file.
+        "icon" => Some("Choose an image file to set as the enclave icon.".to_string()),
         _ => None,
     }
 }
@@ -158,6 +162,12 @@ pub fn router() -> Router<AppState> {
             get(get_branding)
                 .post(post_branding)
                 .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
+        )
+        // LC-542: inline enclave-icon upload from the settings page (writes the
+        // per-enclave branding logo). Same 2 MiB request cap as branding.
+        .route(
+            "/enclave/{id}/icon",
+            post(post_icon).layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
         )
         .route("/enclave/{id}/edit", post(post_edit))
         .route("/enclave/{id}/transfer", post(post_transfer))
@@ -850,6 +860,12 @@ pub async fn get_settings(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, Some(id)).await?;
+    // LC-542: the inline icon control mirrors the switcher rail, which renders
+    // the resolved (enclave-own or global-fallback) branding logo.
+    let has_icon = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(id))
+        .await?
+        .logo_upload_id
+        .is_some();
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
@@ -859,6 +875,7 @@ pub async fn get_settings(
         groups: &groups,
         emojis: &emojis,
         can_delete,
+        has_icon,
         flash_error: flash_message(flash.error.as_deref(), flash.name.as_deref()).as_deref(),
         flash_ok: flash_ok_message(flash.ok.as_deref()).as_deref(),
         sidebar_categories: &sidebar_categories,
@@ -1550,4 +1567,61 @@ pub async fn post_branding(
     )
     .await?;
     Ok(Redirect::to(&format!("/enclave/{id}/branding?saved=1")).into_response())
+}
+
+/// LC-542: set the enclave icon inline from the settings page. Writes the same
+/// per-enclave branding logo the switcher rail renders, so owners can configure
+/// the icon without discovering the separate branding sub-page. Reuses the
+/// branding multipart parser (size + type validation) and preserves every other
+/// branding field, exactly as `post_branding` does for a logo-only edit.
+pub async fn post_icon(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    multipart: Multipart,
+) -> Result<Response, AppError> {
+    require_manage(&state, &user, id).await?;
+    let form = match super::branding::parse_branding_multipart(&state, &user.id, multipart).await? {
+        Ok(f) => f,
+        // A validation failure (unsupported type / over 1 MiB) carries a
+        // specific message. Re-render the full branding editor with it inline
+        // rather than losing the detail through a redirect flash code.
+        Err(msg) => {
+            return Ok(
+                render_enclave_branding_page(&state, &user, id, false, Some(msg))
+                    .await?
+                    .into_response(),
+            );
+        }
+    };
+    let Some(new_logo_id) = form.new_logo_id else {
+        // No file chosen (the client marks the input required, so this is the
+        // forged/empty-submit path). Bounce back with a generic prompt.
+        return Ok(Redirect::to(&format!("/enclave/{id}/settings?error=icon")).into_response());
+    };
+    // Preserve every other branding field; only the logo changes.
+    let existing = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(id)).await?;
+    db::branding::upsert(
+        &state.chat,
+        db::branding::Scope::Enclave(id),
+        Some(new_logo_id),
+        existing.favicon_upload_id,
+        &existing.primary_color,
+        &existing.accent_color,
+        &existing.login_heading,
+        &existing.login_body,
+        &user.id,
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "branding_set",
+        "",
+        &user.id,
+        None,
+        None,
+        Some(&format!("enclave={id}")),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=icon_updated")).into_response())
 }
