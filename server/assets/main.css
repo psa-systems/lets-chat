@@ -2571,6 +2571,18 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     background-color: var(--accent-content);
     color: var(--accent);
 }
+/* LC-576: descendants that set their own grey via a Tailwind utility (the
+   leading #/speaker glyph, the draft pencil, the DM custom-status line) do not
+   inherit the row's --accent-content, so on the active fill they stay resting
+   grey - visually wrong and a contrast failure. A descendant selector (0,2,0)
+   outranks the bare utility (0,1,0), so resting rows are untouched. Opacity
+   0.75 (matching the prototype) keeps the glyph quieter than the room name
+   without reintroducing a fixed grey. */
+.lc-room-row-active .text-content-subtle,
+.lc-room-row-active .text-content-muted {
+    color: var(--accent-content);
+    opacity: 0.75;
+}
 
 /* LC-569: unread count pill. Neutral at rest (inside .lc-sidebar the surface
    tokens resolve to the sidebar ramp), accent only via the active row above. */
