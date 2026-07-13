@@ -8,12 +8,16 @@
 # Since the LC-22 cutover the server refuses to start unless a Bunyip SSO OP
 # answers discovery + JWKS at boot. This overlay adds a tiny mock OP
 # (dev/mock-oidc.py) and points the four LETS_CHAT_BUNYIP_SSO_* vars at it, so
-# the server boots and unauthenticated debug routes render - most usefully
-# GET /dev/theme-gallery for palette/component screenshots.
+# the server boots without the full bunyip dev-sso stack.
 #
-# The mock CANNOT authenticate a real login, so authed pages (the room view,
-# the Details panel) still need the real bunyip dev-sso stack. NEVER use this
-# overlay outside local dev.
+# LC-577: the mock now implements a real authorization-code flow, so a login
+# COMPLETES and every authenticated page (room view, /settings, the home
+# dashboard, the thread and details panels) renders and is screenshot-verifiable
+# here. It previously could not authenticate at all, which left only
+# GET /dev/theme-gallery and other unauthenticated debug routes reachable.
+#
+# It authenticates one fixed identity with no password and no consent screen.
+# NEVER use this overlay outside local dev.
 services:
 
   app:
@@ -26,11 +30,24 @@ services:
       - mock-oidc
 
   mock-oidc:
-    image: python:3-alpine
+    # LC-577: signing a real EdDSA id_token needs `cryptography`, which has no
+    # prebuilt musl wheel - on alpine it would compile from source on every
+    # boot. `slim` is glibc, so both deps land as wheels in a second or two.
+    image: python:3-slim
     container_name: dev-lets-chat-mock-oidc-${USER}
     restart: "no"
+    # LC-577: the issuer is the compose-internal host `mock-oidc:9000`, which the
+    # app resolves via compose DNS. A browser on the HOST cannot resolve that, and
+    # the browser is what follows the /authorize redirect. Publish the same port on
+    # the host and point the browser's resolver at it:
+    #   chrome --host-resolver-rules="MAP mock-oidc 127.0.0.1"
+    # One issuer string then stays valid for both sides (it must match both the
+    # discovery doc and the id_token `iss`), with no /etc/hosts edit needed.
+    ports:
+      - "127.0.0.1:9000:9000"
     volumes:
       - ./dev/mock-oidc.py:/mock-oidc.py:ro
     command:
-      - python3
-      - /mock-oidc.py
+      - sh
+      - -c
+      - pip install --quiet --root-user-action=ignore "pyjwt[crypto]" && exec python3 /mock-oidc.py
