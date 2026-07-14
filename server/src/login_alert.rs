@@ -32,9 +32,13 @@ pub async fn maybe_alert(state: &AppState, user_id: &str, ip: Option<&str>, ua: 
     if !crate::geoip::is_public_ip(&parsed) {
         return;
     }
-    let Some(country) = geoip.country_code(parsed) else {
+    let Some(resolved) = geoip.resolve(parsed) else {
         return;
     };
+    // `code` (ISO 3166-1 alpha-2) is what we compare + store; `name` is the
+    // human-readable country shown in the alert email.
+    let code = resolved.code;
+    let name = resolved.name;
 
     let last = match db::auth::get_last_login_country(&state.auth, user_id).await {
         Ok(v) => v,
@@ -44,17 +48,18 @@ pub async fn maybe_alert(state: &AppState, user_id: &str, ip: Option<&str>, ua: 
         }
     };
 
-    match crate::geoip::location_decision(last.as_deref(), &country) {
+    match crate::geoip::location_decision(last.as_deref(), &code) {
         LocationDecision::Unchanged => {}
         // First geolocatable login: record the country silently, no alert.
         LocationDecision::Record => {
-            persist_country(state, user_id, &country).await;
+            persist_country(state, user_id, &code).await;
         }
-        // Country changed: email the alert (gated + best-effort), then persist
-        // the new country so a repeat login from it does not re-alert.
+        // Country changed: email the alert with the display name (gated +
+        // best-effort), then persist the ISO code so a repeat login from the
+        // same country does not re-alert.
         LocationDecision::Alert => {
-            send_alert(state, user_id, &country, parsed, ua).await;
-            persist_country(state, user_id, &country).await;
+            send_alert(state, user_id, &name, parsed, ua).await;
+            persist_country(state, user_id, &code).await;
         }
     }
 }
@@ -68,7 +73,13 @@ async fn persist_country(state: &AppState, user_id: &str, country: &str) {
 /// Render + send the new-login-location email, gated exactly like the other
 /// transactional notifications (recipient present + verified + opted in +
 /// mailer configured). Any failure is logged, never propagated.
-async fn send_alert(state: &AppState, user_id: &str, country: &str, ip: IpAddr, ua: Option<&str>) {
+async fn send_alert(
+    state: &AppState,
+    user_id: &str,
+    country_name: &str,
+    ip: IpAddr,
+    ua: Option<&str>,
+) {
     let user = match db::auth::find_user_by_id(&state.auth, user_id).await {
         Ok(Some(u)) => u,
         _ => return,
@@ -101,7 +112,7 @@ async fn send_alert(state: &AppState, user_id: &str, country: &str, ip: IpAddr, 
 
     let text = LoginAlertText {
         username: &user.username,
-        country,
+        country: country_name,
         device_label,
         ip: &ip_str,
         when: &when,
@@ -110,7 +121,7 @@ async fn send_alert(state: &AppState, user_id: &str, country: &str, ip: IpAddr, 
     };
     let html = LoginAlertHtml {
         username: &user.username,
-        country,
+        country: country_name,
         device_label,
         ip: &ip_str,
         when: &when,
