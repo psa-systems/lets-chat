@@ -1149,6 +1149,38 @@ pub async fn set_notify_login_alerts_enabled(
     Ok(())
 }
 
+/// LC-580: the ISO 3166-1 alpha-2 country the user last logged in from, or
+/// `None` until the first geolocatable login. Compared at the SSO callback to
+/// detect a significant location change.
+pub async fn get_last_login_country(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<Option<String>> =
+        sqlx::query_scalar("SELECT last_login_country FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.flatten())
+}
+
+/// LC-580: record the ISO 3166-1 alpha-2 country of the user's most recent
+/// geolocatable login, for the next login's change comparison.
+pub async fn set_last_login_country(
+    pool: &SqlitePool,
+    user_id: &str,
+    country: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET last_login_country = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(country)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// LC-88: persist a user's DND schedule. `schedule_json` is `None` to clear
 /// the schedule (no quiet hours). The caller is responsible for validating
 /// the JSON shape before storing.

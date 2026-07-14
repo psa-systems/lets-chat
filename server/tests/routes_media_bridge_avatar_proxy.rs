@@ -45,6 +45,7 @@ async fn app() -> TestApp {
     let sess = db::auth::create_session(&auth, &user).await.unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
@@ -184,6 +185,7 @@ async fn ok_row_serves_bytes_with_cache_headers() {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
+        geoip: None,
         auth: auth_pool,
         chat: chat.clone(),
         settings,

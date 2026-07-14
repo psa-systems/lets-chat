@@ -13,6 +13,7 @@ pub mod email_ingress;
 pub mod embeddings;
 pub mod emoji_catalog;
 pub mod error;
+pub mod geoip;
 pub mod gif;
 pub mod http_client;
 pub mod i18n;
@@ -20,6 +21,7 @@ pub mod last_visited;
 pub mod links;
 pub mod livekit;
 pub mod llm;
+pub mod login_alert;
 pub mod mail;
 pub mod models;
 /// LC-22: "Log in with Bunyip" SSO client.
