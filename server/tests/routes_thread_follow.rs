@@ -60,6 +60,7 @@ async fn setup() -> TestApp {
     let replier_session = db::auth::create_session(&auth, &replier_id).await.unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,

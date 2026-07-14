@@ -42,6 +42,7 @@ async fn app(llm: Option<Arc<dyn lets_chat::llm::LlmClient>>) -> TestApp {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,

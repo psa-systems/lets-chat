@@ -51,6 +51,7 @@ async fn gate_off_returns_404_for_every_hash() {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

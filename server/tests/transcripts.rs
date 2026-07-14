@@ -150,6 +150,7 @@ async fn setup_with_clients(
     let hub = Arc::new(Hub::new());
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat: chat.clone(),
         settings,

@@ -58,6 +58,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
     let auth_for_test = auth.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

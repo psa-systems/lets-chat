@@ -66,6 +66,7 @@ async fn setup() -> Fixture {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

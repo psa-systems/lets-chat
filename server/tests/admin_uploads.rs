@@ -45,6 +45,7 @@ async fn make_app(username: &str, role: &str) -> (Router, String, SqlitePool) {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat: chat.clone(),
         settings,
