@@ -53,6 +53,11 @@ pub struct AppState {
     /// `None` disables outbound mail; password reset routes return 404
     /// and the digest tick short-circuits.
     pub mailer: Option<Mailer>,
+    /// LC-580: IP -> country resolver for login-location alerts. `None` when
+    /// `IP2LOCATION_DB_PATH` is unset or the `.BIN` failed to load, which
+    /// disables the alert (the login is never affected). `Arc` because
+    /// `AppState` is `Clone` (axum state) and the resolver is not.
+    pub geoip: Option<std::sync::Arc<crate::geoip::GeoipResolver>>,
     /// Absolute base URL used to build links inside outbound mail
     /// (password reset, email verification, and digest deep links).
     /// Defaults to `http://localhost:8080`.

@@ -100,6 +100,7 @@ async fn build_harness() -> Harness {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

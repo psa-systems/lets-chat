@@ -6,6 +6,7 @@ use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 #[template(path = "email/login_alert.txt", escape = "none")]
 pub struct LoginAlertText<'a> {
     pub username: &'a str,
+    pub country: &'a str,
     pub device_label: &'a str,
     pub ip: &'a str,
     pub when: &'a str,
@@ -17,6 +18,7 @@ pub struct LoginAlertText<'a> {
 #[template(path = "email/login_alert.html")]
 pub struct LoginAlertHtml<'a> {
     pub username: &'a str,
+    pub country: &'a str,
     pub device_label: &'a str,
     pub ip: &'a str,
     pub when: &'a str,

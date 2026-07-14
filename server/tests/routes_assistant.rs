@@ -44,6 +44,7 @@ async fn app() -> TestApp {
         canned: "The answer is 42.".to_string(),
     });
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,

@@ -20,6 +20,7 @@ async fn setup() -> (Router, String) {
     let session = db::auth::create_session(&auth, &user_id).await.unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat,
         settings,

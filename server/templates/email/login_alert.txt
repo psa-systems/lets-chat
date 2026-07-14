@@ -1,20 +1,21 @@
 Hi {{ username }},
 
-A new sign-in to your Let's Chat account was just recorded:
+A new sign-in to your Let's Chat account was just recorded from a country we
+have not seen you sign in from before:
 
-  Device: {{ device_label }}
+  Country: {{ country }}
+  Device:  {{ device_label }}
 {% if !ip.is_empty() -%}
-  IP:     {{ ip }}
+  IP:      {{ ip }}
 {% endif -%}
-  Time:   {{ when }} UTC
+  Time:    {{ when }} UTC
 
-If this was you, no action is needed. The device is now remembered and
-future sign-ins from it will not trigger another alert.
+If this was you, no action is needed.
 
 If this was NOT you, sign in and revoke the unfamiliar session here:
 
   {{ sessions_url }}
 
-You can also turn these alerts off (or back on) on the settings page:
+You can turn these alerts off (or back on) on the settings page:
 
   {{ settings_url }}

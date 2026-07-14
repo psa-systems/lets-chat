@@ -3,9 +3,10 @@
 <body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
 <p>Hi {{ username }},</p>
 
-<p>A new sign-in to your Let's Chat account was just recorded:</p>
+<p>A new sign-in to your Let's Chat account was just recorded from a country we have not seen you sign in from before:</p>
 
 <table style="border-collapse: collapse; margin-left: 16px;">
+  <tr><td style="color: #666; padding: 2px 12px 2px 0;">Country</td><td>{{ country }}</td></tr>
   <tr><td style="color: #666; padding: 2px 12px 2px 0;">Device</td><td>{{ device_label }}</td></tr>
 {% if !ip.is_empty() %}
   <tr><td style="color: #666; padding: 2px 12px 2px 0;">IP</td><td>{{ ip }}</td></tr>
@@ -13,7 +14,7 @@
   <tr><td style="color: #666; padding: 2px 12px 2px 0;">Time</td><td>{{ when }} UTC</td></tr>
 </table>
 
-<p>If this was you, no action is needed. The device is now remembered and future sign-ins from it will not trigger another alert.</p>
+<p>If this was you, no action is needed.</p>
 
 <p>If this was <strong>not</strong> you, <a href="{{ sessions_url }}">sign in and revoke the unfamiliar session</a>.</p>
 

@@ -32,6 +32,7 @@ async fn app() -> Router {
     let settings = common::pool("settings").await;
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

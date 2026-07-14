@@ -111,6 +111,7 @@ async fn app_with_user(username: &str) -> (Router, String, String) {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
@@ -211,6 +212,7 @@ async fn upload_anonymous_redirects_to_login() {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
@@ -314,6 +316,7 @@ async fn app_with_two_users() -> (Router, String, String, String, String) {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
