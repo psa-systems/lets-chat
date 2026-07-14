@@ -61,6 +61,7 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
     let chat_for_test = chat.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
@@ -275,6 +276,7 @@ async fn post_to_inaccessible_private_room_returns_403() {
     let settings = open_pool("settings").await;
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
+        geoip: None,
         auth: auth_pool,
         chat: chat_pool,
         settings,

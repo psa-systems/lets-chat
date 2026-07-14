@@ -168,6 +168,23 @@ pub async fn get_callback(
         }
     };
     tracing::info!(target: "bunyip_sso", path = "sso", user_id = %user_id, "session created");
+    // LC-580: best-effort new-login-location alert on a detached task, so the
+    // geoip lookup + any SMTP send never adds latency to the login redirect.
+    // No-op unless a country change is detected for a geolocatable public IP
+    // and the user has alerts enabled.
+    let alert_state = state.clone();
+    let alert_user_id = user_id.clone();
+    let alert_ip = ip.clone();
+    let alert_ua = ua.clone();
+    tokio::spawn(async move {
+        crate::login_alert::maybe_alert(
+            &alert_state,
+            &alert_user_id,
+            alert_ip.as_deref(),
+            alert_ua.as_deref(),
+        )
+        .await;
+    });
     let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
     (jar, Redirect::to("/")).into_response()
