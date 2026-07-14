@@ -16,6 +16,15 @@ pub struct GeoipResolver {
     db: DB,
 }
 
+/// A resolved country: the ISO 3166-1 alpha-2 `code` (stable, used for the
+/// change comparison + storage) and a human-readable `name` (shown in the
+/// alert email, e.g. "United States" rather than "US").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedCountry {
+    pub code: String,
+    pub name: String,
+}
+
 impl GeoipResolver {
     /// Build the resolver from the environment, mirroring the mailer / stt /
     /// llm `from_env` pattern. Returns `None` (feature disabled) when
@@ -50,14 +59,19 @@ impl GeoipResolver {
         Ok(Self { db })
     }
 
-    /// The ISO 3166-1 alpha-2 country code for `ip`, or `None` when the IP is
-    /// not resolvable (private / reserved / unknown ranges carry no country).
-    pub fn country_code(&self, ip: IpAddr) -> Option<String> {
-        let raw = match self.db.ip_lookup(ip).ok()? {
-            Record::LocationDb(rec) => rec.country.map(|c| c.short_name),
+    /// Resolve `ip` to its country: the ISO 3166-1 alpha-2 `code` (stable, used
+    /// for the change comparison + storage) and the human-readable `name` (for
+    /// display in the alert email). `None` when the IP is not resolvable
+    /// (private / reserved / unknown ranges carry no country).
+    pub fn resolve(&self, ip: IpAddr) -> Option<ResolvedCountry> {
+        let country = match self.db.ip_lookup(ip).ok()? {
+            Record::LocationDb(rec) => rec.country,
             Record::ProxyDb(_) => None,
         }?;
-        normalize_country_code(&raw)
+        let code = normalize_country_code(&country.short_name)?;
+        // Fall back to the code when the DB carries no usable long name.
+        let name = normalize_country_code(&country.long_name).unwrap_or_else(|| code.clone());
+        Some(ResolvedCountry { code, name })
     }
 }
 
