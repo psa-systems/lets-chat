@@ -18,6 +18,22 @@ home-action-discover-title = Discover or create an enclave
 home-action-discover-desc = Join a community or spin up your own.
 home-action-invitations-title = View invitations
 home-action-invitations-desc = See the enclaves you've been invited to.
+# LC-575: Home dashboard (catch-up) cards.
+home-dash-heading = Catch up
+home-dash-subtitle = What happened across your workspace since you were last here.
+home-dash-catchup = Unread channels
+home-dash-mentions = Mentions
+home-dash-threads = Threads
+home-dash-dms = Direct messages
+home-dash-drafts = Drafts
+home-dash-empty-catchup = No unread channels. You're all caught up.
+home-dash-empty-mentions = No unread mentions.
+home-dash-empty-threads = No followed threads with new replies.
+home-dash-empty-dms = No unread direct messages.
+home-dash-empty-drafts = No saved drafts.
+home-dash-unread-aria = unread
+home-dash-mentions-aria = mentions
+home-dash-replies-aria = new replies
 # LC-516: inline create-enclave prompt shown when the user has no enclaves.
 home-create-enclave-title = Create your first enclave
 home-create-enclave-desc = Enclaves are your spaces for rooms and people.

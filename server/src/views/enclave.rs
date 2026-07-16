@@ -135,6 +135,10 @@ pub struct EnclaveSettingsPage<'a> {
     pub groups: &'a [EnclaveGroupView],
     pub emojis: &'a [CustomEmoji],
     pub can_delete: bool,
+    /// LC-542: whether this enclave has a configured icon (branding logo,
+    /// resolved with the global fallback), driving the inline icon preview vs
+    /// the neutral placeholder on the settings page.
+    pub has_icon: bool,
     pub flash_error: Option<&'a str>,
     /// LC-463: localized success message, shown as a toast on load.
     pub flash_ok: Option<&'a str>,

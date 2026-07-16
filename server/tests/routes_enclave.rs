@@ -38,6 +38,7 @@ pub async fn app_with_named_user(role: &str, username: &str) -> (Router, String,
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
@@ -98,6 +99,7 @@ pub async fn app_with_two_users() -> (Router, String, String, String, String) {
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

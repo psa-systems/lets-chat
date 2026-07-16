@@ -168,6 +168,23 @@ pub async fn get_callback(
         }
     };
     tracing::info!(target: "bunyip_sso", path = "sso", user_id = %user_id, "session created");
+    // LC-580: best-effort new-login-location alert on a detached task, so the
+    // geoip lookup + any SMTP send never adds latency to the login redirect.
+    // No-op unless a country change is detected for a geolocatable public IP
+    // and the user has alerts enabled.
+    let alert_state = state.clone();
+    let alert_user_id = user_id.clone();
+    let alert_ip = ip.clone();
+    let alert_ua = ua.clone();
+    tokio::spawn(async move {
+        crate::login_alert::maybe_alert(
+            &alert_state,
+            &alert_user_id,
+            alert_ip.as_deref(),
+            alert_ua.as_deref(),
+        )
+        .await;
+    });
     let cookie = build_session_cookie(state.cookies_secure(), token);
     let jar = jar.add(cookie);
     (jar, Redirect::to("/")).into_response()
@@ -210,6 +227,28 @@ async fn resolve_or_provision_user(
             return Err(ResolveError::BotConflict);
         }
         return Ok(id);
+    }
+
+    // LC-588: the sub did not match above, but the account may still exist
+    // locally under the same VERIFIED email (a password user who signed up
+    // before SSO). Adopt it by linking the bunyip_sub, rather than INSERTing a
+    // duplicate that trips UNIQUE(users.email). Gated on email_verified so a
+    // bunyip account cannot claim an unverified address to hijack a local
+    // account; find_user_id_by_email already excludes banned rows, and
+    // link_bunyip_sub only links a non-bot row not already linked to another sub.
+    if userinfo.email_verified == Some(true) {
+        if let Some(email) = userinfo
+            .email
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Some(existing_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
+                if db::auth::link_bunyip_sub(&state.auth, &existing_id, sub).await? {
+                    return Ok(existing_id);
+                }
+            }
+        }
     }
 
     // Fresh sub: auto-provision a users row.
