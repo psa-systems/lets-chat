@@ -29,10 +29,16 @@
       <dt class="text-content-muted">{{ "room-details-notifications"|t }}</dt>
       <dd>
         <button type="button"
-                class="text-content font-medium hover:underline"
+                class="inline-flex items-center gap-1 text-content font-medium hover:underline"
+                aria-haspopup="menu"
                 aria-label="{{ "room-details-notifications"|t }}"
                 onclick="var t=document.getElementById('lc-notify-toggle-{{ room.id }}'); if (t) { t.click(); t.scrollIntoView({block: 'nearest'}); }">
-          {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}
+          <span>{% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}</span>
+          {# LC-576: dropdown chevron so the row reads as the notifications picker
+             it opens (matching the comp's Notifications row). #}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-content-muted" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+          </svg>
         </button>
       </dd>
     </div>
