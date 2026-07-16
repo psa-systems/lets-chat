@@ -229,6 +229,28 @@ async fn resolve_or_provision_user(
         return Ok(id);
     }
 
+    // LC-588: the sub did not match above, but the account may still exist
+    // locally under the same VERIFIED email (a password user who signed up
+    // before SSO). Adopt it by linking the bunyip_sub, rather than INSERTing a
+    // duplicate that trips UNIQUE(users.email). Gated on email_verified so a
+    // bunyip account cannot claim an unverified address to hijack a local
+    // account; find_user_id_by_email already excludes banned rows, and
+    // link_bunyip_sub only links a non-bot row not already linked to another sub.
+    if userinfo.email_verified == Some(true) {
+        if let Some(email) = userinfo
+            .email
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Some(existing_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
+                if db::auth::link_bunyip_sub(&state.auth, &existing_id, sub).await? {
+                    return Ok(existing_id);
+                }
+            }
+        }
+    }
+
     // Fresh sub: auto-provision a users row.
     let username = pick_username(state, userinfo).await?;
     let display_name = userinfo.name.as_deref().filter(|s| !s.trim().is_empty());
