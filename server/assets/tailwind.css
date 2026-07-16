@@ -133,23 +133,43 @@
     gap: 0.5rem;
   }
   .lc-palette-swatch {
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
+    align-items: stretch;
+    gap: 0.4rem;
     padding: 0.5rem;
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     cursor: pointer;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
+  .lc-palette-swatch:hover { border-color: var(--border-strong); }
   .lc-palette-swatch:has(:checked) {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-surface);
   }
+  /* LC-553: checkmark badge on the selected palette (prototype). */
+  .lc-palette-swatch:has(:checked)::after {
+    content: "\2713";
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    width: 1.125rem;
+    height: 1.125rem;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-content);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1;
+  }
   .lc-palette-preview {
     width: 100%;
-    height: 2rem;
-    border-radius: 0.375rem;
+    height: 2.75rem;
+    border-radius: 0.5rem;
     border: 1px solid var(--border);
   }
   .lc-palette-name {

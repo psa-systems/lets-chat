@@ -255,37 +255,73 @@
                 </label>
               </div>
             </fieldset>
+            {# LC-553: theme mode as a segmented control (prototype THEME MODE),
+               replacing the select. Radios keep name="theme" so the form still
+               posts the value; onchange live-previews via __lcSetMode. #}
             <div class="lc-set-field">
-              <label class="lc-set-label" for="lc-mode">{{ "settings-mode"|t }}</label>
-              <select id="lc-mode" class="input" name="theme" aria-label="{{ "settings-mode"|t }}"
-                      onchange="window.__lcSetMode&&window.__lcSetMode(this.value==='system'?'':this.value)">
-                <option value="system"{% if user.theme_mode_or_system() == "system" %} selected{% endif %}>{{ "theme-system"|t }}</option>
-                <option value="light"{% if user.theme_mode_or_system() == "light" %} selected{% endif %}>{{ "theme-light"|t }}</option>
-                <option value="dark"{% if user.theme_mode_or_system() == "dark" %} selected{% endif %}>{{ "theme-dark"|t }}</option>
-                <option value="hc-light"{% if user.theme_mode_or_system() == "hc-light" %} selected{% endif %}>{{ "theme-hc-light"|t }}</option>
-                <option value="hc-dark"{% if user.theme_mode_or_system() == "hc-dark" %} selected{% endif %}>{{ "theme-hc-dark"|t }}</option>
-              </select>
+              <label class="lc-set-label">{{ "settings-mode"|t }}</label>
+              <div class="lc-set-seg" role="radiogroup" aria-label="{{ "settings-mode"|t }}">
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="theme" value="light" class="sr-only"{% if user.theme_mode_or_system() == "light" %} checked{% endif %}
+                         onchange="window.__lcSetMode&&window.__lcSetMode(this.value)"><span>{{ "theme-light"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="theme" value="dark" class="sr-only"{% if user.theme_mode_or_system() == "dark" %} checked{% endif %}
+                         onchange="window.__lcSetMode&&window.__lcSetMode(this.value)"><span>{{ "theme-dark"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="theme" value="hc-light" class="sr-only"{% if user.theme_mode_or_system() == "hc-light" %} checked{% endif %}
+                         onchange="window.__lcSetMode&&window.__lcSetMode(this.value)"><span>{{ "theme-hc-light"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="theme" value="hc-dark" class="sr-only"{% if user.theme_mode_or_system() == "hc-dark" %} checked{% endif %}
+                         onchange="window.__lcSetMode&&window.__lcSetMode(this.value)"><span>{{ "theme-hc-dark"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="theme" value="system" class="sr-only"{% if user.theme_mode_or_system() == "system" %} checked{% endif %}
+                         onchange="window.__lcSetMode&&window.__lcSetMode('')"><span>{{ "theme-system"|t }}</span>
+                </label>
+              </div>
             </div>
-            <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-density">{{ "settings-density"|t }}</label>
-              <select id="lc-density" class="input" name="density" aria-label="{{ "settings-density"|t }}"
-                      onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)">
-                <option value="comfortable"{% if user.density_or_default() == "comfortable" %} selected{% endif %}>{{ "density-comfortable"|t }}</option>
-                <option value="compact"{% if user.density_or_default() == "compact" %} selected{% endif %}>{{ "density-compact"|t }}</option>
-              </select>
+            {# LC-553: density as a two-option segmented control (prototype DISPLAY). #}
+            <div class="lc-set-field">
+              <label class="lc-set-label">{{ "settings-density"|t }}</label>
+              <div class="lc-set-seg" role="radiogroup" aria-label="{{ "settings-density"|t }}">
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="density" value="comfortable" class="sr-only"{% if user.density_or_default() == "comfortable" %} checked{% endif %}
+                         onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"><span>{{ "density-comfortable"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="density" value="compact" class="sr-only"{% if user.density_or_default() == "compact" %} checked{% endif %}
+                         onchange="window.__lcSetDensity&&window.__lcSetDensity(this.value)"><span>{{ "density-compact"|t }}</span>
+                </label>
+              </div>
             </div>
             {# LC-569: UI scaling. Scales the whole interface (root rem), persisted
                server-side like mode/palette so it follows the account across devices.
                Distinct from the device-local message text size below. #}
-            <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-scale">{{ "settings-scale"|t }}</label>
-              <select id="lc-scale" class="input" name="scale" aria-label="{{ "settings-scale"|t }}"
-                      onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})">
-                <option value="compact"{% if user.theme_scale_or_default() == "compact" %} selected{% endif %}>{{ "scale-compact"|t }}</option>
-                <option value="default"{% if user.theme_scale_or_default() == "default" %} selected{% endif %}>{{ "scale-default"|t }}</option>
-                <option value="large"{% if user.theme_scale_or_default() == "large" %} selected{% endif %}>{{ "scale-large"|t }}</option>
-                <option value="xl"{% if user.theme_scale_or_default() == "xl" %} selected{% endif %}>{{ "scale-xl"|t }}</option>
-              </select>
+            {# LC-553: UI scaling as a segmented control (prototype DISPLAY >
+               Scaling). Same live-preview + immediate persist as the old select. #}
+            <div class="lc-set-field">
+              <label class="lc-set-label">{{ "settings-scale"|t }}</label>
+              <div class="lc-set-seg" role="radiogroup" aria-label="{{ "settings-scale"|t }}">
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="scale" value="compact" class="sr-only"{% if user.theme_scale_or_default() == "compact" %} checked{% endif %}
+                         onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})"><span>{{ "scale-compact"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="scale" value="default" class="sr-only"{% if user.theme_scale_or_default() == "default" %} checked{% endif %}
+                         onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})"><span>{{ "scale-default"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="scale" value="large" class="sr-only"{% if user.theme_scale_or_default() == "large" %} checked{% endif %}
+                         onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})"><span>{{ "scale-large"|t }}</span>
+                </label>
+                <label class="lc-set-seg-opt">
+                  <input type="radio" name="scale" value="xl" class="sr-only"{% if user.theme_scale_or_default() == "xl" %} checked{% endif %}
+                         onchange="window.__lcSetScale&&window.__lcSetScale(this.value);fetch('/settings/scale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'scale='+encodeURIComponent(this.value)})"><span>{{ "scale-xl"|t }}</span>
+                </label>
+              </div>
             </div>
             {# LC-575: "Open on" landing preference. Submitted with the appearance
                form (server-persisted); chooses whether logging in drops you into
