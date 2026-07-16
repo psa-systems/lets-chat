@@ -81,6 +81,9 @@
           aria-controls="sidebar-search-results"
           aria-autocomplete="list"
           class="lc-sidebar-field">
+        {# LC-576: ⌘K hint, matching the prototype's .sb-search kbd. The binding is
+           wired in the delegated script below (focuses this input from anywhere). #}
+        <kbd class="lc-sb-kbd" aria-hidden="true">⌘K</kbd>
         <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
       </form>
       {# Opens the SAME modal the ROOMS-header `+` opens (LC-400 moved the create
@@ -112,6 +115,15 @@
     // the shared results popover; search.js handles keyboard nav unchanged.
     if (window.__lcSearchTabsWired) return;
     window.__lcSearchTabsWired = true;
+    // LC-576: ⌘K / Ctrl-K focuses the sidebar search (matches the .sb-search kbd
+    // hint). Document-level, wired once with the tabs handler; ignores the combo
+    // while typing in another field so it does not hijack native shortcuts.
+    document.addEventListener('keydown', function(e){
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        var input = document.getElementById('sidebar-search-input');
+        if (input) { e.preventDefault(); input.focus(); input.select && input.select(); }
+      }
+    });
     // LC-392: htmx resolves an element's request verb+path ONCE at process time
     // and binds them into the trigger closure; it does not re-read hx-get per
     // fire. So setAttribute('hx-get', ...) below does NOT redirect the input's

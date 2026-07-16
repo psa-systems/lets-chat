@@ -1987,6 +1987,24 @@ math {
     outline: none;
     border-color: var(--accent);
 }
+/* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
+   field reserves right padding so typed text never slides under the chip. */
+.lc-sidebar-search .lc-sidebar-field { padding-right: 2.75rem; }
+.lc-sb-kbd {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-family: inherit;
+    font-size: 0.6875rem;
+    line-height: 1;
+    color: var(--content-subtle);
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 0.3125rem;
+    padding: 0.1875rem 0.3125rem;
+}
 .lc-sidebar-add {
     height: 2.125rem;
     width: 2.125rem;
