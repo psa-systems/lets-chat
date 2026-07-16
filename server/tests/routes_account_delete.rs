@@ -76,6 +76,7 @@ async fn app_with_user() -> TestApp {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,

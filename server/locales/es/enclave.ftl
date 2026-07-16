@@ -142,6 +142,13 @@ enclave-settings-branding-heading = Personalizacion
 enclave-settings-branding-link = Editar el logotipo, los colores y el texto de la pagina de inicio de sesion
 enclave-settings-branding-text-1 = para este enclave. Estas anulaciones se aplican solo cuando un miembro visualiza una URL dentro de
 enclave-settings-branding-text-2 = ; en cualquier otro lugar se recurre a la personalizacion para todo el despliegue.
+# LC-542: control de icono del enclave integrado en la pagina de ajustes.
+enclave-settings-icon-heading = Icono del enclave
+enclave-settings-icon-desc = Se muestra en la barra de enclaves. Sin un icono personalizado, la barra muestra la inicial del enclave.
+enclave-settings-icon-current-alt = Icono actual del enclave
+enclave-settings-icon-choose = Elegir imagen
+enclave-settings-icon-help = PNG, JPG, WebP o GIF cuadrado, hasta 1 MiB.
+enclave-settings-icon-save = Guardar icono
 enclave-settings-delete = Eliminar enclave
 enclave-settings-delete-confirm = Eliminar permanentemente este enclave y todas sus salas?
 
@@ -189,6 +196,7 @@ enclave-flash-deleted = Eliminado
 enclave-flash-updated = Actualizado
 enclave-flash-unbanned = Usuario desbloqueado
 enclave-flash-transferred = Propiedad transferida
+enclave-flash-icon-updated = Icono actualizado
 
 # LC-469: rediseno de la pagina de marca
 enclave-branding-back = Volver a ajustes

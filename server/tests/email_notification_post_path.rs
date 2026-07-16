@@ -110,6 +110,7 @@ async fn setup(bob_opt_in: bool) -> TestApp {
     let bg = lets_chat::bg::spawn(auth.clone());
     let chat_for_test = chat.clone();
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

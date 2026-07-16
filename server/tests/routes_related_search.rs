@@ -49,6 +49,7 @@ async fn app(embeddings: bool) -> TestApp {
         None
     };
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,

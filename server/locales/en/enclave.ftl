@@ -142,6 +142,13 @@ enclave-settings-branding-heading = Branding
 enclave-settings-branding-link = Edit logo, colors, and login-page copy
 enclave-settings-branding-text-1 = for this enclave. These overrides apply only when a member is viewing a URL under
 enclave-settings-branding-text-2 = ; everywhere else falls back to the deployment-wide branding.
+# LC-542: inline enclave-icon control on the settings page.
+enclave-settings-icon-heading = Enclave icon
+enclave-settings-icon-desc = Shown on the enclave rail. Without a custom icon, the rail shows the enclave's initial.
+enclave-settings-icon-current-alt = Current enclave icon
+enclave-settings-icon-choose = Choose image
+enclave-settings-icon-help = Square PNG, JPG, WebP, or GIF, up to 1 MiB.
+enclave-settings-icon-save = Save icon
 enclave-settings-delete = Delete enclave
 enclave-settings-delete-confirm = Permanently delete this enclave and all rooms?
 
@@ -189,6 +196,7 @@ enclave-flash-deleted = Deleted
 enclave-flash-updated = Updated
 enclave-flash-unbanned = User unbanned
 enclave-flash-transferred = Ownership transferred
+enclave-flash-icon-updated = Icon updated
 
 # LC-469: branding page redesign
 enclave-branding-back = Back to settings

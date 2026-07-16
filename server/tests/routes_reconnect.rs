@@ -48,6 +48,7 @@ async fn app_with_logged_in_user() -> (Router, String) {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,

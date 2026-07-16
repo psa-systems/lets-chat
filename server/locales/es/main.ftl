@@ -41,6 +41,11 @@ scale-compact = Compacta
 scale-default = Predeterminada
 scale-large = Grande
 scale-xl = Muy grande
+# LC-575: preferencia de destino "Abrir en"
+settings-home-landing = Abrir en
+settings-home-landing-help = Dónde llegas después de iniciar sesión.
+home-landing-last-room = Última sala
+home-landing-home = Panel de inicio
 settings-textsize = Tamaño del texto
 textsize-small = Pequeño
 textsize-normal = Normal

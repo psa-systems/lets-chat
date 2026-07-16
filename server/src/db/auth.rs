@@ -67,7 +67,7 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
     )
@@ -91,7 +91,7 @@ pub async fn find_user_by_username(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
@@ -117,7 +117,7 @@ pub async fn find_user_by_id(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
          pronouns, profile_links, timezone \
          FROM users WHERE id = ?",
     )
@@ -170,6 +170,7 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         theme_mode: r.get("theme_mode"),
         theme_palette: r.get("theme_palette"),
         theme_scale: r.get("theme_scale"),
+        home_landing: r.get("home_landing"),
         density: r.get("density"),
         pronouns: r.get("pronouns"),
         profile_links: r.get("profile_links"),
@@ -735,7 +736,7 @@ pub async fn get_user_by_session(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.density, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.home_landing, u.density, \
          u.pronouns, u.profile_links, u.timezone \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
@@ -818,6 +819,20 @@ pub async fn set_user_theme_scale(
     Ok(())
 }
 
+/// LC-575: set (or clear, with `None`) a user's "Open on" landing preference.
+pub async fn set_user_home_landing(
+    pool: &SqlitePool,
+    user_id: &str,
+    landing: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET home_landing = ? WHERE id = ?")
+        .bind(landing)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE id = ?")
         .bind(lookup_session_id(session_id))
@@ -846,7 +861,7 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
          pronouns, profile_links, timezone \
          FROM users ORDER BY created_at ASC",
     )
@@ -1134,6 +1149,38 @@ pub async fn set_notify_login_alerts_enabled(
     Ok(())
 }
 
+/// LC-580: the ISO 3166-1 alpha-2 country the user last logged in from, or
+/// `None` until the first geolocatable login. Compared at the SSO callback to
+/// detect a significant location change.
+pub async fn get_last_login_country(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<Option<String>> =
+        sqlx::query_scalar("SELECT last_login_country FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.flatten())
+}
+
+/// LC-580: record the ISO 3166-1 alpha-2 country of the user's most recent
+/// geolocatable login, for the next login's change comparison.
+pub async fn set_last_login_country(
+    pool: &SqlitePool,
+    user_id: &str,
+    country: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET last_login_country = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(country)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// LC-88: persist a user's DND schedule. `schedule_json` is `None` to clear
 /// the schedule (no quiet hours). The caller is responsible for validating
 /// the JSON shape before storing.
@@ -1370,7 +1417,7 @@ pub async fn search_users(
          notify_email_activity_enabled, \
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
-         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, density, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
          pronouns, profile_links, timezone \
          FROM users \
          WHERE is_banned = 0 \
@@ -1516,6 +1563,27 @@ pub async fn find_user_id_by_email(
     Ok(row.map(|r| r.get::<String, _>("id")))
 }
 
+/// LC-588: link a bunyip subject to an existing local account (SSO onto a
+/// pre-existing password account, matched by verified email). Returns whether a
+/// row was linked. The guards ensure it only links a row that is not already
+/// linked to another subject and is not a bot, so it can never steal or hijack
+/// an already-claimed identity.
+pub async fn link_bunyip_sub(
+    pool: &SqlitePool,
+    user_id: &str,
+    sub: &str,
+) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET bunyip_sub = ?, updated_at = datetime('now') \
+         WHERE id = ? AND (bunyip_sub IS NULL OR bunyip_sub = '') AND COALESCE(is_bot, 0) = 0",
+    )
+    .bind(sub)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// Fetch the configured email for a user, or `None` if unset. Used to render
 /// the email on the profile settings page and to address outbound mail.
 pub async fn get_user_email(
@@ -1625,7 +1693,7 @@ pub async fn list_blocked_users(
          u.notify_email_activity_enabled, \
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
-         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.density, \
+         u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.home_landing, u.density, \
          u.pronouns, u.profile_links, u.timezone \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \

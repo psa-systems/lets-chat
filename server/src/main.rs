@@ -171,6 +171,9 @@ async fn main() {
         };
 
     let bg = lets_chat::bg::spawn(auth_pool.clone());
+    // LC-580: optional IP -> country resolver for login-location alerts.
+    // `None` (env unset or .BIN load failure) leaves the feature disabled.
+    let geoip = lets_chat::geoip::GeoipResolver::from_env().map(std::sync::Arc::new);
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -189,6 +192,7 @@ async fn main() {
         apns_client: None,
         fcm_client: None,
         mailer,
+        geoip,
         base_url,
         ice_servers,
         rate_limits: lets_chat::rate_limit::RateLimits::new(),

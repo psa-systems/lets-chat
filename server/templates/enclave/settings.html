@@ -336,6 +336,39 @@
           </form>
         </div>
 
+        {# Enclave icon (LC-542): inline control writing the same per-enclave
+           branding logo the switcher rail renders, surfaced here so owners can
+           set the icon without discovering the separate branding sub-page. Full
+           logo/color/login-copy editing still lives under the Branding card. #}
+        <div class="card lc-set-card">
+          <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-icon-heading"|t }}</h3></div>
+          <p class="lc-set-card-desc">{{ "enclave-settings-icon-desc"|t }}</p>
+          <form method="post" action="/enclave/{{ enclave.id }}/icon" enctype="multipart/form-data" class="lc-set-avatar-row">
+            {% if has_icon %}
+            <img src="/enclave/{{ enclave.id }}/branding/logo?v={{ asset_version }}" alt="{{ "enclave-settings-icon-current-alt"|t }}"
+                 class="h-16 w-16 flex-none object-contain rounded-lg border border-border bg-surface-elevated p-1">
+            {% else %}
+            <span class="flex h-16 w-16 flex-none items-center justify-center rounded-lg border border-border bg-surface-elevated text-content-muted" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-7 w-7">
+                <path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a.75.75 0 00-1.06 0l-1.91 1.909.47.47a.75.75 0 11-1.06 1.06L6.53 8.091a.75.75 0 00-1.06 0l-2.97 2.97zM12 7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
+              </svg>
+            </span>
+            {% endif %}
+            <div class="flex-1 min-w-0">
+              <div class="lc-set-field">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <label for="lc-enclave-icon-input" class="btn btn-secondary btn-sm">{{ "enclave-settings-icon-choose"|t }}</label>
+                  <input id="lc-enclave-icon-input" type="file" name="logo" required accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only">
+                </div>
+                <p class="lc-set-help">{{ "enclave-settings-icon-help"|t }}</p>
+              </div>
+              <div class="lc-set-actions mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">{{ "enclave-settings-icon-save"|t }}</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
         {# Branding #}
         <div class="card lc-set-card">
           <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-branding-heading"|t }}</h3></div>

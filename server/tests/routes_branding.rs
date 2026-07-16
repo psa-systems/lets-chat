@@ -57,6 +57,7 @@ async fn app() -> TestApp {
         .unwrap();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
+        geoip: None,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,
@@ -641,4 +642,86 @@ async fn page_emits_js_i18n_catalog() {
         body.contains("callMute: \"Mute\""),
         "expected the English catalog value to render"
     );
+}
+
+// ── LC-542: inline enclave-icon control on the settings page ──────────────
+// The icon writes the same per-enclave branding logo the switcher rail renders,
+// so these exercise the settings-side entry point rather than the branding page.
+
+fn tiny_png() -> Vec<u8> {
+    use image::ImageEncoder;
+    let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 255]));
+    let mut buf = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut buf)
+        .write_image(&img, 1, 1, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    buf
+}
+
+fn build_logo_multipart(boundary: &str, filename: &str, bytes: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    out.extend_from_slice(
+        format!("Content-Disposition: form-data; name=\"logo\"; filename=\"{filename}\"\r\n")
+            .as_bytes(),
+    );
+    out.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    out.extend_from_slice(bytes);
+    out.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    out
+}
+
+async fn post_enclave_icon(
+    app: &Router,
+    session: &str,
+    enclave_id: i64,
+    bytes: &[u8],
+) -> StatusCode {
+    let boundary = "----lc-icon-boundary";
+    let body = build_logo_multipart(boundary, "icon.png", bytes);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{enclave_id}/icon"))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from(body))
+        .unwrap();
+    app.clone().oneshot(req).await.unwrap().status()
+}
+
+#[tokio::test]
+async fn enclave_icon_upload_sets_logo_and_renders_on_settings() {
+    let t = app().await;
+    // General enclave (id 1) is seeded by backfill_general_membership; the admin
+    // is a site admin, so require_manage passes.
+    let status = post_enclave_icon(&t.app, &t.admin_session, 1, &tiny_png()).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+
+    // The per-enclave branding logo is now set.
+    let b = db::branding::resolve(&t.chat, db::branding::Scope::Enclave(1))
+        .await
+        .unwrap();
+    assert!(
+        b.logo_upload_id.is_some(),
+        "icon upload should set the enclave logo"
+    );
+
+    // The settings page renders the icon <img> pointing at the logo route.
+    let (s, body) = get_with_session(&t.app, &t.admin_session, "/enclave/1/settings").await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        body.contains("src=\"/enclave/1/branding/logo?"),
+        "settings page should show the configured enclave icon"
+    );
+}
+
+#[tokio::test]
+async fn enclave_icon_upload_forbidden_for_non_manager() {
+    let t = app().await;
+    // A plain member of General (id 1), not an owner/admin, cannot set the icon.
+    let status = post_enclave_icon(&t.app, &t.member_session, 1, &tiny_png()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

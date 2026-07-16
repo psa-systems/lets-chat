@@ -575,6 +575,9 @@ pub struct AppearanceForm {
     /// LC-541: "blue-harbor" / "cobalt" / "ink-ice" / "arctic" / "deep-sea" / "royal-navy" / "amethyst".
     #[serde(default)]
     pub palette: String,
+    /// LC-575: "last-room" / "home" - the "Open on" landing preference.
+    #[serde(default)]
+    pub home_landing: String,
 }
 
 /// POST /settings/appearance - save the UI mode + palette + density
@@ -608,6 +611,11 @@ pub async fn post_appearance(
         _ => "default",
     };
     db::auth::set_user_theme_scale(&state.auth, &user.id, Some(scale)).await?;
+    let home_landing = match form.home_landing.trim() {
+        l @ ("last-room" | "home") => l,
+        _ => "last-room",
+    };
+    db::auth::set_user_home_landing(&state.auth, &user.id, Some(home_landing)).await?;
     if let Some(r) = hx_feedback(
         &headers,
         crate::views::settings::SettingsFeedback::ok(crate::i18n::translate_current(

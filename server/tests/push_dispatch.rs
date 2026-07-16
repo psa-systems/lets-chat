@@ -68,6 +68,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
     let apns_mock = Arc::new(MockApnsClient::default());
     let fcm_mock = Arc::new(MockFcmClient::default());
     let state = AppState {
+        geoip: None,
         auth,
         chat,
         settings,
