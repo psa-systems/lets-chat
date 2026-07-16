@@ -2424,8 +2424,10 @@ html[data-lc-details="collapsed"] [data-lc-details-chevron] {
     align-items: center;
     justify-content: center;
     border-radius: 9999px;
-    background-color: var(--danger);
-    color: var(--danger-content);
+    /* LC-576: the enclave-rail unread badge is accent (matching the comp), not
+       danger-red - it counts unread, it is not an error. */
+    background-color: var(--accent);
+    color: var(--accent-content);
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1;
