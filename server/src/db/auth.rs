@@ -1563,6 +1563,27 @@ pub async fn find_user_id_by_email(
     Ok(row.map(|r| r.get::<String, _>("id")))
 }
 
+/// LC-588: link a bunyip subject to an existing local account (SSO onto a
+/// pre-existing password account, matched by verified email). Returns whether a
+/// row was linked. The guards ensure it only links a row that is not already
+/// linked to another subject and is not a bot, so it can never steal or hijack
+/// an already-claimed identity.
+pub async fn link_bunyip_sub(
+    pool: &SqlitePool,
+    user_id: &str,
+    sub: &str,
+) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET bunyip_sub = ?, updated_at = datetime('now') \
+         WHERE id = ? AND (bunyip_sub IS NULL OR bunyip_sub = '') AND COALESCE(is_bot, 0) = 0",
+    )
+    .bind(sub)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// Fetch the configured email for a user, or `None` if unset. Used to render
 /// the email on the profile settings page and to address outbound mail.
 pub async fn get_user_email(
