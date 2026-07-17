@@ -213,12 +213,44 @@
     }
   }
 
+  // LC-553: dismiss the settings page by clicking outside it (on the rail /
+  // sidebar background) or pressing Escape - it fills the #main pane with no
+  // close control, so "click out to leave" is the expected exit. Registered
+  // once at document level; a guard flag survives init() re-runs.
+  var DISMISS_INTERACTIVE = 'a[href],button,input,select,textarea,label,[role="menuitem"],[role="tab"],[contenteditable="true"]';
+  function leaveSettings() {
+    // Return to whatever was behind settings (the room / home); fall back home
+    // when there is no in-app history to step back to.
+    if (window.history.length > 1) window.history.back();
+    else window.location.assign('/');
+  }
+  function dismissInit() {
+    if (window.__lcSettingsDismissWired) return;
+    window.__lcSettingsDismissWired = true;
+    document.addEventListener('pointerdown', function (e) {
+      // Only while the settings page is actually shown.
+      if (!document.querySelector('[data-lc-settings]')) return;
+      var main = document.getElementById('main');
+      if (!main) return;
+      // Clicks inside the settings pane (including its header) never dismiss.
+      if (main.contains(e.target)) return;
+      // Let real controls (sidebar room links, rail buttons) act normally; a
+      // room link already navigates away. Only empty outside space dismisses.
+      if (e.target.closest && e.target.closest(DISMISS_INTERACTIVE)) return;
+      leaveSettings();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.querySelector('[data-lc-settings]')) leaveSettings();
+    });
+  }
+
   function init() {
     var root = document.querySelector('[data-lc-settings]');
     if (!root) return;
     tabsInit(root);
     avatarInit(root);
     actionsInit(root);
+    dismissInit();
   }
 
   // Document-level status listeners: registered once (init() can re-run).
