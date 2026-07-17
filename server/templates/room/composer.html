@@ -401,21 +401,52 @@
          markdown pipeline that posting uses, so the preview matches the result. #}
       <button type="button" data-lc-preview-toggle data-lc-edit-label="{{ "room-composer-edit"|t }}"
         class="lc-fmt-btn text-xs">{{ "room-composer-preview"|t }}</button>
-      {# LC-547: ephemeral / self-destruct timer. A plain <select> rides the
-         axum::Form post as `ttl`; empty = permanent (the default). A non-empty
-         choice stamps expires_at on the sent message and an unconditional 60s
-         sweep hard-deletes it once the timer passes. Server-side token allowlist
-         (models::message::ephemeral_expires_at) is the source of truth. #}
-      <select name="ttl"
-        class="lc-composer-ttl self-center rounded border border-border bg-surface-elevated text-xs text-content-muted px-1 py-1"
-        data-lc-tip="{{ "room-composer-ttl-label"|t }}" data-lc-tip-pos="top"
-        aria-label="{{ "room-composer-ttl-label"|t }}">
-        <option value="">{{ "room-composer-ttl-off"|t }}</option>
-        <option value="5m">{{ "room-composer-ttl-5m"|t }}</option>
-        <option value="1h">{{ "room-composer-ttl-1h"|t }}</option>
-        <option value="1d">{{ "room-composer-ttl-1d"|t }}</option>
-        <option value="7d">{{ "room-composer-ttl-7d"|t }}</option>
-      </select>
+      {# LC-547 / LC-553: ephemeral / self-destruct timer. Reworked from a raw
+         <select> into a clock-icon popover consistent with the app's other menus.
+         The radios still post `ttl` on the axum::Form (empty = permanent, the
+         default); a non-empty choice stamps expires_at and the 60s sweep hard-
+         deletes once it passes (models::message::ephemeral_expires_at is the
+         source of truth). The clock lights up accent + shows the armed duration
+         so the ephemeral state is glanceable; the menu opens upward. #}
+      <details class="lc-ttl self-center">
+        <summary class="lc-ttl-summary" aria-haspopup="menu"
+          data-lc-tip="{{ "room-composer-ttl-label"|t }}" data-lc-tip-pos="top"
+          aria-label="{{ "room-composer-ttl-label"|t }}">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/>
+          </svg>
+          <span class="lc-ttl-val" aria-hidden="true"></span>
+        </summary>
+        <div class="lc-ttl-menu" role="menu">
+          <label class="lc-ttl-opt"><input type="radio" name="ttl" value="" checked><span>{{ "room-composer-ttl-off"|t }}</span></label>
+          <label class="lc-ttl-opt"><input type="radio" name="ttl" value="5m"><span>{{ "room-composer-ttl-5m"|t }}</span></label>
+          <label class="lc-ttl-opt"><input type="radio" name="ttl" value="1h"><span>{{ "room-composer-ttl-1h"|t }}</span></label>
+          <label class="lc-ttl-opt"><input type="radio" name="ttl" value="1d"><span>{{ "room-composer-ttl-1d"|t }}</span></label>
+          <label class="lc-ttl-opt"><input type="radio" name="ttl" value="7d"><span>{{ "room-composer-ttl-7d"|t }}</span></label>
+        </div>
+      </details>
+      <script>
+      (function(){
+        // LC-553: reflect the armed self-destruct timer in the summary (accent
+        // clock + short duration) and close the popover on pick. Per-element
+        // wired flag: the composer OOB-swaps on room change, so re-running must
+        // not stack listeners; a document click-away closes an open menu.
+        var d = document.currentScript.previousElementSibling;
+        if (!d || d.dataset.lcTtlWired === '1') return;
+        d.dataset.lcTtlWired = '1';
+        d.addEventListener('change', function(){
+          var r = d.querySelector('input[name="ttl"]:checked');
+          var v = r ? r.value : '';
+          d.classList.toggle('lc-ttl-armed', !!v);
+          var s = d.querySelector('.lc-ttl-val');
+          if (s) s.textContent = v || '';
+          d.open = false;
+        });
+        document.addEventListener('click', function(e){
+          if (d.open && !d.contains(e.target)) d.open = false;
+        });
+      })();
+      </script>
       <button
         id="composer-send"
         type="submit"
