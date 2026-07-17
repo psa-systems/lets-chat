@@ -31,6 +31,11 @@
   {# LC-393: transcription control events (started/ended) land here as
      data-lc-transcript-event nodes; transcribe.js consumes + drains them. #}
   <div id="lc-transcript-bus" class="hidden"></div>
+  {# LC-553: shared floating host for the message reaction picker. reactions.js
+     swaps the picker card in here (via the reaction-open trigger's hx-get),
+     positions it by the trigger, and toggles `hidden`. Fixed so it escapes the
+     timeline's overflow clip. #}
+  <div id="lc-reaction-popover" class="hidden fixed left-0 top-0 z-50"></div>
   <div id="lc-call-root" data-lc-call-root data-self-id="{{ user.id }}">
     {# LC-437: incoming-call dialog. Themed via tokens (works in dark); shows the
        caller's avatar for recognition. call.js installs a focus trap on show and
