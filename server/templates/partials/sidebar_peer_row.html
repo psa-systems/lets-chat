@@ -19,6 +19,11 @@
     {% let unread = peer.unread %}
     {% let mute_mode = peer.mute_mode.as_str() %}
     {% include "partials/unread_badge.html" %}
+    {# LC-553: an @ badge on a DM means an unread @-mention here, same as a
+       channel row - the count comes from the SidebarPeer.mentions the view
+       already carries; it was just never rendered on peer rows. #}
+    {% let mentions = peer.mentions %}
+    {% include "partials/mention_badge.html" %}
   </a>
   {# LC-258: per-room mark-as-read, shown on hover only when this DM is unread. #}
   {% if peer.unread > 0 %}
