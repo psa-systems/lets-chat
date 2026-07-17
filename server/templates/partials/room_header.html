@@ -6,7 +6,7 @@
        in step; it was previously reachable only by hovering the sidebar row. #}
     <div class="flex items-center gap-2 min-w-0">
       <a href="/room/{{ room.id }}/info" class="min-w-0 hover:underline" data-lc-tip="{{ "partials-room-info-title"|t }}" data-lc-tip-pos="bottom">
-        <h1 class="lc-h1 truncate"><span class="text-content-subtle">#</span>{{ room.name }}</h1>
+        <h1 class="lc-h1 truncate"><span class="text-content-subtle mr-1.5">#</span>{{ room.name }}</h1>
       </a>
       <form hx-post="/rooms/{{ room.id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex flex-none">
         <button type="submit" class="lc-header-star{% if is_starred %} lc-header-star-on{% endif %}"
