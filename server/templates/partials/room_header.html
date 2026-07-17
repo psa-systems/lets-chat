@@ -23,6 +23,20 @@
     {% endif %}
   </div>
   <div class="lc-header-actions">
+    {# LC-553: member avatar stack + overflow count (prototype). Links to the
+       room info page. For public rooms these are enclave members; the count and
+       ids come from the RoomPage view (header_members / member_count). #}
+    {% if !header_members.is_empty() %}
+    <a href="/room/{{ room.id }}/info" class="lc-member-stack"
+       aria-label="{{ member_count }}" data-lc-tip="{{ member_count }}" data-lc-tip-pos="bottom">
+      {% for mid in header_members %}
+      <img src="/avatars/{{ mid }}" alt="" loading="lazy" class="lc-member-av">
+      {% endfor %}
+      {% if member_count > header_members.len() %}
+      <span class="lc-member-more">+{{ member_count - header_members.len() }}</span>
+      {% endif %}
+    </a>
+    {% endif %}
     {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
        search.js combobox nav; results are jump links to #msg-{id} in-room. #}
     {# LC-388: search field aligned to the .lc-header-action height (h-8) with a
