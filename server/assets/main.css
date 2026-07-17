@@ -3019,6 +3019,16 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     color: var(--content-muted);
     opacity: 1;
 }
+/* LC-553: the thread reply box reuses .lc-mdinput for its chrome (borderless,
+   focus ring, shared metrics) but has NO .lc-mdback highlight backdrop behind
+   it - that overlay only exists in the main composer's .lc-mdwrap. Without the
+   backdrop the transparent .lc-mdinput text renders invisible (only the caret
+   shows), so give the solo thread textarea a solid text colour and a field
+   background. */
+#thread-panel .lc-mdinput {
+    color: var(--content);
+    background: var(--surface-elevated);
+}
 /* When the LC-276 preview pane is shown the textarea gets `hidden`; collapse the
    whole overlay so the preview pane (its flex sibling) takes the slot. */
 .lc-mdwrap:has(> .lc-mdinput.hidden) {
