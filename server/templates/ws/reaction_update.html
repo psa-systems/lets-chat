@@ -1,19 +1,32 @@
-<div id="reactions-{{ message_id }}" hx-swap-oob="outerHTML" class="flex flex-wrap gap-1 items-center">
+{# LC-553: the live OOB twin of partials/reaction_bar.html. It MUST render the
+   same markup as the HTTP toggle response - previously it swapped in a degraded
+   bar (bare "+", different chip classes), so the reactor (who also receives this
+   broadcast) saw the nice bar flip to the degraded one right after reacting.
+   Keep this byte-aligned with reaction_bar.html; only the hx-swap-oob differs. #}
+<div id="reactions-{{ message_id }}" hx-swap-oob="outerHTML" class="flex flex-wrap gap-1.5 items-center mt-1.5 {% if reactions.is_empty() %}hidden{% endif %}">
   {% for r in reactions %}
   <button
     hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
     hx-target="#reactions-{{ message_id }}"
     hx-swap="outerHTML"
-    class="text-xs rounded px-2 py-0.5 {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content{% else %}bg-surface-sunken hover:bg-surface-sunken{% endif %}"
+    {% if !r.reactors_title.is_empty() %}title="{{ r.reactors_title }}"{% endif %}
+    class="text-xs rounded-full border px-2 py-0.5 tabular-nums {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content border-accent font-medium{% else %}bg-surface-elevated border-border text-content-muted hover:bg-surface-sunken hover:text-content{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}
-  {# LC-362: keep the add-reaction button's accessible name in step with
-     partials/reaction_bar.html; this OOB twin swaps in on every live update. #}
+  {% if !reactions.is_empty() %}
   <button
+    data-lc-reaction-open
     hx-get="/messages/{{ message_id }}/reactions/picker"
-    hx-target="this"
-    hx-swap="outerHTML"
+    hx-target="#lc-reaction-popover"
+    hx-swap="innerHTML"
     aria-label="{{ "partials-reaction-add"|t }}"
-    class="text-xs text-content-muted hover:text-content-muted"
-  >+</button>
+    data-lc-tip="{{ "partials-reaction-add"|t }}" data-lc-tip-pos="top"
+    aria-haspopup="dialog"
+    class="lc-react-add inline-flex items-center justify-center h-6 rounded-full border border-border bg-surface-elevated px-1.5 text-content-subtle hover:bg-surface-sunken hover:text-content"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/>
+    </svg>
+  </button>
+  {% endif %}
 </div>
