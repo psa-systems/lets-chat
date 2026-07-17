@@ -1,19 +1,59 @@
 <header id="lc-room-header" data-lc-density-tight="header" class="lc-header">
   <div class="min-w-0 flex-1">
-    <a href="/room/{{ room.id }}/info" class="block hover:underline" data-lc-tip="{{ "partials-room-info-title"|t }}" data-lc-tip-pos="bottom">
-      <h1 class="lc-h1 truncate"><span class="text-content-subtle">#</span>{{ room.name }}</h1>
-      {% if let Some(topic) = room.topic.as_ref() %}
+    {# LC-576: title row - hash, name, then the favorite star, as in the
+       prototype. The star posts to the same /rooms/{id}/star endpoint the
+       sidebar row's star uses and swaps the same #sidebar target, so both stay
+       in step; it was previously reachable only by hovering the sidebar row. #}
+    <div class="flex items-center gap-2 min-w-0">
+      <a href="/room/{{ room.id }}/info" class="min-w-0 hover:underline" data-lc-tip="{{ "partials-room-info-title"|t }}" data-lc-tip-pos="bottom">
+        <h1 class="lc-h1 truncate"><span class="text-content-subtle mr-1.5">#</span>{{ room.name }}</h1>
+      </a>
+      <form hx-post="/rooms/{{ room.id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex flex-none">
+        <button type="submit" class="lc-header-star{% if is_starred %} lc-header-star-on{% endif %}"
+                title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}"
+                aria-label="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">
+          {% if is_starred %}&#9733;{% else %}&#9734;{% endif %}
+        </button>
+      </form>
+    </div>
+    {% if let Some(topic) = room.topic.as_ref() %}
+    <a href="/room/{{ room.id }}/info" class="block hover:underline">
       <p class="lc-small text-content-muted truncate">{{ topic }}</p>
-      {% endif %}
     </a>
+    {% endif %}
   </div>
   <div class="lc-header-actions">
+    {# LC-553: member avatar stack + overflow count (prototype). Links to the
+       room info page. For public rooms these are enclave members; the count and
+       ids come from the RoomPage view (header_members / member_count). #}
+    {% if !header_members.is_empty() %}
+    <a href="/room/{{ room.id }}/info" class="lc-member-stack"
+       aria-label="{{ member_count }}" data-lc-tip="{{ member_count }}" data-lc-tip-pos="bottom">
+      {% for mid in header_members %}
+      <img src="/avatars/{{ mid }}" alt="" loading="lazy" class="lc-member-av">
+      {% endfor %}
+      {% if member_count > header_members.len() %}
+      <span class="lc-member-more">+{{ member_count - header_members.len() }}</span>
+      {% endif %}
+    </a>
+    {% endif %}
     {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
        search.js combobox nav; results are jump links to #msg-{id} in-room. #}
     {# LC-388: search field aligned to the .lc-header-action height (h-8) with a
        leading magnifier + token focus ring, so it sits on one baseline with the
        icon actions and the notify pill. #}
-    <form class="relative" autocomplete="off" onsubmit="return false">
+    {# LC-576: the prototype's header carries a search ICON, not a persistent
+       384px field. A native <details> turns the icon into the trigger and
+       reveals the SAME input on open - the combobox, its hx-* wiring and
+       search.js keyboard nav are untouched, so this is purely presentational. #}
+    <details class="lc-header-search">
+      <summary class="lc-header-action" aria-label="{{ "partials-room-search-placeholder"|t }}"
+               data-lc-tip="{{ "partials-room-search-placeholder"|t }}" data-lc-tip-pos="bottom">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+        </svg>
+      </summary>
+      <form class="lc-header-search-pop relative" autocomplete="off" onsubmit="return false">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-content-subtle">
         <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
       </svg>
@@ -48,7 +88,8 @@
         {{ "partials-room-search-semantic"|t }}
       </label>
       <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
-    </form>
+      </form>
+    </details>
     {# LC-493: start/join an ad-hoc huddle in this group room. data-lc-voice-join
        is the same delegated trigger voice.js uses; it drives the hidden huddle
        root mounted above the composer. DMs (1:1 call path) and voice channels
@@ -116,14 +157,21 @@
       <span>{{ "summary-catch-up-heading"|t }}</span>
     </button>
     {% endif %}
-    <a href="/room/{{ room.id }}/info"
+    {# LC-553: the info icon TOGGLES the inline Details panel (open/close), rather
+       than linking away to the full-page room info. The room name / topic /
+       member stack still link to the full /info deep-dive; this is the quick
+       glance. Paired with the X inside the Details panel, both driven by
+       __lcToggleDetails / data-lc-details (no-flash in base.html). #}
+    <button type="button" data-lc-details-toggle aria-controls="details-panel" aria-expanded="true"
        class="lc-header-action"
-       data-lc-tip="{{ "partials-room-info-docs-title"|t }}" data-lc-tip-pos="bottom">
+       onclick="window.__lcToggleDetails && window.__lcToggleDetails()"
+       data-lc-tip="{{ "room-details-toggle"|t }}" data-lc-tip-pos="bottom"
+       aria-label="{{ "room-details-toggle"|t }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "partials-room-info"|t }}</span>
-    </a>
+    </button>
     {# LC-529: reaction highlights recap for this room. #}
     <a href="/room/{{ room.id }}/highlights"
        class="lc-header-action"
@@ -144,5 +192,8 @@
     </a>
     {% endif %}
     {% include "room/notify_dropdown.html" %}
+    {# LC-553: the right-column collapse control moved OUT of the header to an
+       edge chevron on the column itself, with a thin re-open rail when collapsed
+       (see room/page.html). Same __lcToggleDetails / data-lc-details plumbing. #}
   </div>
 </header>

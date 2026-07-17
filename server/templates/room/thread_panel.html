@@ -1,10 +1,12 @@
-<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+<div id="thread-panel" class="lc-panel flex flex-col">
   {# LC-461: the header references the PARENT message so it is obvious this panel
      is the expanded view of that message's "N replies" pill. #}
   <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <div class="min-w-0">
       <div class="font-semibold leading-tight">{{ "room-thread-heading"|t }}</div>
-      <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} {{ parent.label() }}</div>
+      {# LC-576: the replied-to name is accent-colored (matching the comp's
+         "In reply to <name>"); the "In reply to" prefix stays muted. #}
+      <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} <span class="text-accent font-medium">{{ parent.label() }}</span></div>
     </div>
     <div class="flex items-center gap-2 flex-none">
       {# LC-310: follow/unfollow this thread to be notified of new replies. #}
@@ -37,7 +39,9 @@
     </div>
   </header>
   {# LC-460: the thread root, visually marked as the parent the replies hang off. #}
-  <div class="border-b border-border px-3 py-2 bg-surface">
+  {# LC-576: px-2 side gutter (the timeline's px-5 at panel scale) so the row's
+     own rounded card insets instead of running edge to edge. #}
+  <div class="border-b border-border px-2 py-2 bg-surface">
     {% let parent_message = parent %}
     {% let message = parent_message %}
     {% include "room/thread_reply_inner.html" %}
@@ -55,7 +59,7 @@
   </div>
   {% endif %}
   {# LC-460: a left rail nests the replies under the root. #}
-  <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto py-1">
+  <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto px-2 py-1">
     {% for r in replies %}
     {% let message = r %}
     {% include "room/thread_reply_inner.html" %}
@@ -110,7 +114,9 @@
         autocomplete="off"
         autofocus
         placeholder="{{ "room-thread-reply-placeholder"|t }}"
-        class="flex-1 resize-none overflow-y-auto rounded border px-3 py-1.5 text-sm max-h-32"
+        {# LC-576: the same .lc-mdinput the main composer uses, instead of an
+           ad-hoc `rounded border` that never picked up the token surface. #}
+        class="lc-mdinput flex-1 max-h-32"
         oninput="
           /* LC-229: rAF-coalesced auto-resize + cached send button, mirroring
              the main composer. Separate rAF handle so the thread panel and
@@ -137,10 +143,22 @@
           }
         "
       ></textarea>
+      {# LC-553: emoji picker for thread replies (parity with the main composer).
+         Self-contained: the button loads the shared picker into the slot and the
+         inline script below splices the chosen glyph at the reply cursor. #}
+      <span class="relative inline-flex self-center" data-lc-thread-emoji>
+        <button type="button" data-lc-thread-emoji-open
+          hx-get="/rooms/{{ room.id }}/emoji-picker" hx-target="#lc-thread-emoji-slot" hx-swap="innerHTML"
+          data-lc-tip="{{ "room-composer-emoji"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-emoji"|t }}"
+          class="lc-fmt-btn">&#128512;</button>
+        <span id="lc-thread-emoji-slot" class="relative"></span>
+      </span>
       <button
         type="submit"
         disabled
-        class="thread-send rounded bg-accent px-2 py-1.5 text-accent-content hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        {# LC-576: the same .lc-composer-send as the main composer (32px square,
+           rounded-lg, accent fill) instead of a hand-rolled variant. #}
+        class="thread-send lc-composer-send"
         aria-label="{{ "room-thread-send-reply"|t }}"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
@@ -163,6 +181,37 @@
     window.__lcThreadRefreshSend = function () {
       sendBtn.disabled = !ta.value.trim();
     };
+    // LC-553: thread-reply emoji picker. The button loads the shared picker into
+    // #lc-thread-emoji-slot; splice the chosen glyph at the reply cursor.
+    // mousedown fires before the textarea blur; stopPropagation keeps any global
+    // picker handler from double-inserting. Outside-click closes; the listener is
+    // torn down when the thread panel is swapped away.
+    var slot = document.getElementById('lc-thread-emoji-slot');
+    if (slot) {
+      slot.addEventListener('mousedown', function (ev) {
+        var btn = ev.target.closest && ev.target.closest('[data-lc-emoji-insert]');
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var ins = btn.getAttribute('data-lc-emoji-insert') || '';
+        var s = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+        var e = ta.selectionEnd != null ? ta.selectionEnd : s;
+        ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+        ta.selectionStart = ta.selectionEnd = s + ins.length;
+        slot.replaceChildren();
+        ta.focus();
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      var onDoc = function (ev) {
+        if (slot.contains(ev.target)) return;
+        if (ev.target.closest && ev.target.closest('[data-lc-thread-emoji-open]')) return;
+        if (slot.firstChild) slot.replaceChildren();
+      };
+      document.addEventListener('click', onDoc);
+      var panel = document.getElementById('thread-panel');
+      if (panel) panel.addEventListener('htmx:beforeCleanupElement',
+        function () { document.removeEventListener('click', onDoc); }, { once: true });
+    }
   })();
   </script>
-</aside>
+</div>

@@ -103,8 +103,32 @@ JWKS = {
     ]
 }
 
-# code -> {"nonce": str, "aud": str}. In-memory and single-use.
+# code -> {"nonce": str, "aud": str, "ident": dict}. In-memory and single-use.
 CODES = {}
+# access_token -> ident dict, so /userinfo returns the SAME identity the code
+# authenticated (the callback rejects a userinfo sub that differs from the
+# id_token). Lets one mock OP mint many local identities for seeding/testing.
+TOKENS = {}
+
+
+def _ident_from_cookie(cookie_header: str) -> dict:
+    """LOCAL SEEDING: pick the identity from a `mock_user` cookie so a browser
+    can log in as alice/bob/carol/... without restarting the mock. No cookie ->
+    the fixed default identity, so existing single-user flows are unchanged."""
+    jar = {}
+    for part in (cookie_header or "").split(";"):
+        if "=" in part:
+            k, v = part.strip().split("=", 1)
+            jar[k] = v
+    u = jar.get("mock_user")
+    if u:
+        return {
+            "sub": "mock-" + u,
+            "email": u + "@example.test",
+            "username": u,
+            "name": u.replace("-", " ").title(),
+        }
+    return {"sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -128,14 +152,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/userinfo":
             # The callback fetches /userinfo after the token exchange and rejects
             # the login if its `sub` differs from the id_token's, so this must
-            # serve the SAME identity (see routes/bunyip_sso.rs).
+            # serve the SAME identity (see routes/bunyip_sso.rs). Resolve it from
+            # the Bearer access_token bound at /token.
+            auth = self.headers.get("Authorization", "")
+            token = auth[7:] if auth.startswith("Bearer ") else ""
+            ident = TOKENS.get(token) or {
+                "sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME,
+            }
             self._json(
                 {
-                    "sub": SUB,
-                    "email": EMAIL,
+                    "sub": ident["sub"],
+                    "email": ident["email"],
                     "email_verified": True,
-                    "preferred_username": USERNAME,
-                    "name": USERNAME,
+                    "preferred_username": ident["username"],
+                    "name": ident["name"],
                 }
             )
         else:
@@ -162,6 +192,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         CODES[code] = {
             "nonce": (q.get("nonce") or [""])[0],
             "aud": (q.get("client_id") or [""])[0],
+            "ident": _ident_from_cookie(self.headers.get("Cookie", "")),
         }
         params = {"code": code}
         state = (q.get("state") or [""])[0]
@@ -185,15 +216,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # The client id may arrive in the body or via Basic auth; fall back to
         # whatever /authorize saw so the `aud` claim always matches the client.
         aud = (form.get("client_id") or [""])[0] or entry["aud"]
+        ident = entry.get("ident") or {
+            "sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME,
+        }
         now = int(time.time())
         claims = {
             "iss": ISSUER,
             "aud": aud,
-            "sub": SUB,
-            "email": EMAIL,
+            "sub": ident["sub"],
+            "email": ident["email"],
             "email_verified": True,
-            "preferred_username": USERNAME,
-            "name": USERNAME,
+            "preferred_username": ident["username"],
+            "name": ident["name"],
             "iat": now,
             "exp": now + 3600,
         }
@@ -205,9 +239,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             algorithm="EdDSA",
             headers={"kid": KID},
         )
+        access_token = secrets.token_urlsafe(24)
+        # Bind the identity to the access_token so /userinfo (called without the
+        # cookie) returns the SAME sub the id_token carried.
+        TOKENS[access_token] = ident
         self._json(
             {
-                "access_token": secrets.token_urlsafe(24),
+                "access_token": access_token,
                 "token_type": "Bearer",
                 "expires_in": 3600,
                 "id_token": id_token,

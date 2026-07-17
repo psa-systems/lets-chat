@@ -1,18 +1,48 @@
-<nav id="switcher" class="w-16 flex flex-col items-center py-3 gap-2 overflow-y-auto">
-  {% for e in switcher %}
-  <a href="{% if let Some(id) = e.id %}/enclave/{{ id }}{% else %}/?home=1{% endif %}"
+{# LC-576: the rail itself does NOT scroll. Only the enclave list does (the inner
+   .lc-rail-scroll below). When the whole rail was one scroll container, a long
+   enough enclave list pushed the foot utilities - settings, shortcuts, and the
+   avatar - below the fold, where they were silently unreachable. #}
+<nav id="switcher" class="w-16 flex flex-col items-center py-3 gap-2 overflow-visible">
+  {# LC-576: rail order is brand -> Home -> rule -> enclaves -> discover, then the
+     utilities pinned to the foot with the avatar last. The rule separates the
+     product-level entry points (brand, Home) from the enclave stack; `+` is part
+     of that stack (it adds to it) so it follows the enclaves with no rule of its
+     own, rather than being exiled to the foot as it was. #}
+  <a href="/" class="lc-rail-brand" aria-label="Let's Chat" data-lc-tip="Let's Chat" data-lc-tip-pos="right">
+    <img src="/branding/favicon?v={{ asset_version }}" alt="" class="h-6 w-6 object-contain">
+  </a>
+  {% for e in switcher %}{% if e.id.is_none() %}
+  <a href="/?home=1"
+     class="lc-rail-tile w-11 h-11 flex items-center justify-center{% if e.active %} lc-rail-active{% endif %}"
+     aria-label="{{ e.label }}" data-lc-tip="{{ e.label }}" data-lc-tip-pos="right"
+     {% if e.active %}aria-current="page"{% endif %}>
+    {# The operator's global logo wins here when one is set (routes_branding
+       asserts it); otherwise LC-366's house glyph, so Home reads as a distinct
+       affordance rather than a lettered tile. #}
+    {% if let Some(logo) = e.logo_url %}
+    <img src="{{ logo }}" alt="{{ e.label }}"
+         class="w-8 h-8 rounded-lg object-contain bg-surface-elevated p-0.5">
+    {% else %}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+      <path d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z"/>
+    </svg>
+    {% endif %}
+    {% if e.unread + e.pending_invites > 0 %}
+    <span class="lc-rail-badge">{{ e.unread + e.pending_invites }}</span>
+    {% endif %}
+  </a>
+  {% endif %}{% endfor %}
+  <div class="lc-rail-divider"></div>
+  {# The only scrolling region: the enclave stack and the `+` that adds to it. #}
+  <div class="lc-rail-scroll">
+  {% for e in switcher %}{% if let Some(id) = e.id %}
+  <a href="/enclave/{{ id }}"
      class="lc-rail-tile w-11 h-11 flex items-center justify-center{% if e.active %} lc-rail-active{% endif %}"
      aria-label="{{ e.label }}" data-lc-tip="{{ e.label }}" data-lc-tip-pos="right"
      {% if e.active %}aria-current="page"{% endif %}>
     {% if let Some(logo) = e.logo_url %}
     <img src="{{ logo }}" alt="{{ e.label }}"
          class="w-8 h-8 rounded-lg object-contain bg-surface-elevated p-0.5">
-    {% else if e.id.is_none() %}
-    {# LC-366: the Home pseudo-enclave (DM hub) gets an explicit house glyph
-       instead of a single letter, so it reads as a distinct affordance. #}
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-      <path d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z"/>
-    </svg>
     {% else %}
     <span class="font-semibold">{{ e.initial }}</span>
     {% endif %}
@@ -20,33 +50,74 @@
     <span class="lc-rail-badge">{{ e.unread + e.pending_invites }}</span>
     {% endif %}
   </a>
-  {# LC-143: settings gear for the active enclave (managers only). #}
-  {% if e.active %}{% if let Some(id) = e.id %}{% if e.can_manage %}
-  <a href="/enclave/{{ id }}/settings" aria-label="{{ "switcher-enclave-settings"|t }}" data-lc-tip="{{ "switcher-enclave-settings"|t }}" data-lc-tip-pos="right"
-     class="lc-rail-gear w-6 h-6 -mt-1 rounded-md flex items-center justify-center">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-      <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.31 7.498a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-    </svg>
-  </a>
-  {% endif %}{% endif %}{% endif %}
-  {% endfor %}
-  {# LC-366: divider takes the flex slack so discover + collapse sit at the rail
-     foot, with a hairline separating them from the enclave list above. #}
-  <div class="lc-rail-divider mt-auto"></div>
+  {# LC-143 / LC-576: the enclave-settings gear used to hang off the active tile
+     here. It now lives beside the enclave NAME, in the sidebar's org dropdown
+     (partials/sidebar.html), where it is discoverable and labelled instead of
+     being an unlabelled 16px gear stuck to a rail icon. Same `can_manage` gate. #}
+  {% endif %}{% endfor %}
+  {# Bare `+`, no tile fill - it is an action, not an enclave, so the filled tile
+     made it read as one of them. It sits directly under the enclaves it adds to. #}
   <a href="/enclaves/discover"
-     class="lc-rail-tile w-11 h-11 flex items-center justify-center text-2xl font-light leading-none"
+     class="lc-rail-add w-11 h-11 flex items-center justify-center text-2xl font-light leading-none"
      aria-label="{{ "switcher-discover"|t }}" data-lc-tip="{{ "switcher-discover"|t }}" data-lc-tip-pos="right">
     +
   </a>
-  {# LC-270: collapse the room sidebar to this rail (desktop only). State is
-     device-local in localStorage; the no-flash bootstrap in base.html applies
-     it and __lcToggleSidebar flips it. Chevron rotates via CSS when collapsed. #}
-  <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
+  </div>
+  {# LC-270 / LC-576: the EXPAND control. The primary collapse chevron now lives
+     in the sidebar head next to the title (prototype .sb-head); this one is its
+     counterpart and is shown only while the sidebar is collapsed, since the
+     collapsed #sidebar is display:none and takes its own chevron with it. It
+     points right (">>", expand) - no rotate rule, it has exactly one state. #}
+  <button type="button" data-lc-sidebar-toggle data-lc-sidebar-expand aria-controls="sidebar" aria-expanded="false"
           onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
           aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="right"
-          class="lc-rail-gear hidden md:flex w-11 h-11 rounded-xl items-center justify-center">
-    <svg data-lc-sidebar-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-      <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L9.06 10l3.71 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.06.02z" clip-rule="evenodd"/>
+          class="lc-rail-gear w-11 h-11 rounded-xl items-center justify-center">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+      <path fill-rule="evenodd" d="M4.21 5.23a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L7.94 10 4.23 6.29a.75.75 0 01-.02-1.06zm6 0a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L13.94 10l-3.71-3.71a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
     </svg>
   </button>
+  {# LC-576: the rail foot carries Settings / Shortcuts / Profile, stacked, as in
+     the prototype (gear, help, avatar). They were briefly a row in the sidebar
+     foot, which is wrong on two counts: the prototype puts them here, and the
+     sidebar can be collapsed away - the rail cannot, so this is also the only
+     placement where they stay reachable in every state. #}
+  {# LC-553: the rail settings gear is a curated dropdown (prototype), not a bare
+     link. A native <details> (no JS, mirrors the sidebar org menu) flies a short
+     menu out to the right; each item deep-links to the settings page with that
+     tab open (settings.js reads location.hash). "All settings" opens the page as
+     before, so nothing is lost. #}
+  <details class="lc-rail-menu">
+    <summary class="lc-rail-util" aria-label="{{ "sidebar-link-settings"|t }}"
+             data-lc-tip="{{ "sidebar-link-settings"|t }}" data-lc-tip-pos="right">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.31 7.498a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+      </svg>
+    </summary>
+    <div class="lc-rail-flyout" role="menu" aria-label="{{ "sidebar-link-settings"|t }}">
+      <a href="/settings#profile" role="menuitem" class="lc-menu-item">{{ "settings-section-profile"|t }}</a>
+      <a href="/settings#appearance" role="menuitem" class="lc-menu-item">{{ "settings-section-appearance"|t }}</a>
+      <a href="/settings#notifications" role="menuitem" class="lc-menu-item">{{ "settings-section-notifications"|t }}</a>
+      <a href="/settings#privacy" role="menuitem" class="lc-menu-item">{{ "settings-section-privacy"|t }}</a>
+      <div class="my-1 border-t border-border"></div>
+      <a href="/settings" role="menuitem" class="lc-menu-item">{{ "sidebar-link-settings"|t }}</a>
+    </div>
+  </details>
+  <button type="button" class="lc-rail-util"
+          onclick="window.__lcOpenShortcuts && window.__lcOpenShortcuts()"
+          aria-label="{{ "sidebar-link-shortcuts"|t }}" data-lc-tip="{{ "sidebar-link-shortcuts"|t }}" data-lc-tip-pos="right">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+    </svg>
+  </button>
+  {# LC-576: the user's avatar IS the profile control, as in the prototype - one
+     control, not an icon here and an identity block in the sidebar. It reuses
+     partials/sidebar_self.html unchanged, so the account menu (status, edit
+     profile, theme, shortcuts, admin, sign out) and the ws/own_profile_live OOB
+     swap that targets #sidebar-self both keep working. CSS collapses the trigger
+     to the avatar alone and flies the menu out to the right of the rail. #}
+  <div id="sidebar-self" class="lc-rail-self">
+    {% include "partials/sidebar_self.html" %}
+  </div>
+  {# The account menu's "Set status" item swaps the picker into this slot. #}
+  <div id="status-picker" class="lc-rail-statuspicker"></div>
 </nav>

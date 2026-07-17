@@ -1132,6 +1132,10 @@ mod tests {
 pub struct RoomPage<'a> {
     pub user: &'a User,
     pub room: &'a Room,
+    /// LC-576: whether the VIEWER has starred this room, for the header's
+    /// favorite star. The sidebar rows take `is_starred` as a per-section
+    /// literal, so this is the only per-room source of truth on the page.
+    pub is_starred: bool,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
@@ -1204,6 +1208,11 @@ pub struct RoomPage<'a> {
     /// LC-568: number of rows in `room_members` for this room, surfaced to
     /// the Details panel's "Members" row.
     pub member_count: usize,
+    /// LC-553: up to a few member user-ids that seed the header avatar stack
+    /// (rendered as /avatars/{id}); `member_count - header_members.len()` is the
+    /// "+N" overflow. For public rooms these are enclave members, since a public
+    /// room's access derives from enclave membership, not an explicit roster.
+    pub header_members: Vec<String>,
     /// LC-568: whether the room has at least one pinned message, surfaced
     /// to the Details panel's "Pinned" row. Computed independently of
     /// `pinned_strip_html` (that fragment always renders a wrapper div even

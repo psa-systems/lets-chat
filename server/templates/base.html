@@ -154,6 +154,32 @@
         }
       };
 
+      // LC-576: the right Details panel gets the mirror of the LC-270 left
+      // sidebar collapse, so both rails carry a chevron. Same shape throughout:
+      // device-local (localStorage), applied BEFORE CSS so a collapsed panel
+      // never flashes open, hiding is pure CSS keyed on the attribute, and the
+      // chevron flips via the same rotate rule.
+      function applyDetails(v) {
+        if (v === "collapsed") d.setAttribute("data-lc-details", "collapsed");
+        else d.removeAttribute("data-lc-details");
+      }
+      var dp = null;
+      try { dp = localStorage.getItem("lc-details"); } catch (e) {}
+      applyDetails(dp);
+      window.__lcToggleDetails = function () {
+        var collapsed = d.getAttribute("data-lc-details") === "collapsed";
+        var next = collapsed ? "" : "collapsed";
+        try {
+          if (next) localStorage.setItem("lc-details", next);
+          else localStorage.removeItem("lc-details");
+        } catch (e) {}
+        applyDetails(next);
+        var btns = document.querySelectorAll("[data-lc-details-toggle]");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].setAttribute("aria-expanded", next ? "false" : "true");
+        }
+      };
+
       // LC-308: unread-only sidebar filter. Device-local; set before paint so
       // hidden rows never flash in. The actual hiding is pure CSS keyed on
       // this attribute (main.css), so it tracks live unread-badge OOB swaps

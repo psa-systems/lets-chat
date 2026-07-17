@@ -987,6 +987,18 @@ html[data-scale="xl"]      { font-size: 20px; }
        and hover still wins with the sunken background. */
     background: color-mix(in srgb, var(--accent-surface) 55%, transparent);
 }
+/* LC-553: consecutive mentioned messages (a run of pings, e.g. follow-ups from
+   the same author) read as separate notched brackets because each keeps its own
+   rounded corners. Square the corners where two mentioned rows touch so the
+   accent bar + wash merge into one continuous block for the whole run. */
+.lc-mentioned:has(+ .lc-mentioned) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.lc-mentioned + .lc-mentioned {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
 
 /* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
    <pre> in .lc-code-wrap and drops a .lc-code-copy button in the top-right,
@@ -1119,24 +1131,11 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 /* LC-462: the replies list. The earlier heavy accent rail down the left edge
    read as a "wall"; the parent block + count divider already convey hierarchy,
-   so drop the rail and instead give the scroll region a thin, unobtrusive
-   overlay scrollbar so the panel feels attached to the conversation. */
-.lc-thread-replies {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-strong) transparent;
-}
-.lc-thread-replies::-webkit-scrollbar { width: 8px; }
-.lc-thread-replies::-webkit-scrollbar-track { background: transparent; }
-.lc-thread-replies::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
-    border-radius: 9999px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-}
-.lc-thread-replies::-webkit-scrollbar-thumb:hover {
-    background-color: var(--content-subtle);
-    background-clip: content-box;
-}
+   so the rail is gone and the panel just scrolls.
+   LC-576: this used to also pin its own always-visible 8px --border-strong
+   scrollbar here, which outlived the global switch to thin, button-less,
+   hover-only scrollbars and left the thread panel as the one surface still
+   showing a resting bar. It now inherits the global rule; no override needed. */
 
 .lc-quote-bar {
     display: flex;
@@ -1871,6 +1870,409 @@ math {
     color: var(--sidebar-muted);
 }
 
+/* LC-576: the right column (prototype .rightcol) - ONE rail that owns the single
+   border and the scroll, holding the thread / history / details panels as
+   subcards (.lc-panel, prototype .panel: 14px margin, 12px radius, elevated on
+   the column's plain surface). Previously each panel was its own full-bleed
+   aside with its own border-l, so an open thread read as a second rail bolted
+   onto the details rail instead of one rail of cards. */
+.lc-rightcol {
+    width: 22.5rem;
+    flex: 0 0 22.5rem;
+    border-left: 1px solid var(--border);
+    background-color: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.lc-panel {
+    margin: 0.875rem;
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--surface-elevated);
+    overflow: hidden;
+}
+/* The thread panel scrolls its own replies list, so it must be able to shrink
+   inside the column rather than growing the column's scroll height forever. */
+.lc-rightcol > .lc-panel.flex { min-height: 0; max-height: calc(100vh - 8rem); }
+
+/* LC-576: sidebar head - product title + collapse chevron, matching the
+   prototype's .sb-head / .sb-title (16px 16px 10px, 18px/700). */
+.lc-sidebar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: none;
+    padding: 1rem 1rem 0.625rem;
+}
+.lc-sidebar-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--content);
+}
+
+/* LC-576: org row + its enclave menu (prototype .sb-org: 6px 16px 12px, 15px/600,
+   muted chevron). A native <details> so it needs no JS; the summary marker is
+   stripped because the chevron is drawn explicitly. */
+.lc-sidebar-org-wrap {
+    position: relative;
+    flex: none;
+}
+.lc-sidebar-org {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.375rem 1rem 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--content);
+    cursor: pointer;
+    list-style: none;
+}
+.lc-sidebar-org::-webkit-details-marker { display: none; }
+.lc-sidebar-org-chev {
+    height: 1rem;
+    width: 1rem;
+    flex: none;
+    color: var(--content-muted);
+    transition: transform 0.15s ease;
+}
+.lc-sidebar-org-wrap[open] .lc-sidebar-org-chev { transform: rotate(180deg); }
+.lc-sidebar-org-menu {
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 100%;
+    z-index: 40;
+    padding: 0.375rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+}
+
+/* LC-576: search tabs (prototype .sb-tabs / .sb-tab: two evenly split tabs on the
+   sunken ramp, 12px/600, 7px radius - no bordered shell around them). */
+.lc-sidebar-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0 1rem 0.625rem;
+}
+.lc-sidebar-tab {
+    flex: 1;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.3125rem 0;
+    border-radius: 0.4375rem;
+    color: var(--content-muted);
+    background-color: var(--surface-sunken);
+    cursor: pointer;
+}
+.lc-sidebar-tab:hover { color: var(--content); }
+.lc-sidebar-tab[aria-pressed="true"] {
+    background-color: var(--accent);
+    color: var(--accent-content);
+}
+
+/* LC-576: search row (prototype .sb-search) - the field and the "new room"
+   button share one row. */
+.lc-sidebar-search {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 1rem 0.875rem;
+}
+.lc-sidebar-field {
+    width: 100%;
+    min-width: 0;
+    background-color: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-sidebar-field:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+/* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
+   field reserves right padding so typed text never slides under the chip. */
+.lc-sidebar-search .lc-sidebar-field { padding-right: 3.25rem; padding-left: 1.9rem; }
+/* LC-553: ephemeral-timer (self-destruct) control - a clock-icon popover that
+   replaces the raw <select>. Muted clock when off; accent clock + inline
+   duration when a timer is armed. Menu opens upward (composer is at the foot). */
+.lc-ttl { position: relative; align-self: center; }
+.lc-ttl > summary { list-style: none; cursor: pointer; }
+.lc-ttl > summary::-webkit-details-marker { display: none; }
+.lc-ttl > summary::marker { content: ""; }
+.lc-ttl-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    height: 1.875rem;
+    padding: 0 0.4rem;
+    border-radius: 0.5rem;
+    color: var(--content-muted);
+}
+.lc-ttl-summary:hover { background-color: var(--surface-sunken); color: var(--content); }
+.lc-ttl-summary svg { height: 1.05rem; width: 1.05rem; flex: none; }
+.lc-ttl-val { font-size: 0.6875rem; font-weight: 700; line-height: 1; }
+.lc-ttl.lc-ttl-armed .lc-ttl-summary { color: var(--accent); }
+.lc-ttl-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.375rem);
+    z-index: 40;
+    min-width: 8.5rem;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+}
+.lc-ttl-opt {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+    cursor: pointer;
+}
+.lc-ttl-opt:hover { background-color: var(--surface-sunken); }
+.lc-ttl-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+.lc-ttl-opt::before {
+    content: "";
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    border-radius: 999px;
+    border: 1.5px solid var(--border-strong);
+}
+.lc-ttl-opt:has(:checked) { color: var(--accent); font-weight: 600; }
+.lc-ttl-opt:has(:checked)::before {
+    border-color: var(--accent);
+    background: var(--accent);
+    box-shadow: inset 0 0 0 3px var(--surface-elevated);
+}
+
+/* LC-553: room-header member avatar stack (prototype) - overlapping round
+   avatars with a "+N" overflow count. */
+.lc-member-stack {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    margin-right: 0.25rem;
+}
+.lc-member-av {
+    height: 1.75rem;
+    width: 1.75rem;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 2px solid var(--surface);
+    margin-left: -0.5rem;
+    background-color: var(--surface-sunken);
+}
+.lc-member-av:first-child { margin-left: 0; }
+.lc-member-more {
+    margin-left: 0.4rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--content-muted);
+    white-space: nowrap;
+}
+
+.lc-sb-search-icon {
+    position: absolute;
+    left: 0.5625rem;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 0.9rem;
+    width: 0.9rem;
+    color: var(--content-subtle);
+    pointer-events: none;
+}
+.lc-sb-kbd {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-family: inherit;
+    font-size: 0.6875rem;
+    line-height: 1;
+    color: var(--content-subtle);
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 0.3125rem;
+    padding: 0.1875rem 0.3125rem;
+}
+.lc-sidebar-add {
+    height: 2.125rem;
+    width: 2.125rem;
+    flex: 0 0 2.125rem;
+    border-radius: 0.5rem;
+    background-color: var(--accent);
+    color: var(--accent-content);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+}
+.lc-sidebar-add:hover { background-color: var(--accent-hover); }
+.lc-sidebar-add svg { height: 1.125rem; width: 1.125rem; }
+
+/* LC-576: the bottom-left utility row (Profile / Shortcuts / Settings), matching
+   the prototype's .sb-foot. It sits inside .lc-sidebar, which already remaps the
+   generic tokens onto the sidebar ramp, so plain var(--border) / var(--content)
+   here resolve to the navy variants - no sidebar-specific tokens needed. */
+.lc-sidebar-foot {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: none;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--content-muted);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+.lc-sidebar-foot:hover { color: var(--content); }
+.lc-sidebar-foot svg { height: 1.125rem; width: 1.125rem; flex: none; }
+
+
+/* LC-576: collapsed create-category disclosure at the foot of the room list. */
+.lc-sb-newcat {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.5rem 0;
+    border-top: 1px solid var(--border);
+}
+.lc-sb-newcat > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.125rem 0;
+}
+.lc-sb-newcat > summary::-webkit-details-marker { display: none; }
+.lc-sb-newcat > summary:hover { color: var(--content); }
+
+/* LC-576: rail utilities at the foot (prototype: gear, help, avatar stacked). */
+.lc-rail-util {
+    display: grid;
+    place-items: center;
+    height: 2.25rem;
+    width: 2.25rem;
+    flex: none;
+    border-radius: 0.625rem;
+    color: var(--rail-content-muted);
+    cursor: pointer;
+}
+.lc-rail-util:hover {
+    background-color: var(--rail-tile);
+    color: var(--rail-content);
+}
+.lc-rail-util svg { height: 1.125rem; width: 1.125rem; }
+/* LC-576: the profile control in the rail foot. partials/sidebar_self.html is
+   reused verbatim (so the account menu + the own_profile_live OOB swap keep
+   working); these rules collapse its trigger to the avatar alone and fly the
+   popovers out to the RIGHT of the 64px rail, where they have room. */
+.lc-rail-self {
+    flex: none;
+    margin-bottom: 0.25rem;
+}
+/* Trigger: avatar only - drop the name / @handle / status text column and the
+   chevron. Target the TEXT column (span.min-w-0) explicitly: avatar.html's own
+   root is `<span class="relative inline-block shrink-0">`, which carries no
+   `rounded-full`, so a negative selector like :not([class*="rounded-full"])
+   matches the AVATAR and hides it - which is exactly what it did. */
+.lc-rail-self #own-avatar-wrapper {
+    width: auto;
+    padding: 0.125rem;
+    gap: 0;
+    border-radius: 9999px;
+}
+.lc-rail-self #own-avatar-wrapper > span.min-w-0,
+.lc-rail-self [data-lc-account-chevron] {
+    display: none;
+}
+.lc-rail-self #own-avatar-wrapper:hover { background-color: var(--rail-tile); }
+/* Menu: out to the right, anchored to the rail foot rather than below the
+   trigger (there is no room below - it is the last thing in the rail). */
+.lc-rail-self #lc-account-menu {
+    left: calc(100% + 0.5rem);
+    right: auto;
+    top: auto;
+    bottom: 0;
+    margin-top: 0;
+    width: 15rem;
+}
+/* LC-553: rail settings dropdown (native <details>). The flyout escapes the rail
+   to the right, same treatment as the account menu; the disclosure triangle is
+   suppressed so the summary reads as the plain gear tile. */
+.lc-rail-menu { position: relative; flex: none; }
+.lc-rail-menu > summary { list-style: none; cursor: pointer; }
+.lc-rail-menu > summary::-webkit-details-marker { display: none; }
+.lc-rail-menu > summary::marker { content: ""; }
+.lc-rail-flyout {
+    position: absolute;
+    left: 3.25rem;
+    right: auto;
+    bottom: 0;
+    z-index: 50;
+    width: 13rem;
+    padding: 0.375rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+}
+
+/* LC-553: rail avatar hovercard. The name / @handle / status column is hidden in
+   the rail (avatar-only trigger); on hover reveal it as a two-line card flying
+   out to the right, so identity is discoverable without opening the menu. */
+.lc-rail-self:hover #own-avatar-wrapper > span.min-w-0 {
+    display: block;
+    position: absolute;
+    left: 3.25rem;
+    right: auto;
+    bottom: 0;
+    z-index: 55;
+    width: 12rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+    text-align: left;
+    white-space: normal;
+    pointer-events: none;
+}
+/* LC-553: once the account menu is OPEN (avatar clicked -> aria-expanded), the
+   menu already carries the name/@handle in its own header, so suppress the hover
+   card - otherwise it fires on top of the open menu as a duplicate identity. */
+.lc-rail-self:hover #own-avatar-wrapper[aria-expanded="true"] > span.min-w-0 { display: none; }
+
+/* The status picker swaps in here; same fly-out treatment. */
+.lc-rail-statuspicker {
+    position: relative;
+    flex: none;
+}
+.lc-rail-statuspicker:not(:empty) > * {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    bottom: 0;
+    z-index: 50;
+    width: 15rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+}
+
 /* LC-270: collapse the room sidebar to the enclave rail on desktop. The wide
    #sidebar hides; the w-16 enclave switcher stays as the rail. Desktop only:
    on mobile the sidebar is an overlay with its own toggle (lcOpenNav), so the
@@ -1881,12 +2283,50 @@ math {
         display: none;
     }
 }
-[data-lc-sidebar-chevron] {
-    transition: transform 0.15s ease;
+/* LC-576: the rail's expand button is the way back once the sidebar is hidden,
+   so it exists ONLY in the collapsed state (and only on desktop, where the
+   collapse applies at all). Expanded, the chevron next to the sidebar title is
+   the control, and this one would be a redundant second one. */
+[data-lc-sidebar-expand] {
+    display: none;
 }
-html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
-    transform: rotate(180deg);
+@media (min-width: 768px) {
+    html[data-lc-sidebar="collapsed"] [data-lc-sidebar-expand] {
+        display: flex;
+    }
 }
+
+/* LC-576: mirror of the above for the right Details panel, so both rails have a
+   collapse chevron. Desktop only, for the same reason the left one is: below
+   768px the right column already stacks/hides, and a stored collapse
+   preference must not fight that. The chevron points right (collapse, ">>")
+   when the panel is open and flips to point left ("<<") when it is closed. */
+/* LC-553: the right column holds Details (toggled by the header info icon and
+   closed by its own X) and Thread (opened from a message, closed by its X).
+   Each panel hides independently; the whole column collapses to nothing when
+   BOTH are closed, so no separate collapse control is needed. */
+html[data-lc-details="collapsed"] #details-panel { display: none; }
+@media (min-width: 768px) {
+    /* Details closed AND thread not open -> drop the now-empty column. */
+    html[data-lc-details="collapsed"] #rightcol:has(#thread-panel.hidden) { display: none; }
+}
+/* LC-553: the shared emoji picker (w-72) is left-anchored for the wide composer;
+   in the narrow thread reply it would overflow the panel, so right-anchor it. */
+#lc-thread-emoji-slot [data-lc-emoji-picker-panel] { left: auto; right: 0; }
+
+/* Shared close (X) button for the Details and Thread panel headers. */
+.lc-panel-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.75rem;
+    width: 1.75rem;
+    flex: none;
+    border-radius: 0.5rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-panel-close:hover { color: var(--content); background-color: var(--surface-sunken); }
 
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
    while content streams in. */
@@ -1978,7 +2418,8 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    text-content-muted) EXCEPT caption/section-label, which imply a muted tone.
    Spacing rhythm stays on Tailwind's 4px scale - see docs/ui-conventions.md. */
 .lc-display { font-size: 1.5rem;    font-weight: 600; line-height: 1.2;  letter-spacing: -0.01em; }
-.lc-h1      { font-size: 1.125rem;  font-weight: 600; line-height: 1.35; }
+/* LC-576: 700 to match the prototype's page/room titles (was 600). */
+.lc-h1      { font-size: 1.125rem;  font-weight: 700; line-height: 1.35; }
 .lc-h2      { font-size: 1rem;      font-weight: 600; line-height: 1.4; }
 .lc-h3      { font-size: 0.875rem;  font-weight: 600; line-height: 1.4; }
 .lc-body    { font-size: 0.875rem;  font-weight: 400; line-height: 1.5; }
@@ -2049,10 +2490,13 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     background-color: var(--rail-tile-hover);
     border-radius: 1.375rem;
 }
+/* LC-576: the active tile RECOLORS but keeps its rounded-square shape - it used
+   to also morph to a circle, so selecting an enclave changed its silhouette. The
+   circle is a hover affordance only (see :hover above), which still applies to
+   the active tile on hover. */
 .lc-rail-tile.lc-rail-active {
     background-color: var(--accent);
     color: var(--accent-content);
-    border-radius: 1.375rem;
 }
 /* Left indicator pill (Discord pattern). Sits in the rail gutter to the left of
    the tile: 0 height at rest, a short stub on hover, tallest when active. */
@@ -2074,6 +2518,51 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
 .lc-rail-tile.lc-rail-active::before {
     height: 2.25rem;
 }
+
+
+
+/* LC-576: the enclave stack is the rail's only scroll region, so the foot
+   utilities (settings / shortcuts / avatar) stay pinned and reachable no matter
+   how many enclaves the user is in. flex:1 + min-height:0 is what lets it
+   actually shrink inside the flex column rather than overflowing it. */
+.lc-rail-scroll {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+}
+
+/* LC-576: the Let's Chat brand mark at the head of the rail (prototype .rail-logo).
+   An accent-filled tile, so it reads as the product's own mark and not as another
+   enclave in the stack below it. */
+.lc-rail-brand {
+    display: grid;
+    place-items: center;
+    flex: none;
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 0.75rem;
+    background-color: var(--accent);
+    color: var(--accent-content);
+}
+
+/* LC-576: the rail's discover/create `+` - a bare action glyph with no tile fill,
+   so it does not read as another enclave in the stack. */
+.lc-rail-add {
+    flex: none;
+    color: var(--rail-content-muted);
+    border-radius: 0.95rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.lc-rail-add:hover {
+    color: var(--rail-content);
+    background-color: var(--rail-tile);
+}
+
 /* Settings gear on the active enclave tile + the collapse chevron: muted rail
    icons that brighten on hover. */
 .lc-rail-gear {
@@ -2104,8 +2593,10 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     align-items: center;
     justify-content: center;
     border-radius: 9999px;
-    background-color: var(--danger);
-    color: var(--danger-content);
+    /* LC-576: the enclave-rail unread badge is accent (matching the comp), not
+       danger-red - it counts unread, it is not an error. */
+    background-color: var(--accent);
+    color: var(--accent-content);
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1;
@@ -2261,17 +2752,12 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
    no uppercase), matching the comps and the prototype. */
 .lc-day-chip {
     flex: none;
-    border-radius: 9999px;
-    border: 1px solid var(--border);
-    background-color: var(--surface-elevated);
-    padding: 0.125rem 0.625rem;
-    font-size: 0.6875rem;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    /* LC-558: content-muted (was content-subtle) so the day label clears WCAG AA
-       on the elevated pill instead of hovering near the floor. */
-    color: var(--content-muted);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--content-subtle);
 }
 /* LC-569: the unread separator is the ACCENT "new messages" divider, not a
    danger-red pill: accent text between accent hairlines. */
@@ -2571,13 +3057,13 @@ html[data-lc-sidebar="collapsed"] [data-lc-sidebar-chevron] {
     background-color: var(--accent-content);
     color: var(--accent);
 }
-/* LC-576: descendants that set their own grey via a Tailwind utility (the
-   leading #/speaker glyph, the draft pencil, the DM custom-status line) do not
-   inherit the row's --accent-content, so on the active fill they stay resting
-   grey - visually wrong and a contrast failure. A descendant selector (0,2,0)
-   outranks the bare utility (0,1,0), so resting rows are untouched. Opacity
-   0.75 (matching the prototype) keeps the glyph quieter than the room name
-   without reintroducing a fixed grey. */
+/* LC-576: descendants of the active row set their own color with a Tailwind
+   utility (the leading # glyph and the draft pencil use text-content-subtle,
+   the DM custom-status line uses text-content-muted). A class beats an
+   inherited value, so they kept their resting grey against the solid accent
+   fill instead of inverting with the row. Restate them in the row's own
+   content color and carry the hierarchy with opacity. The mention badge is
+   exempt on purpose: it is a self-contained danger pill with its own fill. */
 .lc-room-row-active .text-content-subtle,
 .lc-room-row-active .text-content-muted {
     color: var(--accent-content);
@@ -2628,14 +3114,21 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    min-height: 3rem;
-    padding: 0.5rem 1rem;
+    /* LC-576: 14px/20px to match the prototype top bar. The 20px side padding
+       also puts the room title on the SAME gutter as the timeline (#messages is
+       px-5), which the old 16px did not - the title hung 4px left of every
+       message row below it. */
+    min-height: 3.5rem;
+    padding: 0.875rem 1.25rem;
     border-bottom: 1px solid var(--border);
 }
 .lc-header-actions {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    /* LC-576: the prototype spaces bare header glyphs 14px apart. These actions
+       each carry 8px of internal padding, so 6px between the boxes lands at the
+       same ~14px optical gap between glyphs without the hover tints colliding. */
+    gap: 0.375rem;
     flex: none;
 }
 /* Header action: icon-only (square) or icon+label (auto width). Consistent
@@ -2662,6 +3155,55 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     color: var(--danger);
 }
 .lc-header-action svg { height: 1.25rem; width: 1.25rem; }
+/* LC-576: the prototype's header actions are icon-only (.hdr-ico) - the labels
+   live in the tooltip / aria-label, which every one of these already carries.
+   The text labels made the bar wide enough to push the notify pill and overflow
+   off the edge on a normal window. The notify pill keeps its label on purpose:
+   it shows STATE ("All" / "Muted"), not just an action name. */
+.lc-header-actions .lc-header-action > span { display: none; }
+.lc-header-actions [id^="lc-notify-toggle-"] > span { display: inline; }
+
+/* LC-576: header search - an icon that discloses the existing combobox, rather
+   than a persistent field taking a fifth of the bar (prototype has an icon). */
+.lc-header-search { position: relative; }
+.lc-header-search > summary {
+    list-style: none;
+    cursor: pointer;
+}
+.lc-header-search > summary::-webkit-details-marker { display: none; }
+.lc-header-search[open] > summary {
+    background-color: var(--surface-sunken);
+    color: var(--content);
+}
+.lc-header-search-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.375rem);
+    z-index: 40;
+    width: 17rem;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+}
+.lc-header-search-pop input[name="q"] { width: 100%; }
+
+/* LC-576: favorite star beside the room title (prototype .hdr-title .star). */
+.lc-header-star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: 0.375rem;
+    font-size: 1.125rem;
+    line-height: 1;
+    color: var(--content-subtle);
+    cursor: pointer;
+}
+.lc-header-star:hover { color: #f59e0b; background-color: var(--surface-sunken); }
+.lc-header-star-on { color: #f59e0b; }
 /* LC-436: Mute is an icon toggle - an sr-only checkbox (keeps the hx-post mute
    wiring) swaps a bell for a slashed bell and tints the action when muted. */
 .lc-header-action .lc-mute-off { display: none; }
@@ -3616,6 +4158,39 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
 .lc-set-field.lc-set-field--narrow { max-width: 22rem; }
 .lc-set-label { font-size: 0.8125rem; font-weight: 500; color: var(--content); }
 .lc-set-help { font-size: 0.75rem; color: var(--content-muted); }
+/* LC-553: segmented control for enumerated prefs (theme mode, scaling, density),
+   matching the prototype's settings pills. A radiogroup of sr-only radios wrapped
+   by label pills; :has(:checked) fills the active pill with the accent. */
+.lc-set-seg {
+    display: inline-flex;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border-radius: 0.625rem;
+    background-color: var(--surface-sunken);
+    border: 1px solid var(--border);
+    align-self: flex-start;
+    max-width: 100%;
+    flex-wrap: wrap;
+}
+.lc-set-seg-opt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.4375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--content-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+.lc-set-seg-opt:hover { color: var(--content); }
+.lc-set-seg-opt:has(:checked) {
+    background-color: var(--accent);
+    color: var(--accent-content);
+}
+.lc-set-seg-opt:has(:focus-visible) { box-shadow: 0 0 0 2px var(--ring); }
 /* LC-439: inline field validation error (avatar size/type). */
 .lc-set-error { font-size: 0.75rem; font-weight: 500; color: var(--danger); }
 .lc-set-error[hidden] { display: none; }

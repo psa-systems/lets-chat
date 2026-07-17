@@ -38,6 +38,9 @@ pub struct SidebarPeer {
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
     pub unread: i64,
+    /// LC-553: unread @-mention count in this DM, so a peer row can show the
+    /// same `@N` badge a channel row does. Mirrors `SidebarRoom::mentions`.
+    pub mentions: i64,
     pub status: String,
     pub custom_status: Option<String>,
     /// "none" | "all". DMs only ever take these two; mirrors

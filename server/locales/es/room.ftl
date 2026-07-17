@@ -532,6 +532,8 @@ room-slowmode-saved = Modo lento actualizado.
 
 ## LC-568: panel de detalles (columna derecha, debajo del panel de hilo)
 room-details-title = Detalles
+# LC-576: chevron para plegar/desplegar el panel de detalles (refleja el de la barra lateral izquierda)
+room-details-toggle = Alternar el panel de detalles
 room-details-created = Creado
 room-details-members = Miembros
 room-details-notifications = Notificaciones
