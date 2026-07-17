@@ -557,9 +557,25 @@ pub async fn get_room(
     // LC-568: Details panel "Members" / "Pinned" rows. Cheap direct queries
     // rather than reusing pinned_strip_html (that fragment always renders a
     // wrapper div, even with zero pins, so it's not an emptiness signal).
-    let member_count = db::chat::list_room_member_ids(&state.chat, room_id)
-        .await?
-        .len();
+    // LC-553: effective members. A public room's access derives from ENCLAVE
+    // membership (its `room_members` roster is empty), so count enclave members
+    // there; private rooms and DMs use their explicit roster. The first few ids
+    // seed the header avatar stack and the count drives its "+N" overflow.
+    let member_ids: Vec<String> = if room.room_type != "private" {
+        if let Some(eid) = current_enclave {
+            db::enclave::list_members(&state.chat, eid)
+                .await?
+                .into_iter()
+                .map(|m| m.user_id)
+                .collect()
+        } else {
+            db::chat::list_room_member_ids(&state.chat, room_id).await?
+        }
+    } else {
+        db::chat::list_room_member_ids(&state.chat, room_id).await?
+    };
+    let member_count = member_ids.len();
+    let header_members: Vec<String> = member_ids.iter().take(5).cloned().collect();
     let has_pinned = db::pinned::count_for_room(&state.chat, room_id).await? > 0;
 
     // LC-64: server-persisted draft restore + 60-day lazy cleanup.
@@ -654,6 +670,7 @@ pub async fn get_room(
         stage_enabled,
         stage_panel_html,
         member_count,
+        header_members,
         has_pinned,
     };
     let body = html(&page)?;

@@ -23,4 +23,8 @@ pub struct RoomHeaderFragment<'a> {
     pub llm_available: bool,
     /// LC-506: admin-only disabled teaser when the LLM is unconfigured.
     pub llm_teaser: bool,
+    /// LC-553: header member avatar stack, recomputed here so the stack survives
+    /// the notify-prefs header swap (mirrors RoomPage).
+    pub member_count: usize,
+    pub header_members: Vec<String>,
 }

@@ -59,7 +59,8 @@ pub async fn post_notify_prefs(
     // LC-84: re-resolve the override-manage flag so the rendered header
     // keeps (or hides) the "Moderators" link consistently with the
     // initial page render.
-    let enclave_role = if let Some(eid) = super::enclave_for_room(&state, room_id).await? {
+    let current_enclave = super::enclave_for_room(&state, room_id).await?;
+    let enclave_role = if let Some(eid) = current_enclave {
         db::enclave::get_membership(&state.chat, eid, &user.id)
             .await?
             .map(|m| m.role)
@@ -67,6 +68,22 @@ pub async fn post_notify_prefs(
         None
     };
     let can_manage_overrides = crate::perms::room_can_manage_overrides(enclave_role, &user.role);
+
+    // LC-553: recompute the header member stack (mirrors RoomPage) so it
+    // survives this notify-prefs header swap. Public rooms use enclave members.
+    let member_ids: Vec<String> = if room.room_type != "private" {
+        if let Some(eid) = current_enclave {
+            db::enclave::list_members(&state.chat, eid)
+                .await?
+                .into_iter()
+                .map(|m| m.user_id)
+                .collect()
+        } else {
+            db::chat::list_room_member_ids(&state.chat, room_id).await?
+        }
+    } else {
+        db::chat::list_room_member_ids(&state.chat, room_id).await?
+    };
 
     let is_starred = db::starred_rooms::is_starred(&state.auth, &user.id, room.id).await?;
     let fragment = RoomHeaderFragment {
@@ -76,6 +93,8 @@ pub async fn post_notify_prefs(
         can_manage_overrides,
         llm_available: state.llm_available(),
         llm_teaser: !state.llm_available() && user.role == "admin",
+        member_count: member_ids.len(),
+        header_members: member_ids.iter().take(5).cloned().collect(),
     };
     html(&fragment)
 }

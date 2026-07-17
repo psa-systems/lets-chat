@@ -1990,6 +1990,32 @@ math {
 /* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
    field reserves right padding so typed text never slides under the chip. */
 .lc-sidebar-search .lc-sidebar-field { padding-right: 3.25rem; padding-left: 1.9rem; }
+/* LC-553: room-header member avatar stack (prototype) - overlapping round
+   avatars with a "+N" overflow count. */
+.lc-member-stack {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    margin-right: 0.25rem;
+}
+.lc-member-av {
+    height: 1.75rem;
+    width: 1.75rem;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 2px solid var(--surface);
+    margin-left: -0.5rem;
+    background-color: var(--surface-sunken);
+}
+.lc-member-av:first-child { margin-left: 0; }
+.lc-member-more {
+    margin-left: 0.4rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--content-muted);
+    white-space: nowrap;
+}
+
 .lc-sb-search-icon {
     position: absolute;
     left: 0.5625rem;
