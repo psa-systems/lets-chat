@@ -4,7 +4,7 @@
    The id-keyed empty span is always present so a later DraftChanged OOB
    swap has a target whether or not a draft exists at first paint. #}
 {% if has_draft %}
-<span id="lc-draft-{{ draft_room_id }}" class="ml-1 text-content-subtle" title="{{ "sidebar-draft-indicator"|t }}" aria-label="{{ "sidebar-draft-indicator"|t }}">&#9998;</span>
+<span id="lc-draft-{{ draft_room_id }}" class="ml-1 shrink-0 inline-flex items-center text-content-subtle" title="{{ "sidebar-draft-indicator"|t }}" aria-label="{{ "sidebar-draft-indicator"|t }}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 10-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg></span>
 {% else %}
 <span id="lc-draft-{{ draft_room_id }}"></span>
 {% endif %}
