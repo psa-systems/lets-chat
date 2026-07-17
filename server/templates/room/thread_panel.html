@@ -4,7 +4,9 @@
   <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <div class="min-w-0">
       <div class="font-semibold leading-tight">{{ "room-thread-heading"|t }}</div>
-      <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} {{ parent.label() }}</div>
+      {# LC-576: the replied-to name is accent-colored (matching the comp's
+         "In reply to <name>"); the "In reply to" prefix stays muted. #}
+      <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} <span class="text-accent font-medium">{{ parent.label() }}</span></div>
     </div>
     <div class="flex items-center gap-2 flex-none">
       {# LC-310: follow/unfollow this thread to be notified of new replies. #}
