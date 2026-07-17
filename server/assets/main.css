@@ -1989,7 +1989,17 @@ math {
 }
 /* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
    field reserves right padding so typed text never slides under the chip. */
-.lc-sidebar-search .lc-sidebar-field { padding-right: 2.75rem; }
+.lc-sidebar-search .lc-sidebar-field { padding-right: 3.5rem; padding-left: 2rem; }
+.lc-sb-search-icon {
+    position: absolute;
+    left: 0.5625rem;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 0.9rem;
+    width: 0.9rem;
+    color: var(--content-subtle);
+    pointer-events: none;
+}
 .lc-sb-kbd {
     position: absolute;
     right: 0.5rem;
@@ -2190,16 +2200,45 @@ math {
    768px the right column already stacks/hides, and a stored collapse
    preference must not fight that. The chevron points right (collapse, ">>")
    when the panel is open and flips to point left ("<<") when it is closed. */
+/* LC-553: the collapse handle straddles the column's left seam so it never sits
+   over a card; the re-open rail is a thin full-height bar at the screen edge,
+   shown only while collapsed. Both desktop-only, matching the hide rule. */
+.lc-rightcol-collapse {
+    display: none;
+    flex: none;
+    align-self: flex-start;
+    align-items: center;
+    justify-content: center;
+    margin: 0.5rem 0 -0.5rem 0.75rem;
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: 0.5rem;
+    color: var(--content-subtle);
+    cursor: pointer;
+}
+.lc-rightcol-collapse:hover { color: var(--content); background-color: var(--surface-elevated); }
+.lc-rightcol-collapse svg { height: 1rem; width: 1rem; }
+.lc-rightcol-reopen { display: none; }
 @media (min-width: 768px) {
-    html[data-lc-details="collapsed"] #details-panel {
-        display: none;
+    .lc-rightcol-collapse { display: inline-flex; }
+    html[data-lc-details="collapsed"] #rightcol { display: none; }
+    html[data-lc-details="collapsed"] .lc-rightcol-reopen {
+        display: flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        border: none;
+        border-left: 1px solid var(--border);
+        background-color: var(--surface);
+        color: var(--content-muted);
+        cursor: pointer;
     }
-}
-[data-lc-details-chevron] {
-    transition: transform 0.15s ease;
-}
-html[data-lc-details="collapsed"] [data-lc-details-chevron] {
-    transform: rotate(180deg);
+    html[data-lc-details="collapsed"] .lc-rightcol-reopen:hover {
+        color: var(--content);
+        background-color: var(--surface-elevated);
+    }
+    .lc-rightcol-reopen svg { height: 1.1rem; width: 1.1rem; }
 }
 
 /* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
