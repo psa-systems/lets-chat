@@ -38,11 +38,15 @@
 
   {# sidebar: active row (solid accent) + resting row, on the navy sidebar ramp #}
   <div class="lc-sidebar" style="padding:.4rem; border-radius:.5rem;">
+    {# LC-576: mirror the REAL row markup (the leading glyph and the draft pencil
+       carry text-content-subtle) rather than inlining the intended colors. An
+       inline style cannot regress, so the earlier hand-colored copy could not
+       show that those utilities failed to invert against the accent fill. #}
     <div class="lc-room-row lc-room-row-active" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
-      <span class="text-content-subtle">#</span><span>product</span><span class="lc-count-pill">2</span>
+      <span class="w-6 text-center shrink-0 text-content-subtle">#</span><span>product</span><span class="ml-1 shrink-0 inline-flex items-center text-content-subtle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 10-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg></span><span class="lc-count-pill">2</span>
     </div>
     <div class="lc-room-row" style="display:flex; align-items:center; gap:.5rem; padding:.45rem .5rem; border-radius:.5rem;">
-      <span style="color:var(--content-muted);">#</span><span>design</span><span class="lc-count-pill">1</span>
+      <span class="w-6 text-center shrink-0 text-content-subtle">#</span><span>design</span><span class="ml-1 shrink-0 inline-flex items-center text-content-subtle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 10-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg></span><span class="lc-count-pill">1</span>
     </div>
   </div>
 

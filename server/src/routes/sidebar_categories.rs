@@ -290,6 +290,7 @@ pub(crate) async fn render_sidebar_with_enclave(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_sidebar(state, user, current_enclave).await?;
+    let switcher = super::load_switcher(state, user, sidebar_current_enclave).await?;
     let fragment = SidebarUpdateFragment {
         user,
         sidebar_categories: &sidebar_categories,
@@ -299,6 +300,7 @@ pub(crate) async fn render_sidebar_with_enclave(
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
     };
     html(&fragment)
 }

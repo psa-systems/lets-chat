@@ -3,18 +3,30 @@
    this is the always-visible glance summary). Rendered inline as part of
    RoomPage - `room`, `mute_mode`, `member_count`, `has_pinned` are all
    RoomPage fields already in scope via {% include %}. #}
-<aside id="details-panel" class="w-72 shrink-0 border-l border-border bg-surface-elevated overflow-y-auto">
-  <header class="border-b border-border px-3 py-2">
+<div id="details-panel" class="lc-panel">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <h2 class="font-semibold">{{ "room-details-title"|t }}</h2>
+    {# LC-553: close the Details panel; the header info icon reopens it. #}
+    <button type="button" data-lc-details-toggle aria-controls="details-panel" aria-expanded="true"
+      onclick="window.__lcToggleDetails && window.__lcToggleDetails()"
+      class="lc-panel-close" aria-label="{{ "room-thread-close"|t }}" data-lc-tip="{{ "room-thread-close"|t }}" data-lc-tip-pos="bottom">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+      </svg>
+    </button>
   </header>
+  {# LC-576: the prototype's Details rows are a plain key/value list - muted
+     sentence-case key on the left, content-colored value on the right, no card
+     and no uppercase. (An earlier pass here wrapped each row in a bordered
+     uppercase card; that was a deviation from the prototype, not a match to it.) #}
   <dl class="px-3 py-2 space-y-3 text-sm">
     <div class="flex items-center justify-between gap-2">
       <dt class="text-content-muted">{{ "room-details-created"|t }}</dt>
-      <dd class="text-content">{{ room.created_at }}</dd>
+      <dd class="text-content font-medium">{{ room.created_at }}</dd>
     </div>
     <div class="flex items-center justify-between gap-2">
       <dt class="text-content-muted">{{ "room-details-members"|t }}</dt>
-      <dd class="text-content">{{ member_count }}</dd>
+      <dd class="text-content font-medium tabular-nums">{{ member_count }}</dd>
     </div>
     {# LC-568: reuses the header's notify dropdown (`room/notify_dropdown.html`,
        included once in `partials/room_header.html`) instead of duplicating its
@@ -25,16 +37,22 @@
       <dt class="text-content-muted">{{ "room-details-notifications"|t }}</dt>
       <dd>
         <button type="button"
-                class="text-content hover:underline"
+                class="inline-flex items-center gap-1 text-content font-medium hover:underline"
+                aria-haspopup="menu"
                 aria-label="{{ "room-details-notifications"|t }}"
                 onclick="var t=document.getElementById('lc-notify-toggle-{{ room.id }}'); if (t) { t.click(); t.scrollIntoView({block: 'nearest'}); }">
-          {% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}
+          <span>{% if mute_mode == "none" %}{{ "room-notify-unmuted"|t }}{% else if mute_mode == "except_mentions" %}{{ "room-notify-muted-mentions"|t }}{% else %}{{ "room-notify-muted"|t }}{% endif %}</span>
+          {# LC-576: dropdown chevron so the row reads as the notifications picker
+             it opens (matching the comp's Notifications row). #}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-content-muted" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+          </svg>
         </button>
       </dd>
     </div>
     <div class="flex items-center justify-between gap-2">
       <dt class="text-content-muted">{{ "room-details-pinned"|t }}</dt>
-      <dd class="text-content">{% if has_pinned %}{{ "room-details-pinned-yes"|t }}{% else %}{{ "room-details-pinned-no"|t }}{% endif %}</dd>
+      <dd class="text-content font-medium">{% if has_pinned %}{{ "room-details-pinned-yes"|t }}{% else %}{{ "room-details-pinned-no"|t }}{% endif %}</dd>
     </div>
   </dl>
   {# LC-568: leaving only revokes access for `private` rooms - `public` room
@@ -43,12 +61,20 @@
      view (see `db::chat::search_messages_filtered`'s scope_clause). Hidden
      rather than shown-disabled to avoid a dead-looking control. #}
   {% if room.room_type == "private" %}
-  <div class="border-t border-border px-3 py-2">
+  {# LC-576: the prototype renders this as a red text action with a leading
+     icon, not a filled full-width danger button. #}
+  <div class="px-3 pb-3 pt-1">
     <form method="post" action="/room/{{ room.id }}/leave"
           data-lc-confirm="{{ "room-details-leave-confirm"|t }}"
           onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
-      <button type="submit" class="btn btn-danger btn-sm w-full">{{ "room-details-leave"|t }}</button>
+      <button type="submit" class="flex items-center gap-2 text-sm font-medium text-danger hover:underline">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h5.5A2.25 2.25 0 0113 4.25v2a.75.75 0 01-1.5 0v-2a.75.75 0 00-.75-.75h-5.5a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 00.75-.75v-2a.75.75 0 011.5 0v2A2.25 2.25 0 0110.75 18h-5.5A2.25 2.25 0 013 15.75V4.25z" clip-rule="evenodd"/>
+          <path fill-rule="evenodd" d="M19 10a.75.75 0 00-.75-.75H8.704l1.048-.943a.75.75 0 10-1.004-1.114l-2.5 2.25a.75.75 0 000 1.114l2.5 2.25a.75.75 0 101.004-1.114L8.704 10.75h9.546A.75.75 0 0019 10z" clip-rule="evenodd"/>
+        </svg>
+        <span>{{ "room-details-leave"|t }}</span>
+      </button>
     </form>
   </div>
   {% endif %}
-</aside>
+</div>

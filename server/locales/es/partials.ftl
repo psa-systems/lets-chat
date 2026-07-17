@@ -2,8 +2,8 @@
 # prefixed "partials-"/"sidebar-"/"switcher-"/"nav-", no dots. Grouped by area.
 
 ## Sidebar
-sidebar-search-messages-placeholder = Buscar mensajes...
-sidebar-search-people-placeholder = Buscar personas...
+sidebar-search-messages-placeholder = Buscar…
+sidebar-search-people-placeholder = Personas…
 sidebar-search-tab-messages = Mensajes
 sidebar-search-tab-people = Personas
 sidebar-link-admin = Administrar
@@ -29,6 +29,8 @@ sidebar-section-all-rooms = Todas las salas
 sidebar-section-rooms = Salas
 sidebar-section-direct-messages = Mensajes directos
 sidebar-room-add = Anadir chat
+# LC-576: sidebar foot action (prototype .sb-foot)
+sidebar-invite-people = Invitar personas
 sidebar-star = Destacar
 sidebar-unstar = Quitar de destacados
 sidebar-draft-indicator = Borrador sin enviar

@@ -690,15 +690,18 @@ pub(crate) async fn load_sidebar(
     // matches the per-room render purge in `db::drafts::get_fresh_or_purge`.
     let draft_room_ids = db::drafts::room_ids_with_drafts(&state.chat, &user.id, 60).await?;
 
+    // LC-553: unread @-mention counts per room, hoisted above the enclave/home
+    // split so both channel rows and DM peer rows can render the `@N` badge.
+    let mention_counts: HashMap<i64, i64> =
+        db::mentions::count_unread_mentions_per_room(&state.chat, &user.id)
+            .await?
+            .into_iter()
+            .collect();
+
     let (sidebar_rooms, sidebar_peers) = if let Some(eid) = current_enclave {
         let rooms = db::chat::list_rooms_in_enclave(&state.chat, eid, &user.id, is_admin).await?;
         let room_unreads: HashMap<i64, i64> =
             db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin)
-                .await?
-                .into_iter()
-                .collect();
-        let mention_counts: HashMap<i64, i64> =
-            db::mentions::count_unread_mentions_per_room(&state.chat, &user.id)
                 .await?
                 .into_iter()
                 .collect();
@@ -749,6 +752,7 @@ pub(crate) async fn load_sidebar(
                     display_name: record.display_name.clone(),
                     avatar_ext: record.avatar_ext.clone(),
                     unread: *dm_unreads_by_room.get(&room.id).unwrap_or(&0),
+                    mentions: *mention_counts.get(&room.id).unwrap_or(&0),
                     status: effective,
                     custom_status: record.custom_status.clone(),
                     mute_mode: dm_mute_modes

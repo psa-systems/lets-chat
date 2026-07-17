@@ -532,6 +532,8 @@ room-slowmode-saved = Slowmode updated.
 
 ## LC-568: Details panel (right column, below the thread panel)
 room-details-title = Details
+# LC-576: collapse/expand chevron for the Details panel (mirrors the left sidebar's)
+room-details-toggle = Toggle details panel
 room-details-created = Created
 room-details-members = Members
 room-details-notifications = Notifications

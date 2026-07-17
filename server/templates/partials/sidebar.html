@@ -1,47 +1,127 @@
 <aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 lc-sidebar border-r border-border flex flex-col">
-  <div class="p-4 border-b border-border">
-    <div id="sidebar-self" class="flex items-center gap-2">
-      {% include "partials/sidebar_self.html" %}
-    </div>
-    <div id="status-picker" class="mt-2"></div>
+  {# LC-576: sidebar head - product title with the collapse chevron beside it,
+     as in the prototype (.sb-head). This is the primary collapse control; the
+     rail keeps a counterpart that only appears once the sidebar is collapsed,
+     because a collapsed #sidebar is display:none and a chevron living in here
+     would disappear with it, leaving no way to expand again. #}
+  <div class="lc-sidebar-head">
+    <span class="lc-sidebar-title">Let's Chat</span>
+    <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
+            onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
+            aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="bottom"
+            class="lc-sidebar-foot-btn hidden md:inline-flex">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path fill-rule="evenodd" d="M15.79 14.77a.75.75 0 01-1.06.02l-4.25-4.24a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L12.06 10l3.71 3.71a.75.75 0 01.02 1.06zm-6 0a.75.75 0 01-1.06.02L4.48 10.55a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L6.06 10l3.71 3.71a.75.75 0 01.02 1.06z" clip-rule="evenodd"/>
+      </svg>
+    </button>
   </div>
+  {# LC-576: org row - the current enclave with a chevron that opens the enclave
+     options, as in the prototype (.sb-org). The rail still carries the enclave
+     tiles for switching; this is the named, discoverable entry point to the
+     current enclave's actions, which previously existed only as a small gear on
+     the rail tile. #}
+  {% if let Some(eid) = sidebar_current_enclave %}
+  {# The enclave's display name is not a field on the page structs, but the rail's
+     `switcher` list already carries (id, label, active) for every enclave - so the
+     current one's label is read straight off it, with no Rust-side plumbing. #}
+  <details class="lc-sidebar-org-wrap">
+    <summary class="lc-sidebar-org">
+      <span class="truncate">{% for e in switcher %}{% if e.active %}{% if e.id.is_some() %}{{ e.label }}{% endif %}{% endif %}{% endfor %}</span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="lc-sidebar-org-chev" aria-hidden="true">
+        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+      </svg>
+    </summary>
+    <div class="lc-sidebar-org-menu" role="menu">
+      {# Enclave settings is MANAGER-ONLY - same `can_manage` gate the rail gear
+         uses (LC-143). Listing it unconditionally here would surface an admin
+         link to every plain member. #}
+      {% for e in switcher %}{% if e.active %}{% if e.can_manage %}
+      <a href="/enclave/{{ eid }}/settings" role="menuitem" class="lc-menu-item">{{ "switcher-enclave-settings"|t }}</a>
+      {% endif %}{% endif %}{% endfor %}
+      <a href="/enclaves/discover" role="menuitem" class="lc-menu-item">{{ "switcher-discover"|t }}</a>
+    </div>
+  </details>
+  {% endif %}
   {# LC-369: unified sidebar search. One combobox over both backends - the
      segmented control (Messages / People) just swaps which endpoint the input
      targets (data-lc-search-tab + the delegated script below); search.js still
      owns keyboard nav over [role=option] in the shared #sidebar-search-results
      popover. Both /search and /users/search stay reachable. #}
-  <div class="p-2 space-y-2" data-lc-search-region>
-    <div class="inline-flex rounded-md border border-border p-0.5 text-xs" role="group"
+  <div data-lc-search-region>
+    {# LC-576: prototype .sb-tabs - two evenly split tabs on the sunken sidebar
+       ramp, no bordered shell. Previously an inline-flex bordered group that
+       shrink-wrapped to its labels and huddled in the corner. #}
+    <div class="lc-sidebar-tabs" role="group"
       aria-label="{{ "sidebar-search-tab-messages"|t }} / {{ "sidebar-search-tab-people"|t }}">
       <button type="button" data-lc-search-tab="messages" aria-pressed="true"
-        class="rounded px-2 py-0.5 text-content-muted aria-pressed:bg-accent aria-pressed:text-accent-content">{{ "sidebar-search-tab-messages"|t }}</button>
+        class="lc-sidebar-tab">{{ "sidebar-search-tab-messages"|t }}</button>
       <button type="button" data-lc-search-tab="people" aria-pressed="false"
-        class="rounded px-2 py-0.5 text-content-muted aria-pressed:bg-accent aria-pressed:text-accent-content">{{ "sidebar-search-tab-people"|t }}</button>
+        class="lc-sidebar-tab">{{ "sidebar-search-tab-people"|t }}</button>
     </div>
-    <form class="relative" autocomplete="off">
-      <input
-        id="sidebar-search-input"
-        name="q"
-        placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
-        aria-label="{{ "sidebar-search-messages-placeholder"|t }}"
-        data-lc-ph-messages="{{ "sidebar-search-messages-placeholder"|t }}"
-        data-lc-ph-people="{{ "sidebar-search-people-placeholder"|t }}"
-        hx-get="/search"
-        hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
-        hx-target="#sidebar-search-results"
-        hx-swap="innerHTML"
-        data-lc-search
-        data-lc-search-results="#sidebar-search-results"
-        role="combobox"
-        aria-expanded="false"
-        aria-controls="sidebar-search-results"
-        aria-autocomplete="list"
-        class="w-full border rounded px-2 py-1 text-sm">
-      <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
-    </form>
+    {# LC-576: prototype .sb-search - the search field and the "new room" button
+       share one row (the add control used to live on the ROOMS section header,
+       far from the search it belongs beside). #}
+    <div class="lc-sidebar-search">
+      <form class="relative flex-1 min-w-0" autocomplete="off">
+        {# LC-553: leading magnifier, matching the prototype .sb-search field. #}
+        <svg class="lc-sb-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+        </svg>
+        <input
+          id="sidebar-search-input"
+          name="q"
+          placeholder="{{ "sidebar-search-messages-placeholder"|t }}"
+          aria-label="{{ "sidebar-search-messages-placeholder"|t }}"
+          data-lc-ph-messages="{{ "sidebar-search-messages-placeholder"|t }}"
+          data-lc-ph-people="{{ "sidebar-search-people-placeholder"|t }}"
+          hx-get="/search"
+          hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
+          hx-target="#sidebar-search-results"
+          hx-swap="innerHTML"
+          data-lc-search
+          data-lc-search-results="#sidebar-search-results"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="sidebar-search-results"
+          aria-autocomplete="list"
+          class="lc-sidebar-field">
+        {# LC-576: ⌘K hint, matching the prototype's .sb-search kbd. The binding is
+           wired in the delegated script below (focuses this input from anywhere). #}
+        <kbd class="lc-sb-kbd" aria-hidden="true">⌘K</kbd>
+        <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
+      </form>
+      {# Opens the SAME modal the ROOMS-header `+` opens (LC-400 moved the create
+         form into the persistent shell so a sidebar OOB swap cannot destroy a
+         half-typed name). This is only a second trigger, beside the search where
+         the prototype puts it. #}
+      {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
+      <button type="button" class="lc-sidebar-add"
+              onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
+              aria-label="{{ "sidebar-room-add"|t }}" data-lc-tip="{{ "sidebar-room-add"|t }}" data-lc-tip-pos="bottom">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+        </svg>
+      </button>
+      {% endif %}{% endif %}
+    </div>
   </div>
+  {# LC-576: the identity block (avatar / display name / @handle / status) used to
+     sit here, above the nav. The prototype has no such block in the sidebar: the
+     avatar in the rail IS the profile control. It moved to the rail foot
+     (partials/enclave_switcher.html) along with the #status-picker slot the
+     account menu targets - keeping both would have been the same control twice. #}
   <script>
   (function(){
+    // LC-553: platform-aware shortcut hint - the ⌘ glyph is Mac-only, so on
+    // Windows/Linux relabel the kbd chip to "Ctrl K". Runs on EVERY sidebar
+    // render (before the wired-once guard below) so an OOB swap that re-emits
+    // the default "⌘K" gets corrected again. The keydown handler already accepts
+    // both metaKey and ctrlKey, so only the label needs swapping.
+    try {
+      var isMac = /Mac|iPhone|iPad|iPod/i.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''));
+      var chips = document.querySelectorAll('.lc-sb-kbd');
+      for (var c = 0; c < chips.length; c++) chips[c].textContent = isMac ? '⌘K' : 'Ctrl K';
+    } catch (e) {}
     // LC-369: segmented search-tab switcher. One document-level delegated
     // handler, wired once (the sidebar partial OOB-swaps, so re-running this
     // inline script must not stack listeners). Swapping the tab rewrites the
@@ -49,6 +129,15 @@
     // the shared results popover; search.js handles keyboard nav unchanged.
     if (window.__lcSearchTabsWired) return;
     window.__lcSearchTabsWired = true;
+    // LC-576: ⌘K / Ctrl-K focuses the sidebar search (matches the .sb-search kbd
+    // hint). Document-level, wired once with the tabs handler; ignores the combo
+    // while typing in another field so it does not hijack native shortcuts.
+    document.addEventListener('keydown', function(e){
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        var input = document.getElementById('sidebar-search-input');
+        if (input) { e.preventDefault(); input.focus(); input.select && input.select(); }
+      }
+    });
     // LC-392: htmx resolves an element's request verb+path ONCE at process time
     // and binds them into the trigger closure; it does not re-read hx-get per
     // fire. So setAttribute('hx-get', ...) below does NOT redirect the input's
@@ -179,5 +268,21 @@
   </nav>
   {# LC-368: the former footer account/utility group (Settings, theme, shortcuts,
      sign out, admin/moderate) moved into the account menu opened from the
-     profile header (partials/sidebar_self.html), removing the footer clutter. #}
+     profile header (partials/sidebar_self.html), removing the footer clutter.
+     LC-576: in the prototype the sidebar foot is a single "Invite people" action
+     (.sb-foot) - Profile / Shortcuts / Settings live in the RAIL instead, so
+     they are in enclave_switcher.html, not here. Inviting is a manager action
+     (invites are issued from the enclave settings member search), so this is
+     gated the same way and links there. #}
+  {% if let Some(eid) = sidebar_current_enclave %}
+  {% for e in switcher %}{% if e.active %}{% if e.can_manage %}
+  <a href="/enclave/{{ eid }}/settings#members" class="lc-sidebar-foot">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
+      <path d="M15.75 6.75a.75.75 0 00-1.5 0v1.5h-1.5a.75.75 0 000 1.5h1.5v1.5a.75.75 0 001.5 0v-1.5h1.5a.75.75 0 000-1.5h-1.5v-1.5z"/>
+    </svg>
+    <span>{{ "sidebar-invite-people"|t }}</span>
+  </a>
+  {% endif %}{% endif %}{% endfor %}
+  {% endif %}
 </aside>

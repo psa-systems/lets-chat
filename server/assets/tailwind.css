@@ -127,58 +127,86 @@
      the selected ring so no JS is needed to toggle a class. Degrades
      gracefully without `:has()` support - the radio still works, only the
      ring is missing. */
+  /* LC-553: prototype palette cards - a full-bleed mini-window preview at the top
+     of the card (edge to edge, NOT inset), with the palette name below on the
+     card's own surface and a plain accent checkmark on the selected card. The
+     card clips the preview to its rounded top corners via overflow:hidden. */
   .lc-palette-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
   }
   .lc-palette-swatch {
+    position: relative;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.5rem;
+    align-items: stretch;
+    padding: 0;
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
+    border-radius: 0.7rem;
+    background: var(--surface-elevated);
+    overflow: hidden;
     cursor: pointer;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
+  .lc-palette-swatch:hover { border-color: var(--border-strong); }
   .lc-palette-swatch:has(:checked) {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-surface);
+    box-shadow: 0 0 0 1px var(--accent);
   }
+  .lc-palette-swatch:has(:checked)::after {
+    content: "\2713";
+    position: absolute;
+    right: 0.7rem;
+    bottom: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+  }
+  /* Full-bleed mini-window: dark sidebar strip (::before, a subtle gradient),
+     light content area (background), rounded accent pill (::after). Per-palette
+     colors are the --pp-* props below. No radius - the card clips it. */
   .lc-palette-preview {
+    position: relative;
     width: 100%;
-    height: 2rem;
-    border-radius: 0.375rem;
-    border: 1px solid var(--border);
+    height: 3.35rem;
+    background: var(--pp-surface, #ffffff);
+  }
+  .lc-palette-preview::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 30%;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--pp-sidebar, #101828) 80%, #000) 0%,
+      var(--pp-sidebar, #101828) 100%);
+  }
+  .lc-palette-preview::after {
+    content: "";
+    position: absolute;
+    top: 22%; left: 36%;
+    width: 28%; height: 14%;
+    border-radius: 999px;
+    background: var(--pp-accent, #2563eb);
   }
   .lc-palette-name {
-    font-size: 0.75rem;
-    color: var(--content-muted);
-    text-align: center;
+    padding: 0.45rem 0.7rem 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--content);
+    text-align: left;
   }
-  /* LC-541: preview swatch colors duplicate main.css palette tokens (a swatch cannot render a non-active palette via inherited vars); keep in sync if a palette is retuned. */
-  .lc-palette-swatch[data-palette="blue-harbor"] .lc-palette-preview {
-    background: linear-gradient(135deg, #071a2f 0 40%, #f7fbff 40% 70%, #2563eb 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="cobalt"] .lc-palette-preview {
-    background: linear-gradient(135deg, #061932 0 40%, #f5f9ff 40% 70%, #0f62fe 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="ink-ice"] .lc-palette-preview {
-    background: linear-gradient(135deg, #07111f 0 40%, #f8fbfd 40% 70%, #1e40af 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="arctic"] .lc-palette-preview {
-    background: linear-gradient(135deg, #062033 0 40%, #fbfdff 40% 70%, #0284c7 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="deep-sea"] .lc-palette-preview {
-    background: linear-gradient(135deg, #041923 0 40%, #f5fcff 40% 70%, #0891b2 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="royal-navy"] .lc-palette-preview {
-    background: linear-gradient(135deg, #080f2a 0 40%, #f6f8ff 40% 70%, #1d4ed8 70% 100%);
-  }
-  .lc-palette-swatch[data-palette="amethyst"] .lc-palette-preview {
-    background: linear-gradient(135deg, #1a1030 0 40%, #faf8ff 40% 70%, #7c3aed 70% 100%);
-  }
+  /* LC-541/LC-553: preview colors duplicate the main.css palette tokens (a swatch
+     cannot render a non-active palette via inherited vars); keep in sync if a
+     palette is retuned. Order: sidebar / surface / accent. */
+  .lc-palette-swatch[data-palette="blue-harbor"] .lc-palette-preview { --pp-sidebar:#071a2f; --pp-surface:#f7fbff; --pp-accent:#2563eb; }
+  .lc-palette-swatch[data-palette="cobalt"] .lc-palette-preview { --pp-sidebar:#061932; --pp-surface:#f5f9ff; --pp-accent:#0f62fe; }
+  .lc-palette-swatch[data-palette="ink-ice"] .lc-palette-preview { --pp-sidebar:#07111f; --pp-surface:#f8fbfd; --pp-accent:#1e40af; }
+  .lc-palette-swatch[data-palette="arctic"] .lc-palette-preview { --pp-sidebar:#062033; --pp-surface:#fbfdff; --pp-accent:#0284c7; }
+  .lc-palette-swatch[data-palette="deep-sea"] .lc-palette-preview { --pp-sidebar:#041923; --pp-surface:#f5fcff; --pp-accent:#0891b2; }
+  .lc-palette-swatch[data-palette="royal-navy"] .lc-palette-preview { --pp-sidebar:#080f2a; --pp-surface:#f6f8ff; --pp-accent:#1d4ed8; }
+  .lc-palette-swatch[data-palette="amethyst"] .lc-palette-preview { --pp-sidebar:#1a1030; --pp-surface:#faf8ff; --pp-accent:#7c3aed; }
 
   /* LC-541: tokenized data table for the dev theme/component gallery (Task
      11) and, in a later phase, utility/admin pages. Explicit classes rather

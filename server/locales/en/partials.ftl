@@ -2,8 +2,8 @@
 # prefixed "partials-"/"sidebar-"/"switcher-"/"nav-", no dots. Grouped by area.
 
 ## Sidebar
-sidebar-search-messages-placeholder = Search messages...
-sidebar-search-people-placeholder = Search people...
+sidebar-search-messages-placeholder = Search…
+sidebar-search-people-placeholder = People…
 sidebar-search-tab-messages = Messages
 sidebar-search-tab-people = People
 sidebar-link-admin = Admin
@@ -29,6 +29,8 @@ sidebar-section-all-rooms = All rooms
 sidebar-section-rooms = Rooms
 sidebar-section-direct-messages = Direct messages
 sidebar-room-add = Add chat
+# LC-576: sidebar foot action (prototype .sb-foot)
+sidebar-invite-people = Invite people
 sidebar-star = Star
 sidebar-unstar = Unstar
 sidebar-draft-indicator = Unsent draft

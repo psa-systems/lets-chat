@@ -2456,6 +2456,9 @@ async fn render_sidebar(
     ) = super::load_sidebar(state, viewer, current_enclave)
         .await
         .ok()?;
+    let switcher = super::load_switcher(state, viewer, sidebar_current_enclave)
+        .await
+        .ok()?;
     SidebarUpdateFragment {
         user: viewer,
         sidebar_categories: &sidebar_categories,
@@ -2465,6 +2468,7 @@ async fn render_sidebar(
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
     }
     .render()
     .ok()
