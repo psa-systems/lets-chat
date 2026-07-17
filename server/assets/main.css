@@ -1989,7 +1989,7 @@ math {
 }
 /* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
    field reserves right padding so typed text never slides under the chip. */
-.lc-sidebar-search .lc-sidebar-field { padding-right: 3.5rem; padding-left: 2rem; }
+.lc-sidebar-search .lc-sidebar-field { padding-right: 3.25rem; padding-left: 1.9rem; }
 .lc-sb-search-icon {
     position: absolute;
     left: 0.5625rem;
