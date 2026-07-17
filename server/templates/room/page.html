@@ -50,12 +50,37 @@
      rails stacked side by side rather than one rail of cards. The column owns
      the single border and the scroll; the panels inside are .lc-panel cards. #}
   <aside id="rightcol" class="lc-rightcol">
+    {# LC-553: collapse handle straddling the column's left seam (desktop only),
+       the chosen "edge chevron + re-open rail" pattern. Points right (collapse);
+       when collapsed the whole column hides and the .lc-rightcol-reopen rail
+       below brings it back. Mirrors the left sidebar's collapse plumbing
+       (__lcToggleDetails / data-lc-details, no-flash in base.html). #}
+    <button type="button" class="lc-rightcol-collapse" data-lc-details-toggle
+            onclick="window.__lcToggleDetails && window.__lcToggleDetails()"
+            aria-controls="rightcol" aria-expanded="true"
+            aria-label="{{ "room-details-toggle"|t }}" data-lc-tip="{{ "room-details-toggle"|t }}" data-lc-tip-pos="left">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L10.94 10 7.23 6.29a.75.75 0 111.06-1.06l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     <div id="thread-panel" class="hidden"></div>
     <div id="history-panel" class="hidden"></div>
     {# LC-568: persistent Details summary, mounted below the toggled thread and
        history panels in the right column. #}
     {% include "room/details_panel.html" %}
   </aside>
+  {# LC-553: thin re-open rail at the screen edge, shown ONLY when the right
+     column is collapsed (CSS-gated on html[data-lc-details="collapsed"]). It is
+     a sibling of #rightcol so it survives the column being display:none, and
+     points left (expand). #}
+  <button type="button" class="lc-rightcol-reopen" data-lc-details-toggle
+          onclick="window.__lcToggleDetails && window.__lcToggleDetails()"
+          aria-controls="rightcol" aria-expanded="false"
+          aria-label="{{ "room-details-toggle"|t }}" data-lc-tip="{{ "room-details-toggle"|t }}" data-lc-tip-pos="left">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L9.06 10l3.71 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.08-.02z" clip-rule="evenodd"/>
+    </svg>
+  </button>
 </div>
 {# LC-156: WS room subscription is handled declaratively by live.js via the
    data-lc-live-room attribute on the page root above. #}

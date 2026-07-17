@@ -171,19 +171,8 @@
     </a>
     {% endif %}
     {% include "room/notify_dropdown.html" %}
-    {# LC-576: collapse chevron for the right Details panel, mirroring the left
-       sidebar's chevron in the enclave rail. It lives HERE rather than inside
-       the panel because the panel is display:none when collapsed - a control
-       mounted inside it would vanish with it and leave no way back. Desktop
-       only, matching the CSS that does the hiding. #}
-    <button type="button" data-lc-details-toggle aria-controls="details-panel" aria-expanded="true"
-            onclick="window.__lcToggleDetails && window.__lcToggleDetails()"
-            aria-label="{{ "room-details-toggle"|t }}"
-            data-lc-tip="{{ "room-details-toggle"|t }}" data-lc-tip-pos="bottom"
-            class="lc-header-action hidden md:inline-flex">
-      <svg data-lc-details-chevron xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L10.94 10 7.23 6.29a.75.75 0 111.06-1.06l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
-      </svg>
-    </button>
+    {# LC-553: the right-column collapse control moved OUT of the header to an
+       edge chevron on the column itself, with a thin re-open rail when collapsed
+       (see room/page.html). Same __lcToggleDetails / data-lc-details plumbing. #}
   </div>
 </header>
