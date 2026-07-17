@@ -127,9 +127,10 @@
      the selected ring so no JS is needed to toggle a class. Degrades
      gracefully without `:has()` support - the radio still works, only the
      ring is missing. */
-  /* LC-553: prototype palette cards - a padded dark card holding a mini-window
-     preview (sidebar strip + light area + accent pill), the palette name
-     bottom-left, and a plain accent checkmark on the selected card. Four across. */
+  /* LC-553: prototype palette cards - a full-bleed mini-window preview at the top
+     of the card (edge to edge, NOT inset), with the palette name below on the
+     card's own surface and a plain accent checkmark on the selected card. The
+     card clips the preview to its rounded top corners via overflow:hidden. */
   .lc-palette-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -140,11 +141,11 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.55rem;
-    padding: 0.5rem 0.5rem 0.6rem;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: 0.7rem;
     background: var(--surface-elevated);
+    overflow: hidden;
     cursor: pointer;
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
@@ -156,39 +157,41 @@
   .lc-palette-swatch:has(:checked)::after {
     content: "\2713";
     position: absolute;
-    right: 0.6rem;
+    right: 0.7rem;
     bottom: 0.5rem;
     font-size: 0.8rem;
     font-weight: 700;
     line-height: 1;
     color: var(--accent);
   }
-  /* Mini-window: dark sidebar strip (::before), light content area (background),
-     rounded accent pill (::after). Per-palette colors are the --pp-* props below. */
+  /* Full-bleed mini-window: dark sidebar strip (::before, a subtle gradient),
+     light content area (background), rounded accent pill (::after). Per-palette
+     colors are the --pp-* props below. No radius - the card clips it. */
   .lc-palette-preview {
     position: relative;
     width: 100%;
-    height: 2.6rem;
-    border-radius: 0.45rem;
-    overflow: hidden;
+    height: 3.35rem;
     background: var(--pp-surface, #ffffff);
   }
   .lc-palette-preview::before {
     content: "";
     position: absolute;
     top: 0; left: 0; bottom: 0;
-    width: 26%;
-    background: var(--pp-sidebar, #101828);
+    width: 30%;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--pp-sidebar, #101828) 80%, #000) 0%,
+      var(--pp-sidebar, #101828) 100%);
   }
   .lc-palette-preview::after {
     content: "";
     position: absolute;
     top: 22%; left: 36%;
-    width: 28%; height: 18%;
+    width: 28%; height: 14%;
     border-radius: 999px;
     background: var(--pp-accent, #2563eb);
   }
   .lc-palette-name {
+    padding: 0.45rem 0.7rem 0.5rem;
     font-size: 0.78rem;
     font-weight: 600;
     color: var(--content);
