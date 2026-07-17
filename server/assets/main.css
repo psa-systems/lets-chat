@@ -987,6 +987,18 @@ html[data-scale="xl"]      { font-size: 20px; }
        and hover still wins with the sunken background. */
     background: color-mix(in srgb, var(--accent-surface) 55%, transparent);
 }
+/* LC-553: consecutive mentioned messages (a run of pings, e.g. follow-ups from
+   the same author) read as separate notched brackets because each keeps its own
+   rounded corners. Square the corners where two mentioned rows touch so the
+   accent bar + wash merge into one continuous block for the whole run. */
+.lc-mentioned:has(+ .lc-mentioned) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.lc-mentioned + .lc-mentioned {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
 
 /* LC-272: copy button on code blocks. The enhancer (layout.html) wraps each
    <pre> in .lc-code-wrap and drops a .lc-code-copy button in the top-right,
