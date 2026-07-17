@@ -412,8 +412,12 @@
         <summary class="lc-ttl-summary" aria-haspopup="menu"
           data-lc-tip="{{ "room-composer-ttl-label"|t }}" data-lc-tip-pos="top"
           aria-label="{{ "room-composer-ttl-label"|t }}">
+          {# LC-553: a STOPWATCH, not a clock - the plain clock is the schedule-send
+             control in the toolbar, so the self-destruct timer needs a distinct
+             glyph that reads as "counting down / expiring". #}
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/>
+            <path d="M8.25 1.5a.75.75 0 000 1.5h.99v1.06a7 7 0 101.52 0V3h.99a.75.75 0 000-1.5h-3.5z"/>
+            <path fill-rule="evenodd" d="M10 4.75a6.25 6.25 0 100 12.5 6.25 6.25 0 000-12.5zM10.75 8a.75.75 0 00-1.5 0v3c0 .414.336.75.75.75h2.25a.75.75 0 000-1.5h-1.5V8z" clip-rule="evenodd"/>
           </svg>
           <span class="lc-ttl-val" aria-hidden="true"></span>
         </summary>
