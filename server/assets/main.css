@@ -2863,6 +2863,13 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     height: 1.25rem;
     width: 1.25rem;
 }
+/* LC-553: the paperclip glyph is bottom-heavy in its viewBox, so at the shared
+   icon size it sits low and its tip clips. Render it a touch smaller so it
+   stays clear of the button's bottom edge. */
+.lc-composer-btn--attach svg {
+    height: 1.1rem;
+    width: 1.1rem;
+}
 .lc-composer-send {
     display: inline-flex;
     align-items: center;
