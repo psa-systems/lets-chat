@@ -2239,6 +2239,10 @@ math {
     white-space: normal;
     pointer-events: none;
 }
+/* LC-553: once the account menu is OPEN (avatar clicked -> aria-expanded), the
+   menu already carries the name/@handle in its own header, so suppress the hover
+   card - otherwise it fires on top of the open menu as a duplicate identity. */
+.lc-rail-self:hover #own-avatar-wrapper[aria-expanded="true"] > span.min-w-0 { display: none; }
 
 /* The status picker swaps in here; same fly-out treatment. */
 .lc-rail-statuspicker {
