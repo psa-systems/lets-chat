@@ -2310,6 +2310,10 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     /* Details closed AND thread not open -> drop the now-empty column. */
     html[data-lc-details="collapsed"] #rightcol:has(#thread-panel.hidden) { display: none; }
 }
+/* LC-553: the shared emoji picker (w-72) is left-anchored for the wide composer;
+   in the narrow thread reply it would overflow the panel, so right-anchor it. */
+#lc-thread-emoji-slot [data-lc-emoji-picker-panel] { left: auto; right: 0; }
+
 /* Shared close (X) button for the Details and Thread panel headers. */
 .lc-panel-close {
     display: inline-flex;
@@ -2820,6 +2824,10 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     align-items: center;
     gap: 0.125rem;
     padding-top: 0.125rem;
+    /* LC-553: the composer card has top padding but the toolbar was flush with
+       its bottom edge, so the (bottom-heavy) paperclip clipped. Give the row a
+       little room below the icons. */
+    padding-bottom: 0.375rem;
     color: var(--content-muted);
 }
 .lc-composer-bar-right {

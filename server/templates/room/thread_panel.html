@@ -143,6 +143,16 @@
           }
         "
       ></textarea>
+      {# LC-553: emoji picker for thread replies (parity with the main composer).
+         Self-contained: the button loads the shared picker into the slot and the
+         inline script below splices the chosen glyph at the reply cursor. #}
+      <span class="relative inline-flex self-center" data-lc-thread-emoji>
+        <button type="button" data-lc-thread-emoji-open
+          hx-get="/rooms/{{ room.id }}/emoji-picker" hx-target="#lc-thread-emoji-slot" hx-swap="innerHTML"
+          data-lc-tip="{{ "room-composer-emoji"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-emoji"|t }}"
+          class="lc-fmt-btn">&#128512;</button>
+        <span id="lc-thread-emoji-slot" class="relative"></span>
+      </span>
       <button
         type="submit"
         disabled
@@ -171,6 +181,37 @@
     window.__lcThreadRefreshSend = function () {
       sendBtn.disabled = !ta.value.trim();
     };
+    // LC-553: thread-reply emoji picker. The button loads the shared picker into
+    // #lc-thread-emoji-slot; splice the chosen glyph at the reply cursor.
+    // mousedown fires before the textarea blur; stopPropagation keeps any global
+    // picker handler from double-inserting. Outside-click closes; the listener is
+    // torn down when the thread panel is swapped away.
+    var slot = document.getElementById('lc-thread-emoji-slot');
+    if (slot) {
+      slot.addEventListener('mousedown', function (ev) {
+        var btn = ev.target.closest && ev.target.closest('[data-lc-emoji-insert]');
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var ins = btn.getAttribute('data-lc-emoji-insert') || '';
+        var s = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+        var e = ta.selectionEnd != null ? ta.selectionEnd : s;
+        ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+        ta.selectionStart = ta.selectionEnd = s + ins.length;
+        slot.replaceChildren();
+        ta.focus();
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      var onDoc = function (ev) {
+        if (slot.contains(ev.target)) return;
+        if (ev.target.closest && ev.target.closest('[data-lc-thread-emoji-open]')) return;
+        if (slot.firstChild) slot.replaceChildren();
+      };
+      document.addEventListener('click', onDoc);
+      var panel = document.getElementById('thread-panel');
+      if (panel) panel.addEventListener('htmx:beforeCleanupElement',
+        function () { document.removeEventListener('click', onDoc); }, { once: true });
+    }
   })();
   </script>
 </div>
