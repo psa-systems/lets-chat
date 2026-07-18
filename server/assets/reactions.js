@@ -145,6 +145,71 @@
     });
   }
 
+  // ── Quick-react bar ───────────────────────────────────────────────────────
+  // LC-553: every message row carries a `data-lc-quick-bar` placeholder that was
+  // never populated (it shipped `hidden` with no filler), so the one-tap row
+  // never appeared. Seed it from the caller's frequency-ranked emoji
+  // (/api/reactions/frequent, cross-device) merged with the device-local MRU,
+  // topped up with sensible defaults, and fill each row lazily on first hover.
+  var QCAP = 5;
+  var QUICK_DEFAULTS = ['👍', '🎉', '❤️', '😄', '👀'];
+  var frequentSeed = null;
+  function seedFrequent() {
+    if (frequentSeed) return frequentSeed;
+    frequentSeed = fetch('/api/reactions/frequent', { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; });
+    return frequentSeed;
+  }
+  function quickList(freq) {
+    var out = [];
+    function push(g) { if (g && out.indexOf(g) < 0) out.push(g); }
+    (Array.isArray(freq) ? freq : []).forEach(push);
+    readRecent().forEach(push);
+    QUICK_DEFAULTS.forEach(push);
+    return out.slice(0, QCAP);
+  }
+  function fillQuick(bar) {
+    if (bar.getAttribute('data-lc-quick-filled') === '1') return;
+    var row = bar.closest('[id^="msg-"]');
+    if (!row) return;
+    var mid = row.id.replace('msg-', '');
+    if (!mid) return;
+    bar.setAttribute('data-lc-quick-filled', '1');
+    seedFrequent().then(function (freq) {
+      var list = quickList(freq);
+      if (!list.length) return;
+      bar.replaceChildren();
+      list.forEach(function (g) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lc-msg-action';
+        b.setAttribute('hx-post', '/messages/' + mid + '/reactions/' + encodeURIComponent(g));
+        b.setAttribute('hx-target', '#reactions-' + mid);
+        b.setAttribute('hx-swap', 'outerHTML');
+        b.setAttribute('aria-label', g);
+        b.textContent = g;
+        bar.appendChild(b);
+      });
+      if (window.htmx) window.htmx.process(bar);
+      bar.classList.remove('hidden');
+      bar.classList.add('inline-flex');
+    });
+  }
+  function quickFromEvent(e) {
+    var row = e.target.closest && e.target.closest('[id^="msg-"]');
+    if (!row) return;
+    var q = row.querySelector('[data-lc-quick-bar]');
+    if (q) fillQuick(q);
+  }
+  document.addEventListener('pointerover', quickFromEvent, true);
+  document.addEventListener('focusin', quickFromEvent, true);
+  // A one-tap quick react counts toward the recent MRU too.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-lc-quick-bar] button[hx-post]');
+    if (b) recordRecent(b);
+  }, true);
+
   // Reveal + position + wire the picker once htmx swaps it into the host.
   document.body.addEventListener('htmx:afterSwap', function (e) {
     if (!e.target || e.target.id !== HOST_ID) return;

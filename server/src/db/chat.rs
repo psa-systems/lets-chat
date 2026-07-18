@@ -1467,41 +1467,46 @@ pub async fn get_dm_peer(
 // ── Reactions ─────────────────────────────────────────────────────────────────
 
 /// Toggle a reaction: insert if not present, delete if already present.
-/// Returns `true` if the reaction was added, `false` if it was removed.
+/// Returns `true` if the reaction is present after the call, `false` if removed.
+///
+/// LC-553: this used to be `SELECT` then a separate `INSERT`/`DELETE` with no
+/// transaction, so two concurrent toggles from the same user (a double-tap)
+/// could both observe "absent" and both `INSERT`; the second violated the
+/// `(message_id, user_id, emoji)` primary key and surfaced as a 500, leaving the
+/// state "reacted" even though the pair of taps meant on-then-off. Each branch
+/// is now a single atomic statement keyed on rows-affected, and the insert is
+/// `OR IGNORE`, so a lost race is a no-op rather than an error and the returned
+/// flag always matches the row's final presence.
 pub async fn toggle_reaction(
     pool: &sqlx::SqlitePool,
     message_id: i64,
     user_id: &str,
     emoji: &str,
 ) -> Result<bool, sqlx::Error> {
-    let existing = sqlx::query(
-        "SELECT 1 FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
+    let deleted = sqlx::query(
+        "DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
     )
     .bind(message_id)
     .bind(user_id)
     .bind(emoji)
-    .fetch_optional(pool)
-    .await?;
+    .execute(pool)
+    .await?
+    .rows_affected();
 
-    if existing.is_some() {
-        sqlx::query(
-            "DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
-        )
+    if deleted > 0 {
+        return Ok(false);
+    }
+
+    // Not present (or a concurrent toggle removed it first): add it. `OR IGNORE`
+    // makes a concurrent insert a no-op instead of a primary-key error; either
+    // way the row is present when this returns, so report `true`.
+    sqlx::query("INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)")
         .bind(message_id)
         .bind(user_id)
         .bind(emoji)
         .execute(pool)
         .await?;
-        Ok(false)
-    } else {
-        sqlx::query("INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)")
-            .bind(message_id)
-            .bind(user_id)
-            .bind(emoji)
-            .execute(pool)
-            .await?;
-        Ok(true)
-    }
+    Ok(true)
 }
 
 /// List reactions grouped by emoji for a message.
