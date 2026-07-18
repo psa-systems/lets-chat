@@ -2283,17 +2283,49 @@ math {
         display: none;
     }
 }
-/* LC-576: the rail's expand button is the way back once the sidebar is hidden,
-   so it exists ONLY in the collapsed state (and only on desktop, where the
-   collapse applies at all). Expanded, the chevron next to the sidebar title is
-   the control, and this one would be a redundant second one. */
-[data-lc-sidebar-expand] {
+/* LC-553: the expand ribbon. Once the sidebar is hidden this half-round tab on
+   the rail's outer seam is the way back - the sidebar no longer just vanishes
+   "into" the rail behind another rail icon. It exists ONLY in the collapsed
+   state (and only on desktop, where the collapse applies at all); expanded, the
+   chevron next to the sidebar title is the control. Sits at the rail's width
+   (w-16 = 4rem) so it reads as a tab pulling the sidebar back out. */
+.lc-sidebar-ribbon {
     display: none;
+    position: fixed;
+    left: 4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 25;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 2.75rem;
+    padding: 0;
+    /* half-round on the outer edge only, so it reads as a tab on the seam */
+    border-radius: 0 999px 999px 0;
+    border: 1px solid var(--sidebar-border);
+    border-left: 0;
+    background: var(--rail-surface);
+    color: var(--rail-content-muted);
+    box-shadow: 2px 0 6px -2px rgb(0 0 0 / 0.35);
+    transition: width 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 @media (min-width: 768px) {
-    html[data-lc-sidebar="collapsed"] [data-lc-sidebar-expand] {
-        display: flex;
+    html[data-lc-sidebar="collapsed"] .lc-sidebar-ribbon {
+        display: inline-flex;
     }
+}
+.lc-sidebar-ribbon:hover {
+    width: 1.45rem;
+    background: var(--rail-tile);
+    color: var(--rail-content);
+}
+.lc-sidebar-ribbon:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ring);
+}
+.lc-sidebar-ribbon svg {
+    flex: none;
 }
 
 /* LC-576: mirror of the above for the right Details panel, so both rails have a
