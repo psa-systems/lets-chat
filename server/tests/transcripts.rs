@@ -195,7 +195,7 @@ fn parse_id(body: &str) -> i64 {
 }
 
 #[tokio::test]
-async fn member_starts_session_outsider_forbidden_nondm_404() {
+async fn member_starts_session_outsider_and_non_huddle_participant_forbidden() {
     let s = setup().await;
 
     let (st, body) = post(
@@ -230,7 +230,10 @@ async fn member_starts_session_outsider_forbidden_nondm_404() {
     .await;
     assert_eq!(st3, StatusCode::FORBIDDEN);
 
-    // Transcription is DM-only: a non-DM room 404s.
+    // LC-553: a group room is huddle-capable (a huddle is the same mesh as a
+    // voice channel), so it is no longer "not a call surface" and no longer
+    // 404s. Authority now comes from live mesh membership instead: a room member
+    // who is not in the huddle is FORBIDDEN rather than hidden.
     let (st4, _) = post(
         &s.app,
         &s.a_session,
@@ -238,7 +241,7 @@ async fn member_starts_session_outsider_forbidden_nondm_404() {
         None,
     )
     .await;
-    assert_eq!(st4, StatusCode::NOT_FOUND);
+    assert_eq!(st4, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

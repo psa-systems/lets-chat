@@ -107,6 +107,15 @@
        emoji MRU (or defaults) on first row hover; one tap reacts via the same
        toggle endpoint as the picker. #}
     <span data-lc-quick-bar role="group" aria-label="{{ "room-quick-react-aria"|t }}" class="hidden items-center gap-1 border-r border-border pr-1 mr-0.5"></span>
+    {# LC-553: emoji-select lives in the hover bar (this is how you start a
+       reaction). It opens the shared picker host; reactions.js positions it. The
+       under-message "+" only appears once a message already has reactions. #}
+    <button data-lc-reaction-open
+      hx-get="/messages/{{ message.id }}/reactions/picker" hx-target="#lc-reaction-popover" hx-swap="innerHTML"
+      class="lc-msg-action" data-lc-tip="{{ "partials-reaction-add"|t }}" data-lc-tip-pos="bottom"
+      aria-label="{{ "partials-reaction-add"|t }}" aria-haspopup="dialog">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
+    </button>
     {% if message.parent_id.is_none() %}
     <button hx-get="/room/{{ message.room_id }}/composer-quote/{{ message.id }}" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="lc-msg-action" data-lc-tip="{{ "room-msg-reply"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "room-msg-reply"|t }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
@@ -318,11 +327,13 @@
     {% include "partials/followup_block.html" %}
   </div>
   {% endif %}
-  <div id="reactions-{{ message.id }}" class="{% if message.is_follow_up %}mt-0 empty:hidden{% else %}mt-2{% endif %}">
-    {% let message_id = message.id %}
-    {% let reactions = message.reactions.as_slice() %}
-    {% include "partials/reaction_bar.html" %}
-  </div>
+  {# LC-553: reaction_bar's own root is #reactions-{id} (the outerHTML swap
+     target for both the HTTP toggle and the WS OOB update), so it must not be
+     nested inside a second element sharing that id - that duplicate id made the
+     first toggle replace the wrong node and drop the spacing wrapper. #}
+  {% let message_id = message.id %}
+  {% let reactions = message.reactions.as_slice() %}
+  {% include "partials/reaction_bar.html" %}
   {# LC-490: acknowledgement bar. Always an id-keyed region so live OOB swaps
      (ws/ack_update.html) land even on a message that becomes required later;
      empty unless this message currently requires acknowledgement. #}

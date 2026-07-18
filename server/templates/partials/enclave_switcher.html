@@ -63,19 +63,11 @@
     +
   </a>
   </div>
-  {# LC-270 / LC-576: the EXPAND control. The primary collapse chevron now lives
-     in the sidebar head next to the title (prototype .sb-head); this one is its
-     counterpart and is shown only while the sidebar is collapsed, since the
-     collapsed #sidebar is display:none and takes its own chevron with it. It
-     points right (">>", expand) - no rotate rule, it has exactly one state. #}
-  <button type="button" data-lc-sidebar-toggle data-lc-sidebar-expand aria-controls="sidebar" aria-expanded="false"
-          onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
-          aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="right"
-          class="lc-rail-gear w-11 h-11 rounded-xl items-center justify-center">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-      <path fill-rule="evenodd" d="M4.21 5.23a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L7.94 10 4.23 6.29a.75.75 0 01-.02-1.06zm6 0a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L13.94 10l-3.71-3.71a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
-    </svg>
-  </button>
+  {# LC-553: the expand control is no longer a tile inside the rail - the
+     collapsed sidebar used to disappear "into" the rail with only a rail button
+     to bring it back. It is now a ribbon tab on the rail's outer seam
+     (.lc-sidebar-ribbon in layout.html), so the affordance reads as "pull the
+     sidebar back out" rather than another rail icon. #}
   {# LC-576: the rail foot carries Settings / Shortcuts / Profile, stacked, as in
      the prototype (gear, help, avatar). They were briefly a row in the sidebar
      foot, which is wrong on two counts: the prototype puts them here, and the
