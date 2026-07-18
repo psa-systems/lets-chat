@@ -44,32 +44,43 @@ async fn label_for(state: &AppState, user_id: &str) -> String {
 }
 
 /// Fetch the room and confirm it is a call-capable surface: a DM (1:1 calls,
-/// LC-393 Phase 1) or a voice channel (`is_voice`, Phase 2). 404 anything else
-/// so a non-call room is indistinguishable from "no such room".
+/// LC-393 Phase 1), a voice channel (`is_voice`, Phase 2), or a group room
+/// hosting an ad-hoc huddle (LC-553).
+///
+/// A huddle is the SAME WebRTC mesh as a voice channel (voice.js, keyed to the
+/// text room's id) with the same per-participant mic capture transcription
+/// relies on - it was excluded only because its room is not flagged `is_voice`,
+/// so captions worked in DMs and voice channels but silently 404'd in huddles.
+/// Every group room is huddle-capable (`huddle_enabled` is just
+/// `room_type != "dm"`), so the surface check is now just "a real room"; actual
+/// authority to open a session is enforced by `require_participant` below, which
+/// demands active mesh membership rather than mere room access.
 async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppError> {
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if room.room_type != "dm" && !room.is_voice {
-        return Err(AppError::NotFound);
-    }
     Ok(room)
 }
 
 /// Gate for mutating the live session (start / segment / end): the caller must
 /// be an active PARTICIPANT, not merely able to see the room. A DM member is a
-/// participant; for a voice channel the caller must currently be joined to the
-/// channel (so a room member who never joined cannot start transcription and
-/// silently auto-capture everyone who did).
+/// participant; for a voice channel OR a huddle the caller must currently be
+/// joined to the mesh (so a room member who never joined cannot start
+/// transcription and silently auto-capture everyone who did).
+///
+/// LC-553: this keyed on `is_voice`, which sent huddles (a non-`is_voice` group
+/// room) down the DM branch, where plain room membership would have been enough.
+/// Now anything that is not a DM is gated on live mesh membership - the hub keys
+/// huddles by the text room's id, so `voice_room_users` covers both.
 async fn require_participant(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
-    let ok = if room.is_voice {
+    let ok = if room.room_type == "dm" {
+        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
+    } else {
         state
             .hub
             .voice_room_users(room.id)
             .iter()
             .any(|u| u == &user.id)
-    } else {
-        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
     };
     if ok {
         Ok(())

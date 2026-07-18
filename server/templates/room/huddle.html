@@ -40,6 +40,25 @@
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 014.25 2h11.5A2.25 2.25 0 0118 4.25v8.5A2.25 2.25 0 0115.75 15h-3.105l.347 1.736.94.313a.75.75 0 01-.237 1.461H6.305a.75.75 0 01-.237-1.461l.94-.313L7.355 15H4.25A2.25 2.25 0 012 12.75v-8.5zm8.75.75a.75.75 0 00-1.5 0v2.69L8.03 6.22a.75.75 0 00-1.06 1.06l2.5 2.5a.75.75 0 001.06 0l2.5-2.5a.75.75 0 10-1.06-1.06L10.75 7.69V5z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-share-screen"|t }}</span>
       </button>
+      {# LC-553: transcription in huddles. A huddle is the same mesh + same mic
+         capture as an enclave voice channel, so it gets the same controls; they
+         were omitted here purely "to keep the bar light", which left captions
+         working in DMs and voice channels but not in group huddles. Hidden until
+         joined (voice.js), and data-lc-room tells transcribe.js which room to
+         open the session for. #}
+      <button type="button" data-lc-transcribe-toggle data-lc-room="{{ room.id }}"
+              aria-pressed="false" data-lc-unsupported="{{ "transcript-unsupported"|t }}"
+              aria-label="{{ "voice-transcribe-tip"|t }}" data-lc-tip="{{ "voice-transcribe-tip"|t }}" data-lc-tip-pos="top"
+              class="hidden lc-cbtn lc-cbtn--rec">
+        <span class="lc-cbtn-ico lc-rec-glyph" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle class="lc-rec-core" cx="10" cy="10" r="3.25" fill="currentColor"/></svg></span>
+        <span class="lc-cbtn-label">{{ "transcript-toggle"|t }}</span>
+      </button>
+      <button type="button" data-lc-transcript-panel-toggle aria-pressed="false"
+              data-lc-tip="{{ "voice-transcript-tip"|t }}" data-lc-tip-pos="top" aria-label="{{ "voice-transcript-tip"|t }}"
+              class="hidden lc-cbtn">
+        <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
+        <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
+      </button>
       <button type="button" data-lc-voice-leave aria-label="{{ "voice-leave"|t }}" data-lc-tip="{{ "voice-leave"|t }}" data-lc-tip-pos="top" class="hidden lc-cbtn lc-cbtn--leave">
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 4c-2.4 0-4.69.42-6.81 1.19a2.25 2.25 0 00-1.45 2.5l.2 1.2a1.75 1.75 0 001.62 1.46l2.06.14a1.75 1.75 0 001.78-1.16l.3-.86a.75.75 0 01.5-.47 11.2 11.2 0 013.6 0 .75.75 0 01.5.47l.3.86a1.75 1.75 0 001.78 1.16l2.06-.14a1.75 1.75 0 001.62-1.46l.2-1.2a2.25 2.25 0 00-1.45-2.5A20.9 20.9 0 0010 4z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-leave"|t }}</span>
