@@ -1500,12 +1500,14 @@ pub async fn toggle_reaction(
     // Not present (or a concurrent toggle removed it first): add it. `OR IGNORE`
     // makes a concurrent insert a no-op instead of a primary-key error; either
     // way the row is present when this returns, so report `true`.
-    sqlx::query("INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)")
-        .bind(message_id)
-        .bind(user_id)
-        .bind(emoji)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
+    )
+    .bind(message_id)
+    .bind(user_id)
+    .bind(emoji)
+    .execute(pool)
+    .await?;
     Ok(true)
 }
 
