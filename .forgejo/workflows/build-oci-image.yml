@@ -44,15 +44,18 @@ jobs:
     env:
       IMAGE_REGISTRY: ""
       REGISTRY_PROVIDER: dev.a8n.run
-      # Push to the shared a8n-tools private org registry via the same org
-      # variables every other repo under ~/projects/a8n-run/ uses (see eg.
-      # backup, eform, saas, storefront). Previously this workflow used
+      # Push to the shared psa-systems private org registry via the same org
+      # variables the other repos in this org use (see eg. mokosh-server,
+      # mokosh-apps). These were the A8N_TOOLS_* names until this repo moved
+      # from the a8n-tools org to psa-systems: org variables and secrets do not
+      # follow a repo across orgs, so they resolved to empty and the registry
+      # login failed with "username is empty". Previously this workflow used
       # `GITHUB_REPOSITORY_OWNER` + `secrets.FORGEJO_PAT`, which pinned the
       # image to whichever owner happened to host the repo and depended on a
       # PAT name not standard across the org.
-      REGISTRY_OWNER: ${{ vars.A8N_TOOLS_PRIVATE_PACKAGE_OWNER }}
+      REGISTRY_OWNER: ${{ vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER }}
       REGISTRY_USER: ""
-      REGISTRY_PASSWORD: ${{ secrets.A8N_TOOLS_PRIVATE_PACKAGE_PAT }}
+      REGISTRY_PASSWORD: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
 
     steps:
       - name: Clone the repository
