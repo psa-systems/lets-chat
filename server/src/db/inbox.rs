@@ -28,19 +28,14 @@ pub async fn list_unread(
     limit: i64,
     before_id: Option<i64>,
 ) -> Result<Vec<InboxRow>, sqlx::Error> {
-    // Admin sees every public + private room; non-admins see public
-    // rooms always, plus private rooms / DMs they are a member of.
-    let access_clause = if is_admin {
-        // No additional membership filter; rooms.room_type != 'dm'
-        // would let admins see channel content but skip private DMs.
-        // We still want admins to see their own unread DMs, so allow
-        // DM access only via membership.
-        "(r.room_type = 'public' OR r.room_type != 'dm' \
-          OR EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = r.id AND rm.user_id = ?))"
-    } else {
-        "(r.room_type = 'public' \
-          OR EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = r.id AND rm.user_id = ?))"
-    };
+    // LC-604: visibility comes from the shared predicate rather than a local
+    // copy. The previous non-admin clause was `room_type = 'public' OR member`,
+    // with no enclave condition - so this query returned the room name and the
+    // message body for any public room on the instance, including enclaves the
+    // viewer is not in and gets a 403 from. The admin branch is unchanged in
+    // effect (every non-DM room, plus DMs they belong to); it was already
+    // redundant, since `room_type = 'public'` implies `room_type != 'dm'`.
+    let access_clause = crate::db::chat::accessible_rooms_sql(is_admin);
     let cursor_clause = if before_id.is_some() {
         "AND m.id < ?"
     } else {
@@ -61,7 +56,12 @@ pub async fn list_unread(
           ORDER BY m.created_at DESC, m.id DESC \
           LIMIT ?"
     );
-    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id).bind(user_id);
+    // Bind order follows placeholder order: dm_read_state, the author filter,
+    // then the access fragment's own placeholders, then cursor and limit.
+    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+    for _ in 0..crate::db::chat::accessible_rooms_binds(is_admin) {
+        q = q.bind(user_id);
+    }
     if let Some(id) = before_id {
         q = q.bind(id);
     }
