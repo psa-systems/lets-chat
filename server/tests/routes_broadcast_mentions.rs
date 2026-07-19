@@ -120,6 +120,7 @@ async fn setup_app_with_users_and_client(
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,
@@ -515,6 +516,7 @@ async fn bounded_concurrency_caps_concurrent_push_sends() {
     let bg = lets_chat::bg::spawn(t.auth.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: t.auth.clone(),
         chat: t.chat.clone(),
         settings,

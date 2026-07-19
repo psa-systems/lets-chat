@@ -46,6 +46,7 @@ async fn app() -> TestApp {
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth,
         chat,
         settings,
@@ -186,6 +187,7 @@ async fn ok_row_serves_bytes_with_cache_headers() {
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth_pool,
         chat: chat.clone(),
         settings,

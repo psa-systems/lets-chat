@@ -1,0 +1,22 @@
+Hi {{ username }},
+
+We need to confirm a sign-in to your Let's Chat account. It looked unfamiliar,
+so we are holding it until you approve it:
+
+  Country: {{ country }}
+  Device:  {{ device_label }}
+{% if !ip.is_empty() -%}
+  IP:      {{ ip }}
+{% endif -%}
+  Time:    {{ when }} UTC
+
+Enter this code on the sign-in screen to approve it:
+
+  {{ code }}
+
+The code expires in 15 minutes and can be used once.
+
+If this was NOT you, do not enter the code. Your account is safe - the sign-in
+cannot complete without it. You can review your active sessions here:
+
+  {{ settings_url }}

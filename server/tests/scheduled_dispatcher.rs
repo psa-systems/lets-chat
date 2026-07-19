@@ -62,6 +62,7 @@ async fn build_state() -> AppState {
         fcm_client: None,
         mailer: None,
         geoip: None,
+        login_approval_enabled: false,
         base_url: "http://localhost:8080".to_string(),
         ice_servers: "[]".to_string(),
         rate_limits: lets_chat::rate_limit::RateLimits::new(),

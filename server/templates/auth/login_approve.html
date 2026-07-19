@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Approve sign-in - Let's Chat{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center p-6">
+  <form method="post" action="/auth/bunyip/approve"
+        class="card w-full max-w-sm space-y-4 p-6 text-center">
+    <h1 class="text-xl font-semibold">Approve this sign-in</h1>
+    <p class="text-sm text-content-muted">
+      This sign-in looked unfamiliar, so we emailed a 6-digit code to the
+      address on your account. Enter it below to finish signing in.
+    </p>
+    {% if let Some(err) = error %}
+    <div class="alert alert-danger text-left" role="alert">{{ err }}</div>
+    {% endif %}
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="text" name="code" inputmode="numeric" pattern="[0-9]*"
+           autocomplete="one-time-code" maxlength="6" required autofocus
+           class="input w-full text-center text-lg tracking-widest"
+           placeholder="000000" aria-label="6-digit approval code">
+    <button type="submit" class="btn btn-primary w-full">Approve sign-in</button>
+    <p class="text-xs text-content-subtle">
+      The code expires in 15 minutes. If this was not you, close this page - the
+      sign-in cannot complete without the code.
+    </p>
+    <p class="text-xs text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
+  </form>
+</main>
+{% endblock %}
