@@ -208,20 +208,32 @@ pub async fn mark_mentions_read_for_room(
 /// Per-room unread mention counts for the sidebar. Returns rows where
 /// `count > 0`. Used by `routes::load_sidebar` to set
 /// `SidebarRoom::mentions`.
+///
+/// LC-606: this had no room-visibility filter at all - it counted mentions in
+/// any room, so a mention written in an enclave the viewer is not in produced a
+/// count (and, on the home dashboard's Mentions card, revealed that the room
+/// exists). Now joined to `rooms` and filtered by the shared predicate that
+/// mirrors `is_room_accessible`.
 pub async fn count_unread_mentions_per_room(
     pool: &SqlitePool,
     user_id: &str,
+    is_admin: bool,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error> {
-    let rows = sqlx::query(
-        "SELECT room_id, COUNT(*) AS n \
-           FROM mentions \
-          WHERE mentioned_user_id = ? AND read_at IS NULL \
-          GROUP BY room_id \
+    let sql = format!(
+        "SELECT men.room_id AS room_id, COUNT(*) AS n \
+           FROM mentions men \
+           JOIN rooms r ON r.id = men.room_id \
+          WHERE men.mentioned_user_id = ? AND men.read_at IS NULL \
+            AND {access} \
+          GROUP BY men.room_id \
           HAVING n > 0",
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?;
+        access = crate::db::chat::accessible_rooms_sql(is_admin),
+    );
+    let mut q = sqlx::query(&sql).bind(user_id);
+    for _ in 0..crate::db::chat::accessible_rooms_binds(is_admin) {
+        q = q.bind(user_id);
+    }
+    let rows = q.fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|r| (r.get::<i64, _>("room_id"), r.get::<i64, _>("n")))

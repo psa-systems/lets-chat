@@ -52,7 +52,9 @@ pub async fn post_read_all(
     for (room_id, _) in db::chat::list_dm_unread_counts(&state.chat, &user.id).await? {
         room_ids.insert(room_id);
     }
-    for (room_id, _) in db::mentions::count_unread_mentions_per_room(&state.chat, &user.id).await? {
+    for (room_id, _) in
+        db::mentions::count_unread_mentions_per_room(&state.chat, &user.id, is_admin).await?
+    {
         room_ids.insert(room_id);
     }
 

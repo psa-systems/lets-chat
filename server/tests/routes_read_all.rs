@@ -170,7 +170,7 @@ async fn read_all_clears_room_dm_unread_and_mentions() {
         1
     );
     assert!(
-        !db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id)
+        !db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id, false)
             .await
             .unwrap()
             .is_empty()
@@ -199,7 +199,7 @@ async fn read_all_clears_room_dm_unread_and_mentions() {
         "DM unread cleared",
     );
     assert!(
-        db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id)
+        db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id, false)
             .await
             .unwrap()
             .is_empty(),
@@ -267,7 +267,7 @@ async fn read_one_room_clears_only_that_room() {
         "target room unread cleared",
     );
     assert!(
-        db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id)
+        db::mentions::count_unread_mentions_per_room(&t.chat, &t.alice_id, false)
             .await
             .unwrap()
             .is_empty(),

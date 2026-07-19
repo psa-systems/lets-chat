@@ -74,11 +74,17 @@ pub struct FollowedThreadDigest {
 /// `dm_read_state` last-read id the sidebar unread counts already use: a reply
 /// counts when its id is past that watermark and it is not the viewer's own.
 /// Newest-activity first, capped so the card stays a glance.
+///
+/// LC-606: following a thread is not a lasting grant of access. This query had
+/// no visibility filter, so a viewer removed from an enclave kept receiving the
+/// room name *and the parent message body* for threads they still follow.
+/// Filtered by the shared predicate that mirrors `is_room_accessible`.
 pub async fn followed_threads_with_unread(
     pool: &SqlitePool,
     user_id: &str,
+    is_admin: bool,
 ) -> Result<Vec<FollowedThreadDigest>, sqlx::Error> {
-    let rows = sqlx::query(
+    let sql = format!(
         "SELECT tf.parent_id AS parent_id, \
                 tf.room_id AS room_id, \
                 r.name AS room_name, \
@@ -93,16 +99,18 @@ pub async fn followed_threads_with_unread(
             AND m.deleted_at IS NULL AND m.quarantined = 0 \
             AND m.id > COALESCE(s.last_read_message_id, 0) \
           WHERE tf.user_id = ? \
+            AND {access} \
           GROUP BY tf.parent_id, tf.room_id, r.name, p.body \
           HAVING unread_replies > 0 \
           ORDER BY MAX(m.id) DESC \
           LIMIT 20",
-    )
-    .bind(user_id)
-    .bind(user_id)
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?;
+        access = crate::db::chat::accessible_rooms_sql(is_admin),
+    );
+    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id).bind(user_id);
+    for _ in 0..crate::db::chat::accessible_rooms_binds(is_admin) {
+        q = q.bind(user_id);
+    }
+    let rows = q.fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|r| FollowedThreadDigest {
