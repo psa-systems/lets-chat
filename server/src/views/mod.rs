@@ -24,6 +24,7 @@ pub mod inbox;
 pub mod kudos;
 pub mod layout;
 pub mod login_alert;
+pub mod login_approval;
 pub mod maintenance;
 pub mod markdown;
 pub mod math;

@@ -99,6 +99,7 @@ async fn app_with_ingress_domain(domain: Option<&str>) -> TestApp {
     let chat_for_test = chat.clone();
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth.clone(),
         chat,
         settings,

@@ -101,6 +101,7 @@ async fn setup() -> Setup {
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth,
         chat,
         settings,
