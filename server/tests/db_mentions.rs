@@ -10,6 +10,34 @@ async fn setup_auth_pool() -> SqlitePool {
     common::auth_pool().await
 }
 
+/// LC-606: a public channel that `members` can actually reach.
+///
+/// `count_unread_mentions_per_room` is now filtered by the shared visibility
+/// predicate, which mirrors `is_room_accessible`: a channel with a NULL
+/// `enclave_id` is unreachable for a non-admin, and enclave membership is
+/// required. These tests used to create the room with `enclave_id = None`,
+/// which no production channel has (migration 0009 backfills every non-DM room
+/// into an enclave). Without this, the counts come back empty and the
+/// assertions below pass for the wrong reason.
+async fn public_room_with_members(pool: &SqlitePool, members: &[&str]) -> i64 {
+    let enclave_id = lets_chat::db::enclave::create_enclave(pool, "Test Enclave", None, members[0])
+        .await
+        .unwrap();
+    for m in members {
+        lets_chat::db::enclave::add_member(
+            pool,
+            enclave_id,
+            m,
+            lets_chat::models::enclave::EnclaveRole::Member,
+        )
+        .await
+        .unwrap();
+    }
+    lets_chat::db::chat::create_room(pool, "general", None, "public", None, Some(enclave_id))
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn parse_extracts_distinct_tokens() {
     let tokens =
@@ -35,9 +63,7 @@ async fn parse_matches_at_start_of_string() {
 #[tokio::test]
 async fn reconcile_inserts_added_and_removes_dropped() {
     let pool = setup_chat_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "general", None, "public", None, None)
-        .await
-        .unwrap();
+    let room_id = public_room_with_members(&pool, &["alice-id", "bob-id"]).await;
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "author", "hi @alice")
         .await
         .unwrap();
@@ -91,9 +117,7 @@ async fn reconcile_inserts_added_and_removes_dropped() {
 #[tokio::test]
 async fn watermark_advances_read_state() {
     let pool = setup_chat_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "general", None, "public", None, None)
-        .await
-        .unwrap();
+    let room_id = public_room_with_members(&pool, &["alice-id", "bob-id"]).await;
     let m1 = lets_chat::db::chat::insert_message(&pool, room_id, "author", "@alice 1")
         .await
         .unwrap();
@@ -118,7 +142,7 @@ async fn watermark_advances_read_state() {
         .unwrap();
 
     // Both unread.
-    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id")
+    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id", false)
         .await
         .unwrap();
     assert_eq!(
@@ -132,7 +156,7 @@ async fn watermark_advances_read_state() {
             .await
             .unwrap();
     assert_eq!(flipped, 1);
-    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id")
+    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id", false)
         .await
         .unwrap();
     assert_eq!(
@@ -144,7 +168,7 @@ async fn watermark_advances_read_state() {
     lets_chat::db::mentions::mark_mentions_read_for_room(&pool, "alice-id", room_id, m2)
         .await
         .unwrap();
-    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id")
+    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id", false)
         .await
         .unwrap();
     assert!(!counts.iter().any(|(r, _)| *r == room_id));
@@ -189,9 +213,7 @@ async fn mentions_for_messages_resolves_usernames() {
 #[tokio::test]
 async fn delete_mentions_returns_unread_users() {
     let pool = setup_chat_pool().await;
-    let room_id = lets_chat::db::chat::create_room(&pool, "general", None, "public", None, None)
-        .await
-        .unwrap();
+    let room_id = public_room_with_members(&pool, &["alice-id", "bob-id"]).await;
     let msg_id = lets_chat::db::chat::insert_message(&pool, room_id, "author", "@alice @bob")
         .await
         .unwrap();
@@ -218,10 +240,11 @@ async fn delete_mentions_returns_unread_users() {
     assert_eq!(users, vec!["bob-id".to_string()]);
 
     // Both alice and bob should now have zero unread (rows are gone).
-    let counts_a = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id")
-        .await
-        .unwrap();
-    let counts_b = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "bob-id")
+    let counts_a =
+        lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "alice-id", false)
+            .await
+            .unwrap();
+    let counts_b = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, "bob-id", false)
         .await
         .unwrap();
     assert!(counts_a.is_empty());

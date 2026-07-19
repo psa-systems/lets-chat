@@ -222,3 +222,104 @@ async fn site_admin_still_sees_every_channel() {
         "a site admin gets counts for every channel"
     );
 }
+
+// ----------------------------------------------------------------------
+// LC-606: the same drift in four more consumers. `list_rooms` fed the
+// forward-message picker and the rooms API; the activity feed and the two
+// remaining dashboard cards (Mentions, Threads) each carried their own copy of
+// `room_type = 'public' OR member`. All now use the shared predicate.
+// ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn list_rooms_hides_channels_from_enclaves_the_viewer_is_not_in() {
+    let fx = fixture().await;
+    let (chat, insider, outsider) = (&fx.chat, &fx.insider, &fx.outsider);
+
+    let insider_rooms = db::chat::list_rooms(chat, insider, false).await.unwrap();
+    assert!(
+        insider_rooms.iter().any(|r| r.name == "secret-general"),
+        "an enclave member still sees the channel"
+    );
+
+    // This is what the forward-message picker and /api rooms listing render.
+    let outsider_rooms = db::chat::list_rooms(chat, outsider, false).await.unwrap();
+    assert!(
+        !outsider_rooms.iter().any(|r| r.name == "secret-general"),
+        "a non-member must not see the channel name in the room list"
+    );
+}
+
+#[tokio::test]
+async fn activity_feed_hides_mentions_from_enclaves_the_viewer_is_not_in() {
+    let fx = fixture().await;
+    let chat = &fx.chat;
+
+    // The outsider is @-mentioned in a room they cannot access. Being mentioned
+    // is not a grant of access, so the item must not surface.
+    let msg_id = db::chat::insert_message(chat, fx.room_id, &fx.insider, "ping @outsider")
+        .await
+        .unwrap();
+    db::mentions::reconcile_mentions(
+        chat,
+        msg_id,
+        fx.room_id,
+        &fx.insider,
+        &[db::mentions::MentionRef {
+            user_id: fx.outsider.clone(),
+            username: "outsider".into(),
+        }],
+    )
+    .await
+    .unwrap();
+
+    let feed = db::activity::feed_for_user(chat, &fx.outsider, false, None, 50)
+        .await
+        .unwrap();
+    assert!(
+        !feed.iter().any(|i| i.room_id == fx.room_id),
+        "a mention in an inaccessible room must not reach the activity feed"
+    );
+
+    let counts = db::mentions::count_unread_mentions_per_room(chat, &fx.outsider, false)
+        .await
+        .unwrap();
+    assert!(
+        !counts.iter().any(|(id, _)| *id == fx.room_id),
+        "nor the per-room unread mention count behind the dashboard card"
+    );
+}
+
+#[tokio::test]
+async fn followed_threads_hide_rooms_the_viewer_can_no_longer_access() {
+    let fx = fixture().await;
+    let chat = &fx.chat;
+
+    // The outsider follows a thread in the room - the state a user is left in
+    // after being removed from an enclave.
+    let parent = db::chat::insert_message(chat, fx.room_id, &fx.insider, "thread parent")
+        .await
+        .unwrap();
+    // follow(pool, user_id, parent_id, room_id)
+    db::thread_followers::follow(chat, &fx.outsider, parent, fx.room_id)
+        .await
+        .unwrap();
+    // A threaded reply: there is no insert helper that sets parent_id, so write
+    // the row directly the way the reply path does.
+    sqlx::query("INSERT INTO messages (room_id, user_id, body, parent_id) VALUES (?, ?, ?, ?)")
+        .bind(fx.room_id)
+        .bind(&fx.insider)
+        .bind("a reply")
+        .bind(parent)
+        .execute(chat)
+        .await
+        .unwrap();
+
+    let threads = db::thread_followers::followed_threads_with_unread(chat, &fx.outsider, false)
+        .await
+        .unwrap();
+    assert!(
+        threads.is_empty(),
+        "following a thread is not a lasting grant of access; got {} rows",
+        threads.len()
+    );
+}

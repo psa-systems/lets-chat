@@ -204,7 +204,7 @@ async fn build_dashboard(
     // Mentions: per-room unread-mention counts. Resolve the room name from the
     // inbox map when we already have it, else one cheap lookup.
     let mut mentions: Vec<MentionRow> = Vec::new();
-    for (room_id, count) in db::mentions::count_unread_mentions_per_room(chat, &user.id)
+    for (room_id, count) in db::mentions::count_unread_mentions_per_room(chat, &user.id, is_admin)
         .await?
         .into_iter()
         .take(CARD_CAP)
@@ -225,7 +225,7 @@ async fn build_dashboard(
 
     // Threads: followed threads carrying replies newer than the read watermark.
     let threads: Vec<ThreadRow> =
-        db::thread_followers::followed_threads_with_unread(chat, &user.id)
+        db::thread_followers::followed_threads_with_unread(chat, &user.id, is_admin)
             .await?
             .into_iter()
             .take(CARD_CAP)

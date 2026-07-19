@@ -127,33 +127,36 @@ fn map_room(row: &sqlx::sqlite::SqliteRow) -> Room {
     }
 }
 
-/// List rooms visible to a user.
-/// Admins see all non-DM rooms. Regular users see public rooms plus private rooms they joined.
+/// List channels visible to a user (DMs are never included).
+///
+/// LC-606: this used to be `room_type = 'public' OR member`, with no enclave
+/// condition, so it returned channels from enclaves the caller is not in - the
+/// same drift LC-604 fixed for the unread queries. It feeds the forward-message
+/// destination picker and the rooms API, so those listed rooms the caller would
+/// be refused on open. Visibility now comes from [`accessible_rooms_sql`], the
+/// shared predicate that mirrors [`is_room_accessible`].
+///
+/// Admins still see every channel: the admin arm of the fragment reduces to
+/// `room_type != 'dm'` here, which is what the separate admin query did.
 pub async fn list_rooms(
     pool: &sqlx::SqlitePool,
     user_id: &str,
     is_admin: bool,
 ) -> Result<Vec<Room>, sqlx::Error> {
-    if is_admin {
-        let rows = sqlx::query(
-            "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by \
-             FROM rooms WHERE room_type != 'dm' ORDER BY name",
-        )
-        .fetch_all(pool)
-        .await?;
-        return Ok(rows.iter().map(map_room).collect());
-    }
-
-    let rows = sqlx::query(
+    let sql = format!(
         "SELECT r.id, r.name, r.topic, r.room_type, r.invite_code, r.created_at, r.is_voice, r.posting_allowed_for, r.description, r.wiki_body, r.wiki_updated_at, r.wiki_updated_by \
          FROM rooms r \
-         LEFT JOIN room_members m ON m.room_id = r.id AND m.user_id = ? \
-         WHERE r.room_type != 'dm' AND (r.room_type = 'public' OR m.user_id IS NOT NULL) \
+         WHERE r.room_type != 'dm' \
+           AND {access} \
          ORDER BY r.name",
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?;
+        access = accessible_rooms_sql(is_admin),
+    );
+
+    let mut q = sqlx::query(&sql);
+    for _ in 0..accessible_rooms_binds(is_admin) {
+        q = q.bind(user_id);
+    }
+    let rows = q.fetch_all(pool).await?;
 
     Ok(rows.iter().map(map_room).collect())
 }

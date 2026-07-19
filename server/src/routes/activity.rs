@@ -43,7 +43,14 @@ pub async fn get_activity(
         None => "all",
     };
 
-    let raw = db::activity::feed_for_user(&state.chat, &user.id, tab_filter, PAGE_LIMIT).await?;
+    let raw = db::activity::feed_for_user(
+        &state.chat,
+        &user.id,
+        user.role == "admin",
+        tab_filter,
+        PAGE_LIMIT,
+    )
+    .await?;
 
     let mut items: Vec<ActivityItem> = Vec::with_capacity(raw.len());
     for item in raw {

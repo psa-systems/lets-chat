@@ -693,7 +693,7 @@ pub(crate) async fn load_sidebar(
     // LC-553: unread @-mention counts per room, hoisted above the enclave/home
     // split so both channel rows and DM peer rows can render the `@N` badge.
     let mention_counts: HashMap<i64, i64> =
-        db::mentions::count_unread_mentions_per_room(&state.chat, &user.id)
+        db::mentions::count_unread_mentions_per_room(&state.chat, &user.id, is_admin)
             .await?
             .into_iter()
             .collect();
