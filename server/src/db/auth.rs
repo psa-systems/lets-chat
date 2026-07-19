@@ -1891,12 +1891,18 @@ pub async fn bump_login_approval_attempts(
 
 /// LC-587: mark a challenge consumed so it can never be replayed (on success,
 /// or when the attempt cap is hit).
-pub async fn consume_login_approval(pool: &SqlitePool, token: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE login_approvals SET consumed_at = datetime('now') WHERE id = ?")
-        .bind(token)
-        .execute(pool)
-        .await?;
-    Ok(())
+/// Returns the number of rows consumed: 1 for the caller that won, 0 if the
+/// challenge was already consumed. The `consumed_at IS NULL` guard makes this
+/// the atomic single-use gate - `verify` mints a session only when it consumed
+/// the row itself, so two concurrent correct-code submits cannot both succeed
+/// (LC-601).
+pub async fn consume_login_approval(pool: &SqlitePool, token: &str) -> Result<u64, sqlx::Error> {
+    let res =
+        sqlx::query("UPDATE login_approvals SET consumed_at = datetime('now') WHERE id = ? AND consumed_at IS NULL")
+            .bind(token)
+            .execute(pool)
+            .await?;
+    Ok(res.rows_affected())
 }
 
 /// LC-587: does the user have at least one known login device? Used to keep the
