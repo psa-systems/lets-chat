@@ -56,5 +56,14 @@ jobs:
       - name: Build (server, saas)
         run: cargo build -p lets-chat-server --no-default-features --features saas
 
-      - name: Unit tests (server, standalone)
-        run: cargo test --lib -p lets-chat-server
+      # LC-605: was `cargo test --lib`, which ran only the 266 in-crate unit
+      # tests. The 177 integration binaries under server/tests/ were compiled by
+      # the `--all-targets` steps above but never executed, so ~74% of the suite
+      # (1036 tests in total) could not fail the pipeline. Three long-lived
+      # breakages reached main that way - see LC-600 and LC-605.
+      #
+      # Dropping `--lib` runs both. The marginal cost is small because the build
+      # steps above already compiled these binaries: locally the suite adds
+      # ~100s wall-clock over `--lib` on a warm cache.
+      - name: Tests (server, standalone)
+        run: cargo test -p lets-chat-server

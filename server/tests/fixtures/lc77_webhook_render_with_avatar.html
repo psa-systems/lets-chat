@@ -26,6 +26,13 @@
     
     <span data-lc-quick-bar role="group" aria-label="Quick reactions" class="hidden items-center gap-1 border-r border-border pr-1 mr-0.5"></span>
     
+    <button data-lc-reaction-open
+      hx-get="/messages/1/reactions/picker" hx-target="#lc-reaction-popover" hx-swap="innerHTML"
+      class="lc-msg-action" data-lc-tip="Add reaction" data-lc-tip-pos="bottom"
+      aria-label="Add reaction" aria-haspopup="dialog">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
+    </button>
+    
     <button hx-get="/room/1/composer-quote/1" hx-target="#composer-quote-bar" hx-swap="innerHTML" class="lc-msg-action" data-lc-tip="Reply" data-lc-tip-pos="bottom" aria-label="Reply">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
     </button>
@@ -40,84 +47,93 @@
       <summary class="lc-msg-action list-none" aria-haspopup="menu" data-lc-tip="More actions" data-lc-tip-pos="bottom" aria-label="More actions">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM15.5 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>
       </summary>
+      
       <div role="menu" class="lc-msg-menu absolute right-0 top-full mt-1 z-30">
+        <div class="lc-menu-group">
+          
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-copy-link="1"
+            data-lc-copied-label="Copied"
+            class="lc-menu-item"
+            onclick="
+              var b = this;
+              var lbl = b.querySelector('[data-lc-label]');
+              var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
+              var done = function(){
+                var orig = lbl.textContent;
+                lbl.textContent = b.getAttribute('data-lc-copied-label');
+                setTimeout(function(){ lbl.textContent = orig; }, 1500);
+              };
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done, function(){
+                  window.__lcCopyFallback && window.__lcCopyFallback(url); done();
+                });
+              } else if (window.__lcCopyFallback) {
+                window.__lcCopyFallback(url); done();
+              }
+            "><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"/></svg><span data-lc-label>Copy link</span></button>
+          
+          
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-copy-text="1"
+            data-lc-copied-label="Copied"
+            class="lc-menu-item"
+            onclick="
+              var b = this;
+              var lbl = b.querySelector('[data-lc-label]');
+              fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.text() : null; })
+                .then(function(t){
+                  if (t === null) return;
+                  var done = function(){
+                    var orig = lbl.textContent;
+                    lbl.textContent = b.getAttribute('data-lc-copied-label');
+                    setTimeout(function(){ lbl.textContent = orig; }, 1500);
+                  };
+                  if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(t).then(done, function(){
+                      window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+                    });
+                  } else if (window.__lcCopyFallback) {
+                    window.__lcCopyFallback(t); done();
+                  }
+                });
+            "><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z"/><path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z"/></svg><span data-lc-label>Copy text</span></button>
+          
+          
+          <button role="menuitem" tabindex="-1" hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.207 2.232a.75.75 0 00.025 1.06l4.146 3.958H6.375a5.375 5.375 0 000 10.75H10.5a.75.75 0 000-1.5H6.375a3.875 3.875 0 010-7.75h10.003l-4.146 3.957a.75.75 0 001.036 1.085l5.5-5.25a.75.75 0 000-1.085l-5.5-5.25a.75.75 0 00-1.06.025z" clip-rule="evenodd"/></svg><span>Forward</span></button>
+        </div>
+        <div class="lc-menu-group">
+          
+          <button role="menuitem" tabindex="-1" hx-post="/messages/1/bookmark" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg><span>Save</span></button>
+          
+          
+          <button role="menuitem" tabindex="-1" hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.293 1.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414l-.043-.043-2.5 2.5.043.043a3 3 0 01.879 2.121v1.086a1 1 0 01-1.707.707L7.5 10.5l-3.793 3.793a1 1 0 01-1.414-1.414L6.086 9.086 3.379 6.379A1 1 0 014.086 4.67h1.086a3 3 0 012.121.879l.043.043 2.5-2.5-.043-.043a1 1 0 010-1.414z"/></svg><span>Pin</span></button>
+          
+          <button role="menuitem" tabindex="-1" hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/></svg><span>Remind</span></button>
+          
+          <button role="menuitem" tabindex="-1" hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/><path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/></svg><span>Mark unread</span></button>
+        </div>
         
-        <button type="button" role="menuitem"
-          data-lc-copy-link="1"
-          data-lc-copied-label="Copied"
-          class="lc-menu-item"
-          onclick="
-            var b = this;
-            var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
-            var done = function(){
-              var orig = b.textContent;
-              b.textContent = b.getAttribute('data-lc-copied-label');
-              setTimeout(function(){ b.textContent = orig; }, 1500);
-            };
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(url).then(done, function(){
-                window.__lcCopyFallback && window.__lcCopyFallback(url); done();
-              });
-            } else if (window.__lcCopyFallback) {
-              window.__lcCopyFallback(url); done();
-            }
-          ">Copy link</button>
-        
-        
-        <button type="button" role="menuitem"
-          data-lc-copy-text="1"
-          data-lc-copied-label="Copied"
-          class="lc-menu-item"
-          onclick="
-            var b = this;
-            fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
-              .then(function(r){ return r.ok ? r.text() : null; })
-              .then(function(t){
-                if (t === null) return;
-                var done = function(){
-                  var orig = b.textContent;
-                  b.textContent = b.getAttribute('data-lc-copied-label');
-                  setTimeout(function(){ b.textContent = orig; }, 1500);
-                };
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                  navigator.clipboard.writeText(t).then(done, function(){
-                    window.__lcCopyFallback && window.__lcCopyFallback(t); done();
-                  });
-                } else if (window.__lcCopyFallback) {
-                  window.__lcCopyFallback(t); done();
-                }
-              });
-          ">Copy text</button>
-        
-        
-        <button role="menuitem" hx-post="/messages/1/pin" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item">Pin</button>
-        
-        
-        <button role="menuitem" hx-post="/messages/1/bookmark" hx-target="#msg-1" hx-swap="outerHTML" class="lc-menu-item">Save</button>
-        
-        
-        
-        <button role="menuitem" hx-get="/reminders/picker?message_id=1" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">Remind</button>
-        
-        <button role="menuitem" hx-post="/messages/1/translate" hx-target="#translation-1" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">Translate</button>
-        
-        
-        
-        
-        <button role="menuitem" hx-get="/messages/1/related" hx-target="#thread-panel" hx-swap="outerHTML" hx-disabled-elt="this" class="lc-menu-item lc-embeddings-only">Find related</button>
-        
-        
-        <button role="menuitem" hx-post="/messages/1/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">Mark unread</button>
-        
-        
-        <button type="button" role="menuitem"
-          data-lc-read-aloud="1"
-          data-lc-reading-label="Stop reading"
-          class="lc-menu-item lc-read-aloud">Read aloud</button>
-        
-        
-        <button role="menuitem" hx-get="/messages/1/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">Forward</button>
-        
+        <div class="lc-menu-group lc-menu-group-tools">
+          
+          <button role="menuitem" tabindex="-1" hx-post="/messages/1/translate" hx-target="#translation-1" hx-swap="innerHTML" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.75 2.75a.75.75 0 00-1.5 0v1.258a32.987 32.987 0 00-3.599.278.75.75 0 10.198 1.487A31.545 31.545 0 018.7 5.545 19.381 19.381 0 017 9.56a19.418 19.418 0 01-1.002-2.05.75.75 0 00-1.384.577 20.935 20.935 0 001.492 2.91 19.613 19.613 0 01-3.828 4.154.75.75 0 10.945 1.164A21.116 21.116 0 007 12.331c.095.132.192.262.29.391a.75.75 0 001.194-.91c-.204-.266-.4-.538-.59-.815a20.888 20.888 0 002.333-5.332c.31.031.618.068.924.108a.75.75 0 00.198-1.487 32.832 32.832 0 00-3.599-.278V2.75z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M13 8a.75.75 0 01.671.415l4.25 8.5a.75.75 0 11-1.342.67L15.787 16h-5.573l-.793 1.585a.75.75 0 11-1.342-.67l4.25-8.5A.75.75 0 0113 8zm2.037 6.5L13 10.427 10.964 14.5h4.073z" clip-rule="evenodd"/></svg><span>Translate</span></button>
+          
+          
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-read-aloud="1"
+            data-lc-reading-label="Stop reading"
+            class="lc-menu-item lc-read-aloud"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7.557 2.066A1 1 0 018 2.882v14.236a1 1 0 01-1.664.748L2.947 14.8H1.5A1.5 1.5 0 010 13.3V6.7a1.5 1.5 0 011.5-1.5h1.447l3.389-3.066a1 1 0 011.221-.068zM12.293 6.293a1 1 0 011.414 0 5 5 0 010 7.414 1 1 0 01-1.414-1.414 3 3 0 000-4.586 1 1 0 010-1.414zM15.121 3.464a1 1 0 011.415 0 9 9 0 010 13.072 1 1 0 01-1.415-1.415 7 7 0 000-10.242 1 1 0 010-1.415z"/></svg><span data-lc-label>Read aloud</span></button>
+          
+          
+          
+          <button role="menuitem" tabindex="-1" hx-get="/messages/1/related" hx-target="#thread-panel" hx-swap="outerHTML" hx-disabled-elt="this" class="lc-menu-item lc-embeddings-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/></svg><span>Find related</span></button>
+          
+          
+          
+          
+          
+        </div>
         
         
         
@@ -147,29 +163,15 @@
   
   
   
-  <div id="reactions-1" class="mt-2">
-    
-    
-    <div id="reactions-1" class="flex flex-wrap gap-1.5 items-center">
   
   
   
-  <button
-    data-lc-reaction-open
-    hx-get="/messages/1/reactions/picker"
-    hx-target="#lc-reaction-popover"
-    hx-swap="innerHTML"
-    aria-label="Add reaction"
-    data-lc-tip="Add reaction" data-lc-tip-pos="top"
-    aria-haspopup="dialog"
-    class="lc-react-add hidden group-hover:inline-flex group-focus-within:inline-flex items-center justify-center h-6 rounded-full border border-border bg-surface-elevated px-1.5 text-content-subtle hover:bg-surface-sunken hover:text-content"
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/>
-    </svg>
-  </button>
+  
+<div id="reactions-1" class="flex flex-wrap gap-1.5 items-center mt-1.5 hidden">
+  
+  
+  
 </div>
-  </div>
   
   
   <div id="ack-1"></div>
