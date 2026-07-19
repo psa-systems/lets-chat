@@ -2736,6 +2736,48 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     border-radius: 0.5rem;
     background-color: var(--surface-elevated);
     box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    /* LC-598: the menu ran most of the viewport at 15 rows. Cap it against the
+       space the delegated handler in room/messages.html measured (--lc-menu-max,
+       set on open); internal scroll is the last resort after the upward flip
+       below, not the first response. The static fallback matters for the
+       no-JS/first-paint case. */
+    max-height: var(--lc-menu-max, 26rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+/* LC-598: flip upward when the row is near the viewport bottom. The handler adds
+   this class instead of the menu always growing downward off-screen. */
+.lc-msg-menu.lc-menu-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 0.25rem;
+}
+/* LC-598: grouped sections. The separator is a border on the group rather than a
+   standalone .lc-menu-divider node, so a group that renders empty (or collapses,
+   like the tools cluster) takes its rule with it and cannot leave a doubled or
+   leading divider behind. */
+.lc-menu-group + .lc-menu-group {
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border);
+}
+/* LC-598: every member of the tools group is capability-gated, so the group is
+   hidden by default and revealed only when something in it can actually show:
+   an LLM ([data-lc-llm]) or embeddings ([data-lc-embeddings]) page root, a
+   browser with speech synthesis (no .lc-no-tts on <html>), or an author/mod
+   viewer who gets the Askama-gated acknowledgement item. Mirrors the existing
+   per-item gates at the top of this file rather than restating their logic. */
+.lc-menu-group-tools {
+    display: none;
+}
+[data-lc-llm] .lc-menu-group-tools,
+[data-lc-embeddings] .lc-menu-group-tools,
+.lc-menu-group-tools:has(.lc-menu-item-ack) {
+    display: block;
+}
+html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
+    display: block;
 }
 /* Keep the hover chip visible while one of its <details> popovers (overflow
    menu or flag) is open, so moving the mouse off the row does not dismiss it. */
