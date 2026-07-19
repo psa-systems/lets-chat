@@ -837,6 +837,25 @@ async fn room_ids_with_drafts_returns_only_fresh_nonempty_rows() {
     );
 }
 
+/// LC-605: return the draft badge element for `room_id`, so these tests can
+/// assert on the badge's *state* (empty target span vs. populated indicator)
+/// rather than on the glyph inside it.
+///
+/// They used to match the literal `&#9998;`. Commit `06913c8` replaced that
+/// entity with an inline SVG pencil and did not update them, which broke the
+/// positive test - and silently made the negative one vacuous, since it asserts
+/// the absence of a string that no longer appears anywhere. Matching on
+/// structure survives the next icon change.
+fn draft_badge(body: &str, room_id: i64) -> &str {
+    let open = format!("<span id=\"lc-draft-{room_id}\"");
+    let start = body
+        .find(&open)
+        .unwrap_or_else(|| panic!("no draft badge span for room {room_id}"));
+    let rest = &body[start..];
+    let end = rest.find("</span>").expect("badge span is closed") + "</span>".len();
+    &rest[..end]
+}
+
 #[tokio::test]
 async fn sidebar_shows_draft_pencil_for_room_with_draft() {
     let t = app().await;
@@ -846,14 +865,11 @@ async fn sidebar_shows_draft_pencil_for_room_with_draft() {
     let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
     assert_eq!(status, StatusCode::OK);
     // The id-keyed badge span is always present (so a later DraftChanged OOB
-    // swap has a target); with a draft it carries the pencil glyph.
+    // swap has a target); with a draft it also carries the indicator icon.
+    let badge = draft_badge(&body, 1);
     assert!(
-        body.contains("id=\"lc-draft-1\""),
-        "sidebar row for room 1 must carry the draft badge target span",
-    );
-    assert!(
-        body.contains("&#9998;"),
-        "a room with a draft must render the pencil draft indicator",
+        badge.contains("<svg"),
+        "a room with a draft must render the pencil draft indicator, got: {badge}",
     );
 }
 
@@ -862,13 +878,14 @@ async fn sidebar_omits_draft_pencil_when_no_draft() {
     let t = app().await;
     let (status, body) = send(&t.app, &t.alice_session, Method::GET, "/room/1", "").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        body.contains("id=\"lc-draft-1\""),
-        "the empty id-keyed badge span must still render as the OOB swap target",
-    );
-    assert!(
-        !body.contains("&#9998;"),
-        "no draft anywhere means no pencil indicator is rendered",
+    // The target span must still render (the OOB swap needs something to hit),
+    // but empty. Asserting it is exactly the empty element is what makes this
+    // test meaningful: the old `!body.contains("&#9998;")` form kept passing
+    // after the glyph became an SVG, while no longer testing anything.
+    let badge = draft_badge(&body, 1);
+    assert_eq!(
+        badge, "<span id=\"lc-draft-1\"></span>",
+        "no draft means the badge target renders empty",
     );
 }
 
