@@ -1306,17 +1306,63 @@ pub async fn list_dm_unread_counts(
         .collect())
 }
 
-/// For each non-DM room visible to the user (public rooms plus private rooms
-/// they joined), count messages from other users that are newer than the
-/// caller's watermark in dm_read_state. The dm_read_state table is room-keyed,
-/// so we reuse it for non-DM rooms as well.
+/// LC-604: the single source of truth for "which rooms may this viewer read",
+/// as a SQL fragment, so list queries cannot drift from [`is_room_accessible`]
+/// the way `list_unread` and `list_room_unread_counts` did. Both had encoded
+/// `room_type = 'public' OR member`, which reads "public" as public to the whole
+/// instance - but a room is only public *within its enclave*, and
+/// `is_room_accessible` (which backs `require_room_access`, and so the 403s)
+/// requires enclave membership first. A non-member was therefore refused a room
+/// while still seeing its name, unread count, and newest message body.
+///
+/// Mirrors [`is_room_accessible`] branch for branch: site admins get every
+/// non-DM room and their own DMs; everyone else needs enclave membership for a
+/// channel (plus room membership when it is private) and room membership for a
+/// DM. A channel with no `enclave_id` is unreachable for non-admins, as there.
+///
+/// The fragment assumes the `rooms` table is aliased `r`. Every placeholder
+/// takes the viewer's user id - bind it [`accessible_rooms_binds`] times, in
+/// order, wherever the fragment is spliced in.
+pub fn accessible_rooms_sql(is_admin: bool) -> &'static str {
+    if is_admin {
+        "(r.room_type != 'dm' \
+          OR EXISTS (SELECT 1 FROM room_members rm \
+                      WHERE rm.room_id = r.id AND rm.user_id = ?))"
+    } else {
+        "((r.room_type = 'dm' \
+           AND EXISTS (SELECT 1 FROM room_members rm \
+                        WHERE rm.room_id = r.id AND rm.user_id = ?)) \
+          OR (r.room_type != 'dm' \
+              AND r.enclave_id IS NOT NULL \
+              AND EXISTS (SELECT 1 FROM enclave_members em \
+                           WHERE em.enclave_id = r.enclave_id AND em.user_id = ?) \
+              AND (r.room_type = 'public' \
+                   OR EXISTS (SELECT 1 FROM room_members rm \
+                               WHERE rm.room_id = r.id AND rm.user_id = ?))))"
+    }
+}
+
+/// How many times to bind the viewer's user id for [`accessible_rooms_sql`].
+pub fn accessible_rooms_binds(is_admin: bool) -> usize {
+    if is_admin {
+        1
+    } else {
+        3
+    }
+}
+
+/// For each non-DM room visible to the user, count messages from other users
+/// that are newer than the caller's watermark in dm_read_state. The
+/// dm_read_state table is room-keyed, so we reuse it for non-DM rooms as well.
+///
+/// Visibility comes from [`accessible_rooms_sql`], so this matches what
+/// `require_room_access` will actually allow (LC-604).
 pub async fn list_room_unread_counts(
     pool: &sqlx::SqlitePool,
     user_id: &str,
     is_admin: bool,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error> {
-    // Admins see every non-DM room regardless of membership.
-    let sql = if is_admin {
+    let sql = format!(
         "SELECT r.id AS room_id, \
                 COUNT(m.id) AS unread \
          FROM rooms r \
@@ -1328,29 +1374,17 @@ pub async fn list_room_unread_counts(
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
          WHERE r.room_type != 'dm' \
-         GROUP BY r.id"
-    } else {
-        "SELECT r.id AS room_id, \
-                COUNT(m.id) AS unread \
-         FROM rooms r \
-         LEFT JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = ? \
-         LEFT JOIN dm_read_state s ON s.room_id = r.id AND s.user_id = ? \
-         LEFT JOIN messages m \
-           ON m.room_id = r.id \
-          AND m.user_id != ? \
-          AND m.deleted_at IS NULL AND m.quarantined = 0 \
-          AND m.parent_id IS NULL \
-          AND m.id > COALESCE(s.last_read_message_id, 0) \
-         WHERE r.room_type != 'dm' \
-           AND (r.room_type = 'public' OR rm.user_id IS NOT NULL) \
-         GROUP BY r.id"
-    };
+           AND {access} \
+         GROUP BY r.id",
+        access = accessible_rooms_sql(is_admin),
+    );
 
-    let mut q = sqlx::query(sql).bind(user_id);
-    if !is_admin {
+    // Bind order follows placeholder order: dm_read_state, messages author,
+    // then the access fragment's own placeholders.
+    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+    for _ in 0..accessible_rooms_binds(is_admin) {
         q = q.bind(user_id);
     }
-    q = q.bind(user_id);
 
     let rows = q.fetch_all(pool).await?;
     Ok(rows
