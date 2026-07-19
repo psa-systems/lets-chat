@@ -104,7 +104,7 @@ async fn scale_mention_queries_under_50ms_at_10k_rows() {
     // Time count_unread_mentions_per_room: the sidebar query, runs on every
     // page render. This is the most-touched read path.
     let t0 = Instant::now();
-    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, user_id)
+    let counts = lets_chat::db::mentions::count_unread_mentions_per_room(&pool, user_id, false)
         .await
         .unwrap();
     let elapsed_count = t0.elapsed();

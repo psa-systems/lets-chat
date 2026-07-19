@@ -49,13 +49,22 @@ pub struct ActivityItem {
 pub async fn feed_for_user(
     pool: &SqlitePool,
     user_id: &str,
+    is_admin: bool,
     tab: Option<ActivityKind>,
     limit: i64,
 ) -> Result<Vec<ActivityItem>, sqlx::Error> {
+    // LC-606: all three queries used `room_type = 'public' OR member`, with no
+    // enclave condition, so an item could surface from a room the viewer would
+    // be refused (someone in another enclave @mentions you, or you were removed
+    // from an enclave after posting and keep receiving replies/reactions).
+    // Visibility now comes from the shared predicate that mirrors
+    // `is_room_accessible`, the same fix LC-604 applied to the unread queries.
+    let access = crate::db::chat::accessible_rooms_sql(is_admin);
+    let access_binds = crate::db::chat::accessible_rooms_binds(is_admin);
     let mut out: Vec<ActivityItem> = Vec::new();
 
     if matches!(tab, None | Some(ActivityKind::Mention)) {
-        let rows = sqlx::query(
+        let sql = format!(
             "SELECT m.id AS message_id, m.room_id, m.user_id AS actor_user_id, m.created_at \
                FROM mentions men \
                INNER JOIN messages m ON m.id = men.message_id \
@@ -63,20 +72,16 @@ pub async fn feed_for_user(
               WHERE men.mentioned_user_id = ? \
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND m.user_id != ? \
-                AND ( \
-                  r.room_type = 'public' \
-                  OR EXISTS (SELECT 1 FROM room_members rm \
-                             WHERE rm.room_id = r.id AND rm.user_id = ?) \
-                ) \
+                AND {access} \
               ORDER BY m.created_at DESC, m.id DESC \
               LIMIT ?",
-        )
-        .bind(user_id)
-        .bind(user_id)
-        .bind(user_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+            access = access,
+        );
+        let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+        for _ in 0..access_binds {
+            q = q.bind(user_id);
+        }
+        let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {
             out.push(ActivityItem {
                 kind: ActivityKind::Mention,
@@ -90,7 +95,7 @@ pub async fn feed_for_user(
     }
 
     if matches!(tab, None | Some(ActivityKind::Reply)) {
-        let rows = sqlx::query(
+        let sql = format!(
             "SELECT m.id AS message_id, m.room_id, m.user_id AS actor_user_id, m.created_at \
                FROM messages m \
                INNER JOIN messages parent ON parent.id = m.parent_id \
@@ -99,20 +104,16 @@ pub async fn feed_for_user(
                 AND m.user_id != ? \
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND parent.deleted_at IS NULL \
-                AND ( \
-                  r.room_type = 'public' \
-                  OR EXISTS (SELECT 1 FROM room_members rm \
-                             WHERE rm.room_id = r.id AND rm.user_id = ?) \
-                ) \
+                AND {access} \
               ORDER BY m.created_at DESC, m.id DESC \
               LIMIT ?",
-        )
-        .bind(user_id)
-        .bind(user_id)
-        .bind(user_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+            access = access,
+        );
+        let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+        for _ in 0..access_binds {
+            q = q.bind(user_id);
+        }
+        let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {
             out.push(ActivityItem {
                 kind: ActivityKind::Reply,
@@ -126,7 +127,7 @@ pub async fn feed_for_user(
     }
 
     if matches!(tab, None | Some(ActivityKind::Reaction)) {
-        let rows = sqlx::query(
+        let sql = format!(
             "SELECT m.id AS message_id, m.room_id, mr.user_id AS actor_user_id, \
                     mr.emoji, mr.created_at \
                FROM message_reactions mr \
@@ -135,20 +136,16 @@ pub async fn feed_for_user(
               WHERE m.user_id = ? \
                 AND mr.user_id != ? \
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
-                AND ( \
-                  r.room_type = 'public' \
-                  OR EXISTS (SELECT 1 FROM room_members rm \
-                             WHERE rm.room_id = r.id AND rm.user_id = ?) \
-                ) \
+                AND {access} \
               ORDER BY mr.created_at DESC \
               LIMIT ?",
-        )
-        .bind(user_id)
-        .bind(user_id)
-        .bind(user_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+            access = access,
+        );
+        let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+        for _ in 0..access_binds {
+            q = q.bind(user_id);
+        }
+        let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {
             out.push(ActivityItem {
                 kind: ActivityKind::Reaction,
