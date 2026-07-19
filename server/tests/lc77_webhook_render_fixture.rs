@@ -101,9 +101,27 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(FIXTURE_DIR).join(name)
 }
 
+/// Whether the caller asked to regenerate the golden files.
+///
+/// LC-605: this used to be `env::var("FIXTURE_WRITE").is_ok()`, which treats a
+/// variable that is *present but empty* as opt-in. `dev/cargo` forwards
+/// `-e "FIXTURE_WRITE=${FIXTURE_WRITE:-}"`, so under the standard local wrapper
+/// the variable was always present and always empty - every local run silently
+/// rewrote the fixtures and passed. The check only did its job under a bare
+/// `cargo test`, i.e. nowhere anyone actually ran it. Require a meaningful
+/// value so the default is "assert".
+fn fixture_write_requested() -> bool {
+    std::env::var("FIXTURE_WRITE")
+        .map(|v| {
+            let v = v.trim();
+            !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false")
+        })
+        .unwrap_or(false)
+}
+
 fn assert_fixture_matches(name: &str, actual: &str) {
     let path = fixture_path(name);
-    if std::env::var("FIXTURE_WRITE").is_ok() {
+    if fixture_write_requested() {
         std::fs::write(&path, actual)
             .unwrap_or_else(|e| panic!("write fixture {}: {e}", path.display()));
         eprintln!("wrote fixture {}", path.display());
