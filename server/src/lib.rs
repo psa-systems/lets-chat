@@ -22,6 +22,7 @@ pub mod links;
 pub mod livekit;
 pub mod llm;
 pub mod login_alert;
+pub mod login_approval;
 pub mod mail;
 pub mod models;
 /// LC-22: "Log in with Bunyip" SSO client.

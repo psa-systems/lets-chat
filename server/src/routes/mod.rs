@@ -1699,6 +1699,8 @@ pub fn build_router(state: AppState) -> Router {
     let router = router
         .route("/auth/bunyip/start", get(bunyip_sso::get_start))
         .route("/auth/bunyip/callback", get(bunyip_sso::get_callback))
+        // LC-587: complete a login withheld for suspicious-login approval.
+        .route("/auth/bunyip/approve", post(bunyip_sso::post_approve))
         .merge(admin::router());
 
     #[cfg(feature = "saas")]

@@ -84,6 +84,7 @@ async fn setup(with_mailer: bool, verified: bool, opted_in: bool) -> Fixture {
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth_pool,
         chat: chat_pool,
         settings: settings_pool,

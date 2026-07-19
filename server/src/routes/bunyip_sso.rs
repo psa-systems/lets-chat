@@ -12,11 +12,12 @@
 //! See `docs/lets-chat/sso/bunyip-only/01-architecture.md` (single flow) and
 //! `03-account-provisioning.md` (the decision tree the callback applies).
 
-use axum::extract::{Query, State};
+use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
-use axum_extra::extract::cookie::CookieJar;
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::Deserialize;
+use time::Duration;
 
 use crate::db;
 use crate::error::AppError;
@@ -153,6 +154,49 @@ pub async fn get_callback(
 
     let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
     let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
+
+    // LC-587: when the suspicious-login gate is enabled, assess the login
+    // BEFORE minting a session. A suspicious login (new country and/or new
+    // device) is withheld: a single-use code is emailed and an interstitial
+    // asks the user to approve it. A cleared login falls through, mints the
+    // session, and records its country/device as the new baseline. The gate is
+    // opt-in (LOGIN_APPROVAL_ENABLED); when off, the original LC-580 alert-only
+    // behaviour below runs unchanged.
+    if state.login_approval_enabled {
+        let device_id = read_device_id(&jar);
+        match crate::login_approval::guard(
+            &state,
+            &user_id,
+            ip.as_deref(),
+            ua.as_deref(),
+            device_id.as_deref(),
+        )
+        .await
+        {
+            crate::login_approval::LoginGate::Challenge { token } => {
+                return render_approval_page(&state, &token, None);
+            }
+            crate::login_approval::LoginGate::Clear {
+                country,
+                device_hash,
+            } => {
+                return complete_login(
+                    &state,
+                    &jar,
+                    &user_id,
+                    ua.as_deref(),
+                    ip.as_deref(),
+                    country.as_deref(),
+                    device_hash,
+                )
+                .await;
+            }
+        }
+    }
+
+    // Gate off (LC-580 path): mint the session and fire the detached,
+    // best-effort new-login-location alert so the geoip lookup + any SMTP send
+    // never add latency to the login redirect.
     let token = match db::auth::create_session_with_origin(
         &state.auth,
         &user_id,
@@ -168,10 +212,6 @@ pub async fn get_callback(
         }
     };
     tracing::info!(target: "bunyip_sso", path = "sso", user_id = %user_id, "session created");
-    // LC-580: best-effort new-login-location alert on a detached task, so the
-    // geoip lookup + any SMTP send never adds latency to the login redirect.
-    // No-op unless a country change is detected for a geolocatable public IP
-    // and the user has alerts enabled.
     let alert_state = state.clone();
     let alert_user_id = user_id.clone();
     let alert_ip = ip.clone();
@@ -372,4 +412,147 @@ async fn promote_if_first_user(
     }
     tx.commit().await?;
     Ok(promoted)
+}
+
+// ── LC-587: suspicious-login approval ──────────────────────────────────────
+
+const DEVICE_COOKIE: &str = "device_id";
+
+#[derive(Debug, Deserialize)]
+pub struct ApproveForm {
+    pub token: String,
+    pub code: String,
+}
+
+/// `POST /auth/bunyip/approve` - finish a login that was withheld as suspicious
+/// (LC-587) by submitting the emailed 6-digit code. Public (no session yet),
+/// mirroring the callback.
+pub async fn post_approve(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    jar: CookieJar,
+    Form(form): Form<ApproveForm>,
+) -> Response {
+    let code = form.code.trim();
+    match crate::login_approval::verify(&state.auth, &form.token, code).await {
+        crate::login_approval::VerifyOutcome::Approved {
+            user_id,
+            country,
+            device_hash,
+        } => {
+            let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
+            let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
+            complete_login(
+                &state,
+                &jar,
+                &user_id,
+                ua.as_deref(),
+                ip.as_deref(),
+                country.as_deref(),
+                device_hash,
+            )
+            .await
+        }
+        crate::login_approval::VerifyOutcome::Wrong => render_approval_page(
+            &state,
+            &form.token,
+            Some("Incorrect code. Please try again."),
+        ),
+        // Expired / already used / too many attempts: send them back to restart
+        // the sign-in from scratch.
+        crate::login_approval::VerifyOutcome::Invalid => {
+            Redirect::to("/login?sso_error=approval").into_response()
+        }
+    }
+}
+
+/// Read the first-party device id cookie, if the browser presents one.
+fn read_device_id(jar: &CookieJar) -> Option<String> {
+    jar.get(DEVICE_COOKIE)
+        .map(|c| c.value().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Long-lived first-party device cookie. `Lax` (not the session cookie's
+/// `Strict`) so it is presented when the browser lands on the callback via the
+/// top-level redirect back from Bunyip.
+fn build_device_cookie(secure: bool, value: String) -> Cookie<'static> {
+    let mut c = Cookie::new(DEVICE_COOKIE, value);
+    c.set_http_only(true);
+    c.set_secure(secure);
+    c.set_same_site(SameSite::Lax);
+    c.set_path("/");
+    c.set_max_age(Duration::days(365));
+    c
+}
+
+/// Render the "approve this sign-in" interstitial for a pending challenge.
+fn render_approval_page(state: &AppState, token: &str, error: Option<&str>) -> Response {
+    let page = crate::views::login_approval::LoginApprovePage {
+        asset_version: &state.asset_version,
+        app_version: crate::version::VERSION,
+        git_hash: crate::version::GIT_HASH,
+        build_date: crate::version::BUILD_DATE,
+        token,
+        error,
+    };
+    match crate::views::html(&page) {
+        Ok(html) => html.into_response(),
+        Err(e) => {
+            tracing::error!(target: "bunyip_sso", error = ?e, "approval page render failed");
+            Redirect::to("/login?sso_error=internal").into_response()
+        }
+    }
+}
+
+/// Mint the session for a cleared/approved login, set the session cookie (plus a
+/// device cookie when the browser had none), record the country/device
+/// baseline, and redirect home. `device_hash` is `Some` when a device was
+/// already identified (presented at login, or carried on the approved
+/// challenge); otherwise a new device id is minted and its cookie set.
+async fn complete_login(
+    state: &AppState,
+    jar: &CookieJar,
+    user_id: &str,
+    ua: Option<&str>,
+    ip: Option<&str>,
+    country: Option<&str>,
+    device_hash: Option<String>,
+) -> Response {
+    let token = match db::auth::create_session_with_origin(&state.auth, user_id, ua, ip).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!(target: "bunyip_sso", error = %e, "session create failed");
+            return Redirect::to("/login?sso_error=internal").into_response();
+        }
+    };
+    tracing::info!(target: "bunyip_sso", path = "sso", user_id = %user_id, "session created");
+    let mut jar = jar
+        .clone()
+        .add(build_session_cookie(state.cookies_secure(), token));
+
+    // Establish a device baseline. Use the already-known hash when present;
+    // otherwise record the presented device, or mint + set one when the browser
+    // sent none, so the next login from this browser is recognised.
+    let device_hash = match device_hash {
+        Some(h) => Some(h),
+        None => match read_device_id(&jar) {
+            Some(id) => Some(crate::login_approval::hash_device(&id)),
+            None => {
+                let id = new_random_token();
+                let h = crate::login_approval::hash_device(&id);
+                jar = jar.add(build_device_cookie(state.cookies_secure(), id));
+                Some(h)
+            }
+        },
+    };
+    crate::login_approval::apply_baseline(
+        &state.auth,
+        user_id,
+        country,
+        device_hash.as_deref(),
+        ua,
+    )
+    .await;
+    (jar, Redirect::to("/")).into_response()
 }

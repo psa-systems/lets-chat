@@ -50,6 +50,7 @@ async fn app(embeddings: bool) -> TestApp {
     };
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth.clone(),
         chat: chat.clone(),
         settings,
