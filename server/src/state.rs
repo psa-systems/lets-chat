@@ -58,6 +58,13 @@ pub struct AppState {
     /// disables the alert (the login is never affected). `Arc` because
     /// `AppState` is `Clone` (axum state) and the resolver is not.
     pub geoip: Option<std::sync::Arc<crate::geoip::GeoipResolver>>,
+    /// LC-587: opt-in suspicious-login notify-and-approve gate. When `true`
+    /// (env `LOGIN_APPROVAL_ENABLED`), a login flagged as suspicious (new
+    /// country and/or new device) at the Bunyip callback is withheld pending an
+    /// emailed 6-digit code instead of minting a session. Default `false`
+    /// leaves the LC-580 alert-only behaviour. Off can never withhold a login;
+    /// on ships opt-in per deployment for a staged rollout (PMS-289 lesson).
+    pub login_approval_enabled: bool,
     /// Absolute base URL used to build links inside outbound mail
     /// (password reset, email verification, and digest deep links).
     /// Defaults to `http://localhost:8080`.

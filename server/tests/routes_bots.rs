@@ -62,6 +62,7 @@ async fn app() -> TestApp {
     let chat_for_test = chat.clone();
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth.clone(),
         chat,
         settings,

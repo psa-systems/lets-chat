@@ -67,6 +67,7 @@ async fn setup() -> Fixture {
     let settings_for_test = settings.clone();
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth,
         chat,
         settings,

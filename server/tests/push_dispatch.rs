@@ -69,6 +69,7 @@ async fn fixture(client: Arc<dyn PushClient>, mock: Arc<MockPushClient>) -> Fixt
     let fcm_mock = Arc::new(MockFcmClient::default());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth,
         chat,
         settings,

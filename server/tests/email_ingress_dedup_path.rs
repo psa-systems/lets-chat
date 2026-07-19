@@ -64,6 +64,7 @@ async fn setup() -> Fixture {
     let bg = lets_chat::bg::spawn(auth_pool.clone());
     let state = AppState {
         geoip: None,
+        login_approval_enabled: false,
         auth: auth_pool,
         chat,
         settings,

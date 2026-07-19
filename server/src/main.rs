@@ -174,6 +174,20 @@ async fn main() {
     // LC-580: optional IP -> country resolver for login-location alerts.
     // `None` (env unset or .BIN load failure) leaves the feature disabled.
     let geoip = lets_chat::geoip::GeoipResolver::from_env().map(std::sync::Arc::new);
+    // LC-587: opt-in suspicious-login approval gate. Off by default; any of
+    // `1` / `true` / `yes` (case-insensitive) turns it on for this deployment.
+    let login_approval_enabled = std::env::var("LOGIN_APPROVAL_ENABLED")
+        .ok()
+        .map(|v| {
+            let v = v.trim();
+            v.eq_ignore_ascii_case("1")
+                || v.eq_ignore_ascii_case("true")
+                || v.eq_ignore_ascii_case("yes")
+        })
+        .unwrap_or(false);
+    if login_approval_enabled {
+        tracing::info!(target: "login_approval", "suspicious-login approval gate ENABLED (LC-587)");
+    }
     let state = AppState {
         auth: auth_pool,
         chat: chat_pool,
@@ -193,6 +207,7 @@ async fn main() {
         fcm_client: None,
         mailer,
         geoip,
+        login_approval_enabled,
         base_url,
         ice_servers,
         rate_limits: lets_chat::rate_limit::RateLimits::new(),

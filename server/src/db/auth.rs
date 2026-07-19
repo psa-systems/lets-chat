@@ -1805,3 +1805,153 @@ pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, 
         .await?;
     Ok(n > 0)
 }
+
+// ── LC-587: suspicious-login approval + known-device tracking ──────────────
+
+/// A pending suspicious-login approval challenge, read back for verification.
+#[derive(Debug, Clone)]
+pub struct LoginApproval {
+    pub user_id: String,
+    pub code_hash: String,
+    pub country: Option<String>,
+    pub device_hash: Option<String>,
+    pub attempts: i64,
+}
+
+/// LC-587: insert a pending approval. `token` is the opaque single-use lookup
+/// key (also handed to the browser); `code_hash` is SHA-256(6-digit code). The
+/// row expires in 15 minutes and is single-use (`consumed_at`).
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_login_approval(
+    pool: &SqlitePool,
+    token: &str,
+    user_id: &str,
+    code_hash: &str,
+    country: Option<&str>,
+    device_hash: Option<&str>,
+    ip: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO login_approvals \
+         (id, user_id, code_hash, country, device_hash, ip, user_agent, expires_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+15 minutes'))",
+    )
+    .bind(token)
+    .bind(user_id)
+    .bind(code_hash)
+    .bind(country)
+    .bind(device_hash)
+    .bind(ip)
+    .bind(user_agent)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// LC-587: fetch a still-valid (unconsumed, unexpired) approval by its token.
+/// Returns `None` when the token is unknown, already used, or expired.
+pub async fn get_valid_login_approval(
+    pool: &SqlitePool,
+    token: &str,
+) -> Result<Option<LoginApproval>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT user_id, code_hash, country, device_hash, attempts \
+         FROM login_approvals \
+         WHERE id = ? AND consumed_at IS NULL AND expires_at > datetime('now')",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| LoginApproval {
+        user_id: r.get::<String, _>("user_id"),
+        code_hash: r.get::<String, _>("code_hash"),
+        country: r.get::<Option<String>, _>("country"),
+        device_hash: r.get::<Option<String>, _>("device_hash"),
+        attempts: r.get::<i64, _>("attempts"),
+    }))
+}
+
+/// LC-587: record a wrong-code attempt against a challenge, returning the new
+/// attempt count so the caller can enforce the cap.
+pub async fn bump_login_approval_attempts(
+    pool: &SqlitePool,
+    token: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query("UPDATE login_approvals SET attempts = attempts + 1 WHERE id = ?")
+        .bind(token)
+        .execute(pool)
+        .await?;
+    let n: i64 = sqlx::query_scalar("SELECT attempts FROM login_approvals WHERE id = ?")
+        .bind(token)
+        .fetch_one(pool)
+        .await?;
+    Ok(n)
+}
+
+/// LC-587: mark a challenge consumed so it can never be replayed (on success,
+/// or when the attempt cap is hit).
+pub async fn consume_login_approval(pool: &SqlitePool, token: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE login_approvals SET consumed_at = datetime('now') WHERE id = ?")
+        .bind(token)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-587: does the user have at least one known login device? Used to keep the
+/// first device (or first-ever login) a silent baseline rather than a
+/// new-device signal.
+pub async fn has_known_device(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM user_login_devices WHERE user_id = ?")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(n > 0)
+}
+
+/// LC-587: is this exact device hash already known for the user?
+pub async fn is_known_device(
+    pool: &SqlitePool,
+    user_id: &str,
+    device_hash: &str,
+) -> Result<bool, sqlx::Error> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM user_login_devices WHERE user_id = ? AND device_hash = ?",
+    )
+    .bind(user_id)
+    .bind(device_hash)
+    .fetch_one(pool)
+    .await?;
+    Ok(n > 0)
+}
+
+/// LC-587: record (or refresh) a known device for the user. Idempotent on the
+/// `(user_id, device_hash)` unique key: a repeat login refreshes `last_seen_at`
+/// and the user agent.
+pub async fn record_known_device(
+    pool: &SqlitePool,
+    user_id: &str,
+    device_hash: &str,
+    user_agent: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    use rand::Rng;
+    let id: String = rand::rngs::OsRng
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(32)
+        .map(char::from)
+        .collect();
+    sqlx::query(
+        "INSERT INTO user_login_devices (id, user_id, device_hash, user_agent) \
+         VALUES (?, ?, ?, ?) \
+         ON CONFLICT(user_id, device_hash) \
+         DO UPDATE SET last_seen_at = datetime('now'), user_agent = excluded.user_agent",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(device_hash)
+    .bind(user_agent)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
