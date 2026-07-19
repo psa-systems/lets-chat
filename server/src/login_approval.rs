@@ -277,12 +277,17 @@ pub async fn verify(pool: &SqlitePool, token: &str, code: &str) -> VerifyOutcome
         return VerifyOutcome::Invalid;
     }
     if sha256_hex(code) == approval.code_hash {
-        // Single-use: burn before minting so a replay of the same code fails.
-        let _ = db::auth::consume_login_approval(pool, token).await;
-        return VerifyOutcome::Approved {
-            user_id: approval.user_id,
-            country: approval.country,
-            device_hash: approval.device_hash,
+        // Single-use: the conditional consume is the atomic winner-take-all
+        // gate (LC-601). Mint a session only when THIS call consumed the row;
+        // if a concurrent request already consumed it we lost the race and must
+        // not mint a second session.
+        return match db::auth::consume_login_approval(pool, token).await {
+            Ok(1) => VerifyOutcome::Approved {
+                user_id: approval.user_id,
+                country: approval.country,
+                device_hash: approval.device_hash,
+            },
+            _ => VerifyOutcome::Invalid,
         };
     }
     // Wrong code: count the attempt and burn the challenge if the cap is hit.

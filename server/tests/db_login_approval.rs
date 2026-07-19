@@ -158,3 +158,44 @@ async fn device_baseline_then_known() {
         .await
         .unwrap());
 }
+
+#[tokio::test]
+async fn consume_is_conditional_single_winner() {
+    let auth = common::auth_pool().await;
+    let uid = db::auth::create_user(&auth, "dave", "h").await.unwrap();
+    db::auth::insert_login_approval(
+        &auth,
+        "tok-c",
+        &uid,
+        &code_hash("222222"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // The conditional consume is the atomic single-use gate: the first call
+    // wins (1 row), a second loses (0). A racing second correct-code submit
+    // therefore cannot mint a second session (LC-601).
+    assert_eq!(
+        db::auth::consume_login_approval(&auth, "tok-c")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db::auth::consume_login_approval(&auth, "tok-c")
+            .await
+            .unwrap(),
+        0
+    );
+
+    // verify() with the correct code after the row is consumed is Invalid,
+    // never a second Approved.
+    assert!(matches!(
+        login_approval::verify(&auth, "tok-c", "222222").await,
+        VerifyOutcome::Invalid
+    ));
+}
