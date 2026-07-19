@@ -143,120 +143,153 @@
       <summary class="lc-msg-action list-none" aria-haspopup="menu" data-lc-tip="{{ "room-msg-more"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "room-msg-more"|t }}">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM15.5 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>
       </summary>
+      {# LC-598: the menu had grown to 15 flat rows and ran most of the viewport.
+         Items are now chunked into .lc-menu-group blocks (message / save+remind /
+         tools / edit / danger); the separator is a border-top on the group in
+         main.css rather than hand-placed .lc-menu-divider nodes, so a group that
+         renders empty takes its divider with it instead of leaving a double rule.
+         Every row carries an icon so the list is scannable by shape, and
+         tabindex="-1" so the delegated roving-tabindex handler in
+         room/messages.html owns arrow-key focus (previously every item sat in the
+         natural tab order despite the role="menu"). Grouping only: no endpoint,
+         no hx-target, and no gate changed. #}
       <div role="menu" class="lc-msg-menu absolute right-0 top-full mt-1 z-30">
-        {# LC-246: copy a permalink (/m/{id}); pure client-side, flips the label to
-           "Copied" for ~1.5s via the data attributes. #}
-        <button type="button" role="menuitem"
-          data-lc-copy-link="{{ message.id }}"
-          data-lc-copied-label="{{ "room-msg-copied"|t }}"
-          class="lc-menu-item"
-          onclick="
-            var b = this;
-            var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
-            var done = function(){
-              var orig = b.textContent;
-              b.textContent = b.getAttribute('data-lc-copied-label');
-              setTimeout(function(){ b.textContent = orig; }, 1500);
-            };
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(url).then(done, function(){
-                window.__lcCopyFallback && window.__lcCopyFallback(url); done();
-              });
-            } else if (window.__lcCopyFallback) {
-              window.__lcCopyFallback(url); done();
-            }
-          ">{{ "room-msg-copy-link"|t }}</button>
-        {# LC-282: copy the raw markdown source (fetched on click). #}
-        {% if !message.body.is_empty() %}
-        <button type="button" role="menuitem"
-          data-lc-copy-text="{{ message.id }}"
-          data-lc-copied-label="{{ "room-msg-copied"|t }}"
-          class="lc-menu-item"
-          onclick="
-            var b = this;
-            fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
-              .then(function(r){ return r.ok ? r.text() : null; })
-              .then(function(t){
-                if (t === null) return;
-                var done = function(){
-                  var orig = b.textContent;
-                  b.textContent = b.getAttribute('data-lc-copied-label');
-                  setTimeout(function(){ b.textContent = orig; }, 1500);
-                };
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                  navigator.clipboard.writeText(t).then(done, function(){
-                    window.__lcCopyFallback && window.__lcCopyFallback(t); done();
-                  });
-                } else if (window.__lcCopyFallback) {
-                  window.__lcCopyFallback(t); done();
-                }
-              });
-          ">{{ "room-msg-copy-text"|t }}</button>
-        {% endif %}
-        {% if message.is_pinned %}
-        <button role="menuitem" hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unpin"|t }}</button>
-        {% else %}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-pin"|t }}</button>
-        {% endif %}
-        {% if message.is_bookmarked %}
-        <button role="menuitem" hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unsave"|t }}</button>
-        {% else %}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-save"|t }}</button>
-        {% endif %}
-        {# LC-490: require / clear acknowledgement (author or room moderator only,
-           same gate as delete). Re-renders the whole bubble so the bar + this
-           menu item flip for the acting tab; other viewers update over WS. #}
-        {% if message.can_delete && !message.is_system %}
-        {% if message.ack.is_some() %}
-        <button role="menuitem" hx-delete="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-unrequire-ack"|t }}</button>
-        {% else %}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-require-ack"|t }}</button>
-        {% endif %}
-        {% endif %}
-        <button role="menuitem" hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-remind"|t }}</button>
-        {# LC-486: translate into the viewer's language. Shown only when an LLM is
-           configured (CSS-gated via [data-lc-llm] on the page root, which also
-           covers live-swapped message fragments). Result swaps into the
-           per-message #translation-{id} block under the body. #}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only">{{ "room-msg-translate"|t }}</button>
-        {# LC-548: draft tappable replies to a received message. Same [data-lc-llm]
-           page-root gate as translate; hidden on own / synthetic-actor messages
-           (you reply to others, not yourself). Result fills #composer-ai-panel. #}
-        {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" class="lc-menu-item lc-llm-only">{{ "room-msg-suggest-reply"|t }}</button>
-        {% endif %}
-        {# LC-549: find messages related to this one by embedding similarity.
-           Gated on [data-lc-embeddings] (an operator embeddings endpoint), like
-           the LLM-gated items above. Result fills the shared #thread-panel slot. #}
-        {% if !message.body.is_empty() %}
-        <button role="menuitem" hx-get="/messages/{{ message.id }}/related" hx-target="#thread-panel" hx-swap="outerHTML" hx-disabled-elt="this" class="lc-menu-item lc-embeddings-only">{{ "room-msg-related"|t }}</button>
-        {% endif %}
-        {# LC-286: mark this conversation unread from here. #}
-        <button role="menuitem" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-mark-unread"|t }}</button>
-        {# LC-528: read this message aloud via the browser SpeechSynthesis API.
-           Pure client-side (delegated handler in live.js) - no route, no LLM.
-           Reads the rendered text of this message and toggles to a stop label
-           while speaking. Only for messages with a text body. The whole item is
-           CSS-hidden (.lc-no-tts on <html>, set by live.js) when the browser has
-           no speech synthesis. #}
-        {% if !message.body.is_empty() %}
-        <button type="button" role="menuitem"
-          data-lc-read-aloud="{{ message.id }}"
-          data-lc-reading-label="{{ "room-msg-stop-reading"|t }}"
-          class="lc-menu-item lc-read-aloud">{{ "room-msg-read-aloud"|t }}</button>
-        {% endif %}
-        {# LC-278: forward this message to another room/DM. #}
-        <button role="menuitem" hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-forward"|t }}</button>
-        {# LC-334: report to moderators (not on own / synthetic-actor messages). #}
-        {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
-        <button role="menuitem" hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="lc-menu-item">{{ "room-msg-report"|t }}</button>
-        {% endif %}
+        <div class="lc-menu-group">
+          {# LC-246: copy a permalink (/m/{id}); pure client-side, flips the label to
+             "Copied" for ~1.5s via the data attributes. The label lives in its own
+             span so swapping it cannot wipe the icon (textContent would). #}
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-copy-link="{{ message.id }}"
+            data-lc-copied-label="{{ "room-msg-copied"|t }}"
+            class="lc-menu-item"
+            onclick="
+              var b = this;
+              var lbl = b.querySelector('[data-lc-label]');
+              var url = location.origin + '/m/' + b.getAttribute('data-lc-copy-link');
+              var done = function(){
+                var orig = lbl.textContent;
+                lbl.textContent = b.getAttribute('data-lc-copied-label');
+                setTimeout(function(){ lbl.textContent = orig; }, 1500);
+              };
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done, function(){
+                  window.__lcCopyFallback && window.__lcCopyFallback(url); done();
+                });
+              } else if (window.__lcCopyFallback) {
+                window.__lcCopyFallback(url); done();
+              }
+            "><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"/></svg><span data-lc-label>{{ "room-msg-copy-link"|t }}</span></button>
+          {# LC-282: copy the raw markdown source (fetched on click). #}
+          {% if !message.body.is_empty() %}
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-copy-text="{{ message.id }}"
+            data-lc-copied-label="{{ "room-msg-copied"|t }}"
+            class="lc-menu-item"
+            onclick="
+              var b = this;
+              var lbl = b.querySelector('[data-lc-label]');
+              fetch('/messages/' + b.getAttribute('data-lc-copy-text') + '/raw', { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.text() : null; })
+                .then(function(t){
+                  if (t === null) return;
+                  var done = function(){
+                    var orig = lbl.textContent;
+                    lbl.textContent = b.getAttribute('data-lc-copied-label');
+                    setTimeout(function(){ lbl.textContent = orig; }, 1500);
+                  };
+                  if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(t).then(done, function(){
+                      window.__lcCopyFallback && window.__lcCopyFallback(t); done();
+                    });
+                  } else if (window.__lcCopyFallback) {
+                    window.__lcCopyFallback(t); done();
+                  }
+                });
+            "><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z"/><path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z"/></svg><span data-lc-label>{{ "room-msg-copy-text"|t }}</span></button>
+          {% endif %}
+          {# LC-278: forward this message to another room/DM. #}
+          <button role="menuitem" tabindex="-1" hx-get="/messages/{{ message.id }}/forward" hx-target="#lc-forward-modal" hx-swap="innerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.207 2.232a.75.75 0 00.025 1.06l4.146 3.958H6.375a5.375 5.375 0 000 10.75H10.5a.75.75 0 000-1.5H6.375a3.875 3.875 0 010-7.75h10.003l-4.146 3.957a.75.75 0 001.036 1.085l5.5-5.25a.75.75 0 000-1.085l-5.5-5.25a.75.75 0 00-1.06.025z" clip-rule="evenodd"/></svg><span>{{ "room-msg-forward"|t }}</span></button>
+        </div>
+        <div class="lc-menu-group">
+          {% if message.is_bookmarked %}
+          <button role="menuitem" tabindex="-1" hx-delete="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" clip-rule="evenodd"/></svg><span>{{ "room-msg-unsave"|t }}</span></button>
+          {% else %}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/bookmark" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg><span>{{ "room-msg-save"|t }}</span></button>
+          {% endif %}
+          {% if message.is_pinned %}
+          <button role="menuitem" tabindex="-1" hx-delete="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9.293 1.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414l-.043-.043-2.5 2.5.043.043a3 3 0 01.879 2.121v1.086a1 1 0 01-1.707.707L7.5 10.5l-3.793 3.793a1 1 0 01-1.414-1.414L6.086 9.086 3.379 6.379A1 1 0 014.086 4.67h1.086a3 3 0 012.121.879l.043.043 2.5-2.5-.043-.043a1 1 0 010-1.414z"/></svg><span>{{ "room-msg-unpin"|t }}</span></button>
+          {% else %}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/pin" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.293 1.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414l-.043-.043-2.5 2.5.043.043a3 3 0 01.879 2.121v1.086a1 1 0 01-1.707.707L7.5 10.5l-3.793 3.793a1 1 0 01-1.414-1.414L6.086 9.086 3.379 6.379A1 1 0 014.086 4.67h1.086a3 3 0 012.121.879l.043.043 2.5-2.5-.043-.043a1 1 0 010-1.414z"/></svg><span>{{ "room-msg-pin"|t }}</span></button>
+          {% endif %}
+          <button role="menuitem" tabindex="-1" hx-get="/reminders/picker?message_id={{ message.id }}" hx-target="#lc-reminder-modal" hx-swap="innerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/></svg><span>{{ "room-msg-remind"|t }}</span></button>
+          {# LC-286: mark this conversation unread from here. #}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/unread" hx-target="#sidebar" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/><path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/></svg><span>{{ "room-msg-mark-unread"|t }}</span></button>
+        </div>
+        {# LC-598: the least-used cluster. Every member is capability-gated, so the
+           whole group collapses (taking its separator) when none apply - see the
+           .lc-menu-group-tools rules in main.css. #}
+        <div class="lc-menu-group lc-menu-group-tools">
+          {# LC-486: translate into the viewer's language. Shown only when an LLM is
+             configured (CSS-gated via [data-lc-llm] on the page root, which also
+             covers live-swapped message fragments). Result swaps into the
+             per-message #translation-{id} block under the body. #}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.75 2.75a.75.75 0 00-1.5 0v1.258a32.987 32.987 0 00-3.599.278.75.75 0 10.198 1.487A31.545 31.545 0 018.7 5.545 19.381 19.381 0 017 9.56a19.418 19.418 0 01-1.002-2.05.75.75 0 00-1.384.577 20.935 20.935 0 001.492 2.91 19.613 19.613 0 01-3.828 4.154.75.75 0 10.945 1.164A21.116 21.116 0 007 12.331c.095.132.192.262.29.391a.75.75 0 001.194-.91c-.204-.266-.4-.538-.59-.815a20.888 20.888 0 002.333-5.332c.31.031.618.068.924.108a.75.75 0 00.198-1.487 32.832 32.832 0 00-3.599-.278V2.75z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M13 8a.75.75 0 01.671.415l4.25 8.5a.75.75 0 11-1.342.67L15.787 16h-5.573l-.793 1.585a.75.75 0 11-1.342-.67l4.25-8.5A.75.75 0 0113 8zm2.037 6.5L13 10.427 10.964 14.5h4.073z" clip-rule="evenodd"/></svg><span>{{ "room-msg-translate"|t }}</span></button>
+          {# LC-528: read this message aloud via the browser SpeechSynthesis API.
+             Pure client-side (delegated handler in live.js) - no route, no LLM.
+             Reads the rendered text of this message and toggles to a stop label
+             while speaking. Only for messages with a text body. The whole item is
+             CSS-hidden (.lc-no-tts on <html>, set by live.js) when the browser has
+             no speech synthesis. #}
+          {% if !message.body.is_empty() %}
+          <button type="button" role="menuitem" tabindex="-1"
+            data-lc-read-aloud="{{ message.id }}"
+            data-lc-reading-label="{{ "room-msg-stop-reading"|t }}"
+            class="lc-menu-item lc-read-aloud"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7.557 2.066A1 1 0 018 2.882v14.236a1 1 0 01-1.664.748L2.947 14.8H1.5A1.5 1.5 0 010 13.3V6.7a1.5 1.5 0 011.5-1.5h1.447l3.389-3.066a1 1 0 011.221-.068zM12.293 6.293a1 1 0 011.414 0 5 5 0 010 7.414 1 1 0 01-1.414-1.414 3 3 0 000-4.586 1 1 0 010-1.414zM15.121 3.464a1 1 0 011.415 0 9 9 0 010 13.072 1 1 0 01-1.415-1.415 7 7 0 000-10.242 1 1 0 010-1.415z"/></svg><span data-lc-label>{{ "room-msg-read-aloud"|t }}</span></button>
+          {% endif %}
+          {# LC-549: find messages related to this one by embedding similarity.
+             Gated on [data-lc-embeddings] (an operator embeddings endpoint), like
+             the LLM-gated items above. Result fills the shared #thread-panel slot. #}
+          {% if !message.body.is_empty() %}
+          <button role="menuitem" tabindex="-1" hx-get="/messages/{{ message.id }}/related" hx-target="#thread-panel" hx-swap="outerHTML" hx-disabled-elt="this" class="lc-menu-item lc-embeddings-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/></svg><span>{{ "room-msg-related"|t }}</span></button>
+          {% endif %}
+          {# LC-548: draft tappable replies to a received message. Same [data-lc-llm]
+             page-root gate as translate; hidden on own / synthetic-actor messages
+             (you reply to others, not yourself). Result fills #composer-ai-panel. #}
+          {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L13.92 6.5l3.756.953a1 1 0 010 1.938l-3.756.954-.953 3.756a1 1 0 01-1.938 0l-.954-3.756-3.756-.954a1 1 0 010-1.938l3.756-.953.954-3.756A1 1 0 0112 2z" clip-rule="evenodd"/></svg><span>{{ "room-msg-suggest-reply"|t }}</span></button>
+          {% endif %}
+          {# LC-490: require / clear acknowledgement (author or room moderator only,
+             same gate as delete). Re-renders the whole bubble so the bar + this
+             menu item flip for the acting tab; other viewers update over WS.
+             .lc-menu-item-ack marks the one member of this group that is gated in
+             Askama rather than by CSS, so the group-collapse rule can see it. #}
+          {% if message.can_delete && !message.is_system %}
+          {% if message.ack.is_some() %}
+          <button role="menuitem" tabindex="-1" hx-delete="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item lc-menu-item-ack"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg><span>{{ "room-msg-unrequire-ack"|t }}</span></button>
+          {% else %}
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/ack-required" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item lc-menu-item-ack"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15zm-3.25-7.75l2.5 2.5 4-5.5"/></svg><span>{{ "room-msg-require-ack"|t }}</span></button>
+          {% endif %}
+          {% endif %}
+        </div>
         {% if message.can_edit %}
-        <button role="menuitem" hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item">{{ "room-msg-edit"|t }}</button>
+        <div class="lc-menu-group">
+          <button role="menuitem" tabindex="-1" hx-get="/messages/{{ message.id }}/edit" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 10-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg><span>{{ "room-msg-edit"|t }}</span></button>
+        </div>
         {% endif %}
-        {% if message.can_delete %}
-        <div class="lc-menu-divider"></div>
-        <button role="menuitem" hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="lc-menu-item lc-menu-item-danger">{{ "room-msg-delete"|t }}</button>
+        {# LC-598: destructive / escalating actions, isolated at the bottom behind
+           their own separator. Report and Delete are near-exclusive in practice -
+           Report renders only on other people's messages, Delete only on your own
+           or as a room moderator. #}
+        {% if (!message.user_id.is_empty() && message.user_id != message.viewer_id) || message.can_delete %}
+        <div class="lc-menu-group">
+          {# LC-334: report to moderators (not on own / synthetic-actor messages). #}
+          {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
+          <button role="menuitem" tabindex="-1" hx-get="/messages/{{ message.id }}/report" hx-target="#lc-report-modal" hx-swap="innerHTML" class="lc-menu-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg><span>{{ "room-msg-report"|t }}</span></button>
+          {% endif %}
+          {% if message.can_delete %}
+          <button role="menuitem" tabindex="-1" hx-delete="/messages/{{ message.id }}" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML" hx-confirm="{{ "room-msg-delete-confirm"|t }}" class="lc-menu-item lc-menu-item-danger"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd"/></svg><span>{{ "room-msg-delete"|t }}</span></button>
+          {% endif %}
+        </div>
         {% endif %}
       </div>
     </details>
