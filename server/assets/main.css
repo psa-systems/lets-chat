@@ -3177,6 +3177,36 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     place-items: center;
 }
 
+/* LC-612: sidebar in-call indicator - a live green dot + participant count on a
+   room row whose huddle is active. Uses the same pill metrics as the count pill
+   but a success accent so it reads as "call in progress", not "unread". */
+.lc-incall-pill {
+    margin-left: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    height: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--success) 18%, transparent);
+    color: var(--success);
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+.lc-incall-dot {
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    background-color: var(--success);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .lc-incall-dot { animation: lc-incall-pulse 2s ease-in-out infinite; }
+}
+@keyframes lc-incall-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
 /* LC-371: device-local collapsible sidebar groups (Starred / Channels / DMs).
    Body hiding + chevron rotation are keyed on the <html data-lc-collapsed-groups>
    attribute (set no-flash by base.html), so a collapsed group never flashes open

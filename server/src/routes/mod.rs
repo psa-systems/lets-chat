@@ -719,6 +719,14 @@ pub(crate) async fn load_sidebar(
                     .as_str()
                     .to_string(),
                 has_draft: draft_room_ids.contains(&r.id),
+                // LC-612: seed the in-call count from the live hub so a fresh
+                // page load already shows an in-progress huddle. Scoped to
+                // huddles (non-voice), matching the live fan-out below.
+                in_call: if r.is_voice {
+                    0
+                } else {
+                    state.hub.voice_room_users(r.id).len() as i64
+                },
                 id: r.id,
                 name: r.name,
                 is_voice: r.is_voice,
