@@ -1849,18 +1849,38 @@ pub async fn insert_login_approval(
     Ok(())
 }
 
-/// LC-587: fetch a still-valid (unconsumed, unexpired) approval by its token.
-/// Returns `None` when the token is unknown, already used, or expired.
-pub async fn get_valid_login_approval(
+/// LC-587: atomically claim one guess against a challenge and return the row.
+///
+/// The single statement is both the validity check and the attempt counter, so
+/// the number of codes that ever get compared is bounded by `max_attempts` no
+/// matter how many submissions arrive at once. The previous read-then-compare
+/// -then-bump sequence did not bound anything: concurrent submissions all read
+/// `attempts` before any of them incremented it, so a burst of 40 requests got
+/// 40 comparisons against a cap of 5. Same read-then-act shape LC-601 closed on
+/// the consume path.
+///
+/// Returns `None` when the token is unknown, expired, already consumed, or has
+/// no attempts left. The returned `attempts` is this caller's slot number, so
+/// `attempts >= max_attempts` means the caller took the last one.
+///
+/// A correct code also spends a slot. That is harmless: success consumes the
+/// challenge outright, so the slot cannot be reused either way.
+pub async fn claim_login_approval_attempt(
     pool: &SqlitePool,
     token: &str,
+    max_attempts: i64,
 ) -> Result<Option<LoginApproval>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT user_id, code_hash, country, device_hash, attempts \
-         FROM login_approvals \
-         WHERE id = ? AND consumed_at IS NULL AND expires_at > datetime('now')",
+        "UPDATE login_approvals \
+            SET attempts = attempts + 1 \
+          WHERE id = ? \
+            AND consumed_at IS NULL \
+            AND expires_at > datetime('now') \
+            AND attempts < ? \
+      RETURNING user_id, code_hash, country, device_hash, attempts",
     )
     .bind(token)
+    .bind(max_attempts)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|r| LoginApproval {
@@ -1870,23 +1890,6 @@ pub async fn get_valid_login_approval(
         device_hash: r.get::<Option<String>, _>("device_hash"),
         attempts: r.get::<i64, _>("attempts"),
     }))
-}
-
-/// LC-587: record a wrong-code attempt against a challenge, returning the new
-/// attempt count so the caller can enforce the cap.
-pub async fn bump_login_approval_attempts(
-    pool: &SqlitePool,
-    token: &str,
-) -> Result<i64, sqlx::Error> {
-    sqlx::query("UPDATE login_approvals SET attempts = attempts + 1 WHERE id = ?")
-        .bind(token)
-        .execute(pool)
-        .await?;
-    let n: i64 = sqlx::query_scalar("SELECT attempts FROM login_approvals WHERE id = ?")
-        .bind(token)
-        .fetch_one(pool)
-        .await?;
-    Ok(n)
 }
 
 /// LC-587: mark a challenge consumed so it can never be replayed (on success,

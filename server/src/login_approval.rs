@@ -264,18 +264,21 @@ async fn issue_challenge(
 /// directly (not `AppState`) so the flagged -> approved recovery is testable
 /// without standing up the full application state.
 pub async fn verify(pool: &SqlitePool, token: &str, code: &str) -> VerifyOutcome {
-    let approval = match db::auth::get_valid_login_approval(pool, token).await {
+    // Claim a guess BEFORE comparing. The claim is a single conditional UPDATE
+    // that both validates the challenge and spends an attempt, so at most
+    // MAX_ATTEMPTS codes are ever compared against one challenge. Reading the
+    // count first and bumping afterwards bounded nothing under concurrency:
+    // simultaneous submissions all read the same pre-bump value and every one
+    // of them got a comparison.
+    let approval = match db::auth::claim_login_approval_attempt(pool, token, MAX_ATTEMPTS).await {
         Ok(Some(a)) => a,
+        // Unknown, expired, already consumed, or out of attempts.
         Ok(None) => return VerifyOutcome::Invalid,
         Err(e) => {
-            tracing::error!(target: "login_approval", error = %e, "get_valid_login_approval failed");
+            tracing::error!(target: "login_approval", error = %e, "claim_login_approval_attempt failed");
             return VerifyOutcome::Invalid;
         }
     };
-    if approval.attempts >= MAX_ATTEMPTS {
-        let _ = db::auth::consume_login_approval(pool, token).await;
-        return VerifyOutcome::Invalid;
-    }
     if sha256_hex(code) == approval.code_hash {
         // Single-use: the conditional consume is the atomic winner-take-all
         // gate (LC-601). Mint a session only when THIS call consumed the row;
@@ -290,14 +293,14 @@ pub async fn verify(pool: &SqlitePool, token: &str, code: &str) -> VerifyOutcome
             _ => VerifyOutcome::Invalid,
         };
     }
-    // Wrong code: count the attempt and burn the challenge if the cap is hit.
-    match db::auth::bump_login_approval_attempts(pool, token).await {
-        Ok(n) if n >= MAX_ATTEMPTS => {
-            let _ = db::auth::consume_login_approval(pool, token).await;
-            VerifyOutcome::Invalid
-        }
-        _ => VerifyOutcome::Wrong,
+    // Wrong code. The attempt is already spent by the claim; burn the challenge
+    // outright when this caller took the last slot, so a spent challenge cannot
+    // sit around unconsumed.
+    if approval.attempts >= MAX_ATTEMPTS {
+        let _ = db::auth::consume_login_approval(pool, token).await;
+        return VerifyOutcome::Invalid;
     }
+    VerifyOutcome::Wrong
 }
 
 /// Record a cleared/approved login's country + device as the new baseline, so a
