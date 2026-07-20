@@ -42,6 +42,39 @@ jobs:
       PACKAGE_NAME: lets-chat
 
     steps:
+      # LC-594: org variables and secrets do not follow a repo across orgs, so
+      # the a8n-tools -> psa-systems move silently emptied every one of them.
+      # The registry credentials failed loudly on the next push, but this
+      # workflow only runs on a `v*` tag: a missing value here would surface
+      # twenty-odd minutes into a release, or - worse, for the public key - not
+      # at all, shipping binaries whose self-updater can never verify a
+      # manifest. Check every value up front so a missing secret costs seconds
+      # and names itself.
+      - name: Preflight required org variables and secrets
+        shell: nu {0}
+        env:
+          # Secrets must be read at step-env: at job-env they arrive empty
+          # inside a nu step (see the job-level note above).
+          SIGNING_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_KEY }}
+          PACKAGE_PAT: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+        run: |
+          # `$env.X?` rather than `$env.X`: an undefined variable is exactly the
+          # state being checked for, and the bare form errors on it instead of
+          # reporting it.
+          let required = [
+            { name: "vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER", value: ($env.PACKAGE_OWNER? | default "") }
+            { name: "vars.DESKTOP_UPDATE_PUBLIC_KEY", value: "${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}" }
+            { name: "secrets.DESKTOP_UPDATE_SIGNING_KEY", value: ($env.SIGNING_KEY? | default "") }
+            { name: "secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT", value: ($env.PACKAGE_PAT? | default "") }
+          ]
+          let missing = ($required | where {|r| $r.value | is-empty } | get name)
+          if ($missing | is-not-empty) {
+              print --stderr $"Missing org variables/secrets: ($missing | str join ', ')"
+              print --stderr "Define them at the psa-systems org level; they do not survive a repo transfer."
+              exit 1
+          }
+          print $"All ($required | length) required values are present."
+
       - name: Clone the repository
         uses: https://code.forgejo.org/actions/checkout@v5
         with:
@@ -68,12 +101,18 @@ jobs:
         run: |
           let jobs = ((sys cpu | length) / 2 | into int)
           print $"CARGO_BUILD_JOBS=($jobs)"
+          let update_base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          print $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
               # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
               # public key so the shipped binary enforces signature checks.
               --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
+              # LC-594: compile in the update source derived from the same
+              # PACKAGE_OWNER this workflow uploads to, so the shipped default
+              # cannot point at an org we no longer publish under.
+              --build-arg $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
               --tag lets-chat-desktop-linux:publish
               --load
               -f ci-build/Dockerfile.desktop-linux-bundles
@@ -109,12 +148,15 @@ jobs:
         run: |
           let jobs = ((sys cpu | length) / 2 | into int)
           print $"CARGO_BUILD_JOBS=($jobs)"
+          let update_base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
               # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
               # public key so the shipped binary enforces signature checks.
               --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
+              # LC-594: see the Linux build step.
+              --build-arg $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
               --tag lets-chat-desktop-windows:publish
               --load
               -f ci-build/Dockerfile.desktop-windows
