@@ -13,6 +13,7 @@
      data-self-id="{{ user.id }}"
      data-self-name="{{ user.display_label() }}"
      data-ice-servers="{{ ice_servers }}"
+     data-lc-huddle-sfu="{% if huddle_sfu %}1{% else %}0{% endif %}"
      class="lc-huddle hidden border-t border-border bg-surface-sunken">
   <div class="flex items-center gap-2 px-4 py-1.5">
     <span class="text-xs font-semibold uppercase tracking-wide text-content-muted">{{ "huddle-label"|t }}</span>
