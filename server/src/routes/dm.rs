@@ -210,6 +210,15 @@ pub async fn get_dm(
     let quote_ids: Vec<i64> = raw_messages.iter().filter_map(|m| m.quote_id).collect();
     let quote_preview_map =
         crate::views::room::build_quote_previews_bulk(&state.chat, &state.auth, &quote_ids).await?;
+    // LC-599: resolve effective mod power once per render, matching
+    // `get_room`. The org role alone is not the predicate - the delete
+    // endpoint (`room.rs`, which serves DM messages too) and the ack
+    // endpoint both call `is_room_moderator`, which takes the higher of the
+    // org role and any per-room override. Reading `user.role` here made the
+    // template stricter than the endpoint, so a moderator-by-override saw no
+    // Delete item on a message they were in fact allowed to delete.
+    let viewer_is_room_mod =
+        db::room_rbac::is_room_moderator(&state.chat, room_id, &user.id, &user.role).await?;
     let mut messages: Vec<MessageView> = Vec::with_capacity(raw_messages.len());
     let mut prev: Option<(String, String)> = None;
     // LC-244: track the previous rendered message's UTC day for date separators.
@@ -236,7 +245,7 @@ pub async fn get_dm(
             entry
         };
         let can_edit = m.user_id == user.id;
-        let can_delete = m.user_id == user.id || user.role == "admin" || user.role == "moderator";
+        let can_delete = m.user_id == user.id || viewer_is_room_mod;
         let reaction_counts = db::chat::list_reactions(&state.chat, m.id, &user.id).await?;
         let reactor_titles = super::build_reactor_titles(&state, &reaction_counts).await;
         let reactions: Vec<ReactionView> = reaction_counts

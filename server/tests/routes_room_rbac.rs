@@ -209,6 +209,100 @@ async fn grant_revoke_writes_audit_log_rows() {
     assert_eq!(revoke.room_id, Some(1));
 }
 
+// ----------------------------------------------------------------------
+// LC-599: the DM timeline used to compute `can_delete` from the org role
+// alone, while the delete endpoint (shared with rooms) resolves the
+// effective role. A moderator-by-override therefore got no Delete item on a
+// message the endpoint would have let them delete. These two tests pin the
+// template to the endpoint: the negative one proves the affordance is still
+// withheld from a plain member, so the positive one is not vacuous.
+// ----------------------------------------------------------------------
+
+/// Fetch a page as `sess`, asserting 200 and returning the body.
+async fn get_body(app: &Router, sess: &str, uri: &str) -> String {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "GET {uri}");
+    let bytes = axum::body::to_bytes(res.into_body(), 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
+
+/// Open the member<->admin DM (the handler creates the room on first view)
+/// and return its room id, so the grant can target it.
+async fn open_dm_room(t: &TestApp) -> i64 {
+    get_body(&t.app, &t.member_session, &format!("/dm/{}", t.admin_id)).await;
+    db::chat::find_dm_room(&t.chat, &t.member_id, &t.admin_id)
+        .await
+        .unwrap()
+        .expect("viewing a DM creates the room")
+        .id
+}
+
+#[tokio::test]
+async fn dm_hides_delete_from_a_plain_member() {
+    let t = app().await;
+    let dm_id = open_dm_room(&t).await;
+    let msg_id = post_message_via_db(&t.chat, dm_id, &t.admin_id, "peer message").await;
+
+    let body = get_body(&t.app, &t.member_session, &format!("/dm/{}", t.admin_id)).await;
+    assert!(
+        body.contains("peer message"),
+        "the message must actually render, or the negative assertion below is vacuous"
+    );
+    assert!(
+        !body.contains(&format!(r#"hx-delete="/messages/{msg_id}""#)),
+        "a plain member must not be offered Delete on the peer's message"
+    );
+}
+
+#[tokio::test]
+async fn dm_offers_delete_to_a_moderator_by_room_override() {
+    let t = app().await;
+    let dm_id = open_dm_room(&t).await;
+    let msg_id = post_message_via_db(&t.chat, dm_id, &t.admin_id, "peer message").await;
+
+    // The DM room has no enclave, so `require_can_manage` falls through to the
+    // site role: an org admin can grant an override here.
+    let grant = format!("user_id={}&role=moderator", t.member_id);
+    assert_eq!(
+        send(
+            &t.app,
+            &t.admin_session,
+            Method::POST,
+            &format!("/room/{dm_id}/moderators"),
+            &grant
+        )
+        .await,
+        StatusCode::SEE_OTHER
+    );
+
+    let body = get_body(&t.app, &t.member_session, &format!("/dm/{}", t.admin_id)).await;
+    assert!(
+        body.contains(&format!(r#"hx-delete="/messages/{msg_id}""#)),
+        "a moderator-by-override must see Delete on the peer's message"
+    );
+
+    // ...and the endpoint agrees, which is the invariant that drifted.
+    assert_eq!(
+        send(
+            &t.app,
+            &t.member_session,
+            Method::DELETE,
+            &format!("/messages/{msg_id}"),
+            ""
+        )
+        .await,
+        StatusCode::OK
+    );
+}
+
 /// Bypass the HTTP handler and write a message row directly so the test
 /// has a target id without depending on the request/response shape of
 /// `POST /room/{id}/messages` (which returns OOB-friendly HTML, not the
