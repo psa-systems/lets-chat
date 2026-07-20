@@ -199,3 +199,56 @@ async fn consume_is_conditional_single_winner() {
         VerifyOutcome::Invalid
     ));
 }
+
+/// LC-587 follow-up probe: does the 5-attempt cap actually bound the number of
+/// code guesses when submissions arrive concurrently?
+///
+/// `verify` reads `attempts`, compares the code, and only then bumps. That is a
+/// read-then-act pattern, the same shape LC-601 closed for the consume path.
+/// The observable is the recorded attempt count: every submission that got its
+/// code compared also bumped, so `attempts` after the burst is exactly the
+/// number of guesses the challenge allowed.
+#[tokio::test]
+async fn attempt_cap_bounds_concurrent_guesses() {
+    let auth = common::auth_pool().await;
+    let uid = db::auth::create_user(&auth, "carol", "h").await.unwrap();
+    db::auth::insert_login_approval(
+        &auth,
+        "tok-race",
+        &uid,
+        &code_hash("123456"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // 40 concurrent wrong guesses, released together by a barrier.
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(40));
+    let mut handles = Vec::new();
+    for _ in 0..40 {
+        let pool = auth.clone();
+        let b = barrier.clone();
+        handles.push(tokio::spawn(async move {
+            b.wait().await;
+            login_approval::verify(&pool, "tok-race", "000000").await;
+        }));
+    }
+    for h in handles {
+        h.await.unwrap();
+    }
+
+    let attempts: i64 = sqlx::query_scalar("SELECT attempts FROM login_approvals WHERE id = ?")
+        .bind("tok-race")
+        .fetch_one(&auth)
+        .await
+        .unwrap();
+    println!("guesses the challenge actually allowed: {attempts} of 40");
+    assert!(
+        attempts <= login_approval::MAX_ATTEMPTS,
+        "attempt cap did not bound concurrent guesses: {attempts} of 40 codes were compared, cap is {}",
+        login_approval::MAX_ATTEMPTS
+    );
+}
