@@ -239,21 +239,20 @@ pub async fn get_huddle_token(
     }
     // The mesh roster is the gate, exactly as `require_participant` treats it
     // for transcription: being able to see the room is not being in the call.
+    //
+    // LC-610: no participant-count threshold. #569 gated on `>= 3` to keep the
+    // mesh for 2 peers, but that only works with a mid-call mesh->SFU handover:
+    // a huddle grows one person at a time, so at the moment it crosses the
+    // threshold the earlier participants are already on the mesh and would be
+    // stranded there while the newcomer connects to the SFU. Building that
+    // handover is deferred; the coherent model in the meantime is that a huddle
+    // is entirely SFU (when LiveKit is configured) or entirely mesh (when it is
+    // not), fixed for its whole life. So the only gate here is membership.
     let participants = state.hub.voice_room_users(room_id);
     if !participants.iter().any(|u| u == &user.id) {
         return Err(AppError::BadRequest(
             "Join the huddle before connecting media.".into(),
         ));
-    }
-    // Below the threshold the mesh is still in charge, so refuse rather than
-    // hand out a token that would silently split the call across two
-    // transports - half the participants on the SFU, half on the mesh, hearing
-    // nobody. The client asks again as the roster grows.
-    if participants.len() < livekit::SFU_MIN_PARTICIPANTS {
-        return Err(AppError::BadRequest(format!(
-            "Huddle is below the SFU threshold ({} participants).",
-            livekit::SFU_MIN_PARTICIPANTS
-        )));
     }
 
     let now = chrono::Utc::now().timestamp().max(0) as u64;

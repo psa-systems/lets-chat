@@ -82,15 +82,21 @@ struct Claims {
     video: VideoGrant,
 }
 
-/// LC-596: the participant count at which a huddle stops using the WebRTC mesh
-/// and moves to the SFU.
+/// LC-596/LC-610: the participant count at which mesh-for-2 would hand over to
+/// the SFU. NOT enforced: the huddle token endpoint issues a token to any
+/// member of a configured room regardless of count.
 ///
-/// The mesh is one `RTCPeerConnection` per pair, so cost is N-squared and
-/// `voice.js` documents a practical cap of 4 to 6. Two peers is exactly one
-/// connection and the mesh is the cheaper, lower-latency path there - no server
-/// hop - so the SFU takes over from the third participant. The ticket called
-/// this an assumption to revise once measured, so it is one named constant
-/// rather than a number spread across client and server.
+/// #569 gated on this so 2-peer huddles kept the cheaper direct mesh. LC-610
+/// found that model incoherent without a mid-call mesh->SFU handover: a huddle
+/// grows one person at a time, so at the crossing point the earlier peers are
+/// already on the mesh and would be stranded there. Until that handover exists,
+/// a huddle is entirely SFU (LiveKit configured) or entirely mesh (not), and
+/// the transport does not depend on count.
+///
+/// Kept as a documented seam, not deleted, so the handover work can reintroduce
+/// mesh-for-2 without re-deriving the number. Reintroducing it means restoring
+/// the `< SFU_MIN_PARTICIPANTS` refusal in `get_huddle_token` AND building the
+/// handover; one without the other is the incoherent state above.
 pub const SFU_MIN_PARTICIPANTS: usize = 3;
 
 /// LC-596: which real-time surface a LiveKit room belongs to.

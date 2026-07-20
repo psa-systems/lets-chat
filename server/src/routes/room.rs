@@ -666,6 +666,7 @@ pub async fn get_room(
         room_seen_bar_html,
         huddle_enabled,
         ice_servers: &state.ice_servers,
+        huddle_sfu: crate::livekit::available(),
         huddle_participants,
         stage_enabled,
         stage_panel_html,

@@ -18,5 +18,16 @@ pub async fn get_config(State(state): State<AppState>, AuthUser(_user): AuthUser
     // LC-393 Phase 3: tells transcribe.js which transcription engine to use -
     // when true, capture audio clips and POST them for server-side STT; when
     // false, use the in-browser Web Speech API.
-    Json(serde_json::json!({ "iceServers": ice, "sttServer": state.stt_available() }))
+    //
+    // LC-610: `huddleSfu` tells voice.js which transport a huddle uses. It is a
+    // pure server-config read (LiveKit configured or not), deliberately
+    // decoupled from membership so voice.js can pick the transport BEFORE
+    // joining - the token endpoint, which does gate on membership, would be a
+    // chicken-and-egg here. When true, a huddle connects to the SFU; when
+    // false, the WebRTC mesh, unchanged.
+    Json(serde_json::json!({
+        "iceServers": ice,
+        "sttServer": state.stt_available(),
+        "huddleSfu": crate::livekit::available(),
+    }))
 }

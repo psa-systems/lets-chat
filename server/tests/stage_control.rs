@@ -7,6 +7,13 @@ use lets_chat::ws::hub::Hub;
 
 mod common;
 
+/// LC-596/LC-610: both LiveKit tests mutate the process-global
+/// `LETS_CHAT_LIVEKIT_*` env, which `livekit::available()` reads. Tests in one
+/// binary run on parallel threads, so they must not overlap. Each locks this for
+/// its whole body. A `tokio::sync::Mutex` (not `std`) because the guard is held
+/// across awaits; it has no poisoning, so a panicking test just releases it.
+static LIVEKIT_ENV: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[test]
 fn stage_roster_promote_demote_hands_and_leave() {
     let hub = Hub::new();
@@ -189,17 +196,20 @@ async fn stage_panel_offers_transcription_to_speakers_only() {
 /// LC-596: the SFU token gate for a huddle.
 ///
 /// Covers the four states that matter and are cheap to reach without a LiveKit
-/// server: unconfigured (the mesh-fallback signal), not in the call, below the
-/// participant threshold, and finally a real token above it.
+/// server: unconfigured (the mesh-fallback signal), configured but not in the
+/// call, and finally a real token for a member.
+///
+/// LC-610: there is deliberately no participant-count threshold. A configured
+/// huddle is entirely SFU regardless of size, so a lone member gets a token.
 #[tokio::test]
 async fn huddle_sfu_token_gate() {
     use axum::body::{to_bytes, Body};
     use axum::http::{Method, Request, StatusCode};
-    use lets_chat::livekit::SFU_MIN_PARTICIPANTS;
     use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
     use std::sync::Arc;
     use tower::ServiceExt;
 
+    let _env = LIVEKIT_ENV.lock().await;
     let dir = std::env::temp_dir().join(format!("lc-huddle-tok-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create test data dir");
     db::set_data_dir(dir.to_string_lossy().to_string());
@@ -209,17 +219,6 @@ async fn huddle_sfu_token_gate() {
     let settings = common::pool("settings").await;
 
     let uid = db::auth::create_user(&auth, "huddler", "h").await.unwrap();
-    // Extra users to push the roster over the threshold. They need no session:
-    // `voice_room_users` dedupes by user id, so distinct users are required -
-    // extra connections for the same user would not raise the count.
-    let mut peers = Vec::new();
-    for i in 1..SFU_MIN_PARTICIPANTS {
-        peers.push(
-            db::auth::create_user(&auth, &format!("peer{i}"), "h")
-                .await
-                .unwrap(),
-        );
-    }
     sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
         .bind(&uid)
         .execute(&auth)
@@ -303,33 +302,16 @@ async fn huddle_sfu_token_gate() {
         "a room member who never joined the huddle gets no token"
     );
 
-    // 3. In the huddle but below the threshold: the mesh is still in charge, so
-    //    a token here would split the call across two transports.
+    // 3. A member of a configured huddle gets a token even when alone: the
+    //    transport is fixed by config, not by count (LC-610). A huddle LiveKit
+    //    room, with publish rights (symmetric - no listener role).
     let (conn, _rx, _) = hub.connect(&uid, "huddler");
     hub.voice_join(conn, room);
     let (st, body) = token(&app, &session, room).await;
     assert_eq!(
         st,
-        StatusCode::BAD_REQUEST,
-        "below the threshold the mesh keeps the call: {body}"
-    );
-
-    // 4. At the threshold: a real token, for the huddle LiveKit room, with
-    //    publish rights (a huddle is symmetric - no listener role).
-    for (i, p) in peers.iter().enumerate() {
-        let (c, _rx, _) = hub.connect(p, &format!("peer{}", i + 1));
-        hub.voice_join(c, room);
-    }
-    assert_eq!(
-        hub.voice_room_users(room).len(),
-        SFU_MIN_PARTICIPANTS,
-        "precondition: the roster is exactly at the threshold"
-    );
-    let (st, body) = token(&app, &session, room).await;
-    assert_eq!(
-        st,
         StatusCode::OK,
-        "at the threshold the SFU takes over: {body}"
+        "a member of a configured huddle gets a token regardless of size: {body}"
     );
     let v: serde_json::Value = serde_json::from_str(&body).expect("json");
     assert_eq!(v["url"], "wss://lk.example.com");
@@ -337,6 +319,116 @@ async fn huddle_sfu_token_gate() {
     assert!(
         v["token"].as_str().is_some_and(|t| !t.is_empty()),
         "a token is issued"
+    );
+
+    unsafe {
+        std::env::remove_var("LETS_CHAT_LIVEKIT_URL");
+        std::env::remove_var("LETS_CHAT_LIVEKIT_API_KEY");
+        std::env::remove_var("LETS_CHAT_LIVEKIT_API_SECRET");
+    }
+}
+
+/// LC-610: the huddle root advertises its transport so voice.js can pick mesh
+/// vs SFU before joining. The flag is a pure `livekit::available()` read, so it
+/// flips with the env and nothing else.
+#[tokio::test]
+async fn huddle_root_advertises_the_sfu_transport() {
+    use axum::body::{to_bytes, Body};
+    use axum::http::{Method, Request, StatusCode};
+    use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    let _env = LIVEKIT_ENV.lock().await;
+    // Ensure a clean baseline: another test may have left LiveKit configured.
+    // SAFETY: guarded by LIVEKIT_ENV; no other test touches the env concurrently.
+    unsafe {
+        std::env::remove_var("LETS_CHAT_LIVEKIT_URL");
+        std::env::remove_var("LETS_CHAT_LIVEKIT_API_KEY");
+        std::env::remove_var("LETS_CHAT_LIVEKIT_API_SECRET");
+    }
+
+    let dir = std::env::temp_dir().join(format!("lc-huddle-root-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create test data dir");
+    db::set_data_dir(dir.to_string_lossy().to_string());
+
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let uid = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
+        .bind(&uid)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let session = db::auth::create_session(&auth, &uid).await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let room = 1;
+
+    let bg = lets_chat::bg::spawn(auth.clone());
+    let state = AppState {
+        geoip: None,
+        login_approval_enabled: false,
+        auth,
+        chat: chat.clone(),
+        settings,
+        hub: Arc::new(Hub::new()),
+        asset_version: "test".into(),
+        last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg,
+        secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: Arc::new(lets_chat::push::MockPushClient::default()),
+        apns_client: None,
+        fcm_client: None,
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
+        embedding_client: None,
+    };
+    let app = routes::build_router(state);
+
+    async fn room_html(app: &axum::Router, session: &str, room: i64) -> String {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/room/{room}"))
+            .header("cookie", format!("session={session}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = to_bytes(res.into_body(), 1 << 22).await.unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
+    }
+
+    // No LiveKit: the root reports the mesh.
+    let s = room_html(&app, &session, room).await;
+    assert!(
+        s.contains(r#"data-lc-huddle-sfu="0""#),
+        "with no LiveKit the huddle must use the mesh"
+    );
+
+    // Configure LiveKit: the same render now reports the SFU.
+    unsafe {
+        std::env::set_var("LETS_CHAT_LIVEKIT_URL", "wss://lk.example.com");
+        std::env::set_var("LETS_CHAT_LIVEKIT_API_KEY", "devkey");
+        std::env::set_var(
+            "LETS_CHAT_LIVEKIT_API_SECRET",
+            "devsecretdevsecretdevsecret123456",
+        );
+    }
+    let s = room_html(&app, &session, room).await;
+    assert!(
+        s.contains(r#"data-lc-huddle-sfu="1""#),
+        "with LiveKit configured the huddle must use the SFU"
     );
 
     unsafe {
