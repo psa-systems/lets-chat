@@ -21,17 +21,19 @@ async fn app_with_user_in_general() -> (Router, String, String) {
 /// user with any accessible room gets the LC-575 dashboard and only a user with
 /// none gets the LC-372 onboarding empty state.
 ///
-/// Reaching that empty state takes more than skipping the General backfill.
-/// `db::chat::list_room_unread_counts` counts a room as accessible when
-/// `r.room_type = 'public' OR rm.user_id IS NOT NULL` (and an admin sees every
-/// non-DM room outright), while the migration seeds the *public* rooms `general`
-/// and `random`. So every user on a seeded instance has an accessible room. The
-/// `in_general: false` fixture therefore also drops the user to a plain member
-/// and clears the seeded rooms, standing in for an instance where nothing is
-/// visible to this user.
+/// LC-603: this fixture used to need `DELETE FROM rooms` to reach the empty
+/// state, because `list_room_unread_counts` read "public" as public to the
+/// whole instance and the migration seeds the public rooms `general` and
+/// `random`. Every user on a seeded instance therefore had an accessible room
+/// and the LC-372 branch was effectively dead in production.
 ///
-/// Worth noting: that makes the LC-372 empty state very hard to reach in
-/// production too, since a fresh instance always seeds those two public rooms.
+/// LC-604 replaced that predicate with `accessible_rooms_sql`, which requires
+/// enclave membership before a channel counts as visible, and LC-516 had
+/// already removed the auto-join-to-General behaviour. So a fresh non-admin
+/// user is now a member of no enclave, sees no rooms, and reaches the
+/// onboarding page on a fully seeded instance. The `DELETE FROM rooms` crutch
+/// is gone: `in_general: false` now only skips the backfill and leaves the user
+/// a plain member, which is exactly the state a real new signup is in.
 async fn app_with_user(in_general: bool) -> (Router, String, String) {
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
@@ -48,11 +50,6 @@ async fn app_with_user(in_general: bool) -> (Router, String, String) {
     let session = db::auth::create_session(&auth, &user_id).await.unwrap();
     if in_general {
         db::enclave::backfill_general_membership(&auth, &chat)
-            .await
-            .unwrap();
-    } else {
-        sqlx::query("DELETE FROM rooms")
-            .execute(&chat)
             .await
             .unwrap();
     }
