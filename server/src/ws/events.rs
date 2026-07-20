@@ -392,6 +392,19 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    /// LC-611: a huddle just started in `room_id`. Unlike `VoiceJoined`, which
+    /// goes to the room topic and so only reaches people who already have the
+    /// room open, this is addressed to one recipient and fanned out over the
+    /// room's membership - the whole point is to reach members who are looking
+    /// somewhere else. Emitted only for the FIRST participant, so a huddle
+    /// rings once rather than on every subsequent join.
+    HuddleStarted {
+        room_id: i64,
+        room_name: String,
+        to_user_id: String,
+        starter_id: String,
+        starter_name: String,
+    },
     /// LC-494: the stage control-plane roster changed (join/leave, hand
     /// raised/lowered, promote/demote). Broadcast to the room; each client
     /// re-renders the stage panel for itself (host controls are per-viewer).

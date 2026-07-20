@@ -1055,9 +1055,29 @@
     if (document.readyState !== 'loading') fn();
     else document.addEventListener('DOMContentLoaded', fn);
   }
+  // LC-611: the huddle ring's Join link lands here as /room/{id}?huddle=1.
+  // Auto-joining makes Join genuinely one click from wherever the ring was
+  // shown, rather than dropping the user on the room to find the huddle bar.
+  // Guarded on the bound root's own id so a stale or hand-edited query string
+  // cannot join a different room than the one being viewed, and the param is
+  // stripped so a refresh (or a shared URL) does not silently re-join.
+  function autoJoinFromQuery() {
+    if (!root || !cfg || joined) return;
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('huddle') !== '1') return;
+    params.delete('huddle');
+    var qs = params.toString();
+    try {
+      window.history.replaceState({}, '',
+        window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    } catch (e) {}
+    join();
+  }
+
   onReady(function () {
     watchBus();
     scan();
+    autoJoinFromQuery();
     document.body.addEventListener('htmx:afterSettle', scan);
   });
 

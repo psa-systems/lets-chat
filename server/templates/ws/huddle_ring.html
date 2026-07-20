@@ -1,0 +1,10 @@
+{# LC-611: one huddle-started ring, OOB-appended to the hidden bus. The client
+   drains it into a banner; keeping the payload in data- attributes means the
+   ring survives with no markup duplication between here and the banner. #}
+<div id="lc-huddle-ring-bus" hx-swap-oob="beforeend">
+  <div data-lc-huddle-ring
+       data-room-id="{{ room_id }}"
+       data-room-name="{{ room_name }}"
+       data-starter-id="{{ starter_id }}"
+       data-starter-name="{{ starter_name }}"></div>
+</div>
