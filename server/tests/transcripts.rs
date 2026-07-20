@@ -90,6 +90,9 @@ struct Setup {
     dm_room: i64,
     public_room: i64,
     voice_room: i64,
+    /// LC-597: a stage-enabled public room. Stage audio rides the LiveKit SFU,
+    /// so participation lives in `Hub::stages`, not `voice_rooms`.
+    stage_room: i64,
 }
 
 async fn setup() -> Setup {
@@ -143,6 +146,15 @@ async fn setup_with_clients(
         .await
         .unwrap();
 
+    // LC-597: a stage-enabled public room. `stage_enabled` is a rooms column;
+    // who is on the stage (and who holds the floor) is hub state.
+    let stage_room = db::chat::create_room(&chat, "stagechan", None, "public", None, None)
+        .await
+        .unwrap();
+    db::chat::set_room_stage_enabled(&chat, stage_room, true)
+        .await
+        .unwrap();
+
     let a_session = db::auth::create_session(&auth, &a).await.unwrap();
     let b_session = db::auth::create_session(&auth, &b).await.unwrap();
     let outsider_session = db::auth::create_session(&auth, &outsider).await.unwrap();
@@ -186,6 +198,7 @@ async fn setup_with_clients(
         dm_room,
         public_room,
         voice_room,
+        stage_room,
     }
 }
 
@@ -309,6 +322,129 @@ async fn voice_channel_participant_transcribes_nonparticipant_forbidden() {
     assert_eq!(st, StatusCode::OK);
     let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
     assert_eq!(t.status, "ended");
+}
+
+/// LC-597: the Stage is the one real-time surface transcription never reached.
+/// Its audio rides the LiveKit SFU rather than the WebRTC mesh, so a speaker is
+/// absent from `voice_room_users` and `require_participant` refused them.
+///
+/// Only the floor is captured. A listener on a Stage is audience - they publish
+/// no track - so capturing them would record a room, not a call.
+#[tokio::test]
+async fn stage_speaker_transcribes_listener_forbidden() {
+    let s = setup().await;
+
+    // On the stage as a LISTENER: present in the roster, no floor.
+    s.hub.stage_join(s.stage_room, &s.b_id);
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.stage_room),
+        None,
+    )
+    .await;
+    assert_eq!(
+        st,
+        StatusCode::FORBIDDEN,
+        "a listener holds no floor and cannot start"
+    );
+
+    // Granted the floor (what a host's stage_promote does).
+    s.hub.stage_promote(s.stage_room, &s.b_id);
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.stage_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "speaker starts: {body}");
+    let tid = parse_id(&body);
+
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=stage+hello"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1, "segment persists for a stage room");
+    assert_eq!(segs[0].text, "stage hello");
+
+    // Carol is not on the stage at all.
+    let (st, _) = post(
+        &s.app,
+        &s.outsider_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=nope"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+
+    // Stepping down revokes it immediately: the floor is the gate, not the
+    // session. This is the server half of the hot-mic stop in transcribe.js.
+    s.hub.stage_demote(s.stage_room, &s.b_id);
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=after+step+down"),
+    )
+    .await;
+    assert_eq!(
+        st,
+        StatusCode::FORBIDDEN,
+        "a demoted speaker cannot keep feeding the session"
+    );
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1, "the refused segment was not stored");
+}
+
+/// LC-597: the hub roster is not cleared when a host turns the stage off in room
+/// settings, so the floor has to be re-checked against the room rather than
+/// trusted from the roster alone. Without the `stage_enabled` re-check, everyone
+/// holding the floor at the moment it was disabled keeps their grant.
+#[tokio::test]
+async fn disabling_the_stage_revokes_the_floor() {
+    let s = setup().await;
+
+    s.hub.stage_join(s.stage_room, &s.b_id);
+    s.hub.stage_promote(s.stage_room, &s.b_id);
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.stage_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "speaker starts while the stage is on");
+    let tid = parse_id(&body);
+
+    db::chat::set_room_stage_enabled(&s.chat, s.stage_room, false)
+        .await
+        .unwrap();
+    // The roster is untouched - bob is still listed as holding the floor.
+    assert!(
+        s.hub
+            .stage_roster(s.stage_room)
+            .is_some_and(|r| r.speakers.contains(&s.b_id)),
+        "precondition: the hub still lists bob as a speaker"
+    );
+
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=stage+is+off"),
+    )
+    .await;
+    assert_eq!(
+        st,
+        StatusCode::FORBIDDEN,
+        "a stale roster entry must not outlive the stage"
+    );
 }
 
 #[tokio::test]

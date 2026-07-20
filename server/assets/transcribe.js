@@ -26,6 +26,10 @@
   function q(sel) { return document.querySelector(sel); }
 
   var transcriptId = null; // active session id, set from the TranscriptStarted bus event
+  // LC-597: room id when the active session was started from a stage panel,
+  // else null. A stage grants and revokes the floor at runtime, so the capture
+  // has to be reconciled against the panel rather than run until a click.
+  var stageRoom = null;
   var recog = null;        // SpeechRecognition instance while capturing (browser engine)
   var capturing = false;
 
@@ -263,6 +267,9 @@
     var room = (toggleEl && toggleEl.getAttribute('data-lc-room')) ||
       window.__lcCallRoom || window.__lcVoiceRoom;
     if (room == null) return;
+    // LC-597: remember when the session was opened from a stage, so losing the
+    // floor can stop the capture. Cleared on any end.
+    stageRoom = (toggleEl && toggleEl.hasAttribute('data-lc-stage-transcribe')) ? room : null;
     // The browser engine needs SpeechRecognition; the server engine needs
     // MediaRecorder. Block only when the engine we'd actually use is missing.
     var ok = sttServer ? !!MR : !!SR;
@@ -303,6 +310,7 @@
   function endSession() {
     var id = transcriptId;
     transcriptId = null;
+    stageRoom = null;
     stopLocalCapture();
     showBanner(false);
     setToggle(false);
@@ -431,6 +439,29 @@
   });
   document.addEventListener('lc:call-active', disableIfUnsupported);
   document.addEventListener('lc:voice-joined', disableIfUnsupported);
+
+  // LC-597: the stage panel is swapped in over the WebSocket (StageChanged), so
+  // its transcribe toggle can appear after load - re-run the support gate for it.
+  //
+  // It can also DISAPPEAR: a host demoting a speaker, or the speaker stepping
+  // down, re-renders the panel with data-lc-stage-speaker="0". The server would
+  // then refuse their segments (require_participant), but the microphone would
+  // have kept recording regardless - a hot mic feeding a session that no longer
+  // accepts it. Stop our capture and reset our own UI, but do NOT call /end:
+  // the session belongs to the stage and the remaining speakers are still on it.
+  // Same reasoning as lc:voice-left.
+  function reconcileStage() {
+    disableIfUnsupported();
+    if (stageRoom == null) return;
+    var panel = document.querySelector('[data-lc-stage][data-room-id="' + stageRoom + '"]');
+    if (panel && panel.getAttribute('data-lc-stage-speaker') === '1') return;
+    stageRoom = null;
+    transcriptId = null;
+    stopLocalCapture();
+    showBanner(false);
+    setToggle(false);
+  }
+  document.body.addEventListener('htmx:afterSettle', reconcileStage);
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
   loadConfig();
