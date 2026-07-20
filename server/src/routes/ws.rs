@@ -19,9 +19,10 @@ use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment, HuddleRingFragment,
-    MentionClearedFragment, MentionedFragment, NewMessageFragment, ReactionUpdateFragment,
-    ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
-    TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
+    InCallBadgeFragment, MentionClearedFragment, MentionedFragment, NewMessageFragment,
+    ReactionUpdateFragment, ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment,
+    ThreadReplyOobFragment, TranscriptControlFragment, TranscriptSegmentFragment,
+    UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -582,6 +583,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     if to_user_id == &send_user.id =>
                                 {
                                     render_huddle_ring(&e)
+                                }
+                                // LC-612: sidebar in-call indicator, per member.
+                                ChatEvent::HuddlePresence { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_incall_badge(&e)
                                 }
                                 // LC-393: call-transcription control + captions,
                                 // per-recipient like the call/voice signals.
@@ -1993,6 +2000,19 @@ fn render_control_signal(event: &ChatEvent) -> Option<String> {
 
 /// Render a voice-channel event into the `#lc-voice-bus` OOB fragment the
 /// browser's voice mesh consumes.
+/// LC-612: render the sidebar in-call indicator for one recipient.
+fn render_incall_badge(event: &ChatEvent) -> Option<String> {
+    match event {
+        ChatEvent::HuddlePresence { room_id, count, .. } => InCallBadgeFragment {
+            room_id: *room_id,
+            in_call: *count,
+        }
+        .render()
+        .ok(),
+        _ => None,
+    }
+}
+
 /// LC-611: render the huddle ring for one recipient.
 fn render_huddle_ring(event: &ChatEvent) -> Option<String> {
     match event {
@@ -2156,6 +2176,8 @@ async fn handle_voice_join(
     // the mesh empty, so the ring fires once per huddle rather than on every
     // subsequent join.
     crate::huddle_ring::ring_members(state, user, username, room_id, started_huddle).await;
+    // LC-612: update every member's sidebar in-call indicator with the new size.
+    crate::huddle_ring::broadcast_presence(state, room_id).await;
 }
 
 /// Remove `conn_id` from its voice channel (if any) and tell the remaining
@@ -2170,6 +2192,14 @@ fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     // participants preview stays accurate.
     let left = ChatEvent::VoiceLeft { room_id, user_id };
     state.hub.broadcast_to_room(room_id, &left);
+    // LC-612: refresh the sidebar in-call indicator for every member with the
+    // post-leave size (0 tears it down). Spawned because this fn is sync.
+    {
+        let st = state.clone();
+        tokio::spawn(async move {
+            crate::huddle_ring::broadcast_presence(&st, room_id).await;
+        });
+    }
     // LC-393 Phase 2: if that was the last participant, finalize any open
     // transcription session for the channel (save + post the notice). Spawned
     // because this fn is sync; AppState is cheap to clone (Arc-backed).

@@ -22,6 +22,12 @@ pub struct SidebarRoom {
     /// Renders the pencil draft indicator (`partials/draft_badge.html`);
     /// updated live over `ChatEvent::DraftChanged`.
     pub has_draft: bool,
+    /// LC-612: number of people currently in this room's huddle, 0 when none.
+    /// Renders the sidebar in-call indicator so an ongoing group call is visible
+    /// without opening the room; updated live over `ChatEvent::HuddlePresence`.
+    /// Always 0 for voice channels (`is_voice`) - the indicator is scoped to
+    /// ad-hoc huddles, matching the LC-611 ring.
+    pub in_call: i64,
 }
 
 /// One row in the sidebar's "Direct messages" section. Carries the unread

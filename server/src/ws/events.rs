@@ -392,6 +392,16 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    /// LC-612: this room's huddle roster changed size. Addressed to one member
+    /// and fanned out over the room's membership, like the LC-611 ring, so the
+    /// sidebar in-call indicator updates for members who do NOT have the room
+    /// open - `VoiceJoined`/`VoiceLeft` reach only the room topic. Carries the
+    /// post-change count (0 tears the indicator down).
+    HuddlePresence {
+        room_id: i64,
+        to_user_id: String,
+        count: i64,
+    },
     /// LC-611: a huddle just started in `room_id`. Unlike `VoiceJoined`, which
     /// goes to the room topic and so only reaches people who already have the
     /// room open, this is addressed to one recipient and fanned out over the
