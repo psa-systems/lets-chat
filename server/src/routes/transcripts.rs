@@ -72,6 +72,11 @@ async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppErro
 /// room) down the DM branch, where plain room membership would have been enough.
 /// Now anything that is not a DM is gated on live mesh membership - the hub keys
 /// huddles by the text room's id, so `voice_room_users` covers both.
+///
+/// LC-597: a Stage carries its audio over the LiveKit SFU, not the mesh, so a
+/// Stage speaker is absent from `voice_room_users` and was refused here. The
+/// mesh check runs first because it is in-memory and covers every other
+/// surface; only a caller it rejects pays for the stage lookup.
 async fn require_participant(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
     let ok = if room.room_type == "dm" {
         db::chat::is_room_member(&state.chat, room.id, &user.id).await?
@@ -81,12 +86,35 @@ async fn require_participant(state: &AppState, user: &User, room: &Room) -> Resu
             .voice_room_users(room.id)
             .iter()
             .any(|u| u == &user.id)
+            || is_stage_speaker(state, room, user).await?
     };
     if ok {
         Ok(())
     } else {
         Err(AppError::Forbidden)
     }
+}
+
+/// LC-597: does `user` currently hold the floor on `room`'s stage?
+///
+/// Listeners are deliberately excluded: a Stage is a broadcast format, so the
+/// audience is large and only the people actually speaking are captured. That
+/// keeps the capture set equal to the set of published tracks.
+///
+/// The `stage_enabled` re-check is not redundant with the join path. The roster
+/// lives in the hub (`Hub::stages`) and is only mutated by the WS stage frames;
+/// turning the stage off in room settings clears neither. Without this a host
+/// who disabled the stage would leave every user who held the floor at that
+/// moment able to keep opening sessions and posting segments.
+async fn is_stage_speaker(state: &AppState, room: &Room, user: &User) -> Result<bool, AppError> {
+    let holds_floor = state
+        .hub
+        .stage_roster(room.id)
+        .is_some_and(|r| r.speakers.contains(&user.id));
+    if !holds_floor {
+        return Ok(false);
+    }
+    Ok(db::chat::get_room_stage_enabled(&state.chat, room.id).await?)
 }
 
 /// Gate for reading a saved transcript: room access (a member can review it
