@@ -40,7 +40,20 @@ use serde::Deserialize;
 use std::io::Read;
 use std::time::Duration;
 
-pub const DEFAULT_UPDATE_URL: &str = "https://dev.a8n.run/api/packages/a8n-tools/generic/lets-chat";
+/// Generic Packages root the updater reads when the operator sets no
+/// `LETS_CHAT_UPDATE_URL`.
+///
+/// LC-594: this was hardcoded to the `a8n-tools` path and stayed there when the
+/// repo moved to the `psa-systems` org, so a shipped binary would have looked
+/// for its updates under an owner CI no longer publishes to. The publish
+/// workflow now injects this from the same `PACKAGE_OWNER` variable it uploads
+/// with, so the compiled-in default cannot drift from the upload destination
+/// again. The literal below is the fallback for builds that inject nothing
+/// (local and non-release CI builds).
+pub const DEFAULT_UPDATE_URL: &str = match option_env!("LETS_CHAT_UPDATE_BASE_URL") {
+    Some(u) if !u.is_empty() => u,
+    _ => "https://dev.a8n.run/api/packages/psa-systems/generic/lets-chat",
+};
 
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(10);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
@@ -261,4 +274,35 @@ pub fn spawn_startup_check() {
             );
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// LC-594: the default update source outlived the org it named. The repo
+    /// moved from `a8n-tools` to `psa-systems` and this constant stayed
+    /// behind, so a shipped binary would have polled an owner CI no longer
+    /// publishes under - a dead self-updater, discoverable only by users, and
+    /// unfixable for them precisely because self-update is what broke.
+    ///
+    /// Asserting the absence of the stale owner rather than a fixed URL keeps
+    /// this honest under the build-time injection: a release build compiles in
+    /// the path derived from the publish workflow's PACKAGE_OWNER, so pinning
+    /// the exact string would fail whenever CI is doing its job.
+    #[test]
+    fn default_update_url_does_not_name_a_stale_org() {
+        assert!(
+            !DEFAULT_UPDATE_URL.is_empty(),
+            "an empty default leaves the updater with nowhere to poll"
+        );
+        assert!(
+            !DEFAULT_UPDATE_URL.contains("a8n-tools"),
+            "default update URL still points at the pre-transfer org: {DEFAULT_UPDATE_URL}"
+        );
+        assert!(
+            DEFAULT_UPDATE_URL.starts_with("https://"),
+            "the updater refuses plaintext sources: {DEFAULT_UPDATE_URL}"
+        );
+    }
 }
