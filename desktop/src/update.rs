@@ -44,15 +44,23 @@ use std::time::Duration;
 /// `LETS_CHAT_UPDATE_URL`.
 ///
 /// LC-594: this was hardcoded to the `a8n-tools` path and stayed there when the
-/// repo moved to the `psa-systems` org, so a shipped binary would have looked
-/// for its updates under an owner CI no longer publishes to. The publish
-/// workflow now injects this from the same `PACKAGE_OWNER` variable it uploads
-/// with, so the compiled-in default cannot drift from the upload destination
-/// again. The literal below is the fallback for builds that inject nothing
-/// (local and non-release CI builds).
+/// repo moved orgs, so a shipped binary would have looked for its updates under
+/// an owner CI no longer publishes to. The publish workflow now injects this
+/// from the same `PACKAGE_OWNER` variable it uploads with, so the compiled-in
+/// default cannot drift from the upload destination again. The literal below is
+/// the fallback for builds that inject nothing (local and non-release builds).
+///
+/// The owner is `psa-systems-private`, not `psa-systems`: the org variable
+/// `PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER` resolves to the former, which is where
+/// the `lets-chat` generic package actually lives. Read from the org rather than
+/// inferred from the repo path, which names the latter.
+///
+/// Note that owner is a *private* org: an anonymous fetch of this URL is 401,
+/// so this default cannot serve public users as-is. Tracked separately; the
+/// updater fails closed on it either way.
 pub const DEFAULT_UPDATE_URL: &str = match option_env!("LETS_CHAT_UPDATE_BASE_URL") {
     Some(u) if !u.is_empty() => u,
-    _ => "https://dev.a8n.run/api/packages/psa-systems/generic/lets-chat",
+    _ => "https://dev.a8n.run/api/packages/psa-systems-private/generic/lets-chat",
 };
 
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -281,10 +289,10 @@ mod tests {
     use super::*;
 
     /// LC-594: the default update source outlived the org it named. The repo
-    /// moved from `a8n-tools` to `psa-systems` and this constant stayed
-    /// behind, so a shipped binary would have polled an owner CI no longer
-    /// publishes under - a dead self-updater, discoverable only by users, and
-    /// unfixable for them precisely because self-update is what broke.
+    /// moved off `a8n-tools` and this constant stayed behind, so a shipped
+    /// binary would have polled an owner CI no longer publishes under - a dead
+    /// self-updater, discoverable only by users, and unfixable for them
+    /// precisely because self-update is what broke.
     ///
     /// Asserting the absence of the stale owner rather than a fixed URL keeps
     /// this honest under the build-time injection: a release build compiles in
