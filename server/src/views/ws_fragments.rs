@@ -421,6 +421,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         // task like the call signals - the recipient-independent path emits
         // nothing for it.
         | ChatEvent::HuddleStarted { .. }
+        // LC-612: likewise addressed per member; rendered in the send task.
+        | ChatEvent::HuddlePresence { .. }
         | ChatEvent::VoiceSignal { .. }
         | ChatEvent::VoiceMuteChanged { .. }
         | ChatEvent::VoiceScreenChanged { .. }
@@ -462,4 +464,15 @@ pub struct HuddleRingFragment<'a> {
     pub room_name: &'a str,
     pub starter_id: &'a str,
     pub starter_name: &'a str,
+}
+
+/// LC-612: OOB swap of one room's sidebar in-call indicator
+/// (`#incall-room-{room_id}`) when its huddle roster changes size. Rendered per
+/// recipient in the WS send task (the event is `broadcast_to_user` over the
+/// room's membership), so `render_event` returns `None` for it.
+#[derive(Template)]
+#[template(path = "ws/incall_badge.html")]
+pub struct InCallBadgeFragment {
+    pub room_id: i64,
+    pub in_call: i64,
 }

@@ -6,6 +6,11 @@
     <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
     {% else %}
     <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
+    {# LC-612: in-call indicator. Present (empty) even at 0 so the live OOB swap
+       (#incall-room-{id}) always has a target. #}
+    {% let incall_room_id = room.id %}
+    {% let in_call = room.in_call %}
+    {% include "partials/incall_badge.html" %}
     {% let draft_room_id = room.id %}
     {% let has_draft = room.has_draft %}
     {% include "partials/draft_badge.html" %}

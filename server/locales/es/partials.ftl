@@ -11,6 +11,7 @@ sidebar-link-moderate = Moderar
 sidebar-link-inbox = Bandeja de entrada
 sidebar-mark-all-read = Marcar todo como leído
 sidebar-mark-room-read = Marcar como leído
+sidebar-in-call = En una llamada
 sidebar-unread-only = Solo no leídos
 sidebar-link-activity = Actividad
 sidebar-link-saved = Guardados

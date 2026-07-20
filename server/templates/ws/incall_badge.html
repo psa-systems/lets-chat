@@ -1,0 +1,10 @@
+{# LC-612: live in-call indicator, OOB-swapped on huddle join/leave. Mirrors
+   partials/incall_badge.html; kept as a separate template only for the
+   hx-swap-oob attribute (the page include must not carry it). #}
+{% if in_call > 0 %}
+<span id="incall-room-{{ room_id }}" data-lc-incall hx-swap-oob="outerHTML" class="lc-incall-pill" title="{{ "sidebar-in-call"|t }}" aria-label="{{ "sidebar-in-call"|t }}">
+  <span class="lc-incall-dot" aria-hidden="true"></span>{{ in_call }}
+</span>
+{% else %}
+<span id="incall-room-{{ room_id }}" data-lc-incall hx-swap-oob="outerHTML"></span>
+{% endif %}

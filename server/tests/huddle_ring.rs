@@ -219,3 +219,122 @@ async fn setup() -> (lets_chat::state::AppState, i64, Vec<String>) {
     };
     (state, room, users)
 }
+
+fn presence_for<'a>(events: &'a [ChatEvent], user: &str) -> Vec<&'a ChatEvent> {
+    events
+        .iter()
+        .filter(|e| matches!(e, ChatEvent::HuddlePresence { to_user_id, .. } if to_user_id == user))
+        .collect()
+}
+
+fn presence_count(e: &ChatEvent) -> i64 {
+    match e {
+        ChatEvent::HuddlePresence { count, .. } => *count,
+        _ => -1,
+    }
+}
+
+/// LC-612: the sidebar in-call indicator reaches a member who does NOT have the
+/// room open (that is the whole point), carries the post-change count, and
+/// fires on every join/leave rather than just the first.
+#[tokio::test]
+async fn presence_fans_out_to_members_with_the_current_count() {
+    let (state, room, users) = setup().await;
+    let (alice, bob, carol) = (&users[0], &users[1], &users[2]);
+
+    // Bob is elsewhere in the app (subscribed to no room). A room-topic
+    // broadcast would miss him.
+    let (_bc, mut bob_rx, _) = state.hub.connect(bob, "bob");
+
+    // Alice joins: bob's sidebar learns the room has 1.
+    let (alice_conn, _rx, _) = state.hub.connect(alice, "alice");
+    state.hub.voice_join(alice_conn, room);
+    lets_chat::huddle_ring::broadcast_presence(&state, room).await;
+    let ev = drain(&mut bob_rx);
+    let p = presence_for(&ev, bob);
+    assert_eq!(p.len(), 1, "a member elsewhere is told about the huddle");
+    assert_eq!(presence_count(p[0]), 1, "count is 1 after the first join");
+
+    // Carol joins: the count rises to 2, and bob is told again (not just once).
+    let (carol_conn, _rx, _) = state.hub.connect(carol, "carol");
+    state.hub.voice_join(carol_conn, room);
+    lets_chat::huddle_ring::broadcast_presence(&state, room).await;
+    let ev = drain(&mut bob_rx);
+    let p = presence_for(&ev, bob);
+    assert_eq!(p.len(), 1, "a later join re-notifies");
+    assert_eq!(presence_count(p[0]), 2, "count rises with the second join");
+
+    // Alice leaves: the count falls to 1 (broadcast_presence reads the roster
+    // after the leave, as the real handler does).
+    state.hub.voice_leave(alice_conn);
+    lets_chat::huddle_ring::broadcast_presence(&state, room).await;
+    let ev = drain(&mut bob_rx);
+    let p = presence_for(&ev, bob);
+    assert_eq!(presence_count(p[0]), 1, "count falls when someone leaves");
+
+    // Carol leaves: empty. A 0 count tears the indicator down.
+    state.hub.voice_leave(carol_conn);
+    lets_chat::huddle_ring::broadcast_presence(&state, room).await;
+    let ev = drain(&mut bob_rx);
+    let p = presence_for(&ev, bob);
+    assert_eq!(
+        presence_count(p[0]),
+        0,
+        "an empty huddle clears the indicator"
+    );
+}
+
+/// LC-612: unlike the ring, the indicator ignores mute - it is passive presence,
+/// not an interruption, so a member who muted the room still sees the dot.
+#[tokio::test]
+async fn presence_ignores_mute() {
+    let (state, room, users) = setup().await;
+    let (alice, bob) = (&users[0], &users[1]);
+
+    db::notifications::set_room_mute_mode(&state.chat, bob, room, db::notifications::MuteMode::All)
+        .await
+        .unwrap();
+
+    let (_bc, mut bob_rx, _) = state.hub.connect(bob, "bob");
+    let (alice_conn, _rx, _) = state.hub.connect(alice, "alice");
+    state.hub.voice_join(alice_conn, room);
+    lets_chat::huddle_ring::broadcast_presence(&state, room).await;
+
+    assert_eq!(
+        presence_for(&drain(&mut bob_rx), bob).len(),
+        1,
+        "a muted member still gets the passive in-call indicator"
+    );
+}
+
+/// LC-612: a persistent voice channel does not drive the huddle indicator (its
+/// membership is enclave-scoped, and it is not the ad-hoc huddle this is for).
+#[tokio::test]
+async fn presence_skips_voice_channels() {
+    let (state, _room, users) = setup().await;
+    let (alice, bob) = (&users[0], &users[1]);
+
+    let voice_room = db::chat::create_room(&state.chat, "voicechan", None, "public", None, None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE rooms SET is_voice = 1 WHERE id = ?")
+        .bind(voice_room)
+        .execute(&state.chat)
+        .await
+        .unwrap();
+    for u in [alice, bob] {
+        db::chat::add_room_member(&state.chat, voice_room, u)
+            .await
+            .unwrap();
+    }
+
+    let (_bc, mut bob_rx, _) = state.hub.connect(bob, "bob");
+    let (alice_conn, _rx, _) = state.hub.connect(alice, "alice");
+    state.hub.voice_join(alice_conn, voice_room);
+    lets_chat::huddle_ring::broadcast_presence(&state, voice_room).await;
+
+    assert!(
+        presence_for(&drain(&mut bob_rx), bob).is_empty(),
+        "a voice channel must not drive the huddle indicator"
+    );
+}
