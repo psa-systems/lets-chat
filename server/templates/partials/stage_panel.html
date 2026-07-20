@@ -19,6 +19,18 @@
       <button type="button" data-lc-stage-join class="btn btn-primary btn-sm">{{ "stage-join"|t }}</button>
       {% else %}
       {% if is_speaker %}
+      {# LC-597: transcription, speakers only. `data-lc-room` is what transcribe.js
+         resolves the session room from, so no stage-specific JS is needed to start
+         one. `data-lc-stage-transcribe` marks the session as stage-scoped so the
+         capture can be stopped when this panel re-renders without the floor. #}
+      <button type="button" data-lc-transcribe-toggle data-lc-stage-transcribe
+              data-lc-room="{{ room_id }}" aria-pressed="false"
+              data-lc-unsupported="{{ "transcript-unsupported"|t }}"
+              aria-label="{{ "voice-transcribe-tip"|t }}"
+              class="btn btn-secondary btn-sm">{{ "transcript-toggle"|t }}</button>
+      <button type="button" data-lc-transcript-panel-toggle aria-pressed="false"
+              aria-label="{{ "voice-transcript-tip"|t }}"
+              class="btn btn-secondary btn-sm">{{ "voice-transcript-panel"|t }}</button>
       <button type="button" data-lc-stage-step-down class="btn btn-secondary btn-sm">{{ "stage-step-down"|t }}</button>
       {% else if hand_raised %}
       <button type="button" data-lc-stage-lower-hand class="btn btn-secondary btn-sm">{{ "stage-lower-hand"|t }}</button>
