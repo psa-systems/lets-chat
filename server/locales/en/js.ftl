@@ -100,3 +100,8 @@ js-clip-denied-help = Allow access in your browser's site settings, then try aga
 js-clip-start-failed = Could not start recording.
 js-clip-empty = Recording was empty
 js-clip-uploading = Uploading clip...
+
+# LC-611: huddle ring banner.
+js-huddle-ring-started = started a huddle in
+js-huddle-ring-join = Join
+js-huddle-ring-ignore = Ignore

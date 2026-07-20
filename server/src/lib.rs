@@ -16,6 +16,7 @@ pub mod error;
 pub mod geoip;
 pub mod gif;
 pub mod http_client;
+pub mod huddle_ring;
 pub mod i18n;
 pub mod last_visited;
 pub mod links;

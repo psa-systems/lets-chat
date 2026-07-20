@@ -98,3 +98,8 @@ js-clip-denied-help = Permite el acceso en la configuracion del sitio de tu nave
 js-clip-start-failed = No se pudo iniciar la grabacion.
 js-clip-empty = La grabacion estaba vacia
 js-clip-uploading = Subiendo clip...
+
+# LC-611: huddle ring banner.
+js-huddle-ring-started = inició una reunión rápida en
+js-huddle-ring-join = Unirse
+js-huddle-ring-ignore = Ignorar
