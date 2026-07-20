@@ -37,6 +37,10 @@
   <div id="lc-notify-bus" class="sr-only" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
   <div id="lc-call-bus" class="hidden"></div>
   <div id="lc-voice-bus" class="hidden"></div>
+  {# LC-611: huddle-started rings, addressed to this member. huddle_ring.js
+     drains this into the banner below. #}
+  <div id="lc-huddle-ring-bus" class="hidden"></div>
+  <div id="lc-huddle-ring-root" data-lc-huddle-ring-root class="hidden"></div>
   {# LC-183/184: remote-control consent signals (request/grant/deny/revoke) are
      rendered here as data-lc-control-event nodes; call.js consumes + drains. #}
   <div id="lc-control-bus" class="hidden"></div>

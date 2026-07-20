@@ -417,6 +417,10 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceJoined { .. }
         | ChatEvent::VoiceLeft { .. }
         | ChatEvent::VoiceRoster { .. }
+        // LC-611: addressed to one member (to_user_id), rendered in the send
+        // task like the call signals - the recipient-independent path emits
+        // nothing for it.
+        | ChatEvent::HuddleStarted { .. }
         | ChatEvent::VoiceSignal { .. }
         | ChatEvent::VoiceMuteChanged { .. }
         | ChatEvent::VoiceScreenChanged { .. }
@@ -442,4 +446,20 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         .render()
         .ok(),
     }
+}
+
+/// LC-611: a huddle just started in a room this member belongs to. OOB-appended
+/// into `#lc-huddle-ring-bus`, where `huddle_ring.js` turns it into a dismissible
+/// banner offering Join.
+///
+/// Rendered per recipient (the event carries `to_user_id`) rather than to the
+/// room topic, because the recipients who matter are the ones without the room
+/// open.
+#[derive(Template)]
+#[template(path = "ws/huddle_ring.html")]
+pub struct HuddleRingFragment<'a> {
+    pub room_id: i64,
+    pub room_name: &'a str,
+    pub starter_id: &'a str,
+    pub starter_name: &'a str,
 }
