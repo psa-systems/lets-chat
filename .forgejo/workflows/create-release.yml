@@ -42,6 +42,16 @@ jobs:
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_PAT }}
         run: |
+          # LC-594: org secrets do not follow a repo across orgs. FORGEJO_PAT is
+          # the psa-systems convention (mokosh-server and mokosh-apps read the
+          # same name), but this workflow has not run since the transfer, so
+          # fail with the name rather than posting an unauthenticated request
+          # and reporting whatever the API says about a malformed token header.
+          if (($env.FORGEJO_TOKEN? | default "") | is-empty) {
+              print --stderr "secrets.FORGEJO_PAT is unset; cannot create the release."
+              print --stderr "Define it at the psa-systems org level with write:repository scope."
+              exit 1
+          }
           let branch = "${{ github.event.pull_request.head.ref }}"
           let tag = ($branch | str replace "release/" "")
 
