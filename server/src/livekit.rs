@@ -82,17 +82,51 @@ struct Claims {
     video: VideoGrant,
 }
 
-/// Stable LiveKit room name for a lets-chat stage room.
-pub fn room_name(room_id: i64) -> String {
-    format!("stage-{room_id}")
+/// LC-596: the participant count at which a huddle stops using the WebRTC mesh
+/// and moves to the SFU.
+///
+/// The mesh is one `RTCPeerConnection` per pair, so cost is N-squared and
+/// `voice.js` documents a practical cap of 4 to 6. Two peers is exactly one
+/// connection and the mesh is the cheaper, lower-latency path there - no server
+/// hop - so the SFU takes over from the third participant. The ticket called
+/// this an assumption to revise once measured, so it is one named constant
+/// rather than a number spread across client and server.
+pub const SFU_MIN_PARTICIPANTS: usize = 3;
+
+/// LC-596: which real-time surface a LiveKit room belongs to.
+///
+/// A lets-chat room can host a Stage and a huddle at the same time - they are
+/// independent features keyed off the same `room_id`, one by `stage_enabled`
+/// and the other by live mesh membership. Naming both `stage-{id}` would drop
+/// their participants into a single LiveKit room, so a huddle would leak into
+/// the Stage broadcast and vice versa. The surface is part of the name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    Stage,
+    Huddle,
 }
 
-/// Mint a LiveKit access token (JWT) for `identity` to join the stage of
-/// `room_id`. `can_publish` is true for speakers/hosts (mic publishing);
-/// everyone may subscribe. `now_unix` is injected so the claims are
-/// deterministically testable.
+impl Surface {
+    fn prefix(self) -> &'static str {
+        match self {
+            Surface::Stage => "stage",
+            Surface::Huddle => "huddle",
+        }
+    }
+}
+
+/// Stable LiveKit room name for one surface of a lets-chat room.
+pub fn room_name(surface: Surface, room_id: i64) -> String {
+    format!("{}-{room_id}", surface.prefix())
+}
+
+/// Mint a LiveKit access token (JWT) for `identity` to join `surface` of
+/// `room_id`. `can_publish` is true for anyone allowed to send media - Stage
+/// speakers and hosts, every huddle participant - while everyone may subscribe.
+/// `now_unix` is injected so the claims are deterministically testable.
 pub fn mint_token(
     cfg: &LiveKitConfig,
+    surface: Surface,
     room_id: i64,
     identity: &str,
     name: &str,
@@ -106,7 +140,7 @@ pub fn mint_token(
         nbf: now_unix,
         exp: now_unix + TOKEN_TTL_SECS,
         video: VideoGrant {
-            room: room_name(room_id),
+            room: room_name(surface, room_id),
             room_join: true,
             can_publish,
             can_subscribe: true,
@@ -148,7 +182,7 @@ mod tests {
     #[test]
     fn speaker_token_can_publish() {
         let c = cfg();
-        let t = mint_token(&c, 42, "user-1", "Alice", true, 1_000).unwrap();
+        let t = mint_token(&c, Surface::Stage, 42, "user-1", "Alice", true, 1_000).unwrap();
         let claims = decode(&t, &c.api_secret);
         assert_eq!(claims.iss, "devkey");
         assert_eq!(claims.sub, "user-1");
@@ -162,16 +196,53 @@ mod tests {
     #[test]
     fn listener_token_cannot_publish_but_subscribes() {
         let c = cfg();
-        let t = mint_token(&c, 7, "user-2", "Bob", false, 5_000).unwrap();
+        let t = mint_token(&c, Surface::Stage, 7, "user-2", "Bob", false, 5_000).unwrap();
         let claims = decode(&t, &c.api_secret);
         assert!(!claims.video.can_publish);
+        assert!(claims.video.can_subscribe);
+    }
+
+    /// LC-596: a room can host a Stage and a huddle simultaneously - one gated
+    /// by `stage_enabled`, the other by live mesh membership - so the surface
+    /// has to be part of the LiveKit room name. Without this the two sets of
+    /// participants share one LiveKit room and hear each other.
+    #[test]
+    fn stage_and_huddle_in_one_room_do_not_collide() {
+        let c = cfg();
+        let stage = decode(
+            &mint_token(&c, Surface::Stage, 42, "u", "U", true, 1_000).unwrap(),
+            &c.api_secret,
+        );
+        let huddle = decode(
+            &mint_token(&c, Surface::Huddle, 42, "u", "U", true, 1_000).unwrap(),
+            &c.api_secret,
+        );
+        assert_eq!(stage.video.room, "stage-42");
+        assert_eq!(huddle.video.room, "huddle-42");
+        assert_ne!(
+            stage.video.room, huddle.video.room,
+            "the same lets-chat room must map to two distinct LiveKit rooms"
+        );
+    }
+
+    /// Every huddle participant is a publisher: a huddle is symmetric, unlike a
+    /// Stage where the floor is granted.
+    #[test]
+    fn huddle_participant_publishes() {
+        let c = cfg();
+        let claims = decode(
+            &mint_token(&c, Surface::Huddle, 9, "user-3", "Cara", true, 2_000).unwrap(),
+            &c.api_secret,
+        );
+        assert_eq!(claims.video.room, "huddle-9");
+        assert!(claims.video.can_publish);
         assert!(claims.video.can_subscribe);
     }
 
     #[test]
     fn token_is_rejected_under_the_wrong_secret() {
         let c = cfg();
-        let t = mint_token(&c, 1, "u", "U", true, 1_000).unwrap();
+        let t = mint_token(&c, Surface::Stage, 1, "u", "U", true, 1_000).unwrap();
         let mut v = Validation::new(jsonwebtoken::Algorithm::HS256);
         v.required_spec_claims.clear();
         assert!(

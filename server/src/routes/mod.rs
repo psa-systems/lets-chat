@@ -1440,6 +1440,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // LC-512: LiveKit access token for stage audio.
         .route("/room/{room_id}/stage/token", get(stage::get_token))
+        // LC-596: LiveKit access token for an SFU-backed huddle.
+        .route("/room/{room_id}/huddle/token", get(stage::get_huddle_token))
         .route(
             "/room/{room_id}/retention/preview",
             get(retention::get_preview),

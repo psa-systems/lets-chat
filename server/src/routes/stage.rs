@@ -182,11 +182,98 @@ pub async fn get_token(
         Some(n) if !n.trim().is_empty() => n.to_string(),
         _ => user.username.clone(),
     };
-    let token = livekit::mint_token(&cfg, room_id, &user.id, &name, can_publish, now)
-        .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;
+    let token = livekit::mint_token(
+        &cfg,
+        livekit::Surface::Stage,
+        room_id,
+        &user.id,
+        &name,
+        can_publish,
+        now,
+    )
+    .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;
     Ok(Json(StageTokenResponse {
         url: cfg.url,
         token,
         can_publish,
+    }))
+}
+
+/// GET /room/{id}/huddle/token  (LC-596)
+///
+/// Mint a LiveKit token for the caller to join this room's huddle over the SFU.
+///
+/// Deliberately a separate route from the stage token rather than a mode flag on
+/// it: the two surfaces have different gates (mesh membership vs the stage
+/// roster), different publish rules (symmetric vs granted floor), and map to
+/// different LiveKit rooms. Sharing one handler would mean branching on all
+/// three inside it.
+///
+/// A huddle is symmetric, so every participant publishes - there is no listener
+/// role to derive rights from, unlike the stage.
+pub async fn get_huddle_token(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+) -> Result<Json<StageTokenResponse>, AppError> {
+    let Some(cfg) = LiveKitConfig::from_env() else {
+        // Not an error condition: an operator with no LiveKit server is the
+        // supported default, and the client falls back to the mesh on this.
+        return Err(AppError::BadRequest(
+            "Group call audio is not configured on this server.".into(),
+        ));
+    };
+    let Some(room) = db::chat::get_room(&state.chat, room_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    // Huddles are the non-DM surface; a DM call is the 1:1 peer connection and
+    // never routes through the SFU.
+    if room.room_type == "dm" {
+        return Err(AppError::BadRequest(
+            "Direct-message calls do not use the SFU.".into(),
+        ));
+    }
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    // The mesh roster is the gate, exactly as `require_participant` treats it
+    // for transcription: being able to see the room is not being in the call.
+    let participants = state.hub.voice_room_users(room_id);
+    if !participants.iter().any(|u| u == &user.id) {
+        return Err(AppError::BadRequest(
+            "Join the huddle before connecting media.".into(),
+        ));
+    }
+    // Below the threshold the mesh is still in charge, so refuse rather than
+    // hand out a token that would silently split the call across two
+    // transports - half the participants on the SFU, half on the mesh, hearing
+    // nobody. The client asks again as the roster grows.
+    if participants.len() < livekit::SFU_MIN_PARTICIPANTS {
+        return Err(AppError::BadRequest(format!(
+            "Huddle is below the SFU threshold ({} participants).",
+            livekit::SFU_MIN_PARTICIPANTS
+        )));
+    }
+
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    let name = match user.display_name.as_deref() {
+        Some(n) if !n.trim().is_empty() => n.to_string(),
+        _ => user.username.clone(),
+    };
+    let token = livekit::mint_token(
+        &cfg,
+        livekit::Surface::Huddle,
+        room_id,
+        &user.id,
+        &name,
+        true,
+        now,
+    )
+    .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;
+    Ok(Json(StageTokenResponse {
+        url: cfg.url,
+        token,
+        can_publish: true,
     }))
 }
