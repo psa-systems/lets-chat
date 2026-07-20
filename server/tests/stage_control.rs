@@ -437,3 +437,98 @@ async fn huddle_root_advertises_the_sfu_transport() {
         std::env::remove_var("LETS_CHAT_LIVEKIT_API_SECRET");
     }
 }
+
+/// LC-612: the in-call indicator is correct on initial page load, not only on
+/// later events - the sidebar seeds the count from the live hub. Renders the
+/// badge for a room with an active huddle and an empty target otherwise.
+#[tokio::test]
+async fn sidebar_seeds_the_in_call_indicator_on_load() {
+    use axum::body::{to_bytes, Body};
+    use axum::http::{Method, Request, StatusCode};
+    use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    let dir = std::env::temp_dir().join(format!("lc-incall-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create test data dir");
+    db::set_data_dir(dir.to_string_lossy().to_string());
+
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let uid = db::auth::create_user(&auth, "viewer", "h").await.unwrap();
+    let other = db::auth::create_user(&auth, "caller", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin', totp_enabled=1 WHERE id=?")
+        .bind(&uid)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let session = db::auth::create_session(&auth, &uid).await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let room = 1; // General, in the sidebar
+
+    let hub = Arc::new(Hub::new());
+    let bg = lets_chat::bg::spawn(auth.clone());
+    let state = AppState {
+        geoip: None,
+        login_approval_enabled: false,
+        auth,
+        chat: chat.clone(),
+        settings,
+        hub: hub.clone(),
+        asset_version: "test".into(),
+        last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
+        activity_ledger: lets_chat::auth::new_last_seen_ledger(),
+        bg,
+        secret_key: Some(Arc::new([0u8; 32])),
+        vapid: None,
+        push_client: Arc::new(lets_chat::push::MockPushClient::default()),
+        apns_client: None,
+        fcm_client: None,
+        mailer: None,
+        base_url: "http://localhost:8080".to_string(),
+        ice_servers: "[]".to_string(),
+        rate_limits: lets_chat::rate_limit::RateLimits::new(),
+        bunyip_sso: None,
+        stt_client: None,
+        llm_client: None,
+        embedding_client: None,
+    };
+    let app = routes::build_router(state);
+
+    async fn page(app: &axum::Router, session: &str, room: i64) -> String {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/room/{room}"))
+            .header("cookie", format!("session={session}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = to_bytes(res.into_body(), 1 << 22).await.unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
+    }
+
+    // No huddle: the target span exists but is empty (no pill).
+    let s = page(&app, &session, room).await;
+    assert!(
+        s.contains(&format!(r#"id="incall-room-{room}""#)),
+        "the OOB target span is always present"
+    );
+    assert!(
+        !s.contains("lc-incall-pill"),
+        "no pill renders when nobody is in the huddle"
+    );
+
+    // Someone else joins the huddle for `room`; a fresh load now shows the pill.
+    let (conn, _rx, _) = hub.connect(&other, "caller");
+    hub.voice_join(conn, room);
+    let s = page(&app, &session, room).await;
+    assert!(
+        s.contains("lc-incall-pill"),
+        "an active huddle renders the in-call pill on load"
+    );
+}

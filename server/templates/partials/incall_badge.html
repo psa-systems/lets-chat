@@ -1,0 +1,11 @@
+{# LC-612: sidebar in-call indicator - a live green dot + participant count so an
+   ongoing huddle is visible without opening the room. Empty span at 0 keeps the
+   #incall-room-{id} target present for the OOB swap. Mirror any change in
+   ws/incall_badge.html (the live-swapped variant). #}
+{% if in_call > 0 %}
+<span id="incall-room-{{ incall_room_id }}" data-lc-incall class="lc-incall-pill" title="{{ "sidebar-in-call"|t }}" aria-label="{{ "sidebar-in-call"|t }}">
+  <span class="lc-incall-dot" aria-hidden="true"></span>{{ in_call }}
+</span>
+{% else %}
+<span id="incall-room-{{ incall_room_id }}" data-lc-incall></span>
+{% endif %}

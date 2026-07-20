@@ -72,3 +72,41 @@ pub async fn ring_members(
         );
     }
 }
+
+/// LC-612: fan the room's current huddle size out to every member's sidebar, so
+/// an ongoing call is visible without opening the room. Call this AFTER the hub
+/// roster has been mutated (join or leave), since it reads the post-change
+/// count.
+///
+/// Unlike [`ring_members`], this does not respect the room mute mode. The ring
+/// is an interruption and mute suppresses it; the sidebar dot is passive
+/// presence, and hiding it on a muted room would mean you could not see that a
+/// call is happening in a room you muted but still belong to. It also fans out
+/// on every join and leave, not just the first, because the count changes each
+/// time.
+///
+/// Voice channels are excluded, matching the ring: they are persistent places,
+/// and their membership is enclave-scoped rather than in `room_members`, so the
+/// per-member fan-out here would not reach the right people anyway.
+pub async fn broadcast_presence(state: &AppState, room_id: i64) {
+    let Ok(Some(room)) = db::chat::get_room(&state.chat, room_id).await else {
+        return;
+    };
+    if room.is_voice {
+        return;
+    }
+    let count = state.hub.voice_room_users(room_id).len() as i64;
+    let Ok(members) = db::chat::list_room_member_ids(&state.chat, room_id).await else {
+        return;
+    };
+    for member in members {
+        state.hub.broadcast_to_user(
+            &member,
+            &ChatEvent::HuddlePresence {
+                room_id,
+                to_user_id: member.clone(),
+                count,
+            },
+        );
+    }
+}
