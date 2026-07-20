@@ -143,6 +143,20 @@ fn read_body_capped(response: ureq::Response, max: usize) -> Result<Vec<u8>, Str
 // the startup check nor `--update` will trust an unsigned/unverifiable
 // manifest. LC-210-BINARY-INTEGRITY (#277).
 pub fn fetch_manifest() -> Result<Manifest, String> {
+    // LC-607: check the embedded key before touching the network. An unkeyed
+    // build refuses every manifest at the verify step below, so fetching first
+    // only changes *which* failure the user is shown - and it showed the wrong
+    // one. Every binary shipped so far is unkeyed (the release workflow, the
+    // only place that injects the key, has never completed a run), and the
+    // configured default source is a private packages org, so `--check-update`
+    // reported a bare 401 against an internal URL. That reads as a broken
+    // server or a permissions problem the user might fix, when the real state
+    // is that this build has no self-update at all. Failing here says so, and
+    // makes no request to a source that could never have helped.
+    if update_verify::PUBLIC_KEY_HEX.is_empty() {
+        return Err(update_verify::VerifyError::NotConfigured.to_string());
+    }
+
     let base = update_url();
     let allow_private = allow_private_initial();
 
@@ -311,6 +325,47 @@ mod tests {
         assert!(
             DEFAULT_UPDATE_URL.starts_with("https://"),
             "the updater refuses plaintext sources: {DEFAULT_UPDATE_URL}"
+        );
+    }
+
+    /// LC-607: an unkeyed build must report *why* it cannot self-update, and
+    /// must not make the request to find out.
+    ///
+    /// The source is pointed at a loopback address the net guard rejects
+    /// outright. If the key check did not come first, the failure would be the
+    /// guard's ("resolves to a non-public address") or a transport error -
+    /// anything but the not-configured message. Getting the not-configured
+    /// message back is therefore evidence that no request was attempted.
+    /// Confirmed by deleting the early return: this asserts the guard's
+    /// message instead.
+    #[test]
+    fn unkeyed_build_reports_not_configured_without_fetching() {
+        assert_eq!(
+            update_verify::PUBLIC_KEY_HEX,
+            "",
+            "test assumes an unkeyed (non-release) build"
+        );
+
+        // SAFETY: single-threaded test process; no other thread reads the env
+        // while this runs. Restored before the assertions.
+        let prev = std::env::var("LETS_CHAT_UPDATE_URL").ok();
+        unsafe { std::env::set_var("LETS_CHAT_UPDATE_URL", "https://127.0.0.1:1/generic/x") };
+
+        let err = fetch_manifest().expect_err("an unkeyed build cannot fetch a usable manifest");
+
+        match prev {
+            Some(v) => unsafe { std::env::set_var("LETS_CHAT_UPDATE_URL", v) },
+            None => unsafe { std::env::remove_var("LETS_CHAT_UPDATE_URL") },
+        }
+
+        assert_eq!(
+            err,
+            update_verify::VerifyError::NotConfigured.to_string(),
+            "unkeyed build must fail on the missing key, not on the transport"
+        );
+        assert!(
+            !err.contains("127.0.0.1"),
+            "must not leak the configured source into the message: {err}"
         );
     }
 }
