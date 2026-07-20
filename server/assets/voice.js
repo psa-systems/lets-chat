@@ -18,8 +18,12 @@
   'use strict';
 
   var root = null;        // current [data-lc-voice-root] element, or null
-  var cfg = null;         // { roomId, selfId, selfName, iceServers }
+  var cfg = null;         // { roomId, selfId, selfName, iceServers, sfu }
   var joined = false;
+  // LC-610: when the room's huddle runs over the SFU, media is owned by
+  // huddle_sfu.js and this stays true for the session. The mesh branch below is
+  // untouched; every mesh-only step is guarded on `!sfu`.
+  var sfu = false;
   var localStream = null;
   var peers = {};         // user_id -> { pc, polite, makingOffer, name, pending: [] }
 
@@ -36,6 +40,7 @@
   var participants = {};  // user_id -> label
   var selfMuted = false;  // LC-402: our own mic state, broadcast to the channel
   var selfSharing = false; // LC-408: our own screen-share state, broadcast too
+  var sfuCamOn = false;   // LC-610: our SFU camera state (localStream is null there)
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -616,6 +621,7 @@
   // ---- join / leave --------------------------------------------------
   function join() {
     if (joined || !cfg) return;
+    if (cfg.sfu) { joinSfu(); return; }
     getMedia(false).then(function (stream) {
       localStream = stream;
       joined = true;
@@ -644,8 +650,111 @@
     });
   }
 
+  // LC-610: the SFU join. Shares presence, the tile grid, and the control
+  // buttons with the mesh path, but hands the media to huddle_sfu.js. The WS
+  // `voice_join` still fires - it is what registers us in the hub roster (which
+  // the token endpoint gates on) and what drives the ring + transcription gate.
+  function joinSfu() {
+    joined = true;
+    sfu = true;
+    selfMuted = false;
+    selfSharing = false;
+    sfuCamOn = false;
+    participants[cfg.selfId] = cfg.selfName;
+    showJoinedUi(true);
+    createTile(cfg.selfId, cfg.selfName, true);
+    setCameraBtn();
+    // Presence first, so by the time huddle_sfu.js requests a token the server
+    // has us in the roster. The token fetch retries to absorb the WS-vs-HTTP
+    // ordering, so a small delay here is harmless.
+    wsSend({ type: 'voice_join', room_id: cfg.roomId });
+    window.__lcVoiceRoom = cfg.roomId;
+    try { document.dispatchEvent(new CustomEvent('lc:voice-joined')); } catch (e) {}
+    window.LetsChatHuddleSfu.start(cfg, sfuHooks()).then(function (ok) {
+      if (!ok) {
+        // Media never came up (SDK, token, or connection). The mesh is not a
+        // fallback here - the server told us this room is SFU - so surface it
+        // and leave, rather than sit in a call that carries no audio.
+        alert(window.__lcS('callConnectionFailed', 'The call connection failed.'));
+        leave();
+      }
+    });
+  }
+
+  // The tile/grid callbacks huddle_sfu.js renders through, so an SFU huddle
+  // reuses the exact mesh tiles rather than duplicating them.
+  function sfuHooks() {
+    return {
+      selfId: cfg.selfId,
+      audioSink: function () {
+        var el = document.getElementById('lc-huddle-sfu-audio-sink');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'lc-huddle-sfu-audio-sink';
+          el.style.display = 'none';
+          document.body.appendChild(el);
+        }
+        return el;
+      },
+      addTile: function (uid, label) {
+        if (!uid || uid === cfg.selfId) return;
+        participants[uid] = label;
+        createTile(uid, label, false);
+        updateCount();
+      },
+      removeTile: function (uid) {
+        if (!uid) return;
+        delete participants[uid];
+        removeTile(uid);
+        updateCount();
+      },
+      tileVideo: tileVideo,
+      setHasVideo: function (uid, on) {
+        var v = tileVideo(uid);
+        var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(uid) + '"]');
+        if (!v || !t) return;
+        var avatar = t.querySelector('[data-lc-voice-avatar]');
+        v.style.display = on ? '' : 'none';
+        if (avatar) avatar.style.display = on ? 'none' : '';
+      },
+      setMuted: applyMute,
+      setScreen: applyScreen,
+      setSpeaking: function (loud) {
+        var g = grid();
+        if (!g) return;
+        var tiles = g.querySelectorAll('[data-lc-voice-tile]');
+        for (var i = 0; i < tiles.length; i++) {
+          var id = tiles[i].getAttribute('data-lc-voice-tile');
+          tiles[i].setAttribute('data-speaking', loud[id] ? 'true' : 'false');
+        }
+      },
+    };
+  }
+
   function leave() {
     if (!joined) return;
+    // LC-610: SFU media is owned by huddle_sfu.js; tear it down, then run the
+    // shared presence/UI cleanup (the mesh-specific steps below are skipped).
+    if (sfu) {
+      sfu = false;
+      selfMuted = false;
+      selfSharing = false;
+      sfuCamOn = false;
+      window.LetsChatHuddleSfu.stop();
+      wsSend({ type: 'voice_leave', room_id: cfg.roomId });
+      removeTile(cfg.selfId);
+      var gs = grid();
+      if (gs) gs.replaceChildren();
+      joined = false;
+      var sss = q('[data-lc-voice-screen]');
+      if (sss) { setLabel(sss, window.__lcS('callShareScreen', 'Share screen')); sss.setAttribute('aria-pressed', 'false'); }
+      if (cfg) delete participants[cfg.selfId];
+      renderPreview();
+      showJoinedUi(false);
+      window.__lcVoiceRoom = null;
+      try { document.dispatchEvent(new CustomEvent('lc:voice-left')); } catch (e) {}
+      return;
+    }
     selfMuted = false;
     selfSharing = false;
     stopSpeaking();
@@ -677,6 +786,19 @@
   }
 
   function toggleMute() {
+    // LC-610: on the SFU, huddle_sfu.js owns the mic and reflects the tile +
+    // remote peers; just sync the button off the state it returns.
+    if (sfu) {
+      window.LetsChatHuddleSfu.toggleMute().then(function (muted) {
+        selfMuted = muted;
+        var b = q('[data-lc-voice-mute]');
+        if (b) {
+          setLabel(b, muted ? window.__lcS('callUnmute', 'Unmute') : window.__lcS('callMute', 'Mute'));
+          b.setAttribute('aria-pressed', muted ? 'true' : 'false');
+        }
+      });
+      return;
+    }
     if (!localStream) return;
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
@@ -719,8 +841,9 @@
   function setCameraBtn() {
     var btn = q('[data-lc-voice-camera]');
     if (!btn) return;
-    setLabel(btn, hasLocalCamera() ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video'));
-    btn.setAttribute('aria-pressed', hasLocalCamera() ? 'true' : 'false'); // LC-402 on/off state
+    var on = sfu ? sfuCamOn : hasLocalCamera();
+    setLabel(btn, on ? window.__lcS('callStopVideo', 'Stop video') : window.__lcS('callStartVideo', 'Start video'));
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false'); // LC-402 on/off state
     // While the screen-share track owns the video sender on every peer,
     // toggling the camera would race for the same outgoing slot.
     if (isSharingScreen()) btn.setAttribute('disabled', '');
@@ -729,13 +852,21 @@
   function setScreenBtn() {
     var btn = q('[data-lc-voice-screen]');
     if (!btn) return;
-    setLabel(btn, isSharingScreen() ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
-    btn.setAttribute('aria-pressed', isSharingScreen() ? 'true' : 'false'); // LC-402 on/off state
+    var on = sfu ? selfSharing : isSharingScreen();
+    setLabel(btn, on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false'); // LC-402 on/off state
   }
 
   // Camera on/off mid-call: acquire or release the video track and add it to
   // (or remove it from) every peer connection, which renegotiates each.
   function toggleCamera() {
+    if (sfu) {
+      window.LetsChatHuddleSfu.toggleCamera().then(function (on) {
+        sfuCamOn = on;
+        setCameraBtn();
+      });
+      return;
+    }
     if (!joined || !localStream) return;
     if (isSharingScreen()) return;  // setCameraBtn disables the control; guard the dispatch path too.
     var existing = localStream.getVideoTracks()[0];
@@ -825,6 +956,13 @@
 
   // Acquire screen capture and route it to every peer.
   function toggleScreen() {
+    if (sfu) {
+      window.LetsChatHuddleSfu.toggleScreen().then(function (on) {
+        selfSharing = on;
+        setScreenBtn();
+      });
+      return;
+    }
     if (!joined || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
@@ -1024,6 +1162,9 @@
       selfId: el.getAttribute('data-self-id'),
       selfName: el.getAttribute('data-self-name') || 'You',
       iceServers: el.getAttribute('data-ice-servers') || '[]',
+      // LC-610: the server sets this from `livekit::available()`. Absent (an
+      // enclave voice channel page, or an older render) reads as mesh.
+      sfu: el.getAttribute('data-lc-huddle-sfu') === '1',
     };
     joined = false;
     seedParticipantsFromDom();
