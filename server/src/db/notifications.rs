@@ -41,6 +41,19 @@ impl MuteMode {
     pub fn allows_unread_bump(self) -> bool {
         matches!(self, MuteMode::None)
     }
+
+    /// LC-611: whether a huddle-started ring should reach the recipient.
+    ///
+    /// Only the fully unmuted state rings. `ExceptMentions` means "interrupt me
+    /// for mentions and nothing else", and a huddle starting is not a mention -
+    /// nobody addressed this user by name. Treating it as one would make the
+    /// setting mean "except mentions, and also any time anyone starts a call",
+    /// which is not what it says. A ring is a stronger interruption than the
+    /// unread bump this deliberately mirrors, so if the two ever diverge it
+    /// should be in the direction of ringing less.
+    pub fn allows_huddle_ring(self) -> bool {
+        matches!(self, MuteMode::None)
+    }
 }
 
 /// Single-row lookup. Returns `MuteMode::None` if no row exists. Called from

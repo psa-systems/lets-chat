@@ -18,7 +18,7 @@ use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
-    render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment,
+    render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment, HuddleRingFragment,
     MentionClearedFragment, MentionedFragment, NewMessageFragment, ReactionUpdateFragment,
     ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
     TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
@@ -576,6 +576,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     if to_user_id == &send_user.id =>
                                 {
                                     render_voice_event(&e)
+                                }
+                                // LC-611: huddle ring, addressed to one member.
+                                ChatEvent::HuddleStarted { to_user_id, .. }
+                                    if to_user_id == &send_user.id =>
+                                {
+                                    render_huddle_ring(&e)
                                 }
                                 // LC-393: call-transcription control + captions,
                                 // per-recipient like the call/voice signals.
@@ -1987,6 +1993,27 @@ fn render_control_signal(event: &ChatEvent) -> Option<String> {
 
 /// Render a voice-channel event into the `#lc-voice-bus` OOB fragment the
 /// browser's voice mesh consumes.
+/// LC-611: render the huddle ring for one recipient.
+fn render_huddle_ring(event: &ChatEvent) -> Option<String> {
+    match event {
+        ChatEvent::HuddleStarted {
+            room_id,
+            room_name,
+            starter_id,
+            starter_name,
+            ..
+        } => HuddleRingFragment {
+            room_id: *room_id,
+            room_name,
+            starter_id,
+            starter_name,
+        }
+        .render()
+        .ok(),
+        _ => None,
+    }
+}
+
 fn render_voice_event(event: &ChatEvent) -> Option<String> {
     match event {
         ChatEvent::VoiceJoined {
@@ -2099,6 +2126,9 @@ async fn handle_voice_join(
     {
         return;
     }
+    // LC-611: an empty mesh before this join means this user STARTED the
+    // huddle. Captured before `voice_join` mutates the roster.
+    let started_huddle = state.hub.voice_room_users(room_id).is_empty();
     let peers = state.hub.voice_join(conn_id, room_id);
     // The joiner gets the roster so it can open a peer connection to each.
     state.hub.broadcast_to_user(
@@ -2119,6 +2149,13 @@ async fn handle_voice_join(
         username: username.to_string(),
     };
     state.hub.broadcast_to_room(room_id, &joined);
+
+    // LC-611: `VoiceJoined` above goes to the room topic, so it only reaches
+    // people who already have this room open - who are exactly the people who
+    // do not need telling. `started_huddle` is true only when this join found
+    // the mesh empty, so the ring fires once per huddle rather than on every
+    // subsequent join.
+    crate::huddle_ring::ring_members(state, user, username, room_id, started_huddle).await;
 }
 
 /// Remove `conn_id` from its voice channel (if any) and tell the remaining

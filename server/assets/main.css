@@ -961,6 +961,7 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 .lc-md pre {
     background: var(--surface-elevated);
+  color: var(--content);
     border: 1px solid var(--border);
     border-radius: 0.375rem;
     padding: 0.5rem 0.75rem;
@@ -1330,6 +1331,7 @@ html[data-scale="xl"]      { font-size: 20px; }
 .lc-rec--busy {
     border-color: var(--border);
     background: var(--surface-elevated);
+  color: var(--content);
 }
 .lc-rec--busy .lc-rec-label { color: var(--content-muted); }
 .lc-rec-spinner {
@@ -1352,6 +1354,7 @@ html[data-scale="xl"]      { font-size: 20px; }
     border: 1px solid var(--border);
     border-radius: 0.625rem;
     background: var(--surface-elevated);
+  color: var(--content);
 }
 .lc-recpreview-actions {
     display: flex;
@@ -1457,6 +1460,7 @@ html[data-scale="xl"]      { font-size: 20px; }
     border: 1px solid var(--border);
     border-radius: 0.625rem;
     background: var(--surface-elevated);
+  color: var(--content);
 }
 .lc-attach-thumb {
     flex: none;
@@ -1519,6 +1523,7 @@ html[data-scale="xl"]      { font-size: 20px; }
     border: 1px solid var(--border);
     border-radius: 0.625rem;
     background: var(--surface-elevated);
+  color: var(--content);
     color: inherit;
     text-decoration: none;
 }
@@ -3070,6 +3075,7 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     overflow: hidden;
     pointer-events: none;
     background: var(--surface-elevated);
+  color: var(--content);
     color: var(--content);
     border-color: transparent;
 }
@@ -3102,6 +3108,7 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
 #thread-panel .lc-mdinput {
     color: var(--content);
     background: var(--surface-elevated);
+  color: var(--content);
 }
 /* When the LC-276 preview pane is shown the textarea gets `hidden`; collapse the
    whole overlay so the preview pane (its flex sibling) takes the slot. */
@@ -3356,6 +3363,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
     background: var(--surface-elevated);
+  color: var(--content);
     color: var(--content);
     padding: 0.5rem 1rem;
     /* LC-416: a query container so the control buttons can drop their labels to
@@ -3762,6 +3770,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     max-width: 85vw;
     border-left: 1px solid var(--border);
     background: var(--surface-elevated);
+  color: var(--content);
     color: var(--content);
     box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
     /* LC-416: slide in from the right rather than snapping, so opening the panel
@@ -4425,6 +4434,7 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     border: 1px solid var(--border);
     border-left-width: 3px;
     background: var(--surface-elevated);
+  color: var(--content);
     color: var(--content);
     padding: 0.625rem 0.75rem;
     font-size: 0.8125rem;
@@ -4485,6 +4495,7 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     border-radius: 0.5rem;
     border: 1px solid var(--border);
     background: var(--surface-elevated);
+  color: var(--content);
     padding: 0.5rem 0.75rem;
     transition: background-color 0.12s ease, border-color 0.12s ease;
 }
@@ -4705,4 +4716,41 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     color: var(--accent-surface-content);
     font-size: 1.5rem;
     font-weight: 700;
+}
+
+/* LC-611: huddle ring banner. Bottom-centre so it does not collide with the
+   toast region (top-right) or the call bar, and above the transcript drawer. */
+.lc-huddle-ring {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-elevated);
+  color: var(--content);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.lc-huddle-ring-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lc-huddle-ring { animation: lc-huddle-ring-in 160ms ease-out; }
+}
+
+@keyframes lc-huddle-ring-in {
+  from { opacity: 0; transform: translate(-50%, 0.5rem); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
