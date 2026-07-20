@@ -1,0 +1,247 @@
+// LC-610: huddle media over a LiveKit SFU.
+//
+// A huddle's transport is fixed by server config: when LiveKit is configured
+// (`data-lc-huddle-sfu="1"` on the voice root) a huddle runs entirely over the
+// SFU; otherwise it runs entirely over the WebRTC mesh in voice.js, unchanged.
+// There is no mid-call switch - see the SFU_MIN_PARTICIPANTS note in
+// livekit.rs for why the threshold model was dropped.
+//
+// voice.js owns the tiles, the control buttons, and the WS presence
+// (`voice_join`/`voice_leave`, which the token endpoint gates on). This module
+// owns only the LiveKit connection and the media: it publishes the local mic
+// and camera, subscribes to remote tracks, and renders each into voice.js's
+// existing tile grid via the small hook API voice.js hands it in `start()`. So
+// an SFU huddle looks identical to a mesh one; only the transport differs.
+//
+// The LiveKit SDK is loaded lazily, same-origin, from the build-vendored bundle
+// (no CDN, no CSP change; wss is already allowed by connect-src). If the SDK or
+// the token is unavailable the call reports failure and voice.js is expected to
+// have already chosen the mesh, so nothing here needs to fall back.
+(function () {
+  'use strict';
+
+  var SDK_URL = '/assets/vendor/livekit-client.umd.min.js';
+  var sdkPromise = null;
+
+  // Live session, or null. hooks are voice.js's tile callbacks.
+  var session = null;
+
+  function loadSdk() {
+    if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
+    if (sdkPromise) return sdkPromise;
+    sdkPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = SDK_URL;
+      s.async = true;
+      s.onload = function () { resolve(window.LivekitClient); };
+      s.onerror = function () { reject(new Error('livekit sdk failed to load')); };
+      document.head.appendChild(s);
+    });
+    return sdkPromise;
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // The token endpoint gates on hub membership, which voice.js establishes with
+  // a `voice_join` WS frame sent just before this runs. WS and HTTP are separate
+  // connections, so the frame may not be processed when the first request lands
+  // (a 400 "Join the huddle before connecting media"). Retry a few times to
+  // absorb that ordering; a persistent 400 is a real refusal (unconfigured, not
+  // a member) and gives up.
+  async function fetchToken(roomId) {
+    var delays = [0, 150, 300, 600];
+    var lastStatus = 0;
+    for (var i = 0; i < delays.length; i++) {
+      if (delays[i]) await sleep(delays[i]);
+      var res = await fetch('/room/' + encodeURIComponent(roomId) + '/huddle/token', {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (res.ok) return res.json(); // { url, token, can_publish }
+      lastStatus = res.status;
+      // Only a 400 is worth retrying (membership may not be registered yet).
+      // Anything else (403 access, 404 room) is terminal.
+      if (res.status !== 400) break;
+    }
+    throw new Error('token ' + lastStatus);
+  }
+
+  // Identity of a LiveKit participant is the lets-chat user id (mint_token's
+  // `sub`), so tiles key on the same id the mesh path uses.
+  function idOf(participant) { return participant && participant.identity; }
+
+  function attachTrack(hooks, participant, track) {
+    var uid = idOf(participant);
+    if (!uid) return;
+    if (track.kind === 'audio') {
+      // Audio is never shown; attach into the hidden sink so it plays. The
+      // self participant's own audio is not subscribed by LiveKit, so this only
+      // ever handles remote audio - no echo.
+      var el = track.attach();
+      el.autoplay = true;
+      hooks.audioSink().appendChild(el);
+      return;
+    }
+    // Video (camera or screen) goes onto the participant's tile.
+    var videoEl = hooks.tileVideo(uid);
+    if (videoEl) {
+      track.attach(videoEl);
+      hooks.setHasVideo(uid, true);
+    }
+  }
+
+  function detachTrack(hooks, participant, track) {
+    var uid = idOf(participant);
+    track.detach().forEach(function (el) { el.remove(); });
+    if (track.kind === 'video' && uid) hooks.setHasVideo(uid, false);
+  }
+
+  async function start(cfg, hooks) {
+    if (session) return true;
+    var LK, info;
+    try {
+      LK = await loadSdk();
+      info = await fetchToken(cfg.roomId);
+    } catch (e) {
+      // No SDK or no token: voice.js chose this path from data-lc-huddle-sfu,
+      // so a failure here means audio simply does not come up. Report it so the
+      // caller can surface the mic/connection error rather than silently
+      // pretending the user is in a working call.
+      if (window.console) console.warn('huddle sfu:', e && e.message);
+      return false;
+    }
+
+    var room = new LK.Room({ adaptiveStream: true, dynacast: true });
+    session = { roomId: cfg.roomId, room: room, hooks: hooks, sharing: false };
+
+    // A remote joined / left: mirror onto the tile grid so the roster matches
+    // the mesh path (where VoiceJoined/VoiceLeft drive the same tiles).
+    room.on(LK.RoomEvent.ParticipantConnected, function (p) {
+      hooks.addTile(idOf(p), p.name || idOf(p));
+    });
+    room.on(LK.RoomEvent.ParticipantDisconnected, function (p) {
+      hooks.removeTile(idOf(p));
+    });
+    room.on(LK.RoomEvent.TrackSubscribed, function (track, _pub, participant) {
+      attachTrack(hooks, participant, track);
+    });
+    room.on(LK.RoomEvent.TrackUnsubscribed, function (track, _pub, participant) {
+      detachTrack(hooks, participant, track);
+    });
+    // LiveKit's own active-speaker detection replaces the mesh's local audio
+    // analysis; light the same speaking indicator on each tile.
+    room.on(LK.RoomEvent.ActiveSpeakersChanged, function (speakers) {
+      var loud = {};
+      speakers.forEach(function (p) { loud[idOf(p)] = true; });
+      hooks.setSpeaking(loud);
+    });
+    // A remote muting/unmuting their mic: reflect it on their tile.
+    room.on(LK.RoomEvent.TrackMuted, function (_pub, p) {
+      if (_pub.kind === 'audio') hooks.setMuted(idOf(p), true);
+    });
+    room.on(LK.RoomEvent.TrackUnmuted, function (_pub, p) {
+      if (_pub.kind === 'audio') hooks.setMuted(idOf(p), false);
+    });
+
+    try {
+      await room.connect(info.url, info.token);
+    } catch (e) {
+      if (window.console) console.warn('huddle sfu connect:', e && e.message);
+      session = null;
+      try { room.disconnect(); } catch (ignored) {}
+      return false;
+    }
+
+    // Seed tiles for participants already in the room at connect time; the
+    // events above only fire for later changes.
+    room.remoteParticipants.forEach(function (p) {
+      hooks.addTile(idOf(p), p.name || idOf(p));
+    });
+
+    // Publish the mic. Camera is off until the user turns it on, matching the
+    // mesh path (join() there captures audio-only).
+    if (info.can_publish) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch (e) {
+        // Mic denied: stay connected as a listener, same as the mesh path,
+        // which also proceeds when getUserMedia fails for video but here the
+        // user can still hear others.
+        if (window.console) console.warn('huddle sfu mic:', e && e.message);
+      }
+    }
+    return true;
+  }
+
+  async function stop() {
+    var s = session;
+    session = null;
+    if (!s) return;
+    try { await s.room.disconnect(); } catch (e) { /* already gone */ }
+    var sink = document.getElementById('lc-huddle-sfu-audio-sink');
+    if (sink) sink.replaceChildren();
+  }
+
+  function active() { return !!session; }
+
+  // Local controls, delegated from voice.js's buttons. Each maps onto a LiveKit
+  // publish toggle and returns the new state so voice.js can update the button.
+  async function toggleMute() {
+    if (!session) return false;
+    var lp = session.room.localParticipant;
+    // `isMicrophoneEnabled` is true when the mic is ON (unmuted). We flip it, so
+    // the post-toggle muted state equals the current enabled state.
+    var muted = lp.isMicrophoneEnabled;
+    try {
+      await lp.setMicrophoneEnabled(!lp.isMicrophoneEnabled);
+    } catch (e) {
+      // Toggle failed: the state did not change, so report what it actually is
+      // now, not the state we were aiming for.
+      return !lp.isMicrophoneEnabled;
+    }
+    session.hooks.setMuted(session.hooks.selfId, muted);
+    return muted; // true = now muted
+  }
+
+  async function toggleCamera() {
+    if (!session) return false;
+    var lp = session.room.localParticipant;
+    var on = !lp.isCameraEnabled;
+    try { await lp.setCameraEnabled(on); } catch (e) {
+      if (window.console) console.warn('huddle sfu camera:', e && e.message);
+      return lp.isCameraEnabled;
+    }
+    // Attach our own camera preview onto the self tile (LiveKit does not loop
+    // local media back through subscription).
+    var pub = lp.getTrackPublication && lp.getTrackPublication(window.LivekitClient.Track.Source.Camera);
+    var videoEl = session.hooks.tileVideo(session.hooks.selfId);
+    if (on && pub && pub.videoTrack && videoEl) {
+      pub.videoTrack.attach(videoEl);
+      session.hooks.setHasVideo(session.hooks.selfId, true);
+    } else if (!on) {
+      session.hooks.setHasVideo(session.hooks.selfId, false);
+    }
+    return on;
+  }
+
+  async function toggleScreen() {
+    if (!session) return false;
+    var lp = session.room.localParticipant;
+    var on = !session.sharing;
+    try { await lp.setScreenShareEnabled(on); } catch (e) {
+      // User-cancel from the picker lands here too; nothing to undo.
+      return session.sharing;
+    }
+    session.sharing = on;
+    session.hooks.setScreen(session.hooks.selfId, on);
+    return on;
+  }
+
+  window.LetsChatHuddleSfu = {
+    start: start,
+    stop: stop,
+    active: active,
+    toggleMute: toggleMute,
+    toggleCamera: toggleCamera,
+    toggleScreen: toggleScreen,
+  };
+})();

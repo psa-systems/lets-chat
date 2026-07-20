@@ -1199,6 +1199,10 @@ pub struct RoomPage<'a> {
     /// anyone already on the line so a fresh page load shows the active huddle.
     pub huddle_enabled: bool,
     pub ice_servers: &'a str,
+    /// LC-610: true when huddles run over the LiveKit SFU (server has LiveKit
+    /// configured), false when they use the WebRTC mesh. Read by voice.js to
+    /// choose the transport before joining.
+    pub huddle_sfu: bool,
     pub huddle_participants: Vec<crate::views::voice::VoiceParticipant>,
     /// LC-494: stage mode (large-audience audio control plane). `stage_enabled`
     /// gates the panel; `stage_panel_html` is the pre-rendered roster (empty
