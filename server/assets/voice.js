@@ -1139,22 +1139,9 @@
     else if (kind === 'ice') onIce(userId, payload);
   }
 
+  // LC-616: the drain loop is shared with call.js (rtc_common.js).
   function watchBus() {
-    var bus = document.getElementById('lc-voice-bus');
-    if (!bus) return;
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        Array.prototype.forEach.call(m.addedNodes, function (n) {
-          if (n.nodeType !== 1) return;
-          if (n.hasAttribute('data-lc-voice-event')) handleEvent(n);
-          else if (n.querySelector) {
-            var c = n.querySelector('[data-lc-voice-event]');
-            if (c) handleEvent(c);
-          }
-        });
-      });
-      bus.replaceChildren();
-    }).observe(bus, { childList: true });
+    window.LetsChatRtc.watchBus('lc-voice-bus', 'data-lc-voice-event', handleEvent);
   }
 
   // ---- wiring --------------------------------------------------------
@@ -1187,14 +1174,13 @@
     }
   }
 
-  document.body.addEventListener('click', function (e) {
-    var t = e.target;
-    if (!t || !t.closest) return;
-    if (t.closest('[data-lc-voice-join]')) { join(); return; }
-    if (t.closest('[data-lc-voice-leave]')) { leave(); return; }
-    if (t.closest('[data-lc-voice-mute]')) { toggleMute(); return; }
-    if (t.closest('[data-lc-voice-camera]')) { toggleCamera(); return; }
-    if (t.closest('[data-lc-voice-screen]')) { toggleScreen(); return; }
+  // LC-616: delegated control-bar dispatch via the shared binder (rtc_common.js).
+  window.LetsChatRtc.bindControls({
+    '[data-lc-voice-join]': function () { join(); },
+    '[data-lc-voice-leave]': function () { leave(); },
+    '[data-lc-voice-mute]': function () { toggleMute(); },
+    '[data-lc-voice-camera]': function () { toggleCamera(); },
+    '[data-lc-voice-screen]': function () { toggleScreen(); },
   });
 
   function onReady(fn) {
