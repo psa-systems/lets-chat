@@ -274,9 +274,12 @@
     peerId = null;
     peerName = null;
     // LC-393: the call is over - let transcribe.js finalize any open session.
-    window.__lcCallRoom = null;
+    window.__lcSessionRoom = null;
     var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.removeAttribute('data-lc-room');
-    try { document.dispatchEvent(new CustomEvent('lc:call-ended')); } catch (e) {}
+    // LC-613: `surface: 'call'` marks a sole-participant session, so transcribe.js
+    // finalizes the shared transcript (a huddle 'voice' end only stops local
+    // capture, since others may still be on the line).
+    try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'call' } })); } catch (e) {}
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
@@ -487,12 +490,14 @@
         installDialogTrap(q('[data-lc-call-active]'));
         // LC-393: publish the active call's room so transcribe.js can open a
         // transcription session, and signal that a call is live.
-        window.__lcCallRoom = roomId;
-        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
-        // the room the same robust way the voice toggle does (not just via the
-        // __lcCallRoom global).
+        // LC-613: one active-session room global + one lifecycle event pair
+        // across the 1:1 call and the huddle/voice surfaces (was __lcCallRoom +
+        // lc:call-active). transcribe.js resolves the room from it and
+        // huddle_ring.js reacts off it; `surface` in the detail preserves the
+        // per-surface behaviour each listener needs.
+        window.__lcSessionRoom = roomId;
         var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
-        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
+        try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'call', room: roomId } })); } catch (e) {}
         // The server resolves glare; if an invite arrived while we were
         // acquiring media the phase has already flipped to 'incoming'.
         // Honor that: we are now the callee.
@@ -530,12 +535,14 @@
         installDialogTrap(q('[data-lc-call-active]'));
         // LC-393: publish the active call's room so transcribe.js can open a
         // transcription session, and signal that a call is live.
-        window.__lcCallRoom = roomId;
-        // LC-394: also stamp the toggle's data-lc-room so transcribe.js resolves
-        // the room the same robust way the voice toggle does (not just via the
-        // __lcCallRoom global).
+        // LC-613: one active-session room global + one lifecycle event pair
+        // across the 1:1 call and the huddle/voice surfaces (was __lcCallRoom +
+        // lc:call-active). transcribe.js resolves the room from it and
+        // huddle_ring.js reacts off it; `surface` in the detail preserves the
+        // per-surface behaviour each listener needs.
+        window.__lcSessionRoom = roomId;
         var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.setAttribute('data-lc-room', roomId);
-        try { document.dispatchEvent(new CustomEvent('lc:call-active')); } catch (e) {}
+        try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'call', room: roomId } })); } catch (e) {}
         setStatus(window.__lcS('callConnecting', 'Connecting...'));
         signal('accept');
         incoming = null;

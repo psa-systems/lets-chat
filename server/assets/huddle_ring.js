@@ -77,7 +77,9 @@
       var n = nodes[i];
       var roomId = n.getAttribute('data-room-id');
       // Already in this room's huddle, or viewing it: no point ringing.
-      if (String(window.__lcVoiceRoom || '') !== roomId) {
+      // LC-613: __lcVoiceRoom folded into the shared __lcSessionRoom. A DM call
+      // never raises a huddle ring, so the shared global cannot false-match here.
+      if (String(window.__lcSessionRoom || '') !== roomId) {
         render({
           roomId: roomId,
           roomName: n.getAttribute('data-room-name') || '',
@@ -106,6 +108,11 @@
   if (bus) new MutationObserver(drain).observe(bus, { childList: true });
   document.body.addEventListener('htmx:wsAfterMessage', drain);
 
-  // A ring for the room we are already in is stale once we join it.
-  document.addEventListener('lc:voice-joined', function () { clear(null); });
+  // A ring for the room we are already in is stale once we join it. LC-613: the
+  // started event is now shared with the 1:1 call, so guard on the voice surface
+  // to keep the exact prior trigger (joining a DM call must not drop a huddle
+  // ring for some other room).
+  document.addEventListener('lc:rtc-session-started', function (e) {
+    if (e && e.detail && e.detail.surface === 'voice') clear(null);
+  });
 })();
