@@ -7,15 +7,7 @@
   <canvas class="lc-voice-wave" width="320" height="40"></canvas>
   <span class="lc-voice-time">0:00</span>
 </div>
-{# LC-483: server-side transcript, rendered as escaped text under the player.
-   Absent until (and unless) transcription completes; a VoiceTranscribed WS
-   event re-renders this message in place once it does. #}
-{% if let Some(t) = a.transcript %}
-<div class="mt-1 max-w-sm text-xs text-content-muted">
-  <span class="font-medium text-content-subtle">{{ "partials-voice-transcript"|t }}:</span>
-  <span>{{ t }}</span>
-</div>
-{% endif %}
+{% include "partials/transcript_block.html" %}
 {% else if a.is_video() %}
 {# LC-496: async video clip (Loom-style). Inline player; the serve route
    supports range requests so seeking works. preload=metadata keeps the timeline
@@ -24,14 +16,7 @@
   <video src="{{ a.url }}" controls preload="metadata"
          class="max-w-sm max-h-96 rounded border border-border bg-black"></video>
 </div>
-{# LC-496: the clip's server-side transcript (same path + WS re-render as voice
-   messages). Absent until transcription completes. #}
-{% if let Some(t) = a.transcript %}
-<div class="mt-1 max-w-sm text-xs text-content-muted">
-  <span class="font-medium text-content-subtle">{{ "partials-voice-transcript"|t }}:</span>
-  <span>{{ t }}</span>
-</div>
-{% endif %}
+{% include "partials/transcript_block.html" %}
 {% else if a.is_image() %}
 <div class="mt-1">
   {# LC-262: data-lc-lightbox opens the full image in the in-app lightbox

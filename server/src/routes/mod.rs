@@ -1645,6 +1645,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/files/{id}", get(uploads::get_file))
         // LC-537: author-only image alt-text editor.
         .route("/api/files/{id}/alt", post(uploads::post_file_alt))
+        // LC-590: uploader-triggered retry of a failed server-side transcription.
+        .route(
+            "/api/files/{id}/retranscribe",
+            post(uploads::post_file_retranscribe),
+        )
         .route(
             "/media/bridge-avatar-proxy/{hash}",
             get(bridge_avatar_media::get_bridge_avatar),

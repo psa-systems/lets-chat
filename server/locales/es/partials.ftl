@@ -63,6 +63,10 @@ partials-status-online = En línea
 ## Voice attachment
 partials-voice-play = Reproducir mensaje de voz
 partials-voice-transcript = Transcripcion
+# LC-590: transcription outcome states shown under the player.
+partials-voice-transcript-pending = Transcribiendo...
+partials-voice-transcript-failed = Fallo la transcripcion
+partials-voice-transcript-retry = Reintentar
 
 ## Image alt text (LC-537)
 attachment-alt-add = Anadir texto alternativo

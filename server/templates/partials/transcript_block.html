@@ -1,0 +1,29 @@
+{# LC-483 / LC-496: the attachment's server-side transcript, rendered as escaped
+   text under the player. Included from both the voice-message and the video-clip
+   branch of attachment.html, which share one transcription path.
+
+   LC-590: the two failure-visible states. Pre-LC-590 a failed transcription was
+   indistinguishable from "not transcribed yet" - the block simply never
+   appeared - so a dropped clip was silent. Now an exhausted attempt renders a
+   Retry control for the author, and a queued retry says so. The Retry button is
+   gated on `message.can_edit` (the author) to match the route's uploader-only
+   gate exactly, so nobody is offered a button that would 403. #}
+{% if let Some(t) = a.transcript %}
+<div class="mt-1 max-w-sm text-xs text-content-muted">
+  <span class="font-medium text-content-subtle">{{ "partials-voice-transcript"|t }}:</span>
+  <span>{{ t }}</span>
+</div>
+{% else %}
+  {% if a.transcript_pending() %}
+<div class="mt-1 max-w-sm text-xs text-content-muted italic">{{ "partials-voice-transcript-pending"|t }}</div>
+  {% else if a.transcript_failed() %}
+<div class="mt-1 flex max-w-sm items-center gap-2 text-xs text-content-muted">
+  <span>{{ "partials-voice-transcript-failed"|t }}</span>
+  {% if message.can_edit %}
+  <button type="button" class="text-accent hover:underline"
+          hx-post="/api/files/{{ a.id }}/retranscribe"
+          hx-target="#msg-{{ message.id }}" hx-swap="outerHTML">{{ "partials-voice-transcript-retry"|t }}</button>
+  {% endif %}
+</div>
+  {% endif %}
+{% endif %}
