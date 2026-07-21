@@ -26,18 +26,47 @@
 
 use async_trait::async_trait;
 
+/// LC-593: which provider's wire shape the STT endpoint speaks. Selects the
+/// request builder and response parser behind [`SttClient`]; the normalized
+/// [`SttResult`] is identical across providers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SttProvider {
+    /// OpenAI `/v1/audio/transcriptions`: multipart `file` + `model`, JSON
+    /// `{text, segments}`. The default, and what most self-hosted engines
+    /// (whisper.cpp, faster-whisper, LocalAI, ...) expose.
+    #[default]
+    OpenAi,
+    /// Deepgram prerecorded `/v1/listen`: raw audio body, `Authorization: Token`,
+    /// JSON `results.channels[0].alternatives[0]` (transcript + word timings).
+    Deepgram,
+}
+
+impl SttProvider {
+    fn parse_str(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "openai" => Some(Self::OpenAi),
+            "deepgram" => Some(Self::Deepgram),
+            _ => None,
+        }
+    }
+}
+
 /// Operator STT configuration. `None` from [`SttConfig::from_env`] means server
 /// STT is disabled and clients fall back to the browser engine.
 #[derive(Debug, Clone)]
 pub struct SttConfig {
-    /// Full transcription endpoint URL (e.g. `http://127.0.0.1:8090/v1/audio/transcriptions`).
+    /// LC-593: the provider wire shape (`openai` default, or `deepgram`).
+    pub provider: SttProvider,
+    /// Full transcription endpoint URL (e.g. `http://127.0.0.1:8090/v1/audio/transcriptions`
+    /// for OpenAI, `https://api.deepgram.com/v1/listen` for Deepgram).
     pub url: String,
-    /// Optional bearer token, for engines that require auth.
+    /// Optional bearer/token key, for engines that require auth.
     pub api_key: Option<String>,
-    /// Model name sent in the `model` form field. Defaults to `whisper-1`.
+    /// Model name. Sent as the `model` form field (OpenAI) or `model` query
+    /// param (Deepgram). Defaults to `whisper-1`.
     pub model: String,
-    /// LC-591: optional operator glossary/style hint sent as the `prompt` field
-    /// (whisper uses it to bias spelling of names and jargon). A single global
+    /// LC-591: optional operator glossary/style hint. Sent as the `prompt` field
+    /// (OpenAI); Deepgram has no equivalent and ignores it. A single global
     /// string; per-room glossaries are out of scope.
     pub prompt: Option<String>,
 }
@@ -45,7 +74,9 @@ pub struct SttConfig {
 impl SttConfig {
     /// Read from `LETS_CHAT_STT_URL` (required to enable), `LETS_CHAT_STT_API_KEY`
     /// (optional), `LETS_CHAT_STT_MODEL` (optional, default `whisper-1`),
-    /// `LETS_CHAT_STT_PROMPT` (optional glossary, LC-591).
+    /// `LETS_CHAT_STT_PROMPT` (optional glossary, LC-591), and
+    /// `LETS_CHAT_STT_PROVIDER` (optional, `openai` default; LC-593). An
+    /// unrecognized provider value falls back to `openai`.
     pub fn from_env() -> Option<Self> {
         let var = |k: &str| {
             std::env::var(k)
@@ -54,7 +85,11 @@ impl SttConfig {
                 .filter(|s| !s.is_empty())
         };
         let url = var("LETS_CHAT_STT_URL")?;
+        let provider = var("LETS_CHAT_STT_PROVIDER")
+            .and_then(|p| SttProvider::parse_str(&p))
+            .unwrap_or_default();
         Some(Self {
+            provider,
             url,
             api_key: var("LETS_CHAT_STT_API_KEY"),
             model: var("LETS_CHAT_STT_MODEL").unwrap_or_else(|| "whisper-1".to_string()),
@@ -140,9 +175,10 @@ impl ReqwestSttClient {
     }
 }
 
-#[async_trait]
-impl SttClient for ReqwestSttClient {
-    async fn transcribe(
+impl ReqwestSttClient {
+    /// OpenAI `/v1/audio/transcriptions`: multipart `file` + `model`, asking for
+    /// `verbose_json` segment timings, with the language + prompt hints (LC-591).
+    async fn transcribe_openai(
         &self,
         audio: Vec<u8>,
         content_type: &str,
@@ -188,19 +224,130 @@ impl SttClient for ReqwestSttClient {
         if let Some(key) = &self.cfg.api_key {
             req = req.bearer_auth(key);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| SttError::Transport(e.to_string()))?;
-        if !resp.status().is_success() {
-            return Err(SttError::BadResponse(format!("status {}", resp.status())));
-        }
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| SttError::BadResponse(e.to_string()))?;
+        let body = send_for_json(req).await?;
         Ok(parse_openai_result(&body))
     }
+
+    /// LC-593: Deepgram prerecorded `/v1/listen`: the raw audio as the request
+    /// body (not multipart), `Authorization: Token <key>`, and model/language
+    /// as query params. Deepgram has no `prompt` equivalent, so the operator
+    /// glossary does not apply here.
+    async fn transcribe_deepgram(
+        &self,
+        audio: Vec<u8>,
+        content_type: &str,
+        language: Option<&str>,
+    ) -> Result<SttResult, SttError> {
+        let mut req = crate::http_client::outbound_trusted_post(&self.cfg.url)
+            .await
+            .map_err(|e| SttError::Transport(e.to_string()))?
+            .query(&deepgram_query(&self.cfg.model, language))
+            .header(reqwest::header::CONTENT_TYPE, content_type.to_string())
+            .body(audio);
+        if let Some(key) = &self.cfg.api_key {
+            // Deepgram uses the `Token` auth scheme, not `Bearer`.
+            req = req.header(reqwest::header::AUTHORIZATION, format!("Token {key}"));
+        }
+        let body = send_for_json(req).await?;
+        Ok(parse_deepgram_result(&body))
+    }
+}
+
+#[async_trait]
+impl SttClient for ReqwestSttClient {
+    async fn transcribe(
+        &self,
+        audio: Vec<u8>,
+        content_type: &str,
+        language: Option<&str>,
+    ) -> Result<SttResult, SttError> {
+        match self.cfg.provider {
+            SttProvider::OpenAi => self.transcribe_openai(audio, content_type, language).await,
+            SttProvider::Deepgram => {
+                self.transcribe_deepgram(audio, content_type, language)
+                    .await
+            }
+        }
+    }
+}
+
+/// Send a prepared request and parse a success JSON body, mapping transport and
+/// non-2xx failures to [`SttError`]. Shared by both providers.
+async fn send_for_json(req: reqwest::RequestBuilder) -> Result<serde_json::Value, SttError> {
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| SttError::Transport(e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(SttError::BadResponse(format!("status {}", resp.status())));
+    }
+    resp.json()
+        .await
+        .map_err(|e| SttError::BadResponse(e.to_string()))
+}
+
+/// LC-593: the Deepgram query parameters. `model` always; `language` when a
+/// hint is given (else Deepgram autodetects); `punctuate` + `smart_format` for
+/// readable output. Split out so the request shape is unit-testable without a
+/// live endpoint.
+pub fn deepgram_query(model: &str, language: Option<&str>) -> Vec<(String, String)> {
+    let mut params = vec![
+        ("model".to_string(), model.to_string()),
+        ("punctuate".to_string(), "true".to_string()),
+        ("smart_format".to_string(), "true".to_string()),
+    ];
+    if let Some(lang) = language.filter(|l| !l.trim().is_empty()) {
+        params.push(("language".to_string(), lang.trim().to_string()));
+    }
+    params
+}
+
+/// LC-593: parse a Deepgram prerecorded response into the normalized
+/// [`SttResult`]. `text` is the first channel's first alternative transcript;
+/// the alternative's `words[]` give the real timings, aggregated into one
+/// clip-level segment (`start` = first word, `end` = last word) - which is what
+/// the downstream duration/VTT path consumes. A body missing the transcript
+/// yields an empty result, matching the OpenAI path's tolerance.
+pub fn parse_deepgram_result(body: &serde_json::Value) -> SttResult {
+    let alt = body
+        .get("results")
+        .and_then(|r| r.get("channels"))
+        .and_then(|c| c.as_array())
+        .and_then(|c| c.first())
+        .and_then(|ch| ch.get("alternatives"))
+        .and_then(|a| a.as_array())
+        .and_then(|a| a.first());
+    let Some(alt) = alt else {
+        return SttResult::default();
+    };
+    let text = alt
+        .get("transcript")
+        .and_then(|t| t.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let words = alt.get("words").and_then(|w| w.as_array());
+    let segments = match words {
+        Some(words) if !words.is_empty() && !text.is_empty() => {
+            let start = words
+                .first()
+                .and_then(|w| w.get("start"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let end = words
+                .last()
+                .and_then(|w| w.get("end"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(start);
+            vec![SttSegment {
+                start,
+                end,
+                text: text.clone(),
+            }]
+        }
+        _ => Vec::new(),
+    };
+    SttResult { text, segments }
 }
 
 /// LC-591: parse the OpenAI-compatible transcription body into an [`SttResult`],
@@ -331,9 +478,103 @@ mod tests {
             "prompt is trimmed"
         );
         assert_eq!(cfg.model, "whisper-1", "default model unchanged");
+        assert_eq!(
+            cfg.provider,
+            SttProvider::OpenAi,
+            "provider defaults to openai"
+        );
         unsafe {
             std::env::remove_var("LETS_CHAT_STT_URL");
             std::env::remove_var("LETS_CHAT_STT_PROMPT");
         }
+    }
+
+    #[test]
+    fn provider_selection_from_env_defaults_to_openai() {
+        assert_eq!(
+            SttProvider::parse_str("deepgram"),
+            Some(SttProvider::Deepgram)
+        );
+        assert_eq!(
+            SttProvider::parse_str("  OpenAI "),
+            Some(SttProvider::OpenAi)
+        );
+        assert_eq!(SttProvider::parse_str("whisper"), None, "unknown -> None");
+
+        // SAFETY: single-threaded test; vars removed at the end.
+        unsafe {
+            std::env::set_var("LETS_CHAT_STT_URL", "https://api.deepgram.com/v1/listen");
+            std::env::set_var("LETS_CHAT_STT_PROVIDER", "deepgram");
+        }
+        assert_eq!(
+            SttConfig::from_env().unwrap().provider,
+            SttProvider::Deepgram
+        );
+        // An unrecognized value falls back to openai, never an error.
+        unsafe { std::env::set_var("LETS_CHAT_STT_PROVIDER", "bogus") };
+        assert_eq!(SttConfig::from_env().unwrap().provider, SttProvider::OpenAi);
+        unsafe {
+            std::env::remove_var("LETS_CHAT_STT_URL");
+            std::env::remove_var("LETS_CHAT_STT_PROVIDER");
+        }
+    }
+
+    #[test]
+    fn deepgram_query_shape() {
+        let q = deepgram_query("nova-2", Some(" es "));
+        assert!(q.contains(&("model".into(), "nova-2".into())));
+        assert!(q.contains(&("punctuate".into(), "true".into())));
+        assert!(q.contains(&("smart_format".into(), "true".into())));
+        assert!(
+            q.contains(&("language".into(), "es".into())),
+            "language hint is trimmed and included"
+        );
+        // No language hint -> no language param (Deepgram autodetects).
+        let q = deepgram_query("nova-2", None);
+        assert!(!q.iter().any(|(k, _)| k == "language"));
+    }
+
+    #[test]
+    fn parses_deepgram_response_with_word_timings() {
+        let body = serde_json::json!({
+            "results": { "channels": [ { "alternatives": [ {
+                "transcript": "hello there friend",
+                "words": [
+                    { "word": "hello", "start": 0.1, "end": 0.5 },
+                    { "word": "there", "start": 0.5, "end": 0.9 },
+                    { "word": "friend", "start": 1.0, "end": 1.6 },
+                ],
+            } ] } ] },
+        });
+        let r = parse_deepgram_result(&body);
+        assert_eq!(r.text, "hello there friend");
+        assert_eq!(r.segments.len(), 1, "words aggregate to one clip segment");
+        assert_eq!(r.segments[0].start, 0.1);
+        assert_eq!(r.segments[0].end, 1.6);
+        // duration = 1.6 - 0.1 = 1.5s.
+        assert_eq!(r.duration_ms(), 1500);
+    }
+
+    #[test]
+    fn deepgram_response_without_words_has_no_segments() {
+        let body = serde_json::json!({
+            "results": { "channels": [ { "alternatives": [ {
+                "transcript": "  no timings here  "
+            } ] } ] },
+        });
+        let r = parse_deepgram_result(&body);
+        assert_eq!(r.text, "no timings here", "transcript is trimmed");
+        assert!(
+            r.segments.is_empty(),
+            "no words -> no segments (synthetic fallback)"
+        );
+        assert_eq!(r.duration_ms(), 0);
+    }
+
+    #[test]
+    fn malformed_deepgram_body_is_empty_not_error() {
+        let r = parse_deepgram_result(&serde_json::json!({ "results": {} }));
+        assert_eq!(r.text, "");
+        assert!(r.segments.is_empty());
     }
 }
