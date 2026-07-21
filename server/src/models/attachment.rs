@@ -23,6 +23,11 @@ pub struct Attachment {
     /// attachment is not a voice message. Rendered as escaped text, so it is
     /// safe to render directly.
     pub transcript: Option<String>,
+    /// LC-590: outcome of the last transcription attempt (`pending` / `done` /
+    /// `failed`), or `None` when none was ever attempted. Drives the "queued"
+    /// and "failed, retry" states under the player; a `done` status is implicit
+    /// in `transcript` being present, so the template does not read it.
+    pub transcript_status: Option<String>,
     /// LC-537: author-provided alt text for accessibility. `None` when the
     /// uploader has not set one; the renderer then falls back to the filename.
     pub alt_text: Option<String>,
@@ -95,6 +100,17 @@ impl Attachment {
         }
     }
 
+    /// LC-590: the last transcription attempt exhausted its retries. The
+    /// template renders a Retry control instead of leaving the failure invisible.
+    pub fn transcript_failed(&self) -> bool {
+        self.transcript_status.as_deref() == Some("failed")
+    }
+
+    /// LC-590: a retry has been queued and is running off the request path.
+    pub fn transcript_pending(&self) -> bool {
+        self.transcript_status.as_deref() == Some("pending")
+    }
+
     /// Recording duration for the template's `data-duration` attribute.
     /// Empty string when unknown; the player then probes the audio element.
     pub fn duration_attr(&self) -> String {
@@ -119,6 +135,7 @@ mod tests {
             waveform: None,
             voice_duration: None,
             transcript: None,
+            transcript_status: None,
             alt_text: alt.map(str::to_string),
         }
     }

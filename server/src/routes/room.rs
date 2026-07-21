@@ -1154,6 +1154,9 @@ pub async fn maybe_transcribe_voice_message(
         Ok(b) => b,
         Err(e) => {
             tracing::warn!(error = %e, upload_id, "voice transcript: read failed");
+            // LC-590: an unreadable file is still a lost transcript, and a
+            // retry is the right affordance if the storage hiccup was transient.
+            mark_transcript_failed(state, upload_id, message_id, room_id).await?;
             return Ok(());
         }
     };
@@ -1167,24 +1170,55 @@ pub async fn maybe_transcribe_voice_message(
         .ok()
         .flatten()
         .and_then(|u| u.locale);
-    let result = match stt
-        .transcribe(bytes, &row.mime_type, uploader_locale.as_deref())
-        .await
-    {
+    // LC-590: scale the request timeout by the recorded length where the client
+    // captured one, so a 4-minute voice note is not judged by the same clock as
+    // a 5-second call clip.
+    let duration_secs = db::uploads::waveform_duration(row.waveform.as_deref());
+    let req = crate::stt::SttRequest::new(bytes, row.mime_type.clone())
+        .with_language(uploader_locale.as_deref())
+        .with_duration_secs(duration_secs);
+    // LC-590: retry transient failures before giving up, then PERSIST the
+    // failure. Pre-LC-590 this logged and returned, which lost the clip's
+    // transcript permanently with nothing in the UI to say so.
+    let result = match crate::stt::transcribe_with_retry(stt.as_ref(), req).await {
         Ok(r) => r,
         Err(e) => {
-            // INFO, not WARN: a transient engine hiccup is expected operational
-            // noise and never blocks the message that was already sent.
-            tracing::info!(error = %e, upload_id, "voice transcript: stt call failed");
+            tracing::warn!(error = %e, upload_id, "voice transcript: stt call failed after retries");
+            mark_transcript_failed(state, upload_id, message_id, room_id).await?;
             return Ok(());
         }
     };
     let trimmed = result.text.trim();
     if trimmed.is_empty() {
+        // The engine ran fine and heard nothing. Not a failure: leave the row
+        // untouched so no Retry control appears for silence.
         return Ok(());
     }
     let capped: String = trimmed.chars().take(MAX_VOICE_TRANSCRIPT_CHARS).collect();
     db::uploads::set_transcript(&state.chat, upload_id, &capped).await?;
+    state.hub.broadcast_to_room(
+        room_id,
+        &ChatEvent::VoiceTranscribed {
+            message_id,
+            room_id,
+        },
+    );
+    Ok(())
+}
+
+/// LC-590: record that this upload's transcription failed and re-render the
+/// message so the attachment shows its Retry control. The same
+/// `VoiceTranscribed` event carries both outcomes - it means "this message's
+/// transcript state changed", and the template decides what to draw - so no new
+/// event type is needed on the WS wire.
+async fn mark_transcript_failed(
+    state: &AppState,
+    upload_id: i64,
+    message_id: i64,
+    room_id: i64,
+) -> Result<(), AppError> {
+    db::uploads::set_transcript_status(&state.chat, upload_id, db::uploads::TRANSCRIPT_FAILED)
+        .await?;
     state.hub.broadcast_to_room(
         room_id,
         &ChatEvent::VoiceTranscribed {

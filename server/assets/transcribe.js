@@ -244,6 +244,15 @@
     try { sttRecorder.start(); } catch (e) { capturing = false; return; }
     sttTimer = setTimeout(function () { try { sttRecorder.stop(); } catch (e) {} }, CLIP_MS);
   }
+  // LC-590: reveal / clear the drawer's "some audio could not be transcribed"
+  // line. The server retries transient failures itself, so reaching here means
+  // three attempts failed (or the request never left the browser).
+  function setClipFailed(failed) {
+    var el = q('[data-lc-caption-error]');
+    if (!el) return;
+    if (failed) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
   function postAudio(blob) {
     if (transcriptId == null || !blob.size) return;
     fetch('/call/transcript/' + transcriptId + '/audio', {
@@ -251,9 +260,15 @@
       headers: { 'Content-Type': blob.type || 'audio/webm' },
       body: blob,
       credentials: 'same-origin'
-    }).catch(function () {});
+    }).then(function (resp) {
+      // A later clip succeeding clears the warning, so a one-off hiccup does
+      // not leave a permanent scare message on the drawer.
+      setClipFailed(!resp.ok);
+    }).catch(function () { setClipFailed(true); });
   }
   function stopServerCapture() {
+    // LC-590: a stale failure line must not greet the next session.
+    setClipFailed(false);
     if (sttTimer) { clearTimeout(sttTimer); sttTimer = null; }
     if (sttRecorder) { try { sttRecorder.onstop = null; sttRecorder.stop(); } catch (e) {} sttRecorder = null; }
     if (sttStream) { sttStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); sttStream = null; }
