@@ -643,8 +643,10 @@
       wsSend({ type: 'voice_join', room_id: cfg.roomId });
       // LC-393 Phase 2: publish the channel room so transcribe.js can open a
       // transcription session, and signal that we are in a live call.
-      window.__lcVoiceRoom = cfg.roomId;
-      try { document.dispatchEvent(new CustomEvent('lc:voice-joined')); } catch (e) {}
+      // LC-613: one shared session-room global + lifecycle event across the call
+      // and huddle surfaces (was __lcVoiceRoom + lc:voice-joined).
+      window.__lcSessionRoom = cfg.roomId;
+      try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'voice', room: cfg.roomId } })); } catch (e) {}
     }).catch(function () {
       alert(window.__lcS('callNoMic', 'Could not access your microphone.'));
     });
@@ -668,8 +670,8 @@
     // has us in the roster. The token fetch retries to absorb the WS-vs-HTTP
     // ordering, so a small delay here is harmless.
     wsSend({ type: 'voice_join', room_id: cfg.roomId });
-    window.__lcVoiceRoom = cfg.roomId;
-    try { document.dispatchEvent(new CustomEvent('lc:voice-joined')); } catch (e) {}
+    window.__lcSessionRoom = cfg.roomId;
+    try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'voice', room: cfg.roomId } })); } catch (e) {}
     window.LetsChatHuddleSfu.start(cfg, sfuHooks()).then(function (ok) {
       if (!ok) {
         // Media never came up (SDK, token, or connection). The mesh is not a
@@ -751,8 +753,8 @@
       if (cfg) delete participants[cfg.selfId];
       renderPreview();
       showJoinedUi(false);
-      window.__lcVoiceRoom = null;
-      try { document.dispatchEvent(new CustomEvent('lc:voice-left')); } catch (e) {}
+      window.__lcSessionRoom = null;
+      try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'voice' } })); } catch (e) {}
       return;
     }
     selfMuted = false;
@@ -781,8 +783,11 @@
     showJoinedUi(false);
     // LC-393 Phase 2: we left the channel - transcribe.js stops our local
     // capture (the session itself continues for whoever is still here).
-    window.__lcVoiceRoom = null;
-    try { document.dispatchEvent(new CustomEvent('lc:voice-left')); } catch (e) {}
+    // LC-613: `surface: 'voice'` tells transcribe.js the shared session may
+    // outlive us, so it stops local capture without finalizing (a 'call' end
+    // finalizes, being sole-participant).
+    window.__lcSessionRoom = null;
+    try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'voice' } })); } catch (e) {}
   }
 
   function toggleMute() {
