@@ -279,13 +279,22 @@ pub async fn audio(
     // this user's own mic). Rooms carry no locale, so the user's is the signal;
     // None lets the engine autodetect.
     let language = user.locale.as_deref();
-    // A transcription failure (engine down / bad clip) must not fail the call:
-    // log and drop this clip so capture keeps running.
-    let result = match stt.transcribe(body.to_vec(), &content_type, language).await {
+    // LC-590: retry transient failures, and on exhaustion answer non-2xx so the
+    // client can show a caption-failed indicator. Pre-LC-590 this returned 200
+    // with an empty body, which is indistinguishable from "you were silent" -
+    // the operator saw a log line and the user saw nothing at all.
+    //
+    // The clip is still dropped: a call caption is live text, so there is
+    // nothing useful to replay by the time three attempts have failed. The
+    // capture loop keeps running, so recovery is automatic on the next clip.
+    let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
+        .with_language(language)
+        .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
+    let result = match crate::stt::transcribe_with_retry(stt.as_ref(), req).await {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(error = %e, "stt transcription failed; dropping clip");
-            return Ok(Html(String::new()));
+            tracing::warn!(error = %e, "stt transcription failed after retries; dropping clip");
+            return Err(AppError::Internal("transcription failed".into()));
         }
     };
     // LC-591: store the real spoken length from the engine's segment timings so

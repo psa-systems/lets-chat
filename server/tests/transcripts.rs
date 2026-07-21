@@ -718,6 +718,7 @@ async fn server_stt_stores_real_segment_duration_and_exports_it() {
                 text: "there friend".into(),
             },
         ],
+        ..Default::default()
     });
     let s = setup_with_stt(Some(mock)).await;
 
@@ -1191,6 +1192,219 @@ async fn voice_message_not_transcribed_when_stt_disabled() {
         .unwrap()
         .unwrap();
     assert_eq!(row.transcript, None);
+}
+
+// ── LC-590: STT reliability (retry, failed status, retranscribe) ──────────────
+
+/// Insert a linked voice-message upload owned by bob and return
+/// `(upload_id, message_id)`. Every LC-590 test needs the same fixture.
+async fn seed_voice_message(s: &Setup, rel: &str) -> (i64, i64) {
+    std::fs::write(db::uploads_dir().join(rel), b"fake-audio-bytes").unwrap();
+    let upload_id = db::uploads::insert_upload(
+        &s.chat,
+        &s.b_id,
+        "voice.webm",
+        "audio/webm",
+        16,
+        rel,
+        Some(r#"{"d":1.5,"p":[0.1,0.4,0.2]}"#),
+    )
+    .await
+    .unwrap();
+    let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "\u{1f3a4}")
+        .await
+        .unwrap();
+    db::uploads::link_upload_to_message(&s.chat, upload_id, mid)
+        .await
+        .unwrap();
+    (upload_id, mid)
+}
+
+/// A transient engine failure is retried, and the clip is transcribed on a later
+/// attempt instead of being lost. This exercises the REAL production backoff
+/// (the unit tests inject zero delays), so it proves the retry is actually wired
+/// into the voice path and not just testable in isolation.
+#[tokio::test]
+async fn transient_stt_failure_is_retried_then_succeeds() {
+    let mock = Arc::new(lets_chat::stt::MockSttClient::failing("recovered text", 1));
+    let s = setup_with_stt(Some(mock.clone())).await;
+    let (upload_id, mid) = seed_voice_message(&s, "lc590-retry.webm").await;
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mock.call_count(),
+        2,
+        "first attempt failed, second succeeded"
+    );
+    let (row, _) = db::uploads::get_upload(&s.chat, upload_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.transcript.as_deref(), Some("recovered text"));
+    assert_eq!(
+        row.transcript_status.as_deref(),
+        Some("done"),
+        "a recovered clip is not left looking failed"
+    );
+}
+
+/// Once the attempts are exhausted the failure is PERSISTED rather than only
+/// logged, and the attachment the renderer reads reports it - which is what puts
+/// the Retry control on screen. Uses a permanent 4xx so the test does not sit
+/// through the production backoff; the retry counting is unit-tested separately.
+#[tokio::test]
+async fn exhausted_stt_failure_marks_the_upload_failed() {
+    let mock = Arc::new(lets_chat::stt::MockSttClient::failing_permanently());
+    let s = setup_with_stt(Some(mock.clone())).await;
+    let (upload_id, mid) = seed_voice_message(&s, "lc590-failed.webm").await;
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    assert_eq!(mock.call_count(), 1, "a 4xx is not retried");
+    let atts = db::uploads::attachments_for_message(&s.chat, mid)
+        .await
+        .unwrap();
+    assert_eq!(atts[0].transcript, None);
+    assert!(
+        atts[0].transcript_failed(),
+        "the renderer must be able to see the failure"
+    );
+    assert!(!atts[0].transcript_pending());
+}
+
+/// An engine that runs fine but hears nothing is NOT a failure: a silent clip
+/// must not sprout a Retry control that would just fail the same way again.
+#[tokio::test]
+async fn silent_clip_is_not_marked_failed() {
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient::text("   ")))).await;
+    let (upload_id, mid) = seed_voice_message(&s, "lc590-silent.webm").await;
+
+    routes::maybe_transcribe_voice_message(&s.state, upload_id, mid, s.public_room)
+        .await
+        .unwrap();
+
+    let atts = db::uploads::attachments_for_message(&s.chat, mid)
+        .await
+        .unwrap();
+    assert_eq!(atts[0].transcript, None);
+    assert!(!atts[0].transcript_failed(), "silence is not a failure");
+}
+
+/// The uploader can retry a failed transcription, and only the uploader can:
+/// the route's gate matches the control's `message.can_edit` visibility exactly.
+#[tokio::test]
+async fn retranscribe_route_is_uploader_only_and_requeues() {
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient::text(
+        "second time lucky",
+    ))))
+    .await;
+    let (upload_id, mid) = seed_voice_message(&s, "lc590-retranscribe.webm").await;
+    db::uploads::set_transcript_status(&s.chat, upload_id, db::uploads::TRANSCRIPT_FAILED)
+        .await
+        .unwrap();
+
+    let uri = format!("/api/files/{upload_id}/retranscribe");
+    // alice did not upload this clip.
+    let (st, _) = post(&s.app, &s.a_session, &uri, None).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    let (row, _) = db::uploads::get_upload(&s.chat, upload_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        row.transcript_status.as_deref(),
+        Some("failed"),
+        "a rejected request must not touch the row"
+    );
+
+    // A non-transcribable attachment is rejected rather than being parked in
+    // `pending` forever by a helper that would no-op on it.
+    let img_rel = "lc590-not-audio.png";
+    std::fs::write(db::uploads_dir().join(img_rel), b"not-really-a-png").unwrap();
+    let img_id =
+        db::uploads::insert_upload(&s.chat, &s.b_id, "pic.png", "image/png", 16, img_rel, None)
+            .await
+            .unwrap();
+    let img_mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "pic")
+        .await
+        .unwrap();
+    db::uploads::link_upload_to_message(&s.chat, img_id, img_mid)
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/api/files/{img_id}/retranscribe"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    let (img_row, _) = db::uploads::get_upload(&s.chat, img_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(img_row.transcript_status, None, "never marked pending");
+
+    // bob did.
+    let (st, body) = post(&s.app, &s.b_session, &uri, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        body.contains(&format!("msg-{mid}")),
+        "responds with the re-rendered message"
+    );
+
+    // The work is spawned, so poll briefly for it rather than racing it.
+    let mut transcript = None;
+    for _ in 0..50 {
+        let (row, _) = db::uploads::get_upload(&s.chat, upload_id)
+            .await
+            .unwrap()
+            .unwrap();
+        if row.transcript.is_some() {
+            transcript = row.transcript;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(transcript.as_deref(), Some("second time lucky"));
+}
+
+/// A call clip whose transcription fails answers non-2xx. Pre-LC-590 this was a
+/// 200 with an empty body, indistinguishable from "the speaker said nothing",
+/// so the client had nothing to show a caption-failed state from.
+#[tokio::test]
+async fn failed_call_clip_returns_non_2xx() {
+    let s = setup_with_stt(Some(Arc::new(
+        lets_chat::stt::MockSttClient::failing_permanently(),
+    )))
+    .await;
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let tid = extract_id(&body);
+
+    let (st, _) = post_raw(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"fake-audio",
+        "audio/webm",
+    )
+    .await;
+    assert!(
+        !st.is_success(),
+        "a dropped clip must be visible to the client, got {st}"
+    );
 }
 
 // ── LC-484: AI catch-me-up summaries (threads + channel) ──────────────────────
