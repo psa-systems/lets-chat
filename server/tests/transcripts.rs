@@ -509,9 +509,8 @@ async fn segments_persist_and_render_gated() {
 async fn server_stt_audio_records_segment() {
     // Phase 3: with a server STT client configured, an audio clip POSTed to
     // /audio is transcribed and stored as a segment (here via a mock engine).
-    let mock: Arc<dyn lets_chat::stt::SttClient> = Arc::new(lets_chat::stt::MockSttClient {
-        canned: "mock transcription".to_string(),
-    });
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("mock transcription"));
     let s = setup_with_stt(Some(mock)).await;
 
     // Bob joins the voice channel and opens a session.
@@ -541,6 +540,9 @@ async fn server_stt_audio_records_segment() {
     assert_eq!(segs.len(), 1);
     assert_eq!(segs[0].text, "mock transcription");
     assert_eq!(segs[0].user_id, s.b_id);
+    // Plain-text mock (no segments) -> unknown duration, so the export stays
+    // synthetic for this one.
+    assert_eq!(segs[0].duration_ms, 0);
 
     // A non-participant still cannot push audio.
     let (st, _) = post_raw(
@@ -693,6 +695,73 @@ async fn summary_rejected_when_llm_disabled() {
     )
     .await;
     assert_eq!(st, StatusCode::BAD_REQUEST);
+}
+
+/// LC-591: a verbose_json engine returns real segment timings; the stored
+/// segment carries the real spoken duration, and the WebVTT export uses it for
+/// the cue length instead of the synthetic "until the next cue" fallback.
+#[tokio::test]
+async fn server_stt_stores_real_segment_duration_and_exports_it() {
+    use lets_chat::stt::{MockSttClient, SttSegment};
+    // Segments span 0.0..2.5s -> duration 2500ms.
+    let mock: Arc<dyn lets_chat::stt::SttClient> = Arc::new(MockSttClient {
+        canned: "hello there friend".into(),
+        canned_segments: vec![
+            SttSegment {
+                start: 0.0,
+                end: 1.0,
+                text: "hello".into(),
+            },
+            SttSegment {
+                start: 1.0,
+                end: 2.5,
+                text: "there friend".into(),
+            },
+        ],
+    });
+    let s = setup_with_stt(Some(mock)).await;
+
+    // Use the DM (alice is a member) so both the participant gate on /audio and
+    // the access gate on the export pass for the same session.
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+
+    let (st, _) = post_raw(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"fake-opus-bytes",
+        "audio/webm",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(
+        segs[0].duration_ms, 2500,
+        "the real spoken duration from the engine's segments is stored"
+    );
+
+    // The VTT export uses the real duration: a single cue starting at 00:00:00
+    // and ending 2.5s later, not the synthetic 2-3s fallback.
+    let (st, vtt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=vtt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        vtt.contains("00:00:00.000 --> 00:00:02.500"),
+        "cue uses the real duration: {vtt}"
+    );
 }
 
 #[tokio::test]
@@ -979,9 +1048,9 @@ async fn outsider_cannot_delete_transcript() {
 /// client and the text lands on the attachment that the message render reads.
 #[tokio::test]
 async fn voice_message_is_transcribed_and_attached() {
-    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
-        canned: "hello from whisper".into(),
-    })))
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient::text(
+        "hello from whisper",
+    ))))
     .await;
 
     let rel = "lc483-voice.webm";
@@ -1024,9 +1093,9 @@ async fn voice_message_is_transcribed_and_attached() {
 /// transcript lands on the attachment the message render reads.
 #[tokio::test]
 async fn video_clip_is_transcribed_and_attached() {
-    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
-        canned: "clip transcript text".into(),
-    })))
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient::text(
+        "clip transcript text",
+    ))))
     .await;
 
     let rel = "lc496-clip.webm";
@@ -1065,9 +1134,9 @@ async fn video_clip_is_transcribed_and_attached() {
 /// working client configured.
 #[tokio::test]
 async fn non_voice_upload_is_not_transcribed() {
-    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient {
-        canned: "should not be used".into(),
-    })))
+    let s = setup_with_stt(Some(Arc::new(lets_chat::stt::MockSttClient::text(
+        "should not be used",
+    ))))
     .await;
 
     let rel = "lc483-image.png";

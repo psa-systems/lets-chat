@@ -1160,8 +1160,18 @@ pub async fn maybe_transcribe_voice_message(
     if bytes.is_empty() {
         return Ok(());
     }
-    let text = match stt.transcribe(bytes, &row.mime_type).await {
-        Ok(t) => t,
+    // LC-591: hint the engine with the uploader's preferred locale (this audio
+    // is theirs); None lets the engine autodetect.
+    let uploader_locale = db::auth::find_user_by_id(&state.auth, &row.uploader_id)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|u| u.locale);
+    let result = match stt
+        .transcribe(bytes, &row.mime_type, uploader_locale.as_deref())
+        .await
+    {
+        Ok(r) => r,
         Err(e) => {
             // INFO, not WARN: a transient engine hiccup is expected operational
             // noise and never blocks the message that was already sent.
@@ -1169,7 +1179,7 @@ pub async fn maybe_transcribe_voice_message(
             return Ok(());
         }
     };
-    let trimmed = text.trim();
+    let trimmed = result.text.trim();
     if trimmed.is_empty() {
         return Ok(());
     }
