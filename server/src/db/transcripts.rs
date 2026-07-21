@@ -34,6 +34,9 @@ pub struct Segment {
     pub user_id: String,
     pub text: String,
     pub spoken_at: String,
+    /// LC-591: real spoken length in ms from the engine's segment timings, or 0
+    /// when unknown (browser Web Speech, or a non-verbose_json engine).
+    pub duration_ms: i64,
 }
 
 fn map_transcript(row: &sqlx::sqlite::SqliteRow) -> Transcript {
@@ -118,14 +121,17 @@ pub async fn append_segment(
     transcript_id: i64,
     user_id: &str,
     text: &str,
+    duration_ms: i64,
 ) -> sqlx::Result<i64> {
     let capped: String = text.chars().take(MAX_SEGMENT_CHARS).collect();
     let id = sqlx::query(
-        "INSERT INTO transcript_segments (transcript_id, user_id, text) VALUES (?, ?, ?)",
+        "INSERT INTO transcript_segments (transcript_id, user_id, text, duration_ms) \
+         VALUES (?, ?, ?, ?)",
     )
     .bind(transcript_id)
     .bind(user_id)
     .bind(&capped)
+    .bind(duration_ms.max(0))
     .execute(pool)
     .await?
     .last_insert_rowid();
@@ -135,7 +141,7 @@ pub async fn append_segment(
 /// All segments of a session, oldest first.
 pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Result<Vec<Segment>> {
     let rows = sqlx::query(
-        "SELECT id, transcript_id, user_id, text, spoken_at \
+        "SELECT id, transcript_id, user_id, text, spoken_at, duration_ms \
          FROM transcript_segments WHERE transcript_id = ? ORDER BY id ASC",
     )
     .bind(transcript_id)
@@ -149,6 +155,7 @@ pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Resul
             user_id: row.get("user_id"),
             text: row.get("text"),
             spoken_at: row.get("spoken_at"),
+            duration_ms: row.get("duration_ms"),
         })
         .collect())
 }
