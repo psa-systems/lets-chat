@@ -87,6 +87,13 @@ pub enum RateLimitKind {
     /// member is held to a minimum interval between posts until they graduate to
     /// "trusted". Cooldown keyed by `{enclave_id}:{user_id}`; via `check_cooldown`.
     NewMemberPost,
+    /// LC-592: server-wide cap on STT submissions. Keyed by a constant, so every
+    /// room shares one counter. Bounds the bill on a metered engine, which the
+    /// concurrency limiter cannot: two workers can still bill all day.
+    SttGlobal,
+    /// LC-592: per-room cap on STT submissions. Keyed by room_id, so one busy
+    /// room cannot consume the whole server-wide allowance.
+    SttRoom,
 }
 
 impl RateLimitKind {
@@ -104,6 +111,8 @@ impl RateLimitKind {
             RateLimitKind::AssistantAsk => "ask",
             RateLimitKind::Slowmode => "slow",
             RateLimitKind::NewMemberPost => "newm",
+            RateLimitKind::SttGlobal => "sttg",
+            RateLimitKind::SttRoom => "sttr",
         }
     }
 }

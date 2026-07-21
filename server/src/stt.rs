@@ -587,6 +587,16 @@ pub struct MockSttClient {
     /// LC-590: total calls received, so a test can assert the attempt count
     /// rather than only the final outcome.
     pub calls: AtomicUsize,
+    /// LC-592: artificial latency, so overlapping calls actually overlap. An
+    /// instant mock can never exceed one concurrent call, which would make a
+    /// concurrency-bound assertion vacuously true.
+    pub delay_ms: u64,
+    /// LC-592: live call count and its high-water mark, so a test can assert
+    /// the concurrency limiter is real rather than only that work completes.
+    /// Public so an out-of-crate test can `..Default::default()` the struct;
+    /// read them through [`MockSttClient::max_concurrent`], not directly.
+    pub in_flight: AtomicUsize,
+    pub max_in_flight: AtomicUsize,
 }
 
 impl MockSttClient {
@@ -617,9 +627,24 @@ impl MockSttClient {
         }
     }
 
+    /// LC-592: a mock that takes `delay_ms` per call, so concurrent callers
+    /// genuinely overlap and [`Self::max_concurrent`] means something.
+    pub fn slow(canned: impl Into<String>, delay_ms: u64) -> Self {
+        Self {
+            canned: canned.into(),
+            delay_ms,
+            ..Default::default()
+        }
+    }
+
     /// Number of `transcribe` calls received so far.
     pub fn call_count(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
+    }
+
+    /// LC-592: the most calls that were ever in flight at the same time.
+    pub fn max_concurrent(&self) -> usize {
+        self.max_in_flight.load(Ordering::SeqCst)
     }
 }
 
@@ -627,6 +652,14 @@ impl MockSttClient {
 impl SttClient for MockSttClient {
     async fn transcribe(&self, _req: SttRequest) -> Result<SttResult, SttError> {
         let n = self.calls.fetch_add(1, Ordering::SeqCst);
+        // LC-592: track the high-water mark across the whole call, including the
+        // delay, since that is the window a concurrency limiter has to bound.
+        let live = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        self.max_in_flight.fetch_max(live, Ordering::SeqCst);
+        if self.delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(self.delay_ms)).await;
+        }
+        self.in_flight.fetch_sub(1, Ordering::SeqCst);
         if n < self.fail_first {
             return Err(if self.fail_permanent {
                 SttError::Status(400)
