@@ -261,11 +261,15 @@
 
   // ---- session control --------------------------------------------------
   // The room comes from the clicked toggle's data-lc-room (voice channel, where
-  // the room is static + server-rendered), else the active 1:1 call / voice room
-  // published by call.js / voice.js.
+  // the room is static + server-rendered), else the active real-time session
+  // room published by call.js / voice.js.
+  //
+  // LC-613: this used to coalesce two globals (__lcCallRoom || __lcVoiceRoom),
+  // one per surface. Both are now the single __lcSessionRoom, so the
+  // reconciliation is gone.
   function startSession(toggleEl) {
     var room = (toggleEl && toggleEl.getAttribute('data-lc-room')) ||
-      window.__lcCallRoom || window.__lcVoiceRoom;
+      window.__lcSessionRoom;
     if (room == null) return;
     // LC-597: remember when the session was opened from a stage, so losing the
     // floor can stop the capture. Cleared on any end.
@@ -424,21 +428,25 @@
     }
   }
 
-  // 1:1 call ended (call.js): finalize the session for everyone.
-  document.addEventListener('lc:call-ended', function () {
-    if (transcriptId != null) endSession();
-    else { stopLocalCapture(); showBanner(false); setToggle(false); }
+  // LC-613: one lifecycle event pair for both surfaces (was lc:call-ended /
+  // lc:voice-left and lc:call-active / lc:voice-joined). `detail.surface`
+  // preserves the one behaviour that genuinely differs between them: a 1:1
+  // call is sole-participant, so its end finalizes the shared transcript for
+  // everyone; a voice/huddle end only stops OUR capture, because the session
+  // continues for whoever is still on the line.
+  document.addEventListener('lc:rtc-session-ended', function (e) {
+    var surface = e && e.detail && e.detail.surface;
+    if (surface === 'call') {
+      if (transcriptId != null) endSession();
+      else { stopLocalCapture(); showBanner(false); setToggle(false); }
+    } else {
+      transcriptId = null;
+      stopLocalCapture();
+      showBanner(false);
+      setToggle(false);
+    }
   });
-  // Left a voice channel (voice.js): stop OUR capture + reset local UI, but do
-  // NOT /end - the shared session continues for whoever is still in the channel.
-  document.addEventListener('lc:voice-left', function () {
-    transcriptId = null;
-    stopLocalCapture();
-    showBanner(false);
-    setToggle(false);
-  });
-  document.addEventListener('lc:call-active', disableIfUnsupported);
-  document.addEventListener('lc:voice-joined', disableIfUnsupported);
+  document.addEventListener('lc:rtc-session-started', disableIfUnsupported);
 
   // LC-597: the stage panel is swapped in over the WebSocket (StageChanged), so
   // its transcribe toggle can appear after load - re-run the support gate for it.
@@ -449,7 +457,7 @@
   // have kept recording regardless - a hot mic feeding a session that no longer
   // accepts it. Stop our capture and reset our own UI, but do NOT call /end:
   // the session belongs to the stage and the remaining speakers are still on it.
-  // Same reasoning as lc:voice-left.
+  // Same reasoning as the voice-surface lc:rtc-session-ended (LC-613).
   function reconcileStage() {
     disableIfUnsupported();
     if (stageRoom == null) return;
