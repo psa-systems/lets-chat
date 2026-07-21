@@ -1296,11 +1296,57 @@ pub struct RoomSeenBar {
     pub oob: bool,
 }
 
+/// LC-595: which surface a reaction control belongs to.
+///
+/// The thread panel renders the same messages as the timeline (the thread ROOT
+/// appears in both), so the two cannot share element ids. A duplicate
+/// `#reactions-{id}` is exactly the LC-553 bug: the first `outerHTML` toggle
+/// replaced the wrong node. Every id and every reaction URL is therefore
+/// namespaced by surface, and this enum is the single source of that namespace -
+/// templates call the two accessors rather than hardcoding the prefix.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReactionSurface {
+    /// The main timeline. Keeps the historical unprefixed ids, so nothing that
+    /// already targets `#reactions-{id}` had to change.
+    #[default]
+    Timeline,
+    /// The open thread panel.
+    Thread,
+}
+
+impl ReactionSurface {
+    /// Element-id prefix for this surface: `""` or `"thread-"`.
+    pub fn id_prefix(self) -> &'static str {
+        match self {
+            Self::Timeline => "",
+            Self::Thread => "thread-",
+        }
+    }
+
+    /// Query string appended to reaction URLs so the SERVER renders its response
+    /// in this surface's namespace. Without it a chip clicked inside the thread
+    /// panel would be replaced by markup carrying the timeline's id, silently
+    /// recreating the duplicate this enum exists to prevent.
+    pub fn url_suffix(self) -> &'static str {
+        match self {
+            Self::Timeline => "",
+            Self::Thread => "?surface=thread",
+        }
+    }
+}
+
+/// LC-595: `oob` makes this the live WS twin of itself. It was previously a
+/// second template (`ws/reaction_update.html`) carrying a comment demanding it
+/// be kept "byte-aligned" with this one by hand; the namespacing work would have
+/// had to be applied to both, so the twin was folded in here instead.
 #[derive(Template)]
 #[template(path = "partials/reaction_bar.html")]
 pub struct ReactionBarFragment<'a> {
     pub message_id: i64,
     pub reactions: &'a [ReactionView],
+    pub surface: ReactionSurface,
+    pub oob: bool,
 }
 
 /// LC-490: per-viewer acknowledgement state for a message that requires it.

@@ -20,9 +20,8 @@ use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment, HuddleRingFragment,
     InCallBadgeFragment, MentionClearedFragment, MentionedFragment, NewMessageFragment,
-    ReactionUpdateFragment, ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment,
-    ThreadReplyOobFragment, TranscriptControlFragment, TranscriptSegmentFragment,
-    UnreadBadgeFragment, VoiceEventFragment,
+    ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
+    TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -1083,7 +1082,11 @@ async fn render_follow_up(state: &AppState, message_id: i64, user_id: &str) -> O
         .ok()
 }
 
-async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
+pub async fn render_reaction_bar(
+    state: &AppState,
+    message_id: i64,
+    user_id: &str,
+) -> Option<String> {
     let m = db::chat::get_message(&state.chat, message_id)
         .await
         .ok()??;
@@ -1100,12 +1103,29 @@ async fn render_reaction_bar(state: &AppState, message_id: i64, user_id: &str) -
         .zip(reactor_titles)
         .map(|(r, title)| ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &emojis))
         .collect();
-    ReactionUpdateFragment {
+    // LC-595: emit BOTH surfaces unconditionally. A viewer may have the timeline
+    // showing, an open thread panel showing, or both, and the server does not
+    // track which - an OOB fragment whose target is absent is a no-op in htmx,
+    // so sending both is cheaper than tracking panel state and correct in every
+    // combination. Without the thread copy, a reaction made anywhere was a
+    // silent no-op for a reply displayed in an open panel.
+    let timeline = crate::views::room::ReactionBarFragment {
         message_id,
         reactions: &reactions,
+        surface: crate::views::room::ReactionSurface::Timeline,
+        oob: true,
     }
     .render()
-    .ok()
+    .ok()?;
+    let thread = crate::views::room::ReactionBarFragment {
+        message_id,
+        reactions: &reactions,
+        surface: crate::views::room::ReactionSurface::Thread,
+        oob: true,
+    }
+    .render()
+    .ok()?;
+    Some(format!("{timeline}{thread}"))
 }
 
 /// LC-490: re-render the ack-bar sub-region (`#ack-{id}`) for one recipient.
@@ -2608,6 +2628,9 @@ async fn render_pin_event(
 /// production entry point - the router never routes here.
 pub mod test_support {
     pub use super::{handle_voice_join, handle_voice_leave, relay_call_signal};
+    // LC-595: the live reaction OOB payload, so a test can assert it carries BOTH
+    // surfaces (an open thread panel used to receive nothing at all).
+    pub use super::render_reaction_bar;
 }
 
 #[cfg(test)]

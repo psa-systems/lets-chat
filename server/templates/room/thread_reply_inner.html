@@ -4,9 +4,28 @@
    the thread panel and the main timeline are the same object at the same scale.
    (It previously used the pre-LC-569 metrics - h-6 avatar, gap-2, font-medium,
    pl-8 - and drifted the moment the timeline was restyled.) Kept as a separate
-   lightweight partial (no action toolbar, no duplicate id="msg-{id}" - that id
-   already exists in the main timeline). #}
-<div id="msg-{{ message.id }}" class="px-3 py-2 rounded-[10px] hover:bg-surface-sunken group">
+   lightweight partial (no full action toolbar).
+
+   LC-595: the row id is `threadmsg-{id}`, NOT `msg-{id}`. The old comment here
+   claimed this partial avoided that duplicate, but it emitted `msg-{id}` anyway.
+   For replies that was harmless-by-accident, since the timeline query filters
+   replies out (`parent_id IS NULL`) - but this same partial also renders the
+   thread PARENT, which DOES appear in the timeline, so the parent's row id was
+   duplicated for as long as a thread was open. Everything here is namespaced
+   now. #}
+<div id="threadmsg-{{ message.id }}" class="relative px-3 py-2 rounded-[10px] hover:bg-surface-sunken group">
+  {# LC-595: reactions are started from the hover bar, exactly as in the timeline
+     (LC-553), which is what makes a thread reply reactable at all. Only the
+     emoji-select is carried over: reply / open-thread / overflow actions either
+     belong to the timeline row or are meaningless inside an open thread. #}
+  <span class="lc-msg-actions absolute right-2 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5 text-xs bg-surface-elevated shadow-md px-1 py-0.5 rounded-lg">
+    <button data-lc-reaction-open
+      hx-get="/messages/{{ message.id }}/reactions/picker?surface=thread" hx-target="#lc-reaction-popover" hx-swap="innerHTML"
+      class="lc-msg-action" data-lc-tip="{{ "partials-reaction-add"|t }}" data-lc-tip-pos="bottom"
+      aria-label="{{ "partials-reaction-add"|t }}" aria-haspopup="dialog">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
+    </button>
+  </span>
   <div class="flex items-center gap-3">
     {% let avatar_user_id = message.user_id.clone() %}
     {% let avatar_username = message.username.clone() %}
@@ -28,4 +47,13 @@
     {% endif %}
   </div>
   <div class="lc-md leading-snug mt-1 pl-12">{{ message.body_html()|safe }}</div>
+  {# LC-595: the reaction bar in the thread's own id namespace, so it coexists
+     with the timeline's bar for the same message instead of colliding with it. #}
+  <div class="pl-12">
+    {% let message_id = message.id %}
+    {% let reactions = message.reactions.as_slice() %}
+    {% let surface = crate::views::room::ReactionSurface::Thread %}
+    {% let oob = false %}
+    {% include "partials/reaction_bar.html" %}
+  </div>
 </div>
