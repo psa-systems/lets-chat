@@ -1707,7 +1707,7 @@ fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
 /// Control kinds (`accept`/`reject`/`cancel`/`hangup`) are additionally
 /// echoed to the sender's other tabs so a call answered or ended on one
 /// device tears down the ringing UI on the rest.
-async fn relay_call_signal(
+pub async fn relay_call_signal(
     state: &AppState,
     user: &User,
     from_name: &str,
@@ -2125,7 +2125,7 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
 /// Handle a `voice_join` frame: validate the room is an accessible voice
 /// channel, register the connection in the hub, hand the joiner the current
 /// roster, and announce the joiner to everyone already in the channel.
-async fn handle_voice_join(
+pub async fn handle_voice_join(
     state: &AppState,
     user: &User,
     username: &str,
@@ -2183,7 +2183,7 @@ async fn handle_voice_join(
 /// Remove `conn_id` from its voice channel (if any) and tell the remaining
 /// participants. Idempotent - safe to call on both explicit leave and
 /// disconnect.
-fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
+pub fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     let Some((room_id, user_id, _)) = state.hub.voice_leave(conn_id) else {
         return;
     };
@@ -2594,6 +2594,20 @@ async fn render_pin_event(
         Err(_) => String::new(),
     };
     Some(format!("{bubble_html}{strip_html}"))
+}
+
+/// LC-614: a test-only surface onto the call and huddle WS handlers.
+///
+/// `relay_call_signal`, `handle_voice_join`, and `handle_voice_leave` are
+/// internal to the WS receive loop and have no coverage. They are the code
+/// LC-613 (converge call.js/voice.js) and LC-615 (the SFU handover) will
+/// refactor, and LC-596 AC4 requires the 1:1 path to keep its behaviour, so
+/// they need tests first. Re-exposing them here lets integration tests drive
+/// the paths directly, without standing up a full WebSocket upgrade + framing
+/// harness that would test axum's plumbing more than this logic. Not a
+/// production entry point - the router never routes here.
+pub mod test_support {
+    pub use super::{handle_voice_join, handle_voice_leave, relay_call_signal};
 }
 
 #[cfg(test)]
