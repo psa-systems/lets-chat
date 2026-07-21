@@ -85,6 +85,8 @@ pub use room::maybe_transcribe_voice_message;
 // LC-397: expose the per-recipient new-message render so the optimistic-echo
 // test can assert the author always gets their own echo, even unsubscribed.
 pub use ws::render_new_message_or_bump;
+// LC-614: test-only handles onto the call/huddle WS handlers (see the module).
+pub use ws::test_support;
 mod room_info;
 mod room_rbac;
 #[cfg(feature = "saas")]
