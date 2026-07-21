@@ -170,12 +170,14 @@ async fn record_and_broadcast(
     transcript_id: i64,
     user: &User,
     text: &str,
+    duration_ms: i64,
 ) -> Result<(), AppError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Ok(());
     }
-    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed).await?;
+    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed, duration_ms)
+        .await?;
     let speaker = label_for(state, &user.id).await;
     let body = trimmed.to_string();
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
@@ -235,7 +237,9 @@ pub async fn segment(
     if session.status != "active" {
         return Ok(Html(String::new()));
     }
-    record_and_broadcast(&state, &room, transcript_id, &user, &text).await?;
+    // Browser Web Speech path: text only, no engine timings (duration 0 -> the
+    // export uses its synthetic cue length for these).
+    record_and_broadcast(&state, &room, transcript_id, &user, &text, 0).await?;
     Ok(Html(String::new()))
 }
 
@@ -271,16 +275,30 @@ pub async fn audio(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("audio/webm")
         .to_string();
+    // LC-591: hint the engine with the speaker's preferred locale (the clip is
+    // this user's own mic). Rooms carry no locale, so the user's is the signal;
+    // None lets the engine autodetect.
+    let language = user.locale.as_deref();
     // A transcription failure (engine down / bad clip) must not fail the call:
     // log and drop this clip so capture keeps running.
-    let text = match stt.transcribe(body.to_vec(), &content_type).await {
-        Ok(t) => t,
+    let result = match stt.transcribe(body.to_vec(), &content_type, language).await {
+        Ok(r) => r,
         Err(e) => {
             tracing::warn!(error = %e, "stt transcription failed; dropping clip");
             return Ok(Html(String::new()));
         }
     };
-    record_and_broadcast(&state, &room, transcript_id, &user, &text).await?;
+    // LC-591: store the real spoken length from the engine's segment timings so
+    // the WebVTT export can use it instead of a synthetic cue duration.
+    record_and_broadcast(
+        &state,
+        &room,
+        transcript_id,
+        &user,
+        &result.text,
+        result.duration_ms(),
+    )
+    .await?;
     Ok(Html(String::new()))
 }
 
@@ -866,7 +884,9 @@ pub async fn export(
     // start, in seconds.
     let start = parse_dt(&session.started_at);
     let mut names: HashMap<String, String> = HashMap::new();
-    let mut lines: Vec<(f64, String, String)> = Vec::with_capacity(segments.len());
+    // (offset_secs, speaker, text, duration_ms) - LC-591 threads the real
+    // per-segment duration through for the VTT cue length.
+    let mut lines: Vec<(f64, String, String, i64)> = Vec::with_capacity(segments.len());
     for s in &segments {
         let name = match names.get(&s.user_id) {
             Some(n) => n.clone(),
@@ -880,7 +900,7 @@ pub async fn export(
             (Some(a), Some(b)) => (b - a).num_milliseconds().max(0) as f64 / 1000.0,
             _ => 0.0,
         };
-        lines.push((off, name, s.text.clone()));
+        lines.push((off, name, s.text.clone(), s.duration_ms));
     }
 
     let vtt = format.as_deref() == Some("vtt");
@@ -904,9 +924,9 @@ pub async fn export(
 }
 
 /// Plain-text transcript: a header then `HH:MM:SS  Speaker: text` per line.
-fn build_txt(room_name: &str, started_at: &str, lines: &[(f64, String, String)]) -> String {
+fn build_txt(room_name: &str, started_at: &str, lines: &[(f64, String, String, i64)]) -> String {
     let mut out = format!("Call transcript - {room_name} - {started_at}\n\n");
-    for (off, speaker, text) in lines {
+    for (off, speaker, text, _dur) in lines {
         out.push_str(&format!("{}  {}: {}\n", fmt_clock(*off), speaker, text));
     }
     out
@@ -914,15 +934,27 @@ fn build_txt(room_name: &str, started_at: &str, lines: &[(f64, String, String)])
 
 /// WebVTT transcript. Cue times are forced monotonic (the stored timestamps are
 /// only second-resolution, so several segments can share an offset): each cue
-/// starts at `max(real_offset, prev_end)` and ends at the next cue's start (last
-/// gets a short tail), guaranteeing valid, ordered, non-zero-length cues.
-fn build_vtt(lines: &[(f64, String, String)]) -> String {
+/// starts at `max(real_offset, prev_end)`. Its END is the real spoken duration
+/// (LC-591, from the engine's segment timings) when known, else the pre-LC-591
+/// synthetic length: the next cue's start, floored to keep the cue non-zero.
+/// Either way cues stay valid, ordered, and non-overlapping.
+fn build_vtt(lines: &[(f64, String, String, i64)]) -> String {
     let mut out = String::from("WEBVTT\n\n");
     let mut cursor = 0.0_f64;
-    for (i, (off, speaker, text)) in lines.iter().enumerate() {
+    for (i, (off, speaker, text, dur_ms)) in lines.iter().enumerate() {
         let start = off.max(cursor);
-        let next = lines.get(i + 1).map(|(o, _, _)| *o).unwrap_or(start + 3.0);
-        let end = next.max(start + 2.0);
+        // Real duration when the engine gave us one; otherwise fall back to the
+        // synthetic "until the next cue" length. Never let the next cue start
+        // before this one really ends, so a real duration still can't overlap.
+        let end = if *dur_ms > 0 {
+            start + (*dur_ms as f64) / 1000.0
+        } else {
+            let next = lines
+                .get(i + 1)
+                .map(|(o, _, _, _)| *o)
+                .unwrap_or(start + 3.0);
+            next.max(start + 2.0)
+        };
         cursor = end;
         // Escape the VTT-significant characters in the cue payload.
         let safe = text
