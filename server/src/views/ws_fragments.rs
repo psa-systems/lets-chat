@@ -77,13 +77,6 @@ pub struct InboxRefreshFragment;
 #[template(path = "ws/activity_refresh.html")]
 pub struct ActivityRefreshFragment;
 
-#[derive(Template)]
-#[template(path = "ws/reaction_update.html")]
-pub struct ReactionUpdateFragment<'a> {
-    pub message_id: i64,
-    pub reactions: &'a [super::room::ReactionView],
-}
-
 /// LC-490: out-of-band swap of the ack bar (`#ack-{message_id}`) for one
 /// recipient after an acknowledge. `ack: None` renders an empty region (the
 /// requirement was cleared); `Some(_)` re-renders the roster + the viewer's

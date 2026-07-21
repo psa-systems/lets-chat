@@ -1,13 +1,21 @@
-{# LC-553: this div IS the #reactions-{id} swap target (HTTP toggle + WS OOB both
-   outerHTML-replace it), so it carries the id, spacing and hide-when-empty. It
-   is server-hidden when there are no reactions (rather than CSS :empty, which
-   the template's whitespace defeats) so no gap is reserved under messages at
-   rest. #}
-<div id="reactions-{{ message_id }}" class="flex flex-wrap gap-1.5 items-center mt-1.5 {% if reactions.is_empty() %}hidden{% endif %}">
+{# LC-553: this div IS the {prefix}reactions-{id} swap target (HTTP toggle + WS
+   OOB both outerHTML-replace it), so it carries the id, spacing and
+   hide-when-empty. It is server-hidden when there are no reactions (rather than
+   CSS :empty, which the template's whitespace defeats) so no gap is reserved
+   under messages at rest.
+
+   LC-595: `surface` namespaces every id and URL so the timeline and an open
+   thread panel can both show a bar for the same message without colliding, and
+   `oob` turns this same markup into the live WS update (it used to be a second
+   template that a comment demanded be kept byte-aligned with this one by hand).
+   Both include sites bind `surface` explicitly; there is deliberately no
+   default, so a new include site must choose rather than silently inherit the
+   timeline's ids. #}
+<div id="{{ surface.id_prefix() }}reactions-{{ message_id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="flex flex-wrap gap-1.5 items-center mt-1.5 {% if reactions.is_empty() %}hidden{% endif %}">
   {% for r in reactions %}
   <button
-    hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}"
-    hx-target="#reactions-{{ message_id }}"
+    hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}{{ surface.url_suffix() }}"
+    hx-target="#{{ surface.id_prefix() }}reactions-{{ message_id }}"
     hx-swap="outerHTML"
     {% if !r.reactors_title.is_empty() %}title="{{ r.reactors_title }}"{% endif %}
     class="text-xs rounded-full border px-2 py-0.5 tabular-nums {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content border-accent font-medium{% else %}bg-surface-elevated border-border text-content-muted hover:bg-surface-sunken hover:text-content{% endif %}"
@@ -20,7 +28,7 @@
   {% if !reactions.is_empty() %}
   <button
     data-lc-reaction-open
-    hx-get="/messages/{{ message_id }}/reactions/picker"
+    hx-get="/messages/{{ message_id }}/reactions/picker{{ surface.url_suffix() }}"
     hx-target="#lc-reaction-popover"
     hx-swap="innerHTML"
     aria-label="{{ "partials-reaction-add"|t }}"

@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
@@ -7,9 +7,18 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
-use crate::views::room::{ReactionBarFragment, ReactionView};
+use crate::views::room::{ReactionBarFragment, ReactionSurface, ReactionView};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
+
+/// LC-595: `?surface=thread` on the reaction endpoints. Absent (the timeline,
+/// and every pre-LC-595 caller) deserializes to the default, so existing URLs
+/// keep working untouched.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct SurfaceQuery {
+    #[serde(default)]
+    pub surface: ReactionSurface,
+}
 
 // percent_encoding is already a transitive dep via the workspace; the picker
 // uses it to URL-encode shortcodes/glyphs into the reactions path segment.
@@ -72,6 +81,7 @@ pub async fn toggle_reaction(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((message_id, emoji)): Path<(i64, String)>,
+    Query(SurfaceQuery { surface }): Query<SurfaceQuery>,
 ) -> Result<Html, AppError> {
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
@@ -141,9 +151,14 @@ pub async fn toggle_reaction(
             ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
         })
         .collect();
+    // LC-595: answer in the CALLER's id namespace. A chip clicked in the thread
+    // panel must be replaced by markup carrying the thread's id; responding with
+    // the timeline's would recreate the duplicate id LC-553 removed.
     let fragment = ReactionBarFragment {
         message_id,
         reactions: &reactions,
+        surface,
+        oob: false,
     };
     html(&fragment)
 }
@@ -153,10 +168,20 @@ pub async fn toggle_reaction(
 /// `hx-post`/`hx-target`/`hx-swap` the LC-288 recorder + close-on-react JS key
 /// on), so expanding the set needed no JS change. `name` is the search keyword
 /// string (human name + every shortcode), attribute-escaped.
-fn push_unicode_button(buf: &mut String, message_id: i64, glyph: &str, name: &str) {
+fn push_unicode_button(
+    buf: &mut String,
+    message_id: i64,
+    glyph: &str,
+    name: &str,
+    surface: ReactionSurface,
+) {
     let encoded = percent_encoding::utf8_percent_encode(glyph, percent_encoding::NON_ALPHANUMERIC);
+    // LC-595: the picker is opened FROM a surface and reacts back INTO it, so
+    // every button carries that surface in both its URL and its target.
+    let prefix = surface.id_prefix();
+    let suffix = surface.url_suffix();
     buf.push_str(&format!(
-        r##"<button type="button" data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}" hx-target="#reactions-{message_id}" hx-swap="outerHTML" class="lc-emoji-cell">{glyph}</button>"##,
+        r##"<button type="button" data-lc-emoji-name="{name}" hx-post="/messages/{message_id}/reactions/{encoded}{suffix}" hx-target="#{prefix}reactions-{message_id}" hx-swap="outerHTML" class="lc-emoji-cell">{glyph}</button>"##,
     ));
 }
 
@@ -170,6 +195,7 @@ pub async fn get_picker(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(message_id): Path<i64>,
+    Query(SurfaceQuery { surface }): Query<SurfaceQuery>,
 ) -> Result<Response, AppError> {
     // LC-149: gate before disclosing the room's custom-emoji inventory (and
     // before the handler doubles as an unauthenticated message-existence
@@ -196,7 +222,7 @@ pub async fn get_picker(
             // Keyword string (name + every shortcode) is shared with the
             // composer picker, attribute-escaped against a stray quote.
             let name = attr_escape(&crate::emoji_catalog::keywords(emoji));
-            push_unicode_button(&mut sections, message_id, emoji.as_str(), &name);
+            push_unicode_button(&mut sections, message_id, emoji.as_str(), &name, surface);
         }
         sections.push_str("</div></section>");
     }
@@ -223,9 +249,11 @@ pub async fn get_picker(
             // shortcode charset is [a-z0-9_]{2,32}, validated on insert,
             // so it is safe to inline into the markup without escaping.
             sections.push_str(&format!(
-                r##"<button type="button" data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}" hx-target="#reactions-{id}" hx-swap="outerHTML" class="lc-emoji-cell" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
+                r##"<button type="button" data-lc-emoji-name="{code}" hx-post="/messages/{id}/reactions/{enc}{suffix}" hx-target="#{prefix}reactions-{id}" hx-swap="outerHTML" class="lc-emoji-cell" title=":{code}:"><img class="h-5 w-5 inline-block align-text-bottom" src="/api/emojis/{eid}" alt=":{code}:"></button>"##,
                 id = message_id,
                 enc = encoded,
+                prefix = surface.id_prefix(),
+                suffix = surface.url_suffix(),
                 code = emoji.shortcode,
                 eid = emoji.id,
             ));

@@ -366,6 +366,9 @@
      first toggle replace the wrong node and drop the spacing wrapper. #}
   {% let message_id = message.id %}
   {% let reactions = message.reactions.as_slice() %}
+  {# LC-595: the timeline keeps the historical unprefixed ids. #}
+  {% let surface = crate::views::room::ReactionSurface::Timeline %}
+  {% let oob = false %}
   {% include "partials/reaction_bar.html" %}
   {# LC-490: acknowledgement bar. Always an id-keyed region so live OOB swaps
      (ws/ack_update.html) land even on a message that becomes required later;
