@@ -688,6 +688,84 @@ pub async fn post_file_alt(
     })
 }
 
+/// `POST /api/files/{id}/retranscribe` - LC-590: re-run a failed server-side
+/// transcription. Uploader-only, matching the control's visibility in
+/// `attachment.html` (`message.can_edit`), so the gate and the affordance agree
+/// and no viewer is offered a button that 403s.
+///
+/// The work is spawned rather than awaited: with the LC-590 retry policy a
+/// worst-case attempt is three tries against a duration-scaled timeout, which is
+/// far too long to hold a request open. Instead the row is marked `pending`
+/// immediately and the message re-renders; `maybe_transcribe_voice_message`
+/// broadcasts again on success OR failure, so the UI resolves either way.
+pub async fn post_file_retranscribe(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(file_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let (upload, room_id) = db::uploads::get_upload(&state.chat, file_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if upload.uploader_id != user.id {
+        return Err(AppError::Forbidden);
+    }
+    let (Some(message_id), Some(room_id)) = (upload.message_id, room_id) else {
+        return Err(AppError::BadRequest("attachment is not posted yet".into()));
+    };
+    if !state.stt_available() {
+        return Err(AppError::BadRequest(
+            "server-side transcription is not configured".into(),
+        ));
+    }
+    // Only a voice message or a video clip is transcribable. Without this an
+    // image could be marked `pending` forever by a hand-crafted request, since
+    // the transcription helper would no-op and never clear the status.
+    if !upload.mime_type.starts_with("audio/") && !upload.mime_type.starts_with("video/") {
+        return Err(AppError::BadRequest(
+            "attachment is not transcribable".into(),
+        ));
+    }
+    // Only queue work when there is none already stored. An upload that has
+    // since been transcribed falls through to the re-render below, so a client
+    // whose view was stale (still showing the failure) catches up rather than
+    // getting an error.
+    if upload.transcript.is_none() {
+        db::uploads::set_transcript_status(&state.chat, file_id, db::uploads::TRANSCRIPT_PENDING)
+            .await?;
+        let st = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) =
+                super::maybe_transcribe_voice_message(&st, file_id, message_id, room_id).await
+            {
+                tracing::warn!(error = %e, upload_id = file_id, "voice transcription retry failed");
+            }
+        });
+    }
+
+    state.hub.broadcast_to_room(
+        room_id,
+        &ChatEvent::VoiceTranscribed {
+            message_id,
+            room_id,
+        },
+    );
+
+    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;
+    let view = super::load_message_view_for_viewer(
+        &state,
+        &user,
+        message_id,
+        pinned_ids.contains(&message_id),
+        is_bookmarked,
+    )
+    .await?;
+    html(&SingleMessageFragment {
+        message: &view,
+        oob: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

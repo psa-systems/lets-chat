@@ -190,6 +190,12 @@
         </svg>
       </button>
     </div>
+    {# LC-590: server-STT failure indicator. The /audio route now answers non-2xx
+       once its retries are exhausted (it used to answer 200 with an empty body,
+       which read as "you were silent"), and transcribe.js reveals this line.
+       Advisory rather than modal: capture keeps running, so the next clip
+       usually recovers and clears it. #}
+    <div data-lc-caption-error hidden class="px-3 pb-1 text-xs text-danger">{{ "voice-transcript-clip-failed"|t }}</div>
     <div class="lc-transcript-body" data-lc-transcript-body>
       {# #lc-caption-log is the OOB target the server appends caption lines into
          (ws/transcript_segment.html). The empty-state below shows until the

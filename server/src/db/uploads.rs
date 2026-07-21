@@ -33,6 +33,9 @@ pub struct UploadRow {
     pub waveform: Option<String>,
     /// LC-483: server-side voice-message transcript, `None` until produced.
     pub transcript: Option<String>,
+    /// LC-590: outcome of the last transcription attempt - [`TRANSCRIPT_PENDING`],
+    /// [`TRANSCRIPT_DONE`], [`TRANSCRIPT_FAILED`], or `None` for never-attempted.
+    pub transcript_status: Option<String>,
     /// LC-537: author-provided image alt text, `None` when unset.
     pub alt_text: Option<String>,
 }
@@ -49,6 +52,7 @@ fn map_upload(row: &sqlx::sqlite::SqliteRow) -> UploadRow {
         created_at: row.get("created_at"),
         waveform: row.get("waveform"),
         transcript: row.get("transcript"),
+        transcript_status: row.get("transcript_status"),
         alt_text: row.get("alt_text"),
     }
 }
@@ -108,20 +112,57 @@ pub async fn link_upload_to_message(
     Ok(())
 }
 
+/// LC-590: `transcript_status` values. A retry is queued (`pending`), produced a
+/// transcript (`done`), or exhausted its attempts (`failed`). A `NULL` column is
+/// "never attempted", which is every pre-LC-590 row and every non-transcribable
+/// attachment.
+pub const TRANSCRIPT_PENDING: &str = "pending";
+pub const TRANSCRIPT_DONE: &str = "done";
+pub const TRANSCRIPT_FAILED: &str = "failed";
+
 /// LC-483: store a voice message's server-side transcript on its upload row.
 /// Best-effort, overwrites any prior value; the caller transcribes off the
 /// request path and only calls this on a non-empty result.
+///
+/// LC-590: also clears any earlier `failed` / `pending` status, so a successful
+/// retry retires the Retry control in the same write that stores the text.
 pub async fn set_transcript(
     pool: &SqlitePool,
     upload_id: i64,
     transcript: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE file_uploads SET transcript = ? WHERE id = ?")
+    sqlx::query("UPDATE file_uploads SET transcript = ?, transcript_status = ? WHERE id = ?")
         .bind(transcript)
+        .bind(TRANSCRIPT_DONE)
         .bind(upload_id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// LC-590: set the transcription status without touching the transcript text.
+/// Used to mark `failed` on exhaustion and `pending` when a retry is queued.
+pub async fn set_transcript_status(
+    pool: &SqlitePool,
+    upload_id: i64,
+    status: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE file_uploads SET transcript_status = ? WHERE id = ?")
+        .bind(status)
+        .bind(upload_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// LC-590: the recorded length in seconds from a stored waveform blob, used to
+/// scale the STT timeout. `None` when the attachment carries no waveform or the
+/// client could not determine a duration.
+pub fn waveform_duration(waveform: Option<&str>) -> Option<f32> {
+    serde_json::from_str::<WaveformBlob>(waveform?)
+        .ok()?
+        .d
+        .filter(|d| d.is_finite() && *d > 0.0)
 }
 
 /// LC-537: set (or clear, with `None`) the author-provided alt text on an
@@ -151,7 +192,7 @@ pub async fn get_upload(
     let row = sqlx::query(
         "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
                 u.size_bytes, u.storage_path, u.created_at, u.waveform, u.transcript, \
-                u.alt_text, \
+                u.transcript_status, u.alt_text, \
                 m.room_id AS room_id \
          FROM file_uploads u \
          LEFT JOIN messages m ON m.id = u.message_id \
@@ -180,7 +221,8 @@ pub async fn attachments_for_messages(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT id, message_id, filename, mime_type, size_bytes, waveform, transcript, alt_text \
+        "SELECT id, message_id, filename, mime_type, size_bytes, waveform, transcript, \
+         transcript_status, alt_text \
          FROM file_uploads \
          WHERE message_id IN ({placeholders}) \
          ORDER BY id"
@@ -205,6 +247,7 @@ pub async fn attachments_for_messages(
             waveform,
             voice_duration,
             transcript: r.get("transcript"),
+            transcript_status: r.get("transcript_status"),
             alt_text: r.get("alt_text"),
         };
         out.entry(mid).or_default().push(att);
@@ -372,7 +415,7 @@ pub async fn list_room_files(
     let mut sql = String::from(
         "SELECT u.id, u.uploader_id, u.message_id, u.filename, u.mime_type, \
                 u.size_bytes, u.storage_path, u.created_at, u.waveform, u.transcript, \
-                u.alt_text \
+                u.transcript_status, u.alt_text \
            FROM file_uploads u \
            JOIN messages m ON m.id = u.message_id \
           WHERE m.room_id = ? AND m.deleted_at IS NULL AND m.quarantined = 0",
@@ -407,7 +450,7 @@ pub async fn list_room_files(
 pub async fn list_image_uploads(pool: &SqlitePool) -> Result<Vec<UploadRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT id, uploader_id, message_id, filename, mime_type, size_bytes, \
-                storage_path, created_at, waveform, transcript, alt_text \
+                storage_path, created_at, waveform, transcript, transcript_status, alt_text \
          FROM file_uploads \
          WHERE mime_type LIKE 'image/%' \
          ORDER BY id",

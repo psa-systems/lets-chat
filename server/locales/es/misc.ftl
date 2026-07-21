@@ -124,6 +124,8 @@ voice-transcript-close = Cerrar transcripción
 voice-jump-live = Ir a lo último
 voice-transcript-empty-title = Aún no hay transcripción
 voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcripción esté activa.
+# LC-590: shown in the drawer when a clip fails server-side transcription.
+voice-transcript-clip-failed = No se pudo transcribir parte del audio. Los subtítulos pueden estar incompletos.
 voice-in-call = En llamada
 # LC-493: huddles ad-hoc (salas de texto de grupo).
 huddle-label = Huddle
