@@ -1149,6 +1149,27 @@ pub async fn maybe_transcribe_voice_message(
     if row.transcript.is_some() {
         return Ok(());
     }
+    // LC-592: operator gating. Excluding a whole category is a policy decision,
+    // not a failure, so a skipped attachment is left untouched - no status, and
+    // therefore no Retry control offering to do the thing the operator switched
+    // off. Call captions are unaffected; this gates stored attachments only.
+    let scope = crate::stt_load::scope();
+    if (is_voice && !scope.allows_voice()) || (is_clip && !scope.allows_clips()) {
+        return Ok(());
+    }
+    // LC-592: spend a submission against the global + per-room caps. Over-cap
+    // work is marked failed rather than left `pending`: there is no queue to
+    // drain it later, so `pending` would spin forever, whereas `failed` gives
+    // the author the LC-590 Retry control once the window has rolled over.
+    if !crate::stt_load::try_admit(&state.rate_limits, room_id) {
+        tracing::info!(upload_id, room_id, "voice transcript: stt rate limited");
+        mark_transcript_failed(state, upload_id, message_id, room_id).await?;
+        return Ok(());
+    }
+    // LC-592: bound concurrency. Held for the whole read + transcribe, so at
+    // most `LETS_CHAT_STT_WORKERS` engine calls are ever in flight. Waiting here
+    // is free - this already runs off the request path.
+    let _permit = crate::stt_load::permits().acquire().await;
     let path = db::uploads_dir().join(&row.storage_path);
     let bytes = match tokio::fs::read(&path).await {
         Ok(b) => b,

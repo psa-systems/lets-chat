@@ -287,6 +287,25 @@ pub async fn audio(
     // The clip is still dropped: a call caption is live text, so there is
     // nothing useful to replay by the time three attempts have failed. The
     // capture loop keeps running, so recovery is automatic on the next clip.
+    // LC-592: live captions are the heaviest producer (one clip per 5 seconds
+    // per speaker), so they are rate-limited alongside stored attachments.
+    if !crate::stt_load::try_admit(&state.rate_limits, room.id) {
+        tracing::info!(room_id = room.id, "stt rate limited; dropping clip");
+        return Err(AppError::TooManyRequests(
+            "transcription rate limit".into(),
+            60,
+        ));
+    }
+    // LC-592: concurrency. Unlike the voice-message path this does NOT wait for
+    // a permit - it SHEDS. A caption is latency-bound and worthless once it
+    // arrives late, and the next clip is already 5 seconds away, so queueing
+    // behind a batch of long voice notes would deliver stale captions AND hold
+    // the engine longer. Dropping now surfaces as LC-590's caption warning and
+    // recovers on the next clip.
+    let Ok(_permit) = crate::stt_load::permits().try_acquire() else {
+        tracing::info!(room_id = room.id, "stt at capacity; dropping clip");
+        return Err(AppError::TooManyRequests("transcription is busy".into(), 5));
+    };
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
