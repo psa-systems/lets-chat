@@ -2540,6 +2540,33 @@ pub async fn patch_message(
 /// GET /room/:room_id/thread/:message_id - render the thread panel for a
 /// parent message. The same handler serves DM rooms (room.room_type=='dm')
 /// since access is gated by `is_room_accessible`.
+/// LC-595: build the reaction views for one message, as the timeline's own
+/// loader does. Factored out because the thread panel needs it for the root AND
+/// every reply, and it previously built none at all - which is why a thread
+/// reply's existing reactions were invisible.
+async fn reaction_views_for(
+    state: &AppState,
+    message_id: i64,
+    viewer_id: &str,
+    custom_emojis: &[crate::models::custom_emoji::EmojiRef],
+) -> Result<Vec<crate::views::room::ReactionView>, AppError> {
+    let counts = db::chat::list_reactions(&state.chat, message_id, viewer_id).await?;
+    let titles = super::build_reactor_titles(state, &counts).await;
+    Ok(counts
+        .into_iter()
+        .zip(titles)
+        .map(|(r, title)| {
+            crate::views::room::ReactionView::new(
+                r.emoji,
+                r.count,
+                r.reacted_by_me,
+                title,
+                custom_emojis,
+            )
+        })
+        .collect())
+}
+
 pub async fn get_thread_panel(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -2622,7 +2649,7 @@ pub async fn get_thread_panel(
         created_at: parent.created_at.clone(),
         edited_at: parent.edited_at.clone(),
         body: parent.body.clone(),
-        reactions: Vec::new(),
+        reactions: reaction_views_for(&state, parent.id, &user.id, &custom_emojis).await?,
         can_edit: false,
         can_delete: false,
         viewer_id: user.id.clone(),
@@ -2703,7 +2730,7 @@ pub async fn get_thread_panel(
             created_at: r.created_at,
             edited_at: r.edited_at,
             body: r.body,
-            reactions: Vec::new(),
+            reactions: reaction_views_for(&state, r_id, &user.id, &custom_emojis).await?,
             can_edit: false,
             can_delete: false,
             viewer_id: user.id.clone(),
