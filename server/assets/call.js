@@ -1031,23 +1031,9 @@
     }
   }
 
+  // LC-616: drain loop shared with voice.js (rtc_common.js).
   function watchControlBus() {
-    var bus = document.getElementById('lc-control-bus');
-    if (!bus) return;
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        Array.prototype.forEach.call(m.addedNodes, function (n) {
-          if (n.nodeType !== 1) return;
-          if (n.hasAttribute('data-lc-control-event')) {
-            handleControl(n);
-          } else if (n.querySelector) {
-            var c = n.querySelector('[data-lc-control-event]');
-            if (c) handleControl(c);
-          }
-        });
-      });
-      bus.replaceChildren();
-    }).observe(bus, { childList: true });
+    window.LetsChatRtc.watchBus('lc-control-bus', 'data-lc-control-event', handleControl);
   }
 
   // ---- inbound signal dispatch -------------------------------------
@@ -1141,22 +1127,7 @@
 
   // ---- wiring -------------------------------------------------------
   function watchBus() {
-    var bus = document.getElementById('lc-call-bus');
-    if (!bus) return;
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        Array.prototype.forEach.call(m.addedNodes, function (n) {
-          if (n.nodeType !== 1) return;
-          if (n.hasAttribute('data-lc-call-event')) {
-            handleSignal(n);
-          } else if (n.querySelector) {
-            var c = n.querySelector('[data-lc-call-event]');
-            if (c) handleSignal(c);
-          }
-        });
-      });
-      bus.replaceChildren();
-    }).observe(bus, { childList: true });
+    window.LetsChatRtc.watchBus('lc-call-bus', 'data-lc-call-event', handleSignal);
   }
 
   function readSelfId() {
@@ -1167,11 +1138,11 @@
   // Delegated click handling: the call buttons (DM-header start buttons and
   // the overlay controls) may be re-rendered by htmx swaps, so a single
   // permanent listener is simpler and swap-proof.
-  document.body.addEventListener('click', function (e) {
-    var t = e.target;
-    if (!t || !t.closest) return;
-    var startBtn = t.closest('[data-lc-call-start]');
-    if (startBtn) {
+  // LC-616: delegated control dispatch via the shared binder (rtc_common.js).
+  // The start button is special: it preventDefaults and reads the room/peer
+  // context off the clicked element, so its handler takes (el, e).
+  window.LetsChatRtc.bindControls({
+    '[data-lc-call-start]': function (startBtn, e) {
       e.preventDefault();
       var ctx = {
         roomId: parseInt(startBtn.getAttribute('data-room-id'), 10),
@@ -1180,18 +1151,17 @@
       };
       if (!isFinite(ctx.roomId)) return;
       startCall(startBtn.getAttribute('data-lc-call-start') === 'video', ctx);
-      return;
-    }
-    if (t.closest('[data-lc-call-accept]')) { acceptCall(); return; }
-    if (t.closest('[data-lc-call-decline]')) { declineCall(); return; }
-    if (t.closest('[data-lc-call-hangup]')) { endCall(); return; }
-    if (t.closest('[data-lc-call-mute]')) { toggleMute(); return; }
-    if (t.closest('[data-lc-call-camera]')) { toggleCamera(); return; }
-    if (t.closest('[data-lc-call-screen]')) { toggleScreen(); return; }
-    if (t.closest('[data-lc-control-request]')) { toggleControlRequest(); return; }
-    if (t.closest('[data-lc-control-grant]')) { grantControl(); return; }
-    if (t.closest('[data-lc-control-deny]')) { denyControl(); return; }
-    if (t.closest('[data-lc-control-stop]')) { revokeAsSharer(); return; }
+    },
+    '[data-lc-call-accept]': function () { acceptCall(); },
+    '[data-lc-call-decline]': function () { declineCall(); },
+    '[data-lc-call-hangup]': function () { endCall(); },
+    '[data-lc-call-mute]': function () { toggleMute(); },
+    '[data-lc-call-camera]': function () { toggleCamera(); },
+    '[data-lc-call-screen]': function () { toggleScreen(); },
+    '[data-lc-control-request]': function () { toggleControlRequest(); },
+    '[data-lc-control-grant]': function () { grantControl(); },
+    '[data-lc-control-deny]': function () { denyControl(); },
+    '[data-lc-control-stop]': function () { revokeAsSharer(); },
   });
 
   // LC-437: Escape declines a ringing incoming call (keyboard-dismissable).
