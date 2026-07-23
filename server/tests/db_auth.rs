@@ -415,3 +415,77 @@ async fn test_search_users_self_visible_when_private() {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].id, alice_id);
 }
+
+// LC-618: a rotated Bunyip sub (the OP issued a new sub for the same verified
+// email) is adopted onto the existing row instead of provisioning a duplicate
+// that trips UNIQUE(users.email). This is the fix for the sso_error=internal
+// surfaced on the v0.2.0 release retest, where adoption previously refused to
+// relink an already-linked row and fell through to a colliding INSERT.
+#[tokio::test]
+async fn test_adopt_bunyip_sub_relinks_rotated_sub() {
+    let pool = setup_pool().await;
+    let id = lets_chat::db::auth::create_user_from_bunyip(
+        &pool,
+        "alice",
+        "sub-old",
+        Some("Alice"),
+        Some("alice@example.com"),
+    )
+    .await
+    .unwrap();
+
+    // Precondition: the row is found by its original sub.
+    assert!(
+        lets_chat::db::auth::get_user_auth_flags_by_bunyip_sub(&pool, "sub-old")
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    // Rotate: adopt the new sub onto the same row.
+    let adopted = lets_chat::db::auth::adopt_bunyip_sub(&pool, &id, "sub-new")
+        .await
+        .unwrap();
+    assert!(adopted);
+
+    // The row now answers to the new sub, and no longer to the old one.
+    let by_new = lets_chat::db::auth::get_user_auth_flags_by_bunyip_sub(&pool, "sub-new")
+        .await
+        .unwrap();
+    assert_eq!(by_new, Some((id.clone(), false, false)));
+    assert!(
+        lets_chat::db::auth::get_user_auth_flags_by_bunyip_sub(&pool, "sub-old")
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // The email still resolves to the same row: no duplicate was provisioned.
+    let by_email = lets_chat::db::auth::find_user_id_by_email(&pool, "alice@example.com")
+        .await
+        .unwrap();
+    assert_eq!(by_email, Some(id));
+}
+
+// LC-618: bot rows are never adopted. adopt_bunyip_sub returns false so the
+// callback raises an identity conflict rather than hijacking a bot identity.
+#[tokio::test]
+async fn test_adopt_bunyip_sub_refuses_bot_row() {
+    let pool = setup_pool().await;
+    let bot_id = lets_chat::db::auth::create_bot(&pool, "botty")
+        .await
+        .unwrap();
+
+    let adopted = lets_chat::db::auth::adopt_bunyip_sub(&pool, &bot_id, "sub-x")
+        .await
+        .unwrap();
+    assert!(!adopted);
+
+    // "sub-x" was not written anywhere: the bot's placeholder sub is untouched.
+    assert!(
+        lets_chat::db::auth::get_user_auth_flags_by_bunyip_sub(&pool, "sub-x")
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
