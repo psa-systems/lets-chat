@@ -3,14 +3,14 @@
    enough enclave list pushed the foot utilities - settings, shortcuts, and the
    avatar - below the fold, where they were silently unreachable. #}
 <nav id="switcher" class="w-16 flex flex-col items-center py-3 gap-2 overflow-visible">
-  {# LC-576: rail order is brand -> Home -> rule -> enclaves -> discover, then the
+  {# LC-576 / LC-622: rail order is Home -> rule -> enclaves -> discover, then the
      utilities pinned to the foot with the avatar last. The rule separates the
-     product-level entry points (brand, Home) from the enclave stack; `+` is part
-     of that stack (it adds to it) so it follows the enclaves with no rule of its
-     own, rather than being exiled to the foot as it was. #}
-  <a href="/" class="lc-rail-brand" aria-label="Let's Chat" data-lc-tip="Let's Chat" data-lc-tip-pos="right">
-    <img src="/branding/favicon?v={{ asset_version }}" alt="" class="h-6 w-6 object-contain">
-  </a>
+     product-level Home entry from the enclave stack; `+` is part of that stack
+     (it adds to it) so it follows the enclaves with no rule of its own, rather
+     than being exiled to the foot as it was. LC-622 removed the separate "Let's
+     Chat" brand button that used to head the rail: after LC-621 its `/` link
+     landed on the same Home dashboard as the Home tile below, so it was a
+     redundant second button stacked on top of Home. #}
   {% for e in switcher %}{% if e.id.is_none() %}
   <a href="/?home=1"
      class="lc-rail-tile w-11 h-11 flex items-center justify-center{% if e.active %} lc-rail-active{% endif %}"
