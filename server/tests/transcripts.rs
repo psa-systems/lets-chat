@@ -107,6 +107,20 @@ async fn setup_with_clients(
     stt_client: Option<Arc<dyn lets_chat::stt::SttClient>>,
     llm_client: Option<Arc<dyn lets_chat::llm::LlmClient>>,
 ) -> Setup {
+    // LC-619: the /audio route sheds a clip with 429 from two independent STT
+    // load controls, both process-wide and both tripped by the parallel
+    // transcripts binary submitting clips across concurrent STT tests, which
+    // intermittently failed an unrelated test:
+    //   1. try_admit's per-minute rate cap (SttGlobal 30/min, SttRoom 10/min by
+    //      default), read from the environment on each call.
+    //   2. the concurrency semaphore (LETS_CHAT_STT_WORKERS permits, default 2),
+    //      a OnceLock read once at the first transcription.
+    // No test asserts either limit, so raise all three out of the way. WORKERS
+    // must be set before the first /audio POST anywhere; every test runs this
+    // builder before posting, so the OnceLock initializes to the high value.
+    std::env::set_var("LETS_CHAT_STT_RATE_GLOBAL", "1000000");
+    std::env::set_var("LETS_CHAT_STT_RATE_ROOM", "1000000");
+    std::env::set_var("LETS_CHAT_STT_WORKERS", "1024");
     ensure_tempdir();
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
