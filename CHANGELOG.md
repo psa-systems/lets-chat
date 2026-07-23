@@ -10,6 +10,32 @@ git log --grep='\[operator-action\]' <last-tag>..HEAD
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections: **Security** (must-act), **Changed** (behavior/default/config changes), **Added**, **Fixed**, **Deprecated**. Internal-only work (refactors, test hygiene, decoder hardening with no operator impact) is intentionally omitted; the git history is the complete record.
 
+## [v0.2.0] - 2026-07-22
+
+Second tagged release, cut from `main` after ~508 commits (roughly seven weeks) of work on top of the v0.1.0 seed. Server deployments track the `latest` OCI image built off `main`, so a running server does not pick this up until its image is repulled and the container is restarted; the tag is the pinning + desktop-updater baseline. The entries below are curated from the `[operator-action]` markers in `git log v0.1.0..HEAD`; internal work (refactors, test hygiene, dependency hardening with no operator impact) is intentionally omitted and lives in the git history.
+
+### Security
+
+- **Session tokens are now hashed at rest (LC-514).** The `sessions` table stored bearer cookies in plaintext; they are now stored hashed, and the first startup after this deploy runs a one-shot in-place re-hash of every existing row. Existing user sessions stay valid because the cookie value is the input to the new hashed lookup, so no one is logged out. **Action:** a database backup taken BEFORE this deploy still contains the plaintext cookies it captured; if that backup's cookie window has not expired (default cookie TTL is 30 days), rotate or invalidate it after deploying.
+- **Security response headers are now emitted on every response (LC-504).** lets-chat now sends HSTS (`max-age=31536000; includeSubDomains; preload`), Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, Referrer-Policy and Permissions-Policy on every response. **Action:** if you terminate TLS at a fronting proxy that also injects these headers, reconcile them to avoid duplicates, and be aware the HSTS `includeSubDomains; preload` directive now applies to the whole domain for a year.
+
+### Changed
+
+- **GIF picker migrated from Tenor to Giphy (LC-505).** Google's Tenor v2 API shut down, so the composer GIF picker now uses Giphy. **Action:** set `LETS_CHAT_GIPHY_API_KEY` in place of the old `LETS_CHAT_TENOR_API_KEY`; optional `LETS_CHAT_GIPHY_RATING` (`g`/`pg`/`pg-13`/`r`, default `pg-13`). If you never set the Tenor key the picker was hidden and stays hidden until you set the Giphy key.
+- **Recorded video clips are now transcribed via the STT endpoint (LC-496).** When `LETS_CHAT_STT_URL` is configured, video clips are sent to it in addition to call audio. No action required; this is a load/cost consideration on a metered or third-party STT engine, and an engine that rejects video containers simply yields no clip transcript (the clip still posts and plays).
+- **Per-message translation sends message text to the LLM endpoint (LC-486).** With `LETS_CHAT_LLM_URL` set, a per-message Translate action now sends that message's text to the endpoint (cached). No action required; load/cost/content consideration on metered or third-party engines.
+- **Catch-me-up summaries send chat text to the LLM endpoint (LC-484).** With `LETS_CHAT_LLM_URL` set, room and thread message text is now sent to that endpoint for on-demand summaries (cached). No action required; same consideration as above.
+- **Voice messages are now transcribed via the STT endpoint (LC-483).** With `LETS_CHAT_STT_URL` set, voice-message audio is sent to it in addition to call audio. No action required; load/cost consideration on a metered STT engine.
+
+### Added
+
+- **LiveKit SFU stage audio (LC-512).** Optional large-audience stage audio backed by a self-hosted LiveKit server. **Action to enable:** run LiveKit and set `LETS_CHAT_LIVEKIT_URL` (`wss://...`), `LETS_CHAT_LIVEKIT_API_KEY`, `LETS_CHAT_LIVEKIT_API_SECRET`; the build must run `just vendor-js` to fetch the browser SDK (already wired into `just build` / `build-saas`). Left unset, stage roles and request-to-speak still work with no audio.
+- **GIF picker in the composer (LC-488, superseded by LC-505).** Introduced against Tenor and migrated to Giphy within this release window; see the Giphy entry under Changed for the current env var.
+
+### Deprecated
+
+- **`LETS_CHAT_TENOR_*` env vars (LC-505).** Replaced by `LETS_CHAT_GIPHY_*` after the Tenor API shutdown. The old vars are ignored.
+
 ## [v0.1.0] - 2026-06-24
 
 First tagged release. lets-chat previously shipped only as the `latest` OCI image built off `main`; v0.1.0 is the seed version cut to a tag so deployments can pin a release (e.g. `lets-chat:v0.1.0` in your OCI registry) and the desktop self-updater has a baseline. This entry is the operator-visible snapshot of everything in `main` at the tag, folding the prior **Pre-release** seed (snapshot 2026-05-30) together with the operator-action changes that landed after it.
