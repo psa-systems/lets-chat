@@ -1563,19 +1563,25 @@ pub async fn find_user_id_by_email(
     Ok(row.map(|r| r.get::<String, _>("id")))
 }
 
-/// LC-588: link a bunyip subject to an existing local account (SSO onto a
-/// pre-existing password account, matched by verified email). Returns whether a
-/// row was linked. The guards ensure it only links a row that is not already
-/// linked to another subject and is not a bot, so it can never steal or hijack
-/// an already-claimed identity.
-pub async fn link_bunyip_sub(
+/// LC-588 + LC-618: adopt an existing local account onto a bunyip subject,
+/// matched by verified email. Returns whether a row was adopted.
+///
+/// LC-588 originally only linked an UNLINKED row (`bunyip_sub IS NULL OR ''`) so
+/// SSO could land on a pre-existing password account. LC-618 drops that guard so
+/// this also re-adopts a row whose `bunyip_sub` has ROTATED: the OP issued a new
+/// sub for the same verified email (account recreated, or the OP's user store
+/// reseeded). The caller only reaches here after the sub-by-lookup missed, so no
+/// other row holds `sub` and force-setting it cannot violate `UNIQUE(bunyip_sub)`.
+/// The `is_bot` guard is retained: bot rows are never adopted (the caller turns a
+/// `false` return into an identity conflict rather than provisioning a duplicate).
+pub async fn adopt_bunyip_sub(
     pool: &SqlitePool,
     user_id: &str,
     sub: &str,
 ) -> Result<bool, sqlx::Error> {
     let res = sqlx::query(
         "UPDATE users SET bunyip_sub = ?, updated_at = datetime('now') \
-         WHERE id = ? AND (bunyip_sub IS NULL OR bunyip_sub = '') AND COALESCE(is_bot, 0) = 0",
+         WHERE id = ? AND COALESCE(is_bot, 0) = 0",
     )
     .bind(sub)
     .bind(user_id)
