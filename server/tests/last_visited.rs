@@ -12,7 +12,7 @@ async fn open_pool(name: &str) -> SqlitePool {
     common::pool(name).await
 }
 
-async fn app_with_user_in_general() -> (Router, String, String) {
+async fn app_with_user_in_general() -> (Router, String, String, SqlitePool) {
     app_with_user(true).await
 }
 
@@ -34,7 +34,7 @@ async fn app_with_user_in_general() -> (Router, String, String) {
 /// onboarding page on a fully seeded instance. The `DELETE FROM rooms` crutch
 /// is gone: `in_general: false` now only skips the backfill and leaves the user
 /// a plain member, which is exactly the state a real new signup is in.
-async fn app_with_user(in_general: bool) -> (Router, String, String) {
+async fn app_with_user(in_general: bool) -> (Router, String, String, SqlitePool) {
     let auth = open_pool("auth").await;
     let chat = open_pool("chat").await;
     let settings = open_pool("settings").await;
@@ -58,7 +58,7 @@ async fn app_with_user(in_general: bool) -> (Router, String, String) {
     let state = AppState {
         geoip: None,
         login_approval_enabled: false,
-        auth,
+        auth: auth.clone(),
         chat,
         settings,
         hub: Arc::new(Hub::new()),
@@ -80,7 +80,7 @@ async fn app_with_user(in_general: bool) -> (Router, String, String) {
         llm_client: None,
         embedding_client: None,
     };
-    (routes::build_router(state), session, user_id)
+    (routes::build_router(state), session, user_id, auth)
 }
 
 /// Fetch `/` as the given session and return the rendered body.
@@ -103,7 +103,7 @@ async fn get_home(app: &Router, sess: &str) -> String {
 async fn home_renders_welcome_when_no_cookie() {
     // LC-600: a user with no accessible room - the only case that still reaches
     // the onboarding empty state since LC-575.
-    let (app, sess, _id) = app_with_user(false).await;
+    let (app, sess, _id, _) = app_with_user(false).await;
     let s = get_home(&app, &sess).await;
     assert!(s.contains("Welcome"), "should render welcome page");
 }
@@ -113,7 +113,7 @@ async fn home_renders_welcome_when_no_cookie() {
 // two tests below kept asserting the pre-LC-575 page (LC-600).
 #[tokio::test]
 async fn home_renders_dashboard_when_user_has_rooms() {
-    let (app, sess, _id) = app_with_user_in_general().await;
+    let (app, sess, _id, _) = app_with_user_in_general().await;
     let s = get_home(&app, &sess).await;
     assert!(s.contains("Catch up"), "renders the dashboard heading");
     assert!(
@@ -132,7 +132,7 @@ async fn home_renders_dashboard_when_user_has_rooms() {
 // Discover/create an enclave, View invitations) and the supporting subtitle.
 #[tokio::test]
 async fn home_welcome_renders_quick_actions() {
-    let (app, sess, _id) = app_with_user(false).await;
+    let (app, sess, _id, _) = app_with_user(false).await;
     let s = get_home(&app, &sess).await;
     assert!(
         s.contains("start something new"),
@@ -154,7 +154,12 @@ async fn home_welcome_renders_quick_actions() {
 
 #[tokio::test]
 async fn home_redirects_to_last_visited_room_when_safe() {
-    let (app, sess, _id) = app_with_user_in_general().await;
+    let (app, sess, id, auth) = app_with_user_in_general().await;
+    // LC-621: the last-visited redirect is opt-in now (the default landing is the
+    // Home dashboard), so set the "last-room" preference to exercise the redirect.
+    db::auth::set_user_home_landing(&auth, &id, Some("last-room"))
+        .await
+        .unwrap();
     // The migration seeded 'general' (id=1) and 'random' (id=2) into the General enclave.
     let req = Request::builder()
         .method(Method::GET)
@@ -175,7 +180,7 @@ async fn home_redirects_to_last_visited_room_when_safe() {
 
 #[tokio::test]
 async fn home_ignores_malformed_cookie() {
-    let (app, sess, _id) = app_with_user_in_general().await;
+    let (app, sess, _id, _) = app_with_user_in_general().await;
     let req = Request::builder()
         .method(Method::GET)
         .uri("/")
@@ -191,7 +196,7 @@ async fn home_ignores_malformed_cookie() {
 
 #[tokio::test]
 async fn home_ignores_inaccessible_room_cookie() {
-    let (app, sess, _id) = app_with_user_in_general().await;
+    let (app, sess, _id, _) = app_with_user_in_general().await;
     let req = Request::builder()
         .method(Method::GET)
         .uri("/")
@@ -207,7 +212,7 @@ async fn home_ignores_inaccessible_room_cookie() {
 
 #[tokio::test]
 async fn get_room_sets_last_visited_cookie() {
-    let (app, sess, _id) = app_with_user_in_general().await;
+    let (app, sess, _id, _) = app_with_user_in_general().await;
     let req = Request::builder()
         .method(Method::GET)
         .uri("/room/1")

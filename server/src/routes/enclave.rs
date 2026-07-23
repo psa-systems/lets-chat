@@ -1148,8 +1148,8 @@ pub struct AddBotForm {
 
 /// POST /enclave/{id}/members/add-bot - LC-516: an enclave manager adds a bot
 /// (`users.is_bot=1`) directly as a member. Bots cannot accept invitations, and
-/// the removed General auto-join was previously the only path a bot entered an
-/// enclave, so managers need a direct add here. Same manage-gate as invite.
+/// the General auto-join (restored for human signups in LC-621) does not apply
+/// to bots, so a manager still needs a direct add here. Same manage-gate as invite.
 pub async fn post_add_bot(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
