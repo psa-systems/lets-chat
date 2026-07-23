@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.2.0"
 
 # Linking many large test binaries in parallel can exhaust memory on hosts
 # without swap. Trimming debug info to line tables keeps the linker footprint
