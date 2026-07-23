@@ -2573,20 +2573,6 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     overflow-y: auto;
 }
 
-/* LC-576: the Let's Chat brand mark at the head of the rail (prototype .rail-logo).
-   An accent-filled tile, so it reads as the product's own mark and not as another
-   enclave in the stack below it. */
-.lc-rail-brand {
-    display: grid;
-    place-items: center;
-    flex: none;
-    height: 2.5rem;
-    width: 2.5rem;
-    border-radius: 0.75rem;
-    background-color: var(--accent);
-    color: var(--accent-content);
-}
-
 /* LC-576: the rail's discover/create `+` - a bare action glyph with no tile fill,
    so it does not read as another enclave in the stack. */
 .lc-rail-add {
