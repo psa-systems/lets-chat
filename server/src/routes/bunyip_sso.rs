@@ -135,6 +135,10 @@ pub async fn get_callback(
             tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, "sso reject: sub attached to bot row");
             return err_dance("bot conflict");
         }
+        Err(ResolveError::IdentityConflict) => {
+            tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, "sso reject: email already linked to a different identity");
+            return Redirect::to("/login?sso_error=identity_conflict").into_response();
+        }
         Err(ResolveError::Database(e)) => {
             tracing::error!(target: "bunyip_sso", error = %e, "resolve_or_provision_user failed");
             return Redirect::to("/login?sso_error=internal").into_response();
@@ -234,6 +238,11 @@ pub async fn get_callback(
 enum ResolveError {
     Banned,
     BotConflict,
+    /// LC-618: the verified email is already owned by a row this login cannot
+    /// adopt (a bot row, an unverified-email match, or a banned row), so
+    /// provisioning would collide on `UNIQUE(users.email)`. Surfaced to the user
+    /// as an actionable message rather than an opaque internal error.
+    IdentityConflict,
     Database(sqlx::Error),
     App(AppError),
 }
@@ -248,6 +257,14 @@ impl From<AppError> for ResolveError {
     fn from(e: AppError) -> Self {
         ResolveError::App(e)
     }
+}
+
+/// LC-618: true when a sqlx error is a UNIQUE violation on `users.email`
+/// specifically (not `username` or `bunyip_sub`), so the provision path can map
+/// an email collision to an actionable identity conflict instead of an opaque
+/// internal error.
+fn is_email_unique_violation(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(d) if d.is_unique_violation() && d.message().contains("users.email"))
 }
 
 /// `users` resolver for a verified Bunyip identity. See
@@ -269,13 +286,15 @@ async fn resolve_or_provision_user(
         return Ok(id);
     }
 
-    // LC-588: the sub did not match above, but the account may still exist
-    // locally under the same VERIFIED email (a password user who signed up
-    // before SSO). Adopt it by linking the bunyip_sub, rather than INSERTing a
-    // duplicate that trips UNIQUE(users.email). Gated on email_verified so a
-    // bunyip account cannot claim an unverified address to hijack a local
-    // account; find_user_id_by_email already excludes banned rows, and
-    // link_bunyip_sub only links a non-bot row not already linked to another sub.
+    // LC-588 + LC-618: the sub did not match above, but a users row may already
+    // exist under the same VERIFIED email. LC-588 adopted an UNLINKED row (a
+    // password user who signed up before SSO). LC-618 also re-adopts a row whose
+    // bunyip_sub has ROTATED - the OP issued a NEW sub for the same verified
+    // email (account recreated, or the OP's user store reseeded). Both cases link
+    // this sub onto the existing row rather than INSERTing a duplicate that trips
+    // UNIQUE(users.email) and 500s. Gated on email_verified so an unverified
+    // address cannot claim an account; find_user_id_by_email excludes banned
+    // rows; adopt_bunyip_sub refuses bot rows (returns false).
     if userinfo.email_verified == Some(true) {
         if let Some(email) = userinfo
             .email
@@ -284,19 +303,32 @@ async fn resolve_or_provision_user(
             .filter(|s| !s.is_empty())
         {
             if let Some(existing_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
-                if db::auth::link_bunyip_sub(&state.auth, &existing_id, sub).await? {
+                if db::auth::adopt_bunyip_sub(&state.auth, &existing_id, sub).await? {
                     return Ok(existing_id);
                 }
+                // The email is held by a bot row; refuse rather than provision a
+                // colliding duplicate.
+                return Err(ResolveError::IdentityConflict);
             }
         }
     }
 
-    // Fresh sub: auto-provision a users row.
+    // Fresh sub with no adoptable verified-email row: provision. If an email is
+    // already owned by a row we did not adopt above (an unverified-email match,
+    // or a banned row that find_user_id_by_email excludes), the INSERT collides
+    // on UNIQUE(users.email). Surface that as an actionable identity conflict
+    // rather than an opaque sso_error=internal (LC-618).
     let username = pick_username(state, userinfo).await?;
     let display_name = userinfo.name.as_deref().filter(|s| !s.trim().is_empty());
     let email = userinfo.email.as_deref().filter(|s| !s.trim().is_empty());
     let id =
-        db::auth::create_user_from_bunyip(&state.auth, &username, sub, display_name, email).await?;
+        match db::auth::create_user_from_bunyip(&state.auth, &username, sub, display_name, email)
+            .await
+        {
+            Ok(id) => id,
+            Err(e) if is_email_unique_violation(&e) => return Err(ResolveError::IdentityConflict),
+            Err(e) => return Err(e.into()),
+        };
 
     promote_if_first_user(&state.auth, &id).await?;
     Ok(id)

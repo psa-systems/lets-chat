@@ -43,6 +43,9 @@ fn map_sso_error(code: &str) -> &'static str {
         "dance" => "Sign-in could not be completed. Please try again.",
         "op" => "Bunyip rejected the sign-in attempt.",
         "banned" => "Your account is suspended.",
+        "identity_conflict" => {
+            "This account's email is already linked to a different sign-in identity. Contact an administrator."
+        }
         "internal" => "An internal error occurred. Please try again.",
         _ => "Sign-in failed.",
     }
