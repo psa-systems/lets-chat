@@ -331,6 +331,22 @@ async fn resolve_or_provision_user(
         };
 
     promote_if_first_user(&state.auth, &id).await?;
+    // LC-621: every user is a member of the General default enclave from the
+    // moment they exist, not only after the next boot-time backfill. Best-effort
+    // (the backfill is the safety net), so a transient failure here never 500s
+    // the SSO callback.
+    if let Ok(Some(general_id)) = db::enclave::get_general_id(&state.chat).await {
+        if let Err(e) = db::enclave::ensure_general_membership(
+            &state.chat,
+            general_id,
+            &id,
+            crate::models::enclave::EnclaveRole::Member,
+        )
+        .await
+        {
+            tracing::warn!(target: "bunyip_sso", error = %e, user_id = %id, "General auto-join failed; backfill will retry");
+        }
+    }
     Ok(id)
 }
 

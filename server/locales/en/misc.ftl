@@ -34,11 +34,6 @@ home-dash-empty-drafts = No saved drafts.
 home-dash-unread-aria = unread
 home-dash-mentions-aria = mentions
 home-dash-replies-aria = new replies
-# LC-516: inline create-enclave prompt shown when the user has no enclaves.
-home-create-enclave-title = Create your first enclave
-home-create-enclave-desc = Enclaves are your spaces for rooms and people.
-home-create-enclave-name-placeholder = Enclave name
-home-create-enclave-button = Create
 
 ## Message search results
 search-no-results = No results.

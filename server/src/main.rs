@@ -55,6 +55,13 @@ async fn main() {
 
     let auth_pool = db::open_auth_pool().await;
     let chat_pool = db::open_chat_pool().await;
+    // LC-621: ensure every pre-existing user is a member of the General default
+    // enclave on each boot (idempotent INSERT OR IGNORE). The SSO signup path
+    // auto-joins new users; only this backfill covers accounts that existed
+    // before LC-621 (or before they next sign in after the upgrade).
+    if let Err(e) = db::enclave::backfill_general_membership(&auth_pool, &chat_pool).await {
+        tracing::warn!(error = %e, "General enclave backfill failed");
+    }
     let settings_pool = db::open_settings_pool().await;
     let secret_key = lets_chat::crypto::load_secret_key_from_env().map(std::sync::Arc::new);
 

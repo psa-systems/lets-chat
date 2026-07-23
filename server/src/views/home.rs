@@ -38,9 +38,6 @@ pub struct WelcomePage<'a> {
     /// LC-372: count of pending enclave invitations, drives the count badge on
     /// the welcome empty-state "View invitations" quick action (hidden when 0).
     pub pending_invites: usize,
-    /// LC-516: false when the user belongs to no enclaves; drives the inline
-    /// "create your first enclave" prompt that replaced the auto-default enclave.
-    pub has_enclaves: bool,
     /// LC-575: when true, render the Home dashboard card grid (the user has at
     /// least one accessible room or DM). When false the onboarding welcome /
     /// empty-state renders instead, exactly as before.

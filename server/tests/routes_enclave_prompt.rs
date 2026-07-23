@@ -1,12 +1,11 @@
-//! LC-516: removing the auto-default "General" enclave.
+//! LC-621: General is the authoritative auto-default enclave again, so the
+//! LC-516 "create your first enclave" prompt and its two tests are gone.
 //!
-//! Two behaviors are covered:
-//! 1. A user who belongs to no enclave sees the inline "create your first
-//!    enclave" prompt on Home; a user who belongs to one does not.
-//! 2. An enclave manager can add a bot directly as a member (bots cannot
-//!    accept invitations), and a non-manager cannot.
+//! Remaining coverage: an enclave manager can add a bot directly as a member
+//! (bots cannot accept invitations), a non-manager cannot, and POST /enclaves
+//! rejects an overlong name.
 
-use axum::body::{to_bytes, Body};
+use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
@@ -22,7 +21,6 @@ struct TestApp {
     chat: SqlitePool,
     alice_id: String,
     alice_session: String,
-    bob_id: String,
     bob_session: String,
     carol_id: String,
     bot_id: String,
@@ -48,8 +46,9 @@ async fn setup() -> TestApp {
     let alice_session = db::auth::create_session(&auth, &alice_id).await.unwrap();
     let bob_session = db::auth::create_session(&auth, &bob_id).await.unwrap();
 
-    // Deliberately NOT calling backfill_general_membership: LC-516 removed the
-    // auto-default enclave, so a fresh user starts with zero enclaves.
+    // Deliberately NOT auto-joining General here: these tests exercise the
+    // add-bot and create-validation flows with users who start in no community
+    // enclave, and each test creates the enclave it needs.
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
@@ -84,24 +83,10 @@ async fn setup() -> TestApp {
         chat,
         alice_id,
         alice_session,
-        bob_id,
         bob_session,
         carol_id,
         bot_id,
     }
-}
-
-async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .header(header::COOKIE, format!("session={sess}"))
-        .body(Body::empty())
-        .unwrap();
-    let res = app.clone().oneshot(req).await.unwrap();
-    let status = res.status();
-    let body = to_bytes(res.into_body(), 1 << 20).await.unwrap();
-    (status, String::from_utf8_lossy(&body).into_owned())
 }
 
 async fn post_form(app: &Router, sess: &str, uri: &str, body: String) -> StatusCode {
@@ -113,36 +98,6 @@ async fn post_form(app: &Router, sess: &str, uri: &str, body: String) -> StatusC
         .body(Body::from(body))
         .unwrap();
     app.clone().oneshot(req).await.unwrap().status()
-}
-
-#[tokio::test]
-async fn no_enclave_user_sees_create_prompt() {
-    let t = setup().await;
-    let (status, body) = get(&t.app, &t.bob_session, "/?home=1").await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(
-        body.contains("action=\"/enclaves\""),
-        "a user with no enclaves must see the inline create-enclave form",
-    );
-    assert!(
-        body.contains("Create your first enclave"),
-        "the create prompt title should render",
-    );
-}
-
-#[tokio::test]
-async fn enclave_member_does_not_see_prompt() {
-    let t = setup().await;
-    // Giving bob an enclave (as its owner) suppresses the prompt.
-    db::enclave::create_enclave(&t.chat, "bobland", None, &t.bob_id)
-        .await
-        .unwrap();
-    let (status, body) = get(&t.app, &t.bob_session, "/?home=1").await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(
-        !body.contains("Create your first enclave"),
-        "a user who already belongs to an enclave must not see the create prompt",
-    );
 }
 
 #[tokio::test]
