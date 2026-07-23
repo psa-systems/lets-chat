@@ -5,6 +5,14 @@
 //! contained `<svg>` element meant to be dropped into a template with
 //! `|safe`; all interpolated values are numbers, so there is nothing to
 //! escape.
+//!
+//! LC-570: the chart CHROME (gridlines, axis + date labels, empty-state
+//! text) uses the palette tokens `var(--border)` / `var(--content-subtle)`
+//! via inline `style` (CSS custom properties resolve in `style`, not in SVG
+//! presentation attributes like `fill="..."`), so the axes recolor across
+//! every palette and light/dark mode instead of the old hardcoded slate.
+//! The per-series `color` stays a fixed categorical hue (one per metric, for
+//! distinguishability), passed by the caller and read in both modes.
 
 use crate::db::analytics::DayPoint;
 
@@ -26,7 +34,7 @@ pub fn line_chart(points: &[DayPoint], color: &str) -> String {
         return format!(
             "<svg viewBox=\"0 0 {W} {H}\" class=\"w-full h-auto\" role=\"img\" \
              aria-label=\"No data\"><text x=\"{cx}\" y=\"{cy}\" text-anchor=\"middle\" \
-             fill=\"#94a3b8\" font-size=\"12\">No data in range</text></svg>",
+             style=\"fill:var(--content-subtle)\" font-size=\"12\">No data in range</text></svg>",
             cx = W / 2.0,
             cy = H / 2.0,
         );
@@ -75,8 +83,8 @@ pub fn line_chart(points: &[DayPoint], color: &str) -> String {
         let label = (max * frac).round() as i64;
         grid.push_str(&format!(
             "<line x1=\"{PAD_L}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
-             stroke=\"#e2e8f0\" stroke-width=\"1\"/>\
-             <text x=\"{tx:.1}\" y=\"{ty:.1}\" text-anchor=\"end\" fill=\"#94a3b8\" \
+             style=\"stroke:var(--border)\" stroke-width=\"1\"/>\
+             <text x=\"{tx:.1}\" y=\"{ty:.1}\" text-anchor=\"end\" style=\"fill:var(--content-subtle)\" \
              font-size=\"10\">{label}</text>",
             x2 = W - PAD_R,
             tx = PAD_L - 4.0,
@@ -96,8 +104,8 @@ pub fn line_chart(points: &[DayPoint], color: &str) -> String {
          <polyline points=\"{line}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" \
          stroke-linejoin=\"round\" stroke-linecap=\"round\"/>\
          <circle cx=\"{lx:.1}\" cy=\"{ly:.1}\" r=\"3\" fill=\"{color}\"/>\
-         <text x=\"{PAD_L}\" y=\"{tby:.1}\" fill=\"#94a3b8\" font-size=\"10\">{first_date}</text>\
-         <text x=\"{rx:.1}\" y=\"{tby:.1}\" text-anchor=\"end\" fill=\"#94a3b8\" \
+         <text x=\"{PAD_L}\" y=\"{tby:.1}\" style=\"fill:var(--content-subtle)\" font-size=\"10\">{first_date}</text>\
+         <text x=\"{rx:.1}\" y=\"{tby:.1}\" text-anchor=\"end\" style=\"fill:var(--content-subtle)\" \
          font-size=\"10\">{last_date}</text>\
          </svg>",
         lx = x_at(n - 1),
