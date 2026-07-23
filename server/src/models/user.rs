@@ -63,7 +63,7 @@ pub struct UserRecord {
     pub theme_palette: Option<String>,
     /// LC-569: preferred UI scale ("compact"/"default"/"large"/"xl"), or NULL = default.
     pub theme_scale: Option<String>,
-    /// LC-575: landing preference ("last-room"/"home"), or NULL = last-room.
+    /// LC-575 / LC-621: landing preference ("last-room"/"home"), or NULL = home.
     pub home_landing: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), NULL = comfortable.
     pub density: Option<String>,
@@ -115,7 +115,7 @@ pub struct User {
     pub theme_palette: Option<String>,
     /// LC-569: preferred UI scale ("compact"/"default"/"large"/"xl"), or None = default.
     pub theme_scale: Option<String>,
-    /// LC-575: landing preference ("last-room"/"home"), or None = last-room.
+    /// LC-575 / LC-621: landing preference ("last-room"/"home"), or None = home.
     pub home_landing: Option<String>,
     /// LC-194: preferred UI density ("comfortable"/"compact"), None = comfortable.
     pub density: Option<String>,
@@ -159,13 +159,14 @@ impl User {
         }
     }
 
-    /// LC-575: saved landing preference, defaulting to "last-room" when unset.
-    /// "last-room" keeps the last-visited redirect; "home" lands on the Home
-    /// dashboard.
+    /// LC-575 / LC-621: saved landing preference, defaulting to "home" when
+    /// unset. "home" lands signed-in users on the Home dashboard (the
+    /// cross-enclave "what did I miss" hub); "last-room" keeps the last-visited
+    /// redirect for users who opt into it.
     pub fn home_landing_or_default(&self) -> &str {
         match self.home_landing.as_deref() {
             Some(s @ ("last-room" | "home")) => s,
-            _ => "last-room",
+            _ => "home",
         }
     }
 

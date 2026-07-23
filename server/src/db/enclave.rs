@@ -10,6 +10,29 @@ pub async fn get_general_id(pool: &SqlitePool) -> Result<Option<i64>, sqlx::Erro
     Ok(row.map(|r| r.get::<i64, _>("id")))
 }
 
+/// LC-621: idempotently add `user_id` to the General enclave (`general_id`) as a
+/// `trusted` member. General is everyone's default home, never a gated
+/// community, so the new-member posting cooldown never applies there. Shared by
+/// the signup-time auto-join (`routes::bunyip_sso::resolve_or_provision_user`)
+/// and the boot-time [`backfill_general_membership`] so the two paths cannot
+/// drift.
+pub async fn ensure_general_membership(
+    chat: &SqlitePool,
+    general_id: i64,
+    user_id: &str,
+    role: EnclaveRole,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role, trust) VALUES (?, ?, ?, 'trusted')",
+    )
+    .bind(general_id)
+    .bind(user_id)
+    .bind(role.as_str())
+    .execute(chat)
+    .await?;
+    Ok(())
+}
+
 fn map_enclave(row: &sqlx::sqlite::SqliteRow) -> Enclave {
     Enclave {
         id: row.get("id"),
@@ -166,26 +189,21 @@ pub async fn backfill_general_membership(
         let target_role = if role == "admin" {
             if owner_id.is_none() {
                 owner_id = Some(id.clone());
-                "owner"
+                EnclaveRole::Owner
             } else {
-                "admin"
+                EnclaveRole::Admin
             }
         } else {
-            "member"
+            EnclaveRole::Member
         };
-        // LC-551: the general enclave is everyone's default home, not a gated
-        // community, and these are pre-existing (established) users - insert them
-        // as `trusted` so the new-member posting cooldown never applies here. The
-        // "new" trust level is earned when JOINING a community enclave via invite
-        // code / discover (see `post_join_by_code`), not in general.
-        sqlx::query(
-            "INSERT OR IGNORE INTO enclave_members (enclave_id, user_id, role, trust) VALUES (?, ?, ?, 'trusted')",
-        )
-        .bind(general_id)
-        .bind(&id)
-        .bind(target_role)
-        .execute(chat)
-        .await?;
+        // LC-551 / LC-621: the general enclave is everyone's default home, not a
+        // gated community, so members join `trusted` (the new-member posting
+        // cooldown never applies here). The "new" trust level is earned when
+        // JOINING a community enclave via invite code / discover (see
+        // `post_join_by_code`), not in general. The INSERT is shared with the
+        // signup-time auto-join via `ensure_general_membership` so the two paths
+        // cannot drift.
+        ensure_general_membership(chat, general_id, &id, target_role).await?;
     }
     if let Some(o) = owner_id {
         sqlx::query("UPDATE enclaves SET created_by=? WHERE id=? AND created_by='system'")
