@@ -34,11 +34,6 @@ home-dash-empty-drafts = No hay borradores guardados.
 home-dash-unread-aria = sin leer
 home-dash-mentions-aria = menciones
 home-dash-replies-aria = respuestas nuevas
-# LC-516: aviso en línea para crear un enclave cuando el usuario no tiene ninguno.
-home-create-enclave-title = Crea tu primer enclave
-home-create-enclave-desc = Los enclaves son tus espacios para salas y personas.
-home-create-enclave-name-placeholder = Nombre del enclave
-home-create-enclave-button = Crear
 
 ## Message search results
 search-no-results = Sin resultados.
