@@ -345,7 +345,11 @@ pub async fn enforce_maintenance_mode(
         || path == "/login"
         || path == "/logout"
         || path.starts_with("/auth/bunyip/")
-        || path == "/version";
+        || path == "/version"
+        // LC-581: health probes must answer during a maintenance window, or the
+        // orchestrator/LB would read maintenance mode as an outage.
+        || path == "/healthz"
+        || path == "/readyz";
     if exempt {
         return next.run(req).await;
     }

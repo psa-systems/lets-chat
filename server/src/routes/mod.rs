@@ -1698,6 +1698,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/ws", get(ws::ws_handler))
         .route("/version", get(get_version))
+        // LC-581: liveness + readiness probes. See the handlers for why the
+        // container HEALTHCHECK targets /healthz (liveness) and monitoring
+        // targets /readyz (readiness). Both are exempt from the maintenance gate
+        // in `enforce_maintenance_mode` so probes keep working during a window.
+        .route("/healthz", get(get_healthz))
+        .route("/readyz", get(get_readyz))
         // LC-541: dev-only theme/component gallery. Registered unconditionally;
         // the handler 404s in release builds.
         .route("/dev/theme-gallery", get(dev::theme_gallery))
@@ -1772,4 +1778,62 @@ async fn get_version() -> axum::Json<serde_json::Value> {
         "git_hash": version::GIT_HASH,
         "build_date": version::BUILD_DATE,
     }))
+}
+
+/// LC-581: liveness probe. Cheapest possible signal that the process is up and
+/// the async runtime is servicing requests. Touches NO dependency - not the DB,
+/// not the SSO OP - on purpose: a liveness probe answers "would a restart help?"
+/// and the answer is only "yes" when the process itself is wedged. This is what
+/// the container `HEALTHCHECK` (and any orchestrator liveness gate) points at.
+///
+/// The 504 in LC-581 was a boot that never reached `axum::serve` (a hard
+/// dependency was unreachable, so `main` exited and the container crash-looped).
+/// Pointing the container healthcheck at a route this cheap means that once the
+/// process IS listening it reports healthy immediately, so an orchestrator never
+/// culls a good container, and Traefik has a real upstream to route to instead
+/// of timing out.
+async fn get_healthz() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        axum::Json(serde_json::json!({ "status": "ok" })),
+    )
+}
+
+/// LC-581: readiness probe. Answers "can this instance actually serve traffic?"
+/// by pinging every backing store and reporting the SSO client's presence. A
+/// failed store yields 503 so a load balancer / monitoring check can drain or
+/// alert; unlike liveness this MUST NOT drive the container healthcheck, or a
+/// transient dependency blip would restart an otherwise-fine process (exactly
+/// the crash-loop shape that produced the LC-581 gateway timeout).
+async fn get_readyz(State(state): State<AppState>) -> Response {
+    async fn ping(pool: &sqlx::SqlitePool) -> bool {
+        sqlx::query("SELECT 1").fetch_one(pool).await.is_ok()
+    }
+
+    let auth_ok = ping(&state.auth).await;
+    let chat_ok = ping(&state.chat).await;
+    let settings_ok = ping(&state.settings).await;
+    // The SSO OP is a hard boot dependency (`main` exits without it), so if we
+    // are serving at all the client exists. Report it for completeness, but a
+    // runtime OP outage does not make an already-booted instance "not ready" -
+    // it degrades login only, so it does not flip the 503.
+    let sso_ok = state.bunyip_sso.is_some();
+
+    let ready = auth_ok && chat_ok && settings_ok;
+    let status = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        axum::Json(serde_json::json!({
+            "status": if ready { "ready" } else { "unready" },
+            "auth_db": auth_ok,
+            "chat_db": chat_ok,
+            "settings_db": settings_ok,
+            "sso": sso_ok,
+        })),
+    )
+        .into_response()
 }
