@@ -117,7 +117,16 @@ LABEL org.opencontainers.image.description="lets-chat"
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl --fail --silent http://localhost:8080/login >/dev/null || exit 1
+# LC-581: probe the dedicated liveness endpoint, not /login. /healthz touches no
+# DB or SSO, so it reports healthy the instant the process is listening and can
+# never false-negative on a dependency hiccup. /login rendered a full template
+# and pulled in the auth path, so it conflated "process up" with "login works".
+# start-period is 30s (was 5s) to cover a legitimately slow cold boot: startup
+# runs migrations, the General-enclave backfill, SSO discovery + JWKS, and the
+# syntect warm sequentially before it ever binds, and a healthy-but-slow boot
+# must not be culled. A crash-loop restarts faster than this and resets the
+# timer, so real failures still surface.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+    CMD curl --fail --silent http://localhost:8080/healthz >/dev/null || exit 1
 
 ENTRYPOINT ["lets-chat"]
