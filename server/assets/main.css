@@ -2744,6 +2744,25 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     margin-top: 0;
     margin-bottom: 0.25rem;
 }
+/* LC-598 follow-up: when the menu is height-capped and has to scroll (a short or
+   mid-height viewport where even the upward flip cannot fit the full list), the
+   scroll starts at the top, so the destructive Delete - the last row - is the
+   one that lands below the fold and reads as unreachable. Pin the danger group
+   to the bottom edge of the scroll viewport so Delete is always visible while the
+   middle of the list scrolls under it. A no-op when the menu fits without
+   scrolling (the group is already at the bottom). The menu's own bottom padding
+   is moved into the sticky group so scrolled rows cannot peek through the gap
+   beneath it. Scoped by :has() so menus without a danger action (someone else's
+   message with no delete right) keep their normal padding. */
+.lc-msg-menu:has(.lc-menu-item-danger) {
+    padding-bottom: 0;
+}
+.lc-msg-menu > .lc-menu-group:has(.lc-menu-item-danger) {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: 0.25rem;
+    background-color: var(--surface-elevated);
+}
 /* LC-598: grouped sections. The separator is a border on the group rather than a
    standalone .lc-menu-divider node, so a group that renders empty (or collapses,
    like the tools cluster) takes its rule with it and cannot leave a doubled or
