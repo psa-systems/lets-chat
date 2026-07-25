@@ -51,7 +51,9 @@
   }
 
   // Recent MRU: stored as an array of glyph strings; custom (image) emojis are
-  // skipped (their button text is empty) to keep the row Unicode-only.
+  // skipped (their button text is empty) to keep it Unicode-only. LC-623: the
+  // picker no longer renders these; the MRU now feeds only the hover quick-react
+  // bar (fillQuick), so a react is still recorded but shown in one place.
   function readRecent() {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; }
   }
@@ -62,28 +64,6 @@
     arr.unshift(glyph);
     arr = arr.slice(0, RECENT_MAX);
     try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); } catch (e) {}
-  }
-  function renderRecent(card) {
-    var row = card.querySelector('[data-lc-emoji-recent]');
-    if (!row) return;
-    var arr = readRecent();
-    if (!arr.length) { row.classList.add('hidden'); return; }
-    var cells = card.querySelectorAll('[data-lc-emoji-name]');
-    row.replaceChildren();
-    var label = document.createElement('span');
-    label.textContent = row.getAttribute('data-lc-recent-label') || '';
-    label.className = 'mr-1';
-    row.appendChild(label);
-    var added = 0;
-    arr.forEach(function (g) {
-      var src = Array.prototype.find.call(cells, function (c) { return c.textContent.trim() === g; });
-      if (!src) return;
-      row.appendChild(src.cloneNode(true)); // carries hx-post/hx-target
-      added++;
-    });
-    if (!added) { row.classList.add('hidden'); return; }
-    if (window.htmx) window.htmx.process(row); // wire the cloned buttons
-    row.classList.remove('hidden');
   }
 
   function initPicker(h) {
@@ -108,8 +88,6 @@
       });
       showCat(tabs[0].getAttribute('data-lc-emoji-tab'));
     }
-
-    renderRecent(card);
 
     var filter = card.querySelector('[data-lc-emoji-filter]');
     if (filter) {

@@ -118,7 +118,6 @@ partials-poll-closes = cierra
 ## Reaction bar
 partials-reaction-add = Añadir reacción
 partials-reaction-filter = Filtrar emoji
-partials-reaction-recent = Recientes
 # LC-389: emoji-picker category labels (tab + section heading).
 partials-reaction-cat-smileys = Caras y emociones
 partials-reaction-cat-people = Personas y cuerpo
