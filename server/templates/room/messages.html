@@ -101,6 +101,11 @@
     menu.style.top = (up ? Math.max(M, tr.top - Math.min(needed, avail) - 4) : tr.bottom + 4) + 'px';
     if (up) menu.classList.add('lc-menu-up');
     menu.style.setProperty('--lc-menu-max', avail + 'px');
+    // When the menu is capped and scrolls, open it at the top so the first row
+    // (Copy link) is the visible anchor; the sticky danger group (main.css) keeps
+    // Delete pinned at the bottom. Reset here because the same <details> is reused
+    // across opens and would otherwise restore a stale scroll offset.
+    menu.scrollTop = 0;
   }
   // A fixed menu no longer travels with the timeline, so close it if the page
   // scrolls or resizes under it rather than leaving it stranded mid-air.
