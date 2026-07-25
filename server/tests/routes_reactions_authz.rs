@@ -239,11 +239,12 @@ async fn picker_ships_filter_and_name_tokens() {
         body.contains("data-lc-emoji-name="),
         "picker buttons must carry searchable name tokens: {body}"
     );
-    // LC-288: the recent-emoji row placeholder (filled client-side from
-    // localStorage) ships in the picker.
+    // LC-623: the picker no longer carries its own recent-emoji row - the hover
+    // quick-react bar already surfaces the MRU one click away, so repeating it
+    // here made the picker a longer copy of the hover bar.
     assert!(
-        body.contains("data-lc-emoji-recent"),
-        "picker must ship the recent-emoji row placeholder: {body}"
+        !body.contains("data-lc-emoji-recent"),
+        "picker must NOT duplicate the hover bar's recent row: {body}"
     );
 }
 
