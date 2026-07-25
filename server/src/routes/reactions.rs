@@ -189,8 +189,9 @@ fn push_unicode_button(
 /// Return the floating emoji picker. LC-389: the full Unicode set organized
 /// into the eight standard categories (browsable via the tab strip + scroll)
 /// plus the message's enclave custom emojis. The LC-274 filter searches name +
-/// shortcodes across the whole set; the LC-288 recent row sits on top. DMs and
-/// non-enclave rooms see the Unicode set without a Custom section.
+/// shortcodes across the whole set. LC-623: no recent row here - the hover
+/// quick-react bar already surfaces the MRU, so the picker is browse/search only.
+/// DMs and non-enclave rooms see the Unicode set without a Custom section.
 pub async fn get_picker(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -265,9 +266,11 @@ pub async fn get_picker(
     // operator/maintainer-controlled, but escape defensively so a future string
     // with a quote cannot break out of the attribute).
     let filter_label = attr_escape(&crate::i18n::translate_current("partials-reaction-filter"));
-    // LC-288: empty recent-emoji row; the layout IIFE fills it from localStorage
-    // when the picker opens (hidden when there is no history).
-    let recent_label = attr_escape(&crate::i18n::translate_current("partials-reaction-recent"));
+    // LC-623: the picker no longer carries its own recent-emoji row. The hover
+    // quick-react bar (reactions.js fillQuick) already surfaces the same MRU one
+    // click away, so repeating it here made the picker read as a longer copy of
+    // the hover bar. The picker's job is now purely browse/search the full set;
+    // recents stay recorded (recordRecent) to feed the hover bar.
     // LC-384: the picker is a floating card rendered into the fixed-position
     // #lc-reaction-popover host (positioned by the layout.html LC-384 script).
     // The id MUST stay `picker-{id}` - the LC-288 recent-row JS derives the
@@ -276,11 +279,10 @@ pub async fn get_picker(
     let close_label = attr_escape(&crate::i18n::translate_current("reminders-close"));
     let body = format!(
         r##"<div id="picker-{message_id}" class="w-72 rounded-lg border border-border bg-surface-elevated shadow-lg overflow-hidden">
-  <div class="flex items-center gap-1 p-2 border-b border-border">
+  <div class="flex items-center gap-1 px-2 py-1.5 border-b border-border">
     <input data-lc-emoji-filter type="text" autocomplete="off" autofocus aria-label="{filter_label}" placeholder="{filter_label}" class="flex-1 min-w-0 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
     <button type="button" data-lc-reaction-close aria-label="{close_label}" class="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md text-content-muted hover:bg-surface-sunken hover:text-content">&times;</button>
   </div>
-  <div data-lc-emoji-recent data-lc-recent-label="{recent_label}" class="hidden flex flex-wrap items-center gap-1 px-2 py-1.5 text-xs text-content-muted border-b border-border"></div>
   <div data-lc-emoji-tabs class="lc-emoji-tabs">{tabs}</div>
   <div data-lc-emoji-grid class="lc-emoji-scroll">{sections}</div>
 </div>"##,
