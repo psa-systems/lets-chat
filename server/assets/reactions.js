@@ -37,9 +37,21 @@
     if (!h || !lastTrigger) return;
     var card = h.firstElementChild;
     if (!card) return;
+    var vw = window.innerWidth, vh = window.innerHeight, m = 8;
+    // LC-598 follow-up: cap the picker to the viewport so a tall card opened near
+    // a screen edge is never clipped off-screen with no way to reach the hidden
+    // rows. Shrink the inner emoji grid (the scrollable part) rather than the whole
+    // card, so the filter box and category tabs stay put and only the grid scrolls.
+    // Clear the previous clamp first so a resize back to a tall window restores the
+    // natural height before re-measuring.
+    var grid = card.querySelector('[data-lc-emoji-grid]');
+    if (grid) grid.style.maxHeight = '';
+    var overflow = card.offsetHeight - (vh - 2 * m);
+    if (grid && overflow > 0) {
+      grid.style.maxHeight = Math.max(96, grid.offsetHeight - overflow) + 'px';
+    }
     var tr = lastTrigger.getBoundingClientRect();
     var cw = card.offsetWidth, ch = card.offsetHeight;
-    var vw = window.innerWidth, vh = window.innerHeight, m = 8;
     var top = tr.top - ch - 6;
     if (top < m) top = tr.bottom + 6;
     if (top + ch > vh - m) top = Math.max(m, vh - ch - m);
