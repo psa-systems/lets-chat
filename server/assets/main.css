@@ -4049,7 +4049,9 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     position: sticky;
     top: 0;
     z-index: 1;
-    padding: 0.375rem 0.125rem 0.25rem;
+    /* LC-623: tighter vertical rhythm so the panel is not longer than it needs
+       to be now that the redundant Recent row is gone. */
+    padding: 0.1875rem 0.125rem 0.125rem;
     background-color: var(--surface-elevated);
     font-size: 0.6875rem;
     font-weight: 600;
@@ -4068,7 +4070,8 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     display: flex;
     gap: 0.125rem;
     overflow-x: auto;
-    padding: 0.25rem 0.5rem;
+    /* LC-623: trim the tab-strip padding to keep the header block compact. */
+    padding: 0.125rem 0.5rem;
     border-bottom: 1px solid var(--border);
 }
 .lc-emoji-tab {
@@ -4077,7 +4080,7 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: inline-flex; }
     align-items: center;
     justify-content: center;
     width: 1.75rem;
-    height: 1.75rem;
+    height: 1.625rem;
     border-radius: 0.375rem;
     font-size: 1rem;
     line-height: 1;
