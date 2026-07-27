@@ -1,7 +1,20 @@
 ---
 
 # Validate code on every push and pull request: fmt, clippy, build, tests.
-# Mirrors the local `just check` + `just test` recipes (which use ./dev/cargo).
+# Mirrors the local `just check` + `just test` recipes for the SERVER (which use
+# ./dev/cargo). The server + saas targets compile natively on the runner and
+# need only a C toolchain; this job never links the desktop GUI binary, so it
+# needs no GTK/WebKit system libraries.
+#
+# The desktop crate is intentionally NOT checked here. It needs GTK/WebKit/Soup/
+# SSL system libraries the bare runner does not carry, and the ./dev/cargo-desktop
+# wrapper cannot bridge that gap on this runner: the runner executes inside a
+# container while the docker daemon runs on the host, so the wrapper's
+# `-v $PWD:/work` bind mount resolves against the host filesystem and lands on an
+# empty directory. The desktop crate is validated by build-desktop-linux.yml
+# (docker buildx, which ships a build context instead of bind-mounting) on push
+# to main / release. See the PR for the full rationale and the follow-up to
+# restore PR-time desktop checks once the runner image carries a toolchain again.
 name: Check
 
 on:
@@ -32,6 +45,21 @@ jobs:
         # See ci-build/check-migration-immutability.nu and LC-515 / DEV-395.
         run: nu ci-build/check-migration-immutability.nu
 
+      - name: Install C toolchain
+        # This is the only workflow that compiles Rust natively on the runner:
+        # the desktop and OCI builds go through Docker images that bundle a
+        # toolchain, and local `just check` uses ./dev/cargo (the rust-builder
+        # image). The openSUSE base runner ships rustc but not a C linker, so
+        # every build script and final binary fails to link with `linker cc not
+        # found`. Install gcc (which provides /usr/bin/cc and pulls glibc-devel)
+        # before any cargo compile. Idempotent: a no-op if the image already has
+        # it, so this stays correct once the runner image is rebuilt with a
+        # toolchain. Root-or-sudo tolerant so it works on either runner layout.
+        run: |
+          if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+          $SUDO zypper --non-interactive --gpg-auto-import-keys refresh
+          $SUDO zypper --non-interactive install --no-recommends gcc
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
@@ -44,26 +72,28 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      - name: Clippy (workspace, standalone)
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (server, standalone)
+        run: cargo clippy -p lets-chat-server --all-targets -- -D warnings
 
       - name: Clippy (server, saas)
-        run: cargo clippy --all-targets -p lets-chat-server --no-default-features --features saas -- -D warnings
-
-      - name: Build (workspace, standalone)
-        run: cargo build --all-targets
+        run: cargo clippy -p lets-chat-server --no-default-features --features saas --all-targets -- -D warnings
 
       - name: Build (server, saas)
         run: cargo build -p lets-chat-server --no-default-features --features saas
 
-      # LC-605: was `cargo test --lib`, which ran only the 266 in-crate unit
-      # tests. The 177 integration binaries under server/tests/ were compiled by
-      # the `--all-targets` steps above but never executed, so ~74% of the suite
-      # (1036 tests in total) could not fail the pipeline. Three long-lived
-      # breakages reached main that way - see LC-600 and LC-605.
+      # LC-605: run the full server suite, not just `--lib`. `cargo test -p
+      # lets-chat-server` compiles AND runs every server target - the 266
+      # in-crate unit tests plus the ~177 integration binaries under
+      # server/tests/ - so an integration-level breakage fails the pipeline
+      # (three reached main when CI ran only `--lib`; see LC-600 / LC-605). The
+      # test compile builds those binaries itself, so no separate build step is
+      # needed to cover them.
       #
-      # Dropping `--lib` runs both. The marginal cost is small because the build
-      # steps above already compiled these binaries: locally the suite adds
-      # ~100s wall-clock over `--lib` on a warm cache.
+      # This step was previously fed by a workspace `cargo build --all-targets`,
+      # which also linked the desktop GUI binary and so required GTK/WebKit
+      # system libs on the runner. That whole-workspace build is gone: the job
+      # now mirrors `just check` (server only) and never links desktop. The
+      # desktop crate is validated by build-desktop-linux.yml on push to main /
+      # release (see the header comment for why it cannot run here).
       - name: Tests (server, standalone)
         run: cargo test -p lets-chat-server
