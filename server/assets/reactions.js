@@ -131,6 +131,7 @@
       var b = e.target.closest && e.target.closest('button[hx-post]');
       if (!b) return;
       recordRecent(b);
+      refreshQuickBars();
       setTimeout(close, 0);
     });
   }
@@ -151,11 +152,18 @@
       .catch(function () { return []; });
     return frequentSeed;
   }
+  // LC-625: recents lead. The hover bar is the one surviving "recent emoji"
+  // surface (the picker's recent row was removed in LC-623), so it must mirror
+  // the same device-local MRU the picker row used to read. Order: MRU first (it
+  // updates the instant you react), then the cross-device frequent seed, then
+  // defaults to fill an empty row. Seeding frequent first (the old order) meant a
+  // freshly-recorded recent never appeared once frequent already held QCAP
+  // glyphs, so the bar looked stale/wrong versus the recent-only picker row.
   function quickList(freq) {
     var out = [];
     function push(g) { if (g && out.indexOf(g) < 0) out.push(g); }
-    (Array.isArray(freq) ? freq : []).forEach(push);
     readRecent().forEach(push);
+    (Array.isArray(freq) ? freq : []).forEach(push);
     QUICK_DEFAULTS.forEach(push);
     return out.slice(0, QCAP);
   }
@@ -192,12 +200,24 @@
     var q = row.querySelector('[data-lc-quick-bar]');
     if (q) fillQuick(q);
   }
+  // LC-625: a bar caches its glyphs behind data-lc-quick-filled and never re-runs
+  // on its own, so it froze at first-hover state until a full reload. After a
+  // react updates the MRU, drop the cache flag on every already-filled bar and
+  // re-fill so the new recents show immediately. fillQuick mutates the DOM inside
+  // an async .then (frequent fetch), which lands after the current click has been
+  // dispatched to htmx, so the just-clicked button is not detached mid-request.
+  function refreshQuickBars() {
+    document.querySelectorAll('[data-lc-quick-bar][data-lc-quick-filled="1"]').forEach(function (bar) {
+      bar.removeAttribute('data-lc-quick-filled');
+      fillQuick(bar);
+    });
+  }
   document.addEventListener('pointerover', quickFromEvent, true);
   document.addEventListener('focusin', quickFromEvent, true);
   // A one-tap quick react counts toward the recent MRU too.
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-lc-quick-bar] button[hx-post]');
-    if (b) recordRecent(b);
+    if (b) { recordRecent(b); refreshQuickBars(); }
   }, true);
 
   // Reveal + position + wire the picker once htmx swaps it into the host.
