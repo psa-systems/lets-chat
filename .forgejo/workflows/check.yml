@@ -1,19 +1,20 @@
 ---
 
 # Validate code on every push and pull request: fmt, clippy, build, tests.
-# Mirrors the local `just check` + `just test` recipes (which use ./dev/cargo).
+# Mirrors the local `just check` + `just test` recipes for the SERVER (which use
+# ./dev/cargo). The server + saas targets compile natively on the runner and
+# need only a C toolchain; this job never links the desktop GUI binary, so it
+# needs no GTK/WebKit system libraries.
 #
-# Two jobs, matching how the recipes split the work:
-#   check         - server + saas, compiled NATIVELY on the runner (needs only a
-#                   C toolchain). It never links the desktop GUI binary, so it
-#                   needs no GTK/WebKit system libraries. This mirrors `just
-#                   check` (server) + `just test`.
-#   check-desktop - the Tao/Wry/tauri desktop crate, checked + linted INSIDE the
-#                   shared rust-builder image via ./dev/cargo-desktop, exactly as
-#                   `just check-desktop` does locally. The image bundles every
-#                   GTK/WebKit/Soup/SSL library the crate needs. The full linked
-#                   desktop bundle is still built by build-desktop-linux.yml on
-#                   push to main / release.
+# The desktop crate is intentionally NOT checked here. It needs GTK/WebKit/Soup/
+# SSL system libraries the bare runner does not carry, and the ./dev/cargo-desktop
+# wrapper cannot bridge that gap on this runner: the runner executes inside a
+# container while the docker daemon runs on the host, so the wrapper's
+# `-v $PWD:/work` bind mount resolves against the host filesystem and lands on an
+# empty directory. The desktop crate is validated by build-desktop-linux.yml
+# (docker buildx, which ships a build context instead of bind-mounting) on push
+# to main / release. See the PR for the full rationale and the follow-up to
+# restore PR-time desktop checks once the runner image carries a toolchain again.
 name: Check
 
 on:
@@ -91,29 +92,8 @@ jobs:
       # This step was previously fed by a workspace `cargo build --all-targets`,
       # which also linked the desktop GUI binary and so required GTK/WebKit
       # system libs on the runner. That whole-workspace build is gone: the job
-      # now mirrors `just check` (server only) and never links desktop, and the
-      # desktop crate is validated by the check-desktop job instead.
+      # now mirrors `just check` (server only) and never links desktop. The
+      # desktop crate is validated by build-desktop-linux.yml on push to main /
+      # release (see the header comment for why it cannot run here).
       - name: Tests (server, standalone)
         run: cargo test -p lets-chat-server
-
-  check-desktop:
-    name: desktop check
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
-
-    steps:
-      - name: Clone the repository
-        uses: https://code.forgejo.org/actions/checkout@v5
-
-      - name: Check + lint the desktop crate
-        # The desktop crate (Tao + Wry + tauri) needs GTK/WebKit/Soup/SSL system
-        # libraries to compile, which the bare runner does not carry. Rather than
-        # install and hand-maintain that package set on the runner, run cargo
-        # inside the shared rust-builder image via ./dev/cargo-desktop - the same
-        # wrapper local `just check-desktop` uses, so CI and local validate the
-        # crate one-for-one against the same baked-in libraries. `cargo check`
-        # and `cargo clippy` do not link a final binary, so no X11/Wayland
-        # display or GUI runtime is needed (headless-safe in CI). The image is
-        # pulled anonymously (public), matching every other build here.
-        run: |
-          ./dev/cargo-desktop check -p lets-chat-desktop
-          ./dev/cargo-desktop clippy -p lets-chat-desktop -- -D warnings
