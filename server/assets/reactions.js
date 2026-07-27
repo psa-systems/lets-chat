@@ -203,9 +203,11 @@
   // LC-625: a bar caches its glyphs behind data-lc-quick-filled and never re-runs
   // on its own, so it froze at first-hover state until a full reload. After a
   // react updates the MRU, drop the cache flag on every already-filled bar and
-  // re-fill so the new recents show immediately. fillQuick mutates the DOM inside
-  // an async .then (frequent fetch), which lands after the current click has been
-  // dispatched to htmx, so the just-clicked button is not detached mid-request.
+  // re-fill so the new recents show immediately. This replaceChildren's the bar,
+  // so when the react was fired from a quick-bar button the caller MUST defer this
+  // call (setTimeout 0) until after htmx has dispatched the click. Otherwise the
+  // just-clicked button is detached before htmx issues its hx-post and no reaction
+  // is sent - the click-regression this comment used to wrongly claim was safe.
   function refreshQuickBars() {
     document.querySelectorAll('[data-lc-quick-bar][data-lc-quick-filled="1"]').forEach(function (bar) {
       bar.removeAttribute('data-lc-quick-filled');
@@ -214,10 +216,15 @@
   }
   document.addEventListener('pointerover', quickFromEvent, true);
   document.addEventListener('focusin', quickFromEvent, true);
-  // A one-tap quick react counts toward the recent MRU too.
+  // A one-tap quick react counts toward the recent MRU too. Record synchronously
+  // (so the deferred re-fill reads the updated MRU), but defer refreshQuickBars:
+  // it replaceChildren's this same bar, and doing that inline would detach the
+  // just-clicked button before htmx dispatches the hx-post. setTimeout(0) runs
+  // after the click is fully handled, mirroring the setTimeout(close, 0) idiom in
+  // initPicker.
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-lc-quick-bar] button[hx-post]');
-    if (b) { recordRecent(b); refreshQuickBars(); }
+    if (b) { recordRecent(b); setTimeout(refreshQuickBars, 0); }
   }, true);
 
   // Reveal + position + wire the picker once htmx swaps it into the host.
