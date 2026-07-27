@@ -32,6 +32,21 @@ jobs:
         # See ci-build/check-migration-immutability.nu and LC-515 / DEV-395.
         run: nu ci-build/check-migration-immutability.nu
 
+      - name: Install C toolchain
+        # This is the only workflow that compiles Rust natively on the runner:
+        # the desktop and OCI builds go through Docker images that bundle a
+        # toolchain, and local `just check` uses ./dev/cargo (the rust-builder
+        # image). The openSUSE base runner ships rustc but not a C linker, so
+        # every build script and final binary fails to link with `linker cc not
+        # found`. Install gcc (which provides /usr/bin/cc and pulls glibc-devel)
+        # before any cargo compile. Idempotent: a no-op if the image already has
+        # it, so this stays correct once the runner image is rebuilt with a
+        # toolchain. Root-or-sudo tolerant so it works on either runner layout.
+        run: |
+          if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+          $SUDO zypper --non-interactive --gpg-auto-import-keys refresh
+          $SUDO zypper --non-interactive install --no-recommends gcc
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
