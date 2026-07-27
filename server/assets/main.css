@@ -3080,7 +3080,6 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     overflow: hidden;
     pointer-events: none;
     background: var(--surface-elevated);
-  color: var(--content);
     color: var(--content);
     border-color: transparent;
 }
@@ -3113,16 +3112,22 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
 #thread-panel .lc-mdinput {
     color: var(--content);
     background: var(--surface-elevated);
-  color: var(--content);
 }
 /* When the LC-276 preview pane is shown the textarea gets `hidden`; collapse the
    whole overlay so the preview pane (its flex sibling) takes the slot. */
 .lc-mdwrap:has(> .lc-mdinput.hidden) {
     display: none;
 }
-/* Token styling. Colour / weight / decoration / background only. */
-.lc-mdback .lc-mdm { color: var(--content-muted); opacity: 0.55; }
-.lc-mdback strong { font-weight: 600; color: var(--content); }
+/* Token styling. Colour / weight / decoration / background only - never
+   font-size / font-family / letter-spacing, which change glyph advance and
+   drift the backdrop off the caret. That is why the markers are made to recede
+   by OPACITY, not by shrinking them: a smaller marker would desync the caret. */
+/* LC-399 follow-up: the markers were too loud at 0.55 (half-visible), so
+   `**Hehe**` still read as literal asterisks rather than a bold "Hehe". Drop
+   them to 0.3 so they fade to faint ghosts and the emphasized text dominates,
+   and lift bold to 700 so the weight contrast is unmistakable. */
+.lc-mdback .lc-mdm { color: var(--content-muted); opacity: 0.3; }
+.lc-mdback strong { font-weight: 700; color: var(--content); }
 .lc-mdback em { font-style: italic; }
 .lc-mdback del { text-decoration: line-through; color: var(--content-muted); }
 .lc-mdback .lc-mdcode {
