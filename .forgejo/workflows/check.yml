@@ -2,6 +2,18 @@
 
 # Validate code on every push and pull request: fmt, clippy, build, tests.
 # Mirrors the local `just check` + `just test` recipes (which use ./dev/cargo).
+#
+# Two jobs, matching how the recipes split the work:
+#   check         - server + saas, compiled NATIVELY on the runner (needs only a
+#                   C toolchain). It never links the desktop GUI binary, so it
+#                   needs no GTK/WebKit system libraries. This mirrors `just
+#                   check` (server) + `just test`.
+#   check-desktop - the Tao/Wry/tauri desktop crate, checked + linted INSIDE the
+#                   shared rust-builder image via ./dev/cargo-desktop, exactly as
+#                   `just check-desktop` does locally. The image bundles every
+#                   GTK/WebKit/Soup/SSL library the crate needs. The full linked
+#                   desktop bundle is still built by build-desktop-linux.yml on
+#                   push to main / release.
 name: Check
 
 on:
@@ -59,26 +71,49 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      - name: Clippy (workspace, standalone)
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (server, standalone)
+        run: cargo clippy -p lets-chat-server --all-targets -- -D warnings
 
       - name: Clippy (server, saas)
-        run: cargo clippy --all-targets -p lets-chat-server --no-default-features --features saas -- -D warnings
-
-      - name: Build (workspace, standalone)
-        run: cargo build --all-targets
+        run: cargo clippy -p lets-chat-server --no-default-features --features saas --all-targets -- -D warnings
 
       - name: Build (server, saas)
         run: cargo build -p lets-chat-server --no-default-features --features saas
 
-      # LC-605: was `cargo test --lib`, which ran only the 266 in-crate unit
-      # tests. The 177 integration binaries under server/tests/ were compiled by
-      # the `--all-targets` steps above but never executed, so ~74% of the suite
-      # (1036 tests in total) could not fail the pipeline. Three long-lived
-      # breakages reached main that way - see LC-600 and LC-605.
+      # LC-605: run the full server suite, not just `--lib`. `cargo test -p
+      # lets-chat-server` compiles AND runs every server target - the 266
+      # in-crate unit tests plus the ~177 integration binaries under
+      # server/tests/ - so an integration-level breakage fails the pipeline
+      # (three reached main when CI ran only `--lib`; see LC-600 / LC-605). The
+      # test compile builds those binaries itself, so no separate build step is
+      # needed to cover them.
       #
-      # Dropping `--lib` runs both. The marginal cost is small because the build
-      # steps above already compiled these binaries: locally the suite adds
-      # ~100s wall-clock over `--lib` on a warm cache.
+      # This step was previously fed by a workspace `cargo build --all-targets`,
+      # which also linked the desktop GUI binary and so required GTK/WebKit
+      # system libs on the runner. That whole-workspace build is gone: the job
+      # now mirrors `just check` (server only) and never links desktop, and the
+      # desktop crate is validated by the check-desktop job instead.
       - name: Tests (server, standalone)
         run: cargo test -p lets-chat-server
+
+  check-desktop:
+    name: desktop check
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Check + lint the desktop crate
+        # The desktop crate (Tao + Wry + tauri) needs GTK/WebKit/Soup/SSL system
+        # libraries to compile, which the bare runner does not carry. Rather than
+        # install and hand-maintain that package set on the runner, run cargo
+        # inside the shared rust-builder image via ./dev/cargo-desktop - the same
+        # wrapper local `just check-desktop` uses, so CI and local validate the
+        # crate one-for-one against the same baked-in libraries. `cargo check`
+        # and `cargo clippy` do not link a final binary, so no X11/Wayland
+        # display or GUI runtime is needed (headless-safe in CI). The image is
+        # pulled anonymously (public), matching every other build here.
+        run: |
+          ./dev/cargo-desktop check -p lets-chat-desktop
+          ./dev/cargo-desktop clippy -p lets-chat-desktop -- -D warnings
