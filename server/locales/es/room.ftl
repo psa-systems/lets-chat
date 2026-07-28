@@ -45,7 +45,6 @@ room-composer-format-bold-ph = texto en negrita
 room-composer-format-italic-ph = texto en cursiva
 room-composer-format-code-ph = código
 room-composer-format-link-text-ph = texto
-room-composer-format-link-url-ph = url
 room-composer-format-strike-ph = tachado
 room-composer-format-list-ph = elemento de lista
 room-composer-format-quote-ph = cita

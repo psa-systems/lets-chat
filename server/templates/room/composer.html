@@ -246,7 +246,7 @@
     <span class="lc-composer-sep"></span>
     <button type="button" data-lc-fmt="code" data-lc-ph="{{ "room-composer-format-code-ph"|t }}" data-lc-tip="{{ "room-composer-format-code"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-code"|t }}"
       class="lc-fmt-btn font-mono">&lt;/&gt;</button>
-    <button type="button" data-lc-fmt="link" data-lc-ph="{{ "room-composer-format-link-text-ph"|t }}" data-lc-ph-url="{{ "room-composer-format-link-url-ph"|t }}" data-lc-tip="{{ "room-composer-format-link"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-link"|t }}"
+    <button type="button" data-lc-fmt="link" data-lc-ph="{{ "room-composer-format-link-text-ph"|t }}" data-lc-tip="{{ "room-composer-format-link"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-format-link"|t }}"
       class="lc-fmt-btn">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
         <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z"/>
@@ -2203,16 +2203,26 @@
     ta.dispatchEvent(new Event('input'));
   }
 
-  // Link is special-cased to [text](url); selecting `url` so the user types the
-  // destination straight away.
-  function link(textPh, urlPh){
+  // Link inserts [text](https://) with the URL scheme pre-filled and the caret
+  // placed right AFTER "https://" (inside the parens), so the user types the rest
+  // of the destination immediately. A link almost always needs a scheme, so
+  // pre-filling it saves the typing and nudges toward a valid URL. It is only the
+  // template default, not validation: the user can delete it or switch to http://
+  // (e.g. before pasting a full scheme-bearing URL). A selection becomes the link
+  // text; with no selection the localized `text` placeholder fills the label.
+  // Either way the caret lands after the scheme, not on the label, because
+  // continuing the URL is the primary action - the fewest-keystrokes path for the
+  // common "link this" / "paste a URL" flow (the label default is one edit away).
+  function link(textPh){
     var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
     var text = v.slice(s, e) || textPh;
-    var insert = '[' + text + '](' + urlPh + ')';
+    var scheme = 'https://';
+    var insert = '[' + text + '](' + scheme + ')';
     ta.value = v.slice(0, s) + insert + v.slice(e);
-    var urlStart = s + 1 + text.length + 2; // past "[" + text + "]("
+    // Caret right after the scheme: past "[" + text + "](" + "https://".
+    var caret = s + 1 + text.length + 2 + scheme.length;
     ta.focus();
-    ta.setSelectionRange(urlStart, urlStart + urlPh.length);
+    ta.setSelectionRange(caret, caret);
     ta.dispatchEvent(new Event('input'));
   }
 
@@ -2224,7 +2234,7 @@
     else if (kind === 'strike') wrap('~~', '~~', ph || 'strikethrough');
     else if (kind === 'ul')     linePrefix('- ', ph || 'list item');
     else if (kind === 'quote')  linePrefix('> ', ph || 'quote');
-    else if (kind === 'link')   link(ph || 'text', (btn && btn.getAttribute('data-lc-ph-url')) || 'url');
+    else if (kind === 'link')   link(ph || 'text');
   }
   window.__lcFormat = apply;
 
