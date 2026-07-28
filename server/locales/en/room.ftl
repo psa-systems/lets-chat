@@ -45,7 +45,6 @@ room-composer-format-bold-ph = bold text
 room-composer-format-italic-ph = italic text
 room-composer-format-code-ph = code
 room-composer-format-link-text-ph = text
-room-composer-format-link-url-ph = url
 room-composer-format-strike-ph = strikethrough
 room-composer-format-list-ph = list item
 room-composer-format-quote-ph = quote
