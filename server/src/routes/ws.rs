@@ -1936,23 +1936,10 @@ async fn relay_control_signal(
     if !REMOTE_CONTROL_KINDS.contains(&kind) {
         return;
     }
-    // LC-186: blunt request spam / re-request harassment. Only `request` is
-    // capped (grant/deny/revoke are responses, not initiations); an over-limit
-    // request drops silently, the same posture as the verified/block gate below.
-    if kind == "request"
-        && matches!(
-            state.rate_limits.check(
-                crate::rate_limit::RateLimitKind::RemoteControlRequest,
-                &user.id,
-                REMOTE_CONTROL_REQUEST_CAP,
-            ),
-            crate::rate_limit::Outcome::Deny { .. }
-        )
-    {
-        return;
-    }
     // Remote control is a DM-call feature only (mirrors relay_call_signal's
-    // dm-room gate). Confirm the room is a DM; the row itself is unused.
+    // dm-room gate). Confirm the room is a DM; the row itself is unused. These
+    // are structural checks: if they fail the sender is not in a real 1:1 call,
+    // so there is no requester UI to give feedback to - stay silent.
     match db::chat::get_room(&state.chat, room_id).await {
         Ok(Some(r)) if r.room_type == "dm" => {}
         _ => return,
@@ -1967,7 +1954,51 @@ async fn relay_control_signal(
     let Some(peer_id) = members.into_iter().find(|id| id != &user.id) else {
         return;
     };
+
+    // LC-627: when a `request` is refused, don't leave the requester on a silent
+    // 12s "not answered" timeout - echo an `unavailable` signal straight back so
+    // their UI clears and says why. The reason is kept generic on the wire (it
+    // must not leak the peer's block/verify status); the tracing line below
+    // records the specific gate for operators. Sent as `from = peer_id` because
+    // the client's consent handler drops any signal whose sender is itself.
+    let refuse = |reason: &'static str| {
+        tracing::info!(
+            from = %user.id,
+            peer = %peer_id,
+            room_id,
+            reason,
+            "remote-control request refused"
+        );
+        let event = ChatEvent::RemoteControlSignal {
+            room_id,
+            to_user_id: user.id.clone(),
+            from_user_id: peer_id.clone(),
+            from_name: from_name.to_string(),
+            kind: "unavailable".to_string(),
+        };
+        state.hub.broadcast_to_user(&user.id, &event);
+    };
+
+    // LC-186: blunt request spam / re-request harassment. Only `request` is
+    // capped (grant/deny/revoke are responses, not initiations).
+    if kind == "request"
+        && matches!(
+            state.rate_limits.check(
+                crate::rate_limit::RateLimitKind::RemoteControlRequest,
+                &user.id,
+                REMOTE_CONTROL_REQUEST_CAP,
+            ),
+            crate::rate_limit::Outcome::Deny { .. }
+        )
+    {
+        refuse("rate_limited");
+        return;
+    }
     if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
+        // Only a `request` has a waiting requester UI to notify.
+        if kind == "request" {
+            refuse("not_allowed");
+        }
         return;
     }
     // LC-186 audit: a grant opens a session row (controller = the recipient of
@@ -1985,6 +2016,16 @@ async fn relay_control_signal(
         }
         _ => {}
     }
+    // LC-627: trace the successful relay so a "no prompt on the peer" report can
+    // be told apart from a silent drop - if this line is present the signal left
+    // the server for the peer, so the next suspect is delivery/render, not relay.
+    tracing::info!(
+        from = %user.id,
+        to = %peer_id,
+        room_id,
+        kind,
+        "remote-control signal relayed to peer"
+    );
     let event = ChatEvent::RemoteControlSignal {
         room_id,
         to_user_id: peer_id.clone(),

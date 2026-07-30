@@ -30,6 +30,7 @@ js-call-requesting = Requesting...
 js-call-stop-controlling = Stop controlling
 js-call-control-no-answer = Control request not answered
 js-call-control-denied = Control request denied
+js-call-control-unavailable = Remote control is not available in this call
 
 # Offline outbox (outbox.js)
 js-outbox-offline-queued = Offline - %n% message(s) queued
