@@ -585,6 +585,10 @@
       // Mirrors the visual: button reads "Unmute" exactly when muted.
       btn.setAttribute('aria-pressed', on ? 'false' : 'true');
     }
+    // LC-626: muting must also gag live transcription. transcribe.js captures
+    // our own mic on a SEPARATE tap, independent of this track's enabled flag,
+    // so without this signal a muted speaker's words still land in the transcript.
+    try { document.dispatchEvent(new CustomEvent('lc:mic-muted', { detail: { muted: !on } })); } catch (e) {}
   }
 
   function toggleCamera() {

@@ -32,6 +32,10 @@
   var stageRoom = null;
   var recog = null;        // SpeechRecognition instance while capturing (browser engine)
   var capturing = false;
+  // LC-626: our own mic mute state, learned from the RTC layer's lc:mic-muted
+  // event. While muted we must not capture: the transcription tap is separate
+  // from the RTC audio track, so muting the call alone would still transcribe.
+  var micMuted = false;
 
   // LC-393 Phase 3: when the operator has configured a server-side STT endpoint,
   // we capture short audio clips with MediaRecorder and POST them instead of
@@ -168,6 +172,9 @@
   // Pick the engine per the server config; each captures the user's own mic.
   function startLocalCapture() {
     if (capturing) return;
+    // LC-626: a muted session opens no mic. Unmuting resumes capture via the
+    // lc:mic-muted handler (which re-calls this once a session is live).
+    if (micMuted) return;
     if (sttServer) startServerCapture(); else startBrowserCapture();
   }
   function stopLocalCapture() {
@@ -461,7 +468,27 @@
       setToggle(false);
     }
   });
-  document.addEventListener('lc:rtc-session-started', disableIfUnsupported);
+  document.addEventListener('lc:rtc-session-started', function () {
+    // LC-626: a fresh RTC session starts unmuted (mirrors voice.js selfMuted),
+    // so clear any mute carried over from a previous call before capture begins.
+    micMuted = false;
+    disableIfUnsupported();
+  });
+
+  // LC-626: mute/unmute the local transcription capture in lockstep with the
+  // RTC mic (call.js / voice.js dispatch lc:mic-muted). On mute we tear the
+  // capture down entirely (Web Speech recognizer stopped, or MediaRecorder mic
+  // stream released); on unmute we reopen it only if a session is still live.
+  document.addEventListener('lc:mic-muted', function (e) {
+    var muted = !!(e && e.detail && e.detail.muted);
+    if (muted === micMuted) return;
+    micMuted = muted;
+    if (muted) {
+      stopLocalCapture();
+    } else if (transcriptId != null) {
+      startLocalCapture();
+    }
+  });
 
   // LC-597: the stage panel is swapped in over the WebSocket (StageChanged), so
   // its transcribe toggle can appear after load - re-run the support gate for it.
