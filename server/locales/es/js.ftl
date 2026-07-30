@@ -28,6 +28,7 @@ js-call-requesting = Solicitando...
 js-call-stop-controlling = Dejar de controlar
 js-call-control-no-answer = Solicitud de control sin respuesta
 js-call-control-denied = Solicitud de control denegada
+js-call-control-unavailable = El control remoto no está disponible en esta llamada
 
 # Bandeja sin conexión (outbox.js)
 js-outbox-offline-queued = Sin conexión: %n% mensaje(s) en cola

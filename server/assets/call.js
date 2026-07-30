@@ -1025,6 +1025,15 @@
           setStatus(window.__lcS('callControlDenied', 'Control request denied'));
         }
         break;
+      case 'unavailable':
+        // LC-627: the server refused the request (rate-limited, or the pair is
+        // not eligible). Clear the requesting state now instead of leaving the
+        // requester on the misleading 12s "not answered" timeout.
+        if (controlPhase === 'requesting') {
+          stopControlling(false);
+          setStatus(window.__lcS('callControlUnavailable', 'Remote control is not available in this call'));
+        }
+        break;
       case 'revoke':
         // Either direction: the peer revoked our control, or revoked the grant
         // they gave us. Stop both roles defensively.
