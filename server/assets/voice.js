@@ -790,6 +790,14 @@
     try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'voice' } })); } catch (e) {}
   }
 
+  // LC-626: tell transcribe.js our mic state so it stops/resumes its own
+  // (separate) transcription capture. Muting the RTC track alone silences peers
+  // but leaves live transcription recording, so a muted speaker's words still
+  // land in the transcript - a privacy leak.
+  function emitMicMuted(muted) {
+    try { document.dispatchEvent(new CustomEvent('lc:mic-muted', { detail: { muted: !!muted } })); } catch (e) {}
+  }
+
   function toggleMute() {
     // LC-610: on the SFU, huddle_sfu.js owns the mic and reflects the tile +
     // remote peers; just sync the button off the state it returns.
@@ -801,6 +809,7 @@
           setLabel(b, muted ? window.__lcS('callUnmute', 'Unmute') : window.__lcS('callMute', 'Mute'));
           b.setAttribute('aria-pressed', muted ? 'true' : 'false');
         }
+        emitMicMuted(muted);
       });
       return;
     }
@@ -818,6 +827,7 @@
     // light the mute indicator on our remote tile too.
     applyMute(cfg.selfId, muted);
     wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: muted });
+    emitMicMuted(muted);
   }
 
   // LC-402: set the mute indicator on a participant's tile (self or remote).
