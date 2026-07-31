@@ -269,6 +269,10 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 /// API surface to the remote page (`withGlobalTauri` stays off).
 pub const BRIDGE_JS: &str = r#"
 (function () {
+  // LC-640: advertise to the page that this client HAS a native injector, so
+  // when it is the one being controlled it can tell the controller their input
+  // will actually land. A plain browser leaves this undefined (falsy).
+  try { window.__lcNativeControl = true; } catch (e) {}
   function inv(cmd, args) {
     try {
       var t = window.__TAURI_INTERNALS__;

@@ -56,6 +56,7 @@ call-control-request-explain = They will be able to move your mouse and type on 
 call-control-grant = Grant control
 call-control-deny = Deny
 call-control-uipi = Admin-elevated windows on their machine can't be controlled.
+call-control-web-peer = They're on the web app, so your clicks and keystrokes can't reach their machine. Remote control needs the desktop app on their end.
 call-mute = Mute
 call-start-video = Start video
 call-share-screen = Share screen

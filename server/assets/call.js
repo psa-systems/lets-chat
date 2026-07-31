@@ -64,6 +64,11 @@
   var controlRequestTimer = null;   // reverts a request that gets no answer
   // Controlled-side flag: true once we granted a peer control of our screen.
   var controlGranted = false;
+  // LC-640: the controlled peer's native-injector capability, learned over the
+  // control data channel right after they grant. null = unknown yet, false = a
+  // web peer (our input reaches their browser but nothing applies it), true = a
+  // desktop app (input actually drives their machine).
+  var peerNativeControl = null;
   // Display name of the peer who requested / is exercising control, for the
   // consent prompt and the active-control banner (LC-186).
   var controlPeerName = '';
@@ -767,10 +772,18 @@
     // native bridge (LC-185) can pick it up. Web peers have no injector, so the
     // event is simply unobserved.
     controlChannel.onmessage = function (ev) {
-      if (!controlGranted) return;  // ignore stray frames outside an active grant
-      try {
-        document.dispatchEvent(new CustomEvent('lc:control-input', { detail: ev.data }));
-      } catch (e) {}
+      if (controlGranted) {
+        // Controlled side: hand each input frame to the native injector (LC-185).
+        // Web peers have no injector, so the event is simply unobserved.
+        try {
+          document.dispatchEvent(new CustomEvent('lc:control-input', { detail: ev.data }));
+        } catch (e) {}
+        return;
+      }
+      // Controller side: input never flows back to us, so the only inbound frame
+      // is the controlled peer's capability announcement (LC-640).
+      var cap = parseCap(ev.data);
+      if (cap) { peerNativeControl = !!cap.native; setRequestBtn(); }
     };
     // An abrupt channel drop (network failure, peer pc.close) must end any
     // session on BOTH roles: detach the controller's capture, and tell the
@@ -789,6 +802,18 @@
     if (controlPhase !== 'controlling') return;
     if (!controlChannel || controlChannel.readyState !== 'open') return;
     try { controlChannel.send(JSON.stringify(obj)); } catch (e) {}
+  }
+
+  // LC-640: peer capability handshake over the same control channel. The
+  // controlled side announces whether ITS machine has a native injector so the
+  // controller learns, without any server involvement, whether input will land.
+  function sendCap() {
+    if (!controlChannel || controlChannel.readyState !== 'open') return;
+    try { controlChannel.send(JSON.stringify({ t: 'cap', native: !!window.__lcNativeControl })); } catch (e) {}
+  }
+  function parseCap(data) {
+    if (typeof data !== 'string') return null;
+    try { var o = JSON.parse(data); return (o && o.t === 'cap') ? o : null; } catch (e) { return null; }
   }
 
   // ---- remote control: coordinate mapping --------------------------
@@ -903,9 +928,22 @@
       setLabel(btn, window.__lcS('callRequestControl', 'Request control'));
       btn.setAttribute('aria-pressed', 'false');
     }
-    // UIPI hint (LC-186): surface that some windows can't be driven so the
-    // controller is not silently no-op'd over an elevated/admin window.
-    if (uipi) { if (controlPhase === 'controlling') show(uipi); else hide(uipi); }
+    // Controller-side hints while controlling. A WEB peer (LC-640) has no
+    // injector at all, so nothing lands regardless of window - its note
+    // supersedes the LC-186 UIPI caveat (which is about admin-elevated windows
+    // on a peer that CAN be driven). A native or not-yet-known peer keeps UIPI.
+    var noinject = q('[data-lc-control-noinject]');
+    var controlling = controlPhase === 'controlling';
+    if (controlling && peerNativeControl === false) {
+      hide(uipi);
+      show(noinject);
+    } else if (controlling) {
+      show(uipi);
+      hide(noinject);
+    } else {
+      hide(uipi);
+      hide(noinject);
+    }
   }
 
   function clearRequestTimer() {
@@ -918,6 +956,7 @@
     if (controlPhase === 'controlling') { stopControlling(true); return; }
     if (controlPhase === 'requesting') return;  // already waiting
     controlPhase = 'requesting';
+    peerNativeControl = null;  // LC-640: re-learn the peer's capability per request
     controlSignal('request');
     clearRequestTimer();
     controlRequestTimer = setTimeout(function () {
@@ -948,6 +987,7 @@
     if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
     if (notifyPeer && (wasActive || controlPhase === 'requesting')) controlSignal('revoke');
     controlPhase = 'none';
+    peerNativeControl = null;  // LC-640: forget the peer capability with the session
     setRequestBtn();
   }
 
@@ -972,6 +1012,10 @@
     hideControlPrompt();
     controlGranted = true;
     controlSignal('grant');
+    // LC-640: tell the controller whether OUR machine can actually be driven, so
+    // a web sharer's "crosshair but nothing happens" state is explained on the
+    // controller's side rather than left a mystery.
+    sendCap();
     showControlBanner();
     // Arm any native injector (LC-185); web has none and ignores this.
     try { document.dispatchEvent(new CustomEvent('lc:control-start')); } catch (e) {}
