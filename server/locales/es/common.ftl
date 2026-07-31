@@ -51,6 +51,7 @@ call-control-request-explain = Podrán mover tu ratón y escribir con tu teclado
 call-control-grant = Conceder control
 call-control-deny = Denegar
 call-control-uipi = No se pueden controlar las ventanas con privilegios de administrador en su equipo.
+call-control-web-peer = Está usando la app web, así que tus clics y pulsaciones no pueden llegar a su equipo. El control remoto necesita la app de escritorio en su lado.
 call-mute = Silenciar
 call-start-video = Iniciar vídeo
 call-share-screen = Compartir pantalla
