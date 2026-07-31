@@ -131,7 +131,13 @@
           </button>
           <button type="button" data-lc-call-mute aria-pressed="false" aria-label="{{ "call-mute"|t }}" data-lc-tip="{{ "call-mute"|t }}" class="lc-cbtn">
             <span class="lc-cbtn-ico lc-cbtn-ico--off" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/></svg></span>
-            <span class="lc-cbtn-ico lc-cbtn-ico--on" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 01-.13.87L7.13 4.13A3 3 0 017 4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 1.36.453 2.616 1.216 3.624l1.1-1.1A4.48 4.48 0 015.5 10v-.357z"/><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 10-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-2.3-2.3A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10c0 .886-.256 1.713-.698 2.41l-1.1-1.1c.19-.41.298-.866.298-1.346V9.4l-2.4-2.4 2.9 2.9-3.1-3.1L3.28 2.22zm6.97 13.734V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546a6.02 6.02 0 01-1.5 0z" clip-rule="evenodd"/></svg></span>
+            {# LC-633: muted state = the SAME intact mic as the unmuted icon plus a
+               clean diagonal slash with a gap, instead of the old broken-mic glyph
+               that read as a stray line drawn across the microphone. The gap is a
+               wider under-stroke in the muted button's own background token
+               (var(--accent-surface)), so the slash reads as a deliberate cut in
+               every theme. #}
+            <span class="lc-cbtn-ico lc-cbtn-ico--on" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/><path d="M3.4 3.4 16.6 16.6" fill="none" stroke="var(--accent-surface)" stroke-width="3.4" stroke-linecap="round"/><path d="M3.4 3.4 16.6 16.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
             <span class="lc-cbtn-label">{{ "call-mute"|t }}</span>
           </button>
           <button type="button" data-lc-call-camera aria-pressed="false" aria-label="{{ "call-start-video"|t }}" data-lc-tip="{{ "call-start-video"|t }}" class="lc-cbtn">
