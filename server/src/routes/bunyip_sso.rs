@@ -156,6 +156,18 @@ pub async fn get_callback(
         return Redirect::to("/login?sso_error=internal").into_response();
     }
 
+    // LC-627: bunyip is the authority for identity, so a bunyip-verified email
+    // counts as verified here too. Provisioning never stamped `email_verified_at`,
+    // which left every SSO user "unverified" to the features gated on it (notably
+    // the remote-control consent gate, which then silently refused every request).
+    // Stamp it now, idempotently, so new AND already-provisioned users are fixed on
+    // their next login. Best-effort: a failure here must not block a valid login.
+    if userinfo.email_verified == Some(true) {
+        if let Err(e) = db::auth::mark_email_verified_if_unset(&state.auth, &user_id).await {
+            tracing::warn!(target: "bunyip_sso", error = %e, user_id = %user_id, "email_verified stamp failed");
+        }
+    }
+
     let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
     let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
 
