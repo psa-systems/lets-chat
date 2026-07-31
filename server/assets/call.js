@@ -191,8 +191,23 @@
     var av = q('[data-lc-local-avatar]');
     var on = hasLocalVideo();
     if (lv) {
-      lv.srcObject = on ? localStream : null;
-      lv.style.display = on ? '' : 'none';
+      if (on) {
+        // LC-641: enabling the camera mid-call (a call that began audio-only)
+        // adds a video track to localStream and re-assigns srcObject here, but
+        // the self-view <video> - hidden until now with no stream - does not
+        // begin playback on its own across that transition, leaving the
+        // initiator's own preview blank while the peer already sees the video.
+        // Assign, then explicitly start playback; a muted element is always
+        // allowed to play, and the direct-video-call path (already autoplaying)
+        // is unaffected.
+        if (lv.srcObject !== localStream) lv.srcObject = localStream;
+        lv.style.display = '';
+        var pr = lv.play && lv.play();
+        if (pr && typeof pr.catch === 'function') pr.catch(function () {});
+      } else {
+        lv.srcObject = null;
+        lv.style.display = 'none';
+      }
     }
     if (av) av.style.display = on ? 'none' : '';
   }
