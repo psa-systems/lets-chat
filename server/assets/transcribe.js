@@ -158,6 +158,12 @@
   // ---- segment POST -----------------------------------------------------
   function postSegment(text) {
     if (transcriptId == null || !text) return;
+    // LC-626: never submit while muted. Tearing the capture down on mute is not
+    // enough on its own - a Web Speech recognizer finalizes the buffered
+    // utterance when stop() is called, so the last thing said at the mute moment
+    // can still fire onresult after micMuted is set. Gate the submission itself
+    // so muted speech never reaches the transcript, whatever the capture timing.
+    if (micMuted) return;
     var body = new URLSearchParams();
     body.set('text', text);
     fetch('/call/transcript/' + transcriptId + '/segment', {
@@ -262,6 +268,9 @@
   }
   function postAudio(blob) {
     if (transcriptId == null || !blob.size) return;
+    // LC-626: same submission-point guard as postSegment. A server-STT clip that
+    // straddled the mute moment must not be shipped even if it finished decoding.
+    if (micMuted) return;
     fetch('/call/transcript/' + transcriptId + '/audio', {
       method: 'POST',
       headers: { 'Content-Type': blob.type || 'audio/webm' },
