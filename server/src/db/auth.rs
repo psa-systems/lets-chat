@@ -1667,6 +1667,25 @@ pub async fn mark_email_verified(
     Ok(res.rows_affected())
 }
 
+/// LC-627: stamp `email_verified_at` when it is not already set, without a
+/// stored-email guard. Used by the SSO callback: the identity provider (bunyip)
+/// is the authority for whether the address is verified, so a `mark_email_verified`
+/// style email match does not apply. `IS NULL` keeps it idempotent - the first
+/// verified SSO login sets it, later logins are no-ops (no `updated_at` churn).
+pub async fn mark_email_verified_if_unset(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET email_verified_at = datetime('now'), updated_at = datetime('now') \
+         WHERE id = ? AND email_verified_at IS NULL",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Overwrite a user's password hash. Used by the reset flow after a token
 /// has been validated. Callers should also delete every session for this
 /// user so any existing logged-in browser is force-signed-out.
