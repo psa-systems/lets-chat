@@ -943,18 +943,22 @@
       setLabel(btn, window.__lcS('callRequestControl', 'Request control'));
       btn.setAttribute('aria-pressed', 'false');
     }
-    // Controller-side hints while controlling. A WEB peer (LC-640) has no
-    // injector at all, so nothing lands regardless of window - its note
-    // supersedes the LC-186 UIPI caveat (which is about admin-elevated windows
-    // on a peer that CAN be driven). A native or not-yet-known peer keeps UIPI.
+    // Controller-side hints while controlling (LC-640). Default to the "web peer,
+    // input can't land" note and only suppress it once the peer POSITIVELY
+    // confirms a native injector (peerNativeControl === true). This does not
+    // depend on the capability frame arriving: browser-to-browser (the common
+    // case) shows the note the moment control starts, and only a desktop peer's
+    // confirmation flips to the LC-186 admin/UIPI caveat instead. The UIPI note
+    // is a Windows/desktop concept, so gating it on a confirmed-native peer is
+    // also more correct than showing it for every session.
     var noinject = q('[data-lc-control-noinject]');
     var controlling = controlPhase === 'controlling';
-    if (controlling && peerNativeControl === false) {
-      hide(uipi);
-      show(noinject);
-    } else if (controlling) {
+    if (controlling && peerNativeControl === true) {
       show(uipi);
       hide(noinject);
+    } else if (controlling) {
+      hide(uipi);
+      show(noinject);
     } else {
       hide(uipi);
       hide(noinject);
