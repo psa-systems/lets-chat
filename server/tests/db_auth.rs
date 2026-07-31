@@ -25,6 +25,45 @@ async fn test_create_user_and_find_by_username() {
 }
 
 #[tokio::test]
+async fn mark_email_verified_if_unset_is_idempotent() {
+    // LC-627: SSO users are provisioned with a NULL email_verified_at; the
+    // callback stamps it on login so the remote-control gate stops refusing them.
+    let pool = setup_pool().await;
+    let user_id = lets_chat::db::auth::create_user(&pool, "sso-user", "")
+        .await
+        .expect("create user");
+
+    // Fresh user: verified stamp is absent.
+    assert!(
+        lets_chat::db::auth::get_user_email_verified_at(&pool, &user_id)
+            .await
+            .expect("read")
+            .is_none()
+    );
+
+    // First stamp writes the row.
+    let n = lets_chat::db::auth::mark_email_verified_if_unset(&pool, &user_id)
+        .await
+        .expect("stamp");
+    assert_eq!(n, 1, "first stamp updates one row");
+    let first = lets_chat::db::auth::get_user_email_verified_at(&pool, &user_id)
+        .await
+        .expect("read")
+        .expect("now verified");
+
+    // Second stamp is a no-op (IS NULL guard), so the timestamp does not churn.
+    let n2 = lets_chat::db::auth::mark_email_verified_if_unset(&pool, &user_id)
+        .await
+        .expect("stamp again");
+    assert_eq!(n2, 0, "already-verified user is not re-stamped");
+    let second = lets_chat::db::auth::get_user_email_verified_at(&pool, &user_id)
+        .await
+        .expect("read")
+        .expect("still verified");
+    assert_eq!(first, second, "timestamp is unchanged on the no-op path");
+}
+
+#[tokio::test]
 async fn test_create_user_duplicate_username_fails() {
     let pool = setup_pool().await;
     lets_chat::db::auth::create_user(&pool, "alice", "hash1")
