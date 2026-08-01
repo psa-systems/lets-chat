@@ -37,6 +37,8 @@ on:
 jobs:
   build-desktop:
     name: Build desktop (Windows x86_64)
+    # Base image: the Windows cross-build and the NSIS installer both run inside
+    # `docker buildx`, so the runner itself never links (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read

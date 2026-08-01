@@ -36,6 +36,8 @@ on:
 jobs:
   build-desktop:
     name: Build desktop (Linux x86_64)
+    # Base image: every compile happens inside `docker buildx` (the Dockerfile
+    # ships its own toolchain), so the runner itself never links (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read

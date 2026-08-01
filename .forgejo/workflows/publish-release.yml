@@ -27,6 +27,8 @@ on:
 jobs:
   publish:
     name: Build + publish lets-chat-desktop binaries
+    # Base image: both release builds run inside `docker buildx`; the runner
+    # only extracts, hashes, signs and uploads artifacts (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read
