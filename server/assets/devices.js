@@ -37,13 +37,14 @@
   }
 
   // ---- constraints --------------------------------------------------
-  // A pinned id becomes an `exact` deviceId constraint; with no pin we fall
-  // back to the boolean form (system default). `exact` is deliberate so the
-  // browser fails loudly (OverconstrainedError) when the device is gone,
-  // which the acquire helpers below catch and retry without the pin.
+  // A pinned id becomes an `exact` deviceId constraint; with no pin the
+  // processing flags still apply. `exact` is deliberate so the browser fails
+  // loudly (OverconstrainedError) when the device is gone, which the acquire
+  // helpers below catch and retry without the pin. LC-628: the echo
+  // cancellation / noise suppression / auto gain trio is centralized in
+  // window.LetsChatMedia so every capture path requests it identically.
   function audioConstraint() {
-    var id = get('audioinput');
-    return id ? { deviceId: { exact: id } } : true;
+    return window.LetsChatMedia.audio(get('audioinput'));
   }
   function videoConstraint() {
     var id = get('videoinput');
@@ -65,7 +66,7 @@
     var c = { audio: audioConstraint(), video: withVideo ? videoConstraint() : false };
     return navigator.mediaDevices.getUserMedia(c).catch(function (err) {
       if (isPinError(err)) {
-        return navigator.mediaDevices.getUserMedia({ audio: true, video: !!withVideo });
+        return navigator.mediaDevices.getUserMedia({ audio: window.LetsChatMedia.audio(), video: !!withVideo });
       }
       throw err;
     });
