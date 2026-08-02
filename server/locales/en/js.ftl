@@ -20,6 +20,7 @@ js-call-declined-by = %name% declined the call
 js-call-missed-from = Missed call from %name%
 js-call-no-answer = No answer
 js-call-ended = Call ended
+js-call-peer-left = %name% left the call
 js-call-no-mic-camera = Could not access your microphone or camera.
 js-call-no-camera = Could not access your camera.
 js-call-no-mic = Could not access your microphone.
