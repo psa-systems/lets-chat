@@ -349,8 +349,12 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.reject(new Error('getUserMedia unavailable'));
     }
+    // LC-628: request echo cancellation / noise suppression / auto gain even on
+    // this degraded path (LetsChatDevices absent) via the shared constraint.
     return navigator.mediaDevices.getUserMedia(
-      withVideo ? { audio: true, video: true } : { audio: true }
+      withVideo
+        ? { audio: window.LetsChatMedia.audio(), video: true }
+        : { audio: window.LetsChatMedia.audio() }
     );
   }
   // LC-144: camera-only acquisition honoring the pinned camera.
