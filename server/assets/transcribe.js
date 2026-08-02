@@ -235,7 +235,10 @@
   function startServerCapture() {
     if (!MR) return;
     capturing = true;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    // LC-628: this STT tap is a second mic open alongside the call; request the
+    // same echo cancellation / noise suppression / auto gain so the clip we POST
+    // is not the caller's own echo.
+    navigator.mediaDevices.getUserMedia({ audio: window.LetsChatMedia.audio() }).then(function (stream) {
       if (!capturing) { stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); return; }
       sttStream = stream;
       recordClip();
