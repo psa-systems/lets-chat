@@ -81,9 +81,9 @@ Be concise and faithful to the transcript; do not invent details.";
 
 /// LC-630: the shared guardrail prompt every AI feature runs against. Before
 /// LC-630 each entry point (`compose_assist`, `assistant`, `suggest_reply`,
-/// transcript summary, chat catch-up, translation) built its own system prompt,
-/// so safety and prompt-injection rules drifted feature by feature. This is
-/// prepended to every feature prompt by [`with_guardrail`] via
+/// transcript summary/correction, chat catch-up, translation) built its own
+/// system prompt, so safety and prompt-injection rules drifted feature by
+/// feature. This is prepended to every feature prompt by [`with_guardrail`] via
 /// [`LlmClient::complete_guarded`], so one rule set governs them all.
 ///
 /// Kept deliberately terse: prompt length drives per-request cost, so this
@@ -146,6 +146,19 @@ pub fn approx_tokens(text: &str) -> usize {
     text.chars().count().div_ceil(4)
 }
 
+/// LC-629: the live-transcript correction prompt. Constrained to fix
+/// speech-to-text recognition errors ONLY - never to paraphrase, summarize,
+/// translate, or add content - so the corrected caption stays a faithful record
+/// of what the speaker said, just recognized correctly. The recent lines are
+/// context for disambiguating homophones, mangled names, and accented words.
+const CORRECTION_PROMPT: &str = "You correct speech-to-text recognition errors in ONE live \
+transcript line. You are given recent preceding lines as CONTEXT and one NEW line. Return ONLY \
+the corrected NEW line. Fix misrecognized words, homophones, mangled proper nouns, and \
+accent-driven errors using the context. Do NOT paraphrase, summarize, translate, rephrase, add, \
+or remove content, and do not change correct text. Preserve the speaker's own words and meaning. \
+If the line is already correct, return it unchanged. Output only the corrected line - no quotes, \
+speaker labels, or commentary.";
+
 /// An operator LLM endpoint. `complete` is the core call (arbitrary system +
 /// user prompt); `complete_guarded` (LC-630) is the entry point AI features use -
 /// it prepends the shared [`GUARDRAIL`] so one rule set governs every feature.
@@ -172,6 +185,26 @@ pub trait LlmClient: Send + Sync {
     /// guarded path with the transcript [`SYSTEM_PROMPT`].
     async fn summarize(&self, transcript: &str) -> Result<String, LlmError> {
         self.complete_guarded(SYSTEM_PROMPT, transcript).await
+    }
+
+    /// LC-629: correct one recognized transcript line against a rolling window of
+    /// recent lines. Default delegates to the LC-630 guarded path with the
+    /// [`CORRECTION_PROMPT`], framing the context and the new line so the model
+    /// returns only the fixed line. `context` is the recent lines, oldest first.
+    async fn correct(&self, context: &[String], line: &str) -> Result<String, LlmError> {
+        let mut user = String::new();
+        if !context.is_empty() {
+            user.push_str("CONTEXT (recent lines, already corrected):\n");
+            for l in context {
+                user.push_str("- ");
+                user.push_str(l);
+                user.push('\n');
+            }
+            user.push('\n');
+        }
+        user.push_str("NEW line to correct:\n");
+        user.push_str(line);
+        self.complete_guarded(CORRECTION_PROMPT, &user).await
     }
 }
 

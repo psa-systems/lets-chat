@@ -13,6 +13,8 @@
     <div class="flex shrink-0 items-center gap-2">
       <a href="/transcripts/{{ transcript_id }}/export?format=txt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-txt"|t }}</a>
       <a href="/transcripts/{{ transcript_id }}/export?format=vtt" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-vtt"|t }}</a>
+      {# LC-629: the raw, uncorrected recognition (only meaningful when AI correction is configured). #}
+      {% if llm_available %}<a href="/transcripts/{{ transcript_id }}/export?format=txt&amp;raw=1" class="rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">{{ "transcript-download-raw"|t }}</a>{% endif %}
     </div>
   </header>
   <div class="flex-1 overflow-y-auto px-4 py-3">

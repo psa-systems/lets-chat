@@ -161,9 +161,48 @@ async fn broadcast_to_members(
     }
 }
 
+/// LC-629: how many recent (already-corrected) lines feed the correction pass
+/// as context. Bounds token cost per the ticket's rolling-window requirement -
+/// correction sees the last few lines, never the whole session.
+const CORRECTION_CONTEXT_LINES: i64 = 6;
+
+/// LC-629: best-effort AI correction of one freshly recognized line against the
+/// recent conversation. Returns the corrected DISPLAY text, or the raw text
+/// unchanged when no LLM is configured or the call fails - a live caption must
+/// never be dropped or blocked because correction was unavailable, and the raw
+/// recognition is preserved by the caller regardless.
+async fn correct_line(state: &AppState, transcript_id: i64, raw: &str) -> String {
+    let Some(llm) = state.llm_client.clone() else {
+        return raw.to_string();
+    };
+    let context =
+        db::transcripts::recent_segment_texts(&state.chat, transcript_id, CORRECTION_CONTEXT_LINES)
+            .await
+            .unwrap_or_default();
+    match llm.correct(&context, raw).await {
+        Ok(corrected) => {
+            let corrected = corrected.trim();
+            if corrected.is_empty() {
+                raw.to_string()
+            } else {
+                corrected.to_string()
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript correction failed; using raw recognition");
+            raw.to_string()
+        }
+    }
+}
+
 /// Store one final speech result (trimmed, length-capped in the db layer) and
 /// fan it out as an attributed live caption. Shared by the browser-text path
 /// (`segment`) and the server-STT path (`audio`). A blank result is a no-op.
+///
+/// LC-629: the recognized text is first passed through a best-effort correction
+/// pass against a rolling window of recent lines; the CORRECTED text is what is
+/// displayed and broadcast, while the original recognition is preserved as the
+/// segment's `raw_text` (NULL when correction was off, failed, or was a no-op).
 async fn record_and_broadcast(
     state: &AppState,
     room: &Room,
@@ -176,17 +215,26 @@ async fn record_and_broadcast(
     if trimmed.is_empty() {
         return Ok(());
     }
-    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed, duration_ms)
-        .await?;
+    let corrected = correct_line(state, transcript_id, trimmed).await;
+    // Keep the raw recognition only when correction actually changed it.
+    let raw_text = (corrected != trimmed).then_some(trimmed);
+    db::transcripts::append_segment(
+        &state.chat,
+        transcript_id,
+        &user.id,
+        &corrected,
+        raw_text,
+        duration_ms,
+    )
+    .await?;
     let speaker = label_for(state, &user.id).await;
-    let body = trimmed.to_string();
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
         room_id: room.id,
         to_user_id: to,
         transcript_id,
         speaker_id: user.id.clone(),
         speaker_name: speaker.clone(),
-        text: body.clone(),
+        text: corrected.clone(),
     })
     .await;
     Ok(())
@@ -860,6 +908,10 @@ pub struct IndexQuery {
 pub struct ExportQuery {
     #[serde(default)]
     pub format: Option<String>,
+    /// LC-629: present ("1") to export the RAW, uncorrected recognition instead
+    /// of the AI-corrected display text - the preserved record is retrievable.
+    #[serde(default)]
+    pub raw: Option<String>,
 }
 
 /// Parse a `datetime('now')` string ("%Y-%m-%d %H:%M:%S").
@@ -899,13 +951,14 @@ pub async fn export(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(transcript_id): Path<i64>,
-    Query(ExportQuery { format }): Query<ExportQuery>,
+    Query(ExportQuery { format, raw }): Query<ExportQuery>,
 ) -> Result<Response, AppError> {
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
+    let want_raw = raw.is_some();
     let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
 
     // Resolve speaker labels (cache) and each segment's offset from the call
@@ -928,7 +981,14 @@ pub async fn export(
             (Some(a), Some(b)) => (b - a).num_milliseconds().max(0) as f64 / 1000.0,
             _ => 0.0,
         };
-        lines.push((off, name, s.text.clone(), s.duration_ms));
+        // LC-629: raw export emits the uncorrected recognition; the default
+        // emits the AI-corrected display text.
+        let text = if want_raw {
+            s.raw().to_string()
+        } else {
+            s.text.clone()
+        };
+        lines.push((off, name, text, s.duration_ms));
     }
 
     let vtt = format.as_deref() == Some("vtt");
