@@ -46,9 +46,16 @@ async fn fixture() -> Fx {
     let enclave_id = db::enclave::create_enclave(&chat, "Private Team", None, &insider)
         .await
         .unwrap();
-    let room_id = db::chat::create_room(&chat, "secret-general", None, "public", None, Some(enclave_id))
-        .await
-        .unwrap();
+    let room_id = db::chat::create_room(
+        &chat,
+        "secret-general",
+        None,
+        "public",
+        None,
+        Some(enclave_id),
+    )
+    .await
+    .unwrap();
 
     Fx {
         chat,
@@ -123,7 +130,9 @@ async fn setup_app() -> App {
 
     // The posting member. A plain (non-admin) account, so the fix - not the
     // admin god-mode branch - is what gates delivery.
-    let member_id = db::auth::create_user(&auth, "member", "hash").await.unwrap();
+    let member_id = db::auth::create_user(&auth, "member", "hash")
+        .await
+        .unwrap();
     let member_session = db::auth::create_session(&auth, &member_id).await.unwrap();
 
     // Their enclave and its public room. create_enclave adds the creator as a
