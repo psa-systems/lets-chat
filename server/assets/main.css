@@ -2506,8 +2506,13 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     color: var(--surface-elevated);
     font-size: 0.75rem;
     font-weight: 500;
-    line-height: 1.2;
-    white-space: nowrap;
+    line-height: 1.3;
+    /* LC-651: wrap within a bounded width. Short labels stay one line; a long
+       reaction "who reacted" list (up to 20 names) wraps instead of running off
+       the viewport, which the old `nowrap` + no-max-width would have done. */
+    white-space: normal;
+    max-width: min(18rem, 90vw);
+    text-align: center;
     pointer-events: none;
     box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
     opacity: 0;

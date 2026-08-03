@@ -248,15 +248,17 @@ async fn picker_ships_filter_and_name_tokens() {
     );
 }
 
-// LC-266: the reaction pill carries a `title` listing who reacted.
+// LC-266 / LC-651: the reaction pill lists who reacted via the app tooltip
+// (data-lc-tip) with the reactor list also as the accessible name, replacing the
+// raw native `title`.
 #[tokio::test]
 async fn reaction_pill_titles_who_reacted() {
     let s = setup().await;
     let (status, body) = react_body(&s.app, &s.member_session, s.general_msg, "%F0%9F%91%8D").await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.contains(r#"title="member""#),
-        "reaction pill must title the reactor's name: {body}"
+        body.contains(r#"data-lc-tip="member""#) && body.contains(r#"aria-label="member""#),
+        "reaction pill must surface the reactor's name via the app tooltip: {body}"
     );
 }
 
