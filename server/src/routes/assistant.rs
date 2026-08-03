@@ -159,7 +159,7 @@ pub(crate) async fn handle_ask(
 
     let context = build_context(state, room, question).await?;
     let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
-    let answer = match llm.complete(SYSTEM_PROMPT, &user_content).await {
+    let answer = match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
         Ok(a) => a,
         Err(e) => {
             tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
