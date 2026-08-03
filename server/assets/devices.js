@@ -25,6 +25,19 @@
     videoinput: window.__lcS('deviceCamera', 'Camera'),
     audiooutput: window.__lcS('deviceSpeaker', 'Speaker'),
   };
+  // LC-632: each device type is shown as an icon (not a text label) next to its
+  // dropdown, so the picker reads visually. The icon carries the kind name as a
+  // title/aria-label for hover + assistive tech; the <select> keeps its own
+  // aria-label since the visible text label is gone.
+  var ICONS = {
+    audioinput: '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4z"/><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z"/></svg>',
+    videoinput: '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M1 4.75C1 3.784 1.784 3 2.75 3h8.5c.966 0 1.75.784 1.75 1.75v6.5A1.75 1.75 0 0111.25 13h-8.5A1.75 1.75 0 011 11.25v-6.5zM14.5 7.732l2.303-1.382A.75.75 0 0118 6.994v6.012a.75.75 0 01-1.197.644L14.5 12.268v-4.536z"/></svg>',
+    audiooutput: '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M10 3.75a.75.75 0 00-1.264-.546L5.203 6.5H2.667a.75.75 0 00-.75.75v5.5c0 .414.336.75.75.75h2.536l3.533 3.296A.75.75 0 0010 16.25V3.75z"/><path d="M15.95 5.05a.75.75 0 10-1.06 1.061 5.5 5.5 0 010 7.778.75.75 0 001.06 1.06 7 7 0 000-9.899zM13.83 7.17a.75.75 0 10-1.06 1.06 2.5 2.5 0 010 3.54.75.75 0 101.06 1.06 4 4 0 000-5.66z"/></svg>',
+  };
+  // Down chevron: the dropdown affordance, drawn on top of an appearance-none
+  // <select> so it matches across browsers instead of the OS default arrow.
+  var CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clip-rule="evenodd"/></svg>';
+  var CLOSE_ICON = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>';
 
   function get(kind) {
     try { return localStorage.getItem(KEYS[kind]) || ''; } catch (e) { return ''; }
@@ -120,7 +133,12 @@
   function buildSelect(kind, devices) {
     var sel = document.createElement('select');
     sel.setAttribute('data-kind', kind);
-    sel.className = 'mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm';
+    // LC-632: themed via semantic tokens so the control is dark inside the dark
+    // call UI (not the inverted light default), rounded to match the dialog, and
+    // full-width. appearance-none drops the native arrow for the CHEVRON overlay
+    // rowFor adds; pr-9 leaves room for it. aria-label replaces the removed text.
+    sel.className = 'w-full appearance-none rounded-lg border border-border bg-surface-sunken py-2 pl-3 pr-9 text-sm text-content focus:outline-none focus:ring-2 focus:ring-ring';
+    sel.setAttribute('aria-label', KIND_LABEL[kind]);
     var current = get(kind);
     var def = document.createElement('option');
     def.value = '';
@@ -147,14 +165,24 @@
     return { row: rowFor(kind, sel), count: n };
   }
 
+  // LC-632: [icon] [select + chevron]. The icon replaces the text label; the
+  // select fills the remaining width with the chevron overlaid at its right.
   function rowFor(kind, sel) {
-    var row = document.createElement('label');
-    row.className = 'block';
-    var span = document.createElement('span');
-    span.className = 'text-sm font-medium text-slate-700';
-    span.textContent = KIND_LABEL[kind];
-    row.appendChild(span);
-    row.appendChild(sel);
+    var row = document.createElement('div');
+    row.className = 'flex items-center gap-2.5';
+    var icon = document.createElement('span');
+    icon.className = 'shrink-0 text-content-muted';
+    icon.setAttribute('title', KIND_LABEL[kind]);
+    icon.innerHTML = ICONS[kind] || '';
+    var wrap = document.createElement('div');
+    wrap.className = 'relative flex-1';
+    wrap.appendChild(sel);
+    var chev = document.createElement('span');
+    chev.className = 'pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-content-muted';
+    chev.innerHTML = CHEVRON;
+    wrap.appendChild(chev);
+    row.appendChild(icon);
+    row.appendChild(wrap);
     return row;
   }
 
@@ -198,14 +226,17 @@
     prevFocus = document.activeElement;
     var overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-[60] flex items-center justify-center bg-black/50';
+    // LC-632: themed dialog - dark surface tokens (was a hardcoded white surface,
+    // which rendered inverted over the dark call UI), a wider card that uses the space,
+    // and a rounded radius matching the rest of the call chrome.
     overlay.innerHTML =
-      '<div role="dialog" aria-modal="true" aria-label="' + window.__lcS('deviceDialogTitle', 'Call devices') + '" class="w-80 rounded-lg bg-white p-5 shadow-xl">' +
-        '<div class="mb-3 flex items-center justify-between">' +
+      '<div role="dialog" aria-modal="true" aria-label="' + window.__lcS('deviceDialogTitle', 'Call devices') + '" class="w-[26rem] max-w-[92vw] rounded-xl border border-border bg-surface-elevated p-5 text-content shadow-xl">' +
+        '<div class="mb-4 flex items-center justify-between">' +
           '<h2 class="text-base font-semibold">' + window.__lcS('deviceDialogTitle', 'Call devices') + '</h2>' +
-          '<button type="button" data-close class="text-sm text-slate-500 hover:text-slate-900">' + window.__lcS('deviceClose', 'Close') + '</button>' +
+          '<button type="button" data-close aria-label="' + window.__lcS('deviceClose', 'Close') + '" class="rounded-md p-1 text-content-muted hover:bg-surface-sunken hover:text-content">' + CLOSE_ICON + '</button>' +
         '</div>' +
         '<div data-fields class="space-y-3"></div>' +
-        '<p data-perm-hint class="mt-3 text-xs text-slate-500" style="display:none">' +
+        '<p data-perm-hint class="mt-4 text-xs text-content-subtle" style="display:none">' +
           window.__lcS('devicePermissionHint', 'Allow microphone or camera access to see device names.') + ' ' +
           '<button type="button" data-grant class="font-medium text-accent hover:underline">' + window.__lcS('deviceShowNames', 'Show device names') + '</button>' +
         '</p>' +
