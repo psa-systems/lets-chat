@@ -79,6 +79,8 @@ transcript-hide-empty-tip = Ocultar transcripciones de 0 líneas
 transcript-download = Descargar
 transcript-download-txt = Texto (.txt)
 transcript-download-vtt = WebVTT (.vtt)
+# LC-629: the uncorrected recognition, preserved alongside the AI-corrected text
+transcript-download-raw = Original (.txt)
 # LC-396: resumen con IA
 transcript-summary-heading = Resumen con IA
 transcript-summary-generate = Resumir
