@@ -2304,6 +2304,13 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    // LC-636: gate on room access before rendering. Without this a message id
+    // is enough for any authenticated user to read a message from a room they
+    // are not a member of. Mirrors the `get_message_raw` sibling above.
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, m.room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
     if db::auth::is_blocked_either_way(&state.auth, &user.id, &m.user_id).await? {
         return Err(AppError::NotFound);
     }
