@@ -32,11 +32,24 @@ pub struct Segment {
     pub id: i64,
     pub transcript_id: i64,
     pub user_id: String,
+    /// The DISPLAY text: LC-629 correction output when an LLM is configured,
+    /// else the raw recognition. This is what the live caption + saved page show.
     pub text: String,
+    /// LC-629: the original, uncorrected recognition when it differs from
+    /// `text`; `None` when no correction was applied (raw equals display).
+    pub raw_text: Option<String>,
     pub spoken_at: String,
     /// LC-591: real spoken length in ms from the engine's segment timings, or 0
     /// when unknown (browser Web Speech, or a non-verbose_json engine).
     pub duration_ms: i64,
+}
+
+impl Segment {
+    /// LC-629: the raw, uncorrected recognition - `raw_text` when a correction
+    /// replaced it, otherwise the display `text` (which is itself the raw text).
+    pub fn raw(&self) -> &str {
+        self.raw_text.as_deref().unwrap_or(&self.text)
+    }
 }
 
 fn map_transcript(row: &sqlx::sqlite::SqliteRow) -> Transcript {
@@ -114,23 +127,29 @@ pub async fn set_summary(pool: &SqlitePool, id: i64, summary: &str) -> sqlx::Res
         .map(|_| ())
 }
 
-/// Append a final speech result. Text is truncated to [`MAX_SEGMENT_CHARS`] on
-/// the char boundary. Returns the new segment id.
+/// Append a final speech result. `text` is the display text (LC-629 corrected,
+/// or the raw recognition when correction is off); `raw_text` is the original
+/// recognition, passed as `Some` ONLY when it differs from `text` (else the raw
+/// equals the display and the column stays NULL). Both are truncated to
+/// [`MAX_SEGMENT_CHARS`] on the char boundary. Returns the new segment id.
 pub async fn append_segment(
     pool: &SqlitePool,
     transcript_id: i64,
     user_id: &str,
     text: &str,
+    raw_text: Option<&str>,
     duration_ms: i64,
 ) -> sqlx::Result<i64> {
     let capped: String = text.chars().take(MAX_SEGMENT_CHARS).collect();
+    let capped_raw: Option<String> = raw_text.map(|r| r.chars().take(MAX_SEGMENT_CHARS).collect());
     let id = sqlx::query(
-        "INSERT INTO transcript_segments (transcript_id, user_id, text, duration_ms) \
-         VALUES (?, ?, ?, ?)",
+        "INSERT INTO transcript_segments (transcript_id, user_id, text, raw_text, duration_ms) \
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(transcript_id)
     .bind(user_id)
     .bind(&capped)
+    .bind(&capped_raw)
     .bind(duration_ms.max(0))
     .execute(pool)
     .await?
@@ -138,10 +157,30 @@ pub async fn append_segment(
     Ok(id)
 }
 
+/// LC-629: the display text of the last `limit` segments of a session, oldest
+/// first - the rolling context window fed to the correction pass. Bounded by the
+/// caller so a long call never grows the correction prompt without limit.
+pub async fn recent_segment_texts(
+    pool: &SqlitePool,
+    transcript_id: i64,
+    limit: i64,
+) -> sqlx::Result<Vec<String>> {
+    let rows = sqlx::query(
+        "SELECT text FROM transcript_segments WHERE transcript_id = ? ORDER BY id DESC LIMIT ?",
+    )
+    .bind(transcript_id)
+    .bind(limit.max(0))
+    .fetch_all(pool)
+    .await?;
+    let mut texts: Vec<String> = rows.into_iter().map(|row| row.get("text")).collect();
+    texts.reverse();
+    Ok(texts)
+}
+
 /// All segments of a session, oldest first.
 pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Result<Vec<Segment>> {
     let rows = sqlx::query(
-        "SELECT id, transcript_id, user_id, text, spoken_at, duration_ms \
+        "SELECT id, transcript_id, user_id, text, raw_text, spoken_at, duration_ms \
          FROM transcript_segments WHERE transcript_id = ? ORDER BY id ASC",
     )
     .bind(transcript_id)
@@ -154,6 +193,7 @@ pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Resul
             transcript_id: row.get("transcript_id"),
             user_id: row.get("user_id"),
             text: row.get("text"),
+            raw_text: row.get("raw_text"),
             spoken_at: row.get("spoken_at"),
             duration_ms: row.get("duration_ms"),
         })

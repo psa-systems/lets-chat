@@ -79,6 +79,19 @@ GitHub-flavored markdown with a short '## Summary' section (2-4 sentences) follo
 by a '## Action items' section as a bullet list (write 'None.' if there are none). \
 Be concise and faithful to the transcript; do not invent details.";
 
+/// LC-629: the live-transcript correction prompt. Constrained to fix
+/// speech-to-text recognition errors ONLY - never to paraphrase, summarize,
+/// translate, or add content - so the corrected caption stays a faithful record
+/// of what the speaker said, just recognized correctly. The recent lines are
+/// context for disambiguating homophones, mangled names, and accented words.
+const CORRECTION_PROMPT: &str = "You correct speech-to-text recognition errors in ONE live \
+transcript line. You are given recent preceding lines as CONTEXT and one NEW line. Return ONLY \
+the corrected NEW line. Fix misrecognized words, homophones, mangled proper nouns, and \
+accent-driven errors using the context. Do NOT paraphrase, summarize, translate, rephrase, add, \
+or remove content, and do not change correct text. Preserve the speaker's own words and meaning. \
+If the line is already correct, return it unchanged. Output only the corrected line - no quotes, \
+speaker labels, or commentary.";
+
 /// An operator LLM endpoint. `complete` is the core call (arbitrary system +
 /// user prompt); `summarize` is a convenience wrapper that applies the
 /// transcript prompt. LC-484 reuses `complete` with a chat-specific prompt for
@@ -92,6 +105,26 @@ pub trait LlmClient: Send + Sync {
     /// `complete` with the transcript [`SYSTEM_PROMPT`].
     async fn summarize(&self, transcript: &str) -> Result<String, LlmError> {
         self.complete(SYSTEM_PROMPT, transcript).await
+    }
+
+    /// LC-629: correct one recognized transcript line against a rolling window of
+    /// recent lines. Default delegates to `complete` with the [`CORRECTION_PROMPT`],
+    /// framing the context and the new line so the model returns only the fixed
+    /// line. `context` is the recent lines, oldest first.
+    async fn correct(&self, context: &[String], line: &str) -> Result<String, LlmError> {
+        let mut user = String::new();
+        if !context.is_empty() {
+            user.push_str("CONTEXT (recent lines, already corrected):\n");
+            for l in context {
+                user.push_str("- ");
+                user.push_str(l);
+                user.push('\n');
+            }
+            user.push('\n');
+        }
+        user.push_str("NEW line to correct:\n");
+        user.push_str(line);
+        self.complete(CORRECTION_PROMPT, &user).await
     }
 }
 
