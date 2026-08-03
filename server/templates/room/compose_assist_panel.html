@@ -11,6 +11,9 @@
             hx-include="closest form"
             hx-target="#composer-ai-panel" hx-swap="innerHTML"
             hx-disabled-elt="this"
+            data-lc-ai-pending
+            data-lc-ai-pending-label="{{ "ai-generating"|t }}"
+            data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
             class="rounded px-1.5 py-0.5 text-xs {% if a.active %}bg-accent-surface text-accent{% else %}text-content-muted hover:bg-surface-sunken{% endif %}">{{ a.label }}</button>
     {% endfor %}
   </div>

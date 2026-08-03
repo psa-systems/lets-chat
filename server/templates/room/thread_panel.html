@@ -26,6 +26,9 @@
         hx-target="#thread-summary-{{ parent.id }}"
         hx-swap="innerHTML"
         hx-disabled-elt="this"
+        data-lc-ai-pending
+        data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+        data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
         class="text-content-subtle hover:text-content-muted text-xs font-medium"
       >{{ "room-thread-summarize"|t }}</button>
       {% endif %}
