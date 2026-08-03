@@ -208,8 +208,26 @@
       var ta = form && form.querySelector('textarea[name="body"]');
       if (sug && ta) {
         ta.value = sug.textContent;
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        // LC-653: caret to the end so the focus-scroll is deterministic.
+        var end = ta.value.length;
+        try {
+          ta.setSelectionRange(end, end);
+        } catch (e) {}
         ta.focus();
+        // Drives the LC-399 highlight backdrop render, the autosize, and the
+        // draft/echo hooks (a programmatic value set fires no native input).
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        // LC-653: the autosize runs in its own rAF and changes the textarea
+        // height/scrollTop AFTER the overlay's render+syncScroll already ran on
+        // this same input event, leaving the transparent-text backdrop synced to
+        // a stale (over-)scroll position - it then shows its blank background and
+        // the inserted text is invisible. Re-sync once the layout has settled:
+        // pin to the top and fire a scroll so `syncScroll` runs against the final
+        // geometry.
+        requestAnimationFrame(function () {
+          ta.scrollTop = 0;
+          ta.dispatchEvent(new Event('scroll', { bubbles: true }));
+        });
       }
       if (panel) panel.innerHTML = '';
       return;
