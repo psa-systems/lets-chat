@@ -1,0 +1,14 @@
+-- LC-629: AI-corrected live transcript with the raw transcript retained.
+--
+-- The `text` column now holds the DISPLAY text: when an operator LLM is
+-- configured, each recognized line is passed (with a rolling window of recent
+-- lines as context) through a correction pass that fixes speech-to-text
+-- recognition errors, so participants read what the speaker meant rather than a
+-- verbatim mis-hearing. `raw_text` preserves the original, uncorrected
+-- recognition so nothing is lost and it stays retrievable (see the transcript
+-- export's `raw` option).
+--
+-- NULL means "raw equals display": no correction was applied (LLM disabled, the
+-- correction failed, or it returned the line unchanged), so there is no separate
+-- raw to store. Every pre-existing segment is therefore correctly NULL here.
+ALTER TABLE transcript_segments ADD COLUMN raw_text TEXT;

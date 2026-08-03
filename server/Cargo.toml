@@ -134,6 +134,10 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+# LC-629: name async_trait in an integration test to implement a correcting
+# LlmClient double (input-dependent, unlike the crate's fixed MockLlmClient).
+# Already a normal dependency; this only makes it visible to the test crates.
+async-trait = "0.1"
 kamadak-exif = "0.5"
 # LC-206-IMAGE-LIMITS (#284): craft a valid PNG decompression-bomb fixture
 # (tiny file, huge decoded dimensions) by streaming zero scanlines through a
