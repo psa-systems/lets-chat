@@ -2395,6 +2395,20 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     vertical-align: -0.125em;
 }
 
+/* LC-650: uniform "AI is working" pending block. Injected by live.js into an
+   AI action's htmx target while the (possibly slow, CPU-bound) LLM request is
+   in flight, then replaced by the real result on completion. Hand-authored here
+   (not a Tailwind utility) so it renders regardless of the JIT purge. */
+.lc-ai-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.125rem;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    color: var(--content-muted);
+}
+
 /* Toast / modal entry. The component classes in tailwind.css apply these by
    default; reduced-motion strips them via the block below. */
 .toast {

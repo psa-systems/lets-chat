@@ -29,6 +29,9 @@
                 hx-post="/transcripts/{{ transcript_id }}/summary"
                 hx-target="#lc-transcript-summary" hx-swap="innerHTML"
                 hx-disabled-elt="this"
+                data-lc-ai-pending
+                data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+                data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
                 class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-regenerate"|t }}</button>
         {# LC-527: turn the action items into a trackable checklist posted to the room. #}
         <div id="lc-transcript-followups">
@@ -45,6 +48,9 @@
                 hx-post="/transcripts/{{ transcript_id }}/summary"
                 hx-target="#lc-transcript-summary" hx-swap="innerHTML"
                 hx-disabled-elt="this"
+                data-lc-ai-pending
+                data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+                data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
                 class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-summary-generate"|t }}</button>
         <span class="lc-caption text-content-subtle htmx-indicator ml-2">{{ "transcript-summary-working"|t }}</span>
         {% endif %}

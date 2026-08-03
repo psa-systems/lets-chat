@@ -220,4 +220,87 @@
       if (p) p.innerHTML = '';
     }
   });
+
+  // LC-650: uniform "AI is working" feedback. AI actions call a possibly-slow
+  // LLM (seconds on a CPU model), and their htmx targets are empty until the
+  // response lands, so without this the click feels dead. Any trigger tagged
+  // `data-lc-ai-pending` gets a spinner + label injected into its htmx target
+  // the moment the request starts; htmx overwrites the target with the real
+  // result on completion, which clears it. A "still working" note swaps in
+  // after a few seconds for the slow case.
+  function lcAiTarget(el) {
+    // AI triggers all use a plain `#id` hx-target; skip htmx's extended
+    // selectors (closest/find/this) which querySelector can't resolve.
+    var sel = el.getAttribute('hx-target');
+    if (!sel || sel.indexOf(' ') !== -1 || /^(this|closest|find|next|previous)/.test(sel)) {
+      return null;
+    }
+    try {
+      return document.querySelector(sel);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function lcAiShowPending(target, label) {
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-pending';
+    wrap.setAttribute('role', 'status');
+    wrap.setAttribute('aria-live', 'polite');
+    var spin = document.createElement('span');
+    spin.className = 'lc-spinner';
+    spin.setAttribute('aria-hidden', 'true');
+    var lbl = document.createElement('span');
+    lbl.className = 'lc-ai-pending-label';
+    lbl.textContent = label || '';
+    wrap.appendChild(spin);
+    wrap.appendChild(lbl);
+    target.innerHTML = '';
+    target.appendChild(wrap);
+  }
+
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    var el = evt.detail && evt.detail.elt;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-lc-ai-pending')) return;
+    var target = lcAiTarget(el);
+    if (!target) return;
+    // Stash the target's current content so a failed request can restore it
+    // (some triggers live inside their own target, e.g. the Summarize button;
+    // without this a 4xx would leave an empty box and no way to retry).
+    target._lcAiOriginal = target.innerHTML;
+    target.setAttribute('aria-busy', 'true');
+    lcAiShowPending(target, el.getAttribute('data-lc-ai-pending-label') || '');
+    var slow = el.getAttribute('data-lc-ai-slow-label');
+    if (slow) {
+      target._lcAiSlowTimer = window.setTimeout(function () {
+        var lbl = target.querySelector('.lc-ai-pending-label');
+        if (lbl) lbl.textContent = slow;
+      }, 3000);
+    }
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    var el = evt.detail && evt.detail.elt;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-lc-ai-pending')) return;
+    var target = lcAiTarget(el);
+    if (!target) return;
+    target.removeAttribute('aria-busy');
+    if (target._lcAiSlowTimer) {
+      window.clearTimeout(target._lcAiSlowTimer);
+      target._lcAiSlowTimer = null;
+    }
+    // On success htmx has already swapped the real result into the target.
+    // On failure htmx does NOT swap a non-2xx body, so our pending block would
+    // otherwise spin forever: restore what was there, re-arm its htmx attrs,
+    // and surface the failure as a toast.
+    if (evt.detail && evt.detail.successful) return;
+    if (typeof target._lcAiOriginal === 'string') {
+      target.innerHTML = target._lcAiOriginal;
+      if (window.htmx && window.htmx.process) window.htmx.process(target);
+    }
+    target._lcAiOriginal = null;
+    if (window.__lcToast) {
+      window.__lcToast('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
+    }
+  });
 })();

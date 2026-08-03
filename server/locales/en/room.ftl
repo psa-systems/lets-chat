@@ -431,6 +431,11 @@ summary-recent-scope = Summarize recent activity
 summary-generate = Generate summary
 summary-regenerate = Regenerate
 summary-disclaimer = AI-generated from recent messages. May be incomplete.
+# LC-650: shared "AI is working" pending labels shown while an LLM request runs.
+ai-generating = Generating...
+ai-summarizing = Summarizing...
+ai-translating = Translating...
+ai-working-slow = Still working - the local model can take a few seconds.
 room-thread-summarize = Summarize
 
 # LC-495: workflow automations (room manage page)
