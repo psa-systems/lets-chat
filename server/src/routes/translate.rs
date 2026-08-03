@@ -48,7 +48,7 @@ pub async fn post_translate(
                  already in {lang}, return it unchanged. Reply with ONLY the translation - no \
                  preamble, notes, or surrounding quotes."
             );
-            let out = match llm.complete(&system, body).await {
+            let out = match llm.complete_guarded(&system, body).await {
                 Ok(s) => s.trim().to_string(),
                 Err(e) => {
                     tracing::warn!(error = %e, message_id, "translation failed");
