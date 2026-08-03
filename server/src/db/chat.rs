@@ -1089,6 +1089,27 @@ pub async fn list_room_member_ids(
     Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
 }
 
+/// LC-637: the user_ids of every member of the enclave that owns `room_id`.
+/// A public room is reachable only by members of its enclave (see
+/// `is_room_accessible`), so its live events fan out to exactly this set - not
+/// every connected socket, which both leaked message bodies to non-members and
+/// cost a server-wide send per message. Returns empty for a room with no
+/// enclave (e.g. a dm), which never takes the public fan-out arm.
+pub async fn list_enclave_member_ids_for_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT em.user_id FROM enclave_members em \
+         JOIN rooms r ON r.enclave_id = em.enclave_id \
+         WHERE r.id = ?",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
+}
+
 /// Find a room by its invite code.
 pub async fn get_room_by_invite(
     pool: &sqlx::SqlitePool,

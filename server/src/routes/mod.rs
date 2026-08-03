@@ -1158,8 +1158,14 @@ pub(crate) async fn broadcast_room_message(
     room: &Room,
     event: &ChatEvent,
 ) -> Result<(), AppError> {
+    // LC-637: a public room is reachable only by members of its enclave, so fan
+    // its events to those members - not every connected socket
+    // (list_connected_users), which delivered each public-room event to every
+    // user on the server (a blast-radius and a scaling cost) and, paired with
+    // the old subscribe authorizer, leaked message bodies to non-members. This
+    // matches is_room_accessible, the predicate that admits a public room.
     let recipients: Vec<String> = match room.room_type.as_str() {
-        "public" => state.hub.list_connected_users(),
+        "public" => db::chat::list_enclave_member_ids_for_room(&state.chat, room.id).await?,
         _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
     };
     for uid in recipients {

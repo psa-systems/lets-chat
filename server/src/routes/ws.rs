@@ -633,15 +633,24 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
                     match frame {
                         ClientFrame::Subscribe { room_id } => {
-                            let allowed = match db::chat::get_room(&state.chat, room_id).await {
-                                Ok(Some(r)) if r.room_type == "dm" || r.room_type == "private" => {
-                                    db::chat::is_room_member(&state.chat, room_id, &user.id)
-                                        .await
-                                        .unwrap_or(false)
-                                }
-                                Ok(Some(_)) => true,
-                                _ => false,
-                            };
+                            // LC-637: authorize the subscribe frame with the SAME
+                            // predicate as the HTTP room handler. The old match
+                            // special-cased dm/private and treated every other
+                            // room_type (public, etc.) as globally open, so a
+                            // non-member of an enclave could join a public room's
+                            // fan-out set and receive its live message bodies.
+                            // is_room_accessible covers all three room types plus
+                            // the site-admin god-mode that topic_subscribe_allowed
+                            // also grants, so the dm/private branches are subsumed.
+                            let is_admin = user.role == "admin";
+                            let allowed = db::chat::is_room_accessible(
+                                &state.chat,
+                                room_id,
+                                &user.id,
+                                is_admin,
+                            )
+                            .await
+                            .unwrap_or(false);
                             if allowed {
                                 state.hub.subscribe(conn_id, room_id);
                                 subscribed.lock().unwrap().insert(room_id);
