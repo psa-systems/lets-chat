@@ -95,7 +95,7 @@ pub async fn post_assist(
         return Err(AppError::BadRequest("type a message first".into()));
     }
 
-    let suggestion = match llm.complete(&system_prompt(action), &draft).await {
+    let suggestion = match llm.complete_guarded(&system_prompt(action), &draft).await {
         Ok(s) => s.trim().to_string(),
         Err(e) => {
             tracing::warn!(error = %e, "compose-assist failed");

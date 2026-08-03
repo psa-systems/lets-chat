@@ -103,28 +103,21 @@ fn strip_list_marker(s: &str) -> Option<&str> {
 }
 
 /// Build the "Label: body" context block (chronological), skipping system and
-/// empty messages, bounded to [`MAX_PROMPT_CHARS`].
+/// empty messages, then bound it with the shared LC-630 sliding window so the
+/// most recent turns win a fixed budget and per-request cost stays flat.
 fn build_context(msgs: &[RawMessage], labels: &HashMap<String, String>) -> String {
-    let mut text = String::new();
-    for m in msgs {
-        if m.is_system {
-            continue;
-        }
-        let body = m.body.trim();
-        if body.is_empty() {
-            continue;
-        }
-        let label = labels
-            .get(&m.user_id)
-            .cloned()
-            .unwrap_or_else(|| m.user_id.clone());
-        let line = format!("{label}: {body}\n");
-        if text.len() + line.len() > MAX_PROMPT_CHARS {
-            break;
-        }
-        text.push_str(&line);
-    }
-    text
+    let lines: Vec<String> = msgs
+        .iter()
+        .filter(|m| !m.is_system && !m.body.trim().is_empty())
+        .map(|m| {
+            let label = labels
+                .get(&m.user_id)
+                .cloned()
+                .unwrap_or_else(|| m.user_id.clone());
+            format!("{label}: {}\n", m.body.trim())
+        })
+        .collect();
+    crate::llm::sliding_window(&lines, crate::llm::CONTEXT_MAX_TURNS, MAX_PROMPT_CHARS).concat()
 }
 
 /// One reply chip.
@@ -187,7 +180,7 @@ pub async fn post_suggest_reply(
         return Err(AppError::BadRequest("nothing to reply to".into()));
     }
 
-    let raw = match llm.complete(SYSTEM_PROMPT, &context).await {
+    let raw = match llm.complete_guarded(SYSTEM_PROMPT, &context).await {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "suggest-reply failed");

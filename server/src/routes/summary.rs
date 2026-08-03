@@ -115,7 +115,7 @@ async fn run_summary(
     if text.trim().is_empty() {
         return Err(AppError::BadRequest("nothing to summarize".into()));
     }
-    let md = match llm.complete(CHAT_SYSTEM_PROMPT, &text).await {
+    let md = match llm.complete_guarded(CHAT_SYSTEM_PROMPT, &text).await {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "chat summary failed");
