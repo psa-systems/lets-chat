@@ -105,3 +105,6 @@ js-clip-uploading = Subiendo clip...
 js-huddle-ring-started = inició una reunión rápida en
 js-huddle-ring-join = Unirse
 js-huddle-ring-ignore = Ignorar
+
+# LC-650: shown as a toast when an AI action fails (htmx does not swap the 4xx).
+js-ai-failed = La solicitud de IA falló. Inténtalo de nuevo.
