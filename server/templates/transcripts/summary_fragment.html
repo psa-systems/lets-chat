@@ -1,17 +1,10 @@
 {# LC-396: rendered transcript summary + a regenerate button. Swapped into
    #lc-transcript-summary after POST /transcripts/{id}/summary, and also included
-   by the transcript page when a cached summary already exists. #}
-<div class="lc-md text-content">{{ summary_html|safe }}</div>
-<button type="button"
-        hx-post="/transcripts/{{ transcript_id }}/summary"
-        hx-target="#lc-transcript-summary" hx-swap="innerHTML"
-        hx-disabled-elt="this"
-        data-lc-ai-pending
-        data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
-        data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
-        class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
-  {{ "transcript-summary-regenerate"|t }}
-</button>
+   by the transcript page when a cached summary already exists.
+   LC-659: match the room "Catch me up" summary - `.lc-ai-enter` fade on the
+   result, a disclaimer footer, and an icon Regenerate that shows the summary
+   skeleton + staged status on re-run (data-lc-ai-*). #}
+<div class="lc-ai-enter lc-md text-content text-sm break-words">{{ summary_html|safe }}</div>
 {# LC-527: turn the action items into a trackable checklist posted to the room. #}
 <div id="lc-transcript-followups">
   {% if has_action_items %}
@@ -19,6 +12,22 @@
           hx-post="/transcripts/{{ transcript_id }}/follow-ups"
           hx-target="#lc-transcript-followups" hx-swap="innerHTML"
           hx-disabled-elt="this"
-          class="mt-2 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "followup-create-button"|t }}</button>
+          class="mt-3 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "followup-create-button"|t }}</button>
   {% endif %}
+</div>
+<div class="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2">
+  <span class="min-w-0 flex-1 text-[11px] leading-tight text-content-subtle">{{ "transcript-summary-disclaimer"|t }}</span>
+  <button type="button"
+          hx-post="/transcripts/{{ transcript_id }}/summary"
+          hx-target="#lc-transcript-summary" hx-swap="innerHTML"
+          hx-disabled-elt="this"
+          data-lc-ai-pending
+          data-lc-ai-skeleton="summary"
+          data-lc-ai-read-label="{{ "transcript-summary-reading"|t }}"
+          data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+          data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+          class="flex-none inline-flex items-center gap-1 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h1.633a.75.75 0 000-1.5H3.373a.75.75 0 00-.75.75v3.75a.75.75 0 001.5 0v-1.633l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V3.42a.75.75 0 00-1.5 0v1.633l-.312-.311A7 7 0 003.237 7.88a.75.75 0 101.45.388A5.5 5.5 0 0113.89 5.81l.311.311h-1.632a.75.75 0 000 1.5h3.75a.75.75 0 00.53-.219z" clip-rule="evenodd"/></svg>
+    {{ "transcript-summary-regenerate"|t }}
+  </button>
 </div>
