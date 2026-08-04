@@ -444,6 +444,23 @@ pub async fn get_message(
 /// rather than reusing a body the caller fetched earlier, so the archived
 /// previous_body matches what the UPDATE actually overwrites even if a
 /// concurrent edit commits in between.
+/// LC-676: replace a message body in place WITHOUT recording an edit or setting
+/// `edited_at`. Used to swap the assistant's "thinking..." placeholder for its
+/// answer, so the answer does not render as "(edited)". The FTS `UPDATE OF body`
+/// trigger still keeps search in sync.
+pub async fn replace_message_body(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    new_body: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE messages SET body = ? WHERE id = ?")
+        .bind(new_body)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn update_message_body(
     pool: &sqlx::SqlitePool,
     message_id: i64,
