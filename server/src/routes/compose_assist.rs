@@ -57,19 +57,16 @@ pub struct AssistForm {
     pub action: String,
 }
 
-/// One mode chip in the panel.
-struct AssistAction {
-    id: &'static str,
-    label: String,
-    active: bool,
-}
-
 #[derive(Template)]
 #[template(path = "room/compose_assist_panel.html")]
 struct AssistPanel {
     room_id: i64,
     suggestion: String,
-    actions: Vec<AssistAction>,
+    /// LC-655: the mode this result was produced with, so the header can name
+    /// it and the Regenerate button can re-run the same mode. The mode menu now
+    /// lives on the composer's sparkle button (composer.html), not in the panel.
+    active_action: &'static str,
+    active_label: String,
 }
 
 /// POST /room/{room_id}/compose-assist
@@ -108,18 +105,12 @@ pub async fn post_assist(
         ));
     }
 
-    let actions = ACTIONS
-        .iter()
-        .map(|a| AssistAction {
-            id: a,
-            label: crate::i18n::translate_current(&format!("compose-assist-action-{a}")),
-            active: *a == action,
-        })
-        .collect();
+    let active_label = crate::i18n::translate_current(&format!("compose-assist-action-{action}"));
     html(&AssistPanel {
         room_id,
         suggestion,
-        actions,
+        active_action: action,
+        active_label,
     })
 }
 
