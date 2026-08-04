@@ -2793,10 +2793,13 @@ pub async fn get_thread_panel(
     // LC-546: whether the viewer has muted this thread (drives the mute toggle).
     let is_muted = db::thread_muters::is_muted(&state.chat, &user.id, message_id).await?;
 
+    // LC-668: the AI thread title (if generated), shown as the panel heading.
+    let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
         replies: &replies,
+        thread_title,
         is_following,
         is_muted,
         llm_available: state.llm_available(),
@@ -2991,6 +2994,10 @@ pub async fn post_thread_reply(
             db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await;
     }
     notify_thread_followers(&state, &room, parent_id, new_id, &user, body).await;
+
+    // LC-668: once the thread has enough replies, generate a short title in the
+    // background (off the request path; no-op if already titled or no LLM).
+    super::thread_title::maybe_title_thread(&state, room_id, parent_id);
 
     // Empty 204 - composer clears via hx-on::before-request, no body needed.
     Ok(axum::http::StatusCode::NO_CONTENT.into_response())

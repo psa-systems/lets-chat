@@ -3,7 +3,9 @@
      is the expanded view of that message's "N replies" pill. #}
   <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <div class="min-w-0">
-      <div class="font-semibold leading-tight">{{ "room-thread-heading"|t }}</div>
+      {# LC-668: once generated, the AI thread title is the heading; otherwise the
+         generic "Thread" label. #}
+      <div class="font-semibold leading-tight truncate">{% if let Some(title) = thread_title.as_ref() %}{{ title }}{% else %}{{ "room-thread-heading"|t }}{% endif %}</div>
       {# LC-576: the replied-to name is accent-colored (matching the comp's
          "In reply to <name>"); the "In reply to" prefix stays muted. #}
       <div class="text-xs text-content-muted truncate">{{ "room-thread-replies-to"|t }} <span class="text-accent font-medium">{{ parent.label() }}</span></div>

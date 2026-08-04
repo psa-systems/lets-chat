@@ -318,6 +318,34 @@ pub async fn count_replies_for_room(
         .collect())
 }
 
+/// LC-668: the AI-generated title for a thread (stored on its root message), or
+/// None if it has not been generated yet.
+pub async fn get_thread_title(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let v: Option<Option<String>> =
+        sqlx::query_scalar("SELECT thread_title FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.flatten())
+}
+
+/// LC-668: store a generated thread title on the root message.
+pub async fn set_thread_title(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    title: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE messages SET thread_title = ? WHERE id = ?")
+        .bind(title)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn count_replies(pool: &sqlx::SqlitePool, parent_id: i64) -> Result<i64, sqlx::Error> {
     let row = sqlx::query(
         "SELECT COUNT(*) AS c FROM messages \
