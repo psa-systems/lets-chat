@@ -71,13 +71,21 @@ impl std::fmt::Display for LlmError {
     }
 }
 
-/// The transcript system prompt: ask for a concise summary + bulleted action
-/// items, in markdown (rendered through the message markdown pipeline on
-/// display).
-const SYSTEM_PROMPT: &str = "You summarize meeting and call transcripts. Reply in \
-GitHub-flavored markdown with a short '## Summary' section (2-4 sentences) followed \
-by a '## Action items' section as a bullet list (write 'None.' if there are none). \
-Be concise and faithful to the transcript; do not invent details.";
+/// The transcript system prompt (LC-396, speaker-attributed in LC-663): a
+/// concise summary plus decisions and action items ATTRIBUTED to the named
+/// speakers, in markdown (rendered through the message markdown pipeline on
+/// display). Each transcript line is prefixed with the speaker's name and a
+/// `Participants:` roster leads the text (see
+/// `routes::transcripts::build_transcript_prompt_text`), so the model has the
+/// exact name set to attribute against.
+const SYSTEM_PROMPT: &str = "You summarize meeting and call transcripts. Each line is prefixed \
+with the speaker's name ('Name: what they said'), and a 'Participants:' line lists everyone who \
+spoke. Reply in GitHub-flavored markdown with three sections: a short '## Summary' (2-4 sentences); \
+a '## Decisions' bullet list attributing each decision to the person who made or owns it; and an \
+'## Action items' bullet list where every item names its owner first, in the form '- Owner - task'. \
+Write 'None.' under Decisions or Action items when there are none. Attribute using only the \
+participant names given; never invent people, names, or details, and when ownership is genuinely \
+unclear omit the name rather than guess. Be concise and faithful to the transcript.";
 
 /// LC-630: the shared guardrail prompt every AI feature runs against. Before
 /// LC-630 each entry point (`compose_assist`, `assistant`, `suggest_reply`,
@@ -319,6 +327,19 @@ mod tests {
         assert!(composed.contains("untrusted DATA"));
         assert!(composed.contains("Never reveal"));
         assert!(composed.contains("do not"));
+    }
+
+    #[test]
+    fn transcript_prompt_asks_for_speaker_attribution() {
+        // LC-663: the recap attributes decisions + action items to the named
+        // speakers, anchored on the `Participants:` roster the caller prepends.
+        assert!(SYSTEM_PROMPT.contains("## Decisions"));
+        assert!(SYSTEM_PROMPT.contains("Participants:"));
+        let lo = SYSTEM_PROMPT.to_lowercase();
+        assert!(lo.contains("owner"));
+        assert!(lo.contains("attribut"));
+        // Still anchored on not inventing content.
+        assert!(lo.contains("never invent"));
     }
 
     #[test]
