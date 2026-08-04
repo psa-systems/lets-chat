@@ -94,10 +94,12 @@ async fn build_context(state: &AppState, room: &Room, question: &str) -> Result<
         }
     }
 
-    // FTS over the room's messages. A query that sanitizes to nothing (only
-    // stop-symbols) just yields no message context; the wiki/description still
-    // ground the answer.
-    if let Some(fts) = db::chat::sanitize_fts_query(question) {
+    // FTS over the room's messages. LC-676: a natural-language question needs
+    // ANY-term (OR) retrieval, not the search box's AND, or "who is david?"
+    // matches nothing even when the room is full of David. A query that
+    // sanitizes to nothing (only stop-symbols) just yields no message context;
+    // the wiki/description still ground the answer.
+    if let Some(fts) = db::chat::fts_query_any(question) {
         let hits = db::chat::fts_room_context(&state.chat, room.id, &fts, RETRIEVAL_LIMIT).await?;
         if !hits.is_empty() {
             let author_ids: Vec<&str> = hits
