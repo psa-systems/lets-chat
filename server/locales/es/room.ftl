@@ -378,6 +378,11 @@ room-rpreview-confirm = Confirmar
 room-slash-help-heading = Comandos de barra
 room-slash-dismiss = Descartar
 room-slash-no-match = No hay comandos coincidentes
+# LC-674: visibilidad de los comandos - boton, enlace "ver todos", consejo.
+room-composer-commands = Comandos (/)
+room-slash-see-all = Ver todos los comandos
+room-slash-tip = Consejo: escribe / para comandos, @ para mencionar, : para emoji.
+room-slash-tip-dismiss = Descartar el consejo
 
 ## Notify dropdown
 room-notify-unmuted = Sin silenciar

@@ -34,6 +34,9 @@ pub struct SlashRow {
     pub name: String,
     pub usage: String,
     pub description: String,
+    /// LC-674: a concrete example for commands with non-trivial syntax; `None`
+    /// otherwise (no example line is rendered).
+    pub example: Option<String>,
 }
 
 #[derive(Template)]
@@ -82,6 +85,7 @@ fn visible_commands(
                 name: b.name.to_string(),
                 usage: b.usage.to_string(),
                 description: b.description.to_string(),
+                example: b.example.map(str::to_string),
             });
         }
     }
@@ -94,6 +98,7 @@ fn visible_commands(
                 name: c.name.clone(),
                 usage: format!("/{}", c.name),
                 description: c.description.clone(),
+                example: None,
             });
         }
     }
@@ -112,6 +117,7 @@ fn exact_command(user: &User, custom: &[db::slash::CustomCommand], name: &str) -
             name: b.name.to_string(),
             usage: b.usage.to_string(),
             description: b.description.to_string(),
+            example: b.example.map(str::to_string),
         });
     }
     custom
@@ -121,6 +127,7 @@ fn exact_command(user: &User, custom: &[db::slash::CustomCommand], name: &str) -
             name: c.name.clone(),
             usage: format!("/{}", c.name),
             description: c.description.clone(),
+            example: None,
         })
 }
 
