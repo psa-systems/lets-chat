@@ -153,6 +153,24 @@
        token that renders as a link to the room. -->
   <div id="lc-channel-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
+  {# LC-674: a one-line, dismissible discoverability tip - surfaces that "/" opens
+     commands (and @ mentions, : emoji) for users who never learned to type "/".
+     Hidden once dismissed (persisted in localStorage); the inline script reveals
+     it otherwise. Rendered hidden so a dismissed tip never flashes on load. #}
+  <div id="lc-slash-tip" hidden
+       class="mb-1 flex items-center gap-2 rounded border border-border bg-surface-sunken px-2 py-1 text-xs text-content-muted">
+    <span class="flex-1 min-w-0">{{ "room-slash-tip"|t }}</span>
+    <button type="button" aria-label="{{ "room-slash-tip-dismiss"|t }}"
+            onclick="try{localStorage.setItem('lcSlashTipDismissed','1')}catch(e){} var t=document.getElementById('lc-slash-tip'); if(t)t.hidden=true;"
+            class="flex-none text-content-subtle hover:text-content-muted leading-none">&times;</button>
+  </div>
+  <script>
+    (function(){
+      try { if (localStorage.getItem('lcSlashTipDismissed')) return; } catch (e) {}
+      var t = document.getElementById('lc-slash-tip');
+      if (t) t.hidden = false;
+    })();
+  </script>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
     <span>{{ "room-composer-send-failed"|t }}</span>
     <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
@@ -277,6 +295,15 @@
         class="lc-fmt-btn">&#128512;</button>
       <span id="lc-emoji-picker-slot" class="relative"></span>
     </span>
+    {# LC-674: a visible entry point to the slash-command panel, so commands are
+       discoverable by clicking, not only by knowing to type "/". mousedown
+       preventDefault keeps the textarea focused so its blur never closes the
+       panel we are about to open. #}
+    <button type="button" data-lc-tip="{{ "room-composer-commands"|t }}" data-lc-tip-pos="top"
+      aria-label="{{ "room-composer-commands"|t }}"
+      onmousedown="event.preventDefault()"
+      onclick="window.__lcOpenSlash && window.__lcOpenSlash()"
+      class="lc-fmt-btn font-mono font-semibold">/</button>
     {# separator between the formatting group and the action icons #}
     <span class="lc-composer-sep"></span>
     <button type="button" data-lc-tip="{{ "room-composer-attach-file"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-attach-file"|t }}"
@@ -1883,6 +1910,19 @@
     // LC-229: shared predicate (pre-LC-229 this site checked only
     // ta.value.trim() and ignored an attached file_id).
     if (window.__lcRefreshSend) window.__lcRefreshSend();
+    refresh();
+  };
+  // LC-674: open the slash panel from a click (the composer toolbar "/" button),
+  // so commands are discoverable without knowing to type "/". Only meaningful on
+  // an empty composer (the panel is for composing a command from scratch); with
+  // other text present it just focuses. Callers preventDefault on mousedown so
+  // the textarea keeps focus and its blur handler never closes the panel.
+  window.__lcOpenSlash = function(){
+    if (!ta) return;
+    ta.focus();
+    if (ta.value.trim() === '') { ta.value = '/'; }
+    else if (!/^\//.test(ta.value)) { return; }
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
     refresh();
   };
 })();

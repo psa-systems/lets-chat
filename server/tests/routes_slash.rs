@@ -162,7 +162,64 @@ async fn help_is_ephemeral_not_broadcast() {
         body.contains("lc-command-result"),
         "ephemeral OOB target, not a broadcast message"
     );
+    // LC-674: /help shows a concrete example under the abstract syntax.
+    assert!(
+        body.contains("e.g. /remind 1h Check the deploy"),
+        "help shows an example line: {body}"
+    );
     assert_eq!(msg_count(&t.chat, room).await, 0, "/help posts no message");
+}
+
+/// LC-674: the autocomplete panel lists every command (empty query), carries the
+/// concrete example for a complex command, and offers the "See all commands"
+/// link to /help.
+#[tokio::test]
+async fn autocomplete_panel_shows_examples_and_see_all() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?q=")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(res.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(body.contains("/poll"), "lists commands: {body}");
+    assert!(
+        body.contains("e.g. /poll"),
+        "example line under a complex command: {body}"
+    );
+    assert!(
+        body.contains("See all commands"),
+        "links to the full /help reference: {body}"
+    );
+}
+
+/// LC-674: the argument-hint bar (typing `/remind `) keeps guiding with the
+/// command's example after it is chosen.
+#[tokio::test]
+async fn hint_bar_shows_the_example() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/slash-commands?hint=true&q=remind")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(res.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains("&lt;15m|1h|3h|1d&gt;") || body.contains("/remind"),
+        "usage: {body}"
+    );
+    assert!(
+        body.contains("e.g. /remind 1h Check the deploy"),
+        "hint shows the example: {body}"
+    );
 }
 
 #[tokio::test]
