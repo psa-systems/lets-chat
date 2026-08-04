@@ -1882,6 +1882,106 @@ async fn auto_call_recap_skipped_when_assistant_disabled() {
     );
 }
 
+/// LC-663: an `LlmClient` double that records the user content (the transcript
+/// text) it was handed, so the speaker roster + attributed lines the recap sends
+/// are observable without a live model.
+#[derive(Default)]
+struct CapturingLlm {
+    last_user: std::sync::Mutex<Option<String>>,
+    canned: String,
+}
+
+#[async_trait::async_trait]
+impl lets_chat::llm::LlmClient for CapturingLlm {
+    async fn complete(
+        &self,
+        _system: &str,
+        user_content: &str,
+    ) -> Result<String, lets_chat::llm::LlmError> {
+        // The live-caption correction pass (LC-629) also runs when an LLM is
+        // configured; pass those NEW lines through unchanged so segments keep
+        // their text, and capture only the summarize call.
+        if user_content.contains("NEW line to correct:") {
+            let line = user_content
+                .rsplit("NEW line to correct:\n")
+                .next()
+                .unwrap_or("")
+                .trim();
+            return Ok(line.to_string());
+        }
+        *self.last_user.lock().unwrap() = Some(user_content.to_string());
+        Ok(self.canned.clone())
+    }
+}
+
+/// LC-663: the auto recap sends the model a `Participants:` roster and
+/// speaker-prefixed lines, so it can attribute decisions and action items to the
+/// people who spoke.
+#[tokio::test]
+async fn recap_sends_speaker_roster_and_attributed_lines() {
+    let cap = Arc::new(CapturingLlm {
+        canned: "## Summary\nThey decided.\n\n## Decisions\n- alice - ship Friday".to_string(),
+        ..Default::default()
+    });
+    let llm: Arc<dyn lets_chat::llm::LlmClient> = cap.clone();
+    let s = setup_with_clients(None, Some(llm)).await;
+    db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
+        .await
+        .unwrap();
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    // Two distinct speakers: alice and bob each transcribe their own mic.
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=we+will+ship+friday"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=i+will+own+the+docs"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Wait for the recap to post, which means the model was called.
+    wait_for_recap(&s, s.dm_room).await.expect("recap posted");
+    let seen = cap
+        .last_user
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the model received the transcript");
+    assert!(
+        seen.contains("Participants: alice, bob"),
+        "roster leads the prompt: {seen}"
+    );
+    assert!(
+        seen.contains("alice: we will ship friday"),
+        "alice's line is attributed: {seen}"
+    );
+    assert!(
+        seen.contains("bob: i will own the docs"),
+        "bob's line is attributed: {seen}"
+    );
+}
+
 #[tokio::test]
 async fn translation_cache_upsert_and_invalidate() {
     let s = setup().await;
