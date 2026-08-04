@@ -150,6 +150,7 @@ pub async fn get_page(
     let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
     let slowmode_seconds = db::chat::get_room_slowmode(&state.chat, room_id).await?;
     let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
+    let digest_enabled = db::chat::get_room_digest_enabled(&state.chat, room_id).await?;
     let stage_enabled = db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
     // LC-495: workflow-automation rules for the included automations section.
     let automations: Vec<crate::views::room_automations::AutomationRow> =
@@ -171,6 +172,7 @@ pub async fn get_page(
         retention_days,
         assistant_enabled,
         assistant_available: state.llm_available(),
+        digest_enabled,
         stage_enabled,
         automations: &automations,
         sidebar_categories: &sidebar_categories,
@@ -400,6 +402,45 @@ pub async fn post_assistant(
     db::moderation::log_mod_action(
         &state.chat,
         "room_assistant_toggle",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "room-policy-saved",
+        )))?
+        .into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+/// POST /room/{id}/digest
+///
+/// LC-665: toggle the scheduled AI activity digest for this room. Same
+/// authorization + audit + dual-mode response as the assistant toggle. Only
+/// posts when the operator has configured an LLM, but the opt-in is independent
+/// so a manager can pre-enable it.
+pub async fn post_digest(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<AssistantForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let enabled = matches!(form.enabled.trim(), "1" | "true" | "on" | "yes");
+    let n = db::chat::set_room_digest_enabled(&state.chat, room_id, enabled).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"digest_enabled":{enabled}}}"#);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_digest_toggle",
         "",
         &user.id,
         None,

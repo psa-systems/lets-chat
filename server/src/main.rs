@@ -241,6 +241,7 @@ async fn main() {
     spawn_reminders_dispatcher(state.clone());
     spawn_polls_closer(state.clone());
     spawn_outgoing_webhook_dispatcher(state.clone());
+    spawn_room_digest_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
     spawn_message_retention_sweeper(state.clone());
     spawn_ephemeral_sweeper(state.clone());
@@ -479,6 +480,31 @@ fn spawn_outgoing_webhook_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "outgoing webhook delivery tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-665: post scheduled per-room AI activity digests. A slow tick (30 min)
+/// posts a once-per-day digest for each opted-in room via the assistant bot;
+/// the once-per-interval + dedupe logic lives in `room_digest::run_digest_tick`.
+fn spawn_room_digest_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 1800;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::room_digest::run_digest_tick(&state).await {
+                Ok(stats) if stats.posted > 0 => {
+                    tracing::info!(
+                        posted = stats.posted,
+                        evaluated = stats.evaluated,
+                        "room digest tick complete"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "room digest tick failed"),
             }
         }
     });

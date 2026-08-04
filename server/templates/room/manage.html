@@ -111,6 +111,27 @@
       </form>
     </div>
 
+    {# ===== Scheduled AI digest (LC-665) ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-digest-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-digest-intro"|t }}</p>
+      </div>
+      {% if !assistant_available %}
+      <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
+      {% endif %}
+      <form hx-post="/room/{{ room.id }}/digest"
+            hx-target="#lc-digest-status" hx-swap="innerHTML"
+            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+        <input type="hidden" name="enabled" value="{% if digest_enabled %}0{% else %}1{% endif %}">
+        <div class="lc-set-toggle-row">
+          <span class="text-sm">{% if digest_enabled %}<strong>{{ "room-digest-on-label"|t }}</strong> {{ "room-digest-on-text"|t }}{% else %}<strong>{{ "room-digest-off-label"|t }}</strong> {{ "room-digest-off-text"|t }}{% endif %}</span>
+          <button type="submit" class="lc-switch" role="switch" aria-checked="{% if digest_enabled %}true{% else %}false{% endif %}" aria-label="{{ "room-digest-heading"|t }}"><span class="lc-switch-thumb"></span></button>
+        </div>
+        <span id="lc-digest-status" class="lc-set-status" role="status" aria-live="polite"></span>
+      </form>
+    </div>
+
     {# ===== Stage mode (LC-494) ===== #}
     <div class="card lc-set-card">
       <div class="lc-set-card-head">
