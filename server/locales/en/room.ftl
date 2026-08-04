@@ -438,6 +438,9 @@ ai-translating = Translating...
 ai-working-slow = Still working - the local model can take a few seconds.
 # LC-654: first stage of the catch-me-up skeleton status, before "Summarizing...".
 ai-reading-messages = Reading recent messages...
+# LC-655: staged status for the composer writing assistant.
+ai-thinking = Thinking...
+ai-writing = Writing...
 room-thread-summarize = Summarize
 
 # LC-495: workflow automations (room manage page)
@@ -507,13 +510,19 @@ sidebar-link-stats = Your stats
 
 ## LC-532: composer AI writing assistant
 compose-assist-tip = AI writing assistant
-compose-assist-use = Use this
+# Still used by the suggested-reply panel (dismiss the chips, no draft change).
 compose-assist-dismiss = Dismiss
-compose-assist-action-rephrase = Rephrase
+# LC-655: mode menu + preview panel (Accept / Regenerate / Discard).
+compose-assist-menu-label = Rewrite with AI
+compose-assist-heading = AI assistant
+compose-assist-accept = Accept
+compose-assist-regenerate = Regenerate
+compose-assist-discard = Discard
+compose-assist-action-rephrase = Improve writing
 compose-assist-action-grammar = Fix grammar
-compose-assist-action-concise = Concise
-compose-assist-action-friendly = Friendly
-compose-assist-action-formal = Formal
+compose-assist-action-concise = Make shorter
+compose-assist-action-friendly = Friendlier tone
+compose-assist-action-formal = More formal
 
 ## LC-548: AI suggested replies
 room-msg-suggest-reply = Suggest reply

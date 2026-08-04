@@ -2500,6 +2500,58 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     50% { opacity: 0.55; }
 }
 
+/* LC-655: the sparkle writing-assistant mode menu (a <details> popover opening
+   upward from the composer toolbar). */
+.lc-ai-menu > summary { list-style: none; cursor: pointer; }
+.lc-ai-menu > summary::-webkit-details-marker { display: none; }
+.lc-ai-menu-pop {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 0.375rem;
+    z-index: 30;
+    min-width: 12rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.lc-ai-menu-head {
+    padding: 0.25rem 0.5rem 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--content-subtle);
+}
+.lc-ai-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-ai-menu-item:hover { background: var(--surface-sunken); }
+
+/* LC-655: "Applied - Undo" affordance after accepting a rewrite (the applied
+   text stays editable; Undo restores the original draft). */
+.lc-ai-applied {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-ai-applied-msg { min-width: 0; flex: 1; }
+
 /* Toast / modal entry. The component classes in tailwind.css apply these by
    default; reduced-motion strips them via the block below. */
 .toast {

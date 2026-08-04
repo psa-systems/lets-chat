@@ -1,25 +1,40 @@
-{# LC-532: composer AI writing-assistant result panel. Swapped into
-   #composer-ai-panel. The suggestion renders as PLAIN TEXT (it is applied back
-   into the composer as raw markdown source, not rendered HTML). The mode chips
-   re-run on the current draft (hx-include the composer form). #}
-<div data-lc-ai-panel class="mt-2 rounded-lg border border-border bg-surface-elevated p-2 text-sm">
-  <div class="mb-1.5 flex flex-wrap gap-1">
-    {% for a in actions %}
-    <button type="button"
-            hx-post="/room/{{ room_id }}/compose-assist"
-            hx-vals='{"action":"{{ a.id }}"}'
-            hx-include="closest form"
-            hx-target="#composer-ai-panel" hx-swap="innerHTML"
-            hx-disabled-elt="this"
-            data-lc-ai-pending
-            data-lc-ai-pending-label="{{ "ai-generating"|t }}"
-            data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
-            class="rounded px-1.5 py-0.5 text-xs {% if a.active %}bg-accent-surface text-accent{% else %}text-content-muted hover:bg-surface-sunken{% endif %}">{{ a.label }}</button>
-    {% endfor %}
-  </div>
-  <div data-lc-ai-suggestion class="whitespace-pre-wrap break-words rounded border border-border bg-surface px-2 py-1.5 text-content">{{ suggestion }}</div>
-  <div class="mt-1.5 flex items-center gap-2">
-    <button type="button" data-lc-ai-apply class="btn btn-primary btn-sm">{{ "compose-assist-use"|t }}</button>
-    <button type="button" data-lc-ai-dismiss class="text-xs text-content-muted hover:underline">{{ "compose-assist-dismiss"|t }}</button>
+{# LC-532 / LC-655: composer AI writing-assistant result panel. Swapped into
+   #composer-ai-panel (inside the composer card, above the textarea). The
+   suggestion is a PREVIEW - it is never auto-applied to the draft; the user
+   Accepts (replaces the draft, with an Undo), Regenerates (re-runs the same
+   mode), or Discards (draft untouched). The mode menu lives on the composer's
+   sparkle button, not here. Suggestion renders as PLAIN TEXT (applied back as
+   raw markdown source, not rendered HTML). #}
+<div data-lc-ai-panel class="mt-2 overflow-hidden rounded-lg border border-border bg-surface-elevated text-sm">
+  <header class="flex items-center gap-1.5 border-b border-border px-2 py-1.5 text-xs">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 text-accent" aria-hidden="true">
+      <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5z"/>
+    </svg>
+    <span class="font-medium text-content">{{ "compose-assist-heading"|t }}</span>
+    <span class="text-content-subtle">&middot; {{ active_label }}</span>
+  </header>
+  <div class="p-2">
+    <div data-lc-ai-suggestion class="whitespace-pre-wrap break-words rounded border border-border bg-surface px-2 py-1.5 text-content">{{ suggestion }}</div>
+    <div class="mt-2 flex items-center gap-2">
+      <button type="button" data-lc-ai-apply class="btn btn-primary btn-sm">{{ "compose-assist-accept"|t }}</button>
+      {# Regenerate: re-run the SAME mode on the current draft (still in the
+         composer, since nothing was accepted). Shows the LC-654 writing skeleton. #}
+      <button type="button"
+              hx-post="/room/{{ room_id }}/compose-assist"
+              hx-vals='{"action":"{{ active_action }}"}'
+              hx-include="closest form"
+              hx-target="#composer-ai-panel" hx-swap="innerHTML"
+              hx-disabled-elt="this"
+              data-lc-ai-pending
+              data-lc-ai-skeleton="writing"
+              data-lc-ai-read-label="{{ "ai-thinking"|t }}"
+              data-lc-ai-pending-label="{{ "ai-writing"|t }}"
+              data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+              class="inline-flex items-center gap-1 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h1.633a.75.75 0 000-1.5H3.373a.75.75 0 00-.75.75v3.75a.75.75 0 001.5 0v-1.633l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V3.42a.75.75 0 00-1.5 0v1.633l-.312-.311A7 7 0 003.237 7.88a.75.75 0 101.45.388A5.5 5.5 0 0113.89 5.81l.311.311h-1.632a.75.75 0 000 1.5h3.75a.75.75 0 00.53-.219z" clip-rule="evenodd"/></svg>
+        {{ "compose-assist-regenerate"|t }}
+      </button>
+      <button type="button" data-lc-ai-dismiss class="ml-auto text-xs text-content-muted hover:underline">{{ "compose-assist-discard"|t }}</button>
+    </div>
   </div>
 </div>

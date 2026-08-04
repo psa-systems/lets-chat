@@ -195,6 +195,12 @@
   // text; "Use this" writes it into the composer textarea and fires an input
   // event so the autosize / highlight / draft-autosave hooks pick it up.
   document.body.addEventListener('click', function (evt) {
+    // LC-655: close any open sparkle mode menu on an outside click (native
+    // <details> only closes on its own summary).
+    var openMenus = document.querySelectorAll('details.lc-ai-menu[open]');
+    for (var mi = 0; mi < openMenus.length; mi++) {
+      if (!openMenus[mi].contains(evt.target)) openMenus[mi].open = false;
+    }
     var apply = evt.target.closest && evt.target.closest('[data-lc-ai-apply]');
     if (apply) {
       var panel = apply.closest('[data-lc-ai-panel]');
@@ -207,29 +213,57 @@
       var form = apply.closest('form');
       var ta = form && form.querySelector('textarea[name="body"]');
       if (sug && ta) {
-        ta.value = sug.textContent;
-        // LC-653: caret to the end so the focus-scroll is deterministic.
-        var end = ta.value.length;
-        try {
-          ta.setSelectionRange(end, end);
-        } catch (e) {}
-        ta.focus();
-        // Drives the LC-399 highlight backdrop render, the autosize, and the
-        // draft/echo hooks (a programmatic value set fires no native input).
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
-        // LC-653: the autosize runs in its own rAF and changes the textarea
-        // height/scrollTop AFTER the overlay's render+syncScroll already ran on
-        // this same input event, leaving the transparent-text backdrop synced to
-        // a stale (over-)scroll position - it then shows its blank background and
-        // the inserted text is invisible. Re-sync once the layout has settled:
-        // pin to the top and fire a scroll so `syncScroll` runs against the final
-        // geometry.
-        requestAnimationFrame(function () {
-          ta.scrollTop = 0;
-          ta.dispatchEvent(new Event('scroll', { bubbles: true }));
-        });
+        var original = ta.value;
+        var setDraft = function (text) {
+          ta.value = text;
+          // Caret to the end so the focus-scroll is deterministic.
+          var end = ta.value.length;
+          try {
+            ta.setSelectionRange(end, end);
+          } catch (e) {}
+          ta.focus();
+          // Drives the LC-399 highlight backdrop, autosize, and draft hooks (a
+          // programmatic value set fires no native input); the rAF re-sync keeps
+          // the highlight backdrop aligned after the autosize settles (LC-653).
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          requestAnimationFrame(function () {
+            ta.scrollTop = 0;
+            ta.dispatchEvent(new Event('scroll', { bubbles: true }));
+          });
+        };
+        setDraft(sug.textContent);
+        // LC-655: replace the preview with an inline "Applied - Undo" affordance
+        // (the toast API has no action button) so the user never loses their
+        // original draft without a way back. The applied text stays editable.
+        var outer = document.getElementById('composer-ai-panel');
+        if (outer) {
+          outer.innerHTML = '';
+          var row = document.createElement('div');
+          row.className = 'lc-ai-applied';
+          row.setAttribute('role', 'status');
+          var msg = document.createElement('span');
+          msg.className = 'lc-ai-applied-msg';
+          msg.textContent = (window.__lcS && window.__lcS('composeApplied', 'Applied to your message')) || 'Applied to your message';
+          var undo = document.createElement('button');
+          undo.type = 'button';
+          undo.className = 'lc-ai-retry';
+          undo.textContent = (window.__lcS && window.__lcS('composeUndo', 'Undo')) || 'Undo';
+          undo.addEventListener('click', function () {
+            setDraft(original);
+            outer.innerHTML = '';
+          });
+          row.appendChild(msg);
+          row.appendChild(undo);
+          outer.appendChild(row);
+          // Auto-dismiss the affordance (the change persists) unless a new assist
+          // has already replaced it.
+          window.setTimeout(function () {
+            if (outer.firstChild === row) outer.innerHTML = '';
+          }, 7000);
+        }
+      } else if (panel) {
+        panel.innerHTML = '';
       }
-      if (panel) panel.innerHTML = '';
       return;
     }
     var dismiss = evt.target.closest && evt.target.closest('[data-lc-ai-dismiss]');
@@ -285,8 +319,15 @@
   // a text summary, so previewing its shape (a heading bar, a few summary lines,
   // then a short action-items cluster) reads far better than a bare spinner
   // while the local model works. Widths prefixed "gap " get extra top spacing.
-  var LC_AI_SKEL_BARS = ['38%', '100%', '92%', '80%', 'gap 34%', '64%'];
-  function lcAiShowSkeleton(target, label) {
+  // Skeleton shapes by surface. "summary" previews a heading + a few lines + a
+  // short action-items cluster; "writing" (LC-655) previews a short rewritten
+  // message (a few lines). Defaults to summary for any unknown value.
+  var LC_AI_SKEL = {
+    summary: ['38%', '100%', '92%', '80%', 'gap 34%', '64%'],
+    writing: ['96%', '100%', '72%']
+  };
+  function lcAiShowSkeleton(target, shape, label) {
+    var bars = LC_AI_SKEL[shape] || LC_AI_SKEL.summary;
     var wrap = document.createElement('div');
     wrap.className = 'lc-ai-skel';
     wrap.setAttribute('role', 'status');
@@ -301,7 +342,7 @@
     var block = document.createElement('div');
     block.className = 'lc-skel-block';
     block.setAttribute('aria-hidden', 'true');
-    LC_AI_SKEL_BARS.forEach(function (w) {
+    bars.forEach(function (w) {
       var gap = w.indexOf('gap ') === 0;
       if (gap) w = w.slice(4);
       var bar = document.createElement('div');
@@ -357,9 +398,10 @@
     var mainLabel = el.getAttribute('data-lc-ai-pending-label') || '';
     var readLabel = el.getAttribute('data-lc-ai-read-label') || '';
     var slowLabel = el.getAttribute('data-lc-ai-slow-label') || '';
-    if (el.getAttribute('data-lc-ai-skeleton')) {
-      // Progressive: reading -> summarizing -> (slow, only if it runs long).
-      lcAiShowSkeleton(target, readLabel || mainLabel);
+    var skeleton = el.getAttribute('data-lc-ai-skeleton');
+    if (skeleton) {
+      // Progressive: reading/thinking -> summarizing/writing -> (slow if long).
+      lcAiShowSkeleton(target, skeleton, readLabel || mainLabel);
       lcAiStage(target, [
         readLabel ? { ms: 1200, text: mainLabel } : null,
         { ms: 4500, text: slowLabel }
