@@ -260,21 +260,79 @@
     }
   }
 
+  function lcAiSpan(cls, text) {
+    var s = document.createElement('span');
+    s.className = cls;
+    if (text != null) s.textContent = text;
+    return s;
+  }
+
+  // The default inline spinner + label (translate, compose-assist, replies).
   function lcAiShowPending(target, label) {
     var wrap = document.createElement('div');
     wrap.className = 'lc-ai-pending';
     wrap.setAttribute('role', 'status');
     wrap.setAttribute('aria-live', 'polite');
-    var spin = document.createElement('span');
-    spin.className = 'lc-spinner';
+    var spin = lcAiSpan('lc-spinner', null);
     spin.setAttribute('aria-hidden', 'true');
-    var lbl = document.createElement('span');
-    lbl.className = 'lc-ai-pending-label';
-    lbl.textContent = label || '';
     wrap.appendChild(spin);
-    wrap.appendChild(lbl);
+    wrap.appendChild(lcAiSpan('lc-ai-pending-label', label || ''));
     target.innerHTML = '';
     target.appendChild(wrap);
+  }
+
+  // LC-654: a summary-shaped skeleton for the AI summary surfaces. The output is
+  // a text summary, so previewing its shape (a heading bar, a few summary lines,
+  // then a short action-items cluster) reads far better than a bare spinner
+  // while the local model works. Widths prefixed "gap " get extra top spacing.
+  var LC_AI_SKEL_BARS = ['38%', '100%', '92%', '80%', 'gap 34%', '64%'];
+  function lcAiShowSkeleton(target, label) {
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-skel';
+    wrap.setAttribute('role', 'status');
+    wrap.setAttribute('aria-live', 'polite');
+    var status = document.createElement('div');
+    status.className = 'lc-ai-skel-status';
+    var spin = lcAiSpan('lc-spinner', null);
+    spin.setAttribute('aria-hidden', 'true');
+    status.appendChild(spin);
+    status.appendChild(lcAiSpan('lc-ai-pending-label', label || ''));
+    wrap.appendChild(status);
+    var block = document.createElement('div');
+    block.className = 'lc-skel-block';
+    block.setAttribute('aria-hidden', 'true');
+    LC_AI_SKEL_BARS.forEach(function (w) {
+      var gap = w.indexOf('gap ') === 0;
+      if (gap) w = w.slice(4);
+      var bar = document.createElement('div');
+      bar.className = 'lc-skel-bar' + (gap ? ' lc-skel-gap' : '');
+      bar.style.width = w;
+      block.appendChild(bar);
+    });
+    wrap.appendChild(block);
+    target.innerHTML = '';
+    target.appendChild(wrap);
+  }
+
+  function lcAiSetLabel(target, text) {
+    var lbl = target.querySelector('.lc-ai-pending-label');
+    if (lbl && text) lbl.textContent = text;
+  }
+  function lcAiClearTimers(target) {
+    if (target._lcAiTimers) {
+      target._lcAiTimers.forEach(function (t) { window.clearTimeout(t); });
+      target._lcAiTimers = null;
+    }
+  }
+  // Staged status: swap the label at each {ms, text} step. Honest and
+  // time-based (the backend exposes no real phases) - a sense of progress
+  // without faking a progress bar.
+  function lcAiStage(target, stages) {
+    var real = stages.filter(Boolean);
+    if (!real.length) return;
+    target._lcAiTimers = real.map(function (s) {
+      return window.setTimeout(function () { lcAiSetLabel(target, s.text); }, s.ms);
+    });
   }
 
   document.body.addEventListener('htmx:beforeRequest', function (evt) {
@@ -286,16 +344,58 @@
     // (some triggers live inside their own target, e.g. the Summarize button;
     // without this a 4xx would leave an empty box and no way to retry).
     target._lcAiOriginal = target.innerHTML;
+    // Everything the inline Retry needs to re-fire the same request (LC-654).
+    target._lcAiRetry = {
+      url: el.getAttribute('hx-post'),
+      sel: el.getAttribute('hx-target'),
+      skeleton: el.getAttribute('data-lc-ai-skeleton'),
+      label: el.getAttribute('data-lc-ai-pending-label'),
+      read: el.getAttribute('data-lc-ai-read-label'),
+      slow: el.getAttribute('data-lc-ai-slow-label')
+    };
     target.setAttribute('aria-busy', 'true');
-    lcAiShowPending(target, el.getAttribute('data-lc-ai-pending-label') || '');
-    var slow = el.getAttribute('data-lc-ai-slow-label');
-    if (slow) {
-      target._lcAiSlowTimer = window.setTimeout(function () {
-        var lbl = target.querySelector('.lc-ai-pending-label');
-        if (lbl) lbl.textContent = slow;
-      }, 3000);
+    var mainLabel = el.getAttribute('data-lc-ai-pending-label') || '';
+    var readLabel = el.getAttribute('data-lc-ai-read-label') || '';
+    var slowLabel = el.getAttribute('data-lc-ai-slow-label') || '';
+    if (el.getAttribute('data-lc-ai-skeleton')) {
+      // Progressive: reading -> summarizing -> (slow, only if it runs long).
+      lcAiShowSkeleton(target, readLabel || mainLabel);
+      lcAiStage(target, [
+        readLabel ? { ms: 1200, text: mainLabel } : null,
+        { ms: 4500, text: slowLabel }
+      ]);
+    } else {
+      lcAiShowPending(target, mainLabel);
+      lcAiStage(target, [{ ms: 3000, text: slowLabel }]);
     }
   });
+
+  function lcAiShowError(target, r) {
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-error';
+    wrap.setAttribute('role', 'alert');
+    var msg = window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.';
+    wrap.appendChild(lcAiSpan('lc-ai-error-msg', msg));
+    // The Retry button carries the SAME htmx + data-lc-ai-* attrs as the trigger,
+    // so clicking it re-runs through the normal pending/skeleton path.
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'lc-ai-retry flex-none';
+    btn.textContent = window.__lcS ? window.__lcS('aiRetry', 'Retry') : 'Retry';
+    btn.setAttribute('hx-post', r.url);
+    btn.setAttribute('hx-target', r.sel);
+    btn.setAttribute('hx-swap', 'innerHTML');
+    btn.setAttribute('hx-disabled-elt', 'this');
+    btn.setAttribute('data-lc-ai-pending', '');
+    if (r.skeleton) btn.setAttribute('data-lc-ai-skeleton', r.skeleton);
+    if (r.label) btn.setAttribute('data-lc-ai-pending-label', r.label);
+    if (r.read) btn.setAttribute('data-lc-ai-read-label', r.read);
+    if (r.slow) btn.setAttribute('data-lc-ai-slow-label', r.slow);
+    wrap.appendChild(btn);
+    target.innerHTML = '';
+    target.appendChild(wrap);
+    if (window.htmx && window.htmx.process) window.htmx.process(target);
+  }
 
   document.body.addEventListener('htmx:afterRequest', function (evt) {
     var el = evt.detail && evt.detail.elt;
@@ -303,22 +403,27 @@
     var target = lcAiTarget(el);
     if (!target) return;
     target.removeAttribute('aria-busy');
-    if (target._lcAiSlowTimer) {
-      window.clearTimeout(target._lcAiSlowTimer);
-      target._lcAiSlowTimer = null;
-    }
+    lcAiClearTimers(target);
     // On success htmx has already swapped the real result into the target.
-    // On failure htmx does NOT swap a non-2xx body, so our pending block would
-    // otherwise spin forever: restore what was there, re-arm its htmx attrs,
-    // and surface the failure as a toast.
-    if (evt.detail && evt.detail.successful) return;
-    if (typeof target._lcAiOriginal === 'string') {
+    if (evt.detail && evt.detail.successful) {
+      target._lcAiOriginal = null;
+      target._lcAiRetry = null;
+      return;
+    }
+    // Failure: htmx does NOT swap a non-2xx body, so the pending block would
+    // otherwise spin forever. Skeleton surfaces get an inline error + one-click
+    // Retry; the rest restore the original trigger and toast (LC-650).
+    var retry = target._lcAiRetry;
+    if (el.getAttribute('data-lc-ai-skeleton') && retry && retry.url) {
+      lcAiShowError(target, retry);
+    } else if (typeof target._lcAiOriginal === 'string') {
       target.innerHTML = target._lcAiOriginal;
       if (window.htmx && window.htmx.process) window.htmx.process(target);
+      if (window.__lcToast) {
+        window.__lcToast('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
+      }
     }
     target._lcAiOriginal = null;
-    if (window.__lcToast) {
-      window.__lcToast('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
-    }
+    target._lcAiRetry = null;
   });
 })();
