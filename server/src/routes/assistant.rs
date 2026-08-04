@@ -32,11 +32,23 @@ const ASK_RATE_PER_MIN: u32 = 10;
 /// The assistant's bot username (and display label).
 const ASSISTANT_USERNAME: &str = "assistant";
 
-const SYSTEM_PROMPT: &str = "You are a helpful assistant inside a team chat room. \
-Answer the user's question using ONLY the provided context (recent room messages, \
-the room's wiki, and its description). If the answer is not in the context, say you \
-could not find it in this room rather than guessing. Be concise and use Markdown. \
-Do not invent facts, links, or quotes.";
+// LC-676: keep the RAG contract (answer from the room's context) but (a) make a
+// no-context outcome helpful instead of a terse dead-end, and (b) refuse a
+// harmful request on SAFETY grounds rather than phrasing it as a retrieval miss
+// ("could not find information on making bombs in this room" implied it would
+// answer if the room had it).
+const SYSTEM_PROMPT: &str = "You are a helpful assistant inside a team chat room. Answer the user's \
+question using the provided context (recent room messages, the room's wiki, and its description). \
+If the context does not contain the answer, say so plainly and helpfully - for example \"I couldn't \
+find anything in this room about X. It may not have been discussed here - try rephrasing or asking \
+in a different channel.\" - and do NOT imply you would have answered if the room had contained it. \
+If the question asks for harmful, dangerous, illegal, or otherwise unsafe information, refuse briefly \
+and plainly on safety grounds, regardless of the context, and never phrase such a refusal as a \
+retrieval miss. Be concise and use Markdown. Do not invent facts, links, or quotes.";
+
+/// LC-676: placeholder shown the instant an /ask is sent, then replaced in place
+/// by the answer. Italic so it reads as a transient status, not a real answer.
+const THINKING_BODY: &str = "_The assistant is thinking\u{2026}_";
 
 /// Resolve (or lazily create) the shared `assistant` bot user and return it as
 /// a `User` suitable for `finalize_message_send`. LC-662: also used by the
@@ -158,33 +170,65 @@ pub(crate) async fn handle_ask(
         ));
     }
 
-    let context = build_context(state, room, question).await?;
-    let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
-    let answer = match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
-        Ok(a) => a,
-        Err(e) => {
-            tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
-            return Err(AppError::BadRequest(
-                "The assistant could not answer right now. Try again later.".into(),
-            ));
-        }
-    };
-    let answer = answer.trim();
-    if answer.is_empty() {
-        return Err(AppError::BadRequest(
-            "The assistant returned an empty answer.".into(),
-        ));
-    }
-
-    // Post as the assistant bot, quoting the asker's question for context (the
-    // `/ask` itself is not echoed into the room).
-    let bot = assistant_bot(state).await?;
+    // LC-676 #3: a quiet, compact attribution line (a reply-style quote) that
+    // stays subordinate to the answer, instead of a heavy bold blockquote.
     let asker_label = match asker.display_name.as_deref() {
         Some(n) if !n.trim().is_empty() => n,
         _ => &asker.username,
     };
-    let body = format!("> **{asker_label} asked:** {question}\n\n{answer}");
-    let new_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &body).await?;
-    super::room::finalize_message_send(state, room, &bot, new_id, &body, None).await?;
+    let header = format!("> {asker_label}: {question}");
+
+    // LC-676 #1: post a "thinking..." placeholder as the bot and broadcast it
+    // immediately, so the asker sees the assistant working right away. The LLM
+    // call then runs (the /ask POST is held open); when it returns, the
+    // placeholder body is replaced in place and re-broadcast. No spawn, no
+    // "(edited)" marker (replace_message_body is silent).
+    let bot = assistant_bot(state).await?;
+    let placeholder = format!("{header}\n\n{THINKING_BODY}");
+    let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &placeholder).await?;
+    super::room::finalize_message_send(state, room, &bot, msg_id, &placeholder, None).await?;
+
+    let context = build_context(state, room, question).await?;
+    let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
+    let final_body = match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
+        Ok(a) if !a.trim().is_empty() => format!("{header}\n\n{}", a.trim()),
+        Ok(_) => format!("{header}\n\n_The assistant returned an empty answer._"),
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
+            format!("{header}\n\n_The assistant could not answer right now. Try again later._")
+        }
+    };
+
+    // Replace the placeholder with the resolved answer/error and re-broadcast.
+    db::chat::replace_message_body(&state.chat, msg_id, &final_body).await?;
+    state.hub.broadcast_to_room(
+        room.id,
+        &crate::ws::events::ChatEvent::MessageEdited {
+            message_id: msg_id,
+            room_id: room.id,
+            new_body: final_body.clone(),
+            edited_at: String::new(),
+        },
+    );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SYSTEM_PROMPT;
+
+    #[test]
+    fn ask_prompt_is_helpful_on_no_context_and_refuses_unsafe() {
+        let lo = SYSTEM_PROMPT.to_lowercase();
+        // LC-676 #2a: a no-context outcome is helpful, not a terse dead-end, and
+        // does not imply it would have answered.
+        assert!(lo.contains("does not contain the answer"));
+        assert!(lo.contains("do not imply"));
+        // LC-676 #2b: an explicit safety refusal, never phrased as a retrieval miss.
+        assert!(lo.contains("safety grounds"));
+        assert!(lo.contains("never phrase such a refusal as a retrieval miss"));
+        // Still RAG-grounded + no hallucination.
+        assert!(lo.contains("provided context"));
+        assert!(lo.contains("do not invent"));
+    }
 }

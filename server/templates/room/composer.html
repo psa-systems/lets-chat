@@ -83,6 +83,8 @@
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
+      // LC-676 #4: dismiss a lingering slash-command hint/popover on send.
+      if (window.__lcClearSlash) window.__lcClearSlash();
       if (window.__lcRefreshSend) window.__lcRefreshSend();
       if (bcast) bcast.innerHTML = '';
       if (qbar) qbar.innerHTML = '';
@@ -1838,6 +1840,11 @@
     ta.setAttribute('aria-expanded', 'false');
     ta.removeAttribute('aria-activedescendant');
   }
+  // LC-676 #4: expose the clear so the send-success handler can dismiss a
+  // lingering slash hint. On a successful send the textarea is re-focused, so
+  // its blur never fires and the popover would otherwise hang until an
+  // outside click.
+  window.__lcClearSlash = clearPopover;
   function scheduleAjax(url){
     if (timer) clearTimeout(timer);
     timer = setTimeout(function(){
