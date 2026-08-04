@@ -86,6 +86,11 @@ transcript-summary-heading = AI summary
 transcript-summary-generate = Summarize
 transcript-summary-regenerate = Regenerate
 transcript-summary-working = Summarizing...
+# LC-659: scope subtitle, staged "reading" label, and disclaimer, to match the
+# room "Catch me up" summary polish.
+transcript-summary-scope = Summary of this call
+transcript-summary-reading = Reading the transcript...
+transcript-summary-disclaimer = AI-generated from this transcript. May be incomplete.
 
 ## Activity page
 activity-page-title = Activity
