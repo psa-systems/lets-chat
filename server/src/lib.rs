@@ -45,4 +45,5 @@ pub mod stt_load;
 pub mod uploads;
 pub mod version;
 pub mod views;
+pub mod weekly_recap;
 pub mod ws;
