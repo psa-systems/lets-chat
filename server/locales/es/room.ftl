@@ -305,6 +305,13 @@ room-assistant-on-label = Activado.
 room-assistant-on-text = Los miembros pueden usar /ask en esta sala.
 room-assistant-off-label = Desactivado.
 room-assistant-off-text = /ask esta desactivado en esta sala.
+# LC-665: interruptor del resumen diario con IA (pagina de gestion).
+room-digest-heading = Resumen diario
+room-digest-intro = Publica una vez al dia un breve resumen con IA de la actividad reciente de esta sala, como el bot asistente.
+room-digest-on-label = Activado.
+room-digest-on-text = Se publica un resumen diario de actividad en esta sala.
+room-digest-off-label = Desactivado.
+room-digest-off-text = No se publica ningun resumen automatico en esta sala.
 # LC-494: interruptor del modo escenario (pagina de gestion).
 room-stage-heading = Modo escenario
 room-stage-intro = Convierte esta sala en un escenario con oradores y oyentes, donde la gente pide la palabra.

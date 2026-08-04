@@ -797,6 +797,76 @@ pub async fn set_room_assistant_enabled(
     Ok(res.rows_affected())
 }
 
+/// LC-665: whether the scheduled AI activity digest is enabled for a room.
+pub async fn get_room_digest_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT digest_enabled FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-665: toggle the scheduled digest for a room. Returns rows affected.
+pub async fn set_room_digest_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    enabled: bool,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET digest_enabled = ? WHERE id = ?")
+        .bind(enabled as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+/// LC-665: the last time a digest ran for a room (ISO-8601 UTC), or None if it
+/// never has. Read before bumping to window the messages "since last digest".
+pub async fn get_room_digest_last_at(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let v: Option<Option<String>> =
+        sqlx::query_scalar("SELECT digest_last_at FROM rooms WHERE id = ?")
+            .bind(room_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.flatten())
+}
+
+/// LC-665: rooms whose digest is enabled and due - never run, or last run more
+/// than `interval_hours` ago. The cutoff is computed in SQL against `now`.
+pub async fn rooms_due_for_digest(
+    pool: &sqlx::SqlitePool,
+    interval_hours: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let modifier = format!("-{interval_hours} hours");
+    sqlx::query_scalar(
+        "SELECT id FROM rooms WHERE digest_enabled = 1 \
+         AND (digest_last_at IS NULL OR digest_last_at < datetime('now', ?))",
+    )
+    .bind(modifier)
+    .fetch_all(pool)
+    .await
+}
+
+/// LC-665: mark a room's digest as just run (dedupe marker). Bumped on every
+/// evaluation, whether or not a digest was actually posted, so a quiet room is
+/// not re-evaluated until the next interval.
+pub async fn set_room_digest_last_at(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE rooms SET digest_last_at = datetime('now') WHERE id = ?")
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// LC-494: whether "stage" mode (large-audience audio) is enabled for a room.
 pub async fn get_room_stage_enabled(
     pool: &sqlx::SqlitePool,
