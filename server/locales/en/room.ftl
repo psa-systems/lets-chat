@@ -383,6 +383,8 @@ room-composer-commands = Commands (/)
 room-slash-see-all = See all commands
 room-slash-tip = Tip: type / for commands, @ to mention, : for emoji.
 room-slash-tip-dismiss = Dismiss tip
+# LC-675: shown when a slash command the user lacks permission to run is invoked.
+room-slash-forbidden = You do not have permission to run that command.
 
 ## Notify dropdown
 room-notify-unmuted = Unmuted

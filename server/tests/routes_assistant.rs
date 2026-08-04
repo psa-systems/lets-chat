@@ -128,9 +128,11 @@ async fn msg_count(chat: &SqlitePool, room: i64) -> i64 {
 async fn ask_refused_when_room_assistant_disabled() {
     let t = app().await;
     let room = make_room(&t).await;
-    // Default off: /ask is refused and nothing is posted.
+    // Default off: /ask is refused and nothing is posted. LC-675: the refusal is
+    // surfaced ephemerally (200 into #lc-command-result) instead of a 4xx the
+    // composer would mask as a generic "could not send" banner.
     let status = post_msg(&t.app, &t.alice_session, room, "/ask what is the answer").await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::OK);
     assert_eq!(msg_count(&t.chat, room).await, 0);
     // The assistant bot is not created by a refused ask.
     assert!(db::auth::find_user_by_username(&t.auth, "assistant")

@@ -383,6 +383,8 @@ room-composer-commands = Comandos (/)
 room-slash-see-all = Ver todos los comandos
 room-slash-tip = Consejo: escribe / para comandos, @ para mencionar, : para emoji.
 room-slash-tip-dismiss = Descartar el consejo
+# LC-675: se muestra al invocar un comando sin permiso para ejecutarlo.
+room-slash-forbidden = No tienes permiso para ejecutar ese comando.
 
 ## Notify dropdown
 room-notify-unmuted = Sin silenciar

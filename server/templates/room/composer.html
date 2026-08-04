@@ -68,7 +68,11 @@
          and restores the in-progress draft - may have new text in the box by
          the time the response lands; wiping it would lose that text. */
       var sentBody = reqParams ? reqParams.body : null;
-      if (sentBody == null || ta.value === sentBody) {
+      /* LC-675: a slash command that failed its own validation answers 200 with
+         an ephemeral error (into #lc-command-result) plus this header; keep the
+         typed command so the user can fix a typo instead of retyping it. */
+      var slashErr = event.detail.xhr && event.detail.xhr.getResponseHeader('x-lc-slash-error');
+      if (!slashErr && (sentBody == null || ta.value === sentBody)) {
         ta.value = '';
         ta.style.height = 'auto';
         /* LC-229: a sub-frame 204 response (LC-228) can land before the last
