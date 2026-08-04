@@ -86,6 +86,11 @@ transcript-summary-heading = Resumen con IA
 transcript-summary-generate = Resumir
 transcript-summary-regenerate = Regenerar
 transcript-summary-working = Resumiendo...
+# LC-659: subtítulo de alcance, etiqueta de "leyendo" por etapas y aviso, para
+# igualar el resumen "Ponerte al día" de la sala.
+transcript-summary-scope = Resumen de esta llamada
+transcript-summary-reading = Leyendo la transcripción...
+transcript-summary-disclaimer = Generado por IA a partir de esta transcripción. Puede estar incompleto.
 
 ## Activity page
 activity-page-title = Actividad
