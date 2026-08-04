@@ -34,6 +34,7 @@ pub mod push;
 pub mod rate_limit;
 pub mod reminders;
 pub mod retention;
+pub mod room_digest;
 pub mod routes;
 pub mod scheduled;
 pub mod security_headers;
