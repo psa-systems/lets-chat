@@ -74,6 +74,11 @@ attachment-alt-edit = Editar texto alternativo
 attachment-alt-label = Texto alternativo
 attachment-alt-placeholder = Describe esta imagen
 attachment-alt-save = Guardar
+# LC-660: la insignia mejorada + el editor emergente.
+attachment-alt-editor-label = Describe esta imagen para personas que usan lectores de pantalla
+attachment-alt-cancel = Cancelar
+attachment-alt-none = Sin texto alternativo
+attachment-alt-described = Tiene una descripcion
 
 ## Profile hovercard (LC-298)
 hovercard-message = Mensaje

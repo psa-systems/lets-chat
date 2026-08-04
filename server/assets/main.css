@@ -1551,6 +1551,126 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 .lc-filecard-size { font-size: 0.75rem; color: var(--content-muted); }
 
+/* LC-660: image alt-text control. The badge anchors to the image corner (the
+   parent `.lc-img-attach` is the positioning context) and reads as an image
+   action, replacing the old floating "Add alt text" link. State: `--missing` is
+   a muted amber nudge kept visible so undescribed images stand out; `--set` is a
+   filled/checked confirmation revealed on hover/focus to keep the timeline calm. */
+.lc-img-attach { position: relative; display: inline-block; max-width: 24rem; }
+.lc-alt { position: absolute; top: 0.375rem; right: 0.375rem; }
+.lc-alt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1875rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border-strong);
+    background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+    backdrop-filter: blur(2px);
+    color: var(--content-muted);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.lc-alt-badge::-webkit-details-marker { display: none; }
+.lc-alt-badge { list-style: none; }
+.lc-alt-ico, .lc-alt-check { width: 0.75rem; height: 0.75rem; flex: none; }
+.lc-alt-tag { font-variant: small-caps; }
+/* Missing: amber, always visible - the accessibility nudge. */
+.lc-alt-badge--missing {
+    color: var(--warning-surface-content);
+    border-color: var(--warning-border);
+    background: color-mix(in srgb, var(--warning-surface) 92%, transparent);
+    opacity: 1;
+}
+.lc-alt-badge--missing:hover,
+.lc-alt-badge--missing:focus-visible {
+    color: var(--warning-content);
+    background: var(--warning);
+    border-color: var(--warning);
+}
+/* Present: filled/checked, revealed on hover/focus of the image or the badge. */
+.lc-alt-badge--set {
+    color: var(--success-surface-content);
+    border-color: var(--success-border);
+    background: color-mix(in srgb, var(--success-surface) 92%, transparent);
+    opacity: 0;
+}
+.lc-img-attach:hover .lc-alt-badge--set,
+.lc-img-attach:focus-within .lc-alt-badge--set { opacity: 1; }
+.lc-alt-badge--set:hover,
+.lc-alt-badge--set:focus-visible {
+    color: var(--success-content);
+    background: var(--success);
+    border-color: var(--success);
+}
+.lc-alt-badge--ro { cursor: default; }
+.lc-alt-check { color: inherit; }
+
+/* Popover editor, anchored under the badge. `.lc-alt[open]` reveals it. */
+.lc-alt-pop {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    right: 0;
+    z-index: 20;
+    width: 18rem;
+    max-width: min(18rem, 80vw);
+    padding: 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    cursor: default;
+}
+.lc-alt-pop-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--content-muted);
+    margin-bottom: 0.3125rem;
+}
+.lc-alt-pop-input {
+    width: 100%;
+    resize: vertical;
+    min-height: 3.5rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+}
+.lc-alt-pop-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
+}
+.lc-alt-pop-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.4375rem;
+}
+.lc-alt-count { font-size: 0.6875rem; color: var(--content-subtle); font-variant-numeric: tabular-nums; }
+.lc-alt-actions { display: inline-flex; gap: 0.375rem; }
+.lc-alt-cancel, .lc-alt-save {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+    cursor: pointer;
+}
+.lc-alt-cancel { background: var(--surface-elevated); color: var(--content-muted); }
+.lc-alt-cancel:hover { background: var(--surface-sunken); color: var(--content); }
+.lc-alt-save { background: var(--accent); color: var(--accent-content); border-color: var(--accent); }
+.lc-alt-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
 /* LC-486: inline message translation. The Translate menu item is CSS-gated on
    an LLM being configured - revealed only under a [data-lc-llm] page root (which
    also covers live-swapped message fragments, since the rule is ancestor-based). */

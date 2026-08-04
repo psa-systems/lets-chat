@@ -18,36 +18,65 @@
 </div>
 {% include "partials/transcript_block.html" %}
 {% else if a.is_image() %}
-<div class="mt-1">
+{# LC-660: the image and its alt-text control share a `position: relative` box so
+   the alt badge can anchor to the image corner instead of floating below it. #}
+<div class="mt-1 lc-img-attach">
   {# LC-262: data-lc-lightbox opens the full image in the in-app lightbox
      (lightbox_modal.html); href + target stay as the no-JS fallback (open the
      raw file in a new tab). #}
-  <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer">
+  <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer" class="block">
     {# LC-507: GIFs serve the animated original so they autoplay inline; the
        still first-frame preview rendition is for non-animated images only.
-       LC-537: alt is the author's text when set, else the filename. #}
+       LC-537: alt is the author's text when set, else the filename.
+       LC-660: when real alt text exists, also expose it as a hover `title` so
+       sighted users benefit, not just screen readers. #}
     {% if a.is_gif() %}
-    <img src="{{ a.url }}" alt="{{ a.alt() }}"
-         class="max-w-sm max-h-96 rounded border border-border">
+    <img src="{{ a.url }}" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
+         class="block max-w-sm max-h-96 rounded border border-border">
     {% else %}
-    <img src="{{ a.url }}?size=preview" alt="{{ a.alt() }}"
-         class="max-w-sm max-h-96 rounded border border-border">
+    <img src="{{ a.url }}?size=preview" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
+         class="block max-w-sm max-h-96 rounded border border-border">
     {% endif %}
   </a>
-  {# LC-537: the author can add / edit alt text after posting. Disclosure keeps
-     it out of the way; no-JS friendly (plain form submit falls back). #}
+  {# LC-660: alt-text state badge on the image corner. Editors get a details-based
+     popover editor (no-JS friendly: the details/form still submit without JS);
+     the badge is muted/outlined when alt is MISSING (kept visible as a nudge) and
+     filled/checked when PRESENT (revealed on hover/focus). Non-editors see a
+     read-only "described" indicator only when alt text exists - never an
+     "add alt text" prompt on someone else's image. Gate matches the route
+     (`upload.uploader_id == user.id`). #}
   {% if message.can_edit %}
-  <details class="lc-alt-editor mt-1">
-    <summary class="cursor-pointer text-xs text-accent hover:underline">{% if a.has_alt() %}{{ "attachment-alt-edit"|t }}{% else %}{{ "attachment-alt-add"|t }}{% endif %}</summary>
-    <form method="post" action="/api/files/{{ a.id }}/alt"
-          hx-post="/api/files/{{ a.id }}/alt" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML"
-          class="mt-1 flex items-start gap-1">
-      <input type="text" name="alt" maxlength="1000" value="{% if let Some(t) = a.alt_text.as_ref() %}{{ t }}{% endif %}"
-             placeholder="{{ "attachment-alt-placeholder"|t }}"
-             class="input flex-1 text-xs" aria-label="{{ "attachment-alt-label"|t }}">
-      <button type="submit" class="btn btn-sm btn-secondary">{{ "attachment-alt-save"|t }}</button>
-    </form>
+  <details class="lc-alt">
+    <summary class="lc-alt-badge lc-alt-badge--{% if a.has_alt() %}set{% else %}missing{% endif %}"
+             aria-label="{% if a.has_alt() %}{{ "attachment-alt-edit"|t }}{% else %}{{ "attachment-alt-add"|t }}{% endif %}"
+             title="{% if a.has_alt() %}{{ "attachment-alt-edit"|t }}{% else %}{{ "attachment-alt-add"|t }}{% endif %}">
+      <svg class="lc-alt-ico" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a.75.75 0 00-1.06 0l-1.91 1.909.47.47a.75.75 0 11-1.06 1.06L6.53 8.091a.75.75 0 00-1.06 0l-2.97 2.97zM12 7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/></svg>
+      <span class="lc-alt-tag">ALT</span>
+      {% if a.has_alt() %}<svg class="lc-alt-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>{% endif %}
+    </summary>
+    <div class="lc-alt-pop">
+      <form method="post" action="/api/files/{{ a.id }}/alt"
+            hx-post="/api/files/{{ a.id }}/alt" hx-target="#msg-{{ message.id }}" hx-swap="outerHTML">
+        <label for="lc-alt-input-{{ a.id }}" class="lc-alt-pop-label">{{ "attachment-alt-editor-label"|t }}</label>
+        <textarea id="lc-alt-input-{{ a.id }}" name="alt" rows="3" maxlength="1000"
+                  placeholder="{{ "attachment-alt-placeholder"|t }}" class="lc-alt-pop-input"
+                  oninput="this.form.querySelector('[data-lc-alt-count]').textContent = this.value.length">{% if let Some(t) = a.alt_text.as_ref() %}{{ t }}{% endif %}</textarea>
+        <div class="lc-alt-pop-foot">
+          <span class="lc-alt-count"><span data-lc-alt-count>{% if let Some(t) = a.alt_text.as_ref() %}{{ t.chars().count() }}{% else %}0{% endif %}</span>/1000</span>
+          <div class="lc-alt-actions">
+            <button type="button" class="lc-alt-cancel" onclick="this.closest('details').removeAttribute('open')">{{ "attachment-alt-cancel"|t }}</button>
+            <button type="submit" class="lc-alt-save">{{ "attachment-alt-save"|t }}</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </details>
+  {% else if a.has_alt() %}
+  <span class="lc-alt-badge lc-alt-badge--set lc-alt-badge--ro"
+        title="{{ a.alt() }}" aria-label="{{ "attachment-alt-described"|t }}">
+    <span class="lc-alt-tag">ALT</span>
+    <svg class="lc-alt-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
+  </span>
   {% endif %}
 </div>
 {% else %}
