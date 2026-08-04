@@ -1817,6 +1817,52 @@ pub fn sanitize_fts_query(raw: &str) -> Option<String> {
     }
 }
 
+/// LC-676: FTS query for the /ask RAG retrieval. Unlike [`sanitize_fts_query`]
+/// (which joins terms with a space = FTS5 implicit AND, right for a deliberate
+/// search box), a natural-language question - "who is david?" - should retrieve
+/// messages matching ANY meaningful term. ANDing every word means the question
+/// only matches a message that literally contains "who" AND "is" AND "david",
+/// so a room clearly discussing David still dead-ended. This drops common
+/// question stopwords and joins the rest with OR; `fts_room_context` then ranks
+/// the candidates. Returns `None` only when nothing usable remains.
+pub fn fts_query_any(raw: &str) -> Option<String> {
+    const STOP: &[&str] = &[
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "am", "who", "whom", "whose",
+        "what", "when", "where", "why", "how", "which", "that", "this", "these", "those", "to",
+        "of", "in", "on", "at", "for", "from", "with", "and", "or", "do", "does", "did", "can",
+        "could", "would", "should", "will", "about", "tell", "me", "us", "please", "i", "you",
+        "it", "he", "she", "they", "we", "any", "know", "there",
+    ];
+    // Trim FTS-special and punctuation from each word's edges ("david?" ->
+    // "david", "(david)" -> "david") while keeping internal characters.
+    let clean: Vec<String> = raw
+        .split_whitespace()
+        .map(|t| {
+            t.trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
+                .to_string()
+        })
+        .filter(|t| !t.is_empty())
+        .collect();
+    if clean.is_empty() {
+        return None;
+    }
+    // Prefer the content words; if the question was ALL stopwords, keep them so
+    // the query still retrieves something.
+    let mut kept: Vec<&String> = clean
+        .iter()
+        .filter(|t| !STOP.contains(&t.to_ascii_lowercase().as_str()))
+        .collect();
+    if kept.is_empty() {
+        kept = clean.iter().collect();
+    }
+    Some(
+        kept.iter()
+            .map(|t| format!("\"{t}\""))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
+}
+
 /// Full-text search across accessible messages.
 ///
 /// Scope rules:
