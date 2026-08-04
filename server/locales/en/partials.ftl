@@ -79,6 +79,8 @@ attachment-alt-editor-label = Describe this image for people using screen reader
 attachment-alt-cancel = Cancel
 attachment-alt-none = No alt text
 attachment-alt-described = Has a description
+# LC-667: auto-draft alt text with the operator vision model.
+attachment-alt-draft = Auto-draft
 
 ## Profile hovercard (LC-298)
 hovercard-message = Message

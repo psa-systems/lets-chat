@@ -1176,6 +1176,9 @@ pub struct RoomPage<'a> {
     /// LC-549: an operator embeddings endpoint is configured; drives
     /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
     pub embeddings_available: bool,
+    /// LC-667: an operator vision endpoint is configured; drives `data-lc-vision`
+    /// for the image alt-text auto-draft affordance.
+    pub vision_available: bool,
     /// LC-506: LLM unconfigured but the viewer is a site admin - show the AI
     /// actions disabled with a "set LETS_CHAT_LLM_URL" hint (discoverability).
     pub llm_teaser: bool,

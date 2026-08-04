@@ -64,6 +64,14 @@
         <div class="lc-alt-pop-foot">
           <span class="lc-alt-count"><span data-lc-alt-count>{% if let Some(t) = a.alt_text.as_ref() %}{{ t.chars().count() }}{% else %}0{% endif %}</span>/1000</span>
           <div class="lc-alt-actions">
+            {# LC-667: draft the alt text with the operator's vision model. Shown
+               only when a vision endpoint is configured ([data-lc-vision] page
+               root). Fills the textarea on success; the uploader still edits +
+               Saves, so nothing is applied without their click. #}
+            <button type="button" class="lc-alt-draft"
+                    hx-post="/api/files/{{ a.id }}/alt-draft" hx-swap="none"
+                    hx-disabled-elt="this"
+                    hx-on::after-request="if(event.detail.successful){var ta=document.getElementById('lc-alt-input-{{ a.id }}'); ta.value=(event.detail.xhr.responseText||'').trim(); ta.dispatchEvent(new Event('input',{bubbles:true})); ta.focus();}">{{ "attachment-alt-draft"|t }}</button>
             <button type="button" class="lc-alt-cancel" onclick="this.closest('details').removeAttribute('open')">{{ "attachment-alt-cancel"|t }}</button>
             <button type="submit" class="lc-alt-save">{{ "attachment-alt-save"|t }}</button>
           </div>

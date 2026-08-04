@@ -1658,7 +1658,7 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 .lc-alt-count { font-size: 0.6875rem; color: var(--content-subtle); font-variant-numeric: tabular-nums; }
 .lc-alt-actions { display: inline-flex; gap: 0.375rem; }
-.lc-alt-cancel, .lc-alt-save {
+.lc-alt-cancel, .lc-alt-save, .lc-alt-draft {
     padding: 0.25rem 0.625rem;
     font-size: 0.75rem;
     font-weight: 600;
@@ -1668,6 +1668,18 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 .lc-alt-cancel { background: var(--surface-elevated); color: var(--content-muted); }
 .lc-alt-cancel:hover { background: var(--surface-sunken); color: var(--content); }
+/* LC-667: "Auto-draft" (vision alt text). Sits on the left of the actions row;
+   hidden unless an operator vision endpoint is configured ([data-lc-vision]
+   page root). */
+.lc-alt-draft {
+    display: none;
+    margin-right: auto;
+    background: var(--surface-elevated);
+    color: var(--accent);
+}
+[data-lc-vision] .lc-alt-draft { display: inline-flex; }
+.lc-alt-draft:hover { background: var(--surface-sunken); }
+.lc-alt-draft:disabled { opacity: 0.5; cursor: default; }
 .lc-alt-save { background: var(--accent); color: var(--accent-content); border-color: var(--accent); }
 .lc-alt-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
