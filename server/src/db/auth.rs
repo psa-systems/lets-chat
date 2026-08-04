@@ -441,6 +441,33 @@ pub async fn set_last_digest_sent_at(pool: &SqlitePool, user_id: &str) -> Result
     Ok(())
 }
 
+/// LC-671: real (non-bot) users who are due for a weekly recap - active in the
+/// last 7 days and not recapped in the last 7 days. Returns user ids; the caller
+/// fetches each one's weekly figures from the chat db and skips those with
+/// nothing to celebrate.
+pub async fn weekly_recap_candidates(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM users \
+          WHERE is_bot = 0 \
+            AND last_active_at >= datetime('now', '-7 days') \
+            AND (last_weekly_recap_at IS NULL \
+                 OR last_weekly_recap_at < datetime('now', '-7 days'))",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// LC-671: mark a user's weekly recap as just handled (dedupe marker). Bumped on
+/// every evaluation, whether or not a recap was actually sent, so a user with a
+/// quiet week is not re-evaluated until the next 7-day window.
+pub async fn set_last_weekly_recap_at(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET last_weekly_recap_at = datetime('now') WHERE id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Flip rows whose `status = 'active'` and whose `last_active_at` is older
 /// than `threshold_seconds` to `'idle'`. Returns the IDs that flipped.
 ///
