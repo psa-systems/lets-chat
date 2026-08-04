@@ -72,6 +72,28 @@
         {% endif %}
       </div>
     </div>
+    {# LC-664: a per-viewer "what did I miss" brief - decisions, action items aimed
+       at the viewer, and anything that concerns them. Personalized, so it is
+       generated on demand (never cached) and starts from a Generate button. #}
+    <div class="mx-auto max-w-2xl mb-4 rounded-lg border border-border bg-surface-elevated overflow-hidden">
+      <header class="border-b border-border px-3 py-2">
+        <div class="font-semibold leading-tight">{{ "transcript-brief-heading"|t }}</div>
+        <div class="text-xs text-content-muted">{{ "transcript-brief-scope"|t }}</div>
+      </header>
+      <div id="lc-transcript-brief" class="min-w-0 break-words p-3">
+        <button type="button"
+                hx-post="/transcripts/{{ transcript_id }}/brief"
+                hx-target="#lc-transcript-brief" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                data-lc-ai-pending
+                data-lc-ai-skeleton="summary"
+                data-lc-ai-read-label="{{ "transcript-brief-reading"|t }}"
+                data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+                data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+                class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">{{ "transcript-brief-generate"|t }}</button>
+        <p class="mt-2 text-xs text-content-subtle">{{ "transcript-brief-disclaimer"|t }}</p>
+      </div>
+    </div>
     {# LC-506: LLM unconfigured but viewer is a site admin - disabled teaser. #}
     {% else if llm_teaser && !lines.is_empty() %}
     <div class="mx-auto max-w-2xl mb-4 rounded-lg border border-border bg-surface-elevated overflow-hidden">

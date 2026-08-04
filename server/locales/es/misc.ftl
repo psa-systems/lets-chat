@@ -91,6 +91,13 @@ transcript-summary-working = Resumiendo...
 transcript-summary-scope = Resumen de esta llamada
 transcript-summary-reading = Leyendo la transcripción...
 transcript-summary-disclaimer = Generado por IA a partir de esta transcripción. Puede estar incompleto.
+# LC-664: resumen personal "qué me perdí".
+transcript-brief-heading = Qué me perdí
+transcript-brief-scope = Personalizado para ti
+transcript-brief-generate = Ponerme al día
+transcript-brief-regenerate = Regenerar
+transcript-brief-reading = Leyendo la transcripción...
+transcript-brief-disclaimer = Generado por IA y personalizado para ti. Puede estar incompleto.
 
 ## Activity page
 activity-page-title = Actividad
