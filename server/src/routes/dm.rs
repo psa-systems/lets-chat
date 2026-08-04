@@ -412,6 +412,7 @@ pub async fn get_dm(
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         llm_available: state.llm_available(),
         embeddings_available: state.embeddings_available(),
+        vision_available: crate::vision::available(),
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
     };

@@ -1655,6 +1655,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/files/{id}", get(uploads::get_file))
         // LC-537: author-only image alt-text editor.
         .route("/api/files/{id}/alt", post(uploads::post_file_alt))
+        // LC-667: draft alt text for an image with the operator's vision model.
+        .route(
+            "/api/files/{id}/alt-draft",
+            post(uploads::post_file_alt_draft),
+        )
         // LC-590: uploader-triggered retry of a failed server-side transcription.
         .route(
             "/api/files/{id}/retranscribe",

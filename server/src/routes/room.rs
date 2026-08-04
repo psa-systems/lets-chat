@@ -659,6 +659,7 @@ pub async fn get_room(
         initial_draft: &initial_draft,
         llm_available: state.llm_available(),
         embeddings_available: state.embeddings_available(),
+        vision_available: crate::vision::available(),
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),

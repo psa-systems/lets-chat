@@ -41,6 +41,9 @@ pub struct DmPage<'a> {
     /// LC-549: an operator embeddings endpoint is configured; drives
     /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
     pub embeddings_available: bool,
+    /// LC-667: an operator vision endpoint is configured; drives `data-lc-vision`
+    /// for the image alt-text auto-draft affordance.
+    pub vision_available: bool,
     /// LC-488: the GIF picker is configured. Drives the composer GIF button.
     pub gif_available: bool,
     /// LC-511: see `RoomPage::gif_teaser`. Giphy unconfigured but the viewer is a
