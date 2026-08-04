@@ -1412,6 +1412,9 @@ pub struct ThreadPanelFragment<'a> {
     pub room: &'a Room,
     pub parent: &'a MessageView,
     pub replies: &'a [MessageView],
+    /// LC-668: the AI-generated thread title, shown as the panel heading once the
+    /// thread reaches the reply threshold. `None` before then.
+    pub thread_title: Option<String>,
     /// LC-310: whether the viewer follows this thread (drives the toggle).
     pub is_following: bool,
     /// LC-546: whether the viewer has muted this thread (drives the mute toggle).
