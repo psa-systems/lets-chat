@@ -635,3 +635,56 @@ async fn test_search_filters_has_file_link_thread() {
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].message_id, reply);
 }
+
+// LC-676: the /ask RAG retrieval must find room context for a natural-language
+// question. The old AND semantics ("who" AND "is" AND "david") missed a room
+// full of David; `fts_query_any` drops stopwords + ORs the rest so it matches.
+
+#[test]
+fn fts_query_any_drops_stopwords_and_ors_the_rest() {
+    let q = lets_chat::db::chat::fts_query_any("who is david?").unwrap();
+    assert_eq!(q, "\"david\"");
+    let q2 = lets_chat::db::chat::fts_query_any("what did we decide about the launch").unwrap();
+    assert_eq!(q2, "\"decide\" OR \"launch\"");
+    // An all-stopword question still yields a usable query rather than None.
+    assert!(lets_chat::db::chat::fts_query_any("who is it").is_some());
+    assert!(lets_chat::db::chat::fts_query_any("   ").is_none());
+}
+
+#[tokio::test]
+async fn ask_retrieval_finds_room_context_the_and_query_missed() {
+    let pool = setup_pool().await;
+    let g = general_id(&pool).await;
+    let room_id = lets_chat::db::chat::create_room(&pool, "ask-ctx", None, "public", None, Some(g))
+        .await
+        .unwrap();
+    lets_chat::db::chat::insert_message(
+        &pool,
+        room_id,
+        "user-1",
+        "David really stands out at Simcha Health, leading clinical trials.",
+    )
+    .await
+    .unwrap();
+    lets_chat::db::chat::insert_message(&pool, room_id, "user-2", "lunch plans for friday")
+        .await
+        .unwrap();
+
+    // The old AND query for the natural-language question matches nothing.
+    let and_q = lets_chat::db::chat::sanitize_fts_query("who is david?").unwrap();
+    let and_hits = lets_chat::db::chat::fts_room_context(&pool, room_id, &and_q, 12)
+        .await
+        .unwrap();
+    assert!(
+        and_hits.is_empty(),
+        "AND semantics dead-end on a question: {and_hits:?}"
+    );
+
+    // The RAG OR query retrieves the David message (and not the lunch one).
+    let any_q = lets_chat::db::chat::fts_query_any("who is david?").unwrap();
+    let hits = lets_chat::db::chat::fts_room_context(&pool, room_id, &any_q, 12)
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1, "retrieves the David context: {hits:?}");
+    assert!(hits[0].1.contains("David"));
+}
