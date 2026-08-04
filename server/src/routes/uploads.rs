@@ -688,6 +688,55 @@ pub async fn post_file_alt(
     })
 }
 
+/// `POST /api/files/{id}/alt-draft` - LC-667: draft alt text for an image with
+/// the operator's vision model, returned as plain text for the LC-660 alt editor
+/// to fill in (the uploader still accepts/edits it). Uploader-only, images only,
+/// and only when a vision endpoint is configured (the button is CSS-hidden
+/// otherwise via `[data-lc-vision]`, so a viewer is never offered a control that
+/// 400s). The image is read from disk and sent to the operator's own endpoint -
+/// it never leaves the box.
+pub async fn post_file_alt_draft(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(file_id): Path<i64>,
+) -> Result<Response, AppError> {
+    use base64::Engine as _;
+
+    let (upload, _room_id) = db::uploads::get_upload(&state.chat, file_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if upload.uploader_id != user.id {
+        return Err(AppError::Forbidden);
+    }
+    if !upload.mime_type.starts_with("image/") {
+        return Err(AppError::BadRequest(
+            "alt text drafting applies only to images".into(),
+        ));
+    }
+    let Some(cfg) = crate::vision::VisionConfig::from_env() else {
+        return Err(AppError::BadRequest(
+            "image description is not configured".into(),
+        ));
+    };
+
+    let path = db::uploads_dir().join(&upload.storage_path);
+    let bytes = tokio::fs::read(&path).await.map_err(|e| {
+        tracing::warn!(error = %e, file_id, "alt-draft could not read the image");
+        AppError::BadRequest("could not read the image".into())
+    })?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let data_url = format!("data:{};base64,{b64}", upload.mime_type);
+
+    let client = crate::vision::ReqwestVisionClient::new(cfg);
+    match crate::vision::VisionClient::describe(&client, &data_url).await {
+        Ok(draft) => Ok(draft.into_response()),
+        Err(e) => {
+            tracing::warn!(error = %e, file_id, "alt-draft vision call failed");
+            Err(AppError::BadRequest("could not draft alt text".into()))
+        }
+    }
+}
+
 /// `POST /api/files/{id}/retranscribe` - LC-590: re-run a failed server-side
 /// transcription. Uploader-only, matching the control's visibility in
 /// `attachment.html` (`message.can_edit`), so the gate and the affordance agree
