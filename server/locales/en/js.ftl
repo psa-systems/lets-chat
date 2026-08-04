@@ -110,3 +110,5 @@ js-huddle-ring-ignore = Ignore
 
 # LC-650: shown as a toast when an AI action fails (htmx does not swap the 4xx).
 js-ai-failed = AI request failed. Please try again.
+# LC-654: inline retry button on the AI summary error state.
+js-ai-retry = Retry
