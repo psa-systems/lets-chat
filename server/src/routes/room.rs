@@ -1043,6 +1043,12 @@ pub async fn post_message(
         });
     }
 
+    // LC-670: background AI moderation triage. Off the request path and gated on
+    // the operator opt-in (LETS_CHAT_AI_MODERATION) + an LLM. Flags a message to
+    // the admin report queue for HUMAN review; never auto-deletes. The spawn +
+    // enablement gate live in `triage::maybe_triage_message`.
+    super::triage::maybe_triage_message(&state, new_id, room_id, body);
+
     // LC-551: graduate the poster to "trusted" once they have posted enough in
     // this enclave, then re-render the settings member list so the trust pill
     // updates live. Only runs for a member who was "new" at the top of this send,
