@@ -63,6 +63,15 @@ struct SlashHelp {
     commands: Vec<SlashRow>,
 }
 
+/// LC-675: a slash command's user-facing error, surfaced ephemerally to the
+/// invoker (OOB into `#lc-command-result`) instead of propagating a 4xx that the
+/// `hx-swap="none"` composer turns into a generic "could not send" banner.
+#[derive(Template)]
+#[template(path = "room/slash_error.html")]
+struct SlashError {
+    message: String,
+}
+
 /// Visible commands for `user`, honoring `admin_only`. Built-ins first, then
 /// custom. A row matches when its name starts with `prefix` OR (LC-509) its
 /// description contains `prefix` as a keyword; an empty prefix matches all.
@@ -179,9 +188,44 @@ pub async fn get_autocomplete(
     })
 }
 
-/// Try to handle `body` as a slash command. Returns `Ok(None)` when the body
-/// is not a recognized command (caller posts it as a literal message).
+/// Try to handle `body` as a slash command. Returns `Ok(None)` when the body is
+/// not a recognized command (caller posts it as a literal message).
+///
+/// LC-675: a recognized command's own validation error (BadRequest / Forbidden)
+/// is surfaced to the invoker as an ephemeral message (200, OOB into
+/// `#lc-command-result`) rather than propagating a 4xx - the composer runs
+/// `hx-swap="none"`, so a 4xx body is discarded and only the generic "could not
+/// send" banner shows, hiding the real reason (e.g. "/ask" when the assistant is
+/// not enabled). A genuine server error still propagates. The response carries
+/// `X-LC-Slash-Error` so the composer keeps the typed command for the user to fix.
 pub(crate) async fn try_dispatch(
+    state: &AppState,
+    room: &Room,
+    user: &User,
+    body: &str,
+) -> Result<Option<Response>, AppError> {
+    match dispatch_known(state, room, user, body).await {
+        Ok(outcome) => Ok(outcome),
+        Err(e) => {
+            let message = match &e {
+                AppError::BadRequest(m) => m.clone(),
+                AppError::Forbidden => crate::i18n::translate_current("room-slash-forbidden"),
+                _ => return Err(e),
+            };
+            let mut resp = html(&SlashError { message })?.into_response();
+            resp.headers_mut().insert(
+                "x-lc-slash-error",
+                axum::http::HeaderValue::from_static("1"),
+            );
+            Ok(Some(resp))
+        }
+    }
+}
+
+/// The command dispatch itself. Errors it returns are mapped to ephemeral
+/// messages by [`try_dispatch`]; `Ok(None)` means the body was not a recognized
+/// command (the caller posts it literally).
+async fn dispatch_known(
     state: &AppState,
     room: &Room,
     user: &User,

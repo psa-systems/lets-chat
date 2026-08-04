@@ -222,6 +222,61 @@ async fn hint_bar_shows_the_example() {
     );
 }
 
+/// LC-675: a slash command's own validation error (here /ask with no LLM
+/// configured) is surfaced ephemerally to the invoker as a 200 with the real
+/// message + the X-LC-Slash-Error header - NOT a 4xx that the composer masks as
+/// a generic "could not send" banner, and nothing is posted.
+#[tokio::test]
+async fn ask_error_surfaces_ephemerally_not_as_send_failure() {
+    let t = app().await;
+    let room = make_room(&t).await;
+    let form = format!("body={}&file_id=&quote_id=", enc("/ask what's up"));
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/room/{room}/messages"))
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={}", t.alice_session))
+        .body(Body::from(form))
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "surfaced as 200, not a 4xx");
+    assert_eq!(
+        res.headers()
+            .get("x-lc-slash-error")
+            .map(|v| v.to_str().unwrap()),
+        Some("1"),
+        "header tells the composer to keep the typed command"
+    );
+    let body =
+        String::from_utf8_lossy(&to_bytes(res.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains("lc-command-result"),
+        "ephemeral OOB target: {body}"
+    );
+    assert!(
+        body.contains("not configured"),
+        "shows the real reason, not a generic banner: {body}"
+    );
+    assert_eq!(
+        msg_count(&t.chat, room).await,
+        0,
+        "nothing posted on failure"
+    );
+}
+
+/// LC-675: the same treatment for a plain built-in usage error (/remind with no
+/// arguments) - the usage message is shown, not the generic banner.
+#[tokio::test]
+async fn command_usage_error_is_ephemeral() {
+    let t = app().await;
+    let room = make_room(&t).await;
+    let (status, body) = post_msg(&t.app, &t.alice_session, room, "/remind").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("lc-command-result"), "ephemeral: {body}");
+    assert!(body.contains("usage: /remind"), "shows usage: {body}");
+    assert_eq!(msg_count(&t.chat, room).await, 0);
+}
+
 #[tokio::test]
 async fn me_posts_italic_action() {
     let t = app().await;
@@ -303,9 +358,21 @@ async fn admin_only_command_rejects_non_admin() {
     )
     .await
     .unwrap();
-    // Bob is a plain user.
-    let (status, _) = post_msg(&t.app, &t.bob_session, room, "/secret").await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    // Bob is a plain user. LC-675: the RBAC block still prevents execution
+    // (nothing posted), but the refusal is now surfaced as an ephemeral message
+    // (200 + the slash-error header) instead of a bare 403 the composer would
+    // mask as a generic "could not send" banner.
+    let (status, body) = post_msg(&t.app, &t.bob_session, room, "/secret").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("lc-command-result"),
+        "ephemeral refusal: {body}"
+    );
+    assert!(body.contains("permission"), "explains the refusal: {body}");
+    assert!(
+        !body.contains("eagle lands"),
+        "the admin-only command did not execute"
+    );
     assert_eq!(msg_count(&t.chat, room).await, 0, "no message posted");
 }
 
