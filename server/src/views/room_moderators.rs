@@ -56,6 +56,9 @@ pub struct RoomModeratorsPage<'a> {
     /// LC-492: whether the operator has configured an LLM at all. When false the
     /// toggle still saves but a hint explains the assistant won't function yet.
     pub assistant_available: bool,
+    /// LC-665: whether the scheduled AI activity digest is enabled here. Shares
+    /// `assistant_available` for the "no LLM configured" hint.
+    pub digest_enabled: bool,
     /// LC-494: whether "stage" mode is enabled for this room.
     pub stage_enabled: bool,
     /// LC-495: this room's workflow-automation rules (shown via the included

@@ -30,7 +30,7 @@ mod activity;
 mod admin;
 mod api;
 mod api_tokens;
-mod assistant;
+pub(crate) mod assistant;
 mod auth;
 mod automations;
 mod avatar;
@@ -101,7 +101,7 @@ mod stage;
 mod starred_rooms;
 mod stats;
 mod status;
-mod summary;
+pub(crate) mod summary;
 mod switcher;
 mod transcripts;
 mod translate;
@@ -1439,6 +1439,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // LC-492: per-room AI assistant toggle.
         .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
+        // LC-665: per-room scheduled AI digest toggle.
+        .route("/room/{room_id}/digest", post(room_rbac::post_digest))
         // LC-494: per-room stage-mode toggle.
         .route("/room/{room_id}/stage", post(room_rbac::post_stage))
         // LC-495: per-room workflow automations (manage-page CRUD).

@@ -305,6 +305,13 @@ room-assistant-on-label = On.
 room-assistant-on-text = Members can use /ask in this room.
 room-assistant-off-label = Off.
 room-assistant-off-text = /ask is disabled in this room.
+# LC-665: scheduled AI digest toggle (room manage page).
+room-digest-heading = Daily digest
+room-digest-intro = Post a short AI recap of this room's recent activity once a day, as the assistant bot.
+room-digest-on-label = On.
+room-digest-on-text = A daily activity digest is posted to this room.
+room-digest-off-label = Off.
+room-digest-off-text = No automatic digest is posted to this room.
 # LC-494: stage-mode toggle (room manage page).
 room-stage-heading = Stage mode
 room-stage-intro = Turn this room into a stage with speakers and listeners, where people request to speak.
