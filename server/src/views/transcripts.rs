@@ -116,3 +116,13 @@ pub struct TranscriptSummaryFragment {
 #[derive(Template)]
 #[template(path = "transcripts/followups_created.html")]
 pub struct FollowUpsCreatedFragment {}
+
+/// LC-664: the htmx response after generating a personal "what did I miss" brief -
+/// the rendered brief + a regenerate button, swapped into `#lc-transcript-brief`.
+/// Not cached: the brief is personalized to the viewer.
+#[derive(Template)]
+#[template(path = "transcripts/brief_fragment.html")]
+pub struct TranscriptBriefFragment {
+    pub transcript_id: i64,
+    pub brief_html: String,
+}
