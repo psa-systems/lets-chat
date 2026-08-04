@@ -809,18 +809,26 @@ async fn build_transcript_prompt_text(
 ) -> Result<String, AppError> {
     const MAX_PROMPT_CHARS: usize = 48_000;
     let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
+    // Resolve a display name per distinct speaker, preserving first-appearance
+    // order. LC-663: a leading `Participants:` roster gives the model the exact
+    // name set to attribute decisions + action items against.
     let mut names: HashMap<String, String> = HashMap::new();
-    let mut text = String::new();
+    let mut order: Vec<String> = Vec::new();
     for s in &segments {
-        let name = match names.get(&s.user_id) {
-            Some(n) => n.clone(),
-            None => {
-                let n = label_for(state, &s.user_id).await;
-                names.insert(s.user_id.clone(), n.clone());
-                n
-            }
-        };
-        text.push_str(&name);
+        if !names.contains_key(&s.user_id) {
+            names.insert(s.user_id.clone(), label_for(state, &s.user_id).await);
+            order.push(s.user_id.clone());
+        }
+    }
+    let mut text = String::new();
+    if !order.is_empty() {
+        let roster: Vec<&str> = order.iter().map(|id| names[id].as_str()).collect();
+        text.push_str("Participants: ");
+        text.push_str(&roster.join(", "));
+        text.push_str("\n\n");
+    }
+    for s in &segments {
+        text.push_str(&names[&s.user_id]);
         text.push_str(": ");
         text.push_str(&s.text);
         text.push('\n');
