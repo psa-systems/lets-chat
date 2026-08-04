@@ -537,6 +537,12 @@ compose-assist-action-grammar = Fix grammar
 compose-assist-action-concise = Make shorter
 compose-assist-action-friendly = Friendlier tone
 compose-assist-action-formal = More formal
+# LC-669: on-demand tone/clarity nudge (a read-only review, not a rewrite).
+compose-assist-action-tone = Check tone
+compose-tone-heading = Tone check
+compose-tone-checking = Checking tone...
+compose-tone-looks-good = Looks clear and friendly.
+compose-tone-dismiss = Dismiss
 
 ## LC-548: AI suggested replies
 room-msg-suggest-reply = Suggest reply

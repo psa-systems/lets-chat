@@ -133,6 +133,31 @@ async fn rephrase_returns_preview_panel_with_actions() {
     );
 }
 
+// LC-669: the tone check is a read-only nudge, not a rewrite - the panel shows
+// the note with a Dismiss but NO Accept/Regenerate (nothing to apply).
+#[tokio::test]
+async fn tone_returns_a_read_only_nudge_not_a_rewrite() {
+    let t = app(Some(mock("This may read as blunt; consider softening it."))).await;
+    let room = make_room(&t).await;
+    let (status, body) = assist(&t, room, "fix this now", "tone").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Tone check"), "tone heading missing: {body}");
+    assert!(
+        body.contains("This may read as blunt"),
+        "the review note is shown: {body}"
+    );
+    // Read-only: no Accept / apply / Regenerate, but a Dismiss.
+    assert!(
+        !body.contains("data-lc-ai-apply"),
+        "must not offer Accept: {body}"
+    );
+    assert!(
+        !body.contains("Regenerate"),
+        "must not offer Regenerate: {body}"
+    );
+    assert!(body.contains("data-lc-ai-dismiss"), "dismissible: {body}");
+}
+
 // LC-658: llama-class models sometimes echo the fenced input back with its
 // `<draft>` / `</draft>` markers. Those are raw HTML that the message renderer
 // drops wholesale, so an accepted-then-sent message would be blank. The handler
