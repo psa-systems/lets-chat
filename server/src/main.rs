@@ -243,6 +243,7 @@ async fn main() {
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_room_digest_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
+    spawn_weekly_recap_dispatcher(state.clone());
     spawn_message_retention_sweeper(state.clone());
     spawn_ephemeral_sweeper(state.clone());
     lets_chat::email_ingress::poll::spawn_email_poll(state.clone());
@@ -505,6 +506,39 @@ fn spawn_room_digest_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "room digest tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-671: personal weekly recap DM. Operator opt-in (`LETS_CHAT_WEEKLY_RECAP`,
+/// off by default), so the dispatcher is not even spawned unless it is set. A
+/// slow tick (6h) DMs each active user a short AI recap of their week at most
+/// once per 7 days; the dedupe + eligibility live in `weekly_recap`.
+fn spawn_weekly_recap_dispatcher(state: AppState) {
+    let enabled = matches!(
+        std::env::var("LETS_CHAT_WEEKLY_RECAP").ok().as_deref(),
+        Some("1" | "true" | "on" | "yes")
+    );
+    if !enabled {
+        return;
+    }
+    const TICK_SECS: u64 = 6 * 3600;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::weekly_recap::run_weekly_recap_tick(&state).await {
+                Ok(stats) if stats.sent > 0 => {
+                    tracing::info!(
+                        sent = stats.sent,
+                        evaluated = stats.evaluated,
+                        "weekly recap tick complete"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "weekly recap tick failed"),
             }
         }
     });
