@@ -103,6 +103,7 @@ mod stats;
 mod status;
 pub(crate) mod summary;
 mod switcher;
+pub mod thread_title;
 mod transcripts;
 mod translate;
 pub mod triage;
