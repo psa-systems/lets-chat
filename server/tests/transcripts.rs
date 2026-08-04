@@ -1754,6 +1754,134 @@ async fn correction_context_is_a_bounded_rolling_window() {
     assert_eq!(ctx.last().unwrap(), "line 9", "most recent line last");
 }
 
+// ── LC-662: automatic post-call AI recap ──────────────────────────────────────
+
+/// Poll the room's messages for a recap posted by the `assistant` bot (the work
+/// is spawned from finalize, so race it rather than assume it has run).
+async fn wait_for_recap(s: &Setup, room_id: i64) -> Option<db::chat::RawMessage> {
+    for _ in 0..50 {
+        let msgs = db::chat::list_messages(&s.chat, room_id).await.unwrap();
+        if let Some(m) = msgs.into_iter().find(|m| m.body.contains("Call recap")) {
+            return Some(m);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    None
+}
+
+/// When the room has opted the assistant in, ending a call auto-posts an AI
+/// recap (summary + action items) as the assistant bot, with a link back to the
+/// full transcript - no one has to open the page and click Summarize.
+#[tokio::test]
+async fn auto_call_recap_posts_when_assistant_enabled() {
+    let s = setup_with_clients(
+        None,
+        with_llm("## Summary\nThe team planned the launch.\n\n## Action items\n- Order pizza"),
+    )
+    .await;
+    db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
+        .await
+        .unwrap();
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=lets+plan+the+launch"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    let recap = wait_for_recap(&s, s.dm_room)
+        .await
+        .expect("recap was posted");
+    assert!(
+        recap.body.contains("The team planned the launch"),
+        "recap carries the summary: {}",
+        recap.body
+    );
+    assert!(
+        recap.body.contains(&format!("/transcripts/{tid}")),
+        "recap links the full transcript: {}",
+        recap.body
+    );
+    // Authored by the assistant bot, not the call starter.
+    let bot = db::auth::find_user_by_username(&s.state.auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot exists after the recap");
+    assert_eq!(recap.user_id, bot.id, "recap is authored by the bot");
+
+    // The stored summary doubles as the dedupe marker.
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert!(t.summary.unwrap().contains("launch"), "summary persisted");
+
+    // Exactly one recap: finalize transitions once, so no double-post.
+    let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
+    let count = msgs
+        .iter()
+        .filter(|m| m.body.contains("Call recap"))
+        .count();
+    assert_eq!(count, 1, "recap posted exactly once");
+}
+
+/// Without the per-room opt-in, no recap is posted even with an LLM configured.
+#[tokio::test]
+async fn auto_call_recap_skipped_when_assistant_disabled() {
+    let s = setup_with_clients(None, with_llm("## Summary\nShould never be posted.")).await;
+    // Note: assistant_enabled defaults off; we do not enable it here.
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Give the spawned task a chance to run and (correctly) no-op at the gate.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
+    assert!(
+        !msgs.iter().any(|m| m.body.contains("Call recap")),
+        "no recap without the opt-in"
+    );
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert!(
+        t.summary.is_none(),
+        "no summary generated without the opt-in"
+    );
+}
+
 #[tokio::test]
 async fn translation_cache_upsert_and_invalidate() {
     let s = setup().await;
