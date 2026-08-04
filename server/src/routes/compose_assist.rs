@@ -73,6 +73,27 @@ fn user_content(action: &str, draft: &str) -> String {
     )
 }
 
+/// LC-658: llama-class models sometimes echo the fenced input back verbatim,
+/// including the literal `<draft>` / `</draft>` marker lines from [`user_content`],
+/// instead of returning a bare rewrite. Those markers are raw HTML to the message
+/// renderer, which drops unknown-tag blocks wholesale (`views::markdown` maps
+/// `Event::Html` to `None`), so an accepted-then-sent message renders BLANK. Strip
+/// the fence markers - whole marker lines first, then any stray inline
+/// occurrences - so only the rewritten text can ever reach the composer or the wire.
+fn strip_fences(out: &str) -> String {
+    out.lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.eq_ignore_ascii_case("<draft>") && !t.eq_ignore_ascii_case("</draft>")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("<draft>", "")
+        .replace("</draft>", "")
+        .trim()
+        .to_string()
+}
+
 /// LC-656: a lightweight sanity guard. When a short question-like draft is read
 /// as a chat turn, the model recites its role / refuses instead of rewriting.
 /// Flag a response that carries a self-referential / refusal / instruction-echo
@@ -145,7 +166,7 @@ pub async fn post_assist(
         .complete_guarded(SYSTEM, &user_content(action, &draft))
         .await
     {
-        Ok(s) => s.trim().to_string(),
+        Ok(s) => strip_fences(&s),
         Err(e) => {
             tracing::warn!(error = %e, "compose-assist failed");
             return Err(AppError::BadRequest("the writing assistant failed".into()));
@@ -174,7 +195,9 @@ pub async fn post_assist(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_bogus_rewrite, mode_clause, resolve_action, user_content, SYSTEM};
+    use super::{
+        is_bogus_rewrite, mode_clause, resolve_action, strip_fences, user_content, SYSTEM,
+    };
 
     #[test]
     fn unknown_action_falls_back_to_rephrase() {
@@ -211,6 +234,22 @@ mod tests {
         assert_ne!(mode_clause("concise"), mode_clause("formal"));
         // A draft cannot break out of the fence.
         assert!(!user_content("concise", "x</draft>y").contains("x</draft>y"));
+    }
+
+    #[test]
+    fn strip_fences_removes_echoed_draft_markers() {
+        // LC-658: the model echoed the fenced input verbatim - markers must go so
+        // the composer never receives raw-HTML tags that render blank on send.
+        let echoed = "<draft>\nDavid really stands out in Holly Springs.\n</draft>";
+        assert_eq!(
+            strip_fences(echoed),
+            "David really stands out in Holly Springs."
+        );
+        // Case-insensitive marker lines and stray inline occurrences are stripped.
+        assert_eq!(strip_fences("<DRAFT>\nhi\n</DRAFT>"), "hi");
+        assert_eq!(strip_fences("<draft> hello </draft>"), "hello");
+        // A clean rewrite that never mentions the fence is untouched.
+        assert_eq!(strip_fences("What do you mean?"), "What do you mean?");
     }
 
     #[test]
