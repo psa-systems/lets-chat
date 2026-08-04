@@ -2435,13 +2435,26 @@
   form.addEventListener('htmx:afterRequest', schedule);
   render(); // initial: restored draft (LC-64) or empty
 
-  function teardown(){
+  function teardown(evt){
+    // LC-653: `htmx:beforeCleanupElement` BUBBLES, so this also fires when an
+    // unrelated form descendant is cleaned up - notably the #composer-ai-panel
+    // swap on a compose-assist / suggested-reply run, which replaces the LC-650
+    // pending block. Tearing down then removes the highlight overlay's own input
+    // listener mid-session and freezes the backdrop: applied/typed text stops
+    // rendering (invisible behind the transparent textarea) and edits look
+    // messy. Only tear down when the element actually going away contains our
+    // textarea (i.e. the whole composer is being removed, e.g. a room switch).
+    if (evt && evt.target && evt.target.contains && !evt.target.contains(ta)) return;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     ta.removeEventListener('input', schedule);
     ta.removeEventListener('scroll', syncScroll);
     form.removeEventListener('htmx:afterRequest', schedule);
+    root2.removeEventListener('htmx:beforeCleanupElement', teardown);
   }
+  // No `{ once: true }`: a bubbled cleanup of an unrelated descendant must be
+  // ignored (above) without consuming the listener, or the real composer
+  // teardown would leak. The handler removes itself when it actually runs.
   var root2 = document.currentScript.closest('[data-lc-cleanup-root]') || form;
-  root2.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+  root2.addEventListener('htmx:beforeCleanupElement', teardown);
 })();
 </script>
