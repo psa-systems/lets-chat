@@ -74,6 +74,11 @@ attachment-alt-edit = Edit alt text
 attachment-alt-label = Alt text
 attachment-alt-placeholder = Describe this image
 attachment-alt-save = Save
+# LC-660: the polished badge + popover editor.
+attachment-alt-editor-label = Describe this image for people using screen readers
+attachment-alt-cancel = Cancel
+attachment-alt-none = No alt text
+attachment-alt-described = Has a description
 
 ## Profile hovercard (LC-298)
 hovercard-message = Message
