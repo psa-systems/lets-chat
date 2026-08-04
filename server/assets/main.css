@@ -2655,6 +2655,12 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     color: var(--content);
 }
 .lc-ai-menu-item:hover { background: var(--surface-sunken); }
+/* LC-669: divider between the rewrite modes and the read-only "Check tone". */
+.lc-ai-menu-sep {
+    height: 1px;
+    margin: 0.25rem 0.25rem;
+    background: var(--border);
+}
 
 /* LC-655: "Applied - Undo" affordance after accepting a rewrite (the applied
    text stays editable; Undo restores the original draft). */
