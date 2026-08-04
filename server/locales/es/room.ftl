@@ -537,6 +537,12 @@ compose-assist-action-grammar = Corregir gramática
 compose-assist-action-concise = Acortar
 compose-assist-action-friendly = Tono más amable
 compose-assist-action-formal = Más formal
+# LC-669: aviso de tono/claridad bajo demanda (una revisión, no una reescritura).
+compose-assist-action-tone = Revisar el tono
+compose-tone-heading = Revisión de tono
+compose-tone-checking = Revisando el tono...
+compose-tone-looks-good = Se lee claro y amable.
+compose-tone-dismiss = Descartar
 
 ## LC-548: AI suggested replies
 room-msg-suggest-reply = Sugerir respuesta
