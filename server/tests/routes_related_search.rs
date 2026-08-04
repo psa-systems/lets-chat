@@ -30,6 +30,8 @@ struct TestApp {
     app: Router,
     session: String,
     chat: SqlitePool,
+    /// LC-673: the built state, so backfill-tick tests can drive it directly.
+    state: AppState,
 }
 
 async fn app(embeddings: bool) -> TestApp {
@@ -77,9 +79,10 @@ async fn app(embeddings: bool) -> TestApp {
         .await
         .unwrap();
     TestApp {
-        app: routes::build_router(state),
+        app: routes::build_router(state.clone()),
         session,
         chat,
+        state,
     }
 }
 
@@ -174,4 +177,76 @@ async fn related_without_embeddings_is_rejected() {
         .unwrap();
     let (status, _) = get(&t, &format!("/messages/{id}/related")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// ── LC-673: embeddings backfill for pre-existing messages ─────────────────────
+
+/// The backfill embeds visible history that has no vector yet, skips
+/// system/empty/deleted messages, and drains (the next tick finds nothing).
+#[tokio::test]
+async fn backfill_embeds_unvectored_history_and_drains() {
+    let t = app(true).await;
+    let room = make_room(&t).await;
+
+    // Plain messages with no embedding (history from before embeddings was on).
+    let a = db::chat::insert_message(&t.chat, room, "alice", "quarterly roadmap review")
+        .await
+        .unwrap();
+    let b = db::chat::insert_message(&t.chat, room, "bob", "the deploy pipeline is flaky")
+        .await
+        .unwrap();
+    // Should be skipped: a system notice, an empty body, and a soft-deleted row.
+    let sys = db::chat::insert_system_message(&t.chat, room, "alice", "alice started a call")
+        .await
+        .unwrap();
+    let empty = db::chat::insert_message(&t.chat, room, "alice", "   ")
+        .await
+        .unwrap();
+    let gone = db::chat::insert_message(&t.chat, room, "bob", "delete me")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE messages SET deleted_at = datetime('now') WHERE id = ?")
+        .bind(gone)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    let n = lets_chat::routes::related::run_embedding_backfill_tick(&t.state, 50)
+        .await
+        .unwrap();
+    assert_eq!(n, 2, "only the two visible text messages are embedded");
+
+    for id in [a, b] {
+        assert!(
+            db::message_embeddings::exists(&t.chat, id).await.unwrap(),
+            "message {id} was backfilled"
+        );
+    }
+    for id in [sys, empty, gone] {
+        assert!(
+            !db::message_embeddings::exists(&t.chat, id).await.unwrap(),
+            "message {id} must be skipped"
+        );
+    }
+
+    // Backlog drained: a second tick finds nothing to do.
+    let n2 = lets_chat::routes::related::run_embedding_backfill_tick(&t.state, 50)
+        .await
+        .unwrap();
+    assert_eq!(n2, 0, "nothing left to embed");
+}
+
+/// Without an embeddings endpoint the backfill is a no-op.
+#[tokio::test]
+async fn backfill_is_a_noop_without_embeddings() {
+    let t = app(false).await;
+    let room = make_room(&t).await;
+    let id = db::chat::insert_message(&t.chat, room, "alice", "no vectors here")
+        .await
+        .unwrap();
+    let n = lets_chat::routes::related::run_embedding_backfill_tick(&t.state, 50)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+    assert!(!db::message_embeddings::exists(&t.chat, id).await.unwrap());
 }
