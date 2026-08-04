@@ -110,3 +110,6 @@ js-huddle-ring-ignore = Ignorar
 js-ai-failed = La solicitud de IA falló. Inténtalo de nuevo.
 # LC-654: inline retry button on the AI summary error state.
 js-ai-retry = Reintentar
+# LC-655: after Accepting a writing-assistant rewrite, an inline Undo restores the draft.
+js-compose-applied = Aplicado a tu mensaje
+js-compose-undo = Deshacer

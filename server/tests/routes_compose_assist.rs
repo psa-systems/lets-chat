@@ -1,8 +1,9 @@
 //! LC-532 integration: composer AI writing assistant (`/room/{id}/compose-assist`).
 //!
-//! Drives the handler over HTTP with a mock LLM: the happy path returns a panel
-//! with the suggestion + mode chips; an empty draft is refused; and with no LLM
-//! configured the endpoint is refused (the draft never leaves the device).
+//! Drives the handler over HTTP with a mock LLM: the happy path returns a
+//! preview panel with the suggestion + Accept/Regenerate/Discard (LC-655); an
+//! empty draft is refused; and with no LLM configured the endpoint is refused
+//! (the draft never leaves the device).
 
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Method, Request, StatusCode};
@@ -106,8 +107,11 @@ fn mock(canned: &str) -> Arc<dyn lets_chat::llm::LlmClient> {
     })
 }
 
+// LC-655: the panel is a preview with Accept / Regenerate / Discard and a header
+// naming the active mode; the modes moved to the composer's sparkle menu, so the
+// panel no longer renders all mode chips.
 #[tokio::test]
-async fn rephrase_returns_panel_with_suggestion_and_chips() {
+async fn rephrase_returns_preview_panel_with_actions() {
     let t = app(Some(mock("Polished version."))).await;
     let room = make_room(&t).await;
     let (status, body) = assist(&t, room, "hey can u fix this", "rephrase").await;
@@ -117,9 +121,16 @@ async fn rephrase_returns_panel_with_suggestion_and_chips() {
         "suggestion missing: {body}"
     );
     assert!(body.contains("data-lc-ai-suggestion"));
+    // Preview actions, not an auto-apply (default locale English labels).
     assert!(body.contains("data-lc-ai-apply"));
-    // The mode chips render (default locale English label).
-    assert!(body.contains("Formal"));
+    assert!(body.contains("Accept"));
+    assert!(body.contains("Regenerate"));
+    assert!(body.contains("Discard"));
+    // The header names the active mode.
+    assert!(
+        body.contains("Improve writing"),
+        "active mode label missing: {body}"
+    );
 }
 
 #[tokio::test]
