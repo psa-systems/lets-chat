@@ -949,6 +949,61 @@ pub async fn summary(
     })
 }
 
+/// LC-664: the personal-brief system prompt. Frames the transcript as data and
+/// asks for a short, second-person brief of only what concerns the named viewer.
+const BRIEF_SYSTEM: &str = "You brief one participant on a call they may have missed or joined \
+late. You are given the call transcript (each line is 'Name: what they said', led by a \
+'Participants:' line) and, above it, the NAME of the person to brief. Address that person directly \
+as 'you' and tell them only what matters to them: decisions that were made, any action items, \
+requests, or questions directed at them, and anything that mentioned or concerns them. Be concise - \
+a few short bullets. If nothing in the call specifically concerns them, say so plainly in one line \
+and give a one-sentence gist of the call. Use only what is in the transcript; never invent people, \
+names, or details.";
+
+/// POST /transcripts/{id}/brief
+/// LC-664: a per-viewer "what did I miss" brief - decisions, action items aimed
+/// at the viewer, and anything that mentioned or concerns them. Gated like the
+/// summary page (any member can read it). Personalized to the viewer, so unlike
+/// the shared summary it is NOT cached: it is per-viewer and cheap to regenerate,
+/// the same posture as the chat catch-me-up (LC-484).
+pub async fn brief(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    let Some(llm) = state.llm_client.clone() else {
+        return Err(AppError::BadRequest(
+            "transcript summarization is not configured".into(),
+        ));
+    };
+
+    let text = build_transcript_prompt_text(&state, transcript_id).await?;
+    if text.trim().is_empty() {
+        return Err(AppError::BadRequest("transcript is empty".into()));
+    }
+    // The viewer's name is DATA (the guardrail keeps it from being treated as an
+    // instruction), so the model knows who "you" refers to.
+    let name = label_for(&state, &user.id).await;
+    let user_content = format!("Person to brief: {name}\n\n{text}");
+    let md = match llm.complete_guarded(BRIEF_SYSTEM, &user_content).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript brief failed");
+            return Err(AppError::BadRequest("brief failed".into()));
+        }
+    };
+    let brief_html = crate::views::markdown::render(&md, &[], &[]);
+    html(&crate::views::transcripts::TranscriptBriefFragment {
+        transcript_id,
+        brief_html,
+    })
+}
+
 /// POST /transcripts/{id}/follow-ups
 /// LC-527: turn the transcript summary's "## Action items" into a trackable
 /// checklist posted to the call's room. Gated like the summary; 400 when the

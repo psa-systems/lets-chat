@@ -1982,6 +1982,97 @@ async fn recap_sends_speaker_roster_and_attributed_lines() {
     );
 }
 
+// ── LC-664: personal "what did I miss" brief ──────────────────────────────────
+
+/// A member gets a brief personalized to them: the model is handed the viewer's
+/// name plus the transcript, and the rendered brief comes back. A non-member is
+/// refused.
+#[tokio::test]
+async fn brief_is_personalized_to_the_viewer() {
+    let cap = Arc::new(CapturingLlm {
+        canned: "You have one action item: write the docs.".to_string(),
+        ..Default::default()
+    });
+    let llm: Arc<dyn lets_chat::llm::LlmClient> = cap.clone();
+    let s = setup_with_clients(None, Some(llm)).await;
+
+    // Start a session in the DM, then seed a segment spoken by bob (alice, the
+    // viewer, missed it). Seed via the db to skip the live-correction path.
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    db::transcripts::append_segment(&s.chat, tid, &s.b_id, "we shipped the release", None, 0)
+        .await
+        .unwrap();
+
+    // alice asks for her brief.
+    let (st, frag) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{frag}");
+    assert!(frag.contains("write the docs"), "brief rendered: {frag}");
+
+    // The model was told who to brief, with the transcript as data.
+    let seen = cap
+        .last_user
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the model received the brief request");
+    assert!(
+        seen.contains("Person to brief: alice"),
+        "brief names the viewer: {seen}"
+    );
+    assert!(
+        seen.contains("bob: we shipped the release"),
+        "brief carries the transcript: {seen}"
+    );
+
+    // A non-member cannot brief themselves on someone else's call.
+    let (st, _) = post(
+        &s.app,
+        &s.outsider_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+/// With no LLM configured the brief is refused (the card is also hidden).
+#[tokio::test]
+async fn brief_400_when_llm_disabled() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    db::transcripts::append_segment(&s.chat, tid, &s.b_id, "hello", None, 0)
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+}
+
 #[tokio::test]
 async fn translation_cache_upsert_and_invalidate() {
     let s = setup().await;
