@@ -15,9 +15,16 @@
         onclick="window.__lcInsertSlash && window.__lcInsertSlash('{{ c.name }}')">
       <span class="font-mono text-content">{{ c.usage }}</span>
       <span class="block text-xs text-content-muted truncate">{{ c.description }}</span>
+      {# LC-674: a concrete example beats the abstract syntax for complex commands. #}
+      {% if let Some(ex) = c.example.as_ref() %}<span class="block text-xs font-mono text-content-subtle truncate">e.g. {{ ex }}</span>{% endif %}
     </li>
     {% endfor %}
   </ul>
+  {# LC-674: link to the full /help reference (fills the composer with /help). #}
+  <button type="button"
+          onmousedown="event.preventDefault()"
+          onclick="window.__lcInsertSlash && window.__lcInsertSlash('help')"
+          class="block w-full border-t border-border px-3 py-1.5 text-left text-xs text-accent hover:bg-surface-sunken">{{ "room-slash-see-all"|t }}</button>
 </div>
 {% else if !query.is_empty() %}
 <div class="absolute bottom-full mb-1 w-full rounded border border-border bg-surface-elevated shadow-lg z-20 px-3 py-2 text-xs text-content-muted">
