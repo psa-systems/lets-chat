@@ -133,6 +133,26 @@ async fn rephrase_returns_preview_panel_with_actions() {
     );
 }
 
+// LC-658: llama-class models sometimes echo the fenced input back with its
+// `<draft>` / `</draft>` markers. Those are raw HTML that the message renderer
+// drops wholesale, so an accepted-then-sent message would be blank. The handler
+// must strip the markers before the suggestion reaches the panel.
+#[tokio::test]
+async fn fenced_echo_has_its_draft_markers_stripped() {
+    let t = app(Some(mock("<draft>\nHello there team.\n</draft>"))).await;
+    let room = make_room(&t).await;
+    let (status, body) = assist(&t, room, "hello there team", "friendly").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("Hello there team."),
+        "suggestion missing: {body}"
+    );
+    assert!(
+        !body.contains("&lt;draft&gt;") && !body.contains("<draft>"),
+        "fence markers leaked into the panel: {body}"
+    );
+}
+
 #[tokio::test]
 async fn empty_draft_is_rejected() {
     let t = app(Some(mock("x"))).await;
