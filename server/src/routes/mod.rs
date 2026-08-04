@@ -105,6 +105,7 @@ pub(crate) mod summary;
 mod switcher;
 mod transcripts;
 mod translate;
+pub mod triage;
 mod unfurl;
 mod uploads;
 mod user_groups;
