@@ -162,9 +162,15 @@ async fn ask_posts_answer_as_assistant_bot_when_enabled() {
     .await
     .unwrap();
     assert!(body.contains("The answer is 42."), "carries the LLM answer");
+    // LC-676 #3: the asker's question is a quiet quote line above the answer.
     assert!(
-        body.contains("asked:") && body.contains("what is the answer"),
-        "quotes the asker's question"
+        body.contains("> ") && body.contains("what is the answer"),
+        "quotes the asker's question: {body}"
+    );
+    // LC-676 #1: the "thinking" placeholder was replaced in place by the answer.
+    assert!(
+        !body.contains("is thinking"),
+        "placeholder was replaced, not left behind: {body}"
     );
 
     // The author is the assistant bot.
