@@ -150,18 +150,31 @@ async fn ask_posts_answer_as_assistant_bot_when_enabled() {
         .unwrap();
 
     let status = post_msg(&t.app, &t.alice_session, room, "/ask what is the answer").await;
+    // LC-676: /ask returns immediately (posts the "thinking" placeholder) and the
+    // answer is filled in by a background task, so poll for the resolved body.
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // Exactly one message: the assistant's answer (the /ask itself is not echoed).
+    // Exactly one message throughout: the placeholder is edited in place.
     assert_eq!(msg_count(&t.chat, room).await, 1);
-    let (body, author): (String, String) = sqlx::query_as(
-        "SELECT body, user_id FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1",
-    )
-    .bind(room)
-    .fetch_one(&t.chat)
-    .await
-    .unwrap();
-    assert!(body.contains("The answer is 42."), "carries the LLM answer");
+    let (mut body, mut author) = (String::new(), String::new());
+    for _ in 0..50 {
+        let row: (String, String) = sqlx::query_as(
+            "SELECT body, user_id FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1",
+        )
+        .bind(room)
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+        if row.0.contains("The answer is 42.") {
+            (body, author) = row;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        body.contains("The answer is 42."),
+        "carries the LLM answer: {body}"
+    );
     // LC-676 #3: the asker's question is a quiet quote line above the answer.
     assert!(
         body.contains("> ") && body.contains("what is the answer"),
