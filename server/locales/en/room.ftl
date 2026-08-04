@@ -378,6 +378,11 @@ room-rpreview-confirm = Confirm
 room-slash-help-heading = Slash commands
 room-slash-dismiss = Dismiss
 room-slash-no-match = No matching commands
+# LC-674: slash-command discoverability - toolbar button, "see all" link, tip.
+room-composer-commands = Commands (/)
+room-slash-see-all = See all commands
+room-slash-tip = Tip: type / for commands, @ to mention, : for emoji.
+room-slash-tip-dismiss = Dismiss tip
 
 ## Notify dropdown
 room-notify-unmuted = Unmuted
