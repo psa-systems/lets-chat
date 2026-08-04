@@ -70,7 +70,7 @@ mod polls;
 mod push;
 mod reactions;
 mod read_all;
-mod related;
+pub mod related;
 mod reminders;
 mod report;
 mod retention;
