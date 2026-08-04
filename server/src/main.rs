@@ -242,6 +242,7 @@ async fn main() {
     spawn_polls_closer(state.clone());
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_room_digest_dispatcher(state.clone());
+    spawn_embedding_backfill_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
     spawn_weekly_recap_dispatcher(state.clone());
     spawn_message_retention_sweeper(state.clone());
@@ -539,6 +540,31 @@ fn spawn_weekly_recap_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "weekly recap tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-673: backfill embeddings for messages posted before the embeddings
+/// endpoint was configured, so semantic search covers history and not just
+/// messages sent after it was turned on. A slow tick embeds a small batch per
+/// pass; a no-op once the backlog is drained or when no embeddings endpoint is
+/// set. The per-message embed is best-effort (a transient endpoint error leaves
+/// the message for a later tick).
+fn spawn_embedding_backfill_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 60;
+    const BATCH: i64 = 50;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::routes::related::run_embedding_backfill_tick(&state, BATCH).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(embedded = n, "embedding backfill batch complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "embedding backfill tick failed"),
             }
         }
     });

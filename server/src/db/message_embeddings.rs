@@ -57,6 +57,31 @@ pub async fn get(pool: &SqlitePool, message_id: i64) -> Result<Option<Vec<f32>>,
     }))
 }
 
+/// LC-673: up to `limit` visible, non-system messages with a non-empty body and
+/// no embedding yet, newest-first. Drives the embeddings backfill for history
+/// posted before an embeddings endpoint was configured. Matches the timeline's
+/// visibility filter (`deleted_at IS NULL AND quarantined = 0`) so the backfill
+/// never embeds a message the search would not surface anyway.
+pub async fn list_unembedded(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<(i64, i64, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT m.id, m.room_id, m.body FROM messages m \
+         LEFT JOIN message_embeddings e ON e.message_id = m.id \
+         WHERE e.message_id IS NULL AND m.is_system = 0 \
+           AND m.deleted_at IS NULL AND m.quarantined = 0 AND TRIM(m.body) <> '' \
+         ORDER BY m.id DESC LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("id"), r.get("room_id"), r.get("body")))
+        .collect())
+}
+
 /// Load every stored embedding for a room, optionally excluding one message
 /// (the query message itself). Decoded into vectors ready for ranking.
 pub async fn list_for_room(

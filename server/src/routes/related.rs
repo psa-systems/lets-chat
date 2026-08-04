@@ -60,6 +60,29 @@ pub(crate) async fn embed_message(
     db::message_embeddings::upsert(&state.chat, message_id, room_id, vec.len() as i64, &bytes).await
 }
 
+/// LC-673: embed a batch of messages that have no embedding yet - history from
+/// before the embeddings endpoint was configured, which is otherwise invisible
+/// to semantic search. Best-effort per message ([`embed_message`] swallows
+/// endpoint errors), so a transient failure just leaves that message for a later
+/// tick. Returns how many messages were processed this batch; `0` means the
+/// backlog is drained (or no embeddings client is configured), which the caller
+/// uses to idle. Newest-first, since recent history is the likeliest search
+/// target.
+pub async fn run_embedding_backfill_tick(
+    state: &AppState,
+    batch: i64,
+) -> Result<usize, sqlx::Error> {
+    if state.embedding_client.is_none() {
+        return Ok(0);
+    }
+    let pending = db::message_embeddings::list_unembedded(&state.chat, batch).await?;
+    let n = pending.len();
+    for (id, room_id, body) in pending {
+        embed_message(state, id, room_id, &body).await?;
+    }
+    Ok(n)
+}
+
 /// One related-message row.
 struct RelatedItem {
     room_id: i64,
