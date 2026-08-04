@@ -1694,6 +1694,10 @@ pub fn build_router(state: AppState) -> Router {
             post(transcripts::summary),
         )
         .route(
+            "/transcripts/{transcript_id}/brief",
+            post(transcripts::brief),
+        )
+        .route(
             "/transcripts/{transcript_id}/follow-ups",
             post(transcripts::create_followups),
         )

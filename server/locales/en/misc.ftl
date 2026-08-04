@@ -91,6 +91,13 @@ transcript-summary-working = Summarizing...
 transcript-summary-scope = Summary of this call
 transcript-summary-reading = Reading the transcript...
 transcript-summary-disclaimer = AI-generated from this transcript. May be incomplete.
+# LC-664: per-viewer "what did I miss" brief.
+transcript-brief-heading = What did I miss
+transcript-brief-scope = Personalized for you
+transcript-brief-generate = Catch me up
+transcript-brief-regenerate = Regenerate
+transcript-brief-reading = Reading the transcript...
+transcript-brief-disclaimer = AI-generated and personalized to you. May be incomplete.
 
 ## Activity page
 activity-page-title = Activity
