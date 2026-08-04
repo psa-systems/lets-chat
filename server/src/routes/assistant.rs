@@ -181,38 +181,67 @@ pub(crate) async fn handle_ask(
     let header = format!("> {asker_label}: {question}");
 
     // LC-676 #1: post a "thinking..." placeholder as the bot and broadcast it
-    // immediately, so the asker sees the assistant working right away. The LLM
-    // call then runs (the /ask POST is held open); when it returns, the
-    // placeholder body is replaced in place and re-broadcast. No spawn, no
-    // "(edited)" marker (replace_message_body is silent).
+    // immediately, so the asker sees the assistant working right away.
     let bot = assistant_bot(state).await?;
     let placeholder = format!("{header}\n\n{THINKING_BODY}");
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &placeholder).await?;
     super::room::finalize_message_send(state, room, &bot, msg_id, &placeholder, None).await?;
 
-    let context = build_context(state, room, question).await?;
+    // Run the (multi-second) LLM call OFF the request path so the /ask POST
+    // returns now. Otherwise it holds open for the whole answer, and the
+    // composer - which clears its text + slash hint on the POST's return - stays
+    // full and the hint hangs until then. The placeholder is replaced in place
+    // when the answer is ready (silent update: no "(edited)" marker).
+    let st = state.clone();
+    let room = room.clone();
+    let question = question.to_string();
+    tokio::spawn(async move {
+        let final_body = build_ask_answer(&st, &room, &question, &header, &*llm).await;
+        if let Err(e) = db::chat::replace_message_body(&st.chat, msg_id, &final_body).await {
+            tracing::warn!(error = %e, message_id = msg_id, "failed to store assistant answer");
+            return;
+        }
+        st.hub.broadcast_to_room(
+            room.id,
+            &crate::ws::events::ChatEvent::MessageEdited {
+                message_id: msg_id,
+                room_id: room.id,
+                new_body: final_body,
+                edited_at: String::new(),
+            },
+        );
+    });
+    Ok(())
+}
+
+/// LC-676: retrieve context, ask the LLM, and format the final answer body
+/// (keeping the quiet `header` attribution line). Returns a friendly, italic
+/// error body on any failure so the "thinking..." placeholder always resolves.
+async fn build_ask_answer(
+    state: &AppState,
+    room: &Room,
+    question: &str,
+    header: &str,
+    llm: &dyn crate::llm::LlmClient,
+) -> String {
+    let context = match build_context(state, room, question).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "assistant context build failed");
+            return format!(
+                "{header}\n\n_The assistant could not answer right now. Try again later._"
+            );
+        }
+    };
     let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
-    let final_body = match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
+    match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
         Ok(a) if !a.trim().is_empty() => format!("{header}\n\n{}", a.trim()),
         Ok(_) => format!("{header}\n\n_The assistant returned an empty answer._"),
         Err(e) => {
             tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
             format!("{header}\n\n_The assistant could not answer right now. Try again later._")
         }
-    };
-
-    // Replace the placeholder with the resolved answer/error and re-broadcast.
-    db::chat::replace_message_body(&state.chat, msg_id, &final_body).await?;
-    state.hub.broadcast_to_room(
-        room.id,
-        &crate::ws::events::ChatEvent::MessageEdited {
-            message_id: msg_id,
-            room_id: room.id,
-            new_body: final_body.clone(),
-            edited_at: String::new(),
-        },
-    );
-    Ok(())
+    }
 }
 
 #[cfg(test)]
