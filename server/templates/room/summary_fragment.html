@@ -3,7 +3,7 @@
    targets the same container by id so a re-run replaces this fragment in
    place. LC-652: break-words so a long token wraps within the panel; a tidy
    footer (disclaimer + regenerate) instead of a bare button. #}
-<div class="lc-md text-content text-sm break-words">{{ summary_html|safe }}</div>
+<div class="lc-ai-enter lc-md text-content text-sm break-words">{{ summary_html|safe }}</div>
 <div class="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2">
   <span class="min-w-0 flex-1 text-[11px] leading-tight text-content-subtle">{{ "summary-disclaimer"|t }}</span>
   {# LC-652: the regenerate action was missing the LC-650 pending state; add it
@@ -13,6 +13,8 @@
           hx-target="#{{ target_id }}" hx-swap="innerHTML"
           hx-disabled-elt="this"
           data-lc-ai-pending
+          data-lc-ai-skeleton="summary"
+          data-lc-ai-read-label="{{ "ai-reading-messages"|t }}"
           data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
           data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
           class="flex-none inline-flex items-center gap-1 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
