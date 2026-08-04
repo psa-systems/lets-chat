@@ -18,7 +18,9 @@ use crate::i18n::translate_current;
 use crate::models::User;
 use crate::perms::room_can_manage_overrides;
 use crate::state::AppState;
-use crate::views::room_moderators::{RoomModeratorRow, RoomModeratorsPage, RoomOverrideEntry};
+use crate::views::room_moderators::{
+    RoomModeratorRow, RoomModeratorsPage, RoomOverrideEntry, SettingsToggleFragment,
+};
 use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
 
@@ -234,6 +236,46 @@ pub struct PostingPolicyForm {
     pub policy: String,
 }
 
+/// LC-677: the re-rendered on/off toggle for the assistant/digest/stage
+/// switches. Returned by those handlers so a click updates the switch, label,
+/// and hidden next-value in place (no reload). `field` is the route segment.
+fn saved_toggle(room_id: i64, field: &'static str, enabled: bool) -> SettingsToggleFragment {
+    let (aria, on_l, on_t, off_l, off_t) = match field {
+        "assistant" => (
+            "room-assistant-heading",
+            "room-assistant-on-label",
+            "room-assistant-on-text",
+            "room-assistant-off-label",
+            "room-assistant-off-text",
+        ),
+        "digest" => (
+            "room-digest-heading",
+            "room-digest-on-label",
+            "room-digest-on-text",
+            "room-digest-off-label",
+            "room-digest-off-text",
+        ),
+        _ => (
+            "room-stage-heading",
+            "room-stage-on-label",
+            "room-stage-on-text",
+            "room-stage-off-label",
+            "room-stage-off-text",
+        ),
+    };
+    SettingsToggleFragment {
+        room_id,
+        field,
+        enabled,
+        aria_label: translate_current(aria),
+        on_label: translate_current(on_l),
+        on_text: translate_current(on_t),
+        off_label: translate_current(off_l),
+        off_text: translate_current(off_t),
+        status: translate_current("room-policy-saved"),
+    }
+}
+
 /// POST /room/{id}/posting-policy
 ///
 /// LC-85: flip a room into / out of read-only or moderators-only mode.
@@ -410,10 +452,7 @@ pub async fn post_assistant(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current(
-            "room-policy-saved",
-        )))?
-        .into_response());
+        return Ok(html(&saved_toggle(room_id, "assistant", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
@@ -449,10 +488,7 @@ pub async fn post_digest(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current(
-            "room-policy-saved",
-        )))?
-        .into_response());
+        return Ok(html(&saved_toggle(room_id, "digest", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
@@ -486,10 +522,7 @@ pub async fn post_stage(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current(
-            "room-policy-saved",
-        )))?
-        .into_response());
+        return Ok(html(&saved_toggle(room_id, "stage", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
