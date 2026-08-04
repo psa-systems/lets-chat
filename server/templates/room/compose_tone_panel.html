@@ -1,0 +1,19 @@
+{# LC-669: read-only tone/clarity nudge. Swapped into #composer-ai-panel (inside
+   the composer card, above the textarea). Not a rewrite - there is nothing to
+   Accept; the writer reads the one-line note and edits or sends as they see fit.
+   Dismissible. It only ever runs when the writer picks "Check tone" from the
+   sparkle menu - never automatically on send, and it never blocks sending. #}
+<div data-lc-ai-panel class="mt-2 overflow-hidden rounded-lg border border-border bg-surface-elevated text-sm">
+  <header class="flex items-center gap-1.5 border-b border-border px-2 py-1.5 text-xs">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 text-accent" aria-hidden="true">
+      <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5z"/>
+    </svg>
+    <span class="font-medium text-content">{{ "compose-tone-heading"|t }}</span>
+  </header>
+  <div class="p-2">
+    <div class="whitespace-pre-wrap break-words rounded border border-border bg-surface px-2 py-1.5 text-content">{{ note }}</div>
+    <div class="mt-2 flex items-center">
+      <button type="button" data-lc-ai-dismiss class="ml-auto text-xs text-content-muted hover:underline">{{ "compose-tone-dismiss"|t }}</button>
+    </div>
+  </div>
+</div>
