@@ -172,6 +172,16 @@ async fn author_sets_alt_and_gets_rerendered_message() {
         body.contains("a napping cat"),
         "re-rendered alt missing: {body}"
     );
+    // LC-660: the saved text lands on the real image `alt` attribute (the
+    // accessibility payoff), and the state badge flips to the "set" variant.
+    assert!(
+        body.contains(r#"alt="a napping cat""#),
+        "alt not applied to the image attribute: {body}"
+    );
+    assert!(
+        body.contains("lc-alt-badge--set"),
+        "badge did not reflect the present state: {body}"
+    );
 }
 
 #[tokio::test]
