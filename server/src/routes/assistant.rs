@@ -39,8 +39,9 @@ could not find it in this room rather than guessing. Be concise and use Markdown
 Do not invent facts, links, or quotes.";
 
 /// Resolve (or lazily create) the shared `assistant` bot user and return it as
-/// a `User` suitable for `finalize_message_send`.
-async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
+/// a `User` suitable for `finalize_message_send`. LC-662: also used by the
+/// automatic post-call recap (`routes::transcripts`), which posts as the same bot.
+pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
     if let Some(rec) = db::auth::find_user_by_username(&state.auth, ASSISTANT_USERNAME).await? {
         return Ok(rec.into());
     }
