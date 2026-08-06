@@ -171,18 +171,25 @@ pub async fn get_search(
             if !db::chat::is_room_accessible(&state.chat, rid, &user.id, is_admin).await? {
                 return Err(AppError::Forbidden);
             }
-            let query_text = if parsed.text.trim().is_empty() {
-                trimmed
-            } else {
-                parsed.text.as_str()
-            };
-            if let Some(rows) = semantic_rows(&state, rid, query_text).await {
-                let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
-                let rows: Vec<_> = rows
-                    .into_iter()
-                    .filter(|r| !blocked.contains(&r.user_id))
-                    .collect();
-                return render_results(&state, &user, trimmed, rows).await;
+            // LC-679: semantic ranking is behind the runtime flag + role gate. An
+            // ungated viewer silently falls through to the FTS keyword path below
+            // rather than getting a 403 - search is a core feature, and the only
+            // difference here is the embeddings-powered ranking.
+            if super::ai_gate::can_use_embeddings_in_room(&state, rid, &user).await? {
+                let query_text = if parsed.text.trim().is_empty() {
+                    trimmed
+                } else {
+                    parsed.text.as_str()
+                };
+                if let Some(rows) = semantic_rows(&state, rid, query_text).await {
+                    let blocked =
+                        db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+                    let rows: Vec<_> = rows
+                        .into_iter()
+                        .filter(|r| !blocked.contains(&r.user_id))
+                        .collect();
+                    return render_results(&state, &user, trimmed, rows).await;
+                }
             }
         }
     }

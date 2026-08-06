@@ -49,6 +49,12 @@ pub(crate) async fn embed_message(
     let Some(client) = state.embedding_client.clone() else {
         return Ok(());
     };
+    // LC-679: the runtime kill switch also halts background message embedding, so
+    // the whole embeddings surface goes dark when the flag is off (flag-only; no
+    // user context on this populator path).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(());
+    }
     let vec = match client.embed(text).await {
         Ok(v) => v,
         Err(e) => {
@@ -118,6 +124,9 @@ pub async fn get_related(
     if !db::chat::is_room_accessible(&state.chat, source.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate for the embeddings surface (403 for
+    // an unprivileged/flag-off caller).
+    super::ai_gate::require_embeddings_in_room(&state, source.room_id, &user).await?;
 
     // Source vector: prefer the stored one; otherwise embed on demand (the
     // background populator may not have reached this message yet).

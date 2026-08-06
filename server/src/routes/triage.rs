@@ -84,6 +84,11 @@ pub async fn run_triage(
     let Some(llm) = state.llm_client.clone() else {
         return Ok(None);
     };
+    // LC-679: the runtime kill switch silences background triage too (flag-only;
+    // no user context on this classify path).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(None);
+    }
     let verdict = match llm.complete_guarded(CLASSIFY_SYSTEM, text).await {
         Ok(s) => s,
         Err(e) => {

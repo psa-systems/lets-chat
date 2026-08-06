@@ -152,6 +152,8 @@ pub async fn post_suggest_reply(
     if !db::chat::is_room_accessible(&state.chat, message.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, message.room_id, &user).await?;
 
     // Window of recent top-level turns ending at (and including) the target.
     // `list_recent_messages` is newest-first and top-level-only; a thread reply
