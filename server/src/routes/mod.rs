@@ -580,6 +580,8 @@ pub(crate) async fn load_message_view_for_viewer(
         quote_preview,
         suppress_quote_preview: false,
         is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
             .await
             .ok()

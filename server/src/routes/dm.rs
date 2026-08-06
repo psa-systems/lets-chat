@@ -306,6 +306,8 @@ pub async fn get_dm(
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             suppress_quote_preview: false,
             is_system: m.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
@@ -326,6 +328,10 @@ pub async fn get_dm(
             actor: meta.actor.clone(),
         });
     }
+
+    // LC-680: collapse runs of consecutive call/system events into one quiet,
+    // expandable block so they stop drowning the human conversation.
+    crate::views::room::group_system_events(&mut messages);
 
     // Compute the "Seen HH:MM" caption for the most recent own-authored
     // message that the peer has read. Gated symmetrically: both viewer and

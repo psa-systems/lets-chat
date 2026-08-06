@@ -170,6 +170,9 @@ room-nickname-clear = Borrar
 room-wiki-label = Wiki (Markdown)
 
 ## Message row
+# LC-680: collapsed run of consecutive call/system events. %n% is the event count.
+room-callgroup-summary = %n% eventos de llamada
+room-callgroup-transcript = 📄 Transcripcion
 room-msg-unread-divider = Mensajes no leidos
 # LC-294: floating pill that scrolls back to the unread divider.
 room-jump-unread-label = No leidos
