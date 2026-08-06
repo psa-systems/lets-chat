@@ -162,19 +162,26 @@
   {# LC-674: a one-line, dismissible discoverability tip - surfaces that "/" opens
      commands (and @ mentions, : emoji) for users who never learned to type "/".
      Hidden once dismissed (persisted in localStorage); the inline script reveals
-     it otherwise. Rendered hidden so a dismissed tip never flashes on load. #}
-  <div id="lc-slash-tip" hidden
+     it otherwise.
+     LC-678: visibility is driven by an inline `display:none`, NOT the `hidden`
+     attribute. The row carries Tailwind's `flex` class, and `.flex`
+     (author stylesheet) always beats `[hidden]{display:none}` (UA stylesheet)
+     regardless of specificity - so `hidden` was inert and the × looked dead.
+     An inline style outranks the class, so the reveal clears it to show and the
+     dismiss removes the node entirely (collapsing the row + its `mb-1` cleanly,
+     no leftover blank band). #}
+  <div id="lc-slash-tip" style="display:none"
        class="mb-1 flex items-center gap-2 rounded border border-border bg-surface-sunken px-2 py-1 text-xs text-content-muted">
     <span class="flex-1 min-w-0">{{ "room-slash-tip"|t }}</span>
     <button type="button" aria-label="{{ "room-slash-tip-dismiss"|t }}"
-            onclick="try{localStorage.setItem('lcSlashTipDismissed','1')}catch(e){} var t=document.getElementById('lc-slash-tip'); if(t)t.hidden=true;"
+            onclick="try{localStorage.setItem('lcSlashTipDismissed','1')}catch(e){} var t=document.getElementById('lc-slash-tip'); if(t)t.remove();"
             class="flex-none text-content-subtle hover:text-content-muted leading-none">&times;</button>
   </div>
   <script>
     (function(){
       try { if (localStorage.getItem('lcSlashTipDismissed')) return; } catch (e) {}
       var t = document.getElementById('lc-slash-tip');
-      if (t) t.hidden = false;
+      if (t) t.style.removeProperty('display');
     })();
   </script>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
