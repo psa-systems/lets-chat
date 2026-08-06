@@ -31,6 +31,8 @@ pub async fn post_translate(
     if !db::chat::is_room_accessible(&state.chat, msg.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, msg.room_id, &user).await?;
     let body = msg.body.trim();
     if body.is_empty() {
         return Err(AppError::BadRequest("nothing to translate".into()));

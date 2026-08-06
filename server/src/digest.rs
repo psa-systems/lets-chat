@@ -432,6 +432,11 @@ async fn gist_subject(
     name_map: &HashMap<String, (String, Option<String>)>,
 ) -> Option<String> {
     let llm = state.llm_client.clone()?;
+    // LC-679: the runtime kill switch also silences the AI digest-subject gist;
+    // the digest falls back to its plain count subject when off.
+    if !crate::routes::ai_gate::flag_on(state).await {
+        return None;
+    }
     let text = build_gist_text(mentions, dms, name_map);
     if text.trim().is_empty() {
         return None;

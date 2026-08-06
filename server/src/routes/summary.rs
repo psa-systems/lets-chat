@@ -94,6 +94,9 @@ async fn require_access(state: &AppState, user: &User, room_id: i64) -> Result<(
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: every caller of this helper is an LLM catch-up route, so fold in
+    // the runtime flag + role gate here - 403 for an unprivileged/flag-off user.
+    super::ai_gate::require_llm_in_room(state, room_id, user).await?;
     Ok(())
 }
 

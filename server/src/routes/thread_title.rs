@@ -47,6 +47,11 @@ pub async fn run_thread_title(
     let Some(llm) = state.llm_client.clone() else {
         return Ok(None);
     };
+    // LC-679: the runtime kill switch silences background thread-titling too
+    // (flag-only; no user context on this path).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(None);
+    }
     // Only ever title once.
     if db::chat::get_thread_title(&state.chat, parent_id)
         .await?

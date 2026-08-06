@@ -125,6 +125,10 @@ async fn setup_with_clients(
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-679: opt this AI-feature test into the runtime flag (default off).
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
 
     let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();

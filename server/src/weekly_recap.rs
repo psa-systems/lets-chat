@@ -38,6 +38,10 @@ pub async fn run_weekly_recap_tick(state: &AppState) -> Result<RecapStats, AppEr
     let Some(llm) = state.llm_client.clone() else {
         return Ok(stats);
     };
+    // LC-679: the runtime kill switch also halts the weekly-recap tick.
+    if !crate::routes::ai_gate::flag_on(state).await {
+        return Ok(stats);
+    }
     let candidates = db::auth::weekly_recap_candidates(&state.auth).await?;
     if candidates.is_empty() {
         return Ok(stats);

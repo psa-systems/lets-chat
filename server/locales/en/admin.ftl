@@ -288,6 +288,14 @@ admin-settings-maintenance-enable-note = Non-admins see a 503 page; admins keep 
 admin-settings-maintenance-message-label = Message shown to users
 admin-settings-maintenance-message-placeholder = Back at 17:00 UTC; upgrading the database.
 admin-settings-maintenance-save = Save maintenance mode
+# LC-679: runtime LLM/AI feature flag (kill switch).
+admin-settings-llm-heading = AI features (LLM / Ollama)
+admin-settings-llm-note = Runtime kill switch for the whole AI surface (writing assistant, catch-up, /ask, translate, suggested replies, semantic search, transcript summaries). Off by default. When on, the features are exposed only to site admins, enclave owners/admins and room moderators; everyone else sees no trace. The first request after the model has been idle can take several seconds to warm up; that is expected.
+admin-settings-llm-enable = Enable AI features
+admin-settings-llm-enable-note = Takes effect immediately, no restart. Leave off in production until the team is ready to support it.
+admin-settings-llm-save = Save AI setting
+admin-settings-llm-unconfigured-title = No LLM endpoint configured.
+admin-settings-llm-unconfigured-body = The flag stays inert until an LLM endpoint is set via
 admin-settings-smtp-heading = SMTP (outbound mail)
 admin-settings-smtp-note-1 = SMTP is configured via environment variables, not the admin UI. Set
 admin-settings-smtp-note-2 = and the optional

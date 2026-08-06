@@ -173,7 +173,9 @@ pub async fn get_page(
         slowmode_seconds,
         retention_days,
         assistant_enabled,
-        assistant_available: state.llm_available(),
+        // LC-679: the Manage page is already restricted to room managers (the
+        // privileged set), so the AI-assistance toggle reflects flag + config.
+        assistant_available: super::ai_gate::flag_on(&state).await && state.llm_available(),
         digest_enabled,
         stage_enabled,
         automations: &automations,

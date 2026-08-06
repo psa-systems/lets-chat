@@ -288,6 +288,14 @@ admin-settings-maintenance-enable-note = Los no administradores ven una pagina 5
 admin-settings-maintenance-message-label = Mensaje mostrado a los usuarios
 admin-settings-maintenance-message-placeholder = De vuelta a las 17:00 UTC; actualizando la base de datos.
 admin-settings-maintenance-save = Guardar modo de mantenimiento
+# LC-679: interruptor de las funciones de IA (LLM).
+admin-settings-llm-heading = Funciones de IA (LLM / Ollama)
+admin-settings-llm-note = Interruptor en tiempo de ejecucion para toda la superficie de IA (asistente de escritura, ponerse al dia, /ask, traducir, respuestas sugeridas, busqueda semantica, resumenes de transcripciones). Desactivado por defecto. Cuando esta activo, las funciones solo se muestran a administradores del sitio, propietarios/administradores de enclave y moderadores de sala; los demas no ven ningun rastro. La primera solicitud tras un periodo inactivo puede tardar varios segundos en calentarse; es normal.
+admin-settings-llm-enable = Activar funciones de IA
+admin-settings-llm-enable-note = Surte efecto de inmediato, sin reiniciar. Dejalo desactivado en produccion hasta que el equipo pueda darle soporte.
+admin-settings-llm-save = Guardar ajuste de IA
+admin-settings-llm-unconfigured-title = No hay endpoint de LLM configurado.
+admin-settings-llm-unconfigured-body = El interruptor no tiene efecto hasta configurar un endpoint de LLM mediante
 admin-settings-smtp-heading = SMTP (correo saliente)
 admin-settings-smtp-note-1 = SMTP se configura mediante variables de entorno, no en la interfaz de administracion. Define
 admin-settings-smtp-note-2 = y el par opcional
