@@ -449,6 +449,8 @@ pub async fn get_room(
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             suppress_quote_preview,
             is_system: m.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
@@ -469,6 +471,10 @@ pub async fn get_room(
             actor: meta.actor.clone(),
         });
     }
+
+    // LC-680: collapse runs of consecutive call/system events into one quiet,
+    // expandable block so they stop drowning the human conversation.
+    crate::views::room::group_system_events(&mut messages);
 
     // Mark the latest message as read for this viewer and notify other tabs
     // of the same user (and any other subscribers in the room) so badges
@@ -2528,6 +2534,8 @@ pub async fn patch_message(
         quote_preview,
         suppress_quote_preview: false,
         is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
             .await
             .ok()
@@ -2688,6 +2696,8 @@ pub async fn get_thread_panel(
         quote_preview: parent_quote_preview,
         suppress_quote_preview: false,
         is_system: parent.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: if poll_ids.contains(&parent.id) {
             crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
                 .await
@@ -2767,6 +2777,8 @@ pub async fn get_thread_panel(
             quote_preview: None,
             suppress_quote_preview: false,
             is_system: r.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&r_id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
                     .await
