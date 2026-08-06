@@ -172,6 +172,19 @@ pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Ro
     Ok(row.as_ref().map(map_room))
 }
 
+/// LC-679: the enclave a room belongs to, or `None` for a DM / enclave-less
+/// room. Used by the AI feature gate to resolve enclave Owner/Admin scope.
+pub async fn room_enclave_id(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
+    let row = sqlx::query("SELECT enclave_id FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
+}
+
 pub async fn list_messages(
     pool: &sqlx::SqlitePool,
     room_id: i64,

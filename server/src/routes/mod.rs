@@ -28,6 +28,7 @@ mod acks;
 mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
+pub(crate) mod ai_gate;
 mod api;
 mod api_tokens;
 pub(crate) mod assistant;
