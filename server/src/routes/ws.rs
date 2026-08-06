@@ -1294,6 +1294,8 @@ async fn render_new_message(
         quote_preview,
         suppress_quote_preview: false,
         is_system: message.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
             .await
             .ok()
@@ -1458,6 +1460,8 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         quote_preview,
         suppress_quote_preview: false,
         is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
             .await
             .ok()
@@ -1564,6 +1568,8 @@ async fn render_thread_reply(
         quote_preview: None,
         suppress_quote_preview: false,
         is_system: message.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
             .await
             .ok()

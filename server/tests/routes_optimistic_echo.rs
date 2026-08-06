@@ -383,6 +383,8 @@ fn user_view(body: &str) -> MessageView {
         quote_preview: None,
         suppress_quote_preview: false,
         is_system: false,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: None,
         follow_up: None,
         author_is_bot: false,
