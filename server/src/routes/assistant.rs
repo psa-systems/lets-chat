@@ -148,6 +148,9 @@ pub(crate) async fn handle_ask(
             "The AI assistant is not configured on this server.".into(),
         ));
     };
+    // LC-679: runtime flag + role gate. 403 for an unprivileged/flag-off caller
+    // so /ask is refused on the server, not merely hidden from the slash menu.
+    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
     if !db::chat::get_room_assistant_enabled(&state.chat, room.id).await? {
         return Err(AppError::BadRequest(
             "The AI assistant is not enabled in this room.".into(),

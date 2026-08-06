@@ -643,6 +643,13 @@ pub async fn get_room(
     // starred list already loaded for the sidebar rather than re-querying.
     let is_starred = sidebar_starred_rooms.iter().any(|r| r.id == room.id);
 
+    // LC-679: AI availability is now the runtime, role-scoped gate (flag ON &&
+    // configured && viewer privileged for this room), not just config presence.
+    // Compute the viewer's privilege and the flag once, then feed both the LLM
+    // and embeddings UI booleans so an ungated viewer sees no AI affordances.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_privileged = super::ai_gate::privileged_in_room(&state, room_id, &user).await?;
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -663,9 +670,11 @@ pub async fn get_room(
         can_post,
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
-        llm_available: state.llm_available(),
-        embeddings_available: state.embeddings_available(),
+        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
         vision_available: crate::vision::available(),
+        // LC-679: the teaser stays a config-presence nudge ("set LETS_CHAT_LLM_URL"),
+        // not a flag hint - the runtime flag lives in /admin/settings instead.
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
@@ -2808,6 +2817,9 @@ pub async fn get_thread_panel(
 
     // LC-668: the AI thread title (if generated), shown as the panel heading.
     let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
+    // LC-679: role-scoped AI gate for the thread panel (same as the room render).
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_privileged = super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
@@ -2815,8 +2827,8 @@ pub async fn get_thread_panel(
         thread_title,
         is_following,
         is_muted,
-        llm_available: state.llm_available(),
-        embeddings_available: state.embeddings_available(),
+        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
     };
     html(&fragment)
 }

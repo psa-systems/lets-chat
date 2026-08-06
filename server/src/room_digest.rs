@@ -46,6 +46,10 @@ pub async fn run_digest_tick(state: &AppState) -> Result<DigestStats, AppError> 
     let Some(llm) = state.llm_client.clone() else {
         return Ok(stats);
     };
+    // LC-679: the runtime kill switch also halts the room-digest tick.
+    if !crate::routes::ai_gate::flag_on(state).await {
+        return Ok(stats);
+    }
 
     let due = db::chat::rooms_due_for_digest(&state.chat, DIGEST_INTERVAL_HOURS).await?;
     for room_id in due {

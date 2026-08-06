@@ -86,12 +86,17 @@ pub async fn post_notify_prefs(
     };
 
     let is_starred = db::starred_rooms::is_starred(&state.auth, &user.id, room.id).await?;
+    // LC-679: role-scoped AI gate for the room-header AI affordances.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_llm = ai_flag_on
+        && state.llm_available()
+        && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     let fragment = RoomHeaderFragment {
         room: &room,
         mute_mode: mode.as_str(),
         is_starred,
         can_manage_overrides,
-        llm_available: state.llm_available(),
+        llm_available: ai_llm,
         llm_teaser: !state.llm_available() && user.role == "admin",
         member_count: member_ids.len(),
         header_members: member_ids.iter().take(5).cloned().collect(),

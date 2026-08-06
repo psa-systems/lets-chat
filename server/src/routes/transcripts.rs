@@ -175,6 +175,11 @@ async fn correct_line(state: &AppState, transcript_id: i64, raw: &str) -> String
     let Some(llm) = state.llm_client.clone() else {
         return raw.to_string();
     };
+    // LC-679: kill switch silences live transcript correction too (flag-only;
+    // per-segment system path with no user). Off -> raw recognition passes through.
+    if !super::ai_gate::flag_on(state).await {
+        return raw.to_string();
+    }
     let context =
         db::transcripts::recent_segment_texts(&state.chat, transcript_id, CORRECTION_CONTEXT_LINES)
             .await
@@ -777,6 +782,11 @@ pub async fn show(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
 
+    // LC-679: role-scoped AI gate for the transcript "Summarize" action.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_llm = ai_flag_on
+        && state.llm_available()
+        && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     html(&TranscriptPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -793,7 +803,7 @@ pub async fn show(
         started_at: session.started_at,
         ended: session.status != "active",
         lines,
-        llm_available: state.llm_available(),
+        llm_available: ai_llm,
         llm_teaser: !state.llm_available() && user.role == "admin",
         summary_html,
         has_action_items,
@@ -868,6 +878,11 @@ async fn post_call_recap(
     let Some(llm) = state.llm_client.clone() else {
         return Ok(());
     };
+    // LC-679: the runtime kill switch also silences this auto-recap (no user
+    // context here, so it is flag-gated only, like the other background jobs).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(());
+    }
     if !db::chat::get_room_assistant_enabled(&state.chat, room.id).await? {
         return Ok(());
     }
@@ -921,6 +936,8 @@ pub async fn summary(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, room.id, &user).await?;
     let Some(llm) = state.llm_client.clone() else {
         return Err(AppError::BadRequest(
             "transcript summarization is not configured".into(),
@@ -976,6 +993,8 @@ pub async fn brief(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, room.id, &user).await?;
     let Some(llm) = state.llm_client.clone() else {
         return Err(AppError::BadRequest(
             "transcript summarization is not configured".into(),

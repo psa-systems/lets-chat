@@ -183,6 +183,8 @@ pub async fn post_assist(
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate. 403 for an unprivileged/flag-off caller.
+    super::ai_gate::require_llm_in_room(&state, room_id, &user).await?;
 
     let raw_action = form.action.trim();
     let draft: String = form.body.trim().chars().take(MAX_ASSIST_CHARS).collect();

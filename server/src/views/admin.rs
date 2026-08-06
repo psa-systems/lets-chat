@@ -256,6 +256,11 @@ pub struct SettingsPage<'a> {
     pub default_notify_email_digest: bool,
     /// Current value of the maintenance-mode toggle.
     pub maintenance_enabled: bool,
+    /// LC-679: current value of the runtime LLM/AI feature flag (`llm_enabled`).
+    pub llm_flag_enabled: bool,
+    /// LC-679: whether an LLM endpoint is configured (`LETS_CHAT_LLM_URL`). The
+    /// flag is inert without it, so the toggle card surfaces the precondition.
+    pub llm_configured: bool,
     /// Operator-facing message shown on the 503 page while maintenance
     /// is on. Empty hides the message block.
     pub maintenance_message: String,
