@@ -27,6 +27,7 @@ jobs:
     if: >-
       github.event.pull_request.merged == true
       && startsWith(github.event.pull_request.head.ref, 'release/v')
+    # Base image: git log plus one API call, nothing compiles (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: write
