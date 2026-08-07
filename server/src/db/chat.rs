@@ -172,6 +172,19 @@ pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Ro
     Ok(row.as_ref().map(map_room))
 }
 
+/// LC-679: the enclave a room belongs to, or `None` for a DM / enclave-less
+/// room. Used by the AI feature gate to resolve enclave Owner/Admin scope.
+pub async fn room_enclave_id(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<i64>, sqlx::Error> {
+    let row = sqlx::query("SELECT enclave_id FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
+}
+
 pub async fn list_messages(
     pool: &sqlx::SqlitePool,
     room_id: i64,
@@ -318,6 +331,34 @@ pub async fn count_replies_for_room(
         .collect())
 }
 
+/// LC-668: the AI-generated title for a thread (stored on its root message), or
+/// None if it has not been generated yet.
+pub async fn get_thread_title(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let v: Option<Option<String>> =
+        sqlx::query_scalar("SELECT thread_title FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.flatten())
+}
+
+/// LC-668: store a generated thread title on the root message.
+pub async fn set_thread_title(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    title: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE messages SET thread_title = ? WHERE id = ?")
+        .bind(title)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn count_replies(pool: &sqlx::SqlitePool, parent_id: i64) -> Result<i64, sqlx::Error> {
     let row = sqlx::query(
         "SELECT COUNT(*) AS c FROM messages \
@@ -416,6 +457,23 @@ pub async fn get_message(
 /// rather than reusing a body the caller fetched earlier, so the archived
 /// previous_body matches what the UPDATE actually overwrites even if a
 /// concurrent edit commits in between.
+/// LC-676: replace a message body in place WITHOUT recording an edit or setting
+/// `edited_at`. Used to swap the assistant's "thinking..." placeholder for its
+/// answer, so the answer does not render as "(edited)". The FTS `UPDATE OF body`
+/// trigger still keeps search in sync.
+pub async fn replace_message_body(
+    pool: &sqlx::SqlitePool,
+    message_id: i64,
+    new_body: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE messages SET body = ? WHERE id = ?")
+        .bind(new_body)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn update_message_body(
     pool: &sqlx::SqlitePool,
     message_id: i64,
@@ -797,6 +855,76 @@ pub async fn set_room_assistant_enabled(
     Ok(res.rows_affected())
 }
 
+/// LC-665: whether the scheduled AI activity digest is enabled for a room.
+pub async fn get_room_digest_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT digest_enabled FROM rooms WHERE id = ?")
+        .bind(room_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-665: toggle the scheduled digest for a room. Returns rows affected.
+pub async fn set_room_digest_enabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    enabled: bool,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET digest_enabled = ? WHERE id = ?")
+        .bind(enabled as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+/// LC-665: the last time a digest ran for a room (ISO-8601 UTC), or None if it
+/// never has. Read before bumping to window the messages "since last digest".
+pub async fn get_room_digest_last_at(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let v: Option<Option<String>> =
+        sqlx::query_scalar("SELECT digest_last_at FROM rooms WHERE id = ?")
+            .bind(room_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.flatten())
+}
+
+/// LC-665: rooms whose digest is enabled and due - never run, or last run more
+/// than `interval_hours` ago. The cutoff is computed in SQL against `now`.
+pub async fn rooms_due_for_digest(
+    pool: &sqlx::SqlitePool,
+    interval_hours: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let modifier = format!("-{interval_hours} hours");
+    sqlx::query_scalar(
+        "SELECT id FROM rooms WHERE digest_enabled = 1 \
+         AND (digest_last_at IS NULL OR digest_last_at < datetime('now', ?))",
+    )
+    .bind(modifier)
+    .fetch_all(pool)
+    .await
+}
+
+/// LC-665: mark a room's digest as just run (dedupe marker). Bumped on every
+/// evaluation, whether or not a digest was actually posted, so a quiet room is
+/// not re-evaluated until the next interval.
+pub async fn set_room_digest_last_at(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE rooms SET digest_last_at = datetime('now') WHERE id = ?")
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// LC-494: whether "stage" mode (large-audience audio) is enabled for a room.
 pub async fn get_room_stage_enabled(
     pool: &sqlx::SqlitePool,
@@ -1086,6 +1214,27 @@ pub async fn list_room_member_ids(
         .bind(room_id)
         .fetch_all(pool)
         .await?;
+    Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
+}
+
+/// LC-637: the user_ids of every member of the enclave that owns `room_id`.
+/// A public room is reachable only by members of its enclave (see
+/// `is_room_accessible`), so its live events fan out to exactly this set - not
+/// every connected socket, which both leaked message bodies to non-members and
+/// cost a server-wide send per message. Returns empty for a room with no
+/// enclave (e.g. a dm), which never takes the public fan-out arm.
+pub async fn list_enclave_member_ids_for_room(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT em.user_id FROM enclave_members em \
+         JOIN rooms r ON r.enclave_id = em.enclave_id \
+         WHERE r.id = ?",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
     Ok(rows.into_iter().map(|r| r.get("user_id")).collect())
 }
 
@@ -1679,6 +1828,52 @@ pub fn sanitize_fts_query(raw: &str) -> Option<String> {
                 .join(" "),
         )
     }
+}
+
+/// LC-676: FTS query for the /ask RAG retrieval. Unlike [`sanitize_fts_query`]
+/// (which joins terms with a space = FTS5 implicit AND, right for a deliberate
+/// search box), a natural-language question - "who is david?" - should retrieve
+/// messages matching ANY meaningful term. ANDing every word means the question
+/// only matches a message that literally contains "who" AND "is" AND "david",
+/// so a room clearly discussing David still dead-ended. This drops common
+/// question stopwords and joins the rest with OR; `fts_room_context` then ranks
+/// the candidates. Returns `None` only when nothing usable remains.
+pub fn fts_query_any(raw: &str) -> Option<String> {
+    const STOP: &[&str] = &[
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "am", "who", "whom", "whose",
+        "what", "when", "where", "why", "how", "which", "that", "this", "these", "those", "to",
+        "of", "in", "on", "at", "for", "from", "with", "and", "or", "do", "does", "did", "can",
+        "could", "would", "should", "will", "about", "tell", "me", "us", "please", "i", "you",
+        "it", "he", "she", "they", "we", "any", "know", "there",
+    ];
+    // Trim FTS-special and punctuation from each word's edges ("david?" ->
+    // "david", "(david)" -> "david") while keeping internal characters.
+    let clean: Vec<String> = raw
+        .split_whitespace()
+        .map(|t| {
+            t.trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
+                .to_string()
+        })
+        .filter(|t| !t.is_empty())
+        .collect();
+    if clean.is_empty() {
+        return None;
+    }
+    // Prefer the content words; if the question was ALL stopwords, keep them so
+    // the query still retrieves something.
+    let mut kept: Vec<&String> = clean
+        .iter()
+        .filter(|t| !STOP.contains(&t.to_ascii_lowercase().as_str()))
+        .collect();
+    if kept.is_empty() {
+        kept = clean.iter().collect();
+    }
+    Some(
+        kept.iter()
+            .map(|t| format!("\"{t}\""))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
 }
 
 /// Full-text search across accessible messages.

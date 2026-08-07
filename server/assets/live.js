@@ -195,6 +195,12 @@
   // text; "Use this" writes it into the composer textarea and fires an input
   // event so the autosize / highlight / draft-autosave hooks pick it up.
   document.body.addEventListener('click', function (evt) {
+    // LC-655: close any open sparkle mode menu on an outside click (native
+    // <details> only closes on its own summary).
+    var openMenus = document.querySelectorAll('details.lc-ai-menu[open]');
+    for (var mi = 0; mi < openMenus.length; mi++) {
+      if (!openMenus[mi].contains(evt.target)) openMenus[mi].open = false;
+    }
     var apply = evt.target.closest && evt.target.closest('[data-lc-ai-apply]');
     if (apply) {
       var panel = apply.closest('[data-lc-ai-panel]');
@@ -207,11 +213,57 @@
       var form = apply.closest('form');
       var ta = form && form.querySelector('textarea[name="body"]');
       if (sug && ta) {
-        ta.value = sug.textContent;
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
-        ta.focus();
+        var original = ta.value;
+        var setDraft = function (text) {
+          ta.value = text;
+          // Caret to the end so the focus-scroll is deterministic.
+          var end = ta.value.length;
+          try {
+            ta.setSelectionRange(end, end);
+          } catch (e) {}
+          ta.focus();
+          // Drives the LC-399 highlight backdrop, autosize, and draft hooks (a
+          // programmatic value set fires no native input); the rAF re-sync keeps
+          // the highlight backdrop aligned after the autosize settles (LC-653).
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          requestAnimationFrame(function () {
+            ta.scrollTop = 0;
+            ta.dispatchEvent(new Event('scroll', { bubbles: true }));
+          });
+        };
+        setDraft(sug.textContent);
+        // LC-655: replace the preview with an inline "Applied - Undo" affordance
+        // (the toast API has no action button) so the user never loses their
+        // original draft without a way back. The applied text stays editable.
+        var outer = document.getElementById('composer-ai-panel');
+        if (outer) {
+          outer.innerHTML = '';
+          var row = document.createElement('div');
+          row.className = 'lc-ai-applied';
+          row.setAttribute('role', 'status');
+          var msg = document.createElement('span');
+          msg.className = 'lc-ai-applied-msg';
+          msg.textContent = (window.__lcS && window.__lcS('composeApplied', 'Applied to your message')) || 'Applied to your message';
+          var undo = document.createElement('button');
+          undo.type = 'button';
+          undo.className = 'lc-ai-retry';
+          undo.textContent = (window.__lcS && window.__lcS('composeUndo', 'Undo')) || 'Undo';
+          undo.addEventListener('click', function () {
+            setDraft(original);
+            outer.innerHTML = '';
+          });
+          row.appendChild(msg);
+          row.appendChild(undo);
+          outer.appendChild(row);
+          // Auto-dismiss the affordance (the change persists) unless a new assist
+          // has already replaced it.
+          window.setTimeout(function () {
+            if (outer.firstChild === row) outer.innerHTML = '';
+          }, 7000);
+        }
+      } else if (panel) {
+        panel.innerHTML = '';
       }
-      if (panel) panel.innerHTML = '';
       return;
     }
     var dismiss = evt.target.closest && evt.target.closest('[data-lc-ai-dismiss]');
@@ -219,5 +271,201 @@
       var p = dismiss.closest('[data-lc-ai-panel]');
       if (p) p.innerHTML = '';
     }
+  });
+
+  // LC-650: uniform "AI is working" feedback. AI actions call a possibly-slow
+  // LLM (seconds on a CPU model), and their htmx targets are empty until the
+  // response lands, so without this the click feels dead. Any trigger tagged
+  // `data-lc-ai-pending` gets a spinner + label injected into its htmx target
+  // the moment the request starts; htmx overwrites the target with the real
+  // result on completion, which clears it. A "still working" note swaps in
+  // after a few seconds for the slow case.
+  function lcAiTarget(el) {
+    // AI triggers all use a plain `#id` hx-target; skip htmx's extended
+    // selectors (closest/find/this) which querySelector can't resolve.
+    var sel = el.getAttribute('hx-target');
+    if (!sel || sel.indexOf(' ') !== -1 || /^(this|closest|find|next|previous)/.test(sel)) {
+      return null;
+    }
+    try {
+      return document.querySelector(sel);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function lcAiSpan(cls, text) {
+    var s = document.createElement('span');
+    s.className = cls;
+    if (text != null) s.textContent = text;
+    return s;
+  }
+
+  // The default inline spinner + label (translate, compose-assist, replies).
+  function lcAiShowPending(target, label) {
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-pending';
+    wrap.setAttribute('role', 'status');
+    wrap.setAttribute('aria-live', 'polite');
+    var spin = lcAiSpan('lc-spinner', null);
+    spin.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(spin);
+    wrap.appendChild(lcAiSpan('lc-ai-pending-label', label || ''));
+    target.innerHTML = '';
+    target.appendChild(wrap);
+  }
+
+  // LC-654: a summary-shaped skeleton for the AI summary surfaces. The output is
+  // a text summary, so previewing its shape (a heading bar, a few summary lines,
+  // then a short action-items cluster) reads far better than a bare spinner
+  // while the local model works. Widths prefixed "gap " get extra top spacing.
+  // Skeleton shapes by surface. "summary" previews a heading + a few lines + a
+  // short action-items cluster; "writing" (LC-655) previews a short rewritten
+  // message (a few lines). Defaults to summary for any unknown value.
+  var LC_AI_SKEL = {
+    summary: ['38%', '100%', '92%', '80%', 'gap 34%', '64%'],
+    writing: ['96%', '100%', '72%']
+  };
+  function lcAiShowSkeleton(target, shape, label) {
+    var bars = LC_AI_SKEL[shape] || LC_AI_SKEL.summary;
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-skel';
+    wrap.setAttribute('role', 'status');
+    wrap.setAttribute('aria-live', 'polite');
+    var status = document.createElement('div');
+    status.className = 'lc-ai-skel-status';
+    var spin = lcAiSpan('lc-spinner', null);
+    spin.setAttribute('aria-hidden', 'true');
+    status.appendChild(spin);
+    status.appendChild(lcAiSpan('lc-ai-pending-label', label || ''));
+    wrap.appendChild(status);
+    var block = document.createElement('div');
+    block.className = 'lc-skel-block';
+    block.setAttribute('aria-hidden', 'true');
+    bars.forEach(function (w) {
+      var gap = w.indexOf('gap ') === 0;
+      if (gap) w = w.slice(4);
+      var bar = document.createElement('div');
+      bar.className = 'lc-skel-bar' + (gap ? ' lc-skel-gap' : '');
+      bar.style.width = w;
+      block.appendChild(bar);
+    });
+    wrap.appendChild(block);
+    target.innerHTML = '';
+    target.appendChild(wrap);
+  }
+
+  function lcAiSetLabel(target, text) {
+    var lbl = target.querySelector('.lc-ai-pending-label');
+    if (lbl && text) lbl.textContent = text;
+  }
+  function lcAiClearTimers(target) {
+    if (target._lcAiTimers) {
+      target._lcAiTimers.forEach(function (t) { window.clearTimeout(t); });
+      target._lcAiTimers = null;
+    }
+  }
+  // Staged status: swap the label at each {ms, text} step. Honest and
+  // time-based (the backend exposes no real phases) - a sense of progress
+  // without faking a progress bar.
+  function lcAiStage(target, stages) {
+    var real = stages.filter(Boolean);
+    if (!real.length) return;
+    target._lcAiTimers = real.map(function (s) {
+      return window.setTimeout(function () { lcAiSetLabel(target, s.text); }, s.ms);
+    });
+  }
+
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    var el = evt.detail && evt.detail.elt;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-lc-ai-pending')) return;
+    var target = lcAiTarget(el);
+    if (!target) return;
+    // Stash the target's current content so a failed request can restore it
+    // (some triggers live inside their own target, e.g. the Summarize button;
+    // without this a 4xx would leave an empty box and no way to retry).
+    target._lcAiOriginal = target.innerHTML;
+    // Everything the inline Retry needs to re-fire the same request (LC-654).
+    target._lcAiRetry = {
+      url: el.getAttribute('hx-post'),
+      sel: el.getAttribute('hx-target'),
+      skeleton: el.getAttribute('data-lc-ai-skeleton'),
+      label: el.getAttribute('data-lc-ai-pending-label'),
+      read: el.getAttribute('data-lc-ai-read-label'),
+      slow: el.getAttribute('data-lc-ai-slow-label')
+    };
+    target.setAttribute('aria-busy', 'true');
+    var mainLabel = el.getAttribute('data-lc-ai-pending-label') || '';
+    var readLabel = el.getAttribute('data-lc-ai-read-label') || '';
+    var slowLabel = el.getAttribute('data-lc-ai-slow-label') || '';
+    var skeleton = el.getAttribute('data-lc-ai-skeleton');
+    if (skeleton) {
+      // Progressive: reading/thinking -> summarizing/writing -> (slow if long).
+      lcAiShowSkeleton(target, skeleton, readLabel || mainLabel);
+      lcAiStage(target, [
+        readLabel ? { ms: 1200, text: mainLabel } : null,
+        { ms: 4500, text: slowLabel }
+      ]);
+    } else {
+      lcAiShowPending(target, mainLabel);
+      lcAiStage(target, [{ ms: 3000, text: slowLabel }]);
+    }
+  });
+
+  function lcAiShowError(target, r) {
+    var wrap = document.createElement('div');
+    wrap.className = 'lc-ai-error';
+    wrap.setAttribute('role', 'alert');
+    var msg = window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.';
+    wrap.appendChild(lcAiSpan('lc-ai-error-msg', msg));
+    // The Retry button carries the SAME htmx + data-lc-ai-* attrs as the trigger,
+    // so clicking it re-runs through the normal pending/skeleton path.
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'lc-ai-retry flex-none';
+    btn.textContent = window.__lcS ? window.__lcS('aiRetry', 'Retry') : 'Retry';
+    btn.setAttribute('hx-post', r.url);
+    btn.setAttribute('hx-target', r.sel);
+    btn.setAttribute('hx-swap', 'innerHTML');
+    btn.setAttribute('hx-disabled-elt', 'this');
+    btn.setAttribute('data-lc-ai-pending', '');
+    if (r.skeleton) btn.setAttribute('data-lc-ai-skeleton', r.skeleton);
+    if (r.label) btn.setAttribute('data-lc-ai-pending-label', r.label);
+    if (r.read) btn.setAttribute('data-lc-ai-read-label', r.read);
+    if (r.slow) btn.setAttribute('data-lc-ai-slow-label', r.slow);
+    wrap.appendChild(btn);
+    target.innerHTML = '';
+    target.appendChild(wrap);
+    if (window.htmx && window.htmx.process) window.htmx.process(target);
+  }
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    var el = evt.detail && evt.detail.elt;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-lc-ai-pending')) return;
+    var target = lcAiTarget(el);
+    if (!target) return;
+    target.removeAttribute('aria-busy');
+    lcAiClearTimers(target);
+    // On success htmx has already swapped the real result into the target.
+    if (evt.detail && evt.detail.successful) {
+      target._lcAiOriginal = null;
+      target._lcAiRetry = null;
+      return;
+    }
+    // Failure: htmx does NOT swap a non-2xx body, so the pending block would
+    // otherwise spin forever. Skeleton surfaces get an inline error + one-click
+    // Retry; the rest restore the original trigger and toast (LC-650).
+    var retry = target._lcAiRetry;
+    if (el.getAttribute('data-lc-ai-skeleton') && retry && retry.url) {
+      lcAiShowError(target, retry);
+    } else if (typeof target._lcAiOriginal === 'string') {
+      target.innerHTML = target._lcAiOriginal;
+      if (window.htmx && window.htmx.process) window.htmx.process(target);
+      if (window.__lcToast) {
+        window.__lcToast('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
+      }
+    }
+    target._lcAiOriginal = null;
+    target._lcAiRetry = null;
   });
 })();

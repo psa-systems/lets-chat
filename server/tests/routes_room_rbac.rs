@@ -5,7 +5,7 @@
 //! authorization gate on the management endpoint (a plain member cannot
 //! grant), and an audit-log spot-check (a `room_role_grant` row lands
 //! in `mod_actions`).
-use axum::body::Body;
+use axum::body::{to_bytes, Body};
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
@@ -105,6 +105,45 @@ async fn send(app: &Router, sess: &str, method: Method, uri: &str, body: &str) -
         .body(Body::from(body.to_string()))
         .unwrap();
     app.clone().oneshot(req).await.unwrap().status()
+}
+
+/// LC-677: an htmx toggle POST (assistant/digest/stage) returns the re-rendered
+/// switch reflecting the NEW state - the switch flips, and the hidden "next
+/// value" flips too - so the UI updates in place without a page reload, and a
+/// second click actually toggles back.
+#[tokio::test]
+async fn toggle_post_rerenders_the_switch_with_the_new_state() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/assistant")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={}", t.admin_session))
+        .header("hx-request", "true")
+        .body(Body::from("enabled=1"))
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&to_bytes(res.into_body(), 1 << 20).await.unwrap()).into_owned();
+    assert!(
+        body.contains(r#"aria-checked="true""#),
+        "switch shows the new ON state: {body}"
+    );
+    assert!(
+        body.contains(r#"name="enabled" value="0""#),
+        "hidden next-value flips to OFF so a second click turns it back off: {body}"
+    );
+    assert!(
+        body.contains(r#"hx-post="/room/1/assistant""#),
+        "re-rendered form posts back to the same route: {body}"
+    );
+    assert!(
+        db::chat::get_room_assistant_enabled(&t.chat, 1)
+            .await
+            .unwrap(),
+        "persisted"
+    );
 }
 
 #[tokio::test]

@@ -162,6 +162,44 @@ fn urlencoding_min(s: &str) -> String {
     s.replace(' ', "+")
 }
 
+async fn post_alt_draft(app: &Router, sess: Option<&str>, file_id: i64) -> StatusCode {
+    let mut req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/api/files/{file_id}/alt-draft"));
+    if let Some(s) = sess {
+        req = req.header(header::COOKIE, format!("session={s}"));
+    }
+    app.clone()
+        .oneshot(req.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+// LC-667: the auto-draft route is uploader-only and only functions when an
+// operator vision endpoint is configured. The test env sets none, so a valid
+// uploader request 400s ("not configured"); a non-uploader is refused first.
+#[tokio::test]
+async fn alt_draft_is_uploader_only_and_needs_a_vision_endpoint() {
+    let s = setup().await;
+    // Non-uploader is refused before anything else.
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.other_session), s.file_id).await,
+        StatusCode::FORBIDDEN
+    );
+    // The uploader gets 400 because no vision endpoint is configured (rather
+    // than a spurious success), and the image never left the box.
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+        StatusCode::BAD_REQUEST
+    );
+    // Unauthenticated is redirected like every other gated POST.
+    assert_eq!(
+        post_alt_draft(&s.app, None, s.file_id).await,
+        StatusCode::SEE_OTHER
+    );
+}
+
 #[tokio::test]
 async fn author_sets_alt_and_gets_rerendered_message() {
     let s = setup().await;
@@ -171,6 +209,16 @@ async fn author_sets_alt_and_gets_rerendered_message() {
     assert!(
         body.contains("a napping cat"),
         "re-rendered alt missing: {body}"
+    );
+    // LC-660: the saved text lands on the real image `alt` attribute (the
+    // accessibility payoff), and the state badge flips to the "set" variant.
+    assert!(
+        body.contains(r#"alt="a napping cat""#),
+        "alt not applied to the image attribute: {body}"
+    );
+    assert!(
+        body.contains("lc-alt-badge--set"),
+        "badge did not reflect the present state: {body}"
     );
 }
 

@@ -68,7 +68,11 @@
          and restores the in-progress draft - may have new text in the box by
          the time the response lands; wiping it would lose that text. */
       var sentBody = reqParams ? reqParams.body : null;
-      if (sentBody == null || ta.value === sentBody) {
+      /* LC-675: a slash command that failed its own validation answers 200 with
+         an ephemeral error (into #lc-command-result) plus this header; keep the
+         typed command so the user can fix a typo instead of retyping it. */
+      var slashErr = event.detail.xhr && event.detail.xhr.getResponseHeader('x-lc-slash-error');
+      if (!slashErr && (sentBody == null || ta.value === sentBody)) {
         ta.value = '';
         ta.style.height = 'auto';
         /* LC-229: a sub-frame 204 response (LC-228) can land before the last
@@ -79,6 +83,8 @@
       err.classList.add('hidden');
       window.__lcLastTyping = 0;
       if (window.__lcClearAttach) window.__lcClearAttach();
+      // LC-676 #4: dismiss a lingering slash-command hint/popover on send.
+      if (window.__lcClearSlash) window.__lcClearSlash();
       if (window.__lcRefreshSend) window.__lcRefreshSend();
       if (bcast) bcast.innerHTML = '';
       if (qbar) qbar.innerHTML = '';
@@ -153,6 +159,31 @@
        token that renders as a link to the room. -->
   <div id="lc-channel-popover" data-lc-skip-focus class="relative"></div>
   <div id="lc-command-result" aria-live="polite"></div>
+  {# LC-674: a one-line, dismissible discoverability tip - surfaces that "/" opens
+     commands (and @ mentions, : emoji) for users who never learned to type "/".
+     Hidden once dismissed (persisted in localStorage); the inline script reveals
+     it otherwise.
+     LC-678: visibility is driven by an inline `display:none`, NOT the `hidden`
+     attribute. The row carries Tailwind's `flex` class, and `.flex`
+     (author stylesheet) always beats `[hidden]{display:none}` (UA stylesheet)
+     regardless of specificity - so `hidden` was inert and the × looked dead.
+     An inline style outranks the class, so the reveal clears it to show and the
+     dismiss removes the node entirely (collapsing the row + its `mb-1` cleanly,
+     no leftover blank band). #}
+  <div id="lc-slash-tip" style="display:none"
+       class="mb-1 flex items-center gap-2 rounded border border-border bg-surface-sunken px-2 py-1 text-xs text-content-muted">
+    <span class="flex-1 min-w-0">{{ "room-slash-tip"|t }}</span>
+    <button type="button" aria-label="{{ "room-slash-tip-dismiss"|t }}"
+            onclick="try{localStorage.setItem('lcSlashTipDismissed','1')}catch(e){} var t=document.getElementById('lc-slash-tip'); if(t)t.remove();"
+            class="flex-none text-content-subtle hover:text-content-muted leading-none">&times;</button>
+  </div>
+  <script>
+    (function(){
+      try { if (localStorage.getItem('lcSlashTipDismissed')) return; } catch (e) {}
+      var t = document.getElementById('lc-slash-tip');
+      if (t) t.style.removeProperty('display');
+    })();
+  </script>
   <div class="composer-error hidden mb-1 flex items-center gap-2 text-xs text-danger" role="alert">
     <span>{{ "room-composer-send-failed"|t }}</span>
     <button type="submit" class="underline hover:no-underline">{{ "room-composer-retry"|t }}</button>
@@ -277,6 +308,15 @@
         class="lc-fmt-btn">&#128512;</button>
       <span id="lc-emoji-picker-slot" class="relative"></span>
     </span>
+    {# LC-674: a visible entry point to the slash-command panel, so commands are
+       discoverable by clicking, not only by knowing to type "/". mousedown
+       preventDefault keeps the textarea focused so its blur never closes the
+       panel we are about to open. #}
+    <button type="button" data-lc-tip="{{ "room-composer-commands"|t }}" data-lc-tip-pos="top"
+      aria-label="{{ "room-composer-commands"|t }}"
+      onmousedown="event.preventDefault()"
+      onclick="window.__lcOpenSlash && window.__lcOpenSlash()"
+      class="lc-fmt-btn font-mono font-semibold">/</button>
     {# separator between the formatting group and the action icons #}
     <span class="lc-composer-sep"></span>
     <button type="button" data-lc-tip="{{ "room-composer-attach-file"|t }}" data-lc-tip-pos="top" aria-label="{{ "room-composer-attach-file"|t }}"
@@ -322,21 +362,32 @@
        ([data-lc-llm] page root); posts the current draft and shows rewrite
        suggestions in #composer-ai-panel. The default action is "rephrase";
        the panel offers the other modes. #}
-    <button
-      type="button"
-      data-lc-tip="{{ "compose-assist-tip"|t }}" data-lc-tip-pos="top"
-      aria-label="{{ "compose-assist-tip"|t }}"
-      class="lc-composer-btn lc-composer-ai"
-      hx-post="/room/{{ room.id }}/compose-assist"
-      hx-vals='{"action":"rephrase"}'
-      hx-include="closest form"
-      hx-target="#composer-ai-panel" hx-swap="innerHTML"
-      hx-disabled-elt="this"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
-        <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5zM4.5 12.5a.5.5 0 01.474.342l.53 1.59 1.59.53a.5.5 0 010 .948l-1.59.53-.53 1.59a.5.5 0 01-.948 0l-.53-1.59-1.59-.53a.5.5 0 010-.948l1.59-.53.53-1.59A.5.5 0 014.5 12.5z"/>
-      </svg>
-    </button>
+    {# LC-655: the sparkle opens a labeled mode menu, so the user picks what the
+       assistant will do (Improve / Fix grammar / Shorten / Friendlier / More
+       formal) BEFORE it runs, instead of one opaque "rephrase". Each item posts
+       compose-assist with its mode and shows the LC-654 writing skeleton in
+       #composer-ai-panel. Gated on an LLM via .lc-composer-ai. #}
+    <details class="lc-ai-menu lc-composer-ai relative" data-lc-ai-menu>
+      <summary class="lc-composer-btn list-none" role="button" aria-haspopup="menu"
+        data-lc-tip="{{ "compose-assist-tip"|t }}" data-lc-tip-pos="top"
+        aria-label="{{ "compose-assist-tip"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+          <path d="M10 1.5a.75.75 0 01.71.51l1.06 3.18 3.18 1.06a.75.75 0 010 1.42l-3.18 1.06-1.06 3.18a.75.75 0 01-1.42 0L8.23 8.73 5.05 7.67a.75.75 0 010-1.42l3.18-1.06 1.06-3.18A.75.75 0 0110 1.5zM4.5 12.5a.5.5 0 01.474.342l.53 1.59 1.59.53a.5.5 0 010 .948l-1.59.53-.53 1.59a.5.5 0 01-.948 0l-.53-1.59-1.59-.53a.5.5 0 010-.948l1.59-.53.53-1.59A.5.5 0 014.5 12.5z"/>
+        </svg>
+      </summary>
+      <div role="menu" class="lc-ai-menu-pop">
+        <div class="lc-ai-menu-head">{{ "compose-assist-menu-label"|t }}</div>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"rephrase"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "ai-writing"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-rephrase"|t }}</button>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"grammar"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "ai-writing"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-grammar"|t }}</button>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"concise"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "ai-writing"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-concise"|t }}</button>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"friendly"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "ai-writing"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-friendly"|t }}</button>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"formal"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "ai-writing"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-formal"|t }}</button>
+        {# LC-669: a read-only tone/clarity nudge - separated from the rewrite
+           modes because it reviews rather than rewrites. On-demand only. #}
+        <div class="lc-ai-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" onclick="this.closest('details').open=false" hx-post="/room/{{ room.id }}/compose-assist" hx-vals='{"action":"tone"}' hx-include="closest form" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-skeleton="writing" data-lc-ai-read-label="{{ "ai-thinking"|t }}" data-lc-ai-pending-label="{{ "compose-tone-checking"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-ai-menu-item">{{ "compose-assist-action-tone"|t }}</button>
+      </div>
+    </details>
     {# LC-491: create an RSVP event (a poll with a start time + Going/Maybe/No). #}
     <button
       type="button"
@@ -1800,6 +1851,11 @@
     ta.setAttribute('aria-expanded', 'false');
     ta.removeAttribute('aria-activedescendant');
   }
+  // LC-676 #4: expose the clear so the send-success handler can dismiss a
+  // lingering slash hint. On a successful send the textarea is re-focused, so
+  // its blur never fires and the popover would otherwise hang until an
+  // outside click.
+  window.__lcClearSlash = clearPopover;
   function scheduleAjax(url){
     if (timer) clearTimeout(timer);
     timer = setTimeout(function(){
@@ -1876,6 +1932,19 @@
     // LC-229: shared predicate (pre-LC-229 this site checked only
     // ta.value.trim() and ignored an attached file_id).
     if (window.__lcRefreshSend) window.__lcRefreshSend();
+    refresh();
+  };
+  // LC-674: open the slash panel from a click (the composer toolbar "/" button),
+  // so commands are discoverable without knowing to type "/". Only meaningful on
+  // an empty composer (the panel is for composing a command from scratch); with
+  // other text present it just focuses. Callers preventDefault on mousedown so
+  // the textarea keeps focus and its blur handler never closes the panel.
+  window.__lcOpenSlash = function(){
+    if (!ta) return;
+    ta.focus();
+    if (ta.value.trim() === '') { ta.value = '/'; }
+    else if (!/^\//.test(ta.value)) { return; }
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
     refresh();
   };
 })();
@@ -2432,13 +2501,26 @@
   form.addEventListener('htmx:afterRequest', schedule);
   render(); // initial: restored draft (LC-64) or empty
 
-  function teardown(){
+  function teardown(evt){
+    // LC-653: `htmx:beforeCleanupElement` BUBBLES, so this also fires when an
+    // unrelated form descendant is cleaned up - notably the #composer-ai-panel
+    // swap on a compose-assist / suggested-reply run, which replaces the LC-650
+    // pending block. Tearing down then removes the highlight overlay's own input
+    // listener mid-session and freezes the backdrop: applied/typed text stops
+    // rendering (invisible behind the transparent textarea) and edits look
+    // messy. Only tear down when the element actually going away contains our
+    // textarea (i.e. the whole composer is being removed, e.g. a room switch).
+    if (evt && evt.target && evt.target.contains && !evt.target.contains(ta)) return;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     ta.removeEventListener('input', schedule);
     ta.removeEventListener('scroll', syncScroll);
     form.removeEventListener('htmx:afterRequest', schedule);
+    root2.removeEventListener('htmx:beforeCleanupElement', teardown);
   }
+  // No `{ once: true }`: a bubbled cleanup of an unrelated descendant must be
+  // ignored (above) without consuming the listener, or the real composer
+  // teardown would leak. The handler removes itself when it actually runs.
   var root2 = document.currentScript.closest('[data-lc-cleanup-root]') || form;
-  root2.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
+  root2.addEventListener('htmx:beforeCleanupElement', teardown);
 })();
 </script>

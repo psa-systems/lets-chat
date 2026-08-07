@@ -35,6 +35,32 @@ async fn scalar_count(pool: &SqlitePool, sql: &str, user_id: &str) -> Result<i64
     Ok(row.get::<i64, _>(0))
 }
 
+/// LC-671: the user's message count over the past 7 days (same countable-message
+/// predicate as the all-time stats). Feeds the weekly recap DM.
+pub async fn weekly_message_count(pool: &SqlitePool, user_id: &str) -> Result<i64, sqlx::Error> {
+    scalar_count(
+        pool,
+        &format!(
+            "SELECT COUNT(*) FROM messages \
+             WHERE user_id = ? AND {COUNTABLE_MSG} AND created_at >= datetime('now', '-7 days')"
+        ),
+        user_id,
+    )
+    .await
+}
+
+/// LC-671: kudos the user received over the past 7 days.
+pub async fn weekly_kudos_received(pool: &SqlitePool, user_id: &str) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(*) FROM kudos \
+         WHERE receiver_id = ? AND created_at >= datetime('now', '-7 days')",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.get::<i64, _>(0))
+}
+
 /// Aggregate the caller's personal stats in a handful of scoped queries.
 pub async fn member_stats(pool: &SqlitePool, user_id: &str) -> Result<MemberStats, sqlx::Error> {
     let messages_sent = scalar_count(

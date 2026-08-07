@@ -42,6 +42,13 @@ jobs:
         shell: nu {0}
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_PAT }}
+          # LC-638: pass the PR head branch through the environment, never
+          # inline `${{ ... }}` into the run script. The `${{ }}` form is
+          # textually substituted before `nu` starts, so a branch name such
+          # as `release/v1"` plus a newline would inject arbitrary Nushell
+          # (the `startsWith(..., 'release/v')` gate only checks the prefix).
+          # Reading `$env.PR_HEAD_REF` at runtime keeps the value as data.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           # LC-594: org secrets do not follow a repo across orgs. FORGEJO_PAT is
           # the psa-systems convention (mokosh-server and mokosh-apps read the
@@ -53,7 +60,7 @@ jobs:
               print --stderr "Define it at the psa-systems org level with write:repository scope."
               exit 1
           }
-          let branch = "${{ github.event.pull_request.head.ref }}"
+          let branch = $env.PR_HEAD_REF
           let tag = ($branch | str replace "release/" "")
 
           # Build changelog from commits since the previous tag

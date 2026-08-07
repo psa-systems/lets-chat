@@ -39,6 +39,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
+        .route("/admin/settings/llm", post(post_llm_flag))
         .route(
             "/admin/settings/email-digest-default",
             post(post_email_digest_default),
@@ -275,6 +276,9 @@ pub async fn get_settings(
     let maintenance_message = db::settings::get_setting(&state.settings, "maintenance_message")
         .await?
         .unwrap_or_default();
+    // LC-679: runtime LLM feature flag + config precondition for the toggle card.
+    let llm_flag_enabled = super::ai_gate::flag_on(&state).await;
+    let llm_configured = state.llm_available();
     let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
     let uploads_total_display =
         format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
@@ -345,6 +349,8 @@ pub async fn get_settings(
         section: "settings",
         default_notify_email_digest,
         maintenance_enabled,
+        llm_flag_enabled,
+        llm_configured,
         maintenance_message,
         uploads_total_display,
         uploads_orphan_count,
@@ -707,6 +713,35 @@ pub async fn post_maintenance(
     let metadata = (!form.message.trim().is_empty()).then(|| form.message.trim());
     db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, metadata)
         .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct LlmFlagForm {
+    /// Checkbox: present when on, omitted when off.
+    #[serde(default)]
+    pub enabled: Option<String>,
+}
+
+/// LC-679: flip the runtime LLM/AI feature flag (`settings.llm_enabled`). This
+/// is the kill switch that gates the whole LLM + embeddings surface; config
+/// presence (`LETS_CHAT_LLM_URL`) stays a separate precondition. Read live on
+/// every request (see `routes::ai_gate::flag_on`), so the change takes effect
+/// with no restart. Audited to the moderation log like maintenance mode.
+pub async fn post_llm_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<LlmFlagForm>,
+) -> Result<Response, AppError> {
+    let on = form.enabled.is_some();
+    let value = if on { "true" } else { "false" };
+    db::settings::set_setting(&state.settings, super::ai_gate::LLM_ENABLED_KEY, value).await?;
+    let action = if on { "llm_flag_on" } else { "llm_flag_off" };
+    db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
     }

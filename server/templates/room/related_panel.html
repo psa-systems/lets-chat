@@ -2,10 +2,12 @@
    #thread-panel slot (one drawer at a time), reusing the thread panel's close
    affordance (DELETE /thread-panel). Rows are jump links to #msg-{id} in the
    room, mirroring the search results list. #}
-<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+{# LC-652: shared `.lc-panel` card, not a hand-rolled `w-96 border-l` aside that
+   overflowed the 22.5rem `.lc-rightcol` and clipped the close X. #}
+<aside id="thread-panel" class="lc-panel flex flex-col">
   <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <div class="min-w-0">
-      <div class="font-semibold leading-tight">{{ "related-heading"|t }}</div>
+      <div class="font-semibold leading-tight truncate">{{ "related-heading"|t }}</div>
       <div class="text-xs text-content-muted truncate">{{ "related-subheading"|t }}</div>
     </div>
     <button
@@ -16,7 +18,7 @@
       aria-label="{{ "room-thread-close"|t }}"
     >&#10005;</button>
   </header>
-  <div class="flex-1 overflow-y-auto p-2">
+  <div class="flex-1 min-w-0 overflow-y-auto p-2">
     {% if items.is_empty() %}
     <p class="p-3 text-sm text-content-muted">{{ "related-empty"|t }}</p>
     {% else %}

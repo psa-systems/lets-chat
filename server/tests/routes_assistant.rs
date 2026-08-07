@@ -34,6 +34,10 @@ async fn app() -> TestApp {
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-679: opt this AI-feature test into the runtime flag (default off).
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
     let alice = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let alice_session = db::auth::create_session(&auth, &alice).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
@@ -128,9 +132,11 @@ async fn msg_count(chat: &SqlitePool, room: i64) -> i64 {
 async fn ask_refused_when_room_assistant_disabled() {
     let t = app().await;
     let room = make_room(&t).await;
-    // Default off: /ask is refused and nothing is posted.
+    // Default off: /ask is refused and nothing is posted. LC-675: the refusal is
+    // surfaced ephemerally (200 into #lc-command-result) instead of a 4xx the
+    // composer would mask as a generic "could not send" banner.
     let status = post_msg(&t.app, &t.alice_session, room, "/ask what is the answer").await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::OK);
     assert_eq!(msg_count(&t.chat, room).await, 0);
     // The assistant bot is not created by a refused ask.
     assert!(db::auth::find_user_by_username(&t.auth, "assistant")
@@ -148,21 +154,40 @@ async fn ask_posts_answer_as_assistant_bot_when_enabled() {
         .unwrap();
 
     let status = post_msg(&t.app, &t.alice_session, room, "/ask what is the answer").await;
+    // LC-676: /ask returns immediately (posts the "thinking" placeholder) and the
+    // answer is filled in by a background task, so poll for the resolved body.
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // Exactly one message: the assistant's answer (the /ask itself is not echoed).
+    // Exactly one message throughout: the placeholder is edited in place.
     assert_eq!(msg_count(&t.chat, room).await, 1);
-    let (body, author): (String, String) = sqlx::query_as(
-        "SELECT body, user_id FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1",
-    )
-    .bind(room)
-    .fetch_one(&t.chat)
-    .await
-    .unwrap();
-    assert!(body.contains("The answer is 42."), "carries the LLM answer");
+    let (mut body, mut author) = (String::new(), String::new());
+    for _ in 0..50 {
+        let row: (String, String) = sqlx::query_as(
+            "SELECT body, user_id FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1",
+        )
+        .bind(room)
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+        if row.0.contains("The answer is 42.") {
+            (body, author) = row;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
     assert!(
-        body.contains("asked:") && body.contains("what is the answer"),
-        "quotes the asker's question"
+        body.contains("The answer is 42."),
+        "carries the LLM answer: {body}"
+    );
+    // LC-676 #3: the asker's question is a quiet quote line above the answer.
+    assert!(
+        body.contains("> ") && body.contains("what is the answer"),
+        "quotes the asker's question: {body}"
+    );
+    // LC-676 #1: the "thinking" placeholder was replaced in place by the answer.
+    assert!(
+        !body.contains("is thinking"),
+        "placeholder was replaced, not left behind: {body}"
     );
 
     // The author is the assistant bot.

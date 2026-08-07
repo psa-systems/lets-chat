@@ -35,6 +35,10 @@ async fn app(llm: Option<Arc<dyn lets_chat::llm::LlmClient>>) -> TestApp {
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-679: opt this AI-feature test into the runtime flag (default off).
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
     let alice = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let session = db::auth::create_session(&auth, &alice).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)

@@ -1,8 +1,9 @@
 //! LC-532 integration: composer AI writing assistant (`/room/{id}/compose-assist`).
 //!
-//! Drives the handler over HTTP with a mock LLM: the happy path returns a panel
-//! with the suggestion + mode chips; an empty draft is refused; and with no LLM
-//! configured the endpoint is refused (the draft never leaves the device).
+//! Drives the handler over HTTP with a mock LLM: the happy path returns a
+//! preview panel with the suggestion + Accept/Regenerate/Discard (LC-655); an
+//! empty draft is refused; and with no LLM configured the endpoint is refused
+//! (the draft never leaves the device).
 
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Method, Request, StatusCode};
@@ -34,6 +35,10 @@ async fn app(llm: Option<Arc<dyn lets_chat::llm::LlmClient>>) -> TestApp {
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-679: opt this AI-feature test into the runtime flag (default off).
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
     let alice = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let session = db::auth::create_session(&auth, &alice).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
@@ -106,8 +111,11 @@ fn mock(canned: &str) -> Arc<dyn lets_chat::llm::LlmClient> {
     })
 }
 
+// LC-655: the panel is a preview with Accept / Regenerate / Discard and a header
+// naming the active mode; the modes moved to the composer's sparkle menu, so the
+// panel no longer renders all mode chips.
 #[tokio::test]
-async fn rephrase_returns_panel_with_suggestion_and_chips() {
+async fn rephrase_returns_preview_panel_with_actions() {
     let t = app(Some(mock("Polished version."))).await;
     let room = make_room(&t).await;
     let (status, body) = assist(&t, room, "hey can u fix this", "rephrase").await;
@@ -117,9 +125,61 @@ async fn rephrase_returns_panel_with_suggestion_and_chips() {
         "suggestion missing: {body}"
     );
     assert!(body.contains("data-lc-ai-suggestion"));
+    // Preview actions, not an auto-apply (default locale English labels).
     assert!(body.contains("data-lc-ai-apply"));
-    // The mode chips render (default locale English label).
-    assert!(body.contains("Formal"));
+    assert!(body.contains("Accept"));
+    assert!(body.contains("Regenerate"));
+    assert!(body.contains("Discard"));
+    // The header names the active mode.
+    assert!(
+        body.contains("Improve writing"),
+        "active mode label missing: {body}"
+    );
+}
+
+// LC-669: the tone check is a read-only nudge, not a rewrite - the panel shows
+// the note with a Dismiss but NO Accept/Regenerate (nothing to apply).
+#[tokio::test]
+async fn tone_returns_a_read_only_nudge_not_a_rewrite() {
+    let t = app(Some(mock("This may read as blunt; consider softening it."))).await;
+    let room = make_room(&t).await;
+    let (status, body) = assist(&t, room, "fix this now", "tone").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Tone check"), "tone heading missing: {body}");
+    assert!(
+        body.contains("This may read as blunt"),
+        "the review note is shown: {body}"
+    );
+    // Read-only: no Accept / apply / Regenerate, but a Dismiss.
+    assert!(
+        !body.contains("data-lc-ai-apply"),
+        "must not offer Accept: {body}"
+    );
+    assert!(
+        !body.contains("Regenerate"),
+        "must not offer Regenerate: {body}"
+    );
+    assert!(body.contains("data-lc-ai-dismiss"), "dismissible: {body}");
+}
+
+// LC-658: llama-class models sometimes echo the fenced input back with its
+// `<draft>` / `</draft>` markers. Those are raw HTML that the message renderer
+// drops wholesale, so an accepted-then-sent message would be blank. The handler
+// must strip the markers before the suggestion reaches the panel.
+#[tokio::test]
+async fn fenced_echo_has_its_draft_markers_stripped() {
+    let t = app(Some(mock("<draft>\nHello there team.\n</draft>"))).await;
+    let room = make_room(&t).await;
+    let (status, body) = assist(&t, room, "hello there team", "friendly").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("Hello there team."),
+        "suggestion missing: {body}"
+    );
+    assert!(
+        !body.contains("&lt;draft&gt;") && !body.contains("<draft>"),
+        "fence markers leaked into the panel: {body}"
+    );
 }
 
 #[tokio::test]

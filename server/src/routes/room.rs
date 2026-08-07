@@ -449,6 +449,8 @@ pub async fn get_room(
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             suppress_quote_preview,
             is_system: m.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
@@ -469,6 +471,10 @@ pub async fn get_room(
             actor: meta.actor.clone(),
         });
     }
+
+    // LC-680: collapse runs of consecutive call/system events into one quiet,
+    // expandable block so they stop drowning the human conversation.
+    crate::views::room::group_system_events(&mut messages);
 
     // Mark the latest message as read for this viewer and notify other tabs
     // of the same user (and any other subscribers in the room) so badges
@@ -637,6 +643,13 @@ pub async fn get_room(
     // starred list already loaded for the sidebar rather than re-querying.
     let is_starred = sidebar_starred_rooms.iter().any(|r| r.id == room.id);
 
+    // LC-679: AI availability is now the runtime, role-scoped gate (flag ON &&
+    // configured && viewer privileged for this room), not just config presence.
+    // Compute the viewer's privilege and the flag once, then feed both the LLM
+    // and embeddings UI booleans so an ungated viewer sees no AI affordances.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_privileged = super::ai_gate::privileged_in_room(&state, room_id, &user).await?;
+
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -657,8 +670,11 @@ pub async fn get_room(
         can_post,
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
-        llm_available: state.llm_available(),
-        embeddings_available: state.embeddings_available(),
+        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
+        vision_available: crate::vision::available(),
+        // LC-679: the teaser stays a config-presence nudge ("set LETS_CHAT_LLM_URL"),
+        // not a flag hint - the runtime flag lives in /admin/settings instead.
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
@@ -1042,6 +1058,12 @@ pub async fn post_message(
             }
         });
     }
+
+    // LC-670: background AI moderation triage. Off the request path and gated on
+    // the operator opt-in (LETS_CHAT_AI_MODERATION) + an LLM. Flags a message to
+    // the admin report queue for HUMAN review; never auto-deletes. The spawn +
+    // enablement gate live in `triage::maybe_triage_message`.
+    super::triage::maybe_triage_message(&state, new_id, room_id, body);
 
     // LC-551: graduate the poster to "trusted" once they have posted enough in
     // this enclave, then re-render the settings member list so the trust pill
@@ -2304,6 +2326,13 @@ pub async fn get_single_message(
     let m = db::chat::get_message(&state.chat, message_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    // LC-636: gate on room access before rendering. Without this a message id
+    // is enough for any authenticated user to read a message from a room they
+    // are not a member of. Mirrors the `get_message_raw` sibling above.
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, m.room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
     if db::auth::is_blocked_either_way(&state.auth, &user.id, &m.user_id).await? {
         return Err(AppError::NotFound);
     }
@@ -2514,6 +2543,8 @@ pub async fn patch_message(
         quote_preview,
         suppress_quote_preview: false,
         is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
             .await
             .ok()
@@ -2674,6 +2705,8 @@ pub async fn get_thread_panel(
         quote_preview: parent_quote_preview,
         suppress_quote_preview: false,
         is_system: parent.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: if poll_ids.contains(&parent.id) {
             crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
                 .await
@@ -2753,6 +2786,8 @@ pub async fn get_thread_panel(
             quote_preview: None,
             suppress_quote_preview: false,
             is_system: r.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&r_id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
                     .await
@@ -2780,14 +2815,20 @@ pub async fn get_thread_panel(
     // LC-546: whether the viewer has muted this thread (drives the mute toggle).
     let is_muted = db::thread_muters::is_muted(&state.chat, &user.id, message_id).await?;
 
+    // LC-668: the AI thread title (if generated), shown as the panel heading.
+    let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
+    // LC-679: role-scoped AI gate for the thread panel (same as the room render).
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_privileged = super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
         replies: &replies,
+        thread_title,
         is_following,
         is_muted,
-        llm_available: state.llm_available(),
-        embeddings_available: state.embeddings_available(),
+        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
     };
     html(&fragment)
 }
@@ -2978,6 +3019,10 @@ pub async fn post_thread_reply(
             db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await;
     }
     notify_thread_followers(&state, &room, parent_id, new_id, &user, body).await;
+
+    // LC-668: once the thread has enough replies, generate a short title in the
+    // background (off the request path; no-op if already titled or no LLM).
+    super::thread_title::maybe_title_thread(&state, room_id, parent_id);
 
     // Empty 204 - composer clears via hx-on::before-request, no body needed.
     Ok(axum::http::StatusCode::NO_CONTENT.into_response())

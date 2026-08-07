@@ -99,16 +99,38 @@
       {% if !assistant_available %}
       <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
       {% endif %}
-      <form hx-post="/room/{{ room.id }}/assistant"
-            hx-target="#lc-asst-status" hx-swap="innerHTML"
-            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
-        <input type="hidden" name="enabled" value="{% if assistant_enabled %}0{% else %}1{% endif %}">
-        <div class="lc-set-toggle-row">
-          <span class="text-sm">{% if assistant_enabled %}<strong>{{ "room-assistant-on-label"|t }}</strong> {{ "room-assistant-on-text"|t }}{% else %}<strong>{{ "room-assistant-off-label"|t }}</strong> {{ "room-assistant-off-text"|t }}{% endif %}</span>
-          <button type="submit" class="lc-switch" role="switch" aria-checked="{% if assistant_enabled %}true{% else %}false{% endif %}" aria-label="{{ "room-assistant-heading"|t }}"><span class="lc-switch-thumb"></span></button>
-        </div>
-        <span id="lc-asst-status" class="lc-set-status" role="status" aria-live="polite"></span>
-      </form>
+      {# LC-677: self-re-rendering toggle (see partials/settings_toggle.html). #}
+      {% let room_id = room.id %}
+      {% let field = "assistant" %}
+      {% let enabled = assistant_enabled %}
+      {% let aria_label = "room-assistant-heading"|t %}
+      {% let on_label = "room-assistant-on-label"|t %}
+      {% let on_text = "room-assistant-on-text"|t %}
+      {% let off_label = "room-assistant-off-label"|t %}
+      {% let off_text = "room-assistant-off-text"|t %}
+      {% let status = "" %}
+      {% include "partials/settings_toggle.html" %}
+    </div>
+
+    {# ===== Scheduled AI digest (LC-665) ===== #}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-digest-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-digest-intro"|t }}</p>
+      </div>
+      {% if !assistant_available %}
+      <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
+      {% endif %}
+      {% let room_id = room.id %}
+      {% let field = "digest" %}
+      {% let enabled = digest_enabled %}
+      {% let aria_label = "room-digest-heading"|t %}
+      {% let on_label = "room-digest-on-label"|t %}
+      {% let on_text = "room-digest-on-text"|t %}
+      {% let off_label = "room-digest-off-label"|t %}
+      {% let off_text = "room-digest-off-text"|t %}
+      {% let status = "" %}
+      {% include "partials/settings_toggle.html" %}
     </div>
 
     {# ===== Stage mode (LC-494) ===== #}
@@ -118,16 +140,16 @@
         <p class="lc-set-card-desc">{{ "room-stage-intro"|t }}</p>
       </div>
       <p class="lc-set-help">{{ "room-stage-audio-note"|t }}</p>
-      <form hx-post="/room/{{ room.id }}/stage"
-            hx-target="#lc-stage-status" hx-swap="innerHTML"
-            hx-disabled-elt="find button[type=submit]" class="lc-set-form">
-        <input type="hidden" name="enabled" value="{% if stage_enabled %}0{% else %}1{% endif %}">
-        <div class="lc-set-toggle-row">
-          <span class="text-sm">{% if stage_enabled %}<strong>{{ "room-stage-on-label"|t }}</strong> {{ "room-stage-on-text"|t }}{% else %}<strong>{{ "room-stage-off-label"|t }}</strong> {{ "room-stage-off-text"|t }}{% endif %}</span>
-          <button type="submit" class="lc-switch" role="switch" aria-checked="{% if stage_enabled %}true{% else %}false{% endif %}" aria-label="{{ "room-stage-heading"|t }}"><span class="lc-switch-thumb"></span></button>
-        </div>
-        <span id="lc-stage-status" class="lc-set-status" role="status" aria-live="polite"></span>
-      </form>
+      {% let room_id = room.id %}
+      {% let field = "stage" %}
+      {% let enabled = stage_enabled %}
+      {% let aria_label = "room-stage-heading"|t %}
+      {% let on_label = "room-stage-on-label"|t %}
+      {% let on_text = "room-stage-on-text"|t %}
+      {% let off_label = "room-stage-off-label"|t %}
+      {% let off_text = "room-stage-off-text"|t %}
+      {% let status = "" %}
+      {% include "partials/settings_toggle.html" %}
     </div>
 
     {# ===== Workflow automations (LC-495) ===== #}

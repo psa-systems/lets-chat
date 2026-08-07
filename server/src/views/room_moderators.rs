@@ -6,6 +6,26 @@ use crate::models::{Room, User};
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::room_automations::AutomationRow;
 
+/// LC-677: a self-re-rendering on/off settings toggle (assistant / digest /
+/// stage). Rendered inline on the Manage page (via `{% include %}`) and returned
+/// by the toggle handlers so a click updates the switch, label, and hidden
+/// next-value in place, no reload. `field` is the route segment
+/// (`/room/{id}/{field}`); `status` is empty on the page render, "Saved" after a
+/// toggle. See `partials/settings_toggle.html`.
+#[derive(Template)]
+#[template(path = "partials/settings_toggle.html")]
+pub struct SettingsToggleFragment {
+    pub room_id: i64,
+    pub field: &'static str,
+    pub enabled: bool,
+    pub aria_label: String,
+    pub on_label: String,
+    pub on_text: String,
+    pub off_label: String,
+    pub off_text: String,
+    pub status: String,
+}
+
 /// One row in the existing-overrides table.
 pub struct RoomOverrideEntry {
     pub user_id: String,
@@ -56,6 +76,9 @@ pub struct RoomModeratorsPage<'a> {
     /// LC-492: whether the operator has configured an LLM at all. When false the
     /// toggle still saves but a hint explains the assistant won't function yet.
     pub assistant_available: bool,
+    /// LC-665: whether the scheduled AI activity digest is enabled here. Shares
+    /// `assistant_available` for the "no LLM configured" hint.
+    pub digest_enabled: bool,
     /// LC-494: whether "stage" mode is enabled for this room.
     pub stage_enabled: bool,
     /// LC-495: this room's workflow-automation rules (shown via the included

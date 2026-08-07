@@ -21,7 +21,24 @@
 {# LC-434: call/system events render as a centered, muted timeline row (like the
    day divider) - visually distinct from user messages. The body is rendered
    inline (system_html) so the transcript "[label](url)" markdown becomes a real
-   anchor instead of literal text. #}
+   anchor instead of literal text.
+   LC-680: a run of consecutive call events collapses into one <details> group.
+   The open <summary> (count + transcript links) is emitted on the first row and
+   the </details> after the last, so the whole run reads as one quiet, expandable
+   block. Opened AFTER the divider blocks above, so a day/unread divider always
+   sits outside (above) the group. A lone event has no open/close and renders as
+   the plain muted line. #}
+{% if let Some(g) = message.sysgroup_open.as_ref() %}
+<details class="lc-sysgroup">
+  <summary class="lc-sysgroup-sum">
+    <span class="lc-sysevent-ico" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c.41 1.163 1.162 2.255 2.124 3.217.962.962 2.054 1.715 3.217 2.124l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg>
+    </span>
+    <span class="lc-sysgroup-count">{{ g.label }}</span>
+    {% for t in g.transcripts %}<a href="{{ t.href }}" class="lc-sysevent-link lc-sysgroup-tlink" onclick="event.stopPropagation()">{{ t.label }}</a>{% endfor %}
+    <span class="lc-sysgroup-toggle" aria-hidden="true"></span>
+  </summary>
+{% endif %}
 <div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap lc-sysevent">
   <span class="lc-sysevent-ico" aria-hidden="true">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c.41 1.163 1.162 2.255 2.124 3.217.962.962 2.054 1.715 3.217 2.124l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg>
@@ -29,6 +46,7 @@
   <span class="lc-sysevent-text"><span class="font-bold">{{ message.label() }}</span> {{ message.system_html()|safe }}</span>
   <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-sysevent-time">{{ message.created_at }}</time>
 </div>
+{% if message.sysgroup_close %}</details>{% endif %}
 {% else %}
 <div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}" data-lc-quick-react="{{ message.id }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="lc-anim-swap relative px-3 rounded-[10px] {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group{% if message.mentions_viewer() %} lc-mentioned{% endif %}">
   {# LC-377: grouped (follow-up) messages hide the author header; a compact HH:MM
@@ -233,7 +251,7 @@
              configured (CSS-gated via [data-lc-llm] on the page root, which also
              covers live-swapped message fragments). Result swaps into the
              per-message #translation-{id} block under the body. #}
-          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.75 2.75a.75.75 0 00-1.5 0v1.258a32.987 32.987 0 00-3.599.278.75.75 0 10.198 1.487A31.545 31.545 0 018.7 5.545 19.381 19.381 0 017 9.56a19.418 19.418 0 01-1.002-2.05.75.75 0 00-1.384.577 20.935 20.935 0 001.492 2.91 19.613 19.613 0 01-3.828 4.154.75.75 0 10.945 1.164A21.116 21.116 0 007 12.331c.095.132.192.262.29.391a.75.75 0 001.194-.91c-.204-.266-.4-.538-.59-.815a20.888 20.888 0 002.333-5.332c.31.031.618.068.924.108a.75.75 0 00.198-1.487 32.832 32.832 0 00-3.599-.278V2.75z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M13 8a.75.75 0 01.671.415l4.25 8.5a.75.75 0 11-1.342.67L15.787 16h-5.573l-.793 1.585a.75.75 0 11-1.342-.67l4.25-8.5A.75.75 0 0113 8zm2.037 6.5L13 10.427 10.964 14.5h4.073z" clip-rule="evenodd"/></svg><span>{{ "room-msg-translate"|t }}</span></button>
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/translate" hx-target="#translation-{{ message.id }}" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-pending-label="{{ "ai-translating"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.75 2.75a.75.75 0 00-1.5 0v1.258a32.987 32.987 0 00-3.599.278.75.75 0 10.198 1.487A31.545 31.545 0 018.7 5.545 19.381 19.381 0 017 9.56a19.418 19.418 0 01-1.002-2.05.75.75 0 00-1.384.577 20.935 20.935 0 001.492 2.91 19.613 19.613 0 01-3.828 4.154.75.75 0 10.945 1.164A21.116 21.116 0 007 12.331c.095.132.192.262.29.391a.75.75 0 001.194-.91c-.204-.266-.4-.538-.59-.815a20.888 20.888 0 002.333-5.332c.31.031.618.068.924.108a.75.75 0 00.198-1.487 32.832 32.832 0 00-3.599-.278V2.75z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M13 8a.75.75 0 01.671.415l4.25 8.5a.75.75 0 11-1.342.67L15.787 16h-5.573l-.793 1.585a.75.75 0 11-1.342-.67l4.25-8.5A.75.75 0 0113 8zm2.037 6.5L13 10.427 10.964 14.5h4.073z" clip-rule="evenodd"/></svg><span>{{ "room-msg-translate"|t }}</span></button>
           {# LC-528: read this message aloud via the browser SpeechSynthesis API.
              Pure client-side (delegated handler in live.js) - no route, no LLM.
              Reads the rendered text of this message and toggles to a stop label
@@ -256,7 +274,7 @@
              page-root gate as translate; hidden on own / synthetic-actor messages
              (you reply to others, not yourself). Result fills #composer-ai-panel. #}
           {% if !message.user_id.is_empty() && message.user_id != message.viewer_id %}
-          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L13.92 6.5l3.756.953a1 1 0 010 1.938l-3.756.954-.953 3.756a1 1 0 01-1.938 0l-.954-3.756-3.756-.954a1 1 0 010-1.938l3.756-.953.954-3.756A1 1 0 0112 2z" clip-rule="evenodd"/></svg><span>{{ "room-msg-suggest-reply"|t }}</span></button>
+          <button role="menuitem" tabindex="-1" hx-post="/messages/{{ message.id }}/suggest-reply" hx-target="#composer-ai-panel" hx-swap="innerHTML" hx-disabled-elt="this" data-lc-ai-pending data-lc-ai-pending-label="{{ "ai-generating"|t }}" data-lc-ai-slow-label="{{ "ai-working-slow"|t }}" class="lc-menu-item lc-llm-only"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L13.92 6.5l3.756.953a1 1 0 010 1.938l-3.756.954-.953 3.756a1 1 0 01-1.938 0l-.954-3.756-3.756-.954a1 1 0 010-1.938l3.756-.953.954-3.756A1 1 0 0112 2z" clip-rule="evenodd"/></svg><span>{{ "room-msg-suggest-reply"|t }}</span></button>
           {% endif %}
           {# LC-490: require / clear acknowledgement (author or room moderator only,
              same gate as delete). Re-renders the whole bubble so the bar + this
