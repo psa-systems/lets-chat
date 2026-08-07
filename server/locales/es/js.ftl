@@ -18,6 +18,7 @@ js-call-declined-by = %name% rechazó la llamada
 js-call-missed-from = Llamada perdida de %name%
 js-call-no-answer = Sin respuesta
 js-call-ended = Llamada finalizada
+js-call-peer-left = %name% salió de la llamada
 js-call-no-mic-camera = No se pudo acceder al micrófono o la cámara.
 js-call-no-camera = No se pudo acceder a la cámara.
 js-call-no-mic = No se pudo acceder al micrófono.
@@ -104,3 +105,11 @@ js-clip-uploading = Subiendo clip...
 js-huddle-ring-started = inició una reunión rápida en
 js-huddle-ring-join = Unirse
 js-huddle-ring-ignore = Ignorar
+
+# LC-650: shown as a toast when an AI action fails (htmx does not swap the 4xx).
+js-ai-failed = La solicitud de IA falló. Inténtalo de nuevo.
+# LC-654: inline retry button on the AI summary error state.
+js-ai-retry = Reintentar
+# LC-655: after Accepting a writing-assistant rewrite, an inline Undo restores the draft.
+js-compose-applied = Aplicado a tu mensaje
+js-compose-undo = Deshacer

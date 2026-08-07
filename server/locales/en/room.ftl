@@ -170,6 +170,9 @@ room-nickname-clear = Clear
 room-wiki-label = Wiki (Markdown)
 
 ## Message row
+# LC-680: collapsed run of consecutive call/system events. %n% is the event count.
+room-callgroup-summary = %n% call events
+room-callgroup-transcript = 📄 Transcript
 room-msg-unread-divider = Unread messages
 # LC-294: floating pill that scrolls back to the unread divider.
 room-jump-unread-label = Unread
@@ -305,6 +308,13 @@ room-assistant-on-label = On.
 room-assistant-on-text = Members can use /ask in this room.
 room-assistant-off-label = Off.
 room-assistant-off-text = /ask is disabled in this room.
+# LC-665: scheduled AI digest toggle (room manage page).
+room-digest-heading = Daily digest
+room-digest-intro = Post a short AI recap of this room's recent activity once a day, as the assistant bot.
+room-digest-on-label = On.
+room-digest-on-text = A daily activity digest is posted to this room.
+room-digest-off-label = Off.
+room-digest-off-text = No automatic digest is posted to this room.
 # LC-494: stage-mode toggle (room manage page).
 room-stage-heading = Stage mode
 room-stage-intro = Turn this room into a stage with speakers and listeners, where people request to speak.
@@ -371,6 +381,13 @@ room-rpreview-confirm = Confirm
 room-slash-help-heading = Slash commands
 room-slash-dismiss = Dismiss
 room-slash-no-match = No matching commands
+# LC-674: slash-command discoverability - toolbar button, "see all" link, tip.
+room-composer-commands = Commands (/)
+room-slash-see-all = See all commands
+room-slash-tip = Tip: type / for commands, @ to mention, : for emoji.
+room-slash-tip-dismiss = Dismiss tip
+# LC-675: shown when a slash command the user lacks permission to run is invoked.
+room-slash-forbidden = You do not have permission to run that command.
 
 ## Notify dropdown
 room-notify-unmuted = Unmuted
@@ -431,6 +448,16 @@ summary-recent-scope = Summarize recent activity
 summary-generate = Generate summary
 summary-regenerate = Regenerate
 summary-disclaimer = AI-generated from recent messages. May be incomplete.
+# LC-650: shared "AI is working" pending labels shown while an LLM request runs.
+ai-generating = Generating...
+ai-summarizing = Summarizing...
+ai-translating = Translating...
+ai-working-slow = Warming up the local model - the first request after it has been idle can take a few seconds.
+# LC-654: first stage of the catch-me-up skeleton status, before "Summarizing...".
+ai-reading-messages = Reading recent messages...
+# LC-655: staged status for the composer writing assistant.
+ai-thinking = Thinking...
+ai-writing = Writing...
 room-thread-summarize = Summarize
 
 # LC-495: workflow automations (room manage page)
@@ -500,13 +527,25 @@ sidebar-link-stats = Your stats
 
 ## LC-532: composer AI writing assistant
 compose-assist-tip = AI writing assistant
-compose-assist-use = Use this
+# Still used by the suggested-reply panel (dismiss the chips, no draft change).
 compose-assist-dismiss = Dismiss
-compose-assist-action-rephrase = Rephrase
+# LC-655: mode menu + preview panel (Accept / Regenerate / Discard).
+compose-assist-menu-label = Rewrite with AI
+compose-assist-heading = AI assistant
+compose-assist-accept = Accept
+compose-assist-regenerate = Regenerate
+compose-assist-discard = Discard
+compose-assist-action-rephrase = Improve writing
 compose-assist-action-grammar = Fix grammar
-compose-assist-action-concise = Concise
-compose-assist-action-friendly = Friendly
-compose-assist-action-formal = Formal
+compose-assist-action-concise = Make shorter
+compose-assist-action-friendly = Friendlier tone
+compose-assist-action-formal = More formal
+# LC-669: on-demand tone/clarity nudge (a read-only review, not a rewrite).
+compose-assist-action-tone = Check tone
+compose-tone-heading = Tone check
+compose-tone-checking = Checking tone...
+compose-tone-looks-good = Looks clear and friendly.
+compose-tone-dismiss = Dismiss
 
 ## LC-548: AI suggested replies
 room-msg-suggest-reply = Suggest reply

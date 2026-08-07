@@ -79,11 +79,25 @@ transcript-hide-empty-tip = Hide 0-line transcripts
 transcript-download = Download
 transcript-download-txt = Text (.txt)
 transcript-download-vtt = WebVTT (.vtt)
+# LC-629: the uncorrected recognition, preserved alongside the AI-corrected text
+transcript-download-raw = Raw (.txt)
 # LC-396: AI summary
 transcript-summary-heading = AI summary
 transcript-summary-generate = Summarize
 transcript-summary-regenerate = Regenerate
 transcript-summary-working = Summarizing...
+# LC-659: scope subtitle, staged "reading" label, and disclaimer, to match the
+# room "Catch me up" summary polish.
+transcript-summary-scope = Summary of this call
+transcript-summary-reading = Reading the transcript...
+transcript-summary-disclaimer = AI-generated from this transcript. May be incomplete.
+# LC-664: per-viewer "what did I miss" brief.
+transcript-brief-heading = What did I miss
+transcript-brief-scope = Personalized for you
+transcript-brief-generate = Catch me up
+transcript-brief-regenerate = Regenerate
+transcript-brief-reading = Reading the transcript...
+transcript-brief-disclaimer = AI-generated and personalized to you. May be incomplete.
 
 ## Activity page
 activity-page-title = Activity

@@ -161,9 +161,53 @@ async fn broadcast_to_members(
     }
 }
 
+/// LC-629: how many recent (already-corrected) lines feed the correction pass
+/// as context. Bounds token cost per the ticket's rolling-window requirement -
+/// correction sees the last few lines, never the whole session.
+const CORRECTION_CONTEXT_LINES: i64 = 6;
+
+/// LC-629: best-effort AI correction of one freshly recognized line against the
+/// recent conversation. Returns the corrected DISPLAY text, or the raw text
+/// unchanged when no LLM is configured or the call fails - a live caption must
+/// never be dropped or blocked because correction was unavailable, and the raw
+/// recognition is preserved by the caller regardless.
+async fn correct_line(state: &AppState, transcript_id: i64, raw: &str) -> String {
+    let Some(llm) = state.llm_client.clone() else {
+        return raw.to_string();
+    };
+    // LC-679: kill switch silences live transcript correction too (flag-only;
+    // per-segment system path with no user). Off -> raw recognition passes through.
+    if !super::ai_gate::flag_on(state).await {
+        return raw.to_string();
+    }
+    let context =
+        db::transcripts::recent_segment_texts(&state.chat, transcript_id, CORRECTION_CONTEXT_LINES)
+            .await
+            .unwrap_or_default();
+    match llm.correct(&context, raw).await {
+        Ok(corrected) => {
+            let corrected = corrected.trim();
+            if corrected.is_empty() {
+                raw.to_string()
+            } else {
+                corrected.to_string()
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript correction failed; using raw recognition");
+            raw.to_string()
+        }
+    }
+}
+
 /// Store one final speech result (trimmed, length-capped in the db layer) and
 /// fan it out as an attributed live caption. Shared by the browser-text path
 /// (`segment`) and the server-STT path (`audio`). A blank result is a no-op.
+///
+/// LC-629: the recognized text is first passed through a best-effort correction
+/// pass against a rolling window of recent lines; the CORRECTED text is what is
+/// displayed and broadcast, while the original recognition is preserved as the
+/// segment's `raw_text` (NULL when correction was off, failed, or was a no-op).
 async fn record_and_broadcast(
     state: &AppState,
     room: &Room,
@@ -176,17 +220,26 @@ async fn record_and_broadcast(
     if trimmed.is_empty() {
         return Ok(());
     }
-    db::transcripts::append_segment(&state.chat, transcript_id, &user.id, trimmed, duration_ms)
-        .await?;
+    let corrected = correct_line(state, transcript_id, trimmed).await;
+    // Keep the raw recognition only when correction actually changed it.
+    let raw_text = (corrected != trimmed).then_some(trimmed);
+    db::transcripts::append_segment(
+        &state.chat,
+        transcript_id,
+        &user.id,
+        &corrected,
+        raw_text,
+        duration_ms,
+    )
+    .await?;
     let speaker = label_for(state, &user.id).await;
-    let body = trimmed.to_string();
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
         room_id: room.id,
         to_user_id: to,
         transcript_id,
         speaker_id: user.id.clone(),
         speaker_name: speaker.clone(),
-        text: body.clone(),
+        text: corrected.clone(),
     })
     .await;
     Ok(())
@@ -362,6 +415,8 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     .await;
     if transitioned {
         post_saved_message(state, room, transcript_id).await;
+        // LC-662: kick off the async AI recap (opt-in, best-effort).
+        maybe_post_call_recap(state, room, transcript_id);
     }
 }
 
@@ -397,6 +452,8 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
                 })
                 .await;
                 post_saved_message(state, &room, tid).await;
+                // LC-662: kick off the async AI recap (opt-in, best-effort).
+                maybe_post_call_recap(state, &room, tid);
             }
         }
     }
@@ -725,6 +782,11 @@ pub async fn show(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
 
+    // LC-679: role-scoped AI gate for the transcript "Summarize" action.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_llm = ai_flag_on
+        && state.llm_available()
+        && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     html(&TranscriptPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -741,11 +803,123 @@ pub async fn show(
         started_at: session.started_at,
         ended: session.status != "active",
         lines,
-        llm_available: state.llm_available(),
+        llm_available: ai_llm,
         llm_teaser: !state.llm_available() && user.role == "admin",
         summary_html,
         has_action_items,
     })
+}
+
+/// LC-396/LC-662: assemble the `Speaker: text` transcript prompt for the model,
+/// bounded so the prompt stays a reasonable size. Shared by the on-demand summary
+/// handler and the automatic post-call recap.
+async fn build_transcript_prompt_text(
+    state: &AppState,
+    transcript_id: i64,
+) -> Result<String, AppError> {
+    const MAX_PROMPT_CHARS: usize = 48_000;
+    let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
+    // Resolve a display name per distinct speaker, preserving first-appearance
+    // order. LC-663: a leading `Participants:` roster gives the model the exact
+    // name set to attribute decisions + action items against.
+    let mut names: HashMap<String, String> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for s in &segments {
+        if !names.contains_key(&s.user_id) {
+            names.insert(s.user_id.clone(), label_for(state, &s.user_id).await);
+            order.push(s.user_id.clone());
+        }
+    }
+    let mut text = String::new();
+    if !order.is_empty() {
+        let roster: Vec<&str> = order.iter().map(|id| names[id].as_str()).collect();
+        text.push_str("Participants: ");
+        text.push_str(&roster.join(", "));
+        text.push_str("\n\n");
+    }
+    for s in &segments {
+        text.push_str(&names[&s.user_id]);
+        text.push_str(": ");
+        text.push_str(&s.text);
+        text.push('\n');
+        if text.len() >= MAX_PROMPT_CHARS {
+            break;
+        }
+    }
+    Ok(text)
+}
+
+/// LC-662: after a call transcript finalizes, post an AI recap (summary + action
+/// items) into the room as the `assistant` bot, so nobody has to open the
+/// transcript page and click Summarize. Gated on `rooms.assistant_enabled` - the
+/// same manager opt-in that governs the /ask assistant, since this is the same
+/// bot posting in the same room. Fire-and-forget: local summarization can take
+/// many seconds and nobody is waiting on it, so a failure only logs.
+fn maybe_post_call_recap(state: &AppState, room: &Room, transcript_id: i64) {
+    let state = state.clone();
+    let room = room.clone();
+    tokio::spawn(async move {
+        if let Err(e) = post_call_recap(&state, &room, transcript_id).await {
+            tracing::warn!(error = %e, transcript_id, "auto call recap failed");
+        }
+    });
+}
+
+/// The recap body of [`maybe_post_call_recap`]. Idempotent: the transcript's
+/// stored `summary` doubles as a "recap already produced" marker, so a
+/// re-finalize race (explicit /end plus the WS-disconnect backstop) never
+/// double-posts. Silent no-op when no LLM is configured, the room has not opted
+/// in, or the call produced no speech.
+async fn post_call_recap(
+    state: &AppState,
+    room: &Room,
+    transcript_id: i64,
+) -> Result<(), AppError> {
+    let Some(llm) = state.llm_client.clone() else {
+        return Ok(());
+    };
+    // LC-679: the runtime kill switch also silences this auto-recap (no user
+    // context here, so it is flag-gated only, like the other background jobs).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(());
+    }
+    if !db::chat::get_room_assistant_enabled(&state.chat, room.id).await? {
+        return Ok(());
+    }
+    // Dedupe: a stored summary means the recap already ran for this transcript.
+    let Some(session) = db::transcripts::get(&state.chat, transcript_id).await? else {
+        return Ok(());
+    };
+    if session
+        .summary
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty())
+    {
+        return Ok(());
+    }
+
+    let text = build_transcript_prompt_text(state, transcript_id).await?;
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    let md = match llm.summarize(&text).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, transcript_id, "auto call recap summarization failed");
+            return Ok(());
+        }
+    };
+    // Store first so it doubles as the dedupe marker even if the post fails.
+    db::transcripts::set_summary(&state.chat, transcript_id, &md).await?;
+
+    let bot = super::assistant::assistant_bot(state).await?;
+    let body = format!(
+        "**\u{1F4DD} Call recap** \u{00B7} [full transcript](/transcripts/{transcript_id})\n\n{md}"
+    );
+    let new_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &body).await?;
+    super::room::finalize_message_send(state, room, &bot, new_id, &body, None).await?;
+    Ok(())
 }
 
 /// POST /transcripts/{id}/summary
@@ -762,35 +936,15 @@ pub async fn summary(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, room.id, &user).await?;
     let Some(llm) = state.llm_client.clone() else {
         return Err(AppError::BadRequest(
             "transcript summarization is not configured".into(),
         ));
     };
 
-    // Build the transcript text (Speaker: text per line), bounded so the prompt
-    // stays a reasonable size for the model.
-    const MAX_PROMPT_CHARS: usize = 48_000;
-    let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
-    let mut names: HashMap<String, String> = HashMap::new();
-    let mut text = String::new();
-    for s in &segments {
-        let name = match names.get(&s.user_id) {
-            Some(n) => n.clone(),
-            None => {
-                let n = label_for(&state, &s.user_id).await;
-                names.insert(s.user_id.clone(), n.clone());
-                n
-            }
-        };
-        text.push_str(&name);
-        text.push_str(": ");
-        text.push_str(&s.text);
-        text.push('\n');
-        if text.len() >= MAX_PROMPT_CHARS {
-            break;
-        }
-    }
+    let text = build_transcript_prompt_text(&state, transcript_id).await?;
     if text.trim().is_empty() {
         return Err(AppError::BadRequest("transcript is empty".into()));
     }
@@ -809,6 +963,63 @@ pub async fn summary(
         transcript_id,
         summary_html,
         has_action_items,
+    })
+}
+
+/// LC-664: the personal-brief system prompt. Frames the transcript as data and
+/// asks for a short, second-person brief of only what concerns the named viewer.
+const BRIEF_SYSTEM: &str = "You brief one participant on a call they may have missed or joined \
+late. You are given the call transcript (each line is 'Name: what they said', led by a \
+'Participants:' line) and, above it, the NAME of the person to brief. Address that person directly \
+as 'you' and tell them only what matters to them: decisions that were made, any action items, \
+requests, or questions directed at them, and anything that mentioned or concerns them. Be concise - \
+a few short bullets. If nothing in the call specifically concerns them, say so plainly in one line \
+and give a one-sentence gist of the call. Use only what is in the transcript; never invent people, \
+names, or details.";
+
+/// POST /transcripts/{id}/brief
+/// LC-664: a per-viewer "what did I miss" brief - decisions, action items aimed
+/// at the viewer, and anything that mentioned or concerns them. Gated like the
+/// summary page (any member can read it). Personalized to the viewer, so unlike
+/// the shared summary it is NOT cached: it is per-viewer and cheap to regenerate,
+/// the same posture as the chat catch-me-up (LC-484).
+pub async fn brief(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, room.id, &user).await?;
+    let Some(llm) = state.llm_client.clone() else {
+        return Err(AppError::BadRequest(
+            "transcript summarization is not configured".into(),
+        ));
+    };
+
+    let text = build_transcript_prompt_text(&state, transcript_id).await?;
+    if text.trim().is_empty() {
+        return Err(AppError::BadRequest("transcript is empty".into()));
+    }
+    // The viewer's name is DATA (the guardrail keeps it from being treated as an
+    // instruction), so the model knows who "you" refers to.
+    let name = label_for(&state, &user.id).await;
+    let user_content = format!("Person to brief: {name}\n\n{text}");
+    let md = match llm.complete_guarded(BRIEF_SYSTEM, &user_content).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript brief failed");
+            return Err(AppError::BadRequest("brief failed".into()));
+        }
+    };
+    let brief_html = crate::views::markdown::render(&md, &[], &[]);
+    html(&crate::views::transcripts::TranscriptBriefFragment {
+        transcript_id,
+        brief_html,
     })
 }
 
@@ -860,6 +1071,10 @@ pub struct IndexQuery {
 pub struct ExportQuery {
     #[serde(default)]
     pub format: Option<String>,
+    /// LC-629: present ("1") to export the RAW, uncorrected recognition instead
+    /// of the AI-corrected display text - the preserved record is retrievable.
+    #[serde(default)]
+    pub raw: Option<String>,
 }
 
 /// Parse a `datetime('now')` string ("%Y-%m-%d %H:%M:%S").
@@ -899,13 +1114,14 @@ pub async fn export(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(transcript_id): Path<i64>,
-    Query(ExportQuery { format }): Query<ExportQuery>,
+    Query(ExportQuery { format, raw }): Query<ExportQuery>,
 ) -> Result<Response, AppError> {
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
+    let want_raw = raw.is_some();
     let segments = db::transcripts::list_segments(&state.chat, transcript_id).await?;
 
     // Resolve speaker labels (cache) and each segment's offset from the call
@@ -928,7 +1144,14 @@ pub async fn export(
             (Some(a), Some(b)) => (b - a).num_milliseconds().max(0) as f64 / 1000.0,
             _ => 0.0,
         };
-        lines.push((off, name, s.text.clone(), s.duration_ms));
+        // LC-629: raw export emits the uncorrected recognition; the default
+        // emits the AI-corrected display text.
+        let text = if want_raw {
+            s.raw().to_string()
+        } else {
+            s.text.clone()
+        };
+        lines.push((off, name, text, s.duration_ms));
     }
 
     let vtt = format.as_deref() == Some("vtt");

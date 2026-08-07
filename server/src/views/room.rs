@@ -90,6 +90,17 @@ pub struct MessageView {
     /// The template renders these as a centered, non-interactive line with
     /// no avatar, hover menu, reactions, or thread affordances.
     pub is_system: bool,
+    /// LC-680: `Some(_)` on the FIRST row of a collapsed run of consecutive
+    /// call/system events (>= [`SYS_GROUP_MIN`]); carries the summary count and
+    /// the run's transcript links. The timeline template opens a `<details>`
+    /// (after any divider) so the run reads as one quiet, expandable block.
+    /// `None` for a lone event and every non-timeline render (WS / thread /
+    /// single-message), which show the event ungrouped. Set by
+    /// [`group_system_events`] after the list is built.
+    pub sysgroup_open: Option<SysGroup>,
+    /// LC-680: true on the LAST row of a collapsed run; the timeline template
+    /// closes the `<details>` after it. See [`sysgroup_open`](Self::sysgroup_open).
+    pub sysgroup_close: bool,
     /// LC-66: `Some(...)` when this message is a poll. Renders an
     /// interactive options block beneath the body (the question lives in
     /// the body). `None` for ordinary messages.
@@ -449,6 +460,103 @@ pub(crate) fn render_system_inline(body: &str) -> String {
         }
     }
     html_escape(body)
+}
+
+/// LC-680: parse a system-event body of the form `[label](/internal/path)` into
+/// its `(href, label)`. Returns `None` for a plain-text event (a call
+/// start/cancel notice) or a non-internal URL. Mirrors the link gate in
+/// [`render_system_inline`]; used to surface transcript links in a collapsed
+/// call-group summary.
+pub(crate) fn parse_internal_link(body: &str) -> Option<(String, String)> {
+    let rest = body.strip_prefix('[')?;
+    let close = rest.find("](")?;
+    let label = &rest[..close];
+    let after = &rest[close + 2..];
+    let end = after.find(')')?;
+    let url = &after[..end];
+    if url.starts_with('/') && !url.starts_with("//") {
+        Some((url.to_string(), label.to_string()))
+    } else {
+        None
+    }
+}
+
+/// LC-680: a transcript link surfaced in a collapsed call-group summary so the
+/// genuinely useful transcript stays one click away without expanding.
+pub struct TranscriptLink {
+    pub href: String,
+    pub label: String,
+}
+
+/// LC-680: summary shown on a collapsed run of call/system events - the event
+/// count plus the run's transcript links.
+pub struct SysGroup {
+    /// Preformatted "N call events" (count substituted server-side, matching the
+    /// app's `%n%` convention) so the template needs no Fluent number args.
+    pub label: String,
+    pub transcripts: Vec<TranscriptLink>,
+}
+
+/// LC-680: minimum consecutive call/system events to collapse into a group. A
+/// lone start/cancel or a start+transcript pair stays inline; a back-and-forth
+/// (start / cancel / transcript, or several calls) collapses so it reads as one
+/// quiet block instead of many stacked lines.
+pub const SYS_GROUP_MIN: usize = 3;
+
+/// LC-680: pure run-finder for [`group_system_events`]. Given each row as
+/// `(is_system, has_divider)`, return the `(start, end_exclusive)` ranges of
+/// maximal runs of >= [`SYS_GROUP_MIN`] consecutive system rows to collapse. A
+/// run stops before any later row carrying a divider (so a day/unread divider is
+/// never swallowed into a collapsed group); a divider on the run's own first row
+/// is irrelevant because the template opens the group after the divider block.
+fn system_group_ranges(rows: &[(bool, bool)]) -> Vec<(usize, usize)> {
+    let n = rows.len();
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if !rows[i].0 {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut j = i + 1;
+        while j < n && rows[j].0 && !rows[j].1 {
+            j += 1;
+        }
+        if j - start >= SYS_GROUP_MIN {
+            ranges.push((start, j));
+        }
+        i = j;
+    }
+    ranges
+}
+
+/// LC-680: collapse maximal runs of >= [`SYS_GROUP_MIN`] consecutive
+/// system-event rows into one collapsible group. Sets [`MessageView::sysgroup_open`]
+/// on the first row of a qualifying run (with the count + transcript links) and
+/// [`MessageView::sysgroup_close`] on the last, so a run of stacked call events
+/// reads as one quiet, expandable block. Chronology, message order and the
+/// day/unread dividers are preserved (a run is broken at any divider). Called by
+/// the room and DM timeline builders after their `Vec<MessageView>` is assembled.
+pub fn group_system_events(messages: &mut [MessageView]) {
+    let rows: Vec<(bool, bool)> = messages
+        .iter()
+        .map(|m| (m.is_system, m.day_label.is_some() || m.show_unread_divider))
+        .collect();
+    for (start, end) in system_group_ranges(&rows) {
+        let transcripts: Vec<TranscriptLink> = messages[start..end]
+            .iter()
+            .filter_map(|m| parse_internal_link(&m.body))
+            .map(|(href, _)| TranscriptLink {
+                href,
+                label: crate::i18n::translate_current("room-callgroup-transcript"),
+            })
+            .collect();
+        let label = crate::i18n::translate_current("room-callgroup-summary")
+            .replace("%n%", &(end - start).to_string());
+        messages[start].sysgroup_open = Some(SysGroup { label, transcripts });
+        messages[end - 1].sysgroup_close = true;
+    }
 }
 
 pub(crate) fn linkify_body(
@@ -847,6 +955,52 @@ mod tests {
     }
 
     #[test]
+    fn parse_internal_link_extracts_transcript_target() {
+        assert_eq!(
+            parse_internal_link("[\u{1F4DD} Call transcript saved](/transcripts/47)"),
+            Some((
+                "/transcripts/47".to_string(),
+                "\u{1F4DD} Call transcript saved".to_string()
+            ))
+        );
+        // A plain call notice has no link.
+        assert_eq!(parse_internal_link("started a call."), None);
+        // External destinations are not surfaced as links.
+        assert_eq!(parse_internal_link("[x](https://evil.test)"), None);
+    }
+
+    #[test]
+    fn sysgroups_collapse_only_runs_at_or_over_the_threshold() {
+        // (is_system, has_divider). SYS_GROUP_MIN == 3.
+        let rows = [
+            (false, false), // human
+            (true, false),  // \
+            (true, false),  //  } run of 3 -> grouped (1..4)
+            (true, false),  // /
+            (false, false), // human breaks the run
+            (true, false),  // \ run of 2 -> too short, left inline
+            (true, false),  // /
+        ];
+        assert_eq!(system_group_ranges(&rows), vec![(1, 4)]);
+    }
+
+    #[test]
+    fn sysgroup_run_breaks_at_a_divider() {
+        // A divider mid-run (e.g. a day change or the unread marker) splits the
+        // run so the divider is never hidden inside a collapsed group. The
+        // divider on the run's own first row is irrelevant.
+        let rows = [
+            (true, true),  // group start (own divider ignored) \
+            (true, false), //                                    } 0..3
+            (true, false), //                                   /
+            (true, true),  // divider here starts a fresh run   \
+            (true, false), //                                    } 3..6
+            (true, false), //                                   /
+        ];
+        assert_eq!(system_group_ranges(&rows), vec![(0, 3), (3, 6)]);
+    }
+
+    #[test]
     fn system_inline_rejects_external_link() {
         // Only internal `/...` destinations become anchors; a scheme/host link
         // is left as escaped literal text.
@@ -1176,6 +1330,9 @@ pub struct RoomPage<'a> {
     /// LC-549: an operator embeddings endpoint is configured; drives
     /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
     pub embeddings_available: bool,
+    /// LC-667: an operator vision endpoint is configured; drives `data-lc-vision`
+    /// for the image alt-text auto-draft affordance.
+    pub vision_available: bool,
     /// LC-506: LLM unconfigured but the viewer is a site admin - show the AI
     /// actions disabled with a "set LETS_CHAT_LLM_URL" hint (discoverability).
     pub llm_teaser: bool,
@@ -1412,6 +1569,9 @@ pub struct ThreadPanelFragment<'a> {
     pub room: &'a Room,
     pub parent: &'a MessageView,
     pub replies: &'a [MessageView],
+    /// LC-668: the AI-generated thread title, shown as the panel heading once the
+    /// thread reaches the reply threshold. `None` before then.
+    pub thread_title: Option<String>,
     /// LC-310: whether the viewer follows this thread (drives the toggle).
     pub is_following: bool,
     /// LC-546: whether the viewer has muted this thread (drives the mute toggle).

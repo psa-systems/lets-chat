@@ -325,6 +325,16 @@
     var rows = dayRows();
     return { min: rows[0].getAttribute('data-lc-day'), max: rows[rows.length - 1].getAttribute('data-lc-day') };
   }
+  // LC-634: the set of "YYYY-MM-DD" days that actually have a message. A day in
+  // range but with no messages must be disabled (greyed) like the out-of-range
+  // days, not left active - otherwise the picker offers dates with nothing to
+  // jump to. Recomputed per render so live arrivals on a new day count.
+  function messageDays(){
+    var have = Object.create(null);
+    var rows = dayRows();
+    for (var i = 0; i < rows.length; i++) have[rows[i].getAttribute('data-lc-day')] = true;
+    return have;
+  }
   var view = null; // { y, m } 0-based month currently displayed
 
   function jumpTo(chosen){
@@ -367,10 +377,13 @@
       var dn = new Date(2023, 0, 1 + w).toLocaleDateString(undefined, { weekday: 'narrow' });
       h += '<span class="lc-jd-dow">'+esc(dn)+'</span>';
     }
+    var have = messageDays();
     for (var s = 0; s < startDow; s++) h += '<span></span>';
     for (var d = 1; d <= daysIn; d++) {
       var ds = ymd(view.y, view.m, d);
-      var dis = ds < b.min || ds > b.max;
+      // LC-634: enabled only when that exact day has at least one message.
+      // Out-of-range days are absent from `have` too, so they stay disabled.
+      var dis = !have[ds];
       h += '<button type="button" data-lc-jd-day="'+ds+'"'+(dis?' disabled':'')+' class="lc-jd-day'+(ds===todayStr?' lc-jd-today':'')+'">'+d+'</button>';
     }
     h += '</div><div class="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-border">';

@@ -8,9 +8,14 @@
               onclick="var s=document.getElementById('lc-command-result'); if(s)s.innerHTML='';"
               class="text-content-subtle hover:text-content-muted leading-none">&times;</button>
     </div>
-    <ul class="mt-1 space-y-0.5">
+    <ul class="mt-1 space-y-1.5">
       {% for c in commands %}
-      <li><span class="font-mono text-content">{{ c.usage }}</span> - {{ c.description }}</li>
+      <li>
+        <span class="font-mono text-content">{{ c.usage }}</span>
+        <span class="text-content-muted">- {{ c.description }}</span>
+        {# LC-674: a filled-in example under the abstract syntax. #}
+        {% if let Some(ex) = c.example.as_ref() %}<span class="block font-mono text-[11px] text-content-subtle">e.g. {{ ex }}</span>{% endif %}
+      </li>
       {% endfor %}
     </ul>
   </div>

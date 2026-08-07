@@ -170,6 +170,9 @@ room-nickname-clear = Borrar
 room-wiki-label = Wiki (Markdown)
 
 ## Message row
+# LC-680: collapsed run of consecutive call/system events. %n% is the event count.
+room-callgroup-summary = %n% eventos de llamada
+room-callgroup-transcript = 📄 Transcripcion
 room-msg-unread-divider = Mensajes no leidos
 # LC-294: floating pill that scrolls back to the unread divider.
 room-jump-unread-label = No leidos
@@ -305,6 +308,13 @@ room-assistant-on-label = Activado.
 room-assistant-on-text = Los miembros pueden usar /ask en esta sala.
 room-assistant-off-label = Desactivado.
 room-assistant-off-text = /ask esta desactivado en esta sala.
+# LC-665: interruptor del resumen diario con IA (pagina de gestion).
+room-digest-heading = Resumen diario
+room-digest-intro = Publica una vez al dia un breve resumen con IA de la actividad reciente de esta sala, como el bot asistente.
+room-digest-on-label = Activado.
+room-digest-on-text = Se publica un resumen diario de actividad en esta sala.
+room-digest-off-label = Desactivado.
+room-digest-off-text = No se publica ningun resumen automatico en esta sala.
 # LC-494: interruptor del modo escenario (pagina de gestion).
 room-stage-heading = Modo escenario
 room-stage-intro = Convierte esta sala en un escenario con oradores y oyentes, donde la gente pide la palabra.
@@ -371,6 +381,13 @@ room-rpreview-confirm = Confirmar
 room-slash-help-heading = Comandos de barra
 room-slash-dismiss = Descartar
 room-slash-no-match = No hay comandos coincidentes
+# LC-674: visibilidad de los comandos - boton, enlace "ver todos", consejo.
+room-composer-commands = Comandos (/)
+room-slash-see-all = Ver todos los comandos
+room-slash-tip = Consejo: escribe / para comandos, @ para mencionar, : para emoji.
+room-slash-tip-dismiss = Descartar el consejo
+# LC-675: se muestra al invocar un comando sin permiso para ejecutarlo.
+room-slash-forbidden = No tienes permiso para ejecutar ese comando.
 
 ## Notify dropdown
 room-notify-unmuted = Sin silenciar
@@ -431,6 +448,16 @@ summary-recent-scope = Resumir la actividad reciente
 summary-generate = Generar resumen
 summary-regenerate = Regenerar
 summary-disclaimer = Generado por IA a partir de mensajes recientes. Puede estar incompleto.
+# LC-650: shared "AI is working" pending labels shown while an LLM request runs.
+ai-generating = Generando...
+ai-summarizing = Resumiendo...
+ai-translating = Traduciendo...
+ai-working-slow = Calentando el modelo local: la primera solicitud tras un periodo inactivo puede tardar unos segundos.
+# LC-654: first stage of the catch-me-up skeleton status, before "Summarizing...".
+ai-reading-messages = Leyendo mensajes recientes...
+# LC-655: staged status for the composer writing assistant.
+ai-thinking = Pensando...
+ai-writing = Escribiendo...
 room-thread-summarize = Resumir
 
 # LC-495: automatizaciones de flujo de trabajo (pagina de gestion de sala)
@@ -500,13 +527,25 @@ sidebar-link-stats = Tus estadísticas
 
 ## LC-532: composer AI writing assistant
 compose-assist-tip = Asistente de redacción con IA
-compose-assist-use = Usar esto
+# Aún lo usa el panel de respuestas sugeridas (descartar los chips, sin cambiar el borrador).
 compose-assist-dismiss = Descartar
-compose-assist-action-rephrase = Reformular
+# LC-655: menú de modos + panel de vista previa (Aceptar / Regenerar / Descartar).
+compose-assist-menu-label = Reescribir con IA
+compose-assist-heading = Asistente de IA
+compose-assist-accept = Aceptar
+compose-assist-regenerate = Regenerar
+compose-assist-discard = Descartar
+compose-assist-action-rephrase = Mejorar redacción
 compose-assist-action-grammar = Corregir gramática
-compose-assist-action-concise = Conciso
-compose-assist-action-friendly = Amigable
-compose-assist-action-formal = Formal
+compose-assist-action-concise = Acortar
+compose-assist-action-friendly = Tono más amable
+compose-assist-action-formal = Más formal
+# LC-669: aviso de tono/claridad bajo demanda (una revisión, no una reescritura).
+compose-assist-action-tone = Revisar el tono
+compose-tone-heading = Revisión de tono
+compose-tone-checking = Revisando el tono...
+compose-tone-looks-good = Se lee claro y amable.
+compose-tone-dismiss = Descartar
 
 ## LC-548: AI suggested replies
 room-msg-suggest-reply = Sugerir respuesta

@@ -1551,6 +1551,138 @@ html[data-scale="xl"]      { font-size: 20px; }
 }
 .lc-filecard-size { font-size: 0.75rem; color: var(--content-muted); }
 
+/* LC-660: image alt-text control. The badge anchors to the image corner (the
+   parent `.lc-img-attach` is the positioning context) and reads as an image
+   action, replacing the old floating "Add alt text" link. State: `--missing` is
+   a muted amber nudge kept visible so undescribed images stand out; `--set` is a
+   filled/checked confirmation revealed on hover/focus to keep the timeline calm. */
+.lc-img-attach { position: relative; display: inline-block; max-width: 24rem; }
+.lc-alt { position: absolute; top: 0.375rem; right: 0.375rem; }
+.lc-alt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1875rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border-strong);
+    background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+    backdrop-filter: blur(2px);
+    color: var(--content-muted);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.lc-alt-badge::-webkit-details-marker { display: none; }
+.lc-alt-badge { list-style: none; }
+.lc-alt-ico, .lc-alt-check { width: 0.75rem; height: 0.75rem; flex: none; }
+.lc-alt-tag { font-variant: small-caps; }
+/* Missing: amber, always visible - the accessibility nudge. */
+.lc-alt-badge--missing {
+    color: var(--warning-surface-content);
+    border-color: var(--warning-border);
+    background: color-mix(in srgb, var(--warning-surface) 92%, transparent);
+    opacity: 1;
+}
+.lc-alt-badge--missing:hover,
+.lc-alt-badge--missing:focus-visible {
+    color: var(--warning-content);
+    background: var(--warning);
+    border-color: var(--warning);
+}
+/* Present: filled/checked, revealed on hover/focus of the image or the badge. */
+.lc-alt-badge--set {
+    color: var(--success-surface-content);
+    border-color: var(--success-border);
+    background: color-mix(in srgb, var(--success-surface) 92%, transparent);
+    opacity: 0;
+}
+.lc-img-attach:hover .lc-alt-badge--set,
+.lc-img-attach:focus-within .lc-alt-badge--set { opacity: 1; }
+.lc-alt-badge--set:hover,
+.lc-alt-badge--set:focus-visible {
+    color: var(--success-content);
+    background: var(--success);
+    border-color: var(--success);
+}
+.lc-alt-badge--ro { cursor: default; }
+.lc-alt-check { color: inherit; }
+
+/* Popover editor, anchored under the badge. `.lc-alt[open]` reveals it. */
+.lc-alt-pop {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    right: 0;
+    z-index: 20;
+    width: 18rem;
+    max-width: min(18rem, 80vw);
+    padding: 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    cursor: default;
+}
+.lc-alt-pop-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--content-muted);
+    margin-bottom: 0.3125rem;
+}
+.lc-alt-pop-input {
+    width: 100%;
+    resize: vertical;
+    min-height: 3.5rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+}
+.lc-alt-pop-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
+}
+.lc-alt-pop-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.4375rem;
+}
+.lc-alt-count { font-size: 0.6875rem; color: var(--content-subtle); font-variant-numeric: tabular-nums; }
+.lc-alt-actions { display: inline-flex; gap: 0.375rem; }
+.lc-alt-cancel, .lc-alt-save, .lc-alt-draft {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+    cursor: pointer;
+}
+.lc-alt-cancel { background: var(--surface-elevated); color: var(--content-muted); }
+.lc-alt-cancel:hover { background: var(--surface-sunken); color: var(--content); }
+/* LC-667: "Auto-draft" (vision alt text). Sits on the left of the actions row;
+   hidden unless an operator vision endpoint is configured ([data-lc-vision]
+   page root). */
+.lc-alt-draft {
+    display: none;
+    margin-right: auto;
+    background: var(--surface-elevated);
+    color: var(--accent);
+}
+[data-lc-vision] .lc-alt-draft { display: inline-flex; }
+.lc-alt-draft:hover { background: var(--surface-sunken); }
+.lc-alt-draft:disabled { opacity: 0.5; cursor: default; }
+.lc-alt-save { background: var(--accent); color: var(--accent-content); border-color: var(--accent); }
+.lc-alt-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
 /* LC-486: inline message translation. The Translate menu item is CSS-gated on
    an LLM being configured - revealed only under a [data-lc-llm] page root (which
    also covers live-swapped message fragments, since the rule is ancestor-based). */
@@ -2395,6 +2527,169 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     vertical-align: -0.125em;
 }
 
+/* LC-650: uniform "AI is working" pending block. Injected by live.js into an
+   AI action's htmx target while the (possibly slow, CPU-bound) LLM request is
+   in flight, then replaced by the real result on completion. Hand-authored here
+   (not a Tailwind utility) so it renders regardless of the JIT purge. */
+.lc-ai-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.125rem;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    color: var(--content-muted);
+}
+
+/* LC-654: summary-shaped skeleton + staged status for the AI summary panels.
+   Previewing the output's shape (heading, a few lines, a short action-items
+   cluster) reads as "content is coming" far better than a bare spinner while
+   the local model works. */
+.lc-ai-skel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 0.25rem 0;
+}
+.lc-ai-skel-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-skel-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+.lc-skel-bar {
+    height: 0.62rem;
+    border-radius: 0.375rem;
+    background: var(--surface-sunken);
+    position: relative;
+    overflow: hidden;
+}
+.lc-skel-gap {
+    margin-top: 0.6rem;
+}
+/* A lighter band (surface-elevated over the sunken bar) sweeps across - subtle
+   and theme-aware without color-mix. */
+.lc-skel-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--surface-elevated), transparent);
+    opacity: 0.7;
+    animation: lc-skel-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes lc-skel-shimmer {
+    to { transform: translateX(100%); }
+}
+
+/* LC-654: inline error + retry for the summary surfaces (never an endless
+   spinner). */
+.lc-ai-error {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-ai-error-msg {
+    min-width: 0;
+}
+.lc-ai-retry {
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--surface-elevated);
+    color: var(--content-muted);
+}
+.lc-ai-retry:hover {
+    background: var(--surface-sunken);
+    color: var(--content);
+}
+
+/* LC-654: the summary enters from the skeleton smoothly, not a jarring pop. */
+.lc-ai-enter {
+    animation: lc-ai-fade-in 220ms ease-out;
+}
+@keyframes lc-ai-fade-in {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* No shimmer sweep or slide-in; a gentle opacity pulse keeps it "alive". */
+    .lc-skel-bar::after { animation: none; opacity: 0; }
+    .lc-skel-bar { animation: lc-skel-pulse 1.8s ease-in-out infinite; }
+    .lc-ai-enter { animation: none; }
+}
+@keyframes lc-skel-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+/* LC-655: the sparkle writing-assistant mode menu (a <details> popover opening
+   upward from the composer toolbar). */
+.lc-ai-menu > summary { list-style: none; cursor: pointer; }
+.lc-ai-menu > summary::-webkit-details-marker { display: none; }
+.lc-ai-menu-pop {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 0.375rem;
+    z-index: 30;
+    min-width: 12rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.lc-ai-menu-head {
+    padding: 0.25rem 0.5rem 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--content-subtle);
+}
+.lc-ai-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--content);
+}
+.lc-ai-menu-item:hover { background: var(--surface-sunken); }
+/* LC-669: divider between the rewrite modes and the read-only "Check tone". */
+.lc-ai-menu-sep {
+    height: 1px;
+    margin: 0.25rem 0.25rem;
+    background: var(--border);
+}
+
+/* LC-655: "Applied - Undo" affordance after accepting a rewrite (the applied
+   text stays editable; Undo restores the original draft). */
+.lc-ai-applied {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-ai-applied-msg { min-width: 0; flex: 1; }
+
 /* Toast / modal entry. The component classes in tailwind.css apply these by
    default; reduced-motion strips them via the block below. */
 .toast {
@@ -2492,8 +2787,13 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     color: var(--surface-elevated);
     font-size: 0.75rem;
     font-weight: 500;
-    line-height: 1.2;
-    white-space: nowrap;
+    line-height: 1.3;
+    /* LC-651: wrap within a bounded width. Short labels stay one line; a long
+       reaction "who reacted" list (up to 20 names) wraps instead of running off
+       the viewport, which the old `nowrap` + no-max-width would have done. */
+    white-space: normal;
+    max-width: min(18rem, 90vw);
+    text-align: center;
     pointer-events: none;
     box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
     opacity: 0;
@@ -2861,25 +3161,28 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
 }
 
 /* LC-434: call/system events - a centered, muted timeline row distinct from
-   user messages. Icon + actor + event text + time, all on one centered line. */
+   user messages. Icon + actor + event text + time, all on one centered line.
+   LC-680: de-emphasized further (smaller, quieter, tighter) so the human
+   conversation is the loud thing and these events read as subordinate. */
 .lc-sysevent {
     display: flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 0.375rem;
-    padding: 0.25rem 1rem;
-    font-size: 0.75rem;
-    line-height: 1.25;
-    color: var(--content-muted);
+    gap: 0.3125rem;
+    padding: 0.0625rem 1rem;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    color: var(--content-subtle);
     text-align: center;
 }
 .lc-sysevent-ico {
     display: inline-flex;
     flex: none;
     color: var(--content-subtle);
+    opacity: 0.85;
 }
-.lc-sysevent-ico svg { height: 0.8125rem; width: 0.8125rem; }
+.lc-sysevent-ico svg { height: 0.75rem; width: 0.75rem; }
 .lc-sysevent-text { min-width: 0; }
 .lc-sysevent-link {
     color: var(--accent);
@@ -2892,7 +3195,54 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     flex: none;
     color: var(--content-subtle);
     font-variant-numeric: tabular-nums;
+    opacity: 0.75;
 }
+
+/* LC-680: collapsed group of consecutive call events. The <summary> is a quiet,
+   centered, clickable row (event count + any transcript links); expanding
+   reveals the individual .lc-sysevent rows. Native disclosure triangle is
+   replaced by a rotating chevron so the affordance matches both densities. */
+.lc-sysgroup { margin: 0.0625rem 0; }
+.lc-sysgroup-sum {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0.125rem 1rem;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    color: var(--content-muted);
+    text-align: center;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.lc-sysgroup-sum::-webkit-details-marker { display: none; }
+.lc-sysgroup-sum:hover { color: var(--content); }
+.lc-sysgroup-count { font-weight: 500; }
+/* Transcript links stay prominent while collapsed - the useful part is one
+   click away without expanding. Rendered as small accent chips. */
+.lc-sysgroup-tlink {
+    flex: none;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    text-decoration: none;
+}
+.lc-sysgroup-tlink:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+/* Rotating chevron affordance. */
+.lc-sysgroup-toggle {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    opacity: 0.6;
+    transition: transform 0.15s ease;
+}
+.lc-sysgroup[open] .lc-sysgroup-toggle { transform: rotate(-135deg); }
 
 /* LC-380: composer controls. The two tiers share one icon-button language: a
    denser format toolbar (.lc-fmt-btn) and the larger bottom action row
@@ -3062,7 +3412,11 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
        ring instead (see .lc-mdinput:focus). */
     border: 1px solid transparent;
     border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    /* LC-676 #5: tighter vertical padding so the empty/single-line composer is
+       compact, not a tall band. Set on BOTH .lc-mdback and .lc-mdinput (this
+       shared rule) so the LC-399 overlay metrics stay identical and the
+       highlight never drifts from the caret. */
+    padding: 0.375rem 0.75rem;
     font-family: inherit;
     font-size: 1rem;
     font-weight: 400;

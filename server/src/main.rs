@@ -241,7 +241,10 @@ async fn main() {
     spawn_reminders_dispatcher(state.clone());
     spawn_polls_closer(state.clone());
     spawn_outgoing_webhook_dispatcher(state.clone());
+    spawn_room_digest_dispatcher(state.clone());
+    spawn_embedding_backfill_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
+    spawn_weekly_recap_dispatcher(state.clone());
     spawn_message_retention_sweeper(state.clone());
     spawn_ephemeral_sweeper(state.clone());
     lets_chat::email_ingress::poll::spawn_email_poll(state.clone());
@@ -479,6 +482,89 @@ fn spawn_outgoing_webhook_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "outgoing webhook delivery tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-665: post scheduled per-room AI activity digests. A slow tick (30 min)
+/// posts a once-per-day digest for each opted-in room via the assistant bot;
+/// the once-per-interval + dedupe logic lives in `room_digest::run_digest_tick`.
+fn spawn_room_digest_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 1800;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::room_digest::run_digest_tick(&state).await {
+                Ok(stats) if stats.posted > 0 => {
+                    tracing::info!(
+                        posted = stats.posted,
+                        evaluated = stats.evaluated,
+                        "room digest tick complete"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "room digest tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-671: personal weekly recap DM. Operator opt-in (`LETS_CHAT_WEEKLY_RECAP`,
+/// off by default), so the dispatcher is not even spawned unless it is set. A
+/// slow tick (6h) DMs each active user a short AI recap of their week at most
+/// once per 7 days; the dedupe + eligibility live in `weekly_recap`.
+fn spawn_weekly_recap_dispatcher(state: AppState) {
+    let enabled = matches!(
+        std::env::var("LETS_CHAT_WEEKLY_RECAP").ok().as_deref(),
+        Some("1" | "true" | "on" | "yes")
+    );
+    if !enabled {
+        return;
+    }
+    const TICK_SECS: u64 = 6 * 3600;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::weekly_recap::run_weekly_recap_tick(&state).await {
+                Ok(stats) if stats.sent > 0 => {
+                    tracing::info!(
+                        sent = stats.sent,
+                        evaluated = stats.evaluated,
+                        "weekly recap tick complete"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "weekly recap tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-673: backfill embeddings for messages posted before the embeddings
+/// endpoint was configured, so semantic search covers history and not just
+/// messages sent after it was turned on. A slow tick embeds a small batch per
+/// pass; a no-op once the backlog is drained or when no embeddings endpoint is
+/// set. The per-message embed is best-effort (a transient endpoint error leaves
+/// the message for a later tick).
+fn spawn_embedding_backfill_dispatcher(state: AppState) {
+    const TICK_SECS: u64 = 60;
+    const BATCH: i64 = 50;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::routes::related::run_embedding_backfill_tick(&state, BATCH).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(embedded = n, "embedding backfill batch complete");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "embedding backfill tick failed"),
             }
         }
     });

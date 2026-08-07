@@ -277,6 +277,12 @@ test:
 test-saas:
     ./dev/cargo test -p lets-chat-server --no-default-features --features saas
 
+# Run the browser-asset unit tests (LC-628: media-constraints shape). Node's
+# built-in runner, no extra dependency. Globs server/assets/*.test.js.
+[group('test')]
+test-js:
+    node --test 'server/assets/**/*.test.js'
+
 # Run desktop crate tests (LC-210 established the pattern: #[cfg(test)] modules
 # in desktop/src/). Desktop is bin-only, so these are in-crate unit tests. Run
 # this for any PR touching desktop/ - `just check` only compiles it.

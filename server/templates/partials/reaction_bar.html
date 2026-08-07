@@ -17,7 +17,12 @@
     hx-post="/messages/{{ message_id }}/reactions/{{ r.emoji }}{{ surface.url_suffix() }}"
     hx-target="#{{ surface.id_prefix() }}reactions-{{ message_id }}"
     hx-swap="outerHTML"
-    {% if !r.reactors_title.is_empty() %}title="{{ r.reactors_title }}"{% endif %}
+    {# LC-651: the app's styled tooltip (tooltip.js) instead of the raw native
+       `title` - consistent with the "+" button below, theme-aware, escapes the
+       timeline's overflow clip, keyboard-focusable. `aria-label` keeps the
+       reactor list as the accessible name (data-lc-tip is an aria-hidden visual
+       layer). #}
+    {% if !r.reactors_title.is_empty() %}aria-label="{{ r.reactors_title }}" data-lc-tip="{{ r.reactors_title }}" data-lc-tip-pos="top"{% endif %}
     class="text-xs rounded-full border px-2 py-0.5 tabular-nums {% if r.viewer_reacted %}bg-accent-surface text-accent-surface-content border-accent font-medium{% else %}bg-surface-elevated border-border text-content-muted hover:bg-surface-sunken hover:text-content{% endif %}"
   >{{ r.display_html|safe }} {{ r.count }}</button>
   {% endfor %}

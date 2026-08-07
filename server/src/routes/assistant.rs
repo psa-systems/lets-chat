@@ -32,15 +32,28 @@ const ASK_RATE_PER_MIN: u32 = 10;
 /// The assistant's bot username (and display label).
 const ASSISTANT_USERNAME: &str = "assistant";
 
-const SYSTEM_PROMPT: &str = "You are a helpful assistant inside a team chat room. \
-Answer the user's question using ONLY the provided context (recent room messages, \
-the room's wiki, and its description). If the answer is not in the context, say you \
-could not find it in this room rather than guessing. Be concise and use Markdown. \
-Do not invent facts, links, or quotes.";
+// LC-676: keep the RAG contract (answer from the room's context) but (a) make a
+// no-context outcome helpful instead of a terse dead-end, and (b) refuse a
+// harmful request on SAFETY grounds rather than phrasing it as a retrieval miss
+// ("could not find information on making bombs in this room" implied it would
+// answer if the room had it).
+const SYSTEM_PROMPT: &str = "You are a helpful assistant inside a team chat room. Answer the user's \
+question using the provided context (recent room messages, the room's wiki, and its description). \
+If the context does not contain the answer, say so plainly and helpfully - for example \"I couldn't \
+find anything in this room about X. It may not have been discussed here - try rephrasing or asking \
+in a different channel.\" - and do NOT imply you would have answered if the room had contained it. \
+If the question asks for harmful, dangerous, illegal, or otherwise unsafe information, refuse briefly \
+and plainly on safety grounds, regardless of the context, and never phrase such a refusal as a \
+retrieval miss. Be concise and use Markdown. Do not invent facts, links, or quotes.";
+
+/// LC-676: placeholder shown the instant an /ask is sent, then replaced in place
+/// by the answer. Italic so it reads as a transient status, not a real answer.
+const THINKING_BODY: &str = "_The assistant is thinking\u{2026}_";
 
 /// Resolve (or lazily create) the shared `assistant` bot user and return it as
-/// a `User` suitable for `finalize_message_send`.
-async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
+/// a `User` suitable for `finalize_message_send`. LC-662: also used by the
+/// automatic post-call recap (`routes::transcripts`), which posts as the same bot.
+pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
     if let Some(rec) = db::auth::find_user_by_username(&state.auth, ASSISTANT_USERNAME).await? {
         return Ok(rec.into());
     }
@@ -81,10 +94,12 @@ async fn build_context(state: &AppState, room: &Room, question: &str) -> Result<
         }
     }
 
-    // FTS over the room's messages. A query that sanitizes to nothing (only
-    // stop-symbols) just yields no message context; the wiki/description still
-    // ground the answer.
-    if let Some(fts) = db::chat::sanitize_fts_query(question) {
+    // FTS over the room's messages. LC-676: a natural-language question needs
+    // ANY-term (OR) retrieval, not the search box's AND, or "who is david?"
+    // matches nothing even when the room is full of David. A query that
+    // sanitizes to nothing (only stop-symbols) just yields no message context;
+    // the wiki/description still ground the answer.
+    if let Some(fts) = db::chat::fts_query_any(question) {
         let hits = db::chat::fts_room_context(&state.chat, room.id, &fts, RETRIEVAL_LIMIT).await?;
         if !hits.is_empty() {
             let author_ids: Vec<&str> = hits
@@ -133,6 +148,9 @@ pub(crate) async fn handle_ask(
             "The AI assistant is not configured on this server.".into(),
         ));
     };
+    // LC-679: runtime flag + role gate. 403 for an unprivileged/flag-off caller
+    // so /ask is refused on the server, not merely hidden from the slash menu.
+    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
     if !db::chat::get_room_assistant_enabled(&state.chat, room.id).await? {
         return Err(AppError::BadRequest(
             "The AI assistant is not enabled in this room.".into(),
@@ -157,33 +175,94 @@ pub(crate) async fn handle_ask(
         ));
     }
 
-    let context = build_context(state, room, question).await?;
-    let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
-    let answer = match llm.complete(SYSTEM_PROMPT, &user_content).await {
-        Ok(a) => a,
-        Err(e) => {
-            tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
-            return Err(AppError::BadRequest(
-                "The assistant could not answer right now. Try again later.".into(),
-            ));
-        }
-    };
-    let answer = answer.trim();
-    if answer.is_empty() {
-        return Err(AppError::BadRequest(
-            "The assistant returned an empty answer.".into(),
-        ));
-    }
-
-    // Post as the assistant bot, quoting the asker's question for context (the
-    // `/ask` itself is not echoed into the room).
-    let bot = assistant_bot(state).await?;
+    // LC-676 #3: a quiet, compact attribution line (a reply-style quote) that
+    // stays subordinate to the answer, instead of a heavy bold blockquote.
     let asker_label = match asker.display_name.as_deref() {
         Some(n) if !n.trim().is_empty() => n,
         _ => &asker.username,
     };
-    let body = format!("> **{asker_label} asked:** {question}\n\n{answer}");
-    let new_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &body).await?;
-    super::room::finalize_message_send(state, room, &bot, new_id, &body, None).await?;
+    let header = format!("> {asker_label}: {question}");
+
+    // LC-676 #1: post a "thinking..." placeholder as the bot and broadcast it
+    // immediately, so the asker sees the assistant working right away.
+    let bot = assistant_bot(state).await?;
+    let placeholder = format!("{header}\n\n{THINKING_BODY}");
+    let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &placeholder).await?;
+    super::room::finalize_message_send(state, room, &bot, msg_id, &placeholder, None).await?;
+
+    // Run the (multi-second) LLM call OFF the request path so the /ask POST
+    // returns now. Otherwise it holds open for the whole answer, and the
+    // composer - which clears its text + slash hint on the POST's return - stays
+    // full and the hint hangs until then. The placeholder is replaced in place
+    // when the answer is ready (silent update: no "(edited)" marker).
+    let st = state.clone();
+    let room = room.clone();
+    let question = question.to_string();
+    tokio::spawn(async move {
+        let final_body = build_ask_answer(&st, &room, &question, &header, &*llm).await;
+        if let Err(e) = db::chat::replace_message_body(&st.chat, msg_id, &final_body).await {
+            tracing::warn!(error = %e, message_id = msg_id, "failed to store assistant answer");
+            return;
+        }
+        st.hub.broadcast_to_room(
+            room.id,
+            &crate::ws::events::ChatEvent::MessageEdited {
+                message_id: msg_id,
+                room_id: room.id,
+                new_body: final_body,
+                edited_at: String::new(),
+            },
+        );
+    });
     Ok(())
+}
+
+/// LC-676: retrieve context, ask the LLM, and format the final answer body
+/// (keeping the quiet `header` attribution line). Returns a friendly, italic
+/// error body on any failure so the "thinking..." placeholder always resolves.
+async fn build_ask_answer(
+    state: &AppState,
+    room: &Room,
+    question: &str,
+    header: &str,
+    llm: &dyn crate::llm::LlmClient,
+) -> String {
+    let context = match build_context(state, room, question).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "assistant context build failed");
+            return format!(
+                "{header}\n\n_The assistant could not answer right now. Try again later._"
+            );
+        }
+    };
+    let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
+    match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
+        Ok(a) if !a.trim().is_empty() => format!("{header}\n\n{}", a.trim()),
+        Ok(_) => format!("{header}\n\n_The assistant returned an empty answer._"),
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "assistant LLM call failed");
+            format!("{header}\n\n_The assistant could not answer right now. Try again later._")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SYSTEM_PROMPT;
+
+    #[test]
+    fn ask_prompt_is_helpful_on_no_context_and_refuses_unsafe() {
+        let lo = SYSTEM_PROMPT.to_lowercase();
+        // LC-676 #2a: a no-context outcome is helpful, not a terse dead-end, and
+        // does not imply it would have answered.
+        assert!(lo.contains("does not contain the answer"));
+        assert!(lo.contains("do not imply"));
+        // LC-676 #2b: an explicit safety refusal, never phrased as a retrieval miss.
+        assert!(lo.contains("safety grounds"));
+        assert!(lo.contains("never phrase such a refusal as a retrieval miss"));
+        // Still RAG-grounded + no hallucination.
+        assert!(lo.contains("provided context"));
+        assert!(lo.contains("do not invent"));
+    }
 }

@@ -48,7 +48,7 @@ fn label_for(username: &str, display_name: Option<&str>) -> String {
 /// Resolve display labels for every distinct author across `msgs` in one bulk
 /// auth query. Synthetic actors (webhook/bridge/email) fall back to their raw
 /// user id, which is acceptable for prompt context.
-async fn author_labels(
+pub(crate) async fn author_labels(
     state: &AppState,
     msgs: &[RawMessage],
 ) -> Result<HashMap<String, String>, AppError> {
@@ -66,7 +66,7 @@ async fn author_labels(
 
 /// Build the "Label: body" prompt block (chronological), skipping system and
 /// empty messages, bounded to `MAX_PROMPT_CHARS`.
-fn build_prompt_text(msgs: &[RawMessage], labels: &HashMap<String, String>) -> String {
+pub(crate) fn build_prompt_text(msgs: &[RawMessage], labels: &HashMap<String, String>) -> String {
     let mut text = String::new();
     for m in msgs {
         if m.is_system {
@@ -94,6 +94,9 @@ async fn require_access(state: &AppState, user: &User, room_id: i64) -> Result<(
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: every caller of this helper is an LLM catch-up route, so fold in
+    // the runtime flag + role gate here - 403 for an unprivileged/flag-off user.
+    super::ai_gate::require_llm_in_room(state, room_id, user).await?;
     Ok(())
 }
 
@@ -115,7 +118,7 @@ async fn run_summary(
     if text.trim().is_empty() {
         return Err(AppError::BadRequest("nothing to summarize".into()));
     }
-    let md = match llm.complete(CHAT_SYSTEM_PROMPT, &text).await {
+    let md = match llm.complete_guarded(CHAT_SYSTEM_PROMPT, &text).await {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "chat summary failed");

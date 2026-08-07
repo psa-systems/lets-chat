@@ -125,6 +125,10 @@ async fn setup_with_clients(
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-679: opt this AI-feature test into the runtime flag (default off).
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
 
     let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
@@ -1550,6 +1554,529 @@ async fn translate_400_when_llm_disabled() {
 
 // The cache round-trips and `delete_for_message` (called from the edit path)
 // clears it, so a re-translation reflects the edited body.
+// ── LC-629: AI-corrected live transcript, raw recognition retained ────────────
+
+/// An `LlmClient` double that fixes a fixed set of speech-to-text recognition
+/// errors on the NEW line (input-dependent, unlike the crate's canned
+/// `MockLlmClient`) and records the largest context window it was handed, so the
+/// rolling-window bound is observable from a test.
+#[derive(Default)]
+struct CorrectingMock {
+    max_context_seen: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl lets_chat::llm::LlmClient for CorrectingMock {
+    async fn complete(
+        &self,
+        _system: &str,
+        user_content: &str,
+    ) -> Result<String, lets_chat::llm::LlmError> {
+        // The default `correct` frames the context as `- ` bullets then the new
+        // line after this marker. Count the bullets (the window it saw) and
+        // correct the new line against a small canned map; pass others through.
+        let ctx_lines = user_content.lines().filter(|l| l.starts_with("- ")).count();
+        self.max_context_seen
+            .fetch_max(ctx_lines, std::sync::atomic::Ordering::Relaxed);
+        let line = user_content
+            .rsplit("NEW line to correct:\n")
+            .next()
+            .unwrap_or("")
+            .trim();
+        let fixed = match line {
+            "i program in java script" => "I program in JavaScript",
+            "we use post gres" => "we use Postgres",
+            other => other,
+        };
+        Ok(fixed.to_string())
+    }
+}
+
+/// The live transcript shows AI-corrected text while the raw, uncorrected
+/// recognition is persisted separately and stays retrievable (page + exports).
+#[tokio::test]
+async fn live_transcript_is_ai_corrected_and_raw_is_retained() {
+    let mock: Arc<dyn lets_chat::llm::LlmClient> = Arc::new(CorrectingMock::default());
+    let s = setup_with_clients(None, Some(mock)).await;
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+
+    // A sample of misrecognized phrases; the correction pass fixes each.
+    for phrase in ["i program in java script", "we use post gres"] {
+        let (st, _) = post(
+            &s.app,
+            &s.a_session,
+            &format!("/call/transcript/{tid}/segment"),
+            Some(&format!("text={}", phrase.replace(' ', "+"))),
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK);
+    }
+
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 2);
+    // Display text is corrected...
+    assert_eq!(segs[0].text, "I program in JavaScript");
+    assert_eq!(segs[1].text, "we use Postgres");
+    // ...and the raw recognition is retained, unchanged, in a separate column.
+    assert_eq!(segs[0].raw(), "i program in java script");
+    assert_eq!(segs[1].raw(), "we use post gres");
+    assert_eq!(
+        segs[0].raw_text.as_deref(),
+        Some("i program in java script")
+    );
+
+    // The saved page shows the corrected text, not the raw mis-hearing.
+    let (st, page) = get(&s.app, &s.a_session, &format!("/transcripts/{tid}")).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        page.contains("I program in JavaScript"),
+        "page shows corrected text: {page}"
+    );
+    assert!(
+        !page.contains("java script"),
+        "page must not show the raw mis-hearing"
+    );
+
+    // Default export is corrected; the `raw` export preserves the recognition.
+    let (_, txt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=txt"),
+    )
+    .await;
+    assert!(
+        txt.contains("I program in JavaScript"),
+        "export body: {txt}"
+    );
+    assert!(!txt.contains("java script"));
+    let (_, raw_txt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=txt&raw=1"),
+    )
+    .await;
+    assert!(
+        raw_txt.contains("i program in java script"),
+        "raw export preserves the uncorrected recognition: {raw_txt}"
+    );
+    assert!(!raw_txt.contains("JavaScript"));
+}
+
+/// A line the correction leaves unchanged stores no separate raw row: the
+/// display text IS the raw, so `raw_text` stays NULL and `raw()` returns it.
+#[tokio::test]
+async fn unchanged_line_stores_no_separate_raw() {
+    let mock: Arc<dyn lets_chat::llm::LlmClient> = Arc::new(CorrectingMock::default());
+    let s = setup_with_clients(None, Some(mock)).await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=already+correct"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs[0].text, "already correct");
+    assert_eq!(
+        segs[0].raw_text, None,
+        "an unchanged line stores no separate raw"
+    );
+    assert_eq!(segs[0].raw(), "already correct");
+}
+
+/// With no LLM configured the display text is the raw recognition and no
+/// separate raw is stored - correction is strictly opt-in.
+#[tokio::test]
+async fn without_llm_display_equals_raw() {
+    let s = setup().await; // llm_client = None
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=verbatim+text"),
+    )
+    .await;
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs[0].text, "verbatim text");
+    assert_eq!(segs[0].raw_text, None);
+}
+
+/// The correction context is a bounded rolling window (the last few lines,
+/// oldest-first), never the whole session.
+#[tokio::test]
+async fn correction_context_is_a_bounded_rolling_window() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    for i in 0..10 {
+        db::transcripts::append_segment(&s.chat, tid, &s.b_id, &format!("line {i}"), None, 0)
+            .await
+            .unwrap();
+    }
+    let ctx = db::transcripts::recent_segment_texts(&s.chat, tid, 6)
+        .await
+        .unwrap();
+    assert_eq!(ctx.len(), 6, "window is bounded to the requested size");
+    assert_eq!(
+        ctx.first().unwrap(),
+        "line 4",
+        "oldest-first, only the tail"
+    );
+    assert_eq!(ctx.last().unwrap(), "line 9", "most recent line last");
+}
+
+// ── LC-662: automatic post-call AI recap ──────────────────────────────────────
+
+/// Poll the room's messages for a recap posted by the `assistant` bot (the work
+/// is spawned from finalize, so race it rather than assume it has run).
+async fn wait_for_recap(s: &Setup, room_id: i64) -> Option<db::chat::RawMessage> {
+    for _ in 0..50 {
+        let msgs = db::chat::list_messages(&s.chat, room_id).await.unwrap();
+        if let Some(m) = msgs.into_iter().find(|m| m.body.contains("Call recap")) {
+            return Some(m);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    None
+}
+
+/// When the room has opted the assistant in, ending a call auto-posts an AI
+/// recap (summary + action items) as the assistant bot, with a link back to the
+/// full transcript - no one has to open the page and click Summarize.
+#[tokio::test]
+async fn auto_call_recap_posts_when_assistant_enabled() {
+    let s = setup_with_clients(
+        None,
+        with_llm("## Summary\nThe team planned the launch.\n\n## Action items\n- Order pizza"),
+    )
+    .await;
+    db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
+        .await
+        .unwrap();
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=lets+plan+the+launch"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    let recap = wait_for_recap(&s, s.dm_room)
+        .await
+        .expect("recap was posted");
+    assert!(
+        recap.body.contains("The team planned the launch"),
+        "recap carries the summary: {}",
+        recap.body
+    );
+    assert!(
+        recap.body.contains(&format!("/transcripts/{tid}")),
+        "recap links the full transcript: {}",
+        recap.body
+    );
+    // Authored by the assistant bot, not the call starter.
+    let bot = db::auth::find_user_by_username(&s.state.auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot exists after the recap");
+    assert_eq!(recap.user_id, bot.id, "recap is authored by the bot");
+
+    // The stored summary doubles as the dedupe marker.
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert!(t.summary.unwrap().contains("launch"), "summary persisted");
+
+    // Exactly one recap: finalize transitions once, so no double-post.
+    let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
+    let count = msgs
+        .iter()
+        .filter(|m| m.body.contains("Call recap"))
+        .count();
+    assert_eq!(count, 1, "recap posted exactly once");
+}
+
+/// Without the per-room opt-in, no recap is posted even with an LLM configured.
+#[tokio::test]
+async fn auto_call_recap_skipped_when_assistant_disabled() {
+    let s = setup_with_clients(None, with_llm("## Summary\nShould never be posted.")).await;
+    // Note: assistant_enabled defaults off; we do not enable it here.
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Give the spawned task a chance to run and (correctly) no-op at the gate.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
+    assert!(
+        !msgs.iter().any(|m| m.body.contains("Call recap")),
+        "no recap without the opt-in"
+    );
+    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    assert!(
+        t.summary.is_none(),
+        "no summary generated without the opt-in"
+    );
+}
+
+/// LC-663: an `LlmClient` double that records the user content (the transcript
+/// text) it was handed, so the speaker roster + attributed lines the recap sends
+/// are observable without a live model.
+#[derive(Default)]
+struct CapturingLlm {
+    last_user: std::sync::Mutex<Option<String>>,
+    canned: String,
+}
+
+#[async_trait::async_trait]
+impl lets_chat::llm::LlmClient for CapturingLlm {
+    async fn complete(
+        &self,
+        _system: &str,
+        user_content: &str,
+    ) -> Result<String, lets_chat::llm::LlmError> {
+        // The live-caption correction pass (LC-629) also runs when an LLM is
+        // configured; pass those NEW lines through unchanged so segments keep
+        // their text, and capture only the summarize call.
+        if user_content.contains("NEW line to correct:") {
+            let line = user_content
+                .rsplit("NEW line to correct:\n")
+                .next()
+                .unwrap_or("")
+                .trim();
+            return Ok(line.to_string());
+        }
+        *self.last_user.lock().unwrap() = Some(user_content.to_string());
+        Ok(self.canned.clone())
+    }
+}
+
+/// LC-663: the auto recap sends the model a `Participants:` roster and
+/// speaker-prefixed lines, so it can attribute decisions and action items to the
+/// people who spoke.
+#[tokio::test]
+async fn recap_sends_speaker_roster_and_attributed_lines() {
+    let cap = Arc::new(CapturingLlm {
+        canned: "## Summary\nThey decided.\n\n## Decisions\n- alice - ship Friday".to_string(),
+        ..Default::default()
+    });
+    let llm: Arc<dyn lets_chat::llm::LlmClient> = cap.clone();
+    let s = setup_with_clients(None, Some(llm)).await;
+    db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
+        .await
+        .unwrap();
+
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    // Two distinct speakers: alice and bob each transcribe their own mic.
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=we+will+ship+friday"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=i+will+own+the+docs"),
+    )
+    .await;
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/end"),
+        None,
+    )
+    .await;
+
+    // Wait for the recap to post, which means the model was called.
+    wait_for_recap(&s, s.dm_room).await.expect("recap posted");
+    let seen = cap
+        .last_user
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the model received the transcript");
+    assert!(
+        seen.contains("Participants: alice, bob"),
+        "roster leads the prompt: {seen}"
+    );
+    assert!(
+        seen.contains("alice: we will ship friday"),
+        "alice's line is attributed: {seen}"
+    );
+    assert!(
+        seen.contains("bob: i will own the docs"),
+        "bob's line is attributed: {seen}"
+    );
+}
+
+// ── LC-664: personal "what did I miss" brief ──────────────────────────────────
+
+/// A member gets a brief personalized to them: the model is handed the viewer's
+/// name plus the transcript, and the rendered brief comes back. A non-member is
+/// refused.
+#[tokio::test]
+async fn brief_is_personalized_to_the_viewer() {
+    let cap = Arc::new(CapturingLlm {
+        canned: "You have one action item: write the docs.".to_string(),
+        ..Default::default()
+    });
+    let llm: Arc<dyn lets_chat::llm::LlmClient> = cap.clone();
+    let s = setup_with_clients(None, Some(llm)).await;
+
+    // Start a session in the DM, then seed a segment spoken by bob (alice, the
+    // viewer, missed it). Seed via the db to skip the live-correction path.
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    db::transcripts::append_segment(&s.chat, tid, &s.b_id, "we shipped the release", None, 0)
+        .await
+        .unwrap();
+
+    // alice asks for her brief.
+    let (st, frag) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{frag}");
+    assert!(frag.contains("write the docs"), "brief rendered: {frag}");
+
+    // The model was told who to brief, with the transcript as data.
+    let seen = cap
+        .last_user
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the model received the brief request");
+    assert!(
+        seen.contains("Person to brief: alice"),
+        "brief names the viewer: {seen}"
+    );
+    assert!(
+        seen.contains("bob: we shipped the release"),
+        "brief carries the transcript: {seen}"
+    );
+
+    // A non-member cannot brief themselves on someone else's call.
+    let (st, _) = post(
+        &s.app,
+        &s.outsider_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+/// With no LLM configured the brief is refused (the card is also hidden).
+#[tokio::test]
+async fn brief_400_when_llm_disabled() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    db::transcripts::append_segment(&s.chat, tid, &s.b_id, "hello", None, 0)
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/brief"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+}
+
 #[tokio::test]
 async fn translation_cache_upsert_and_invalidate() {
     let s = setup().await;

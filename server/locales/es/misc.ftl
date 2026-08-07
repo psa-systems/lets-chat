@@ -79,11 +79,25 @@ transcript-hide-empty-tip = Ocultar transcripciones de 0 líneas
 transcript-download = Descargar
 transcript-download-txt = Texto (.txt)
 transcript-download-vtt = WebVTT (.vtt)
+# LC-629: the uncorrected recognition, preserved alongside the AI-corrected text
+transcript-download-raw = Original (.txt)
 # LC-396: resumen con IA
 transcript-summary-heading = Resumen con IA
 transcript-summary-generate = Resumir
 transcript-summary-regenerate = Regenerar
 transcript-summary-working = Resumiendo...
+# LC-659: subtítulo de alcance, etiqueta de "leyendo" por etapas y aviso, para
+# igualar el resumen "Ponerte al día" de la sala.
+transcript-summary-scope = Resumen de esta llamada
+transcript-summary-reading = Leyendo la transcripción...
+transcript-summary-disclaimer = Generado por IA a partir de esta transcripción. Puede estar incompleto.
+# LC-664: resumen personal "qué me perdí".
+transcript-brief-heading = Qué me perdí
+transcript-brief-scope = Personalizado para ti
+transcript-brief-generate = Ponerme al día
+transcript-brief-regenerate = Regenerar
+transcript-brief-reading = Leyendo la transcripción...
+transcript-brief-disclaimer = Generado por IA y personalizado para ti. Puede estar incompleto.
 
 ## Activity page
 activity-page-title = Actividad

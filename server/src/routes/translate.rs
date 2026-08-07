@@ -31,6 +31,8 @@ pub async fn post_translate(
     if !db::chat::is_room_accessible(&state.chat, msg.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate (403 for unprivileged/flag-off).
+    super::ai_gate::require_llm_in_room(&state, msg.room_id, &user).await?;
     let body = msg.body.trim();
     if body.is_empty() {
         return Err(AppError::BadRequest("nothing to translate".into()));
@@ -48,7 +50,7 @@ pub async fn post_translate(
                  already in {lang}, return it unchanged. Reply with ONLY the translation - no \
                  preamble, notes, or surrounding quotes."
             );
-            let out = match llm.complete(&system, body).await {
+            let out = match llm.complete_guarded(&system, body).await {
                 Ok(s) => s.trim().to_string(),
                 Err(e) => {
                     tracing::warn!(error = %e, message_id, "translation failed");

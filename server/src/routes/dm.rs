@@ -306,6 +306,8 @@ pub async fn get_dm(
                 .and_then(|qid| quote_preview_map.get(&qid).cloned()),
             suppress_quote_preview: false,
             is_system: m.is_system,
+            sysgroup_open: None,
+            sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
                 crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
                     .await
@@ -326,6 +328,10 @@ pub async fn get_dm(
             actor: meta.actor.clone(),
         });
     }
+
+    // LC-680: collapse runs of consecutive call/system events into one quiet,
+    // expandable block so they stop drowning the human conversation.
+    crate::views::room::group_system_events(&mut messages);
 
     // Compute the "Seen HH:MM" caption for the most recent own-authored
     // message that the peer has read. Gated symmetrically: both viewer and
@@ -392,6 +398,11 @@ pub async fn get_dm(
         .await?
         .unwrap_or_default();
 
+    // LC-679: role-scoped AI gate. A DM has no enclave and no room-moderator
+    // overrides, so `privileged_in_room` here reduces to site-admin-only.
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_privileged = super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+
     let page = DmPage {
         user: &user,
         peer: &peer,
@@ -410,8 +421,9 @@ pub async fn get_dm(
         pinned_strip_html,
         initial_draft,
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
-        llm_available: state.llm_available(),
-        embeddings_available: state.embeddings_available(),
+        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
+        vision_available: crate::vision::available(),
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
     };

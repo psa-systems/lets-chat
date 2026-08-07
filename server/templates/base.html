@@ -276,6 +276,10 @@
      `%name%` / `%status%` / `%n%` are placeholders the JS substitutes. #}
   <script>
     window.__lcI18n = {
+      aiFailed: "{{ "js-ai-failed"|t }}",
+      aiRetry: "{{ "js-ai-retry"|t }}",
+      composeApplied: "{{ "js-compose-applied"|t }}",
+      composeUndo: "{{ "js-compose-undo"|t }}",
       callMute: "{{ "js-call-mute"|t }}",
       callUnmute: "{{ "js-call-unmute"|t }}",
       callStartVideo: "{{ "js-call-start-video"|t }}",
@@ -294,6 +298,7 @@
       callMissedFrom: "{{ "js-call-missed-from"|t }}",
       callNoAnswer: "{{ "js-call-no-answer"|t }}",
       callEnded: "{{ "js-call-ended"|t }}",
+      callPeerLeft: "{{ "js-call-peer-left"|t }}",
       callNoMicCamera: "{{ "js-call-no-mic-camera"|t }}",
       callNoCamera: "{{ "js-call-no-camera"|t }}",
       callNoMic: "{{ "js-call-no-mic"|t }}",
@@ -379,6 +384,7 @@
   <script src="/assets/reactions.js?v={{ asset_version }}" defer></script>
   <script src="/assets/tooltip.js?v={{ asset_version }}" defer></script>
   <script src="/assets/search.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/media-constraints.js?v={{ asset_version }}" defer></script>
   <script src="/assets/devices.js?v={{ asset_version }}" defer></script>
   <script src="/assets/rtc_common.js?v={{ asset_version }}" defer></script>
   <script src="/assets/call.js?v={{ asset_version }}" defer></script>

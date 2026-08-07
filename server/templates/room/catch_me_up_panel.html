@@ -3,10 +3,15 @@
    close affordance (DELETE /thread-panel). The body holds a Generate button
    that POSTs /room/{id}/summary and swaps the rendered summary into
    #room-summary-body in place. #}
-<aside id="thread-panel" class="w-96 border-l border-border flex flex-col bg-surface-elevated">
+{# LC-652: use the shared `.lc-panel` card like the thread/related panels rather
+   than a hand-rolled `w-96 border-l` aside. The old fixed width (24rem) was
+   wider than the 22.5rem `.lc-rightcol` it lives in, so the panel overflowed its
+   column and the header + close X were clipped, needing a horizontal scroll.
+   `.lc-panel` fits the column, adds `overflow: hidden`, and reads as a card. #}
+<aside id="thread-panel" class="lc-panel flex flex-col">
   <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
     <div class="min-w-0">
-      <div class="font-semibold leading-tight">{{ "summary-catch-up-heading"|t }}</div>
+      <div class="font-semibold leading-tight truncate">{{ "summary-catch-up-heading"|t }}</div>
       <div class="text-xs text-content-muted truncate">
         {% if has_unread %}{{ unread_count }} {{ "summary-unread-suffix"|t }}{% else %}{{ "summary-recent-scope"|t }}{% endif %}
       </div>
@@ -19,12 +24,19 @@
       aria-label="{{ "room-thread-close"|t }}"
     >&#10005;</button>
   </header>
-  <div class="flex-1 overflow-y-auto p-3">
-    <div id="room-summary-body">
+  <div class="flex-1 min-w-0 overflow-y-auto p-3">
+    {# min-w-0 + break-words so a long token in the AI summary wraps instead of
+       forcing the panel wider than its column (LC-652). #}
+    <div id="room-summary-body" class="min-w-0 break-words">
       <button type="button"
               hx-post="/room/{{ room_id }}/summary"
               hx-target="#room-summary-body" hx-swap="innerHTML"
               hx-disabled-elt="this"
+              data-lc-ai-pending
+              data-lc-ai-skeleton="summary"
+              data-lc-ai-read-label="{{ "ai-reading-messages"|t }}"
+              data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+              data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
               class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
         {{ "summary-generate"|t }}
       </button>

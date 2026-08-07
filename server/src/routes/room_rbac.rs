@@ -18,7 +18,9 @@ use crate::i18n::translate_current;
 use crate::models::User;
 use crate::perms::room_can_manage_overrides;
 use crate::state::AppState;
-use crate::views::room_moderators::{RoomModeratorRow, RoomModeratorsPage, RoomOverrideEntry};
+use crate::views::room_moderators::{
+    RoomModeratorRow, RoomModeratorsPage, RoomOverrideEntry, SettingsToggleFragment,
+};
 use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
 
@@ -150,6 +152,7 @@ pub async fn get_page(
     let broadcast_policy = db::chat::get_room_broadcast_policy(&state.chat, room_id).await?;
     let slowmode_seconds = db::chat::get_room_slowmode(&state.chat, room_id).await?;
     let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
+    let digest_enabled = db::chat::get_room_digest_enabled(&state.chat, room_id).await?;
     let stage_enabled = db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
     // LC-495: workflow-automation rules for the included automations section.
     let automations: Vec<crate::views::room_automations::AutomationRow> =
@@ -170,7 +173,10 @@ pub async fn get_page(
         slowmode_seconds,
         retention_days,
         assistant_enabled,
-        assistant_available: state.llm_available(),
+        // LC-679: the Manage page is already restricted to room managers (the
+        // privileged set), so the AI-assistance toggle reflects flag + config.
+        assistant_available: super::ai_gate::flag_on(&state).await && state.llm_available(),
+        digest_enabled,
         stage_enabled,
         automations: &automations,
         sidebar_categories: &sidebar_categories,
@@ -230,6 +236,46 @@ pub struct PostingPolicyForm {
     /// One of `"all"`, `"moderators_only"`, `"admins_only"`. Anything
     /// else 400s.
     pub policy: String,
+}
+
+/// LC-677: the re-rendered on/off toggle for the assistant/digest/stage
+/// switches. Returned by those handlers so a click updates the switch, label,
+/// and hidden next-value in place (no reload). `field` is the route segment.
+fn saved_toggle(room_id: i64, field: &'static str, enabled: bool) -> SettingsToggleFragment {
+    let (aria, on_l, on_t, off_l, off_t) = match field {
+        "assistant" => (
+            "room-assistant-heading",
+            "room-assistant-on-label",
+            "room-assistant-on-text",
+            "room-assistant-off-label",
+            "room-assistant-off-text",
+        ),
+        "digest" => (
+            "room-digest-heading",
+            "room-digest-on-label",
+            "room-digest-on-text",
+            "room-digest-off-label",
+            "room-digest-off-text",
+        ),
+        _ => (
+            "room-stage-heading",
+            "room-stage-on-label",
+            "room-stage-on-text",
+            "room-stage-off-label",
+            "room-stage-off-text",
+        ),
+    };
+    SettingsToggleFragment {
+        room_id,
+        field,
+        enabled,
+        aria_label: translate_current(aria),
+        on_label: translate_current(on_l),
+        on_text: translate_current(on_t),
+        off_label: translate_current(off_l),
+        off_text: translate_current(off_t),
+        status: translate_current("room-policy-saved"),
+    }
 }
 
 /// POST /room/{id}/posting-policy
@@ -408,10 +454,43 @@ pub async fn post_assistant(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current(
-            "room-policy-saved",
-        )))?
-        .into_response());
+        return Ok(html(&saved_toggle(room_id, "assistant", enabled))?.into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+/// POST /room/{id}/digest
+///
+/// LC-665: toggle the scheduled AI activity digest for this room. Same
+/// authorization + audit + dual-mode response as the assistant toggle. Only
+/// posts when the operator has configured an LLM, but the opt-in is independent
+/// so a manager can pre-enable it.
+pub async fn post_digest(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<AssistantForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let enabled = matches!(form.enabled.trim(), "1" | "true" | "on" | "yes");
+    let n = db::chat::set_room_digest_enabled(&state.chat, room_id, enabled).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"digest_enabled":{enabled}}}"#);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_digest_toggle",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&saved_toggle(room_id, "digest", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
@@ -445,10 +524,7 @@ pub async fn post_stage(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current(
-            "room-policy-saved",
-        )))?
-        .into_response());
+        return Ok(html(&saved_toggle(room_id, "stage", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }

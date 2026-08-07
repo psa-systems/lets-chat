@@ -28,9 +28,10 @@ mod acks;
 mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
+pub(crate) mod ai_gate;
 mod api;
 mod api_tokens;
-mod assistant;
+pub(crate) mod assistant;
 mod auth;
 mod automations;
 mod avatar;
@@ -70,7 +71,7 @@ mod polls;
 mod push;
 mod reactions;
 mod read_all;
-mod related;
+pub mod related;
 mod reminders;
 mod report;
 mod retention;
@@ -101,10 +102,12 @@ mod stage;
 mod starred_rooms;
 mod stats;
 mod status;
-mod summary;
+pub(crate) mod summary;
 mod switcher;
+pub mod thread_title;
 mod transcripts;
 mod translate;
+pub mod triage;
 mod unfurl;
 mod uploads;
 mod user_groups;
@@ -578,6 +581,8 @@ pub(crate) async fn load_message_view_for_viewer(
         quote_preview,
         suppress_quote_preview: false,
         is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
         poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
             .await
             .ok()
@@ -1158,8 +1163,14 @@ pub(crate) async fn broadcast_room_message(
     room: &Room,
     event: &ChatEvent,
 ) -> Result<(), AppError> {
+    // LC-637: a public room is reachable only by members of its enclave, so fan
+    // its events to those members - not every connected socket
+    // (list_connected_users), which delivered each public-room event to every
+    // user on the server (a blast-radius and a scaling cost) and, paired with
+    // the old subscribe authorizer, leaked message bodies to non-members. This
+    // matches is_room_accessible, the predicate that admits a public room.
     let recipients: Vec<String> = match room.room_type.as_str() {
-        "public" => state.hub.list_connected_users(),
+        "public" => db::chat::list_enclave_member_ids_for_room(&state.chat, room.id).await?,
         _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
     };
     for uid in recipients {
@@ -1433,6 +1444,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // LC-492: per-room AI assistant toggle.
         .route("/room/{room_id}/assistant", post(room_rbac::post_assistant))
+        // LC-665: per-room scheduled AI digest toggle.
+        .route("/room/{room_id}/digest", post(room_rbac::post_digest))
         // LC-494: per-room stage-mode toggle.
         .route("/room/{room_id}/stage", post(room_rbac::post_stage))
         // LC-495: per-room workflow automations (manage-page CRUD).
@@ -1645,6 +1658,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/files/{id}", get(uploads::get_file))
         // LC-537: author-only image alt-text editor.
         .route("/api/files/{id}/alt", post(uploads::post_file_alt))
+        // LC-667: draft alt text for an image with the operator's vision model.
+        .route(
+            "/api/files/{id}/alt-draft",
+            post(uploads::post_file_alt_draft),
+        )
         // LC-590: uploader-triggered retry of a failed server-side transcription.
         .route(
             "/api/files/{id}/retranscribe",
@@ -1686,6 +1704,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/transcripts/{transcript_id}/summary",
             post(transcripts::summary),
+        )
+        .route(
+            "/transcripts/{transcript_id}/brief",
+            post(transcripts::brief),
         )
         .route(
             "/transcripts/{transcript_id}/follow-ups",

@@ -49,6 +49,12 @@ pub(crate) async fn embed_message(
     let Some(client) = state.embedding_client.clone() else {
         return Ok(());
     };
+    // LC-679: the runtime kill switch also halts background message embedding, so
+    // the whole embeddings surface goes dark when the flag is off (flag-only; no
+    // user context on this populator path).
+    if !super::ai_gate::flag_on(state).await {
+        return Ok(());
+    }
     let vec = match client.embed(text).await {
         Ok(v) => v,
         Err(e) => {
@@ -58,6 +64,29 @@ pub(crate) async fn embed_message(
     };
     let bytes = embeddings::vec_to_bytes(&vec);
     db::message_embeddings::upsert(&state.chat, message_id, room_id, vec.len() as i64, &bytes).await
+}
+
+/// LC-673: embed a batch of messages that have no embedding yet - history from
+/// before the embeddings endpoint was configured, which is otherwise invisible
+/// to semantic search. Best-effort per message ([`embed_message`] swallows
+/// endpoint errors), so a transient failure just leaves that message for a later
+/// tick. Returns how many messages were processed this batch; `0` means the
+/// backlog is drained (or no embeddings client is configured), which the caller
+/// uses to idle. Newest-first, since recent history is the likeliest search
+/// target.
+pub async fn run_embedding_backfill_tick(
+    state: &AppState,
+    batch: i64,
+) -> Result<usize, sqlx::Error> {
+    if state.embedding_client.is_none() {
+        return Ok(0);
+    }
+    let pending = db::message_embeddings::list_unembedded(&state.chat, batch).await?;
+    let n = pending.len();
+    for (id, room_id, body) in pending {
+        embed_message(state, id, room_id, &body).await?;
+    }
+    Ok(n)
 }
 
 /// One related-message row.
@@ -95,6 +124,9 @@ pub async fn get_related(
     if !db::chat::is_room_accessible(&state.chat, source.room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-679: runtime flag + role gate for the embeddings surface (403 for
+    // an unprivileged/flag-off caller).
+    super::ai_gate::require_embeddings_in_room(&state, source.room_id, &user).await?;
 
     // Source vector: prefer the stored one; otherwise embed on demand (the
     // background populator may not have reached this message yet).

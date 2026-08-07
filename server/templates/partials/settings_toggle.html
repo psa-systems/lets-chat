@@ -1,0 +1,15 @@
+{# LC-677: a self-re-rendering on/off settings toggle. The POST (to
+   /room/{room_id}/{field}) returns this same partial with the NEW state, so the
+   switch, the label, AND the hidden "next value" all update in place without a
+   reload. Used both inline (manage.html include) and as the toggle handlers'
+   response (SettingsToggleFragment). All referenced names are provided in both
+   contexts: `{% let %}` bindings in manage.html, struct fields in the handler. #}
+<form hx-post="/room/{{ room_id }}/{{ field }}" hx-target="this" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type=submit]" class="lc-set-form">
+  <input type="hidden" name="enabled" value="{% if enabled %}0{% else %}1{% endif %}">
+  <div class="lc-set-toggle-row">
+    <span class="text-sm">{% if enabled %}<strong>{{ on_label }}</strong> {{ on_text }}{% else %}<strong>{{ off_label }}</strong> {{ off_text }}{% endif %}</span>
+    <button type="submit" class="lc-switch" role="switch" aria-checked="{% if enabled %}true{% else %}false{% endif %}" aria-label="{{ aria_label }}"><span class="lc-switch-thumb"></span></button>
+  </div>
+  <span class="lc-set-status" role="status" aria-live="polite">{{ status }}</span>
+</form>

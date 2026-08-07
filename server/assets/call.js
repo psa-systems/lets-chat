@@ -349,8 +349,12 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.reject(new Error('getUserMedia unavailable'));
     }
+    // LC-628: request echo cancellation / noise suppression / auto gain even on
+    // this degraded path (LetsChatDevices absent) via the shared constraint.
     return navigator.mediaDevices.getUserMedia(
-      withVideo ? { audio: true, video: true } : { audio: true }
+      withVideo
+        ? { audio: window.LetsChatMedia.audio(), video: true }
+        : { audio: window.LetsChatMedia.audio() }
     );
   }
   // LC-144: camera-only acquisition honoring the pinned camera.
@@ -1187,7 +1191,18 @@
         }
         break;
       case 'hangup':
-        if (phase !== 'idle') { setStatus(window.__lcS('callEnded', 'Call ended')); setTimeout(teardown, 800); }
+        if (phase !== 'idle') {
+          // LC-631: unlike an enclave/room call - a server-scoped LiveKit room
+          // that persists so others can still join - a 1:1 direct call is a
+          // single peer connection with no room to wait in, so the peer leaving
+          // ends the call. Announce who left (matching the room path, where a
+          // departure is visible on the tile grid) instead of a bare "Call
+          // ended", then tear down. peerName is read now; teardown clears it.
+          var who = peerName || window.__lcS('callAContact', 'A contact');
+          setStatus(window.__lcS('callPeerLeft', '%name% left the call').replace('%name%', who));
+          lcToast('info', 'callPeerLeft', '%name% left the call', who);
+          setTimeout(teardown, 1000);
+        }
         break;
       case 'offer':
         onOffer(payload);

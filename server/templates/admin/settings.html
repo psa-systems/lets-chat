@@ -42,6 +42,34 @@
     </form>
   </div>
 
+  {# --- LC-679: AI / LLM feature flag (runtime kill switch) --- #}
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-llm-heading"|t }}</h3>
+    </div>
+    {% if !llm_configured %}
+    <div class="alert alert-warning mb-3">
+      <span><strong>{{ "admin-settings-llm-unconfigured-title"|t }}</strong> {{ "admin-settings-llm-unconfigured-body"|t }} <code>LETS_CHAT_LLM_URL</code></span>
+    </div>
+    {% endif %}
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-llm-note"|t }}</p>
+    <form class="lc-set-form" method="post" action="/admin/settings/llm"
+          hx-post="/admin/settings/llm" hx-target="#st-llm" hx-swap="innerHTML" hx-disabled-elt="this">
+      <label class="lc-toggle">
+        <input type="checkbox" name="enabled" value="1" {% if llm_flag_enabled %}checked{% endif %}>
+        <span class="lc-toggle-track" aria-hidden="true"></span>
+        <span class="lc-toggle-text">
+          <span class="lc-toggle-title">{{ "admin-settings-llm-enable"|t }}</span>
+          <span class="lc-toggle-desc">{{ "admin-settings-llm-enable-note"|t }}</span>
+        </span>
+      </label>
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-llm-save"|t }}</span></button>
+        <span id="st-llm" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
   {# --- Outbound email (SMTP), read-only env-var callout --- #}
   <div class="card lc-set-card">
     <div class="lc-set-card-head">
