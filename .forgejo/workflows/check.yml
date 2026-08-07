@@ -43,6 +43,11 @@ jobs:
         # See ci-build/check-migration-immutability.nu and LC-515 / DEV-395.
         run: nu ci-build/check-migration-immutability.nu
 
+      - name: Runner label guard
+        # Keep the base/dev split honest: a job that compiles must request the
+        # dev label, and no job may install a toolchain at run time (LC-647).
+        run: nu ci-build/check-runner-labels.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:

@@ -37,6 +37,8 @@ on:
 jobs:
   build-and-push:
     name: Build and push lets-chat
+    # Base image: the server compile happens inside `docker buildx`; the runner
+    # only drives docker and the registry (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read
