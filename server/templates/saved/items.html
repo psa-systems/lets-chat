@@ -7,9 +7,10 @@
    chips + this whole region can be replaced wholesale by the live refresh
    without the server needing to know each tab's active filter. #}
 {% if entries.is_empty() %}
-<p class="p-4 text-sm text-content-muted">
-  {{ "saved-empty"|t }}
-</p>
+{# LC-684: shared empty-state treatment (icon + muted copy) instead of a bare
+   paragraph, matching the room About / Manage surfaces. #}
+{% let empty_text_key = "saved-empty" %}
+{% include "partials/empty_state.html" %}
 {% else %}
 {% if !self.labels().is_empty() %}
 <div data-lc-saved-chips class="flex flex-wrap items-center gap-1 px-4 py-2 border-b border-border">
@@ -22,32 +23,53 @@
   {% endif %}
 </div>
 {% endif %}
-<ul class="divide-y divide-border">
+{# LC-684: card rows on the app's token surfaces (border + elevated surface +
+   rounded), replacing the flat divide-y lines. Content prominent, metadata quiet
+   secondary text. Token colors only, so all four themes + both densities hold. #}
+<ul class="flex flex-col gap-2 p-4">
   {% for e in entries %}
-  <li id="saved-row-{{ e.message_id }}" data-lc-saved-label="{{ e.label_value() }}" class="px-4 py-3">
+  <li id="saved-row-{{ e.message_id }}" data-lc-saved-label="{{ e.label_value() }}"
+      class="rounded-lg border border-border bg-surface-elevated p-3">
     <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
-      <span>
-        <span class="font-medium text-content-muted">{{ e.author_label }}</span>
+      <span class="min-w-0 truncate">
+        <span class="font-medium text-content">{{ e.author_label }}</span>
         &middot; {{ "saved-in"|t }}
+        {# LC-684: the caption links to the permalink route, which jumps to this
+           exact message in its original room / DM context. #}
         <a href="{{ e.context_path }}" class="text-accent hover:underline">{{ e.context_label }}</a>
         &middot; {{ "saved-saved-at"|t }} {{ e.saved_at }}
       </span>
       <span class="flex items-center gap-2 shrink-0">
-        {# LC-479: inline label editor. Posts on change (htmx sends this input's
-           value); the SavedChanged broadcast refreshes the list + chips. #}
+        {# LC-479: inline label editor (tag-style). Posts on change (htmx sends
+           this input's value); the SavedChanged broadcast refreshes list + chips. #}
         <input type="text" name="label" value="{{ e.label_value() }}" maxlength="40"
                hx-post="/messages/{{ e.message_id }}/bookmark/label"
                hx-trigger="change" hx-swap="none"
                placeholder="{{ "saved-label-placeholder"|t }}"
                aria-label="{{ "saved-label-aria"|t }}"
-               class="w-28 rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-xs text-content placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+               class="w-24 rounded-full border border-border bg-surface-sunken px-2.5 py-0.5 text-xs text-content placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+        {# LC-684: Unsave as a clear secondary/destructive control with a confirm
+           step, so an accidental click doesn't silently drop a save. #}
         <button hx-delete="/messages/{{ e.message_id }}/bookmark"
                 hx-target="#saved-row-{{ e.message_id }}"
                 hx-swap="delete"
-                class="text-danger hover:underline">{{ "saved-unsave"|t }}</button>
+                hx-confirm="{{ "saved-unsave-confirm"|t }}"
+                class="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-surface hover:border-danger-border focus:outline-none focus:ring-1 focus:ring-danger">{{ "saved-unsave"|t }}</button>
       </span>
     </div>
-    <div class="mt-1 whitespace-pre-wrap text-sm text-content">{{ e.body }}</div>
+    {# LC-684: real content - markdown-rendered body (bold/italic/links) and the
+       message's attachments rendered read-only, the same as the timeline. A
+       message with neither shows a quiet placeholder instead of a blank card. #}
+    {% if e.has_content() %}
+    {% if !e.body_html.trim().is_empty() %}
+    <div class="lc-md leading-snug mt-2 text-sm text-content">{{ e.body_html|safe }}</div>
+    {% endif %}
+    {% for a in e.attachments %}
+    {% include "saved/media.html" %}
+    {% endfor %}
+    {% else %}
+    <div class="mt-2 text-sm italic text-content-subtle">{{ "saved-no-preview"|t }}</div>
+    {% endif %}
   </li>
   {% endfor %}
 </ul>
