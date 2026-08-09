@@ -28,6 +28,7 @@ pub mod login_approval;
 pub mod maintenance;
 pub mod markdown;
 pub mod math;
+pub mod members;
 pub mod mentions;
 pub mod message_actor;
 pub mod not_found;
