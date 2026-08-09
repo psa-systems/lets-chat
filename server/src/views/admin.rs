@@ -563,6 +563,10 @@ pub struct BotRowView {
     pub username: String,
     pub disabled: bool,
     pub created_at: String,
+    /// LC-693: true when this bot is the one the AI assistant currently posts as
+    /// (settings `assistant_bot_username`). Resolved in the handler so the
+    /// template stays comparison-free.
+    pub is_assistant: bool,
 }
 
 /// LC-78: one bridge row on the admin bridges page.
@@ -635,6 +639,9 @@ pub struct BotsPage<'a> {
     pub new_token: Option<String>,
     /// The just-created bot's username, paired with new_token.
     pub new_bot_name: Option<String>,
+    /// LC-693: the bot the AI assistant currently posts as (its username), or
+    /// None when it uses the built-in `assistant`. Drives the selector's default.
+    pub assistant_bot: Option<String>,
     pub error: Option<String>,
 }
 

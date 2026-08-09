@@ -82,6 +82,12 @@ admin-bots-status-active = active
 admin-bots-disable = Disable
 admin-bots-disable-confirm = Disable this bot? It will be banned and all its API tokens revoked.
 admin-bots-empty = No bots yet.
+admin-bots-assistant-heading = AI assistant identity
+admin-bots-assistant-desc = Choose which bot the AI assistant posts as: the identity shown on /ask answers, catch-up summaries, and post-call recaps. Defaults to the built-in "assistant" bot.
+admin-bots-assistant-label = AI assistant posts as
+admin-bots-assistant-default = assistant (built-in)
+admin-bots-assistant-save = Save
+admin-bots-assistant-pill = AI assistant
 
 admin-bridges-title = Bridges
 admin-bridges-heading = Bridges
