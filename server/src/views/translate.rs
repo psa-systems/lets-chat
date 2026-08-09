@@ -98,16 +98,22 @@ pub fn resolve_target(requested: Option<&str>, viewer_locale: &str) -> &'static 
         .unwrap_or(&TARGETS[0])
 }
 
-/// Rendered translation, swapped into `#translation-{message_id}` under the
-/// message body. Carries the in-block language picker (`targets` + the
+/// Rendered translation block, swapped into `#translation-{message_id}` under
+/// the message body. Carries the in-block language picker (`targets` + the
 /// `selected` code) and a "show original" affordance (the template clears the
 /// container).
+///
+/// LC-694: `translated_html` is `None` in the picker-only state (the first
+/// Translate click opens the picker and runs no LLM call, so an already-in-your-
+/// language message never burns a wasted translation) and `Some(html)` once a
+/// target has been chosen and translated.
 #[derive(Template)]
 #[template(path = "room/translation_block.html")]
 pub struct TranslationFragment {
     pub message_id: i64,
-    pub translated_html: String,
-    /// The chosen target's code, to mark the selected `<option>`.
+    /// `None` = picker only (no AI call yet); `Some` = the rendered translation.
+    pub translated_html: Option<String>,
+    /// The chosen (or default) target's code, to mark the selected `<option>`.
     pub selected: &'static str,
     /// The full picker list (always [`TARGETS`]).
     pub targets: &'static [TranslateTarget],

@@ -221,6 +221,7 @@ room-msg-edit = Editar
 room-msg-delete = Eliminar
 # LC-486: traduccion en linea
 room-msg-translate = Traducir
+room-msg-translate-to = Traducir a
 room-msg-translated-to = Traducido a
 room-msg-translate-language = Idioma de traducción
 room-msg-show-original = Mostrar original

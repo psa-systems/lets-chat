@@ -1,15 +1,25 @@
-{# LC-486: inline translation under a message body. Swapped into
-   #translation-{id}; "Show original" clears the container (re-translating is a
-   cache hit, so toggling back on is cheap).
-   LC-688: the "Translated to" label is now a language picker - changing it
-   re-posts to the translate route with the chosen target and swaps this block in
-   place. The target is user-chosen, not the viewer's UI locale, so any offered
-   language works. #}
+{# LC-486 / LC-688 / LC-694: inline translation under a message body, swapped
+   into #translation-{id}.
+
+   LC-694 two-state flow:
+   - Picker only (translated_html = None): the first Translate click opens this
+     with NO translation yet - a language picker + a "Translate" button - so no
+     LLM call runs until the user confirms a target. This kills the old wasted
+     first call (auto-translating a message into the language it was already in).
+   - Translated (translated_html = Some): the chosen target's translation, with
+     "Show original" (clears the container) and the same picker; changing the
+     language re-translates to the new target (one LLM call each, cached).
+
+   The picker's <select> auto-translates on change; in picker-only mode the
+   client (live.js) also pre-selects the viewer's remembered target from
+   localStorage, and the "Translate" button confirms the shown default. Loading
+   feedback reuses the shared data-lc-ai-pending spinner (LC-650). #}
 <div class="lc-translation-block">
   <div class="lc-translation-head">
     <label class="inline-flex items-center gap-1">
-      <span>{{ "room-msg-translated-to"|t }}</span>
+      <span>{% if translated_html.is_some() %}{{ "room-msg-translated-to"|t }}{% else %}{{ "room-msg-translate-to"|t }}{% endif %}</span>
       <select name="lang"
+              data-lc-translate-select{% if translated_html.is_none() %} data-lc-translate-preset{% endif %}
               hx-post="/messages/{{ message_id }}/translate"
               hx-trigger="change"
               hx-target="#translation-{{ message_id }}"
@@ -19,14 +29,29 @@
               data-lc-ai-pending-label="{{ "ai-translating"|t }}"
               data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
               aria-label="{{ "room-msg-translate-language"|t }}"
-              class="rounded border border-border bg-surface-elevated px-1 py-0.5 text-xs text-content focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+              class="lc-translation-select">
         {% for t in targets %}
         <option value="{{ t.code }}"{% if t.code == selected %} selected{% endif %}>{{ t.native }}</option>
         {% endfor %}
       </select>
     </label>
+    {% if translated_html.is_some() %}
     <button type="button" class="lc-translation-hide"
             onclick="var c=this.closest('[id^=translation-]'); if(c)c.innerHTML='';">{{ "room-msg-show-original"|t }}</button>
+    {% else %}
+    {# Confirm the shown default (the select posts its current value); one LLM call. #}
+    <button type="button" class="lc-translation-go"
+            hx-post="/messages/{{ message_id }}/translate"
+            hx-include="closest .lc-translation-head"
+            hx-target="#translation-{{ message_id }}"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            data-lc-ai-pending
+            data-lc-ai-pending-label="{{ "ai-translating"|t }}"
+            data-lc-ai-slow-label="{{ "ai-working-slow"|t }}">{{ "room-msg-translate"|t }}</button>
+    {% endif %}
   </div>
-  <div class="lc-md leading-snug">{{ translated_html|safe }}</div>
+  {% if let Some(html) = translated_html %}
+  <div class="lc-md leading-snug">{{ html|safe }}</div>
+  {% endif %}
 </div>
