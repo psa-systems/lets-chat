@@ -296,6 +296,33 @@
     }
   });
 
+  // LC-694: remember the viewer's last translation target (per browser) so the
+  // message Translate picker defaults to it - a frequent user does not re-pick
+  // every time. Persist on any target change; pre-select only the picker-only
+  // <select> (data-lc-translate-preset), never the translated-state one (whose
+  // value reflects the active translation, not the viewer's preference).
+  var LC_TRANSLATE_KEY = 'lc-translate-lang';
+  document.body.addEventListener('change', function (evt) {
+    var sel = evt.target.closest && evt.target.closest('[data-lc-translate-select]');
+    if (!sel) return;
+    try { localStorage.setItem(LC_TRANSLATE_KEY, sel.value); } catch (e) { /* storage off */ }
+  });
+  function lcTranslatePreset(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var presets = scope.querySelectorAll('[data-lc-translate-preset]');
+    if (!presets.length) return;
+    var pref;
+    try { pref = localStorage.getItem(LC_TRANSLATE_KEY); } catch (e) { pref = null; }
+    // Codes are 2-letter target keys (the allowlist); guard the attribute
+    // selector and ignore a stored code no longer offered.
+    if (!pref || !/^[a-z]{2}$/.test(pref)) return;
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].querySelector('option[value="' + pref + '"]')) presets[i].value = pref;
+    }
+  }
+  document.body.addEventListener('htmx:load', function (e) { lcTranslatePreset(e.target); });
+  document.body.addEventListener('htmx:afterSettle', function (e) { lcTranslatePreset(e.target); });
+
   // LC-650: uniform "AI is working" feedback. AI actions call a possibly-slow
   // LLM (seconds on a CPU model), and their htmx targets are empty until the
   // response lands, so without this the click feels dead. Any trigger tagged

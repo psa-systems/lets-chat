@@ -53,12 +53,29 @@ pub async fn post_translate(
         return Err(AppError::BadRequest("nothing to translate".into()));
     }
 
-    // LC-688: target language is the picker's choice, defaulting to the viewer's
-    // locale; the cache is keyed by the target code so each language caches
-    // independently.
-    let requested = form.lang;
     let viewer_locale = crate::i18n::current_lang_code();
-    let target = resolve_target(requested.as_deref(), &viewer_locale);
+
+    // LC-694: the first Translate click posts no `lang`, so open the picker
+    // WITHOUT translating. Previously this auto-translated to the viewer's
+    // locale, which burned an LLM call on a no-op when the message was already in
+    // that language, then forced a second call once the user picked what they
+    // actually wanted. Now the AI runs only once the user confirms a target
+    // (the picker's "Translate" button or a language change), so there is never a
+    // wasted first call. The default highlighted option is the viewer's locale;
+    // the client (live.js) may re-preselect the viewer's remembered target.
+    let Some(requested) = form.lang else {
+        let target = resolve_target(None, &viewer_locale);
+        return html(&TranslationFragment {
+            message_id,
+            translated_html: None,
+            selected: target.code,
+            targets: TARGETS,
+        });
+    };
+
+    // LC-688: target language is the picker's choice; the cache is keyed by the
+    // target code so each language caches independently.
+    let target = resolve_target(Some(&requested), &viewer_locale);
 
     let translated =
         match db::translations::get_cached(&state.chat, message_id, target.code).await? {
@@ -89,7 +106,7 @@ pub async fn post_translate(
     let translated_html = crate::views::markdown::render(&translated, &[], &[]);
     html(&TranslationFragment {
         message_id,
-        translated_html,
+        translated_html: Some(translated_html),
         selected: target.code,
         targets: TARGETS,
     })
