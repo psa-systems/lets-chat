@@ -38,15 +38,22 @@
         var rows = list.querySelectorAll('[data-lc-member-key]');
         for (var i = 0; i < rows.length; i++) {
           var k = rows[i].getAttribute('data-lc-member-key') || '';
-          rows[i].hidden = q !== '' && k.indexOf(q) === -1;
+          /* LC-689: toggle style.display, NOT the hidden attribute - the row
+             carries Tailwind's `flex` class and `.flex` (author CSS) beats
+             `[hidden]` (UA CSS), so `hidden` was inert and the filter did
+             nothing (same cascade trap as LC-678/LC-686). */
+          rows[i].style.display = (q !== '' && k.indexOf(q) === -1) ? 'none' : '';
         }
       ">
   </div>
 
   <div id="lc-members-list" class="flex-1 min-w-0 overflow-y-auto p-1">
     {% for m in members %}
-    <a href="/dm/{{ m.user_id }}" data-lc-hovercard="{{ m.user_id }}"
-       data-lc-member-key="{{ m.filter_key }}"
+    {# LC-689: the viewer's own row is not a DM link (you cannot DM yourself -
+       /dm/{self} 404s); it renders as a plain row marked "You". Everyone else
+       links to the DM and carries the profile hovercard. An <a> with no href is
+       valid and simply does not navigate, so the two share one element. #}
+    <a {% if !m.is_self %}href="/dm/{{ m.user_id }}" data-lc-hovercard="{{ m.user_id }}" {% endif %}data-lc-member-key="{{ m.filter_key }}"
        class="lc-member-row flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-sunken">
       {% let avatar_user_id = m.user_id.clone() %}
       {% let avatar_username = m.username.clone() %}
@@ -58,6 +65,9 @@
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5 min-w-0">
           <span class="truncate text-sm font-medium text-content">{{ m.label }}</span>
+          {% if m.is_self %}
+          <span class="flex-none text-[10px] font-bold uppercase tracking-wide rounded px-1 py-0.5 border border-border text-content-muted">{{ "members-you"|t }}</span>
+          {% endif %}
           {% if let Some(b) = m.badge.as_ref() %}
           <span class="flex-none text-[10px] font-bold uppercase tracking-wide rounded px-1 py-0.5 {{ b.class }}">{{ b.label }}</span>
           {% endif %}
