@@ -82,6 +82,12 @@ admin-bots-status-active = activo
 admin-bots-disable = Desactivar
 admin-bots-disable-confirm = Desactivar este bot? Sera baneado y todos sus tokens de API revocados.
 admin-bots-empty = Aun no hay bots.
+admin-bots-assistant-heading = Identidad del asistente IA
+admin-bots-assistant-desc = Elige con que bot publica el asistente IA: la identidad que aparece en las respuestas de /ask, los resumenes de puesta al dia y los resumenes posteriores a las llamadas. Por defecto usa el bot "assistant" integrado.
+admin-bots-assistant-label = El asistente IA publica como
+admin-bots-assistant-default = assistant (integrado)
+admin-bots-assistant-save = Guardar
+admin-bots-assistant-pill = Asistente IA
 
 admin-bridges-title = Puentes
 admin-bridges-heading = Puentes

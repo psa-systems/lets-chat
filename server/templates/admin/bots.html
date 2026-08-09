@@ -44,6 +44,30 @@
 </div>
 {% endif %}
 
+{# LC-693: choose which bot the AI assistant (/ask answers, catch-up summaries,
+   post-call recaps) posts as. Only active bots are pickable; the default is the
+   built-in `assistant`. Shown once at least one bot exists to pick from. #}
+{% if !bots.is_empty() %}
+<div class="card lc-set-card mb-5">
+  <div class="lc-set-card-head">
+    <h3 class="lc-set-card-title">{{ "admin-bots-assistant-heading"|t }}</h3>
+    <p class="lc-set-card-desc">{{ "admin-bots-assistant-desc"|t }}</p>
+  </div>
+  <form method="post" action="/admin/bots/assistant" class="lc-set-form">
+    <div class="lc-set-field lc-set-field--narrow">
+      <label class="lc-set-label" for="assistant_bot">{{ "admin-bots-assistant-label"|t }}</label>
+      <select id="assistant_bot" name="assistant_bot" class="input">
+        <option value=""{% if assistant_bot.is_none() %} selected{% endif %}>{{ "admin-bots-assistant-default"|t }}</option>
+        {% for b in bots %}{% if !b.disabled %}
+        <option value="{{ b.username }}"{% if b.is_assistant %} selected{% endif %}>{{ b.username }}</option>
+        {% endif %}{% endfor %}
+      </select>
+    </div>
+    <div><button type="submit" class="btn btn-primary">{{ "admin-bots-assistant-save"|t }}</button></div>
+  </form>
+</div>
+{% endif %}
+
 {% if bots.is_empty() %}
 {% let empty_text_key = "admin-bots-empty" %}
 {% include "partials/empty_state.html" %}
@@ -61,7 +85,7 @@
     <tbody>
       {% for b in bots %}
       <tr>
-        <td class="font-mono text-xs">{{ b.username }}</td>
+        <td class="font-mono text-xs">{{ b.username }}{% if b.is_assistant %} <span class="lc-pill lc-pill--neutral font-sans">{{ "admin-bots-assistant-pill"|t }}</span>{% endif %}</td>
         <td class="text-xs text-content-muted">{{ b.created_at }}</td>
         <td class="text-xs">{% if b.disabled %}<span class="lc-pill lc-pill--danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
         <td class="lc-table-actions">

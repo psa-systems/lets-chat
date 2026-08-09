@@ -103,6 +103,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/reports/{id}/resolve", post(post_report_resolve))
         .route("/admin/reports/{id}/dismiss", post(post_report_dismiss))
         .route("/admin/bots", get(get_bots).post(post_bots))
+        .route("/admin/bots/assistant", post(post_bots_assistant))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
         .route("/admin/bridges", get(get_bridges).post(post_bridges))
         .route("/admin/bridges/avatars", get(get_bridge_avatars))
@@ -2617,10 +2618,17 @@ async fn render_bots_page(
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(state, user, None).await?;
+    // LC-693: the bot the AI assistant posts as (empty setting = built-in default).
+    let assistant_bot =
+        db::settings::get_setting(&state.settings, super::assistant::ASSISTANT_BOT_KEY)
+            .await?
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
     let bots: Vec<BotRowView> = db::auth::list_bots(&state.auth)
         .await?
         .into_iter()
         .map(|b| BotRowView {
+            is_assistant: assistant_bot.as_deref() == Some(b.username.as_str()),
             id: b.id,
             username: b.username,
             disabled: b.is_banned,
@@ -2648,6 +2656,7 @@ async fn render_bots_page(
         bots: &bots,
         new_token,
         new_bot_name,
+        assistant_bot,
         error,
     };
     html(&page)
@@ -2784,6 +2793,46 @@ pub async fn post_bot_disable(
         .await?;
     }
     Ok(Redirect::to("/admin/bots"))
+}
+
+/// LC-693: choose which bot the AI assistant posts as.
+#[derive(Deserialize)]
+pub struct BotAssistantForm {
+    #[serde(default)]
+    pub assistant_bot: String,
+}
+
+/// POST /admin/bots/assistant - set (or clear) the bot the AI assistant posts
+/// as (LC-693). An empty selection clears the setting and reverts to the
+/// built-in `assistant`; a non-empty value must name an existing, active bot.
+pub async fn post_bots_assistant(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    axum::Form(form): axum::Form<BotAssistantForm>,
+) -> Result<Response, AppError> {
+    let choice = form.assistant_bot.trim();
+    if choice.is_empty() {
+        db::settings::set_setting(&state.settings, super::assistant::ASSISTANT_BOT_KEY, "").await?;
+        return Ok(Redirect::to("/admin/bots").into_response());
+    }
+    // Only an actual, non-disabled bot may stand in as the assistant identity.
+    let is_active_bot = db::auth::list_bots(&state.auth)
+        .await?
+        .into_iter()
+        .any(|b| !b.is_banned && b.username == choice);
+    if !is_active_bot {
+        return Ok(render_bots_page(
+            &state,
+            &actor,
+            None,
+            None,
+            Some("Pick an existing, active bot for the AI assistant.".into()),
+        )
+        .await?
+        .into_response());
+    }
+    db::settings::set_setting(&state.settings, super::assistant::ASSISTANT_BOT_KEY, choice).await?;
+    Ok(Redirect::to("/admin/bots").into_response())
 }
 
 // LC-78: bridges -----------------------------------------------------------

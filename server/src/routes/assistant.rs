@@ -29,8 +29,14 @@ const CONTEXT_CHARS: usize = 8000;
 /// Per-user asks per minute.
 const ASK_RATE_PER_MIN: u32 = 10;
 
-/// The assistant's bot username (and display label).
+/// The assistant's default bot username (and display label). Used when no bot
+/// has been chosen on the admin Bots page, and as the lazily-created fallback.
 const ASSISTANT_USERNAME: &str = "assistant";
+
+/// LC-693: settings key naming the bot the AI assistant posts as. An admin picks
+/// it on the Bots page from the existing bot accounts; unset (or a stale /
+/// disabled choice) falls back to [`ASSISTANT_USERNAME`].
+pub(crate) const ASSISTANT_BOT_KEY: &str = "assistant_bot_username";
 
 // LC-676: keep the RAG contract (answer from the room's context) but (a) make a
 // no-context outcome helpful instead of a terse dead-end, and (b) refuse a
@@ -54,6 +60,21 @@ const THINKING_BODY: &str = "_The assistant is thinking\u{2026}_";
 /// a `User` suitable for `finalize_message_send`. LC-662: also used by the
 /// automatic post-call recap (`routes::transcripts`), which posts as the same bot.
 pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
+    // LC-693: an admin can choose which bot the AI assistant posts as (settings
+    // `assistant_bot_username`, set from the admin Bots page). Honor it only when
+    // it names an existing, active bot; an unset, renamed, or disabled choice
+    // falls through to the built-in `assistant` identity below, so /ask and the
+    // other assistant surfaces never break on a stale setting.
+    if let Some(chosen) = db::settings::get_setting(&state.settings, ASSISTANT_BOT_KEY).await? {
+        let chosen = chosen.trim();
+        if !chosen.is_empty() && chosen != ASSISTANT_USERNAME {
+            if let Some(rec) = db::auth::find_user_by_username(&state.auth, chosen).await? {
+                if rec.is_bot && !rec.is_banned {
+                    return Ok(rec.into());
+                }
+            }
+        }
+    }
     if let Some(rec) = db::auth::find_user_by_username(&state.auth, ASSISTANT_USERNAME).await? {
         return Ok(rec.into());
     }
