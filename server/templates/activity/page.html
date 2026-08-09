@@ -23,24 +23,41 @@
       {{ "activity-new"|t }}
     </button>
     {% if items.is_empty() %}
-    <p class="p-8 text-center text-sm text-content-muted">{{ "activity-empty"|t }}</p>
+    {# LC-690: shared empty-state treatment (icon + muted copy) instead of a bare
+       paragraph, matching the Inbox / Saved surfaces. #}
+    {% let empty_text_key = "activity-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
-    <ul class="divide-y divide-border">
+    {# LC-690: card rows with the actor avatar (live presence) + a clear hierarchy
+       - actor prominent, action readable, kind/room/time quiet - replacing the
+       flat all-muted line. The whole card is one deep-link to the message. #}
+    <ul class="flex flex-col gap-2 p-4">
       {% for item in items %}
-      <li class="px-4 py-3 hover:bg-surface">
-        <a href="{{ item.target_path }}" class="block">
-          <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
-            <span class="font-semibold text-content-muted">{{ item.kind_label }} - {{ item.room_label }}</span>
-            <span>{{ item.created_at }}</span>
-          </div>
-          <div class="text-sm mt-1 text-content-muted">
-            {% if item.kind == "reaction" %}
-            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-reacted-prefix"|t }} {{ item.emoji }} {{ "activity-reacted-suffix"|t }}
-            {% else if item.kind == "reply" %}
-            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-replied"|t }}
-            {% else %}
-            <span class="font-medium">{{ item.actor_label }}</span> {{ "activity-mentioned"|t }}
-            {% endif %}
+      <li class="rounded-lg border border-border bg-surface-elevated hover:bg-surface-sunken">
+        <a href="{{ item.target_path }}" class="flex items-start gap-3 p-3">
+          {% let avatar_user_id = item.actor_user_id.clone() %}
+          {% let avatar_username = item.actor_label.clone() %}
+          {% let avatar_ext = item.avatar_ext.clone() %}
+          {% let avatar_status = item.actor_status.clone() %}
+          {% let avatar_custom_status = item.actor_custom_status.clone() %}
+          {% let avatar_size = "h-9 w-9 text-sm" %}
+          {% include "partials/avatar.html" %}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-baseline justify-between gap-2">
+              <span class="truncate text-sm font-semibold text-content">{{ item.actor_label }}</span>
+              <span class="shrink-0 text-xs text-content-subtle">{{ item.created_at }}</span>
+            </div>
+            <div class="truncate text-xs text-content-muted">{{ item.kind_label }} &middot; {{ item.room_label }}</div>
+            {# Actor is the heading, so the action line drops the leading name. #}
+            <div class="mt-1 text-sm text-content">
+              {% if item.kind == "reaction" %}
+              {{ "activity-reacted-prefix"|t }} {{ item.emoji }} {{ "activity-reacted-suffix"|t }}
+              {% else if item.kind == "reply" %}
+              {{ "activity-replied"|t }}
+              {% else %}
+              {{ "activity-mentioned"|t }}
+              {% endif %}
+            </div>
           </div>
         </a>
       </li>
