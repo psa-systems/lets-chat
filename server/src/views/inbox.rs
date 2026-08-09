@@ -12,6 +12,13 @@ pub struct InboxItem {
     pub room_id: i64,
     pub room_label: String,
     pub author_label: String,
+    /// LC-685: author identity for the row avatar (`partials/avatar.html`).
+    pub author_user_id: String,
+    pub avatar_ext: Option<String>,
+    /// Effective presence (`online`/`idle`/`dnd`/`offline`) for the avatar dot,
+    /// resolved via `routes::effective_status` like every other avatar surface.
+    pub author_status: String,
+    pub author_custom_status: Option<String>,
     pub snippet: String,
     pub created_at: String,
     /// Deep-link target: /room/{id}#msg-{message_id} for channels,
@@ -48,11 +55,29 @@ pub struct InboxItemsFragment<'a> {
     pub next_cursor: Option<i64>,
 }
 
+/// Author identity resolved by the caller (it crosses the auth.db / chat.db
+/// split), passed into [`render_item`] so the view can render the row avatar.
+pub struct InboxAuthor {
+    pub user_id: String,
+    pub label: String,
+    pub avatar_ext: Option<String>,
+    /// Effective presence (already run through `routes::effective_status`).
+    pub status: String,
+    pub custom_status: Option<String>,
+}
+
 /// Convert a raw `InboxRow` (from the DB layer) into the renderable
-/// `InboxItem`. The `author_label` resolution is the caller's job
-/// since it crosses the auth.db / chat.db split; this function just
-/// formats the bits the view layer can handle on its own.
-pub fn render_item(row: &InboxRow, author_label: String, peer_id: Option<&str>) -> InboxItem {
+/// `InboxItem`. Author identity + the DM peer's display label are the caller's
+/// job (they cross the auth.db / chat.db split); this function just formats the
+/// bits the view layer can handle on its own. `peer_id` drives the DM deep-link,
+/// `peer_label` the caption (LC-685: previously the raw peer id leaked into the
+/// caption as "DM with @<uuid>").
+pub fn render_item(
+    row: &InboxRow,
+    author: InboxAuthor,
+    peer_id: Option<&str>,
+    peer_label: Option<&str>,
+) -> InboxItem {
     let snippet: String = row
         .body
         .chars()
@@ -60,8 +85,8 @@ pub fn render_item(row: &InboxRow, author_label: String, peer_id: Option<&str>) 
         .collect::<String>()
         .replace('\n', " ");
     let room_label = match row.room_type.as_str() {
-        "dm" => peer_id
-            .map(|p| format!("DM with @{p}"))
+        "dm" => peer_label
+            .map(|p| format!("DM with {p}"))
             .unwrap_or_else(|| "Direct message".to_string()),
         _ => format!("#{}", row.room_name),
     };
@@ -75,7 +100,11 @@ pub fn render_item(row: &InboxRow, author_label: String, peer_id: Option<&str>) 
         message_id: row.message_id,
         room_id: row.room_id,
         room_label,
-        author_label,
+        author_label: author.label,
+        author_user_id: author.user_id,
+        avatar_ext: author.avatar_ext,
+        author_status: author.status,
+        author_custom_status: author.custom_status,
         snippet,
         created_at: row.created_at.clone(),
         target_path,
