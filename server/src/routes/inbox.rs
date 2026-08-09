@@ -10,7 +10,7 @@ use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::views::inbox::{render_item, InboxItem, InboxItemsFragment, InboxPage};
+use crate::views::inbox::{render_item, InboxAuthor, InboxItem, InboxItemsFragment, InboxPage};
 use crate::views::{html, Html};
 
 const PAGE_SIZE: i64 = 30;
@@ -35,26 +35,59 @@ pub async fn get_inbox(
     let is_admin = user.role == "admin";
     let rows = db::inbox::list_unread(&state.chat, &user.id, is_admin, PAGE_SIZE, q.before).await?;
 
+    // LC-685: the codebase-wide label rule (display name, else `@username`),
+    // shared by the author and the DM peer below.
+    let label_of = |r: &crate::models::user::UserRecord| -> String {
+        r.display_name
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("@{}", r.username))
+    };
+
     let mut items: Vec<InboxItem> = Vec::with_capacity(rows.len());
     for row in &rows {
-        let author = db::auth::find_user_by_id(&state.auth, &row.author_user_id).await?;
-        let author_label = author
-            .as_ref()
-            .map(|r| {
-                r.display_name
-                    .clone()
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| format!("@{}", r.username))
-            })
-            .unwrap_or_else(|| "(unknown)".to_string());
-        // For DMs, derive the peer user id so the deep-link points
-        // at /dm/{peer_id} rather than /room/{dm_room_id}.
-        let peer_id = if row.room_type == "dm" {
-            db::chat::get_dm_peer(&state.chat, row.room_id, &user.id).await?
-        } else {
-            None
+        let author_rec = db::auth::find_user_by_id(&state.auth, &row.author_user_id).await?;
+        // LC-685: carry the author's avatar + presence onto the row so it shows
+        // an avatar like every other surface (previously fetched then discarded).
+        let author = InboxAuthor {
+            user_id: row.author_user_id.clone(),
+            label: author_rec
+                .as_ref()
+                .map(&label_of)
+                .unwrap_or_else(|| "(unknown)".to_string()),
+            avatar_ext: author_rec.as_ref().and_then(|r| r.avatar_ext.clone()),
+            status: super::effective_status(
+                &state,
+                &row.author_user_id,
+                author_rec
+                    .as_ref()
+                    .map(|r| r.status.as_str())
+                    .unwrap_or("offline"),
+            ),
+            custom_status: author_rec.as_ref().and_then(|r| r.custom_status.clone()),
         };
-        items.push(render_item(row, author_label, peer_id.as_deref()));
+        // For DMs, derive the peer user id (deep-link target) AND resolve its
+        // display label so the caption reads a name, not a raw UUID (LC-685).
+        let (peer_id, peer_label) = if row.room_type == "dm" {
+            match db::chat::get_dm_peer(&state.chat, row.room_id, &user.id).await? {
+                Some(pid) => {
+                    let plabel = db::auth::find_user_by_id(&state.auth, &pid)
+                        .await?
+                        .map(|r| label_of(&r))
+                        .unwrap_or_else(|| format!("@{pid}"));
+                    (Some(pid), Some(plabel))
+                }
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
+        items.push(render_item(
+            row,
+            author,
+            peer_id.as_deref(),
+            peer_label.as_deref(),
+        ));
     }
 
     // Cursor for the next page: the smallest message_id in this

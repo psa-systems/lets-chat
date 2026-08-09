@@ -1,19 +1,29 @@
+{# LC-685: card row with the author avatar (live presence dot) + a clear
+   hierarchy - author prominent, snippet readable, room + time quiet - replacing
+   the flat all-muted line. The whole card is one deep-link to the message. #}
 {% for item in items %}
-<li class="px-4 py-3 hover:bg-surface">
-  <a href="{{ item.target_path }}" class="block">
-    <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
-      <span class="font-semibold text-content-muted">{{ item.room_label }}</span>
-      <span>{{ item.created_at }}</span>
-    </div>
-    <div class="text-sm mt-1">
-      <span class="text-content-muted font-medium">{{ item.author_label }}:</span>
-      <span class="text-content-muted">{{ item.snippet }}</span>
+<li id="inbox-row-{{ item.message_id }}" class="rounded-lg border border-border bg-surface-elevated hover:bg-surface-sunken">
+  <a href="{{ item.target_path }}" class="flex items-start gap-3 p-3">
+    {% let avatar_user_id = item.author_user_id.clone() %}
+    {% let avatar_username = item.author_label.clone() %}
+    {% let avatar_ext = item.avatar_ext.clone() %}
+    {% let avatar_status = item.author_status.clone() %}
+    {% let avatar_custom_status = item.author_custom_status.clone() %}
+    {% let avatar_size = "h-9 w-9 text-sm" %}
+    {% include "partials/avatar.html" %}
+    <div class="min-w-0 flex-1">
+      <div class="flex items-baseline justify-between gap-2">
+        <span class="truncate text-sm font-semibold text-content">{{ item.author_label }}</span>
+        <span class="shrink-0 text-xs text-content-subtle">{{ item.created_at }}</span>
+      </div>
+      <div class="truncate text-xs text-content-muted">{{ item.room_label }}</div>
+      <div class="mt-1 text-sm text-content break-words line-clamp-2">{{ item.snippet }}</div>
     </div>
   </a>
 </li>
 {% endfor %}
 {% if let Some(cursor) = next_cursor %}
-<li class="px-4 py-3 text-center text-xs text-content-subtle"
+<li class="py-3 text-center text-xs text-content-subtle"
     hx-get="/inbox?before={{ cursor }}&fragment=1"
     hx-trigger="revealed"
     hx-swap="outerHTML">
