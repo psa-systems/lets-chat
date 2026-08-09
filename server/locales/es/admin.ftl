@@ -88,6 +88,10 @@ admin-bots-assistant-label = El asistente IA publica como
 admin-bots-assistant-default = assistant (integrado)
 admin-bots-assistant-save = Guardar
 admin-bots-assistant-pill = Asistente IA
+admin-bots-persona-label = Instrucciones del asistente
+admin-bots-persona-help = Prompt de sistema personalizado para las respuestas de /ask de este bot, dandole su propio tono o rol. Dejalo vacio para el valor por defecto. Solo aplica a /ask. Las reglas de seguridad y el contrato de "responder desde el contexto de la sala, no inventar datos" siempre se aplican encima y no se pueden anular aqui.
+admin-bots-persona-placeholder = p. ej. Eres un facilitador de stand-up conciso. Manten las respuestas en una o dos frases y ve al grano.
+admin-bots-persona-save = Guardar instrucciones
 
 admin-bridges-title = Puentes
 admin-bridges-heading = Puentes

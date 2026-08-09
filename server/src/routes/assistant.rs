@@ -38,12 +38,31 @@ const ASSISTANT_USERNAME: &str = "assistant";
 /// disabled choice) falls back to [`ASSISTANT_USERNAME`].
 pub(crate) const ASSISTANT_BOT_KEY: &str = "assistant_bot_username";
 
+/// LC-695: settings key prefix for a bot's custom `/ask` persona (the personality
+/// half of its system prompt), keyed by the bot's username. Empty/absent means
+/// the default persona. Stored in the settings KV, like [`ASSISTANT_BOT_KEY`].
+pub(crate) const BOT_PERSONA_KEY_PREFIX: &str = "bot_persona:";
+
+/// The settings key holding `username`'s custom `/ask` persona.
+pub(crate) fn bot_persona_key(username: &str) -> String {
+    format!("{BOT_PERSONA_KEY_PREFIX}{username}")
+}
+
+/// LC-695: the persona (role / personality) half of the `/ask` system prompt.
+/// An admin can override this per assistant bot; the invariant [`ASSISTANT_RULES`]
+/// half is always appended, so a custom persona can shape tone and role but can
+/// never remove the safety refusal or the "answer from context" contract.
+const DEFAULT_PERSONA: &str = "You are a helpful assistant inside a team chat room.";
+
 // LC-676: keep the RAG contract (answer from the room's context) but (a) make a
 // no-context outcome helpful instead of a terse dead-end, and (b) refuse a
 // harmful request on SAFETY grounds rather than phrasing it as a retrieval miss
 // ("could not find information on making bombs in this room" implied it would
 // answer if the room had it).
-const SYSTEM_PROMPT: &str = "You are a helpful assistant inside a team chat room. Answer the user's \
+// LC-695: this is the INVARIANT half of the prompt - always applied, whether the
+// persona is the default or a bot's custom one, so safety + the retrieval
+// contract cannot be prompted away.
+const ASSISTANT_RULES: &str = "Answer the user's \
 question using the provided context (recent room messages, the room's wiki, and its description). \
 If the context does not contain the answer, say so plainly and helpfully - for example \"I couldn't \
 find anything in this room about X. It may not have been discussed here - try rephrasing or asking \
@@ -51,6 +70,19 @@ in a different channel.\" - and do NOT imply you would have answered if the room
 If the question asks for harmful, dangerous, illegal, or otherwise unsafe information, refuse briefly \
 and plainly on safety grounds, regardless of the context, and never phrase such a refusal as a \
 retrieval miss. Be concise and use Markdown. Do not invent facts, links, or quotes.";
+
+/// LC-695: compose the effective `/ask` system prompt. A non-empty `persona`
+/// (a bot's custom instructions) replaces the default personality; the invariant
+/// [`ASSISTANT_RULES`] envelope (safety + retrieval contract + formatting) is
+/// always appended and cannot be overridden. A blank persona falls back to the
+/// default, matching how the identity falls back to the built-in `assistant`.
+fn effective_system_prompt(persona: Option<&str>) -> String {
+    let persona = persona
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .unwrap_or(DEFAULT_PERSONA);
+    format!("{persona}\n\n{ASSISTANT_RULES}")
+}
 
 /// LC-676: placeholder shown the instant an /ask is sent, then replaced in place
 /// by the answer. Italic so it reads as a transient status, not a real answer.
@@ -93,6 +125,25 @@ pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
         }
         Err(e) => Err(e.into()),
     }
+}
+
+/// LC-695: the username of the bot the assistant currently posts as, WITHOUT
+/// lazily creating the built-in `assistant` (unlike [`assistant_bot`]) - so
+/// merely rendering the admin Bots page does not conjure the bot. Mirrors the
+/// same selection logic: the chosen active bot, else `assistant`. Used to key a
+/// bot's custom `/ask` persona ([`bot_persona_key`]).
+pub(crate) async fn effective_assistant_username(state: &AppState) -> Result<String, AppError> {
+    if let Some(chosen) = db::settings::get_setting(&state.settings, ASSISTANT_BOT_KEY).await? {
+        let chosen = chosen.trim();
+        if !chosen.is_empty() && chosen != ASSISTANT_USERNAME {
+            if let Some(rec) = db::auth::find_user_by_username(&state.auth, chosen).await? {
+                if rec.is_bot && !rec.is_banned {
+                    return Ok(rec.username);
+                }
+            }
+        }
+    }
+    Ok(ASSISTANT_USERNAME.to_string())
 }
 
 /// Build the retrieval context block for `question` in `room`: the room wiki +
@@ -207,6 +258,11 @@ pub(crate) async fn handle_ask(
     // LC-676 #1: post a "thinking..." placeholder as the bot and broadcast it
     // immediately, so the asker sees the assistant working right away.
     let bot = assistant_bot(state).await?;
+    // LC-695: the active bot's custom persona (if any) shapes the /ask system
+    // prompt; the safety envelope is always applied by effective_system_prompt.
+    let persona =
+        db::settings::get_setting(&state.settings, &bot_persona_key(&bot.username)).await?;
+    let system_prompt = effective_system_prompt(persona.as_deref());
     let placeholder = format!("{header}\n\n{THINKING_BODY}");
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &placeholder).await?;
     super::room::finalize_message_send(state, room, &bot, msg_id, &placeholder, None).await?;
@@ -220,7 +276,8 @@ pub(crate) async fn handle_ask(
     let room = room.clone();
     let question = question.to_string();
     tokio::spawn(async move {
-        let final_body = build_ask_answer(&st, &room, &question, &header, &*llm).await;
+        let final_body =
+            build_ask_answer(&st, &room, &question, &header, &*llm, &system_prompt).await;
         if let Err(e) = db::chat::replace_message_body(&st.chat, msg_id, &final_body).await {
             tracing::warn!(error = %e, message_id = msg_id, "failed to store assistant answer");
             return;
@@ -247,6 +304,7 @@ async fn build_ask_answer(
     question: &str,
     header: &str,
     llm: &dyn crate::llm::LlmClient,
+    system_prompt: &str,
 ) -> String {
     let context = match build_context(state, room, question).await {
         Ok(c) => c,
@@ -258,7 +316,7 @@ async fn build_ask_answer(
         }
     };
     let user_content = format!("Context:\n{context}\n\nQuestion: {question}");
-    match llm.complete_guarded(SYSTEM_PROMPT, &user_content).await {
+    match llm.complete_guarded(system_prompt, &user_content).await {
         Ok(a) if !a.trim().is_empty() => format!("{header}\n\n{}", a.trim()),
         Ok(_) => format!("{header}\n\n_The assistant returned an empty answer._"),
         Err(e) => {
@@ -270,11 +328,11 @@ async fn build_ask_answer(
 
 #[cfg(test)]
 mod tests {
-    use super::SYSTEM_PROMPT;
+    use super::{effective_system_prompt, DEFAULT_PERSONA};
 
     #[test]
     fn ask_prompt_is_helpful_on_no_context_and_refuses_unsafe() {
-        let lo = SYSTEM_PROMPT.to_lowercase();
+        let lo = effective_system_prompt(None).to_lowercase();
         // LC-676 #2a: a no-context outcome is helpful, not a terse dead-end, and
         // does not imply it would have answered.
         assert!(lo.contains("does not contain the answer"));
@@ -285,5 +343,30 @@ mod tests {
         // Still RAG-grounded + no hallucination.
         assert!(lo.contains("provided context"));
         assert!(lo.contains("do not invent"));
+        // Default persona opener is present.
+        assert!(lo.contains("helpful assistant"));
+    }
+
+    #[test]
+    fn custom_persona_shapes_role_but_cannot_drop_the_safety_envelope() {
+        // LC-695: a custom persona replaces the personality opener...
+        let p = effective_system_prompt(Some("You are a terse pirate stand-up bot."));
+        let lo = p.to_lowercase();
+        assert!(lo.contains("pirate")); // persona applied
+        assert!(!lo.contains("helpful assistant")); // default opener replaced
+                                                    // ...but the invariant rules (safety + retrieval contract) always apply.
+        assert!(lo.contains("safety grounds"));
+        assert!(lo.contains("never phrase such a refusal as a retrieval miss"));
+        assert!(lo.contains("provided context"));
+        assert!(lo.contains("do not invent"));
+    }
+
+    #[test]
+    fn blank_persona_falls_back_to_the_default() {
+        assert_eq!(
+            effective_system_prompt(Some("   ")),
+            effective_system_prompt(None)
+        );
+        assert!(effective_system_prompt(None).starts_with(DEFAULT_PERSONA));
     }
 }
