@@ -1685,8 +1685,14 @@ html[data-scale="xl"]      { font-size: 20px; }
 
 /* LC-486: inline message translation. The Translate menu item is CSS-gated on
    an LLM being configured - revealed only under a [data-lc-llm] page root (which
-   also covers live-swapped message fragments, since the rule is ancestor-based). */
-.lc-llm-only { display: none; }
+   also covers live-swapped message fragments, since the rule is ancestor-based).
+   LC-686: the hide rule MUST include `.lc-menu-item` so it is (0,2,0), not (0,1,0).
+   The item always carries both classes, and `.lc-menu-item { display: flex }`
+   (defined later in this file) is also (0,1,0) - a bare `.lc-llm-only { display:
+   none }` loses the source-order tie and never hides, so the item leaked through
+   with the flag off. (0,2,0) beats `.lc-menu-item`; the reveal rule below is
+   (0,3,0) and still wins. Same cascade trap as LC-678. */
+.lc-menu-item.lc-llm-only { display: none; }
 [data-lc-llm] .lc-menu-item.lc-llm-only { display: flex; }
 /* LC-532: composer AI writing-assistant button, revealed only when an LLM is
    configured (same [data-lc-llm] page-root gate as the translate item). */
@@ -1694,8 +1700,10 @@ html[data-scale="xl"]      { font-size: 20px; }
 [data-lc-llm] .lc-composer-ai { display: inline-flex; }
 /* LC-549: "Find related" menu item, revealed only when an operator embeddings
    endpoint is configured ([data-lc-embeddings] page root, ancestor-based so it
-   covers live-swapped message fragments). Independent of the LLM gate. */
-.lc-embeddings-only { display: none; }
+   covers live-swapped message fragments). Independent of the LLM gate.
+   LC-686: `.lc-menu-item` prefix so the hide rule is (0,2,0) and actually beats
+   `.lc-menu-item { display: flex }` - see the note on `.lc-llm-only` above. */
+.lc-menu-item.lc-embeddings-only { display: none; }
 [data-lc-embeddings] .lc-menu-item.lc-embeddings-only { display: flex; }
 /* LC-549: the room-search "Semantic" toggle, shown only when embeddings are
    configured (same page-root gate). */
