@@ -1,9 +1,30 @@
 {# LC-486: inline translation under a message body. Swapped into
    #translation-{id}; "Show original" clears the container (re-translating is a
-   cache hit, so toggling back on is cheap). #}
+   cache hit, so toggling back on is cheap).
+   LC-688: the "Translated to" label is now a language picker - changing it
+   re-posts to the translate route with the chosen target and swaps this block in
+   place. The target is user-chosen, not the viewer's UI locale, so any offered
+   language works. #}
 <div class="lc-translation-block">
   <div class="lc-translation-head">
-    <span>{{ "room-msg-translated-to"|t }} {{ language }}</span>
+    <label class="inline-flex items-center gap-1">
+      <span>{{ "room-msg-translated-to"|t }}</span>
+      <select name="lang"
+              hx-post="/messages/{{ message_id }}/translate"
+              hx-trigger="change"
+              hx-target="#translation-{{ message_id }}"
+              hx-swap="innerHTML"
+              hx-disabled-elt="this"
+              data-lc-ai-pending
+              data-lc-ai-pending-label="{{ "ai-translating"|t }}"
+              data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+              aria-label="{{ "room-msg-translate-language"|t }}"
+              class="rounded border border-border bg-surface-elevated px-1 py-0.5 text-xs text-content focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+        {% for t in targets %}
+        <option value="{{ t.code }}"{% if t.code == selected %} selected{% endif %}>{{ t.native }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <button type="button" class="lc-translation-hide"
             onclick="var c=this.closest('[id^=translation-]'); if(c)c.innerHTML='';">{{ "room-msg-show-original"|t }}</button>
   </div>
