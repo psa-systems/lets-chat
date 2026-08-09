@@ -24,7 +24,10 @@
   {# The enclave's display name is not a field on the page structs, but the rail's
      `switcher` list already carries (id, label, active) for every enclave - so the
      current one's label is read straight off it, with no Rust-side plumbing. #}
-  <details class="lc-sidebar-org-wrap">
+  {# LC-692: data-lc-flyout opts this native <details> into the shared
+     outside-click / Escape closer in live.js, so the org switcher dismisses on
+     an outside click like the account menu and the rail Settings gear. #}
+  <details class="lc-sidebar-org-wrap" data-lc-flyout>
     <summary class="lc-sidebar-org">
       <span class="truncate">{% for e in switcher %}{% if e.active %}{% if e.id.is_some() %}{{ e.label }}{% endif %}{% endif %}{% endfor %}</span>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="lc-sidebar-org-chev" aria-hidden="true">
