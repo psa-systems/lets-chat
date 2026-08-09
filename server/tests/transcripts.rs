@@ -1540,7 +1540,10 @@ async fn translate_opens_picker_then_translates_and_caches() {
     let cached = db::translations::get_cached(&s.chat, mid, &lets_chat::i18n::current_lang_code())
         .await
         .unwrap();
-    assert_eq!(cached, None, "no translation cached from opening the picker");
+    assert_eq!(
+        cached, None,
+        "no translation cached from opening the picker"
+    );
 
     // Confirming a target translates once and caches under that target's code.
     let (st, body) = post(
