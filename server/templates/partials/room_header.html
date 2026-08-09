@@ -23,19 +23,27 @@
     {% endif %}
   </div>
   <div class="lc-header-actions">
-    {# LC-553: member avatar stack + overflow count (prototype). Links to the
-       room info page. For public rooms these are enclave members; the count and
-       ids come from the RoomPage view (header_members / member_count). #}
+    {# LC-553: member avatar stack + overflow count (prototype). For public rooms
+       these are enclave members; the count and ids come from the RoomPage view
+       (header_members / member_count). LC-683: clicking it now opens the members
+       roster in the shared #thread-panel slot (who's-here), instead of
+       navigating to the room Info settings page - which had no member list and
+       read as "open room settings," not "who's in this room." Room settings stay
+       reachable via the Info icon and the room name / topic links. #}
     {% if !header_members.is_empty() %}
-    <a href="/room/{{ room.id }}/info" class="lc-member-stack"
-       aria-label="{{ member_count }}" data-lc-tip="{{ member_count }}" data-lc-tip-pos="bottom">
+    <button type="button" class="lc-member-stack"
+       hx-get="/room/{{ room.id }}/members"
+       hx-target="#thread-panel"
+       hx-swap="outerHTML"
+       aria-label="{{ "members-open-label"|t }}"
+       data-lc-tip="{{ "members-open-label"|t }}" data-lc-tip-pos="bottom">
       {% for mid in header_members %}
       <img src="/avatars/{{ mid }}" alt="" loading="lazy" class="lc-member-av">
       {% endfor %}
       {% if member_count > header_members.len() %}
       <span class="lc-member-more">+{{ member_count - header_members.len() }}</span>
       {% endif %}
-    </a>
+    </button>
     {% endif %}
     {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
        search.js combobox nav; results are jump links to #msg-{id} in-room. #}

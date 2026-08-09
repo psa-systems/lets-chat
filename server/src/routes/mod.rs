@@ -64,6 +64,7 @@ mod highlights;
 mod home;
 mod inbox;
 mod kudos;
+mod members;
 mod mentions;
 mod notify_prefs;
 mod pinned;
@@ -988,6 +989,34 @@ pub(crate) async fn enclave_for_room(
     Ok(row.and_then(|r| r.get::<Option<i64>, _>("enclave_id")))
 }
 
+/// LC-683: the effective member ids for a room, resolved the one way the header
+/// avatar stack and the members panel must agree on. A public/enclave room's
+/// access derives from ENCLAVE membership (its `room_members` roster is empty),
+/// so its members are the enclave's; a private room or DM uses its explicit
+/// roster. Factored out of `routes::room::get_room` so the header count and the
+/// panel roster can never diverge.
+pub(crate) async fn effective_member_ids(
+    state: &AppState,
+    room_id: i64,
+    room_type: &str,
+    enclave_id: Option<i64>,
+) -> Result<Vec<String>, AppError> {
+    let ids = if room_type != "private" {
+        if let Some(eid) = enclave_id {
+            db::enclave::list_members(&state.chat, eid)
+                .await?
+                .into_iter()
+                .map(|m| m.user_id)
+                .collect()
+        } else {
+            db::chat::list_room_member_ids(&state.chat, room_id).await?
+        }
+    } else {
+        db::chat::list_room_member_ids(&state.chat, room_id).await?
+    };
+    Ok(ids)
+}
+
 /// Resolve which enclave's sidebar the viewer is currently looking at, for a
 /// route that re-renders the whole sidebar (category mutations, star
 /// toggle/reorder, mark-read/unread). The re-render needs the viewer's CURRENT
@@ -1294,6 +1323,9 @@ pub fn build_router(state: AppState) -> Router {
             post(room::post_thread_mute).delete(room::delete_thread_mute),
         )
         .route("/thread-panel", delete(room::close_thread_panel))
+        // LC-683: the room members roster, opened from the header avatar cluster
+        // into the shared #thread-panel slot (closed via DELETE /thread-panel).
+        .route("/room/{room_id}/members", get(members::get_members_panel))
         // LC-484: AI "catch me up" summaries (threads + channel unread range).
         .route(
             "/room/{room_id}/summary",

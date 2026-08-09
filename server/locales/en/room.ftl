@@ -441,6 +441,16 @@ room-delete-confirm-prefix = Type
 room-delete-confirm-phrase = delete this room
 room-delete-confirm-suffix = to confirm.
 
+# LC-683: room members panel (opened from the header avatar cluster)
+members-panel-title = Members
+members-count-suffix = members
+members-open-label = View members
+members-filter-placeholder = Filter members
+members-role-owner = Owner
+members-role-admin = Admin
+members-role-moderator = Mod
+members-manage-link = Manage members
+
 # LC-484: AI "catch me up" summaries (threads + channel)
 summary-catch-up-heading = Catch me up
 summary-unread-suffix = unread messages
