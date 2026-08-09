@@ -18,6 +18,7 @@ sidebar-link-saved = Guardados
 sidebar-link-scheduled = Programados
 sidebar-link-transcripts = Transcripciones
 sidebar-link-settings = Ajustes
+sidebar-settings-all = Todos los ajustes
 sidebar-link-shortcuts = Atajos de teclado
 sidebar-toggle-theme = Cambiar tema
 sidebar-link-sign-out = Cerrar sesión
