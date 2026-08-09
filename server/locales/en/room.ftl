@@ -222,6 +222,7 @@ room-msg-delete = Delete
 # LC-486: inline translation
 room-msg-translate = Translate
 room-msg-translated-to = Translated to
+room-msg-translate-language = Translation language
 room-msg-show-original = Show original
 room-msg-delete-confirm = Delete this message?
 room-msg-quote-deleted = (quoted message was deleted)
