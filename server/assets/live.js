@@ -273,6 +273,29 @@
     }
   });
 
+  // LC-692: native <details> flyout menus (the rail Settings gear, the sidebar
+  // org switcher) only toggle from their own <summary> - the browser never
+  // closes them on an outside click. Any <details data-lc-flyout> opts into the
+  // shared dismissal here so every dropdown behaves like the account menu
+  // (sidebar_self.html) and the composer AI menu (LC-655): an outside click or
+  // Escape collapses it. A click INSIDE the flyout leaves it open, so item
+  // links / htmx actions still fire before anything hides them.
+  document.body.addEventListener('click', function (evt) {
+    var flyouts = document.querySelectorAll('details[data-lc-flyout][open]');
+    for (var fi = 0; fi < flyouts.length; fi++) {
+      if (!flyouts[fi].contains(evt.target)) flyouts[fi].open = false;
+    }
+  });
+  document.addEventListener('keydown', function (evt) {
+    if (evt.key !== 'Escape') return;
+    var flyouts = document.querySelectorAll('details[data-lc-flyout][open]');
+    for (var fi = 0; fi < flyouts.length; fi++) {
+      flyouts[fi].open = false;
+      var s = flyouts[fi].querySelector('summary');
+      if (s) s.focus(); // return focus to the trigger, matching the account menu
+    }
+  });
+
   // LC-650: uniform "AI is working" feedback. AI actions call a possibly-slow
   // LLM (seconds on a CPU model), and their htmx targets are empty until the
   // response lands, so without this the click feels dead. Any trigger tagged

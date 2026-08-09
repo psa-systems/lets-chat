@@ -78,7 +78,10 @@
      menu out to the right; each item deep-links to the settings page with that
      tab open (settings.js reads location.hash). "All settings" opens the page as
      before, so nothing is lost. #}
-  <details class="lc-rail-menu">
+  {# LC-692: data-lc-flyout opts this native <details> into the shared
+     outside-click / Escape closer in live.js (a bare <details> only toggles from
+     its own summary and never dismisses on an outside click). #}
+  <details class="lc-rail-menu" data-lc-flyout>
     <summary class="lc-rail-util" aria-label="{{ "sidebar-link-settings"|t }}"
              data-lc-tip="{{ "sidebar-link-settings"|t }}" data-lc-tip-pos="right">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
