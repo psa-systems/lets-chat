@@ -132,6 +132,10 @@ pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
 /// merely rendering the admin Bots page does not conjure the bot. Mirrors the
 /// same selection logic: the chosen active bot, else `assistant`. Used to key a
 /// bot's custom `/ask` persona ([`bot_persona_key`]).
+// Only the admin Bots page (a `standalone`-only module) calls this; without the
+// allow, the `saas` build - which never compiles `routes::admin` - fails `-D
+// dead-code`. Same pattern as the other standalone-only helpers (see auth.rs).
+#[cfg_attr(not(feature = "standalone"), allow(dead_code))]
 pub(crate) async fn effective_assistant_username(state: &AppState) -> Result<String, AppError> {
     if let Some(chosen) = db::settings::get_setting(&state.settings, ASSISTANT_BOT_KEY).await? {
         let chosen = chosen.trim();
