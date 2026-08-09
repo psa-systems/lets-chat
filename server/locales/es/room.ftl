@@ -451,6 +451,7 @@ members-role-owner = Propietario
 members-role-admin = Administrador
 members-role-moderator = Moderador
 members-manage-link = Gestionar miembros
+members-you = Tú
 
 # LC-484: resumenes con IA "ponme al dia" (hilos + canal)
 summary-catch-up-heading = Ponme al dia
