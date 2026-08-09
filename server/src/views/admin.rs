@@ -642,6 +642,12 @@ pub struct BotsPage<'a> {
     /// LC-693: the bot the AI assistant currently posts as (its username), or
     /// None when it uses the built-in `assistant`. Drives the selector's default.
     pub assistant_bot: Option<String>,
+    /// LC-695: the username of the bot the assistant actually posts as (the
+    /// chosen active bot, else `assistant`), whose persona the card edits.
+    pub assistant_username: String,
+    /// LC-695: that bot's custom `/ask` persona (system prompt), or None for the
+    /// default. Pre-fills the persona textarea.
+    pub assistant_persona: Option<String>,
     pub error: Option<String>,
 }
 

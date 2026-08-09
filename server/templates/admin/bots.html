@@ -65,6 +65,21 @@
     </div>
     <div><button type="submit" class="btn btn-primary">{{ "admin-bots-assistant-save"|t }}</button></div>
   </form>
+
+  {# LC-695: the active assistant bot's own /ask persona (custom system prompt).
+     Empty = the default persona; the safety + retrieval rules always apply on top
+     and cannot be overridden here. Applies to /ask only, not the catch-up / recap
+     / triage surfaces (which have their own task prompts). #}
+  <form method="post" action="/admin/bots/persona" class="lc-set-form mt-4 pt-4 border-t border-border">
+    <div class="lc-set-field">
+      <label class="lc-set-label" for="bot_persona">{{ "admin-bots-persona-label"|t }} (<code class="font-mono">{{ assistant_username }}</code>)</label>
+      <textarea id="bot_persona" name="persona" rows="4" maxlength="2000"
+                placeholder="{{ "admin-bots-persona-placeholder"|t }}"
+                class="input font-mono text-xs">{% if let Some(p) = assistant_persona %}{{ p }}{% endif %}</textarea>
+      <p class="lc-set-card-desc">{{ "admin-bots-persona-help"|t }}</p>
+    </div>
+    <div><button type="submit" class="btn btn-primary">{{ "admin-bots-persona-save"|t }}</button></div>
+  </form>
 </div>
 {% endif %}
 
