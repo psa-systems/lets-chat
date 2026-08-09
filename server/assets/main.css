@@ -2205,6 +2205,14 @@ math {
     align-items: center;
     flex: none;
     margin-right: 0.25rem;
+    /* LC-683: now a <button> (opens the members panel) rather than an <a>; reset
+       the UA button chrome so it reads as the bare avatar stack it did before. */
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
 }
 .lc-member-av {
     height: 1.75rem;

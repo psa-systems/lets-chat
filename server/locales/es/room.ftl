@@ -441,6 +441,16 @@ room-delete-confirm-prefix = Escribe
 room-delete-confirm-phrase = eliminar esta sala
 room-delete-confirm-suffix = para confirmar.
 
+# LC-683: panel de miembros de la sala (abierto desde el grupo de avatares del encabezado)
+members-panel-title = Miembros
+members-count-suffix = miembros
+members-open-label = Ver miembros
+members-filter-placeholder = Filtrar miembros
+members-role-owner = Propietario
+members-role-admin = Administrador
+members-role-moderator = Moderador
+members-manage-link = Gestionar miembros
+
 # LC-484: resumenes con IA "ponme al dia" (hilos + canal)
 summary-catch-up-heading = Ponme al dia
 summary-unread-suffix = mensajes sin leer

@@ -1,0 +1,82 @@
+{# LC-683: the room members panel. Occupies the shared right-side #thread-panel
+   slot (one drawer at a time), so it reuses the thread panel's close affordance
+   (DELETE /thread-panel), exactly like the catch-me-up panel. Opened from the
+   header member-avatar cluster instead of navigating to the room Info page.
+   Rows reuse partials/avatar.html (live presence dot) and the profile hovercard
+   (href=/dm/{id} data-lc-hovercard) for the per-member profile / DM action. #}
+<aside id="thread-panel" class="lc-panel flex flex-col">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight truncate">{{ "members-panel-title"|t }}</div>
+      <div class="text-xs text-content-muted truncate tabular-nums">{{ member_count }} {{ "members-count-suffix"|t }}</div>
+    </div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-content-subtle hover:text-content-muted flex-none"
+      aria-label="{{ "room-thread-close"|t }}"
+    >&#10005;</button>
+  </header>
+
+  {# Client-side filter over the already-rendered rows (rooms are bounded, so the
+     roster renders once and never needs a round-trip). Matches name + @username
+     via each row's data-lc-member-key. Mirrors the inline-oninput pattern used by
+     the composer / thread reply box. #}
+  <div class="border-b border-border px-3 py-2">
+    <input
+      type="text"
+      inputmode="search"
+      autocomplete="off"
+      placeholder="{{ "members-filter-placeholder"|t }}"
+      aria-label="{{ "members-filter-placeholder"|t }}"
+      class="w-full h-8 rounded-md border border-border bg-surface-elevated px-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+      oninput="
+        var q = this.value.trim().toLowerCase();
+        var list = document.getElementById('lc-members-list');
+        if (!list) return;
+        var rows = list.querySelectorAll('[data-lc-member-key]');
+        for (var i = 0; i < rows.length; i++) {
+          var k = rows[i].getAttribute('data-lc-member-key') || '';
+          rows[i].hidden = q !== '' && k.indexOf(q) === -1;
+        }
+      ">
+  </div>
+
+  <div id="lc-members-list" class="flex-1 min-w-0 overflow-y-auto p-1">
+    {% for m in members %}
+    <a href="/dm/{{ m.user_id }}" data-lc-hovercard="{{ m.user_id }}"
+       data-lc-member-key="{{ m.filter_key }}"
+       class="lc-member-row flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-sunken">
+      {% let avatar_user_id = m.user_id.clone() %}
+      {% let avatar_username = m.username.clone() %}
+      {% let avatar_ext = m.avatar_ext.clone() %}
+      {% let avatar_status = m.status.clone() %}
+      {% let avatar_custom_status = m.custom_status.clone() %}
+      {% let avatar_size = "h-8 w-8 text-sm" %}
+      {% include "partials/avatar.html" %}
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="truncate text-sm font-medium text-content">{{ m.label }}</span>
+          {% if let Some(b) = m.badge.as_ref() %}
+          <span class="flex-none text-[10px] font-bold uppercase tracking-wide rounded px-1 py-0.5 {{ b.class }}">{{ b.label }}</span>
+          {% endif %}
+        </div>
+        {% if let Some(cs) = m.custom_status.as_ref() %}
+        <div class="truncate text-xs text-content-muted">{{ cs }}</div>
+        {% else %}
+        <div class="truncate text-xs text-content-subtle">@{{ m.username }}</div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {# LC-683: management stays gated and reuses the existing manage page rather
+     than reimplementing promote/kick inline. Hidden for members who can't manage. #}
+  {% if can_manage %}
+  <footer class="border-t border-border px-3 py-2">
+    <a href="/room/{{ room_id }}/manage" class="text-xs font-medium text-accent hover:underline">{{ "members-manage-link"|t }}</a>
+  </footer>
+  {% endif %}
+</aside>
