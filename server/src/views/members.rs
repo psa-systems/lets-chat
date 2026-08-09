@@ -31,6 +31,9 @@ pub struct MemberRow {
     pub badge: Option<MemberBadge>,
     /// Lowercased "label @username" haystack for the client-side filter.
     pub filter_key: String,
+    /// LC-689: the viewer's own row. Rendered without a DM link (you cannot DM
+    /// yourself - `/dm/{self}` 404s) and marked "You".
+    pub is_self: bool,
 }
 
 /// The members drawer. Occupies the shared `#thread-panel` slot, so it reuses

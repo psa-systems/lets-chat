@@ -127,6 +127,7 @@ pub async fn get_members_panel(
         let status = super::effective_status(&state, &rec.id, &rec.status);
         let role = badge_for(enclave_roles.get(id), rbac.get(id).map(String::as_str));
         let filter_key = format!("{} @{}", label.to_lowercase(), rec.username.to_lowercase());
+        let is_self = rec.id == user.id;
         ranked.push((
             rank(role),
             MemberRow {
@@ -138,6 +139,7 @@ pub async fn get_members_panel(
                 custom_status: rec.custom_status,
                 badge: badge_view(role),
                 filter_key,
+                is_self,
             },
         ));
     }
