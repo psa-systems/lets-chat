@@ -10,7 +10,9 @@
   </header>
   <div class="flex-1 overflow-y-auto p-4">
     {% if receivers.is_empty() && givers.is_empty() %}
-    <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
+    {# LC-691: shared empty-state treatment, matching the other nav pages. #}
+    {% let empty_text_key = "kudos-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <div class="mx-auto grid max-w-2xl gap-6 sm:grid-cols-2">
       <section>
@@ -18,13 +20,9 @@
         {% if receivers.is_empty() %}
         <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
         {% else %}
-        <ol class="space-y-1">
+        <ol class="space-y-1.5">
           {% for row in receivers %}
-          <li class="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
-            <span class="w-5 shrink-0 tabular-nums text-content-subtle">{{ row.rank }}</span>
-            <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
-            <span class="shrink-0 tabular-nums text-content-muted">{{ row.count }}</span>
-          </li>
+          {% include "kudos/row.html" %}
           {% endfor %}
         </ol>
         {% endif %}
@@ -34,13 +32,9 @@
         {% if givers.is_empty() %}
         <p class="text-sm text-content-muted">{{ "kudos-empty"|t }}</p>
         {% else %}
-        <ol class="space-y-1">
+        <ol class="space-y-1.5">
           {% for row in givers %}
-          <li class="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
-            <span class="w-5 shrink-0 tabular-nums text-content-subtle">{{ row.rank }}</span>
-            <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
-            <span class="shrink-0 tabular-nums text-content-muted">{{ row.count }}</span>
-          </li>
+          {% include "kudos/row.html" %}
           {% endfor %}
         </ol>
         {% endif %}

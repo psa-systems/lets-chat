@@ -10,11 +10,12 @@
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if pending.is_empty() %}
-    <p class="p-4 text-sm text-content-muted">
-      {{ "scheduled-empty"|t }}
-    </p>
+    {# LC-691: shared empty-state treatment, matching the other nav pages. #}
+    {% let empty_text_key = "scheduled-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
-    <ul id="scheduled-pending" class="divide-y divide-border">
+    {# LC-691: card rows on token surfaces, replacing the flat divide-y list. #}
+    <ul id="scheduled-pending" class="flex flex-col gap-2 p-4">
       {% for row in pending %}
         {% include "scheduled_row.html" %}
       {% endfor %}
@@ -22,20 +23,22 @@
     {% endif %}
 
     {% if !dropped.is_empty() %}
-    <section class="border-t border-border mt-4">
-      <h2 class="px-4 py-2 text-sm font-semibold text-content-muted bg-surface">{{ "scheduled-dropped-heading"|t }}</h2>
-      <ul class="divide-y divide-border">
+    <section class="mt-2">
+      <h2 class="px-4 py-2 lc-section-label">{{ "scheduled-dropped-heading"|t }}</h2>
+      <ul class="flex flex-col gap-2 px-4 pb-4">
         {% for d in dropped %}
-        <li class="px-4 py-3">
+        <li class="rounded-lg border border-border bg-surface-elevated p-3">
           <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
-            <span>
-              {{ "scheduled-for-prefix"|t }} <a href="{{ d.room_label }}" class="text-accent hover:underline">{{ d.room_label }}</a>
+            {# LC-691: DroppedRow carries no room path, so the room is plain text
+               (previously an <a href> pointed at the label itself - a dead link). #}
+            <span class="min-w-0 truncate">
+              {{ "scheduled-for-prefix"|t }} <span class="font-medium text-content">{{ d.room_label }}</span>
               &middot; {{ "scheduled-scheduled-for"|t }} {{ d.scheduled_for }} UTC
               &middot; {{ "scheduled-dropped-at"|t }} {{ d.delivered_at }} UTC
             </span>
           </div>
           <div class="mt-1 text-sm text-danger">{{ "scheduled-dropped-label"|t }} {{ d.failed_reason }}</div>
-          <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-content">{{ d.body_html|safe }}</div>
+          <div class="mt-2 lc-md whitespace-pre-wrap text-sm text-content break-words">{{ d.body_html|safe }}</div>
         </li>
         {% endfor %}
       </ul>
