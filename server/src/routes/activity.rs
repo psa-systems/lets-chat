@@ -52,23 +52,51 @@ pub async fn get_activity(
     )
     .await?;
 
+    // LC-690: the codebase-wide label rule (display name, else `@username`),
+    // shared by the actor and the DM peer below.
+    let label_of = |r: &crate::models::user::UserRecord| -> String {
+        r.display_name
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("@{}", r.username))
+    };
+
     let mut items: Vec<ActivityItem> = Vec::with_capacity(raw.len());
     for item in raw {
         let actor = db::auth::find_user_by_id(&state.auth, &item.actor_user_id).await?;
+        // LC-690: carry the actor's avatar + presence onto the row so it shows an
+        // avatar like the Inbox / timeline (previously fetched then discarded).
         let actor_label = actor
             .as_ref()
-            .and_then(|r| r.display_name.clone().filter(|s| !s.trim().is_empty()))
-            .or_else(|| actor.as_ref().map(|r| format!("@{}", r.username)))
+            .map(&label_of)
             .unwrap_or_else(|| "(unknown)".to_string());
+        let avatar_ext = actor.as_ref().and_then(|r| r.avatar_ext.clone());
+        let actor_status = super::effective_status(
+            &state,
+            &item.actor_user_id,
+            actor
+                .as_ref()
+                .map(|r| r.status.as_str())
+                .unwrap_or("offline"),
+        );
+        let actor_custom_status = actor.as_ref().and_then(|r| r.custom_status.clone());
         let room = db::chat::get_room(&state.chat, item.room_id).await?;
         let (room_label, target_path) = match room.as_ref() {
             Some(r) if r.room_type == "dm" => {
                 let peer = db::chat::get_dm_peer(&state.chat, r.id, &user.id).await?;
                 match peer {
-                    Some(p) => (
-                        format!("DM with @{p}"),
-                        format!("/dm/{p}#msg-{}", item.message_id),
-                    ),
+                    // LC-690: resolve the peer's display name for the caption, not
+                    // the raw UUID; the id still drives the deep-link.
+                    Some(p) => {
+                        let peer_label = db::auth::find_user_by_id(&state.auth, &p)
+                            .await?
+                            .map(|r| label_of(&r))
+                            .unwrap_or_else(|| format!("@{p}"));
+                        (
+                            format!("DM with {peer_label}"),
+                            format!("/dm/{p}#msg-{}", item.message_id),
+                        )
+                    }
                     None => (
                         "Direct message".to_string(),
                         format!("/room/{}#msg-{}", r.id, item.message_id),
@@ -95,6 +123,10 @@ pub async fn get_activity(
             room_id: item.room_id,
             room_label,
             actor_label,
+            actor_user_id: item.actor_user_id,
+            avatar_ext,
+            actor_status,
+            actor_custom_status,
             emoji: item.emoji,
             created_at: item.created_at,
             target_path,
