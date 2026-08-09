@@ -1,6 +1,9 @@
-<li id="scheduled-row-{{ row.id }}" class="px-4 py-3">
+{# LC-691: card row on token surfaces, matching the Inbox / Saved / Activity
+   pattern. Also rendered standalone as the ScheduledRowFragment when a new
+   schedule is added, so it stays a self-contained <li>. #}
+<li id="scheduled-row-{{ row.id }}" class="rounded-lg border border-border bg-surface-elevated p-3">
   <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
-    <span>
+    <span class="min-w-0 truncate">
       {{ "scheduled-for-prefix"|t }} <a href="{{ row.room_path }}" class="text-accent hover:underline">{{ row.room_label }}</a>
       &middot; {{ "scheduled-row-delivers"|t }} {{ row.scheduled_for }} UTC
       {% if row.repeat != "none" %}
@@ -11,7 +14,7 @@
             hx-target="#scheduled-row-{{ row.id }}"
             hx-swap="delete"
             hx-confirm="{{ "scheduled-cancel-confirm"|t }}"
-            class="text-danger hover:underline">{{ "action-cancel"|t }}</button>
+            class="flex-none rounded-md border border-border px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-surface hover:border-danger-border focus:outline-none focus:ring-1 focus:ring-danger">{{ "action-cancel"|t }}</button>
   </div>
-  <div class="mt-1 lc-md whitespace-pre-wrap text-sm text-content">{{ row.body_html|safe }}</div>
+  <div class="mt-2 lc-md whitespace-pre-wrap text-sm text-content break-words">{{ row.body_html|safe }}</div>
 </li>

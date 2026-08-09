@@ -12,6 +12,12 @@ pub struct LeaderRow {
     pub rank: usize,
     pub label: String,
     pub count: i64,
+    /// LC-691: identity for the row avatar (`partials/avatar.html`).
+    pub user_id: String,
+    pub avatar_ext: Option<String>,
+    /// Effective presence for the avatar dot (via `routes::effective_status`).
+    pub status: String,
+    pub custom_status: Option<String>,
 }
 
 #[derive(Template)]
