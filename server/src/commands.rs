@@ -19,6 +19,11 @@ pub struct BuiltinCommand {
     /// built-ins are admin-only; the flag exists so the registry + dispatch
     /// honor it uniformly with custom commands.
     pub admin_only: bool,
+    /// LC-686: when true, the command is part of the LLM/AI surface and is
+    /// listed only when AI is available for the viewer's room (runtime flag on,
+    /// an LLM configured, and the viewer privileged) - the same gate the
+    /// per-message AI menu items use. Dispatch still enforces this server-side.
+    pub llm_only: bool,
 }
 
 /// The built-in commands. Order is the `/help` display order.
@@ -29,6 +34,7 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/help",
         example: None,
         admin_only: false,
+        llm_only: false,
     },
     BuiltinCommand {
         name: "me",
@@ -36,6 +42,7 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/me <action>",
         example: Some("/me waves hello"),
         admin_only: false,
+        llm_only: false,
     },
     BuiltinCommand {
         name: "shrug",
@@ -43,6 +50,7 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/shrug [text]",
         example: Some("/shrug oh well"),
         admin_only: false,
+        llm_only: false,
     },
     BuiltinCommand {
         name: "poll",
@@ -50,6 +58,7 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/poll \"Question\" \"Option A\" \"Option B\" ...",
         example: Some("/poll \"Lunch?\" \"Tacos\" \"Pizza\""),
         admin_only: false,
+        llm_only: false,
     },
     BuiltinCommand {
         name: "remind",
@@ -57,6 +66,7 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/remind <15m|1h|3h|1d> <text>",
         example: Some("/remind 1h Check the deploy"),
         admin_only: false,
+        llm_only: false,
     },
     // LC-526: recognition. Posts a kudos card and tallies the leaderboard.
     BuiltinCommand {
@@ -65,15 +75,18 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         usage: "/kudos @user <reason>",
         example: Some("/kudos @dave for the code review"),
         admin_only: false,
+        llm_only: false,
     },
     // LC-492: in-channel AI assistant. Functions only when the operator has
     // configured an LLM and the room has the assistant enabled.
+    // LC-686: llm_only, so it is hidden from the slash list when AI is off.
     BuiltinCommand {
         name: "ask",
         description: "Ask the room's AI assistant a question.",
         usage: "/ask <question>",
         example: Some("/ask what did we decide about the launch?"),
         admin_only: false,
+        llm_only: true,
     },
 ];
 

@@ -72,13 +72,28 @@ struct SlashError {
     message: String,
 }
 
-/// Visible commands for `user`, honoring `admin_only`. Built-ins first, then
-/// custom. A row matches when its name starts with `prefix` OR (LC-509) its
-/// description contains `prefix` as a keyword; an empty prefix matches all.
+/// LC-686: whether the AI slash surface (`/ask`) should be offered to `user` in
+/// `room_id`. Mirrors the per-message AI menu items' `data-lc-llm` gate exactly:
+/// the runtime flag on, an LLM configured, and the viewer privileged for this
+/// room. A privilege-lookup error degrades to "unavailable" (hide), never an
+/// error - the listing is best-effort and dispatch enforces the real gate.
+async fn ai_slash_available(state: &AppState, user: &User, room_id: i64) -> bool {
+    super::ai_gate::flag_on(state).await
+        && state.llm_available()
+        && super::ai_gate::privileged_in_room(state, room_id, user)
+            .await
+            .unwrap_or(false)
+}
+
+/// Visible commands for `user`, honoring `admin_only` and (LC-686) the AI gate
+/// for `llm_only` commands. Built-ins first, then custom. A row matches when its
+/// name starts with `prefix` OR (LC-509) its description contains `prefix` as a
+/// keyword; an empty prefix matches all.
 fn visible_commands(
     user: &User,
     custom: &[db::slash::CustomCommand],
     prefix: &str,
+    ai_available: bool,
 ) -> Vec<SlashRow> {
     let is_admin = user.role == "admin";
     let matches = |name: &str, description: &str| {
@@ -87,6 +102,10 @@ fn visible_commands(
     let mut rows = Vec::new();
     for b in commands::BUILTINS {
         if b.admin_only && !is_admin {
+            continue;
+        }
+        // LC-686: an AI command is listed only when AI is available here.
+        if b.llm_only && !ai_available {
             continue;
         }
         if matches(b.name, b.description) {
@@ -116,10 +135,19 @@ fn visible_commands(
 
 /// LC-509: the single command whose name exactly equals `name` (honoring
 /// `admin_only`), for the argument-hint bar. Built-ins win over custom.
-fn exact_command(user: &User, custom: &[db::slash::CustomCommand], name: &str) -> Option<SlashRow> {
+fn exact_command(
+    user: &User,
+    custom: &[db::slash::CustomCommand],
+    name: &str,
+    ai_available: bool,
+) -> Option<SlashRow> {
     let is_admin = user.role == "admin";
     if let Some(b) = commands::find_builtin(name) {
         if b.admin_only && !is_admin {
+            return None;
+        }
+        // LC-686: hide the AI command's hint bar when AI is unavailable here.
+        if b.llm_only && !ai_available {
             return None;
         }
         return Some(SlashRow {
@@ -148,6 +176,11 @@ pub struct AutocompleteQuery {
     /// named by `q` instead of the filtered command list.
     #[serde(default)]
     pub hint: bool,
+    /// LC-686: the composer's room, so the AI slash gate (`/ask`) can be scoped
+    /// to flag + config + this room's privilege. Absent (older clients) => the
+    /// AI command is hidden, the safe default.
+    #[serde(default)]
+    pub room_id: Option<i64>,
 }
 
 /// LC-487: the custom commands visible to `user`: admin-defined global commands
@@ -177,11 +210,16 @@ pub async fn get_autocomplete(
 ) -> Result<Html, AppError> {
     let prefix = q.q.trim_start_matches('/').to_ascii_lowercase();
     let custom = custom_for_user(&state, &user).await?;
+    // LC-686: is the AI slash surface available in the composer's room?
+    let ai_available = match q.room_id {
+        Some(room_id) => ai_slash_available(&state, &user, room_id).await,
+        None => false,
+    };
     if q.hint {
-        let command = exact_command(&user, &custom, &prefix);
+        let command = exact_command(&user, &custom, &prefix, ai_available);
         return html(&SlashHint { command });
     }
-    let commands = visible_commands(&user, &custom, &prefix);
+    let commands = visible_commands(&user, &custom, &prefix, ai_available);
     html(&SlashPopover {
         commands,
         query: prefix,
@@ -253,7 +291,9 @@ async fn dispatch_known(
         match cmd.as_str() {
             "help" => {
                 let custom = custom_for_user(state, user).await?;
-                let rows = visible_commands(user, &custom, "");
+                // LC-686: /help lists the AI command only when AI is available here.
+                let ai_available = ai_slash_available(state, user, room.id).await;
+                let rows = visible_commands(user, &custom, "", ai_available);
                 return Ok(Some(html(&SlashHelp { commands: rows })?.into_response()));
             }
             "me" => {
