@@ -6,7 +6,7 @@
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
     <h1 class="font-semibold truncate">{{ "inbox-heading"|t }}</h1>
-    <button type="button" data-lc-jump-unread class="text-xs text-content-muted hover:text-content px-2 py-1 border rounded">{{ "inbox-jump-unread"|t }}</button>
+    <button type="button" data-lc-jump-unread class="text-xs text-content-muted hover:text-content hover:bg-surface-sunken px-2 py-1 border border-border rounded-md">{{ "inbox-jump-unread"|t }}</button>
   </header>
   <div class="flex-1 overflow-y-auto" id="lc-inbox-list">
     {# LC-179: hidden until a new unread arrives over the WS, when the send
@@ -18,9 +18,15 @@
       {{ "inbox-new-unread"|t }}
     </button>
     {% if items.is_empty() %}
-    <p class="p-8 text-center text-sm text-content-muted">{{ "inbox-all-caught-up"|t }}</p>
+    {# LC-685: shared empty-state treatment (icon + muted copy) instead of a bare
+       paragraph, matching the Saved / room About / Manage surfaces. #}
+    {% let empty_text_key = "inbox-all-caught-up" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
-    <ul class="divide-y divide-border">
+    {# LC-685: card rows on token surfaces (see inbox/items.html). The <ul> owns
+       the spacing; the infinite-scroll sentinel stays a direct <li> child so
+       paging is untouched. #}
+    <ul class="flex flex-col gap-2 p-4">
       {% include "inbox/items.html" %}
     </ul>
     {% endif %}
