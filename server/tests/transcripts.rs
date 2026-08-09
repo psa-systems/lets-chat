@@ -1509,13 +1509,18 @@ async fn catch_me_up_panel_opens() {
 
 // ── LC-486: inline message translation ────────────────────────────────────────
 
+// LC-694: the first Translate click (empty body, no `lang`) opens the language
+// picker and runs NO LLM call, so nothing is translated or cached until the user
+// confirms a target. Confirming a target (`lang=`) translates once and caches by
+// that target's code.
 #[tokio::test]
-async fn translate_returns_translation_and_caches() {
+async fn translate_opens_picker_then_translates_and_caches() {
     let s = setup_with_clients(None, with_llm("HOLA_TRANSLATED")).await;
     let mid = db::chat::insert_message(&s.chat, s.public_room, &s.b_id, "hello there")
         .await
         .unwrap();
 
+    // First click: picker only, no translation, nothing cached.
     let (st, body) = post(
         &s.app,
         &s.a_session,
@@ -1525,12 +1530,32 @@ async fn translate_returns_translation_and_caches() {
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
     assert!(
+        !body.contains("HOLA_TRANSLATED"),
+        "opening the picker must not translate: {body}"
+    );
+    assert!(
+        body.contains("lc-translation-select"),
+        "picker rendered: {body}"
+    );
+    let cached = db::translations::get_cached(&s.chat, mid, &lets_chat::i18n::current_lang_code())
+        .await
+        .unwrap();
+    assert_eq!(cached, None, "no translation cached from opening the picker");
+
+    // Confirming a target translates once and caches under that target's code.
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/messages/{mid}/translate"),
+        Some("lang=es"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    assert!(
         body.contains("HOLA_TRANSLATED"),
         "rendered translation: {body}"
     );
-
-    // Cached for the viewer's resolved locale (default fallback locale).
-    let cached = db::translations::get_cached(&s.chat, mid, &lets_chat::i18n::current_lang_code())
+    let cached = db::translations::get_cached(&s.chat, mid, "es")
         .await
         .unwrap();
     assert_eq!(cached.as_deref(), Some("HOLA_TRANSLATED"));
