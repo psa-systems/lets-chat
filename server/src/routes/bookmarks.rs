@@ -174,51 +174,70 @@ pub(crate) async fn build_saved_rows(
 ) -> Result<Vec<SavedListRow>, AppError> {
     let rows = db::bookmarks::bookmarks_for_user(&state.chat, &user.id).await?;
 
-    // Resolve author labels in a single bulk auth lookup.
-    let author_ids: Vec<&str> = rows
-        .iter()
-        .map(|r| r.author_user_id.as_str())
-        .collect::<std::collections::HashSet<&str>>()
-        .into_iter()
-        .collect();
-    let labels = db::auth::display_names_for_ids(&state.auth, &author_ids).await?;
+    // LC-684: resolve each DM row's peer up front so the peer id can join the
+    // author ids in ONE bulk display-name lookup. Pre-LC-684 the peer id was
+    // never resolved, so the DM caption fell back to the raw UUID.
+    let mut peer_by_room: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
+    for r in &rows {
+        if r.room_type == "dm" && !peer_by_room.contains_key(&r.room_id) {
+            if let Some(peer_id) = db::chat::get_dm_peer(&state.chat, r.room_id, &user.id).await? {
+                peer_by_room.insert(r.room_id, peer_id);
+            }
+        }
+    }
 
-    // Build the per-row context_path: rooms use /room/{id}; DMs resolve
-    // the peer via the room membership and use /dm/{peer}. DMs that no
-    // longer have a resolvable peer (the peer was deleted) fall back to
-    // /room/{id} so the link is never empty.
-    let mut entries: Vec<SavedListRow> = Vec::with_capacity(rows.len());
-    for r in rows {
-        let author_label = labels
-            .get(&r.author_user_id)
+    // Resolve author + DM-peer labels in a single bulk auth lookup.
+    let mut id_set: std::collections::HashSet<&str> =
+        rows.iter().map(|r| r.author_user_id.as_str()).collect();
+    for peer_id in peer_by_room.values() {
+        id_set.insert(peer_id.as_str());
+    }
+    let ids: Vec<&str> = id_set.into_iter().collect();
+    let labels = db::auth::display_names_for_ids(&state.auth, &ids).await?;
+    // Display name if set, else `@username`, else the raw id (synthetic actor).
+    let label_for = |id: &str| -> String {
+        labels
+            .get(id)
             .map(|(uname, dname)| match dname.as_deref() {
                 Some(n) if !n.trim().is_empty() => n.to_string(),
-                _ => uname.clone(),
+                _ => format!("@{uname}"),
             })
-            .unwrap_or_else(|| r.author_user_id.clone());
+            .unwrap_or_else(|| id.to_string())
+    };
 
-        let (context_label, context_path) = if r.room_type == "dm" {
-            match db::chat::get_dm_peer(&state.chat, r.room_id, &user.id).await? {
-                Some(peer_id) => {
-                    let peer_label = labels
-                        .get(&peer_id)
-                        .map(|(uname, dname)| match dname.as_deref() {
-                            Some(n) if !n.trim().is_empty() => n.to_string(),
-                            _ => uname.clone(),
-                        })
-                        .unwrap_or_else(|| peer_id.clone());
-                    (format!("DM with @{peer_label}"), format!("/dm/{peer_id}"))
-                }
-                None => ("Direct message".to_string(), format!("/room/{}", r.room_id)),
+    // LC-684: bulk-load every saved message's attachments in one query, keyed by
+    // message id, so a media saved message renders its real content instead of a
+    // blank row.
+    let message_ids: Vec<i64> = rows.iter().map(|r| r.message_id).collect();
+    let mut attachments = db::uploads::attachments_for_messages(&state.chat, &message_ids).await?;
+
+    // LC-684: the context link points at the permalink route (/m/{id}), which
+    // redirects to /room/{id}#msg-{id} or /dm/{peer}#msg-{id}, so clicking a
+    // saved message jumps to it in its original context. The caption still names
+    // the room or DM peer.
+    let mut entries: Vec<SavedListRow> = Vec::with_capacity(rows.len());
+    for r in rows {
+        let author_label = label_for(&r.author_user_id);
+
+        let context_label = if r.room_type == "dm" {
+            match peer_by_room.get(&r.room_id) {
+                Some(peer_id) => format!("DM with {}", label_for(peer_id)),
+                None => "Direct message".to_string(),
             }
         } else {
-            (format!("#{}", r.room_name), format!("/room/{}", r.room_id))
+            format!("#{}", r.room_name)
         };
+        let context_path = format!("/m/{}", r.message_id);
+
+        // Same markdown pipeline as the timeline (sanitized). Empty in -> empty
+        // out, which `has_content()` treats as "no text".
+        let body_html = crate::views::markdown::render(&r.message_body, &[], &[]);
 
         entries.push(SavedListRow {
             message_id: r.message_id,
             author_label,
-            body: r.message_body,
+            body_html,
+            attachments: attachments.remove(&r.message_id).unwrap_or_default(),
             message_created_at: r.message_created_at,
             saved_at: r.created_at,
             context_label,

@@ -7,6 +7,10 @@ saved-empty = You haven't saved any messages yet. Hover over a message and click
 saved-in = in
 saved-saved-at = saved
 saved-unsave = Unsave
+# LC-684: confirm before removing a save, and the placeholder for a saved
+# message that has neither text nor a renderable attachment.
+saved-unsave-confirm = Remove this saved message?
+saved-no-preview = No preview available
 # LC-479: per-bookmark labels ("folders") + filter chips.
 saved-label-placeholder = Label
 saved-label-aria = Label this saved message
