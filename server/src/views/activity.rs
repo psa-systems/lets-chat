@@ -12,6 +12,13 @@ pub struct ActivityItem {
     pub room_id: i64,
     pub room_label: String,
     pub actor_label: String,
+    /// LC-690: actor identity for the row avatar (`partials/avatar.html`).
+    pub actor_user_id: String,
+    pub avatar_ext: Option<String>,
+    /// Effective presence (`online`/`idle`/`dnd`/`offline`) for the avatar dot,
+    /// resolved via `routes::effective_status` like every other avatar surface.
+    pub actor_status: String,
+    pub actor_custom_status: Option<String>,
     /// For reactions, the emoji shortcode. Empty for other kinds.
     pub emoji: String,
     pub created_at: String,
