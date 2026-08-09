@@ -1868,9 +1868,11 @@
   function refresh(){
     var v = ta.value;
     var m = v.match(SLASH);
-    if (m) { scheduleAjax('/api/slash-commands?q=' + encodeURIComponent(m[1])); return; }
+    {# LC-686: pass the room so the AI slash gate (/ask) is scoped to flag + config
+       + this room's privilege, matching the per-message AI menu items. #}
+    if (m) { scheduleAjax('/api/slash-commands?room_id={{ room.id }}&q=' + encodeURIComponent(m[1])); return; }
     var ma = v.match(SLASH_ARGS);
-    if (ma) { scheduleAjax('/api/slash-commands?hint=true&q=' + encodeURIComponent(ma[1].toLowerCase())); return; }
+    if (ma) { scheduleAjax('/api/slash-commands?room_id={{ room.id }}&hint=true&q=' + encodeURIComponent(ma[1].toLowerCase())); return; }
     clearPopover();
   }
   function insert(li){
