@@ -2,7 +2,7 @@
 use crate::i18n::filters;
 use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
-use crate::models::User;
+use crate::models::{Attachment, User};
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
 /// One row on the Saved page. Pre-resolved by the route handler so the
@@ -11,7 +11,13 @@ use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 pub struct SavedListRow {
     pub message_id: i64,
     pub author_label: String,
-    pub body: String,
+    /// LC-684: the body run through the same `views::markdown` pipeline the
+    /// timeline uses (sanitized HTML), rather than raw source. Empty when the
+    /// saved message has no text body (e.g. an image-only or file message).
+    pub body_html: String,
+    /// LC-684: the saved message's attachments, rendered read-only the same way
+    /// the timeline renders them (image / video / voice / file card).
+    pub attachments: Vec<Attachment>,
     pub message_created_at: String,
     pub saved_at: String,
     pub context_label: String,
@@ -25,6 +31,13 @@ impl SavedListRow {
     /// "" when unlabeled. Keeps the template free of Option matching.
     pub fn label_value(&self) -> &str {
         self.label.as_deref().unwrap_or("")
+    }
+
+    /// LC-684: true when the row has something to show (rendered text or at
+    /// least one attachment). Drives the "No preview available" placeholder so a
+    /// saved message never renders as a blank card.
+    pub fn has_content(&self) -> bool {
+        !self.body_html.trim().is_empty() || !self.attachments.is_empty()
     }
 }
 
