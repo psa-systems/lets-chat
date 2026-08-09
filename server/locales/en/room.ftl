@@ -451,6 +451,7 @@ members-role-owner = Owner
 members-role-admin = Admin
 members-role-moderator = Mod
 members-manage-link = Manage members
+members-you = You
 
 # LC-484: AI "catch me up" summaries (threads + channel)
 summary-catch-up-heading = Catch me up
