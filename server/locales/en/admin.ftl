@@ -88,6 +88,10 @@ admin-bots-assistant-label = AI assistant posts as
 admin-bots-assistant-default = assistant (built-in)
 admin-bots-assistant-save = Save
 admin-bots-assistant-pill = AI assistant
+admin-bots-persona-label = Assistant instructions
+admin-bots-persona-help = Custom system prompt for this bot's /ask answers, giving it its own tone or role. Leave empty for the default. Applies to /ask only. Safety rules and the "answer from the room's context, don't invent facts" contract always apply on top and cannot be overridden here.
+admin-bots-persona-placeholder = e.g. You are a terse stand-up facilitator. Keep answers to one or two sentences and stay on topic.
+admin-bots-persona-save = Save instructions
 
 admin-bridges-title = Bridges
 admin-bridges-heading = Bridges

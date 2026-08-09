@@ -104,6 +104,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/reports/{id}/dismiss", post(post_report_dismiss))
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/assistant", post(post_bots_assistant))
+        .route("/admin/bots/persona", post(post_bots_persona))
         .route("/admin/bots/{id}/disable", post(post_bot_disable))
         .route("/admin/bridges", get(get_bridges).post(post_bridges))
         .route("/admin/bridges/avatars", get(get_bridge_avatars))
@@ -2635,6 +2636,15 @@ async fn render_bots_page(
             created_at: b.created_at,
         })
         .collect();
+    // LC-695: the persona (custom /ask system prompt) of the bot the assistant
+    // actually posts as - the chosen active bot, else the built-in `assistant`.
+    let assistant_username = super::assistant::effective_assistant_username(state).await?;
+    let assistant_persona = db::settings::get_setting(
+        &state.settings,
+        &super::assistant::bot_persona_key(&assistant_username),
+    )
+    .await?
+    .filter(|s| !s.is_empty());
     let page = BotsPage {
         user,
         sidebar_categories: &sidebar_categories,
@@ -2657,6 +2667,8 @@ async fn render_bots_page(
         new_token,
         new_bot_name,
         assistant_bot,
+        assistant_username,
+        assistant_persona,
         error,
     };
     html(&page)
@@ -2833,6 +2845,29 @@ pub async fn post_bots_assistant(
     }
     db::settings::set_setting(&state.settings, super::assistant::ASSISTANT_BOT_KEY, choice).await?;
     Ok(Redirect::to("/admin/bots").into_response())
+}
+
+/// LC-695: set the active assistant bot's custom `/ask` persona.
+#[derive(Deserialize)]
+pub struct BotPersonaForm {
+    #[serde(default)]
+    pub persona: String,
+}
+
+/// POST /admin/bots/persona - store (or clear) the custom `/ask` persona for the
+/// bot the assistant currently posts as (LC-695). The target bot is resolved
+/// server-side (the chosen active bot, else the built-in `assistant`), so a stale
+/// client cannot write another bot's persona. An empty body clears it, reverting
+/// that bot to the default persona. The safety envelope always applies regardless.
+pub async fn post_bots_persona(
+    State(state): State<AppState>,
+    AdminUser(_actor): AdminUser,
+    axum::Form(form): axum::Form<BotPersonaForm>,
+) -> Result<Redirect, AppError> {
+    let username = super::assistant::effective_assistant_username(&state).await?;
+    let key = super::assistant::bot_persona_key(&username);
+    db::settings::set_setting(&state.settings, &key, form.persona.trim()).await?;
+    Ok(Redirect::to("/admin/bots"))
 }
 
 // LC-78: bridges -----------------------------------------------------------
