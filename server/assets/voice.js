@@ -198,6 +198,10 @@
     }
     video.style.display = hasVideo ? '' : 'none';
     avatar.style.display = hasVideo ? 'none' : '';
+    // LC-700: expose the tile's media state so the huddle dock can lay out
+    // audio-only participants as compact chips (pure CSS :has() on the root)
+    // and only grow to full tiles when a camera or screen-share is live.
+    t.setAttribute('data-media', hasVideo ? 'video' : 'audio');
     // NOTE: do NOT clear data-screen here based on `hasVideo`. The screen-share
     // pin is owned solely by the explicit voice_screen signal (applyScreen). On
     // the RECEIVER the voice_screen=true signal lands before the screen video
