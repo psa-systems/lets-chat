@@ -4227,6 +4227,84 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     font-size: 0.875rem;
 }
 
+/* ---- LC-700: huddle dock (ad-hoc group huddles; scoped to .lc-huddle) ------
+   A huddle is a lightweight stay-in-chat mode, not a co-equal 50/50 split. It
+   docks at the room foot: audio-only participants render as compact chips in a
+   wrapping row so the timeline stays primary, and the dock only grows to full
+   16/9 video tiles when a camera or screen-share is live. A collapse toggle
+   (live.js) shrinks it to just the control bar. These rules never touch the
+   full-screen voice-channel view, which has no .lc-huddle root. */
+
+/* The bar is a query container so the shared .lc-callbar-controls rule collapses
+   labelled buttons to icons when the dock is narrow (reused from the call bar). */
+.lc-huddle-bar { container: lc-callbar / inline-size; }
+.lc-huddle-collapse .lc-cbtn-ico { transform: rotate(180deg); }
+
+/* Collapsed: keep the control bar, drop the participant area. Instant (a
+   deterministic display toggle rather than a max-height/specificity fight); the
+   chevron still rotates for a visible affordance. */
+.lc-huddle--collapsed [data-lc-voice-grid],
+.lc-huddle--collapsed [data-lc-voice-preview] { display: none; }
+.lc-huddle--collapsed .lc-huddle-collapse .lc-cbtn-ico { transform: rotate(0deg); }
+@media (prefers-reduced-motion: no-preference) {
+    .lc-huddle-collapse .lc-cbtn-ico { transition: transform 0.2s ease; }
+    .lc-huddle [data-lc-voice-grid] { transition: max-height 0.2s ease; }
+}
+
+/* Audio-only (no tile carries a live camera or a screen-share pin): lay the
+   in-call grid out as a wrapping row of compact chips. Reuses the live tile DOM
+   (speaking ring, mute badge, YOU pill) - only the geometry changes. */
+.lc-huddle [data-lc-voice-grid]:not(.lc-voice-grid--hidden):not(:has([data-media="video"], [data-screen])) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    max-height: 5rem;
+}
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-tile {
+    aspect-ratio: auto;
+    min-height: 0;
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.625rem 0.25rem 0.3rem;
+    border-radius: 9999px;
+    background: var(--surface-elevated);
+}
+/* Re-flow the absolutely-positioned tile internals into an inline chip. */
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-tile video,
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-tile .lc-voice-screen-badge {
+    display: none;
+}
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-avatar {
+    position: static;
+    inset: auto;
+    margin: 0;
+    height: 1.5rem;
+    width: 1.5rem;
+    display: block;
+}
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-name {
+    position: static;
+    inset: auto;
+    background: transparent;
+    padding: 0;
+    max-width: none;
+    font-size: 0.75rem;
+}
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-mute-badge {
+    position: static;
+    inset: auto;
+    height: 1rem;
+    width: 1rem;
+}
+/* Alone-in-huddle placeholder stays inline and quiet in the compact dock. */
+.lc-huddle [data-lc-voice-grid]:not(:has([data-media="video"], [data-screen])) .lc-voice-waiting {
+    grid-column: auto;
+    min-height: 0;
+    font-size: 0.75rem;
+}
+
 /* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
 /* Shown before joining: previews who is already here as avatar chips, with a
    heading + primary Join CTA, or an empty state. voice.js hides the whole

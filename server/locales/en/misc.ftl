@@ -146,6 +146,8 @@ huddle-start-tip = Start or join a huddle
 huddle-join = Join huddle
 huddle-in-call = In huddle
 huddle-empty = No one's in the huddle yet.
+# LC-700: collapse/expand the huddle dock (one label for both states).
+huddle-collapse = Collapse or expand huddle
 huddle-lobby-one = is in the huddle
 huddle-lobby-other = in the huddle
 # LC-494: stage control plane (speakers vs listeners + request-to-speak).
