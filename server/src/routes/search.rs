@@ -188,7 +188,7 @@ pub async fn get_search(
                         .into_iter()
                         .filter(|r| !blocked.contains(&r.user_id))
                         .collect();
-                    return render_results(&state, &user, trimmed, rows).await;
+                    return render_results(&state, &user, trimmed, query_text, rows).await;
                 }
             }
         }
@@ -258,7 +258,7 @@ pub async fn get_search(
     .filter(|r| !blocked_authors.contains(&r.user_id))
     .collect();
 
-    render_results(&state, &user, trimmed, rows).await
+    render_results(&state, &user, trimmed, &parsed.text, rows).await
 }
 
 /// Turn ranked `models::SearchResult` rows (from FTS or LC-549 semantic ranking)
@@ -269,6 +269,7 @@ async fn render_results(
     state: &AppState,
     user: &crate::models::User,
     trimmed: &str,
+    highlight: &str,
     rows: Vec<crate::models::SearchResult>,
 ) -> Result<Html, AppError> {
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
@@ -280,31 +281,29 @@ async fn render_results(
         dm_peer_by_room.insert(room.id, peer_id.clone());
     }
 
-    // Resolve usernames for DM peers so the context label can show "@user"
-    // rather than the opaque user_id stored in the DB row.
+    // Resolve usernames for DM peers (the context label) and message authors
+    // (the row byline). `db::chat` only fills `author_name` with the raw
+    // user_id, so we resolve it here, caching one lookup per distinct id.
     let mut username_cache: HashMap<String, String> = HashMap::new();
+
+    // LC-699: highlight the matched query terms in each snippet.
+    let terms = highlight_terms(highlight);
 
     let mut results: Vec<SearchResult> = Vec::with_capacity(rows.len());
     for r in rows {
+        let author_name = resolve_username(state, &mut username_cache, &r.user_id).await?;
+        let snippet = highlight_body(&r.body, &terms);
         if let Some(peer_id) = dm_peer_by_room.get(&r.room_id) {
-            let peer_name = match username_cache.get(peer_id) {
-                Some(n) => n.clone(),
-                None => {
-                    let resolved = db::auth::find_user_by_id(&state.auth, peer_id)
-                        .await?
-                        .map(|u| u.username)
-                        .unwrap_or_else(|| "(unknown)".to_string());
-                    username_cache.insert(peer_id.clone(), resolved.clone());
-                    resolved
-                }
-            };
+            let peer_name = resolve_username(state, &mut username_cache, peer_id).await?;
             results.push(SearchResult {
                 message_id: r.message_id,
                 context_kind: "dm",
                 context_id: peer_id.clone(),
                 context_label: format!("@{peer_name}"),
+                author_name: format!("@{author_name}"),
+                author_id: r.user_id,
                 created_at: r.created_at,
-                snippet: r.body,
+                snippet,
             });
         } else {
             results.push(SearchResult {
@@ -312,8 +311,10 @@ async fn render_results(
                 context_kind: "room",
                 context_id: r.room_id.to_string(),
                 context_label: format!("#{}", r.room_name),
+                author_name: format!("@{author_name}"),
+                author_id: r.user_id,
                 created_at: r.created_at,
-                snippet: r.body,
+                snippet,
             });
         }
     }
@@ -323,6 +324,74 @@ async fn render_results(
         results: &results,
     };
     html(&fragment)
+}
+
+/// Resolve a user_id to its username, caching each distinct lookup. Unknown ids
+/// (deleted accounts) fall back to "(unknown)".
+async fn resolve_username(
+    state: &AppState,
+    cache: &mut HashMap<String, String>,
+    user_id: &str,
+) -> Result<String, AppError> {
+    if let Some(n) = cache.get(user_id) {
+        return Ok(n.clone());
+    }
+    let resolved = db::auth::find_user_by_id(&state.auth, user_id)
+        .await?
+        .map(|u| u.username)
+        .unwrap_or_else(|| "(unknown)".to_string());
+    cache.insert(user_id.to_string(), resolved.clone());
+    Ok(resolved)
+}
+
+/// LC-699: the distinct free-text words to highlight, ASCII-lowercased and
+/// length-filtered so single-character noise ("a", punctuation) does not mark
+/// half the snippet. Operators were already stripped before this is called.
+fn highlight_terms(text: &str) -> Vec<String> {
+    let mut terms: Vec<String> = Vec::new();
+    for w in text.split_whitespace() {
+        let w: String = w
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_ascii_lowercase();
+        if w.len() >= 2 && !terms.contains(&w) {
+            terms.push(w);
+        }
+    }
+    terms
+}
+
+/// LC-699: HTML-escape `body` and wrap case-insensitive matches of any term in
+/// `<mark>`. Matching is done on an ASCII-lowercased copy so byte offsets stay
+/// aligned with the original (ASCII lowercasing never changes byte length), so
+/// multi-byte UTF-8 is never sliced mid-character. The result is safe HTML.
+fn highlight_body(body: &str, terms: &[String]) -> String {
+    use crate::views::room::html_escape;
+    if terms.is_empty() {
+        return html_escape(body);
+    }
+    let lower = body.to_ascii_lowercase();
+    let mut out = String::with_capacity(body.len() + 16);
+    let mut i = 0;
+    while i < body.len() {
+        let mut matched = false;
+        for term in terms {
+            if lower[i..].starts_with(term.as_str()) {
+                let end = i + term.len();
+                out.push_str("<mark>");
+                out.push_str(&html_escape(&body[i..end]));
+                out.push_str("</mark>");
+                i = end;
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            let ch_len = body[i..].chars().next().map_or(1, |c| c.len_utf8());
+            out.push_str(&html_escape(&body[i..i + ch_len]));
+            i += ch_len;
+        }
+    }
+    out
 }
 
 /// LC-280 + LC-530: a raw query split into free text plus operator refinements.

@@ -175,12 +175,11 @@ async fn from_operator_filters_by_author() {
     // alice is admin (sees all rooms). Filter to bob's authorship.
     let (status, body) = search_global(&t.app, &t.alice_session, "from:bob needle").await;
     assert_eq!(status, StatusCode::OK);
+    // LC-699: the matched term "needle" is now wrapped in <mark>, so the snippet
+    // reads "<mark>needle</mark> from bob"; assert on the unhighlighted tail.
+    assert!(body.contains("from bob"), "bob's hit must appear: {body}");
     assert!(
-        body.contains("needle from bob"),
-        "bob's hit must appear: {body}"
-    );
-    assert!(
-        !body.contains("needle from alice"),
+        !body.contains("from alice"),
         "from:bob must exclude alice's hit: {body}"
     );
 }
