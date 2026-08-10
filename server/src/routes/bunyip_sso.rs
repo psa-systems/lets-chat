@@ -124,28 +124,28 @@ pub async fn get_callback(
         tracing::warn!(target: "bunyip_sso", id_sub = %id_claims.sub, ui_sub = %userinfo.sub, "userinfo sub mismatch");
         return err_dance("userinfo sub mismatch");
     }
+    // LC-698: an empty subject is the UNLINKED marker in `users.bunyip_sub`, so
+    // accepting one would resolve the login to an arbitrary unlinked account.
+    if id_claims.sub.trim().is_empty() {
+        return err_dance("empty sub claim");
+    }
 
     let user_id = match resolve_or_provision_user(&state, &id_claims.sub, &userinfo).await {
         Ok(id) => id,
-        Err(ResolveError::Banned) => {
-            tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, "sso reject: banned user");
-            return Redirect::to("/login?sso_error=banned").into_response();
-        }
-        Err(ResolveError::BotConflict) => {
-            tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, "sso reject: sub attached to bot row");
-            return err_dance("bot conflict");
-        }
-        Err(ResolveError::IdentityConflict) => {
-            tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, "sso reject: email already linked to a different identity");
-            return Redirect::to("/login?sso_error=identity_conflict").into_response();
-        }
-        Err(ResolveError::Database(e)) => {
-            tracing::error!(target: "bunyip_sso", error = %e, "resolve_or_provision_user failed");
-            return Redirect::to("/login?sso_error=internal").into_response();
-        }
-        Err(ResolveError::App(e)) => {
-            tracing::error!(target: "bunyip_sso", error = ?e, "resolve_or_provision_user failed");
-            return Redirect::to("/login?sso_error=internal").into_response();
+        Err(e) => {
+            let code = sso_error_code(&e);
+            match &e {
+                ResolveError::Database(err) => {
+                    tracing::error!(target: "bunyip_sso", error = %err, "resolve_or_provision_user failed");
+                }
+                ResolveError::App(err) => {
+                    tracing::error!(target: "bunyip_sso", error = ?err, "resolve_or_provision_user failed");
+                }
+                other => {
+                    tracing::warn!(target: "bunyip_sso", sub = %id_claims.sub, code, reason = ?other, "sso reject");
+                }
+            }
+            return Redirect::to(&format!("/login?sso_error={code}")).into_response();
         }
     };
 
@@ -162,9 +162,21 @@ pub async fn get_callback(
     // the remote-control consent gate, which then silently refused every request).
     // Stamp it now, idempotently, so new AND already-provisioned users are fixed on
     // their next login. Best-effort: a failure here must not block a valid login.
+    // LC-698: only when the row's stored address IS the one bunyip vouched for -
+    // otherwise a self-service profile email would stamp itself verified and
+    // become an adoption target for the next login on that address.
     if userinfo.email_verified == Some(true) {
-        if let Err(e) = db::auth::mark_email_verified_if_unset(&state.auth, &user_id).await {
-            tracing::warn!(target: "bunyip_sso", error = %e, user_id = %user_id, "email_verified stamp failed");
+        if let Some(email) = userinfo
+            .email
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if let Err(e) =
+                db::auth::mark_email_verified_if_unset(&state.auth, &user_id, email).await
+            {
+                tracing::warn!(target: "bunyip_sso", error = %e, user_id = %user_id, "email_verified stamp failed");
+            }
         }
     }
 
@@ -250,13 +262,27 @@ pub async fn get_callback(
 enum ResolveError {
     Banned,
     BotConflict,
-    /// LC-618: the verified email is already owned by a row this login cannot
-    /// adopt (a bot row, an unverified-email match, or a banned row), so
-    /// provisioning would collide on `UNIQUE(users.email)`. Surfaced to the user
-    /// as an actionable message rather than an opaque internal error.
+    /// LC-618 + LC-698: the verified email is owned by a row this login must not
+    /// adopt (already linked to a different subject, a bot row, or a banned
+    /// row), so adopting would be a takeover and provisioning would collide on
+    /// `UNIQUE(users.email)`. Surfaced to the user as an actionable message
+    /// rather than an opaque internal error; an admin resolves a rotated sub by
+    /// unlinking the row (`POST /admin/users/{id}/unlink-sso`).
     IdentityConflict,
     Database(sqlx::Error),
     App(AppError),
+}
+
+/// The `?sso_error=` code a resolver failure lands the browser on. One mapping,
+/// so the code the user actually sees is testable without driving the whole
+/// OIDC dance.
+fn sso_error_code(e: &ResolveError) -> &'static str {
+    match e {
+        ResolveError::Banned => "banned",
+        ResolveError::BotConflict => "dance",
+        ResolveError::IdentityConflict => "identity_conflict",
+        ResolveError::Database(_) | ResolveError::App(_) => "internal",
+    }
 }
 
 impl From<sqlx::Error> for ResolveError {
@@ -298,15 +324,14 @@ async fn resolve_or_provision_user(
         return Ok(id);
     }
 
-    // LC-588 + LC-618: the sub did not match above, but a users row may already
-    // exist under the same VERIFIED email. LC-588 adopted an UNLINKED row (a
-    // password user who signed up before SSO). LC-618 also re-adopts a row whose
-    // bunyip_sub has ROTATED - the OP issued a NEW sub for the same verified
-    // email (account recreated, or the OP's user store reseeded). Both cases link
-    // this sub onto the existing row rather than INSERTing a duplicate that trips
-    // UNIQUE(users.email) and 500s. Gated on email_verified so an unverified
-    // address cannot claim an account; find_user_id_by_email excludes banned
-    // rows; adopt_bunyip_sub refuses bot rows (returns false).
+    // LC-588 + LC-698: the sub did not match above, but a users row may already
+    // own the same VERIFIED email. Exactly one shape is adoptable: an UNLINKED,
+    // verified-email, non-bot, non-banned row (LC-588's pre-SSO password user).
+    // Every other shape is refused, because the local email is a self-service
+    // string and must never re-point an identity at someone else's account.
+    // LC-618 briefly relinked a row whose bunyip_sub had ROTATED; that silent
+    // relink was the takeover primitive LC-698 removes, so a rotated sub is now
+    // an explicit conflict that an admin resolves by unlinking the row.
     if userinfo.email_verified == Some(true) {
         if let Some(email) = userinfo
             .email
@@ -314,21 +339,52 @@ async fn resolve_or_provision_user(
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            if let Some(existing_id) = db::auth::find_user_id_by_email(&state.auth, email).await? {
-                if db::auth::adopt_bunyip_sub(&state.auth, &existing_id, sub).await? {
-                    return Ok(existing_id);
+            if let Some(owner) = db::auth::find_email_owner(&state.auth, email).await? {
+                if owner.is_banned || owner.is_bot {
+                    tracing::warn!(
+                        target: "bunyip_sso", sub, owner_id = %owner.id,
+                        banned = owner.is_banned, bot = owner.is_bot,
+                        "sso adoption refused: verified email owned by a banned/bot row",
+                    );
+                    return Err(ResolveError::IdentityConflict);
                 }
-                // The email is held by a bot row; refuse rather than provision a
-                // colliding duplicate.
-                return Err(ResolveError::IdentityConflict);
+                if !owner.email_verified {
+                    // The address was set self-service and never verified, so that
+                    // row has no claim on it while the OP vouches for this login.
+                    // Release it (otherwise the provision below collides on
+                    // UNIQUE(users.email)) and provision a fresh account. Releasing
+                    // also stops the squatting row from receiving mail addressed to
+                    // this user.
+                    tracing::warn!(
+                        target: "bunyip_sso", sub, owner_id = %owner.id,
+                        "releasing unverified profile email from another row; provisioning instead of adopting",
+                    );
+                    db::auth::set_user_email(&state.auth, &owner.id, None).await?;
+                } else if let Some(other_sub) = owner.bunyip_sub.as_deref() {
+                    tracing::warn!(
+                        target: "bunyip_sso", sub, owner_id = %owner.id, other_sub,
+                        "sso adoption refused: verified email already linked to a different subject",
+                    );
+                    return Err(ResolveError::IdentityConflict);
+                } else if db::auth::link_bunyip_sub(&state.auth, &owner.id, sub).await? {
+                    return Ok(owner.id);
+                } else {
+                    // Lost a race with a concurrent link: refuse rather than
+                    // provision a duplicate that collides on the email.
+                    tracing::warn!(
+                        target: "bunyip_sso", sub, owner_id = %owner.id,
+                        "sso adoption refused: row stopped being linkable mid-login",
+                    );
+                    return Err(ResolveError::IdentityConflict);
+                }
             }
         }
     }
 
     // Fresh sub with no adoptable verified-email row: provision. If an email is
-    // already owned by a row we did not adopt above (an unverified-email match,
-    // or a banned row that find_user_id_by_email excludes), the INSERT collides
-    // on UNIQUE(users.email). Surface that as an actionable identity conflict
+    // still owned by a row we did not adopt above (an unverified email on the
+    // OP side whose address a local row holds), the INSERT collides on
+    // UNIQUE(users.email). Surface that as an actionable identity conflict
     // rather than an opaque sso_error=internal (LC-618).
     let username = pick_username(state, userinfo).await?;
     let display_name = userinfo.name.as_deref().filter(|s| !s.trim().is_empty());
@@ -615,4 +671,217 @@ async fn complete_login(
     )
     .await;
     (jar, Redirect::to("/")).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    //! LC-698: the resolver decides which local row an incoming Bunyip identity
+    //! binds to, so its refusals are exercised here directly rather than through
+    //! the full OIDC dance (which would need a live OP).
+    use super::*;
+    use crate::oidc::UserInfo;
+    use crate::ws::hub::Hub;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
+    async fn auth_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn settings_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/settings")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn test_state() -> AppState {
+        let auth = auth_pool().await;
+        AppState {
+            geoip: None,
+            login_approval_enabled: false,
+            bg: crate::bg::spawn(auth.clone()),
+            auth,
+            chat: chat_pool().await,
+            settings: settings_pool().await,
+            hub: Arc::new(Hub::new()),
+            asset_version: "test".into(),
+            last_seen_ledger: crate::auth::new_last_seen_ledger(),
+            activity_ledger: crate::auth::new_last_seen_ledger(),
+            secret_key: None,
+            vapid: None,
+            push_client: Arc::new(crate::push::MockPushClient::default()),
+            apns_client: None,
+            fcm_client: None,
+            mailer: None,
+            base_url: "http://localhost:8080".to_string(),
+            ice_servers: "[]".to_string(),
+            rate_limits: crate::rate_limit::RateLimits::new(),
+            bunyip_sso: None,
+            stt_client: None,
+            llm_client: None,
+            embedding_client: None,
+        }
+    }
+
+    fn userinfo(sub: &str, email: &str, verified: bool) -> UserInfo {
+        UserInfo {
+            sub: sub.to_string(),
+            email: Some(email.to_string()),
+            email_verified: Some(verified),
+            preferred_username: Some(email.split('@').next().unwrap().to_string()),
+            name: None,
+        }
+    }
+
+    /// A row linked to `sub` whose email is verified: the shape the resolver
+    /// matches on when an incoming identity presents the same address.
+    async fn linked_user(state: &AppState, username: &str, sub: &str, email: &str) -> String {
+        let id = db::auth::create_user_from_bunyip(&state.auth, username, sub, None, Some(email))
+            .await
+            .unwrap();
+        db::auth::mark_email_verified_if_unset(&state.auth, &id, email)
+            .await
+            .unwrap();
+        id
+    }
+
+    /// The row's stored subject. Unlinked reads as `""` (the column is
+    /// `NOT NULL DEFAULT ''`).
+    async fn stored_sub(state: &AppState, user_id: &str) -> String {
+        sqlx::query_scalar::<_, String>("SELECT bunyip_sub FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_one(&state.auth)
+            .await
+            .unwrap()
+    }
+
+    // LC-698 AC4: a rotated sub (the verified email matches a row linked to a
+    // DIFFERENT subject) is an explicit identity conflict. Not a 500, and above
+    // all not the silent relink LC-618 shipped.
+    #[tokio::test]
+    async fn rotated_sub_conflicts_instead_of_relinking() {
+        let state = test_state().await;
+        let alice = linked_user(&state, "alice", "sub-old", "alice@example.com").await;
+
+        let err = resolve_or_provision_user(
+            &state,
+            "sub-new",
+            &userinfo("sub-new", "alice@example.com", true),
+        )
+        .await
+        .expect_err("a rotated sub must not resolve");
+        assert!(matches!(err, ResolveError::IdentityConflict), "got {err:?}");
+        assert_eq!(sso_error_code(&err), "identity_conflict");
+
+        // The row is untouched: the incoming subject was never bound to it.
+        assert_eq!(stored_sub(&state, &alice).await, "sub-old");
+    }
+
+    // LC-698 AC1 (the exploit from the issue): Mallory sets her profile email to
+    // the new hire's address, unverified. The new hire's first login must not
+    // land in her account.
+    #[tokio::test]
+    async fn self_service_email_never_adopts_another_row() {
+        let state = test_state().await;
+        let mallory = linked_user(&state, "mallory", "sub-mallory", "mallory@example.com").await;
+        db::auth::set_user_email(&state.auth, &mallory, Some("newhire@example.com"))
+            .await
+            .unwrap();
+
+        let id = resolve_or_provision_user(
+            &state,
+            "sub-newhire",
+            &userinfo("sub-newhire", "newhire@example.com", true),
+        )
+        .await
+        .expect("the new hire signs in");
+
+        assert_ne!(id, mallory, "the login must not resolve to Mallory's row");
+        assert_eq!(
+            stored_sub(&state, &mallory).await,
+            "sub-mallory",
+            "Mallory's row keeps its own subject",
+        );
+        // The squatted address was released to its verified owner, so it no
+        // longer routes Mallory's mail to the new hire either.
+        assert_eq!(
+            db::auth::get_user_email(&state.auth, &mallory)
+                .await
+                .unwrap(),
+            None,
+        );
+        assert_eq!(
+            db::auth::get_user_email(&state.auth, &id)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("newhire@example.com"),
+        );
+    }
+
+    // LC-588 must not regress (AC2): an UNLINKED row with a verified email is
+    // still adopted, so a pre-SSO account is claimed by its owner's first login.
+    #[tokio::test]
+    async fn unlinked_verified_row_is_still_adopted() {
+        let state = test_state().await;
+        let alice = linked_user(&state, "alice", "sub-old", "alice@example.com").await;
+        // The admin unlink path (AC5) leaves exactly this state.
+        assert!(db::auth::clear_bunyip_sub(&state.auth, &alice)
+            .await
+            .unwrap());
+
+        let id = resolve_or_provision_user(
+            &state,
+            "sub-new",
+            &userinfo("sub-new", "alice@example.com", true),
+        )
+        .await
+        .expect("an unlinked row is adoptable");
+
+        assert_eq!(id, alice, "the same row was adopted, not a duplicate");
+        assert_eq!(stored_sub(&state, &alice).await, "sub-new");
+    }
+
+    // LC-698: an unverified assertion from the OP is not an adoption signal at
+    // all, so the address stays with the row that holds it and the login fails
+    // loudly on the email collision rather than binding to that row.
+    #[tokio::test]
+    async fn unverified_op_email_never_adopts() {
+        let state = test_state().await;
+        let alice = linked_user(&state, "alice", "sub-old", "alice@example.com").await;
+        assert!(db::auth::clear_bunyip_sub(&state.auth, &alice)
+            .await
+            .unwrap());
+
+        let err = resolve_or_provision_user(
+            &state,
+            "sub-new",
+            &userinfo("sub-new", "alice@example.com", false),
+        )
+        .await
+        .expect_err("an unverified OP email cannot claim a row");
+        assert_eq!(sso_error_code(&err), "identity_conflict");
+        assert_eq!(
+            stored_sub(&state, &alice).await,
+            "",
+            "the row stays unlinked"
+        );
+    }
 }

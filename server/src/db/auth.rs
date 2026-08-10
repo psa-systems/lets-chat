@@ -1575,46 +1575,130 @@ pub async fn list_blocked_ids_either_way(
         .collect())
 }
 
-/// Look up the user_id whose email matches `email` (case-insensitive). Used
-/// by the password-reset request handler to map an inbound email address to
-/// the account that should receive a reset link. Returns `None` for unknown
-/// addresses; the caller still returns 200 to avoid email enumeration.
-pub async fn find_user_id_by_email(
-    pool: &SqlitePool,
-    email: &str,
-) -> Result<Option<String>, sqlx::Error> {
-    let row = sqlx::query("SELECT id FROM users WHERE email = ? COLLATE NOCASE AND is_banned = 0")
-        .bind(email)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.map(|r| r.get::<String, _>("id")))
+/// LC-698: the row that owns `email` (case-insensitive), with the flags the SSO
+/// resolver needs to classify it. `users.email` is uniquely indexed, so at most
+/// one row can match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmailOwner {
+    pub id: String,
+    /// The subject this row is already linked to, or `None` when unlinked
+    /// (NULL or the empty string, both of which LC-588 treated as unlinked).
+    pub bunyip_sub: Option<String>,
+    pub is_bot: bool,
+    pub is_banned: bool,
+    /// `email_verified_at IS NOT NULL`: the stored address was verified by an
+    /// authority. A self-service profile email is never verified (LC-22 retired
+    /// verification mail and `set_user_email` clears the stamp on change).
+    pub email_verified: bool,
 }
 
-/// LC-588 + LC-618: adopt an existing local account onto a bunyip subject,
-/// matched by verified email. Returns whether a row was adopted.
+/// LC-698: the subject a row is linked to, or `None` when it is unlinked (the
+/// empty-string marker) or the user is gone. Drives the admin row's "Unlink SSO"
+/// affordance, which is only offered when there is a subject to clear.
+pub async fn get_bunyip_sub(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let sub: Option<String> = sqlx::query_scalar("SELECT bunyip_sub FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(sub.filter(|s| !s.trim().is_empty()))
+}
+
+/// LC-698: look up the row owning `email`, whatever its state. Replaces
+/// `find_user_id_by_email`, which filtered banned rows and returned only an id:
+/// the SSO resolver must see `bunyip_sub`, `is_bot` and the verified stamp to
+/// tell an adoptable row from one it has to refuse.
+pub async fn find_email_owner(
+    pool: &SqlitePool,
+    email: &str,
+) -> Result<Option<EmailOwner>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, bunyip_sub, COALESCE(is_bot, 0) AS is_bot, is_banned, email_verified_at \
+         FROM users WHERE email = ? COLLATE NOCASE",
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| EmailOwner {
+        id: r.get::<String, _>("id"),
+        bunyip_sub: r
+            .get::<Option<String>, _>("bunyip_sub")
+            .filter(|s| !s.trim().is_empty()),
+        is_bot: r.get::<i64, _>("is_bot") != 0,
+        is_banned: r.get::<i64, _>("is_banned") != 0,
+        email_verified: r
+            .get::<Option<String>, _>("email_verified_at")
+            .is_some_and(|s| !s.trim().is_empty()),
+    }))
+}
+
+/// LC-588 (restored by LC-698): link an UNLINKED local account to a bunyip
+/// subject, matched by verified email. Returns whether a row was linked.
 ///
-/// LC-588 originally only linked an UNLINKED row (`bunyip_sub IS NULL OR ''`) so
-/// SSO could land on a pre-existing password account. LC-618 drops that guard so
-/// this also re-adopts a row whose `bunyip_sub` has ROTATED: the OP issued a new
-/// sub for the same verified email (account recreated, or the OP's user store
-/// reseeded). The caller only reaches here after the sub-by-lookup missed, so no
-/// other row holds `sub` and force-setting it cannot violate `UNIQUE(bunyip_sub)`.
-/// The `is_bot` guard is retained: bot rows are never adopted (the caller turns a
+/// The `bunyip_sub IS NULL OR ''` guard is the takeover guard: a row already
+/// claimed by some other subject can never be re-pointed here, so an email
+/// string (which any user can set on their own profile, unverified) cannot bind
+/// an incoming identity onto someone else's account. LC-618 deleted the clause
+/// to auto-relink a ROTATED sub; that silent relink is the vulnerability LC-698
+/// closes. A rotated sub is now an explicit identity conflict, recoverable by an
+/// admin through `clear_bunyip_sub`.
+///
+/// The `is_bot` guard is retained: bot rows are never linked (the caller turns a
 /// `false` return into an identity conflict rather than provisioning a duplicate).
-pub async fn adopt_bunyip_sub(
+/// On success every session on the row is deleted, so a link can never leave a
+/// previous holder's cookie live.
+pub async fn link_bunyip_sub(
     pool: &SqlitePool,
     user_id: &str,
     sub: &str,
 ) -> Result<bool, sqlx::Error> {
+    // The empty string is the UNLINKED marker, never a subject to link to.
+    if sub.trim().is_empty() {
+        return Ok(false);
+    }
     let res = sqlx::query(
         "UPDATE users SET bunyip_sub = ?, updated_at = datetime('now') \
-         WHERE id = ? AND COALESCE(is_bot, 0) = 0",
+         WHERE id = ? AND COALESCE(is_bot, 0) = 0 \
+           AND (bunyip_sub IS NULL OR bunyip_sub = '')",
     )
     .bind(sub)
     .bind(user_id)
     .execute(pool)
     .await?;
-    Ok(res.rows_affected() > 0)
+    if res.rows_affected() == 0 {
+        return Ok(false);
+    }
+    delete_user_sessions(pool, user_id).await?;
+    Ok(true)
+}
+
+/// LC-698: unlink a user from its bunyip subject, so the next SSO login for
+/// that verified email re-links the row through `link_bunyip_sub`. This is the
+/// deliberate admin path out of an identity conflict (the OP rotated the sub).
+/// Returns whether a row changed; bot rows and already-unlinked rows report
+/// `false` so the caller can surface a no-op rather than claim success. Every
+/// session on the row is deleted, so an authorized relink cannot leave the
+/// previous holder signed in.
+///
+/// Unlinked is the empty string, not NULL: `bunyip_sub` is `NOT NULL DEFAULT ''`
+/// (migration 0029), and 0043 made its unique index partial so any number of
+/// rows may sit unlinked at once.
+pub async fn clear_bunyip_sub(pool: &SqlitePool, user_id: &str) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET bunyip_sub = '', updated_at = datetime('now') \
+         WHERE id = ? AND COALESCE(is_bot, 0) = 0 \
+           AND bunyip_sub IS NOT NULL AND bunyip_sub <> ''",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Ok(false);
+    }
+    delete_user_sessions(pool, user_id).await?;
+    Ok(true)
 }
 
 /// Fetch the configured email for a user, or `None` if unset. Used to render
@@ -1694,20 +1778,27 @@ pub async fn mark_email_verified(
     Ok(res.rows_affected())
 }
 
-/// LC-627: stamp `email_verified_at` when it is not already set, without a
-/// stored-email guard. Used by the SSO callback: the identity provider (bunyip)
-/// is the authority for whether the address is verified, so a `mark_email_verified`
-/// style email match does not apply. `IS NULL` keeps it idempotent - the first
-/// verified SSO login sets it, later logins are no-ops (no `updated_at` churn).
+/// LC-627: stamp `email_verified_at` when it is not already set. Used by the SSO
+/// callback: the identity provider (bunyip) is the authority for whether an
+/// address is verified. `IS NULL` keeps it idempotent - the first verified SSO
+/// login sets it, later logins are no-ops (no `updated_at` churn).
+///
+/// LC-698 adds the `email` guard: the stamp asserts that THIS address was
+/// verified, so it may only be written when the stored address is the one the OP
+/// vouched for. Without it a user could set an arbitrary unverified profile
+/// email, log in, and have their own login stamp that stranger's address as
+/// verified - which would defeat the resolver's verified-email adoption gate.
 pub async fn mark_email_verified_if_unset(
     pool: &SqlitePool,
     user_id: &str,
+    email: &str,
 ) -> Result<u64, sqlx::Error> {
     let res = sqlx::query(
         "UPDATE users SET email_verified_at = datetime('now'), updated_at = datetime('now') \
-         WHERE id = ? AND email_verified_at IS NULL",
+         WHERE id = ? AND email_verified_at IS NULL AND email = ? COLLATE NOCASE",
     )
     .bind(user_id)
+    .bind(email)
     .execute(pool)
     .await?;
     Ok(res.rows_affected())
@@ -1764,28 +1855,37 @@ pub async fn list_blocked_users(
 
 /// Returns the lets-chat `users.id` whose `bunyip_sub` column matches the
 /// supplied verified `sub` claim. `None` on no match.
+///
+/// LC-698: `bunyip_sub <> ''` because the empty string is the UNLINKED marker,
+/// not a subject. Without it an empty `sub` would resolve to an arbitrary
+/// unlinked account.
 pub async fn find_user_id_by_bunyip_sub(
     pool: &SqlitePool,
     sub: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE bunyip_sub = ?")
-        .bind(sub)
-        .fetch_optional(pool)
-        .await
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM users WHERE bunyip_sub = ? AND bunyip_sub <> ''",
+    )
+    .bind(sub)
+    .fetch_optional(pool)
+    .await
 }
 
 /// LC-22: lookup by id with the moderation flags the callback resolver
 /// needs. Returns banned + bot booleans alongside the id, so the callback
 /// can short-circuit a banned account or refuse to attach a sub to a bot.
+/// LC-698: the empty string never matches (see `find_user_id_by_bunyip_sub`).
 pub async fn get_user_auth_flags_by_bunyip_sub(
     pool: &SqlitePool,
     sub: &str,
 ) -> Result<Option<(String, bool, bool)>, sqlx::Error> {
-    let row: Option<(String, i64, i64)> =
-        sqlx::query_as("SELECT id, is_banned, COALESCE(is_bot, 0) FROM users WHERE bunyip_sub = ?")
-            .bind(sub)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String, i64, i64)> = sqlx::query_as(
+        "SELECT id, is_banned, COALESCE(is_bot, 0) FROM users \
+         WHERE bunyip_sub = ? AND bunyip_sub <> ''",
+    )
+    .bind(sub)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(|(id, banned, bot)| (id, banned != 0, bot != 0)))
 }
 
