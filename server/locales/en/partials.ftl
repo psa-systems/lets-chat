@@ -145,6 +145,8 @@ partials-room-info = Info
 partials-room-search-placeholder = Search this room...
 # LC-549: opt-in semantic (embedding) search toggle in the room-header search.
 partials-room-search-semantic = Semantic
+# LC-699: one-line hint under the semantic toggle explaining what it does.
+partials-room-search-semantic-hint = Find by meaning, not exact words. Slower.
 partials-room-moderators-title = Manage per-room moderators
 partials-room-moderators = Moderators
 # LC-325: jump-to-date control.

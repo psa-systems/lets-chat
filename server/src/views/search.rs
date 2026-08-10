@@ -25,8 +25,14 @@ pub struct SearchResult {
     pub context_id: String,
     /// Human-readable label shown above the snippet (e.g. "#general", "@alice").
     pub context_label: String,
+    /// LC-699: the message author, resolved to a display name (`@username`), and
+    /// their id for the `/avatars/{id}` thumbnail. `db::chat` only fills
+    /// `author_name` with the raw user_id, so `render_results` resolves it.
+    pub author_name: String,
+    pub author_id: String,
     pub created_at: String,
-    /// Plain message body. Askama escapes this on render; the FTS layer does
-    /// not produce pre-formatted `<mark>` HTML, so no `|safe` filter is used.
+    /// LC-699: the matched message body, HTML-escaped with the matched query
+    /// terms wrapped in `<mark>`. Rendered with `|safe` because it is
+    /// pre-escaped server-side; never pass an un-escaped body here.
     pub snippet: String,
 }

@@ -165,8 +165,10 @@ async fn semantic_search_ranks_by_meaning() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    // LC-699: "database" is now wrapped in <mark>, so assert on the tail that
+    // stays unhighlighted ("problem" does not appear in this message).
     assert!(
-        body.contains("database migration failed"),
+        body.contains("migration failed"),
         "semantic hit should appear: {body}"
     );
     assert!(!body.contains("tacos for lunch"), "unrelated hit: {body}");

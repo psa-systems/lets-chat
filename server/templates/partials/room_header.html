@@ -62,40 +62,61 @@
         </svg>
       </summary>
       <form class="lc-header-search-pop relative" autocomplete="off" onsubmit="return false">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-content-subtle">
-        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
-      </svg>
-      <input
-        name="q"
-        placeholder="{{ "partials-room-search-placeholder"|t }}"
-        aria-label="{{ "partials-room-search-placeholder"|t }}"
-        hx-get="/search?room_id={{ room.id }}"
-        hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
-        hx-target="#lc-room-search-results"
-        hx-swap="innerHTML"
-        hx-include="#lc-semantic-{{ room.id }}"
-        data-lc-search
-        data-lc-search-results="#lc-room-search-results"
-        role="combobox"
-        aria-expanded="false"
-        aria-controls="lc-room-search-results"
-        aria-autocomplete="list"
-        class="w-48 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+      <div class="lc-search-field">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="lc-search-field-icon">
+          <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+        </svg>
+        <input
+          name="q"
+          placeholder="{{ "partials-room-search-placeholder"|t }}"
+          aria-label="{{ "partials-room-search-placeholder"|t }}"
+          hx-get="/search?room_id={{ room.id }}"
+          hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+          hx-target="#lc-room-search-results"
+          hx-swap="innerHTML"
+          hx-include="#lc-semantic-{{ room.id }}"
+          hx-indicator="#lc-search-indicator-{{ room.id }}"
+          data-lc-search
+          data-lc-search-results="#lc-room-search-results"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="lc-room-search-results"
+          aria-autocomplete="list"
+          class="lc-search-input">
+        {# LC-699: clear the query and collapse the popover. CSS hides it while the
+           field is empty (:placeholder-shown), so it appears only once typing. #}
+        <button type="button" class="lc-search-clear" aria-label="{{ "search-clear"|t }}"
+                onclick="var f=this.closest('form');var i=f.querySelector('input[name=q]');i.value='';i.focus();var r=document.getElementById('lc-room-search-results');if(r)r.innerHTML='';">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-3.5 w-3.5">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+          </svg>
+        </button>
+        {# LC-699: in-flight indicator (htmx-indicator). Especially useful for
+           semantic search, which hits the embedding model. #}
+        <span id="lc-search-indicator-{{ room.id }}" class="lc-search-indicator htmx-indicator" role="status" aria-live="polite">
+          {{ "search-searching"|t }}
+        </span>
+      </div>
       {# LC-549: opt-in semantic (embedding) search. CSS-hidden unless an operator
-         embeddings endpoint is configured ([data-lc-embeddings] page root).
+         embeddings endpoint is configured AND the AI toggle is on
+         ([data-lc-embeddings] page root; see routes::room embeddings_available).
          Toggling it re-runs the current query in semantic mode; the server
          degrades to FTS if embeddings are unavailable. #}
-      <label class="lc-semantic-toggle mt-1 flex items-center gap-1 text-xs text-content-muted">
+      <label class="lc-semantic-toggle">
         <input type="checkbox" id="lc-semantic-{{ room.id }}" name="semantic" value="1"
                hx-get="/search?room_id={{ room.id }}"
                hx-trigger="change"
                hx-include="[name='q']"
                hx-target="#lc-room-search-results"
                hx-swap="innerHTML"
-               class="h-3 w-3 rounded border-border">
-        {{ "partials-room-search-semantic"|t }}
+               hx-indicator="#lc-search-indicator-{{ room.id }}"
+               class="lc-semantic-checkbox">
+        <span class="lc-semantic-text">
+          <span class="lc-semantic-label">{{ "partials-room-search-semantic"|t }}</span>
+          <span class="lc-semantic-hint">{{ "partials-room-search-semantic-hint"|t }}</span>
+        </span>
       </label>
-      <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-64 empty:hidden"></div>
+      <div id="lc-room-search-results" class="absolute right-0 top-full mt-1 z-40 w-72 empty:hidden"></div>
       </form>
     </details>
     {# LC-493: start/join an ad-hoc huddle in this group room. data-lc-voice-join
