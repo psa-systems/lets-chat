@@ -323,6 +323,38 @@
   document.body.addEventListener('htmx:load', function (e) { lcTranslatePreset(e.target); });
   document.body.addEventListener('htmx:afterSettle', function (e) { lcTranslatePreset(e.target); });
 
+  // LC-700: huddle dock collapse/expand. Pure UI (no WebRTC), so it lives here
+  // rather than in voice.js: flips the root's lc-huddle--collapsed class and the
+  // toggle's aria-expanded, and remembers the choice per room across reloads.
+  function lcHuddleKey(root) {
+    return 'lc-huddle-collapsed:' + (root.getAttribute('data-room-id') || '');
+  }
+  function lcApplyHuddleCollapsed(root, collapsed) {
+    root.classList.toggle('lc-huddle--collapsed', collapsed);
+    var btn = root.querySelector('[data-lc-huddle-collapse]');
+    if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+  document.body.addEventListener('click', function (evt) {
+    var btn = evt.target.closest && evt.target.closest('[data-lc-huddle-collapse]');
+    if (!btn) return;
+    var root = btn.closest('[data-lc-huddle]');
+    if (!root) return;
+    var collapsed = !root.classList.contains('lc-huddle--collapsed');
+    lcApplyHuddleCollapsed(root, collapsed);
+    try { localStorage.setItem(lcHuddleKey(root), collapsed ? '1' : '0'); } catch (e) { /* storage off */ }
+  });
+  function lcRestoreHuddle(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+    var roots = root.querySelectorAll('[data-lc-huddle]');
+    Array.prototype.forEach.call(roots, function (r) {
+      var v = null;
+      try { v = localStorage.getItem(lcHuddleKey(r)); } catch (e) { v = null; }
+      if (v === '1') lcApplyHuddleCollapsed(r, true);
+    });
+  }
+  lcRestoreHuddle(document);
+  document.body.addEventListener('htmx:afterSettle', function (e) { lcRestoreHuddle(e.target); });
+
   // LC-650: uniform "AI is working" feedback. AI actions call a possibly-slow
   // LLM (seconds on a CPU model), and their htmx targets are empty until the
   // response lands, so without this the click feels dead. Any trigger tagged
