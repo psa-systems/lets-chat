@@ -67,6 +67,7 @@
           <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
         </svg>
         <input
+          id="lc-search-q-{{ room.id }}"
           name="q"
           placeholder="{{ "partials-room-search-placeholder"|t }}"
           aria-label="{{ "partials-room-search-placeholder"|t }}"
@@ -103,10 +104,15 @@
          Toggling it re-runs the current query in semantic mode; the server
          degrades to FTS if embeddings are unavailable. #}
       <label class="lc-semantic-toggle">
+        {# LC-701: hx-include MUST target this room's search input by id, not the
+           global `[name='q']` selector. A room page has several inputs named
+           "q" (the sidebar message search, people search, modals), so the
+           global selector sent `q=&q=&q=` - duplicate keys that axum's
+           Query<SearchQuery> rejects with 400, so toggling Semantic errored. #}
         <input type="checkbox" id="lc-semantic-{{ room.id }}" name="semantic" value="1"
                hx-get="/search?room_id={{ room.id }}"
                hx-trigger="change"
-               hx-include="[name='q']"
+               hx-include="#lc-search-q-{{ room.id }}"
                hx-target="#lc-room-search-results"
                hx-swap="innerHTML"
                hx-indicator="#lc-search-indicator-{{ room.id }}"
