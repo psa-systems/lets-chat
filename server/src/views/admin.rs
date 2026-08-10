@@ -69,6 +69,9 @@ pub struct AdminUserView {
     /// or empty when the user is unlimited. An empty submit clears the
     /// quota.
     pub quota_mib_value: String,
+    /// LC-698: the row holds a bunyip subject, so "Unlink SSO" has something to
+    /// clear. False hides the button (an unlinked row would 400 the action).
+    pub is_sso_linked: bool,
 }
 
 /// Per-row projection for the invites admin table.
