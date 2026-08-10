@@ -127,6 +127,25 @@ async fn default_avatar_revalidates_with_etag() {
     assert_eq!(resp.status(), StatusCode::NOT_MODIFIED);
 }
 
+// LC-701: an unknown id (a bot or a since-deleted user, e.g. a search-result
+// author) must resolve to the generated default image, not 404. Chat rows, the
+// voice grid, and search rows reference /avatars/{id} unconditionally.
+#[tokio::test]
+async fn unknown_avatar_falls_back_to_default_image() {
+    let s = setup().await;
+    let resp = get_avatar(&s.app, &s.session, "no-such-user-id", None).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "an unknown avatar id must resolve to an image, not 404"
+    );
+    assert_eq!(
+        header_str(&resp, header::CONTENT_TYPE),
+        "image/svg+xml",
+        "unknown id should serve the generated default SVG"
+    );
+}
+
 #[tokio::test]
 async fn uploaded_avatar_serves_etag_then_304() {
     let s = setup().await;

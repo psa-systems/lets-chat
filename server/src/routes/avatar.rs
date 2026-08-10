@@ -13,9 +13,16 @@ pub async fn get_avatar(
     Path(user_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let user = db::auth::find_user_by_id(&state.auth, &user_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    // LC-701: an unknown id (a message author who is a bot or a since-deleted
+    // user, e.g. surfaced in search results) must still resolve to an image, not
+    // 404. `/avatars/{id}` is referenced unconditionally by chat rows, the voice
+    // grid, and the search result rows, none of which can branch on existence;
+    // a 404 there is a broken <img> and console noise. Fall back to a generated
+    // default so the invariant "this route always resolves to an image" holds.
+    let Some(user) = db::auth::find_user_by_id(&state.auth, &user_id).await? else {
+        // Empty username -> the generic "?" initial (default_avatar's fallback).
+        return Ok(default_avatar("", &headers));
+    };
     let Some(ext) = user.avatar_ext else {
         // No custom avatar: serve a generated initial-on-color SVG so
         // `/avatars/{id}` always resolves to an image (used by the voice
