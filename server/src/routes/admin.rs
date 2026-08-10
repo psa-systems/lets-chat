@@ -52,6 +52,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{id}/unmute", post(post_unmute))
         .route("/admin/users/{id}/role", post(post_role))
         .route("/admin/users/{id}/quota", post(post_user_quota))
+        .route("/admin/users/{id}/unlink-sso", post(post_unlink_sso))
         .route("/admin/users/{id}/delete", post(post_delete_user))
         .route("/admin/invites", get(get_invites).post(post_create_invite))
         .route("/admin/invites/{id}/revoke", post(post_revoke_invite))
@@ -776,7 +777,11 @@ pub async fn get_users(
     for r in records {
         let usage_bytes = db::quota::sum_user_usage(&state.chat, &r.id).await?;
         let quota_bytes = db::quota::get_user_quota(&state.chat, &r.id).await?;
+        let is_sso_linked = db::auth::get_bunyip_sub(&state.auth, &r.id)
+            .await?
+            .is_some();
         users.push(AdminUserView {
+            is_sso_linked,
             id: r.id,
             username: r.username,
             role: r.role,
@@ -918,6 +923,34 @@ pub async fn post_unmute(
     render_user_row(&state, &user_id).await
 }
 
+/// LC-698: the deliberate relink path. SSO never re-points an already-linked
+/// row at a new subject (that was the takeover primitive), so when the OP
+/// rotates a user's `sub` the login fails with `sso_error=identity_conflict`
+/// until an admin unlinks the row here; the next login then links the new sub
+/// through `link_bunyip_sub`. Unlinking also drops the user's sessions.
+pub async fn post_unlink_sso(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    Path(user_id): Path<String>,
+) -> Result<Html, AppError> {
+    if !db::auth::clear_bunyip_sub(&state.auth, &user_id).await? {
+        return Err(AppError::BadRequest(
+            "user has no linked SSO identity to clear".into(),
+        ));
+    }
+    db::moderation::log_mod_action(
+        &state.chat,
+        "sso_unlink",
+        &user_id,
+        &actor.id,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    render_user_row(&state, &user_id).await
+}
+
 pub async fn post_role(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
@@ -994,7 +1027,11 @@ pub(crate) async fn build_admin_user_view(
     };
     let usage_bytes = db::quota::sum_user_usage(&state.chat, &record.id).await?;
     let quota_bytes = db::quota::get_user_quota(&state.chat, &record.id).await?;
+    let is_sso_linked = db::auth::get_bunyip_sub(&state.auth, &record.id)
+        .await?
+        .is_some();
     Ok(Some(AdminUserView {
+        is_sso_linked,
         id: record.id,
         username: record.username,
         role: record.role,

@@ -45,6 +45,11 @@
         <button type="submit" class="btn btn-sm btn-warning-outline">{{ "admin-userrow-mute"|t }}</button>
       </form>
       {% endif %}
+      {# LC-698: the deliberate relink path out of an SSO identity conflict.
+         Offered only while there is a subject to clear. #}
+      {% if u.is_sso_linked %}
+      <button hx-post="/admin/users/{{ u.id }}/unlink-sso" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-unlink-sso-confirm"|t }}" class="btn btn-sm btn-ghost">{{ "admin-userrow-unlink-sso"|t }}</button>
+      {% endif %}
       <button hx-post="/admin/users/{{ u.id }}/delete" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-delete-confirm-prefix"|t }} {{ u.username }}? {{ "admin-userrow-delete-confirm-suffix"|t }}" class="btn btn-sm btn-danger-outline">{{ "admin-userrow-delete"|t }}</button>
     </div>
   </td>

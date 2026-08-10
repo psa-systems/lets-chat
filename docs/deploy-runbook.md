@@ -130,6 +130,7 @@ Staging (`:latest`): revert or re-tag `:latest` upstream, or temporarily pin c-0
 | `manifest unknown` on pull | Pin points at old `a8n-tools-private` org, or tag not built yet | Repoint to `psa-systems-private`; confirm CI image job green |
 | Version endpoint still shows old build after restart | Host repo not pulled, or `:latest` not re-pulled | `git pull --ff-only` then `docker compose pull` before restart |
 | SSO `sso_error=internal` | App-level defect, NOT version drift | Check logs: `docker compose logs --tail 200 | find "resolve_or_provision_user"` |
+| SSO `sso_error=identity_conflict` | The user's verified email belongs to a local account linked to a different Bunyip subject (usually a rotated `sub`), or to a banned/bot row. Never relinked automatically: that was the LC-698 takeover primitive | Confirm the row is the same person, then Admin -> Users -> "Unlink SSO" on it. That clears `bunyip_sub`, signs them out everywhere, and is written to the mod log; their next sign-in links the new subject |
 | Prod down after restart | New image absent when old container removed | `docker compose pull` succeeded? Fix pin, pull, restart |
 
 ### Log grep (Nushell)

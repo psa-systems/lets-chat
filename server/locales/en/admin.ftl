@@ -421,6 +421,10 @@ admin-userrow-ban = Ban
 admin-userrow-unmute = Unmute
 admin-userrow-mute = Mute
 admin-userrow-delete = Delete
+# LC-698: clear the row's linked SSO subject so the next sign-in re-links it.
+admin-userrow-unlink-sso = Unlink SSO
+admin-userrow-unlink-sso-confirm = Unlink this user's SSO identity? They are signed out everywhere, and their next sign-in links whichever identity presents their verified email.
+admin-userrow-action-failed = That action could not be completed. Reload the page and try again.
 admin-userrow-delete-confirm-prefix = Permanently delete
 admin-userrow-delete-confirm-suffix = This cannot be undone.
 # LC-510: destructive-action confirmations + table empty states
