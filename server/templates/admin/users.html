@@ -30,4 +30,19 @@
   </table>
 </div>
 {% endif %}
+{# LC-698: never-silent guarantee for the row actions. htmx does not swap a
+   non-2xx body, so a rejected action (e.g. unlinking a row that is already
+   unlinked) would leave the table looking unchanged. Toast it instead. #}
+<script>
+(function () {
+  function onErr(e) {
+    var el = (e.detail && e.detail.elt) || e.target;
+    if (!el || !el.closest || !el.closest('.lc-table')) return;
+    var msg = "{{ "admin-userrow-action-failed"|t }}";
+    if (window.__lcToast) window.__lcToast('err', msg);
+  }
+  document.body.addEventListener('htmx:responseError', onErr);
+  document.body.addEventListener('htmx:sendError', onErr);
+})();
+</script>
 {% endblock %}

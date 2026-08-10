@@ -421,6 +421,10 @@ admin-userrow-ban = Banear
 admin-userrow-unmute = Quitar silencio
 admin-userrow-mute = Silenciar
 admin-userrow-delete = Eliminar
+# LC-698: borra el sujeto SSO vinculado para que el proximo inicio de sesion lo revincule.
+admin-userrow-unlink-sso = Desvincular SSO
+admin-userrow-unlink-sso-confirm = Desvincular la identidad SSO de este usuario? Se cerraran todas sus sesiones y el proximo inicio de sesion vinculara la identidad que presente su correo verificado.
+admin-userrow-action-failed = No se pudo completar esa accion. Recarga la pagina e intentalo de nuevo.
 admin-userrow-delete-confirm-prefix = Eliminar permanentemente a
 admin-userrow-delete-confirm-suffix = Esto no se puede deshacer.
 # LC-510: confirmaciones de acciones destructivas + estados vacios de tablas
