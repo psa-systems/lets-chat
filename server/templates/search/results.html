@@ -1,22 +1,47 @@
 {% if results.is_empty() %}
-<div class="bg-surface-elevated border border-border-strong rounded shadow-lg p-3">
-  <p class="text-sm text-content-muted">{{ "search-no-results"|t }}</p>
+<div class="lc-search-panel">
+  <p class="px-3 py-3 text-sm text-content-muted">{{ "search-no-results"|t }}</p>
 </div>
 {% else %}
-<div role="listbox" class="bg-surface-elevated border border-border-strong rounded shadow-lg max-h-80 overflow-y-auto">
-  {% for r in results %}
-  <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="block px-3 py-2 hover:bg-surface-sunken border-b border-border last:border-b-0">
-    <div class="text-xs text-content-muted">{{ r.context_label }} - {{ r.created_at }}</div>
-    <div class="text-sm truncate">{{ r.snippet }}</div>
-  </a>
-  {% endfor %}
-  {# LC-312: one-click save of the current query. Buttons + hx-include (not a
-     nested <form>, which is invalid inside the search form) - the button swaps
-     this footer to a "Saved" confirmation, so it works in any results popover. #}
-  <div id="lc-save-wrap" class="px-3 py-1.5 border-t border-border text-right">
+<div class="lc-search-panel">
+  {# LC-699: results header - makes the scope explicit and gives the popover a
+     clear top edge. The header box is always single-room; the sidebar owns
+     global search. #}
+  <div class="lc-search-head">
+    <span class="lc-search-scope">{{ "search-scope-room"|t }}</span>
+  </div>
+  <div role="listbox" class="lc-search-list max-h-80 overflow-y-auto">
+    {% for r in results %}
+    <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="lc-search-row">
+      <img src="/avatars/{{ r.author_id }}" alt="" loading="lazy" class="lc-search-avatar">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-1.5 text-xs text-content-muted">
+          <span class="font-medium text-content truncate">{{ r.author_name }}</span>
+          <span class="text-content-subtle">&middot;</span>
+          <span class="truncate">{{ r.context_label }}</span>
+          <span class="text-content-subtle">&middot;</span>
+          <span class="flex-none">{{ r.created_at }}</span>
+        </div>
+        {# LC-699: snippet is pre-escaped server-side with <mark> around the
+           matched terms, so it is rendered safe. #}
+        <div class="lc-search-snippet">{{ r.snippet|safe }}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {# LC-312 / LC-699: one-click save of the current query. Buttons + hx-include
+     (not a nested <form>, which is invalid inside the search form) - the button
+     swaps this footer to a "Saved" confirmation, so it works in any results
+     popover. #}
+  <div id="lc-save-wrap" class="lc-search-foot">
     <input type="hidden" id="lc-save-q" name="query" value="{{ query }}">
     <button type="button" hx-post="/searches" hx-include="#lc-save-q" hx-target="#lc-save-wrap" hx-swap="innerHTML"
-      class="text-xs text-content-muted hover:text-content">&#9733; {{ "search-save"|t }}</button>
+      class="lc-search-save">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-3.5 w-3.5">
+        <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clip-rule="evenodd"/>
+      </svg>
+      {{ "search-save"|t }}
+    </button>
   </div>
 </div>
 {% endif %}

@@ -42,6 +42,10 @@ search-save = Guardar búsqueda
 search-saved = Guardada
 search-saved-heading = Búsquedas guardadas
 search-saved-remove = Quitar búsqueda guardada
+# LC-699: room-header search polish.
+search-scope-room = En esta sala
+search-clear = Limpiar búsqueda
+search-searching = Buscando...
 
 ## People search results
 people-no-results = No hay personas coincidentes.
