@@ -55,9 +55,30 @@ pub struct WelcomePage<'a> {
 pub struct CatchUpRow {
     pub room_id: i64,
     pub name: String,
-    /// One-line preview of the newest unread message.
+    /// One-line preview of the newest unread message. LC-703: rendered through
+    /// `markdown::plain_line`, so markdown links/emphasis collapse to readable
+    /// text; falls back to a "📎 Attachment" label when the message has no body.
     pub preview: String,
     pub unread: i64,
+    /// LC-703: the newest unread message's timestamp (SQLite `YYYY-MM-DD
+    /// HH:MM:SS`, UTC), shown quietly on the row. Empty hides the time.
+    pub created_at: String,
+}
+
+impl CatchUpRow {
+    /// LC-703: `created_at` as an unambiguous RFC3339 UTC string for the
+    /// `<time datetime>` attribute (mirrors `MessageView::created_at_iso`).
+    pub fn created_at_iso(&self) -> String {
+        crate::views::room::to_iso_utc(&self.created_at)
+    }
+
+    /// LC-703: the date portion (`YYYY-MM-DD`) shown as the visible row time.
+    /// The app has no client-side relative-time formatter, so a clean date is
+    /// the honest fallback; the `<time datetime>` wrapper upgrades for free if
+    /// one is added later.
+    pub fn day(&self) -> &str {
+        self.created_at.get(..10).unwrap_or(&self.created_at)
+    }
 }
 
 /// LC-575: one "you were mentioned" summary row (per room) on the Mentions card.
