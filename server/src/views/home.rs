@@ -49,6 +49,10 @@ pub struct WelcomePage<'a> {
     pub threads: &'a [ThreadRow],
     pub dms: &'a [DmRow],
     pub drafts: &'a [DraftRow],
+    /// LC-705: show the workspace-wide "Catch me up" AI card. True only when the
+    /// AI surface is available to this viewer (flag on, LLM configured, within
+    /// the audience) AND there is something unread to summarize.
+    pub ai_catch_up: bool,
 }
 
 /// LC-575: one channel-with-unread row on the dashboard "Catch up" card.

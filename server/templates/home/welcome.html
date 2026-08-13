@@ -24,6 +24,39 @@
       <h2 class="lc-h2">{{ "home-dash-heading"|t }}</h2>
       <p class="lc-small text-content-muted">{{ "home-dash-subtitle"|t }}</p>
     </div>
+
+    {# LC-705: workspace-wide "Catch me up" AI summary. Shown only when the AI
+       surface is available to this viewer and there is unread to summarize
+       (`ai_catch_up`). The Generate button POSTs /home/summary and swaps the
+       rendered summary into #home-summary-body in place; the returned fragment
+       carries a Regenerate button targeting the same container. The POST
+       re-checks the AI gate server-side. #}
+    {% if ai_catch_up %}
+    <section class="card mb-4 p-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="lc-h3">{{ "home-catchup-ai-heading"|t }}</h3>
+          <p class="lc-small text-content-muted">{{ "home-catchup-ai-scope"|t }}</p>
+        </div>
+      </div>
+      <div id="home-summary-body" class="mt-3 min-w-0 break-words">
+        <button type="button"
+                hx-post="/home/summary"
+                hx-target="#home-summary-body" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                data-lc-ai-pending
+                data-lc-ai-skeleton="summary"
+                data-lc-ai-read-label="{{ "ai-reading-messages"|t }}"
+                data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+                data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+                class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+          {{ "summary-generate"|t }}
+        </button>
+        <p class="mt-2 text-xs text-content-subtle">{{ "summary-disclaimer"|t }}</p>
+      </div>
+    </section>
+    {% endif %}
+
     <div class="lc-home-grid">
 
       {# Catch up - channels with unread #}
