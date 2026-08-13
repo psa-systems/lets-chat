@@ -11,16 +11,19 @@
 //!    (the same store as `maintenance_mode` / `link_filter_enabled`), so an
 //!    admin toggle takes effect on the next request with no restart. Config
 //!    presence stays a precondition, not the switch.
-//! 2. Role scoping - when the flag is on, the feature is exposed only to the
-//!    site admin role, enclave `Owner`/`Admin`, and room Moderators, reusing the
-//!    existing [`crate::perms`] predicates and `db::room_rbac::is_room_moderator`
-//!    rather than a new role type. A DM / enclave-less room has no such roles,
-//!    so it reduces to site-admin-only.
+//! 2. Audience scoping - the settings row [`LLM_AUDIENCE_KEY`], one of
+//!    `"everyone"` (default) or `"staff"`. In `"everyone"` mode any logged-in
+//!    member of the room/DM gets the feature; in `"staff"` mode it narrows to
+//!    the site admin role, enclave `Owner`/`Admin`, and room Moderators (LC-679's
+//!    original rollout scope), reusing the existing [`crate::perms`] predicates
+//!    and `db::room_rbac::is_room_moderator`. LC-702: the default is `"everyone"`
+//!    so a plain member sees AI once an admin flips the flag on; `"staff"` stays
+//!    available for piloting the surface with staff before opening it up.
 //!
-//! The render path uses [`flag_on`] + [`privileged_in_room`] to compute the UI
-//! booleans (so an ungated viewer sees no trace of the feature), and every
-//! LLM/embeddings route calls a `require_*` guard so a direct request from an
-//! unprivileged user gets a 403 rather than merely a hidden button. The flag is
+//! The render path uses [`flag_on`] + [`allowed_in_room`] to compute the UI
+//! booleans (so a viewer outside the audience sees no trace of the feature), and
+//! every LLM/embeddings route calls a `require_*` guard so a direct request from
+//! a disallowed user gets a 403 rather than merely a hidden button. The flag is
 //! kept after rollout as a kill switch.
 
 use crate::db;
@@ -34,6 +37,11 @@ use crate::state::AppState;
 /// defaults the whole surface off with no deploy.
 pub const LLM_ENABLED_KEY: &str = "llm_enabled";
 
+/// LC-702: settings key for the AI audience. `"staff"` narrows the surface to
+/// privileged roles; any other value - including absent - reads as `"everyone"`,
+/// so a fresh deployment opens AI to all members the moment the flag flips on.
+pub const LLM_AUDIENCE_KEY: &str = "llm_audience";
+
 /// True when the runtime LLM feature flag is ON. Read live from the settings KV
 /// store (no cache), so toggling in `/admin/settings` takes effect on the next
 /// request without a restart.
@@ -44,6 +52,19 @@ pub async fn flag_on(state: &AppState) -> bool {
         .flatten()
         .as_deref()
         == Some("true")
+}
+
+/// LC-702: true when the AI audience is "everyone" (the default). Only the
+/// explicit `"staff"` value narrows the surface to privileged roles; an absent
+/// or any-other value reads as everyone, so the feature is open by default once
+/// the flag is on. Read live like [`flag_on`].
+pub async fn audience_is_everyone(state: &AppState) -> bool {
+    db::settings::get_setting(&state.settings, LLM_AUDIENCE_KEY)
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        != Some("staff")
 }
 
 /// Is `user` privileged to use AI in `room_id`'s context? Site admin OR enclave
@@ -69,10 +90,26 @@ pub async fn privileged_in_room(
     Ok(false)
 }
 
+/// LC-702: is `user` allowed to use AI in `room_id`'s context, honoring the
+/// audience setting? `"everyone"` (default) admits any member; `"staff"` narrows
+/// to [`privileged_in_room`]. This is the predicate the render paths and route
+/// guards ask; the flag-on check stays separate (callers gate on both).
+pub async fn allowed_in_room(
+    state: &AppState,
+    room_id: i64,
+    user: &User,
+) -> Result<bool, AppError> {
+    if audience_is_everyone(state).await {
+        return Ok(true);
+    }
+    privileged_in_room(state, room_id, user).await
+}
+
 /// Full embeddings gate for a room-context decision: flag ON, client configured,
-/// and the viewer privileged. Used by semantic search to decide whether to rank
-/// by embeddings (the render paths compute `llm_available` / `embeddings_available`
-/// inline from `flag_on` + [`privileged_in_room`] + the relevant `*_available()`).
+/// and the viewer within the audience. Used by semantic search to decide whether
+/// to rank by embeddings (the render paths compute `llm_available` /
+/// `embeddings_available` inline from `flag_on` + [`allowed_in_room`] + the
+/// relevant `*_available()`).
 pub async fn can_use_embeddings_in_room(
     state: &AppState,
     room_id: i64,
@@ -84,7 +121,7 @@ pub async fn can_use_embeddings_in_room(
     Ok(can_use_llm(
         true,
         true,
-        privileged_in_room(state, room_id, user).await?,
+        allowed_in_room(state, room_id, user).await?,
     ))
 }
 
@@ -100,7 +137,7 @@ pub async fn require_llm_in_room(
     room_id: i64,
     user: &User,
 ) -> Result<(), AppError> {
-    if flag_on(state).await && privileged_in_room(state, room_id, user).await? {
+    if flag_on(state).await && allowed_in_room(state, room_id, user).await? {
         Ok(())
     } else {
         Err(AppError::Forbidden)
@@ -115,7 +152,7 @@ pub async fn require_embeddings_in_room(
     room_id: i64,
     user: &User,
 ) -> Result<(), AppError> {
-    if flag_on(state).await && privileged_in_room(state, room_id, user).await? {
+    if flag_on(state).await && allowed_in_room(state, room_id, user).await? {
         Ok(())
     } else {
         Err(AppError::Forbidden)

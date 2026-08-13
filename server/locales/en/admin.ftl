@@ -300,9 +300,14 @@ admin-settings-maintenance-message-placeholder = Back at 17:00 UTC; upgrading th
 admin-settings-maintenance-save = Save maintenance mode
 # LC-679: runtime LLM/AI feature flag (kill switch).
 admin-settings-llm-heading = AI features (LLM / Ollama)
-admin-settings-llm-note = Runtime kill switch for the whole AI surface (writing assistant, catch-up, /ask, translate, suggested replies, semantic search, transcript summaries). Off by default. When on, the features are exposed only to site admins, enclave owners/admins and room moderators; everyone else sees no trace. The first request after the model has been idle can take several seconds to warm up; that is expected.
+admin-settings-llm-note = Runtime kill switch for the whole AI surface (writing assistant, catch-up, /ask, translate, suggested replies, semantic search, transcript summaries). Off by default. When on, who can use it is set by the audience below; anyone outside that audience sees no trace. The first request after the model has been idle can take several seconds to warm up; that is expected.
 admin-settings-llm-enable = Enable AI features
 admin-settings-llm-enable-note = Takes effect immediately, no restart. Leave off in production until the team is ready to support it.
+admin-settings-llm-audience-label = Who can use AI
+admin-settings-llm-audience-everyone = Everyone
+admin-settings-llm-audience-everyone-note = All members see and use the AI features in rooms and DMs they belong to.
+admin-settings-llm-audience-staff = Staff only
+admin-settings-llm-audience-staff-note = Limit to site admins, enclave owners/admins and room moderators. Useful for piloting before opening it up.
 admin-settings-llm-save = Save AI setting
 admin-settings-llm-unconfigured-title = No LLM endpoint configured.
 admin-settings-llm-unconfigured-body = The flag stays inert until an LLM endpoint is set via

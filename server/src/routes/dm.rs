@@ -398,10 +398,11 @@ pub async fn get_dm(
         .await?
         .unwrap_or_default();
 
-    // LC-679: role-scoped AI gate. A DM has no enclave and no room-moderator
-    // overrides, so `privileged_in_room` here reduces to site-admin-only.
+    // LC-679/LC-702: audience-scoped AI gate. In "everyone" mode both DM
+    // participants get AI; in "staff" mode a DM has no enclave and no
+    // room-moderator overrides, so `allowed_in_room` reduces to site-admin-only.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_privileged = super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
 
     let page = DmPage {
         user: &user,
@@ -421,8 +422,8 @@ pub async fn get_dm(
         pinned_strip_html,
         initial_draft,
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
-        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
-        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
+        llm_available: ai_flag_on && state.llm_available() && ai_allowed,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
         vision_available: crate::vision::available(),
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
