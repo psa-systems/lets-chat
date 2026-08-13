@@ -90,6 +90,37 @@ pub async fn privileged_in_room(
     Ok(false)
 }
 
+/// LC-705: is `user` allowed to use the workspace-wide AI surface (the Home
+/// "Catch me up" summary), honoring the audience setting? Unlike
+/// [`allowed_in_room`] there is no single room to scope against: `"everyone"`
+/// (default) admits any logged-in user; `"staff"` narrows to the site-admin
+/// role. A cross-room feature has no enclave or per-room override to consult, so
+/// "privileged" here reduces to site admin - the same floor `privileged_in_room`
+/// lands on for an enclave-less room.
+pub async fn allowed_workspace(state: &AppState, user: &User) -> bool {
+    audience_is_everyone(state).await || user.role == "admin"
+}
+
+/// LC-705: render-path predicate for the Home "Catch me up" entry point: flag
+/// ON, LLM client configured, and the viewer within the audience. Mirrors how
+/// the room render paths compute `llm_available` from `flag_on` + audience +
+/// `llm_available()`, but for the workspace surface.
+pub async fn llm_catch_up_available(state: &AppState, user: &User) -> bool {
+    state.llm_available() && flag_on(state).await && allowed_workspace(state, user).await
+}
+
+/// LC-705: route guard for the workspace summary. `Ok(())` when the flag is on
+/// AND the viewer is within the audience, else 403. Like [`require_llm_in_room`]
+/// it deliberately skips the config-presence check, leaving the route's own
+/// `let Some(llm) = ...` guard to return the "not configured" message.
+pub async fn require_llm_workspace(state: &AppState, user: &User) -> Result<(), AppError> {
+    if flag_on(state).await && allowed_workspace(state, user).await {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 /// LC-702: is `user` allowed to use AI in `room_id`'s context, honoring the
 /// audience setting? `"everyone"` (default) admits any member; `"staff"` narrows
 /// to [`privileged_in_room`]. This is the predicate the render paths and route
