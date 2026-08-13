@@ -42,6 +42,10 @@ home-dash-preview-image = 🖼 Image
 home-dash-preview-video = 🎞 Video
 home-dash-preview-voice = 🎤 Voice message
 home-dash-preview-file = 📎 File
+# LC-705: workspace-wide "Catch me up" AI summary card on the Home dashboard.
+home-catchup-ai-heading = Catch me up
+home-catchup-ai-scope = A quick AI recap of everything you missed across your workspace.
+home-catchup-ai-caught-up = You're all caught up. Nothing unread across your workspace.
 
 ## Message search results
 search-no-results = No results.
