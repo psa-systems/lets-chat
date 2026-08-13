@@ -782,11 +782,11 @@ pub async fn show(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
 
-    // LC-679: role-scoped AI gate for the transcript "Summarize" action.
+    // LC-679/LC-702: audience-scoped AI gate for the transcript "Summarize" action.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
     let ai_llm = ai_flag_on
         && state.llm_available()
-        && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+        && super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
     html(&TranscriptPage {
         user: &user,
         sidebar_categories: &sidebar_categories,

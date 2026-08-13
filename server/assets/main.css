@@ -5057,6 +5057,24 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-toggle-title { font-size: 0.875rem; color: var(--content); }
 .lc-toggle-desc { display: block; font-size: 0.75rem; color: var(--content-muted); margin-top: 0.125rem; }
 
+/* LC-702: audience radio rows in the admin AI card. Mirrors the toggle text
+   scale; the radio control uses the platform accent so it reads in both themes. */
+.lc-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.25rem 0;
+}
+.lc-radio input[type="radio"] {
+    margin-top: 0.1875rem;
+    accent-color: var(--accent);
+    flex: none;
+}
+.lc-radio-text { min-width: 0; }
+.lc-radio-title { font-size: 0.875rem; color: var(--content); }
+.lc-radio-desc { display: block; font-size: 0.75rem; color: var(--content-muted); margin-top: 0.125rem; }
+
 /* Quiet-hours time grid: labelled start/end pairs, aligned. */
 .lc-set-timegrid {
     display: grid;

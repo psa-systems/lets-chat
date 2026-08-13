@@ -633,10 +633,11 @@ pub async fn get_room(
 
     // LC-679: AI availability is now the runtime, role-scoped gate (flag ON &&
     // configured && viewer privileged for this room), not just config presence.
-    // Compute the viewer's privilege and the flag once, then feed both the LLM
-    // and embeddings UI booleans so an ungated viewer sees no AI affordances.
+    // Compute the viewer's audience membership and the flag once, then feed both
+    // the LLM and embeddings UI booleans so a viewer outside the audience sees no
+    // AI affordances.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_privileged = super::ai_gate::privileged_in_room(&state, room_id, &user).await?;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room_id, &user).await?;
 
     let page = RoomPage {
         user: &user,
@@ -658,8 +659,8 @@ pub async fn get_room(
         can_post,
         posting_policy: &room.posting_allowed_for,
         initial_draft: &initial_draft,
-        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
-        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
+        llm_available: ai_flag_on && state.llm_available() && ai_allowed,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
         vision_available: crate::vision::available(),
         // LC-679: the teaser stays a config-presence nudge ("set LETS_CHAT_LLM_URL"),
         // not a flag hint - the runtime flag lives in /admin/settings instead.
@@ -2805,9 +2806,10 @@ pub async fn get_thread_panel(
 
     // LC-668: the AI thread title (if generated), shown as the panel heading.
     let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
-    // LC-679: role-scoped AI gate for the thread panel (same as the room render).
+    // LC-679/LC-702: audience-scoped AI gate for the thread panel (same as the
+    // room render).
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_privileged = super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
     let fragment = ThreadPanelFragment {
         room: &room,
         parent: &parent_view,
@@ -2815,8 +2817,8 @@ pub async fn get_thread_panel(
         thread_title,
         is_following,
         is_muted,
-        llm_available: ai_flag_on && state.llm_available() && ai_privileged,
-        embeddings_available: ai_flag_on && state.embeddings_available() && ai_privileged,
+        llm_available: ai_flag_on && state.llm_available() && ai_allowed,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
     };
     html(&fragment)
 }

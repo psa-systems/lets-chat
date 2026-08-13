@@ -282,6 +282,8 @@ pub async fn get_settings(
     // LC-679: runtime LLM feature flag + config precondition for the toggle card.
     let llm_flag_enabled = super::ai_gate::flag_on(&state).await;
     let llm_configured = state.llm_available();
+    // LC-702: audience selector - true when narrowed to staff, else "everyone".
+    let llm_audience_staff = !super::ai_gate::audience_is_everyone(&state).await;
     let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
     let uploads_total_display =
         format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
@@ -354,6 +356,7 @@ pub async fn get_settings(
         maintenance_enabled,
         llm_flag_enabled,
         llm_configured,
+        llm_audience_staff,
         maintenance_message,
         uploads_total_display,
         uploads_orphan_count,
@@ -727,13 +730,18 @@ pub struct LlmFlagForm {
     /// Checkbox: present when on, omitted when off.
     #[serde(default)]
     pub enabled: Option<String>,
+    /// LC-702: audience radio - `"everyone"` (default) or `"staff"`. Absent is
+    /// treated as `"everyone"` so the surface stays open by default.
+    #[serde(default)]
+    pub audience: Option<String>,
 }
 
-/// LC-679: flip the runtime LLM/AI feature flag (`settings.llm_enabled`). This
-/// is the kill switch that gates the whole LLM + embeddings surface; config
-/// presence (`LETS_CHAT_LLM_URL`) stays a separate precondition. Read live on
-/// every request (see `routes::ai_gate::flag_on`), so the change takes effect
-/// with no restart. Audited to the moderation log like maintenance mode.
+/// LC-679: flip the runtime LLM/AI feature flag (`settings.llm_enabled`) and
+/// LC-702 the AI audience (`settings.llm_audience`). The flag is the kill switch
+/// that gates the whole LLM + embeddings surface; config presence
+/// (`LETS_CHAT_LLM_URL`) stays a separate precondition. Both are read live on
+/// every request (see `routes::ai_gate`), so changes take effect with no
+/// restart. Audited to the moderation log like maintenance mode.
 pub async fn post_llm_flag(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
@@ -743,6 +751,13 @@ pub async fn post_llm_flag(
     let on = form.enabled.is_some();
     let value = if on { "true" } else { "false" };
     db::settings::set_setting(&state.settings, super::ai_gate::LLM_ENABLED_KEY, value).await?;
+    // Only `"staff"` narrows the audience; anything else persists as "everyone".
+    let audience = if form.audience.as_deref() == Some("staff") {
+        "staff"
+    } else {
+        "everyone"
+    };
+    db::settings::set_setting(&state.settings, super::ai_gate::LLM_AUDIENCE_KEY, audience).await?;
     let action = if on { "llm_flag_on" } else { "llm_flag_off" };
     db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
     if is_hx(&headers) {

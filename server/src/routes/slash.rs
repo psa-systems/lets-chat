@@ -74,13 +74,13 @@ struct SlashError {
 
 /// LC-686: whether the AI slash surface (`/ask`) should be offered to `user` in
 /// `room_id`. Mirrors the per-message AI menu items' `data-lc-llm` gate exactly:
-/// the runtime flag on, an LLM configured, and the viewer privileged for this
-/// room. A privilege-lookup error degrades to "unavailable" (hide), never an
-/// error - the listing is best-effort and dispatch enforces the real gate.
+/// the runtime flag on, an LLM configured, and the viewer within the AI audience
+/// for this room (LC-702). A lookup error degrades to "unavailable" (hide), never
+/// an error - the listing is best-effort and dispatch enforces the real gate.
 async fn ai_slash_available(state: &AppState, user: &User, room_id: i64) -> bool {
     super::ai_gate::flag_on(state).await
         && state.llm_available()
-        && super::ai_gate::privileged_in_room(state, room_id, user)
+        && super::ai_gate::allowed_in_room(state, room_id, user)
             .await
             .unwrap_or(false)
 }
