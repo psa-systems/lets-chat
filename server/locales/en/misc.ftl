@@ -34,6 +34,9 @@ home-dash-empty-drafts = No saved drafts.
 home-dash-unread-aria = unread
 home-dash-mentions-aria = mentions
 home-dash-replies-aria = new replies
+# LC-703: fallback preview label when the newest unread message has no text
+# body (an attachment / image / GIF only), so the row never renders blank.
+home-dash-preview-attachment = 📎 Attachment
 
 ## Message search results
 search-no-results = No results.
