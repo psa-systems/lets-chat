@@ -57,7 +57,8 @@ pub struct CatchUpRow {
     pub name: String,
     /// One-line preview of the newest unread message. LC-703: rendered through
     /// `markdown::plain_line`, so markdown links/emphasis collapse to readable
-    /// text; falls back to a "📎 Attachment" label when the message has no body.
+    /// text. LC-704: a bodyless (attachment-only) message shows a per-type label
+    /// instead ("🖼 Image", "🎞 Video", "🎤 Voice message", "📎 File").
     pub preview: String,
     pub unread: i64,
     /// LC-703: the newest unread message's timestamp (SQLite `YYYY-MM-DD
