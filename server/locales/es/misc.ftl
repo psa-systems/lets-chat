@@ -34,6 +34,9 @@ home-dash-empty-drafts = No hay borradores guardados.
 home-dash-unread-aria = sin leer
 home-dash-mentions-aria = menciones
 home-dash-replies-aria = respuestas nuevas
+# LC-703: etiqueta de vista previa de reserva cuando el mensaje sin leer mas
+# reciente no tiene texto (solo un adjunto / imagen / GIF).
+home-dash-preview-attachment = 📎 Adjunto
 
 ## Message search results
 search-no-results = Sin resultados.

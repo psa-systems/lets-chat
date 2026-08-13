@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use crate::auth::OptionalUser;
 use crate::db;
 use crate::error::AppError;
+use crate::i18n::translate_current;
 use crate::last_visited;
 use crate::models::User;
 use crate::state::AppState;
@@ -21,14 +22,18 @@ const CARD_CAP: usize = 6;
 /// LC-575: how deep into the unread inbox to scan for channel/DM previews.
 const PREVIEW_SCAN: i64 = 80;
 
-/// LC-575: collapse a message body to a single short preview line.
+/// LC-575 / LC-703: collapse a message body to a single short preview line.
+/// Runs the shared markdown one-liner (link -> label text, emphasis/heading/code
+/// markers dropped) so raw markdown never leaks into the dashboard; a body with
+/// no text (an attachment/image/GIF-only message) falls back to a muted
+/// "📎 Attachment" label instead of rendering blank.
 fn preview_of(body: &str) -> String {
-    let flat = body.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut out: String = flat.chars().take(120).collect();
-    if flat.chars().count() > 120 {
-        out.push('\u{2026}');
+    let line = crate::views::markdown::plain_line(body, 120);
+    if line.is_empty() {
+        translate_current("home-dash-preview-attachment")
+    } else {
+        line
     }
-    out
 }
 
 #[derive(Deserialize)]
@@ -190,6 +195,7 @@ async fn build_dashboard(
                 name: row.room_name.clone(),
                 preview: preview_of(&row.body),
                 unread: *room_counts.get(&row.room_id).unwrap_or(&0),
+                created_at: row.created_at.clone(),
             });
         }
     }

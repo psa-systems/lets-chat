@@ -444,6 +444,46 @@ pub fn render_login_body(body: &str) -> String {
     out
 }
 
+/// LC-703: collapse a markdown body to a single clean plain-text line suitable
+/// for a preview (dashboard cards, and any other "one-line summary of a message"
+/// surface). Runs the real parser and keeps only the human-readable text - a
+/// `[label](url)` link becomes its `label`, emphasis / heading / code markers
+/// are dropped, and images contribute their alt text. Newlines and runs of
+/// whitespace collapse to single spaces; the result is truncated to `max_chars`
+/// at a char boundary with an ellipsis. Returns PLAIN text (no HTML): callers
+/// render it through Askama's default auto-escape, so it is never a nested
+/// anchor inside a row that is itself a link. Empty when the body has no text
+/// (e.g. an attachment-only message) so the caller can substitute a label.
+pub fn plain_line(body: &str, max_chars: usize) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TABLES);
+    let parser = Parser::new_ext(body, options);
+    let mut text = String::new();
+    for ev in parser {
+        match ev {
+            // Link/image labels arrive as their own Text events between the
+            // Start/End tags, so keeping Text + Code is enough to surface them.
+            Event::Text(t) | Event::Code(t) => text.push_str(&t),
+            Event::SoftBreak | Event::HardBreak => text.push(' '),
+            // A block boundary (end of paragraph, list item, heading) is a
+            // space so adjacent blocks do not run their words together.
+            Event::End(_) => text.push(' '),
+            _ => {}
+        }
+    }
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut out = String::with_capacity(flat.len().min(max_chars + 4));
+    for (count, c) in flat.chars().enumerate() {
+        if count >= max_chars {
+            out.push('\u{2026}');
+            break;
+        }
+        out.push(c);
+    }
+    out
+}
+
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
 
@@ -994,5 +1034,53 @@ mod tests {
         let out = render("a || b without close", &[], &[]);
         assert!(!out.contains("lc-spoiler"), "spurious spoiler: {out}");
         assert!(out.contains("||"), "literal marker dropped: {out}");
+    }
+
+    // LC-703: a markdown link collapses to its label text (the dashboard bug -
+    // `[📝 Call transcript saved](/transcripts/49)` showed literally before).
+    #[test]
+    fn plain_line_link_becomes_label_text() {
+        let out = plain_line("[\u{1F4DD} Call transcript saved](/transcripts/49)", 120);
+        assert_eq!(out, "\u{1F4DD} Call transcript saved");
+        assert!(
+            !out.contains("]("),
+            "raw markdown link syntax leaked: {out}"
+        );
+        assert!(
+            !out.contains("/transcripts/49"),
+            "url leaked into preview: {out}"
+        );
+    }
+
+    // LC-703: emphasis, heading and code markers are dropped; text survives.
+    #[test]
+    fn plain_line_strips_formatting_markers() {
+        let out = plain_line("# Heading\n\n**bold** and `code` and _italic_", 120);
+        assert!(!out.contains('#') && !out.contains('*') && !out.contains('`'));
+        assert!(out.contains("Heading"), "heading text lost: {out}");
+        assert!(out.contains("bold") && out.contains("code") && out.contains("italic"));
+    }
+
+    // LC-703: multi-line / multi-block bodies collapse to one whitespace-run line.
+    #[test]
+    fn plain_line_collapses_to_single_line() {
+        let out = plain_line("line one\n\nline two   with    gaps", 120);
+        assert_eq!(out, "line one line two with gaps");
+    }
+
+    // LC-703: over-long bodies truncate at a char boundary with an ellipsis.
+    #[test]
+    fn plain_line_truncates_with_ellipsis() {
+        let out = plain_line(&"a ".repeat(200), 10);
+        assert_eq!(out.chars().count(), 11, "10 chars + ellipsis: {out}");
+        assert!(out.ends_with('\u{2026}'), "no ellipsis: {out}");
+    }
+
+    // LC-703: an attachment-only message (no text) yields empty, so the caller
+    // can substitute a "📎 Attachment" label instead of a blank preview.
+    #[test]
+    fn plain_line_empty_for_bodyless_message() {
+        assert_eq!(plain_line("", 120), "");
+        assert_eq!(plain_line("   \n  ", 120), "");
     }
 }
