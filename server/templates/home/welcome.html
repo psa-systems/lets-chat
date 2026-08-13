@@ -13,60 +13,73 @@
   </header>
   <div class="flex-1 overflow-y-auto">
   {% if show_dashboard %}
-  {# LC-575: Home dashboard. A card grid that answers "what did I miss?" across
-     the whole workspace (unread channels, mentions, followed threads, recent
-     DMs, drafts). Built on the ported token + component look (card / count pill
-     / avatar). Each card is capped server-side and shows an "all caught up"
-     line when empty. #}
-  <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
+  {# LC-575 / LC-703: Home dashboard. A balanced auto-fill card grid that answers
+     "what did I miss?" across the whole workspace (unread channels, mentions,
+     followed threads, recent DMs, drafts). Each card is capped server-side; a
+     card with no content is de-emphasized and sorts last (`lc-home-card--empty`)
+     so populated cards lead. Previews render through `markdown::plain_line`, so
+     markdown never leaks (LC-703). #}
+  <div class="lc-home">
     <div class="mb-4">
       <h2 class="lc-h2">{{ "home-dash-heading"|t }}</h2>
       <p class="lc-small text-content-muted">{{ "home-dash-subtitle"|t }}</p>
     </div>
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="lc-home-grid">
 
       {# Catch up - channels with unread #}
-      <section class="card overflow-hidden p-0">
-        <header class="border-b border-border px-4 py-2.5"><h3 class="lc-h3">{{ "home-dash-catchup"|t }}</h3></header>
+      <section class="card lc-home-card overflow-hidden p-0{% if catch_up.is_empty() %} lc-home-card--empty{% endif %}">
+        <header class="lc-home-card-head">
+          <h3 class="lc-h3">{{ "home-dash-catchup"|t }}</h3>
+          {% if !catch_up.is_empty() %}<span class="lc-count-pill">{{ catch_up.len() }}</span>{% endif %}
+        </header>
         <ul class="divide-y divide-border">
           {% for r in catch_up %}
           <li>
-            <a href="/room/{{ r.room_id }}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+            <a href="/room/{{ r.room_id }}" class="lc-home-row">
               <span class="min-w-0 flex-1">
-                <span class="block truncate font-medium text-content">{{ r.name }}</span>
+                <span class="lc-home-row-title">
+                  <span class="min-w-0 truncate">{{ r.name }}</span>
+                  {% if !r.created_at.is_empty() %}<time datetime="{{ r.created_at_iso() }}" title="{{ r.created_at }}" class="lc-home-row-time">{{ r.day() }}</time>{% endif %}
+                </span>
                 <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
               </span>
               {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
             </a>
           </li>
           {% endfor %}
-          {% if catch_up.is_empty() %}<li class="px-4 py-3 lc-small text-content-muted">{{ "home-dash-empty-catchup"|t }}</li>{% endif %}
+          {% if catch_up.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-catchup"|t }}</li>{% endif %}
         </ul>
       </section>
 
       {# Mentions #}
-      <section class="card overflow-hidden p-0">
-        <header class="border-b border-border px-4 py-2.5"><h3 class="lc-h3">{{ "home-dash-mentions"|t }}</h3></header>
+      <section class="card lc-home-card overflow-hidden p-0{% if mentions.is_empty() %} lc-home-card--empty{% endif %}">
+        <header class="lc-home-card-head">
+          <h3 class="lc-h3">{{ "home-dash-mentions"|t }}</h3>
+          {% if !mentions.is_empty() %}<span class="lc-count-pill">{{ mentions.len() }}</span>{% endif %}
+        </header>
         <ul class="divide-y divide-border">
           {% for r in mentions %}
           <li>
-            <a href="/room/{{ r.room_id }}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+            <a href="/room/{{ r.room_id }}" class="lc-home-row">
               <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.name }}</span>
               <span class="lc-count-pill" aria-label="{{ r.count }} {{ "home-dash-mentions-aria"|t }}">{{ r.count }}</span>
             </a>
           </li>
           {% endfor %}
-          {% if mentions.is_empty() %}<li class="px-4 py-3 lc-small text-content-muted">{{ "home-dash-empty-mentions"|t }}</li>{% endif %}
+          {% if mentions.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-mentions"|t }}</li>{% endif %}
         </ul>
       </section>
 
       {# Threads - followed threads with new replies #}
-      <section class="card overflow-hidden p-0">
-        <header class="border-b border-border px-4 py-2.5"><h3 class="lc-h3">{{ "home-dash-threads"|t }}</h3></header>
+      <section class="card lc-home-card overflow-hidden p-0{% if threads.is_empty() %} lc-home-card--empty{% endif %}">
+        <header class="lc-home-card-head">
+          <h3 class="lc-h3">{{ "home-dash-threads"|t }}</h3>
+          {% if !threads.is_empty() %}<span class="lc-count-pill">{{ threads.len() }}</span>{% endif %}
+        </header>
         <ul class="divide-y divide-border">
           {% for r in threads %}
           <li>
-            <a href="/room/{{ r.room_id }}#msg-{{ r.parent_id }}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+            <a href="/room/{{ r.room_id }}#msg-{{ r.parent_id }}" class="lc-home-row">
               <span class="min-w-0 flex-1">
                 <span class="block truncate font-medium text-content">{{ r.room_name }}</span>
                 <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
@@ -75,17 +88,20 @@
             </a>
           </li>
           {% endfor %}
-          {% if threads.is_empty() %}<li class="px-4 py-3 lc-small text-content-muted">{{ "home-dash-empty-threads"|t }}</li>{% endif %}
+          {% if threads.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-threads"|t }}</li>{% endif %}
         </ul>
       </section>
 
       {# Direct messages #}
-      <section class="card overflow-hidden p-0">
-        <header class="border-b border-border px-4 py-2.5"><h3 class="lc-h3">{{ "home-dash-dms"|t }}</h3></header>
+      <section class="card lc-home-card overflow-hidden p-0{% if dms.is_empty() %} lc-home-card--empty{% endif %}">
+        <header class="lc-home-card-head">
+          <h3 class="lc-h3">{{ "home-dash-dms"|t }}</h3>
+          {% if !dms.is_empty() %}<span class="lc-count-pill">{{ dms.len() }}</span>{% endif %}
+        </header>
         <ul class="divide-y divide-border">
           {% for r in dms %}
           <li>
-            <a href="/dm/{{ r.peer_id }}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+            <a href="/dm/{{ r.peer_id }}" class="lc-home-row">
               {% if r.avatar_ext.is_some() %}
               <img src="/avatars/{{ r.peer_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
               {% else %}
@@ -96,23 +112,26 @@
             </a>
           </li>
           {% endfor %}
-          {% if dms.is_empty() %}<li class="px-4 py-3 lc-small text-content-muted">{{ "home-dash-empty-dms"|t }}</li>{% endif %}
+          {% if dms.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-dms"|t }}</li>{% endif %}
         </ul>
       </section>
 
       {# Drafts #}
-      <section class="card overflow-hidden p-0">
-        <header class="border-b border-border px-4 py-2.5"><h3 class="lc-h3">{{ "home-dash-drafts"|t }}</h3></header>
+      <section class="card lc-home-card overflow-hidden p-0{% if drafts.is_empty() %} lc-home-card--empty{% endif %}">
+        <header class="lc-home-card-head">
+          <h3 class="lc-h3">{{ "home-dash-drafts"|t }}</h3>
+          {% if !drafts.is_empty() %}<span class="lc-count-pill">{{ drafts.len() }}</span>{% endif %}
+        </header>
         <ul class="divide-y divide-border">
           {% for r in drafts %}
           <li>
-            <a href="{{ r.href }}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring">
+            <a href="{{ r.href }}" class="lc-home-row">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-content-subtle" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg>
               <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
             </a>
           </li>
           {% endfor %}
-          {% if drafts.is_empty() %}<li class="px-4 py-3 lc-small text-content-muted">{{ "home-dash-empty-drafts"|t }}</li>{% endif %}
+          {% if drafts.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-drafts"|t }}</li>{% endif %}
         </ul>
       </section>
 

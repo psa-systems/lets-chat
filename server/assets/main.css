@@ -5280,6 +5280,53 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 }
 .lc-empty-ico { height: 2rem; width: 2rem; color: var(--content-subtle); }
 .lc-empty-text { font-size: 0.8125rem; color: var(--content-muted); max-width: 24rem; }
+
+/* LC-703: Home "Catch up" dashboard. Authored so the layout renders without a
+   Tailwind rebuild (tailwind-built.css is gitignored). Token-only colors keep
+   all four themes correct; the row internals keep spacing utilities so both
+   densities hold. */
+.lc-home { max-width: 72rem; margin-left: auto; margin-right: auto; padding: 1rem; }
+@media (min-width: 640px) { .lc-home { padding: 1.5rem; } }
+/* Auto-fill balanced columns: each card sizes to its content and the row flows
+   into as many columns as fit, aligned to the top so a short card never
+   stretches to match a tall neighbour. Replaces the fixed 3-col grid that
+   stranded five cards as an asymmetric 3+2 with large empty gaps. */
+.lc-home-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+.lc-home-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+/* Empty cards de-emphasize and sort after populated ones (via grid `order`), so
+   the eye lands on the cards that actually carry unread content. */
+.lc-home-card--empty { order: 1; }
+.lc-home-card--empty .lc-home-card-head { color: var(--content-muted); }
+.lc-home-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+}
+.lc-home-row:hover { background: var(--surface-sunken); }
+.lc-home-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.lc-home-row-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-weight: 500;
+    color: var(--content);
+}
+.lc-home-row-time { flex: none; font-size: 0.75rem; color: var(--content-subtle); }
+.lc-home-empty { padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--content-muted); }
 /* Caution card: amber edge for the destructive-but-not-irreversible retention
    section, distinct from the red --danger delete card. */
 .lc-set-card--caution { border-color: var(--warning-border); }
