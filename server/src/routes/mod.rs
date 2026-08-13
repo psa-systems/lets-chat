@@ -1335,6 +1335,8 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/thread/{parent_id}/summary",
             post(summary::summarize_thread),
         )
+        // LC-705: workspace-wide "Catch me up" summary on the Home dashboard.
+        .route("/home/summary", post(summary::summarize_home))
         .route(
             "/room/{room_id}/composer-quote/{message_id}",
             get(room::get_composer_quote),

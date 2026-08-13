@@ -122,6 +122,12 @@ pub async fn get_home(
     // and only run on this fall-through path (not on the last-room redirect).
     let (catch_up, mentions, threads, dms, drafts, show_dashboard) =
         build_dashboard(&state, &user).await?;
+    // LC-705: offer the workspace "Catch me up" AI summary only when the surface
+    // is available to this viewer AND there is unread to summarize. The card's
+    // POST re-checks the gate, so this is a UI affordance, not the access check.
+    let has_unread =
+        !catch_up.is_empty() || !mentions.is_empty() || !threads.is_empty() || !dms.is_empty();
+    let ai_catch_up = has_unread && super::ai_gate::llm_catch_up_available(&state, &user).await;
 
     let page = WelcomePage {
         user: &user,
@@ -142,6 +148,7 @@ pub async fn get_home(
         threads: &threads,
         dms: &dms,
         drafts: &drafts,
+        ai_catch_up,
     };
     let body = html(&page)?;
     Ok(body.into_response())

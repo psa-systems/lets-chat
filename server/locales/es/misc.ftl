@@ -42,6 +42,10 @@ home-dash-preview-image = 🖼 Imagen
 home-dash-preview-video = 🎞 Vídeo
 home-dash-preview-voice = 🎤 Mensaje de voz
 home-dash-preview-file = 📎 Archivo
+# LC-705: tarjeta de resumen con IA "Ponerme al día" en el panel de inicio.
+home-catchup-ai-heading = Ponerme al día
+home-catchup-ai-scope = Un resumen rápido con IA de todo lo que te perdiste en tu espacio de trabajo.
+home-catchup-ai-caught-up = Estás al día. No hay nada sin leer en tu espacio de trabajo.
 
 ## Message search results
 search-no-results = Sin resultados.

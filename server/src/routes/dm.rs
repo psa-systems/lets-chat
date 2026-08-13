@@ -83,6 +83,8 @@ pub async fn get_dm(
             threads: &[],
             dms: &[],
             drafts: &[],
+            // LC-705: no dashboard here, so no workspace catch-up card.
+            ai_catch_up: false,
         };
         return Ok(html(&page)?.into_response());
     }
@@ -132,6 +134,8 @@ pub async fn get_dm(
                     threads: &[],
                     dms: &[],
                     drafts: &[],
+                    // LC-705: no dashboard here, so no workspace catch-up card.
+                    ai_catch_up: false,
                 };
                 return Ok(html(&page)?.into_response());
             }
