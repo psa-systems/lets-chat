@@ -22,18 +22,49 @@ const CARD_CAP: usize = 6;
 /// LC-575: how deep into the unread inbox to scan for channel/DM previews.
 const PREVIEW_SCAN: i64 = 80;
 
-/// LC-575 / LC-703: collapse a message body to a single short preview line.
-/// Runs the shared markdown one-liner (link -> label text, emphasis/heading/code
-/// markers dropped) so raw markdown never leaks into the dashboard; a body with
-/// no text (an attachment/image/GIF-only message) falls back to a muted
-/// "📎 Attachment" label instead of rendering blank.
-fn preview_of(body: &str) -> String {
-    let line = crate::views::markdown::plain_line(body, 120);
-    if line.is_empty() {
-        translate_current("home-dash-preview-attachment")
-    } else {
-        line
+/// LC-575 / LC-703: collapse a message body to a single short preview line via
+/// the shared markdown one-liner (link -> label text, emphasis/heading/code
+/// markers dropped), so raw markdown never leaks into the dashboard. Returns an
+/// empty string for a message with no text body (an attachment-only message);
+/// the caller then substitutes a per-type attachment label (LC-704).
+fn preview_text(body: &str) -> String {
+    crate::views::markdown::plain_line(body, 120)
+}
+
+/// LC-704: i18n key for the label shown in place of a bodyless message's
+/// preview. Mirrors the timeline's own render precedence (audio -> video ->
+/// image -> file; see `templates/partials/attachment.html`), classifying by the
+/// first attachment so the label matches what the message leads with. An empty
+/// slice (a bodyless message with no attachments we could load) falls back to
+/// the generic label.
+fn attachment_preview_key(atts: &[crate::models::Attachment]) -> &'static str {
+    match atts.first() {
+        Some(a) if a.is_audio() => "home-dash-preview-voice",
+        Some(a) if a.is_video() => "home-dash-preview-video",
+        Some(a) if a.is_image() => "home-dash-preview-image",
+        Some(_) => "home-dash-preview-file",
+        None => "home-dash-preview-attachment",
     }
+}
+
+/// LC-704: resolve a per-type attachment label key for each of `message_ids` by
+/// bulk-loading their attachments once. Callers pass only the ids of bodyless
+/// rows, so a dashboard whose previews are all text costs no extra query.
+async fn attachment_preview_keys(
+    state: &AppState,
+    message_ids: &[i64],
+) -> Result<HashMap<i64, &'static str>, AppError> {
+    if message_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let atts = db::uploads::attachments_for_messages(&state.chat, message_ids).await?;
+    Ok(message_ids
+        .iter()
+        .map(|id| {
+            let key = attachment_preview_key(atts.get(id).map(Vec::as_slice).unwrap_or(&[]));
+            (*id, key)
+        })
+        .collect())
 }
 
 #[derive(Deserialize)]
@@ -158,6 +189,9 @@ async fn build_dashboard(
     let inbox_rows = db::inbox::list_unread(chat, &user.id, is_admin, PREVIEW_SCAN, None).await?;
     let mut room_names: HashMap<i64, String> = HashMap::new();
     let mut catch_up: Vec<CatchUpRow> = Vec::new();
+    // LC-704: source message id per catch-up row, kept parallel so a bodyless
+    // preview can be back-filled with a per-type attachment label below.
+    let mut catch_up_msg_ids: Vec<i64> = Vec::new();
     let mut dms: Vec<DmRow> = Vec::new();
     let mut seen: HashSet<i64> = HashSet::new();
     for row in &inbox_rows {
@@ -190,13 +224,34 @@ async fn build_dashboard(
                 unread: *dm_counts.get(&row.room_id).unwrap_or(&0),
             });
         } else if catch_up.len() < CARD_CAP {
+            catch_up_msg_ids.push(row.message_id);
             catch_up.push(CatchUpRow {
                 room_id: row.room_id,
                 name: row.room_name.clone(),
-                preview: preview_of(&row.body),
+                preview: preview_text(&row.body),
                 unread: *room_counts.get(&row.room_id).unwrap_or(&0),
                 created_at: row.created_at.clone(),
             });
+        }
+    }
+
+    // LC-704: bodyless catch-up rows (attachment-only messages) show a per-type
+    // label ("🖼 Image", "🎞 Video", "🎤 Voice message", "📎 File") in place of
+    // the empty preview. One bulk attachment lookup for just the empty rows.
+    let empty_catch: Vec<i64> = catch_up
+        .iter()
+        .zip(&catch_up_msg_ids)
+        .filter(|(r, _)| r.preview.is_empty())
+        .map(|(_, id)| *id)
+        .collect();
+    let catch_keys = attachment_preview_keys(state, &empty_catch).await?;
+    for (r, id) in catch_up.iter_mut().zip(&catch_up_msg_ids) {
+        if r.preview.is_empty() {
+            let key = catch_keys
+                .get(id)
+                .copied()
+                .unwrap_or("home-dash-preview-attachment");
+            r.preview = translate_current(key);
         }
     }
 
@@ -223,7 +278,7 @@ async fn build_dashboard(
     }
 
     // Threads: followed threads carrying replies newer than the read watermark.
-    let threads: Vec<ThreadRow> =
+    let mut threads: Vec<ThreadRow> =
         db::thread_followers::followed_threads_with_unread(chat, &user.id, is_admin)
             .await?
             .into_iter()
@@ -232,10 +287,27 @@ async fn build_dashboard(
                 room_id: d.room_id,
                 parent_id: d.parent_id,
                 room_name: d.room_name,
-                preview: preview_of(&d.parent_preview),
+                preview: preview_text(&d.parent_preview),
                 unread: d.unread_replies,
             })
             .collect();
+    // LC-704: a bodyless thread root (attachment-only) shows a per-type label,
+    // keyed off the root message id the row already carries (`parent_id`).
+    let empty_threads: Vec<i64> = threads
+        .iter()
+        .filter(|r| r.preview.is_empty())
+        .map(|r| r.parent_id)
+        .collect();
+    let thread_keys = attachment_preview_keys(state, &empty_threads).await?;
+    for r in threads.iter_mut() {
+        if r.preview.is_empty() {
+            let key = thread_keys
+                .get(&r.parent_id)
+                .copied()
+                .unwrap_or("home-dash-preview-attachment");
+            r.preview = translate_current(key);
+        }
+    }
 
     // Drafts: rooms/DMs with a fresh unsent draft. Sort by id desc for a stable
     // order, then resolve each to the right deep-link + label.
@@ -314,4 +386,61 @@ async fn target_accessible(state: &AppState, user: &User, path: &str) -> Result<
         return Ok(dm.is_some());
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attachment_preview_key;
+    use crate::models::Attachment;
+
+    fn att(mime: &str) -> Attachment {
+        Attachment {
+            id: 1,
+            filename: "f".into(),
+            mime_type: mime.into(),
+            size_bytes: 1,
+            url: "/api/files/1".into(),
+            waveform: None,
+            voice_duration: None,
+            transcript: None,
+            transcript_status: None,
+            alt_text: None,
+        }
+    }
+
+    #[test]
+    fn preview_key_classifies_each_attachment_type() {
+        assert_eq!(
+            attachment_preview_key(&[att("image/png")]),
+            "home-dash-preview-image"
+        );
+        assert_eq!(
+            attachment_preview_key(&[att("image/gif")]),
+            "home-dash-preview-image"
+        );
+        assert_eq!(
+            attachment_preview_key(&[att("video/mp4")]),
+            "home-dash-preview-video"
+        );
+        assert_eq!(
+            attachment_preview_key(&[att("audio/webm")]),
+            "home-dash-preview-voice"
+        );
+        assert_eq!(
+            attachment_preview_key(&[att("application/pdf")]),
+            "home-dash-preview-file"
+        );
+    }
+
+    #[test]
+    fn preview_key_uses_first_attachment_and_falls_back_when_empty() {
+        // Precedence follows the timeline's render order: the message leads with
+        // its first attachment, so that is what the label reflects.
+        assert_eq!(
+            attachment_preview_key(&[att("image/png"), att("application/zip")]),
+            "home-dash-preview-image"
+        );
+        // A bodyless message with no loadable attachments gets the generic label.
+        assert_eq!(attachment_preview_key(&[]), "home-dash-preview-attachment");
+    }
 }

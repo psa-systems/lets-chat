@@ -34,9 +34,14 @@ home-dash-empty-drafts = No hay borradores guardados.
 home-dash-unread-aria = sin leer
 home-dash-mentions-aria = menciones
 home-dash-replies-aria = respuestas nuevas
-# LC-703: etiqueta de vista previa de reserva cuando el mensaje sin leer mas
-# reciente no tiene texto (solo un adjunto / imagen / GIF).
+# LC-703 / LC-704: etiqueta de vista previa cuando el mensaje sin leer mas
+# reciente no tiene texto (solo adjunto). Las etiquetas por tipo siguen el orden
+# de render del historial; -attachment es la reserva generica.
 home-dash-preview-attachment = 📎 Adjunto
+home-dash-preview-image = 🖼 Imagen
+home-dash-preview-video = 🎞 Vídeo
+home-dash-preview-voice = 🎤 Mensaje de voz
+home-dash-preview-file = 📎 Archivo
 
 ## Message search results
 search-no-results = Sin resultados.

@@ -34,9 +34,14 @@ home-dash-empty-drafts = No saved drafts.
 home-dash-unread-aria = unread
 home-dash-mentions-aria = mentions
 home-dash-replies-aria = new replies
-# LC-703: fallback preview label when the newest unread message has no text
-# body (an attachment / image / GIF only), so the row never renders blank.
+# LC-703 / LC-704: preview label when the newest unread message has no text
+# body (attachment-only), so the row never renders blank. Per-type labels
+# mirror the timeline's render precedence; -attachment is the generic fallback.
 home-dash-preview-attachment = 📎 Attachment
+home-dash-preview-image = 🖼 Image
+home-dash-preview-video = 🎞 Video
+home-dash-preview-voice = 🎤 Voice message
+home-dash-preview-file = 📎 File
 
 ## Message search results
 search-no-results = No results.
