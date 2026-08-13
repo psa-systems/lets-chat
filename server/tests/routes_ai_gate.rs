@@ -1,8 +1,9 @@
-//! LC-679: runtime, role-scoped gate for the LLM/AI surface. Covers the three
-//! required cases against a representative LLM route (POST compose-assist):
-//! flag OFF (403 even for an admin), flag ON + privileged (site admin -> not
-//! 403), and flag ON + unprivileged (ordinary member -> 403). Harness mirrors
-//! routes_alt_text.
+//! LC-679 / LC-702: runtime, audience-scoped gate for the LLM/AI surface.
+//! Covers, against a representative LLM route (POST compose-assist): flag OFF
+//! (403 even for an admin), flag ON + default "everyone" audience (an ordinary
+//! member is allowed -> not 403), flag ON + "staff" audience (an ordinary member
+//! -> 403 while an admin passes), and the absent-flag default (OFF). Harness
+//! mirrors routes_alt_text.
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
@@ -98,6 +99,15 @@ async fn set_flag(settings: &sqlx::SqlitePool, on: bool) {
         .unwrap();
 }
 
+/// LC-702: set the AI audience row. `true` narrows to staff; `false` opens it to
+/// everyone (the default when the row is absent).
+async fn set_staff_only(settings: &sqlx::SqlitePool, staff_only: bool) {
+    let value = if staff_only { "staff" } else { "everyone" };
+    db::settings::set_setting(settings, "llm_audience", value)
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn flag_off_forbids_even_a_site_admin() {
     let s = setup().await;
@@ -114,21 +124,37 @@ async fn flag_off_forbids_even_a_site_admin() {
 async fn flag_on_allows_a_privileged_role() {
     let s = setup().await;
     set_flag(&s.settings, true).await;
-    // Site admin is privileged -> the gate passes and the assist renders (200).
+    // Site admin is always within the audience -> the gate passes (200).
     assert_eq!(post_assist(&s.app, &s.admin_session).await, StatusCode::OK);
 }
 
 #[tokio::test]
-async fn flag_on_forbids_an_unprivileged_user() {
+async fn flag_on_everyone_audience_allows_a_member() {
     let s = setup().await;
     set_flag(&s.settings, true).await;
-    // Ordinary member of the room: not a site admin, not a room moderator, not
-    // an enclave Owner/Admin -> 403 despite the flag being on.
+    // LC-702: default audience is "everyone" (row absent). An ordinary member of
+    // the room - not admin, not moderator, not enclave Owner/Admin - is allowed.
+    assert_eq!(
+        post_assist(&s.app, &s.member_session).await,
+        StatusCode::OK,
+        "with the default 'everyone' audience a plain member may use AI"
+    );
+}
+
+#[tokio::test]
+async fn flag_on_staff_audience_forbids_a_member() {
+    let s = setup().await;
+    set_flag(&s.settings, true).await;
+    set_staff_only(&s.settings, true).await;
+    // LC-702: "staff" audience narrows back to LC-679's scope. An ordinary member
+    // is refused on the server, not merely hidden in the UI.
     assert_eq!(
         post_assist(&s.app, &s.member_session).await,
         StatusCode::FORBIDDEN,
-        "an unprivileged member must be refused on the server, not just in the UI"
+        "the 'staff' audience must refuse an unprivileged member"
     );
+    // The admin still passes under the staff audience.
+    assert_eq!(post_assist(&s.app, &s.admin_session).await, StatusCode::OK);
 }
 
 #[tokio::test]

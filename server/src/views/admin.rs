@@ -264,6 +264,10 @@ pub struct SettingsPage<'a> {
     /// LC-679: whether an LLM endpoint is configured (`LETS_CHAT_LLM_URL`). The
     /// flag is inert without it, so the toggle card surfaces the precondition.
     pub llm_configured: bool,
+    /// LC-702: whether the AI audience is narrowed to staff (`llm_audience` ==
+    /// "staff"). False means the default "everyone". Drives the audience radio's
+    /// checked state.
+    pub llm_audience_staff: bool,
     /// Operator-facing message shown on the 503 page while maintenance
     /// is on. Empty hides the message block.
     pub maintenance_message: String,
