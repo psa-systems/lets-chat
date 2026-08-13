@@ -63,6 +63,25 @@
           <span class="lc-toggle-desc">{{ "admin-settings-llm-enable-note"|t }}</span>
         </span>
       </label>
+      {# LC-702: who may use AI once the flag is on. Default "everyone"; "staff"
+         narrows to site admins, enclave owners/admins and room moderators. #}
+      <fieldset class="lc-set-field">
+        <legend class="lc-set-label">{{ "admin-settings-llm-audience-label"|t }}</legend>
+        <label class="lc-radio">
+          <input type="radio" name="audience" value="everyone" {% if !llm_audience_staff %}checked{% endif %}>
+          <span class="lc-radio-text">
+            <span class="lc-radio-title">{{ "admin-settings-llm-audience-everyone"|t }}</span>
+            <span class="lc-radio-desc">{{ "admin-settings-llm-audience-everyone-note"|t }}</span>
+          </span>
+        </label>
+        <label class="lc-radio">
+          <input type="radio" name="audience" value="staff" {% if llm_audience_staff %}checked{% endif %}>
+          <span class="lc-radio-text">
+            <span class="lc-radio-title">{{ "admin-settings-llm-audience-staff"|t }}</span>
+            <span class="lc-radio-desc">{{ "admin-settings-llm-audience-staff-note"|t }}</span>
+          </span>
+        </label>
+      </fieldset>
       <div class="lc-set-actions">
         <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-llm-save"|t }}</span></button>
         <span id="st-llm" class="lc-set-status" role="status" aria-live="polite"></span>
