@@ -10,6 +10,7 @@ pub mod report;
 pub mod room;
 pub mod search_result;
 pub mod session;
+pub mod support_ticket;
 pub mod user;
 
 pub use attachment::Attachment;

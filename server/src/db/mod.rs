@@ -52,6 +52,7 @@ pub mod sidebar_categories;
 pub mod slash;
 pub mod starred_rooms;
 pub mod stats;
+pub mod support_tickets;
 pub mod thread_followers;
 pub mod thread_muters;
 pub mod transcripts;

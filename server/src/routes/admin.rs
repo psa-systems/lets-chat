@@ -105,6 +105,9 @@ pub fn router() -> Router<AppState> {
         .route("/admin/reports/badge", get(get_reports_badge))
         .route("/admin/reports/{id}/resolve", post(post_report_resolve))
         .route("/admin/reports/{id}/dismiss", post(post_report_dismiss))
+        .route("/admin/support", get(get_support))
+        .route("/admin/support/badge", get(get_support_badge))
+        .route("/admin/support/{id}/resolve", post(post_support_resolve))
         .route("/admin/bots", get(get_bots).post(post_bots))
         .route("/admin/bots/assistant", post(post_bots_assistant))
         .route("/admin/bots/persona", post(post_bots_persona))
@@ -1576,6 +1579,92 @@ async fn handle_report_status(
         super::report::broadcast_reports_changed(state);
     }
     super::report::render_reports_oob(state).await
+}
+
+// Support ticket queue (LC-714) -------------------------------------------------
+
+/// `GET /admin/support` - the open AI help desk support-ticket queue.
+pub async fn get_support(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let tickets = super::support::build_support_views(&state).await?;
+    let page = crate::views::admin::SupportPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "support",
+        tickets: &tickets,
+    };
+    html(&page)
+}
+
+/// `GET /admin/support/badge` - the nav open-count badge inner markup, fetched
+/// on load by every admin page.
+pub async fn get_support_badge(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+) -> Result<Html, AppError> {
+    let open_count = db::support_tickets::count_open(&state.chat).await?;
+    html(&crate::views::support::AdminSupportBadge { open_count })
+}
+
+/// `POST /admin/support/{id}/resolve` - resolve an open ticket, audit it, notify
+/// the requester by a bot DM, and live-update every admin queue. A ticket already
+/// resolved by another admin is a no-op (no second audit row, no second DM).
+pub async fn post_support_resolve(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    // Fetch first so we still have the requester id after the status flip.
+    let ticket = db::support_tickets::get(&state.chat, id).await?;
+    let updated = db::support_tickets::set_status(&state.chat, id, "resolved", &user.id).await?;
+    if updated {
+        db::moderation::log_mod_action(
+            &state.chat,
+            "support_resolved",
+            &format!("ticket#{id}"),
+            &user.id,
+            None,
+            None,
+            None,
+        )
+        .await?;
+        super::support::broadcast_support_changed(&state);
+        if let Some(t) = ticket {
+            let body = format!(
+                "_Your support request (#{id}) has been resolved by an admin. Reply here if you still need help._"
+            );
+            if let Err(e) =
+                super::help_docs::notify_user_from_bot(&state, &t.requester_id, &body).await
+            {
+                tracing::warn!(error = %e, ticket = id, "failed to notify requester of resolution");
+            }
+        }
+    }
+    super::support::render_support_oob(&state).await
 }
 
 fn random_code(len: usize) -> String {
