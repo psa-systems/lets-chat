@@ -80,6 +80,10 @@ pub enum RateLimitKind {
     /// LC-492: per-user cap on the in-channel AI assistant (`/ask`). Keyed by
     /// the asking user_id. Bounds LLM cost/load; over-limit asks are refused.
     AssistantAsk,
+    /// LC-712: per-user cap on the AI help desk (`/support`). Keyed by the asking
+    /// user_id. Separate bucket from `AssistantAsk` so the docs helper and the
+    /// room assistant do not share a counter. Bounds LLM + embeddings cost.
+    HelpDocsAsk,
     /// LC-534: per-channel slowmode. Cooldown (not per-minute count) keyed by
     /// `{room_id}:{user_id}`; checked via `check_cooldown`.
     Slowmode,
@@ -109,6 +113,7 @@ impl RateLimitKind {
             RateLimitKind::RemoteControlRequest => "rcr",
             RateLimitKind::BridgeMessage => "brm",
             RateLimitKind::AssistantAsk => "ask",
+            RateLimitKind::HelpDocsAsk => "help",
             RateLimitKind::Slowmode => "slow",
             RateLimitKind::NewMemberPost => "newm",
             RateLimitKind::SttGlobal => "sttg",
