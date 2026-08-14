@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use lets_chat::embeddings::{EmbeddingClient, MockEmbeddingClient};
 use lets_chat::llm::MockLlmClient;
+use lets_chat::models::User;
 use lets_chat::state::AppState;
 use lets_chat::ws::hub::Hub;
 use lets_chat::{db, embeddings};
@@ -177,4 +178,109 @@ async fn support_answer_is_honest_when_nothing_relevant_is_indexed() {
         !body.contains("**Sources:**"),
         "no citations when nothing matched"
     );
+}
+
+#[tokio::test]
+async fn human_escalation_dms_all_admins_and_reports_availability() {
+    let state = state_with_embeddings().await;
+    // A plain member (the requester) and two admins in the auth db.
+    let req_id = db::auth::create_user(&state.auth, "member", "h")
+        .await
+        .unwrap();
+    let requester: User = db::auth::find_user_by_id(&state.auth, &req_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .into();
+    let a1 = db::auth::create_user(&state.auth, "admin1", "h")
+        .await
+        .unwrap();
+    let a2 = db::auth::create_user(&state.auth, "admin2", "h")
+        .await
+        .unwrap();
+    for a in [&a1, &a2] {
+        sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+            .bind(a)
+            .execute(&state.auth)
+            .await
+            .unwrap();
+    }
+    // General (id=1) is seeded by the migration; backfill membership so it is a
+    // usable room to escalate from.
+    db::enclave::backfill_general_membership(&state.auth, &state.chat)
+        .await
+        .unwrap();
+    let room = db::chat::get_room(&state.chat, 1)
+        .await
+        .unwrap()
+        .expect("general room seeded");
+
+    let outcome = lets_chat::routes::help_docs::escalate_to_admins(
+        &state,
+        &requester,
+        &room,
+        "my account is locked",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(outcome.notified, 2, "both admins notified");
+    assert!(
+        outcome.available,
+        "a freshly-created admin counts as active"
+    );
+
+    // Each admin has a bot DM carrying the escalation and a link back to the room.
+    let bot = db::auth::find_user_by_username(&state.auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    for a in [&a1, &a2] {
+        let dm = db::chat::find_dm_room(&state.chat, &bot.id, a)
+            .await
+            .unwrap()
+            .expect("bot DM exists for the admin");
+        let body: String = sqlx::query_scalar(
+            "SELECT body FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 1",
+        )
+        .bind(dm.id)
+        .fetch_one(&state.chat)
+        .await
+        .unwrap();
+        assert!(
+            body.contains("Help requested"),
+            "DM carries the escalation, got: {body}"
+        );
+        assert!(
+            body.contains("my account is locked"),
+            "DM carries the note, got: {body}"
+        );
+        assert!(
+            body.contains("/room/1"),
+            "DM links back to the origin room, got: {body}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn human_escalation_with_no_admins_notifies_nobody() {
+    let state = state_with_embeddings().await;
+    let req_id = db::auth::create_user(&state.auth, "member", "h")
+        .await
+        .unwrap();
+    let requester: User = db::auth::find_user_by_id(&state.auth, &req_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .into();
+    db::enclave::backfill_general_membership(&state.auth, &state.chat)
+        .await
+        .unwrap();
+    let room = db::chat::get_room(&state.chat, 1).await.unwrap().unwrap();
+
+    let outcome = lets_chat::routes::help_docs::escalate_to_admins(&state, &requester, &room, "")
+        .await
+        .unwrap();
+    assert_eq!(outcome.notified, 0, "no admins to notify");
+    assert!(!outcome.available);
 }
