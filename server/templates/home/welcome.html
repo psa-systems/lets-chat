@@ -19,156 +19,260 @@
      card with no content is de-emphasized and sorts last (`lc-home-card--empty`)
      so populated cards lead. Previews render through `markdown::plain_line`, so
      markdown never leaks (LC-703). #}
+  {# LC-575 / LC-703 / LC-706: Home dashboard. A composed, attention-first landing.
+     A greeting + quick-actions launchpad sits above a two-column layout: the wide
+     primary column leads with the AI "Catch me up" hero and the Unread-channels
+     card, while the narrower secondary column carries Direct messages, Mentions,
+     Threads and Drafts. Empty secondary sections do not render as boxes; they
+     collapse into a single quiet "All caught up" strip so the eye lands on what
+     carries content. Previews render through `markdown::plain_line` (LC-703). #}
   <div class="lc-home">
+    {# LC-706: personal greeting. The greeting word is picked client-side from the
+       viewer's local hour (timestamps are stored UTC, so a server hour would be
+       wrong); the fallback word renders fine without JS. #}
     <div class="mb-4">
-      <h2 class="lc-h2">{{ "home-dash-heading"|t }}</h2>
+      <h2 class="lc-h2"><span data-lc-greeting
+            data-morning="{{ "home-greeting-morning"|t }}"
+            data-afternoon="{{ "home-greeting-afternoon"|t }}"
+            data-evening="{{ "home-greeting-evening"|t }}">{{ "home-greeting-fallback"|t }}</span> {{ user.display_label() }}</h2>
       <p class="lc-small text-content-muted">{{ "home-dash-subtitle"|t }}</p>
     </div>
 
-    {# LC-705: workspace-wide "Catch me up" AI summary. Shown only when the AI
-       surface is available to this viewer and there is unread to summarize
-       (`ai_catch_up`). The Generate button POSTs /home/summary and swaps the
-       rendered summary into #home-summary-body in place; the returned fragment
-       carries a Regenerate button targeting the same container. The POST
-       re-checks the AI gate server-side. #}
-    {% if ai_catch_up %}
-    <section class="card mb-4 p-4">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h3 class="lc-h3">{{ "home-catchup-ai-heading"|t }}</h3>
-          <p class="lc-small text-content-muted">{{ "home-catchup-ai-scope"|t }}</p>
-        </div>
-      </div>
-      <div id="home-summary-body" class="mt-3 min-w-0 break-words">
-        <button type="button"
-                hx-post="/home/summary"
-                hx-target="#home-summary-body" hx-swap="innerHTML"
-                hx-disabled-elt="this"
-                data-lc-ai-pending
-                data-lc-ai-skeleton="summary"
-                data-lc-ai-read-label="{{ "ai-reading-messages"|t }}"
-                data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
-                data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
-                class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
-          {{ "summary-generate"|t }}
-        </button>
-        <p class="mt-2 text-xs text-content-subtle">{{ "summary-disclaimer"|t }}</p>
-      </div>
-    </section>
-    {% endif %}
-
-    <div class="lc-home-grid">
-
-      {# Catch up - channels with unread #}
-      <section class="card lc-home-card overflow-hidden p-0{% if catch_up.is_empty() %} lc-home-card--empty{% endif %}">
-        <header class="lc-home-card-head">
-          <h3 class="lc-h3">{{ "home-dash-catchup"|t }}</h3>
-          {% if !catch_up.is_empty() %}<span class="lc-count-pill">{{ catch_up.len() }}</span>{% endif %}
-        </header>
-        <ul class="divide-y divide-border">
-          {% for r in catch_up %}
-          <li>
-            <a href="/room/{{ r.room_id }}" class="lc-home-row">
-              <span class="min-w-0 flex-1">
-                <span class="lc-home-row-title">
-                  <span class="min-w-0 truncate">{{ r.name }}</span>
-                  {% if !r.created_at.is_empty() %}<time datetime="{{ r.created_at_iso() }}" title="{{ r.created_at }}" class="lc-home-row-time">{{ r.day() }}</time>{% endif %}
-                </span>
-                <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
-              </span>
-              {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
-            </a>
-          </li>
-          {% endfor %}
-          {% if catch_up.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-catchup"|t }}</li>{% endif %}
-        </ul>
-      </section>
-
-      {# Mentions #}
-      <section class="card lc-home-card overflow-hidden p-0{% if mentions.is_empty() %} lc-home-card--empty{% endif %}">
-        <header class="lc-home-card-head">
-          <h3 class="lc-h3">{{ "home-dash-mentions"|t }}</h3>
-          {% if !mentions.is_empty() %}<span class="lc-count-pill">{{ mentions.len() }}</span>{% endif %}
-        </header>
-        <ul class="divide-y divide-border">
-          {% for r in mentions %}
-          <li>
-            <a href="/room/{{ r.room_id }}" class="lc-home-row">
-              <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.name }}</span>
-              <span class="lc-count-pill" aria-label="{{ r.count }} {{ "home-dash-mentions-aria"|t }}">{{ r.count }}</span>
-            </a>
-          </li>
-          {% endfor %}
-          {% if mentions.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-mentions"|t }}</li>{% endif %}
-        </ul>
-      </section>
-
-      {# Threads - followed threads with new replies #}
-      <section class="card lc-home-card overflow-hidden p-0{% if threads.is_empty() %} lc-home-card--empty{% endif %}">
-        <header class="lc-home-card-head">
-          <h3 class="lc-h3">{{ "home-dash-threads"|t }}</h3>
-          {% if !threads.is_empty() %}<span class="lc-count-pill">{{ threads.len() }}</span>{% endif %}
-        </header>
-        <ul class="divide-y divide-border">
-          {% for r in threads %}
-          <li>
-            <a href="/room/{{ r.room_id }}#msg-{{ r.parent_id }}" class="lc-home-row">
-              <span class="min-w-0 flex-1">
-                <span class="block truncate font-medium text-content">{{ r.room_name }}</span>
-                <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
-              </span>
-              {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-replies-aria"|t }}">{{ r.unread }}</span>{% endif %}
-            </a>
-          </li>
-          {% endfor %}
-          {% if threads.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-threads"|t }}</li>{% endif %}
-        </ul>
-      </section>
-
-      {# Direct messages #}
-      <section class="card lc-home-card overflow-hidden p-0{% if dms.is_empty() %} lc-home-card--empty{% endif %}">
-        <header class="lc-home-card-head">
-          <h3 class="lc-h3">{{ "home-dash-dms"|t }}</h3>
-          {% if !dms.is_empty() %}<span class="lc-count-pill">{{ dms.len() }}</span>{% endif %}
-        </header>
-        <ul class="divide-y divide-border">
-          {% for r in dms %}
-          <li>
-            <a href="/dm/{{ r.peer_id }}" class="lc-home-row">
-              {% if r.avatar_ext.is_some() %}
-              <img src="/avatars/{{ r.peer_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
-              {% else %}
-              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-semibold text-content">{% if let Some(c) = r.username.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
-              {% endif %}
-              <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
-              {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
-            </a>
-          </li>
-          {% endfor %}
-          {% if dms.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-dms"|t }}</li>{% endif %}
-        </ul>
-      </section>
-
-      {# Drafts #}
-      <section class="card lc-home-card overflow-hidden p-0{% if drafts.is_empty() %} lc-home-card--empty{% endif %}">
-        <header class="lc-home-card-head">
-          <h3 class="lc-h3">{{ "home-dash-drafts"|t }}</h3>
-          {% if !drafts.is_empty() %}<span class="lc-count-pill">{{ drafts.len() }}</span>{% endif %}
-        </header>
-        <ul class="divide-y divide-border">
-          {% for r in drafts %}
-          <li>
-            <a href="{{ r.href }}" class="lc-home-row">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-content-subtle" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg>
-              <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
-            </a>
-          </li>
-          {% endfor %}
-          {% if drafts.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-drafts"|t }}</li>{% endif %}
-        </ul>
-      </section>
-
+    {# LC-706: quick actions - a small launchpad so Home is not just a summary.
+       "Resume last draft" only appears when a draft exists. #}
+    <div class="lc-home-actions mb-5">
+      <button type="button"
+        onclick="var t=document.querySelector('[data-lc-search-tab=people]'); if(t)t.click(); var i=document.getElementById('sidebar-search-input'); if(i)i.focus();"
+        class="lc-home-action">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path d="M10 2c-4.418 0-8 3.134-8 7 0 1.76.743 3.37 1.97 4.6a.75.75 0 01.219.62l-.243 1.94 1.96-.98a.75.75 0 01.546-.06A9.71 9.71 0 0010 16c4.418 0 8-3.134 8-7s-3.582-7-8-7z"/></svg>
+        <span>{{ "home-quick-new-message"|t }}</span>
+      </button>
+      <button type="button"
+        onclick="var i=document.getElementById('sidebar-search-input'); if(i){i.focus();i.select&&i.select();}"
+        class="lc-home-action">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/></svg>
+        <span>{{ "home-quick-jump-room"|t }}</span>
+      </button>
+      {% if let Some(d) = drafts.first() %}
+      <a href="{{ d.href }}" class="lc-home-action">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg>
+        <span>{{ "home-quick-resume-draft"|t }}</span>
+      </a>
+      {% endif %}
     </div>
+
+    <div class="lc-home-layout">
+      {# Primary column: AI hero + Unread channels. #}
+      <div class="lc-home-primary">
+
+        {# LC-705 / LC-706: workspace-wide "Catch me up" AI summary, promoted to a
+           hero at the top of the dashboard. Shown only when the AI surface is
+           available to this viewer and there is unread to summarize (`ai_catch_up`).
+           The Generate button POSTs /home/summary and swaps the rendered summary
+           into #home-summary-body in place; the returned fragment carries a
+           Regenerate button targeting the same container. Generation stays manual
+           (no auto-fire on load) so a home visit never triggers the model on its
+           own. The POST re-checks the AI gate server-side. #}
+        {% if ai_catch_up %}
+        <section class="lc-home-hero">
+          <div class="flex items-start gap-3">
+            <span class="lc-home-hero-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.4z"/></svg>
+            </span>
+            <div class="min-w-0">
+              <h3 class="lc-h3">{{ "home-catchup-ai-heading"|t }}</h3>
+              <p class="lc-small text-content-muted">{{ "home-catchup-ai-scope"|t }}</p>
+            </div>
+          </div>
+          <div id="home-summary-body" class="mt-3 min-w-0 break-words">
+            <button type="button"
+                    hx-post="/home/summary"
+                    hx-target="#home-summary-body" hx-swap="innerHTML"
+                    hx-disabled-elt="this"
+                    data-lc-ai-pending
+                    data-lc-ai-skeleton="summary"
+                    data-lc-ai-read-label="{{ "ai-reading-messages"|t }}"
+                    data-lc-ai-pending-label="{{ "ai-summarizing"|t }}"
+                    data-lc-ai-slow-label="{{ "ai-working-slow"|t }}"
+                    class="rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-content-muted hover:bg-surface-sunken hover:text-content disabled:opacity-50">
+              {{ "summary-generate"|t }}
+            </button>
+            <p class="mt-2 text-xs text-content-subtle">{{ "summary-disclaimer"|t }}</p>
+          </div>
+        </section>
+        {% endif %}
+
+        {# Catch up - channels with unread (the primary content anchor) #}
+        <section class="card lc-home-card overflow-hidden p-0">
+          <header class="lc-home-card-head">
+            <h3 class="lc-h3">{{ "home-dash-catchup"|t }}</h3>
+            {% if !catch_up.is_empty() %}<span class="lc-count-pill">{{ catch_up.len() }}</span>{% endif %}
+          </header>
+          <ul class="divide-y divide-border">
+            {% for r in catch_up %}
+            <li>
+              <a href="/room/{{ r.room_id }}" class="lc-home-row">
+                <span class="min-w-0 flex-1">
+                  <span class="lc-home-row-title">
+                    <span class="min-w-0 truncate">{{ r.name }}</span>
+                    {% if !r.created_at.is_empty() %}<time datetime="{{ r.created_at_iso() }}" title="{{ r.created_at }}" data-lc-reltime class="lc-home-row-time">{{ r.day() }}</time>{% endif %}
+                  </span>
+                  <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
+                </span>
+                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
+              </a>
+            </li>
+            {% endfor %}
+            {% if catch_up.is_empty() %}<li class="lc-home-empty">{{ "home-dash-empty-catchup"|t }}</li>{% endif %}
+          </ul>
+        </section>
+
+      </div>
+
+      {# Secondary column: populated cards lead; empty sections collapse into the
+         quiet strip below rather than rendering as empty boxes. #}
+      <div class="lc-home-secondary">
+
+        {# Direct messages #}
+        {% if !dms.is_empty() %}
+        <section class="card lc-home-card overflow-hidden p-0">
+          <header class="lc-home-card-head">
+            <h3 class="lc-h3">{{ "home-dash-dms"|t }}</h3>
+            <span class="lc-count-pill">{{ dms.len() }}</span>
+          </header>
+          <ul class="divide-y divide-border">
+            {% for r in dms %}
+            <li>
+              <a href="/dm/{{ r.peer_id }}" class="lc-home-row">
+                {% if r.avatar_ext.is_some() %}
+                <img src="/avatars/{{ r.peer_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
+                {% else %}
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-semibold text-content">{% if let Some(c) = r.username.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
+                {% endif %}
+                <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
+                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+
+        {# Mentions #}
+        {% if !mentions.is_empty() %}
+        <section class="card lc-home-card overflow-hidden p-0">
+          <header class="lc-home-card-head">
+            <h3 class="lc-h3">{{ "home-dash-mentions"|t }}</h3>
+            <span class="lc-count-pill">{{ mentions.len() }}</span>
+          </header>
+          <ul class="divide-y divide-border">
+            {% for r in mentions %}
+            <li>
+              <a href="/room/{{ r.room_id }}" class="lc-home-row">
+                <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.name }}</span>
+                <span class="lc-count-pill" aria-label="{{ r.count }} {{ "home-dash-mentions-aria"|t }}">{{ r.count }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+
+        {# Threads - followed threads with new replies #}
+        {% if !threads.is_empty() %}
+        <section class="card lc-home-card overflow-hidden p-0">
+          <header class="lc-home-card-head">
+            <h3 class="lc-h3">{{ "home-dash-threads"|t }}</h3>
+            <span class="lc-count-pill">{{ threads.len() }}</span>
+          </header>
+          <ul class="divide-y divide-border">
+            {% for r in threads %}
+            <li>
+              <a href="/room/{{ r.room_id }}#msg-{{ r.parent_id }}" class="lc-home-row">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-medium text-content">{{ r.room_name }}</span>
+                  <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
+                </span>
+                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-replies-aria"|t }}">{{ r.unread }}</span>{% endif %}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+
+        {# Drafts #}
+        {% if !drafts.is_empty() %}
+        <section class="card lc-home-card overflow-hidden p-0">
+          <header class="lc-home-card-head">
+            <h3 class="lc-h3">{{ "home-dash-drafts"|t }}</h3>
+            <span class="lc-count-pill">{{ drafts.len() }}</span>
+          </header>
+          <ul class="divide-y divide-border">
+            {% for r in drafts %}
+            <li>
+              <a href="{{ r.href }}" class="lc-home-row">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-content-subtle" aria-hidden="true"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z"/></svg>
+                <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+
+        {# LC-706: quiet "all caught up" strip. Every empty secondary section is
+           named here as a muted chip instead of a full empty card, so the calm
+           sections never compete with content for attention. #}
+        {% if mentions.is_empty() || threads.is_empty() || dms.is_empty() || drafts.is_empty() %}
+        <section class="lc-home-quiet">
+          <span class="lc-home-quiet-head">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
+            {{ "home-quiet-heading"|t }}
+          </span>
+          <span class="lc-home-quiet-tags">
+            {% if dms.is_empty() %}<span class="lc-home-quiet-tag">{{ "home-dash-dms"|t }}</span>{% endif %}
+            {% if mentions.is_empty() %}<span class="lc-home-quiet-tag">{{ "home-dash-mentions"|t }}</span>{% endif %}
+            {% if threads.is_empty() %}<span class="lc-home-quiet-tag">{{ "home-dash-threads"|t }}</span>{% endif %}
+            {% if drafts.is_empty() %}<span class="lc-home-quiet-tag">{{ "home-dash-drafts"|t }}</span>{% endif %}
+          </span>
+        </section>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# LC-706: progressive enhancement - localized time-of-day greeting word and
+       relative timestamps ("2h ago"). Both degrade to the server-rendered
+       fallback (greeting word / exact date) when JS is off. Uses Intl, no deps. #}
+    <script>
+    (function () {
+      var g = document.querySelector('[data-lc-greeting]');
+      if (g) {
+        var h = new Date().getHours();
+        var word = h < 12 ? g.dataset.morning : (h < 18 ? g.dataset.afternoon : g.dataset.evening);
+        if (word) g.textContent = word;
+      }
+      if (typeof Intl === 'undefined' || !Intl.RelativeTimeFormat) return;
+      var rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+      var units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+      document.querySelectorAll('time[data-lc-reltime]').forEach(function (el) {
+        var iso = el.getAttribute('datetime');
+        if (!iso) return;
+        var then = Date.parse(iso);
+        if (isNaN(then)) return;
+        var diff = (then - Date.now()) / 1000;
+        var abs = Math.abs(diff);
+        if (abs < 60) { el.textContent = rtf.format(0, 'minute'); return; }
+        for (var i = 0; i < units.length; i++) {
+          if (abs >= units[i][1] || i === units.length - 1) {
+            el.textContent = rtf.format(Math.round(diff / units[i][1]), units[i][0]);
+            return;
+          }
+        }
+      });
+    })();
+    </script>
   </div>
   {% else %}
   {# LC-372: centered, vertically balanced empty state. min-h-full + flex

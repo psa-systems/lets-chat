@@ -46,6 +46,16 @@ home-dash-preview-file = 📎 File
 home-catchup-ai-heading = Catch me up
 home-catchup-ai-scope = A quick AI recap of everything you missed across your workspace.
 home-catchup-ai-caught-up = You're all caught up. Nothing unread across your workspace.
+# LC-706: composed dashboard - greeting, quick actions, and the quiet
+# "all caught up" strip that collapses empty sections.
+home-greeting-morning = Good morning,
+home-greeting-afternoon = Good afternoon,
+home-greeting-evening = Good evening,
+home-greeting-fallback = Welcome back,
+home-quick-new-message = New message
+home-quick-jump-room = Jump to a room
+home-quick-resume-draft = Resume last draft
+home-quiet-heading = All caught up
 
 ## Message search results
 search-no-results = No results.
