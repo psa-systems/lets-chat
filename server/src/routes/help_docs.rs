@@ -709,13 +709,24 @@ pub(crate) async fn handle_human(
         Some(n) if !n.trim().is_empty() => n,
         _ => &asker.username,
     };
-    let confirmation = if outcome.notified == 0 {
-        format!("_{asker_label}, there are no admins available to take this request yet._")
-    } else if outcome.available {
+    // LC-714: when a human is available now, the live notification suffices. When
+    // none is available (idle admins, or none at all), file a durable support
+    // ticket so the request is not lost, and surface it in the /admin/support
+    // queue. The admins were still DMed above (they get it when they return).
+    let confirmation = if outcome.available {
         format!("_{asker_label}, an admin has been notified and should respond here shortly._")
     } else {
+        let body = if message.is_empty() {
+            "(the user asked for a human via /human)".to_string()
+        } else {
+            message.clone()
+        };
+        let ticket_id =
+            db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
+                .await?;
+        super::support::broadcast_support_changed(state);
         format!(
-            "_{asker_label}, no admins are online right now, but they have been notified and will follow up._"
+            "_{asker_label}, no admins are available right now. I've filed support ticket #{ticket_id}; an admin will follow up._"
         )
     };
     let bot = super::assistant::assistant_bot(state).await?;
@@ -765,7 +776,7 @@ pub async fn escalate_to_admins(
 
     let mut notified = 0;
     for (admin_id, admin_username) in &targets {
-        match dm_admin(state, &bot, admin_id, admin_username, &dm_body).await {
+        match dm_from_bot(state, &bot, admin_id, admin_username, &dm_body).await {
             Ok(()) => notified += 1,
             Err(e) => {
                 tracing::warn!(admin_id = %admin_id, error = %e, "help desk escalation DM failed")
@@ -778,33 +789,53 @@ pub async fn escalate_to_admins(
     })
 }
 
-/// Send `body` as a DM from the assistant bot to one admin. Finds or creates the
-/// bot-to-admin DM room, then posts through `finalize_message_send`, which for a
-/// DM room already fans out the peer notification (WS + push + email) to the
-/// admin, so the escalation rides the exact same delivery path as any DM (no
-/// bespoke notification code, no double-send).
-async fn dm_admin(
+/// LC-714: send `body` as a DM from the assistant bot to `recipient_id`,
+/// resolving the bot and recipient username. Used to tell a requester their
+/// support ticket was resolved (from `routes::admin`). No-op if the recipient no
+/// longer exists.
+// Only the standalone admin support queue calls this; without the allow, the
+// `saas` build (which never compiles `routes::admin`) fails `-D dead-code`.
+#[cfg_attr(not(feature = "standalone"), allow(dead_code))]
+pub(crate) async fn notify_user_from_bot(
     state: &AppState,
-    bot: &User,
-    admin_id: &str,
-    admin_username: &str,
+    recipient_id: &str,
     body: &str,
 ) -> Result<(), AppError> {
-    let (room, created) = match db::chat::find_dm_room(&state.chat, &bot.id, admin_id).await? {
+    let bot = super::assistant::assistant_bot(state).await?;
+    let recipient_username = match db::auth::find_user_by_id(&state.auth, recipient_id).await? {
+        Some(rec) => rec.username,
+        None => return Ok(()),
+    };
+    dm_from_bot(state, &bot, recipient_id, &recipient_username, body).await
+}
+
+/// Send `body` as a DM from the assistant bot to `recipient_id`. Finds or creates
+/// the bot-to-recipient DM room, then posts through `finalize_message_send`,
+/// which for a DM room already fans out the peer notification (WS + push +
+/// email) to the recipient, so the message rides the exact same delivery path as
+/// any DM (no bespoke notification code, no double-send).
+async fn dm_from_bot(
+    state: &AppState,
+    bot: &User,
+    recipient_id: &str,
+    recipient_username: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let (room, created) = match db::chat::find_dm_room(&state.chat, &bot.id, recipient_id).await? {
         Some(r) => (r, false),
         None => {
-            let name = format!("@{admin_username}");
-            let r = db::chat::create_dm_room(&state.chat, &name, &bot.id, admin_id).await?;
+            let name = format!("@{recipient_username}");
+            let r = db::chat::create_dm_room(&state.chat, &name, &bot.id, recipient_id).await?;
             (r, true)
         }
     };
     if created {
-        // New DM: nudge the admin's sidebar to pick it up live (mirrors routes::dm).
+        // New DM: nudge the recipient's sidebar to pick it up live (mirrors routes::dm).
         state.hub.broadcast_to_user(
-            admin_id,
+            recipient_id,
             &crate::ws::events::ChatEvent::RoomMemberAdded {
                 room_id: room.id,
-                user_id: admin_id.to_string(),
+                user_id: recipient_id.to_string(),
             },
         );
     }

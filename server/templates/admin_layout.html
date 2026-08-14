@@ -26,6 +26,9 @@
          live via the AdminReportsOob OOB swap on the `admin` topic; its id must
          stay #admin-reports-badge. #}
       <a href="/admin/reports" class="lc-set-tab"{% if section == "reports" %} aria-current="page"{% endif %}><span>{{ "admin-nav-reports"|t }}</span><span id="admin-reports-badge" class="lc-admin-badge" hx-get="/admin/reports/badge" hx-trigger="load" hx-swap="innerHTML"></span></a>
+      {# LC-714: AI help desk support-ticket queue. Same live-badge mechanism as
+         the report queue; its id must stay #admin-support-badge. #}
+      <a href="/admin/support" class="lc-set-tab"{% if section == "support" %} aria-current="page"{% endif %}><span>{{ "admin-nav-support"|t }}</span><span id="admin-support-badge" class="lc-admin-badge" hx-get="/admin/support/badge" hx-trigger="load" hx-swap="innerHTML"></span></a>
       <a href="/admin/quarantine" class="lc-set-tab"{% if section == "quarantine" %} aria-current="page"{% endif %}>{{ "admin-nav-quarantine"|t }}</a>
       <a href="/admin/modlog" class="lc-set-tab"{% if section == "modlog" %} aria-current="page"{% endif %}>{{ "admin-nav-modlog"|t }}</a>
       <a href="/admin/anti-spam" class="lc-set-tab"{% if section == "anti_spam" %} aria-current="page"{% endif %}>{{ "admin-nav-anti-spam"|t }}</a>

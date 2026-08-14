@@ -403,6 +403,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::AdminReportChanged => {
                                     render_admin_reports(&send_state).await
                                 }
+                                #[cfg(feature = "standalone")]
+                                ChatEvent::AdminSupportChanged => {
+                                    render_admin_support(&send_state).await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,
@@ -2513,6 +2517,20 @@ async fn render_admin_reports(state: &AppState) -> Option<String> {
     let open_count = reports.len() as i64;
     crate::views::report::AdminReportsOob {
         reports,
+        open_count,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-714: render the support-ticket queue OOB fragment (`#admin-support-list` +
+/// nav badge) for one admin's WS connection. Mirrors `render_admin_reports`.
+#[cfg(feature = "standalone")]
+async fn render_admin_support(state: &AppState) -> Option<String> {
+    let tickets = super::support::build_support_views(state).await.ok()?;
+    let open_count = tickets.len() as i64;
+    crate::views::support::AdminSupportOob {
+        tickets,
         open_count,
     }
     .render()
