@@ -100,6 +100,25 @@ async fn post_home_summary(app: &Router, session: &str) -> StatusCode {
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+/// GET the Home dashboard (`?home=1` forces it past the last-visited redirect)
+/// and return (status, body). Used to smoke-test that the composed template and
+/// every new `|t` key render at runtime, which askama's compile step does not
+/// check for the runtime Fluent lookups.
+async fn get_dashboard(app: &Router, session: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/?home=1")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn set_flag(settings: &sqlx::SqlitePool, on: bool) {
     db::settings::set_setting(settings, "llm_enabled", if on { "true" } else { "false" })
         .await
@@ -154,6 +173,29 @@ async fn flag_on_staff_audience_forbids_a_member_but_allows_admin() {
         post_home_summary(&s.app, &s.admin_session).await,
         StatusCode::OK,
         "an admin stays within the 'staff' audience"
+    );
+}
+
+#[tokio::test]
+async fn dashboard_renders_greeting_quick_actions_and_quiet_strip() {
+    // LC-706: a member with an accessible room (General) but nothing unread sees
+    // the composed dashboard: greeting, quick actions, and the collapsed
+    // "all caught up" strip in place of empty section cards. This exercises every
+    // new `|t` key, so a missing locale entry surfaces as a failed assertion.
+    let s = setup().await;
+    let (status, body) = get_dashboard(&s.app, &s.member_session).await;
+    assert_eq!(status, StatusCode::OK, "dashboard must render for a member");
+    assert!(
+        body.contains("data-lc-greeting") && body.contains("Welcome back,"),
+        "greeting with its client-side enhancement hook must render"
+    );
+    assert!(
+        body.contains("New message") && body.contains("Jump to a room"),
+        "quick-action launchpad must render"
+    );
+    assert!(
+        body.contains("lc-home-quiet") && body.contains("All caught up"),
+        "empty sections must collapse into the quiet strip"
     );
 }
 

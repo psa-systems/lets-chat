@@ -5305,16 +5305,20 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
    densities hold. */
 .lc-home { max-width: 72rem; margin-left: auto; margin-right: auto; padding: 1rem; }
 @media (min-width: 640px) { .lc-home { padding: 1.5rem; } }
-/* Auto-fill balanced columns: each card sizes to its content and the row flows
-   into as many columns as fit, aligned to the top so a short card never
-   stretches to match a tall neighbour. Replaces the fixed 3-col grid that
-   stranded five cards as an asymmetric 3+2 with large empty gaps. */
-.lc-home-grid {
+/* LC-706: composed two-column layout. A wide primary column (AI hero + Unread
+   channels) leads; a narrower secondary column (DMs, Mentions, Threads, Drafts)
+   sits beside it. Columns stack on narrow viewports. Replaces the auto-fill grid
+   that stranded five equal-weight cards - including empty ones - top-left. */
+.lc-home-layout {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     align-items: start;
 }
+@media (min-width: 64rem) {
+    .lc-home-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1.25rem; }
+}
+.lc-home-primary, .lc-home-secondary { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .lc-home-card-head {
     display: flex;
     align-items: center;
@@ -5323,10 +5327,6 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     padding: 0.625rem 1rem;
     border-bottom: 1px solid var(--border);
 }
-/* Empty cards de-emphasize and sort after populated ones (via grid `order`), so
-   the eye lands on the cards that actually carry unread content. */
-.lc-home-card--empty { order: 1; }
-.lc-home-card--empty .lc-home-card-head { color: var(--content-muted); }
 .lc-home-row {
     display: flex;
     align-items: center;
@@ -5345,6 +5345,62 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 }
 .lc-home-row-time { flex: none; font-size: 0.75rem; color: var(--content-subtle); }
 .lc-home-empty { padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--content-muted); }
+/* LC-706: quick-actions launchpad - a compact pill row under the greeting. */
+.lc-home-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.lc-home-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background: var(--surface-elevated);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--content-muted);
+}
+.lc-home-action:hover { border-color: var(--border-strong); background: var(--surface-sunken); color: var(--content); }
+.lc-home-action:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-home-action svg { color: var(--content-subtle); }
+/* LC-706: AI "Catch me up" hero - the dashboard's visual anchor. Stays on the
+   normal elevated surface (so the muted/subtle text tokens keep their intended
+   contrast in every theme) and earns presence from an accent left edge and the
+   accent-tinted icon, not from recolouring the whole card. */
+.lc-home-hero {
+    border: 1px solid var(--border-strong);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-lg, 0.75rem);
+    background: var(--surface-elevated);
+    color: var(--content);
+    padding: 1rem 1.25rem;
+}
+.lc-home-hero-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--surface-elevated);
+    color: var(--accent);
+}
+/* LC-706: quiet "all caught up" strip - every empty secondary section collapses
+   into one calm line of muted chips instead of a stack of empty cards. */
+.lc-home-quiet {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg, 0.75rem);
+    background: var(--surface-sunken);
+}
+.lc-home-quiet-head { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; font-weight: 500; color: var(--content-muted); }
+.lc-home-quiet-head svg { color: var(--success, var(--content-subtle)); }
+.lc-home-quiet-tags { display: inline-flex; flex-wrap: wrap; gap: 0.375rem; }
+.lc-home-quiet-tag { font-size: 0.75rem; color: var(--content-subtle); background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 9999px; padding: 0.0625rem 0.5rem; }
 /* Caution card: amber edge for the destructive-but-not-irreversible retention
    section, distinct from the red --danger delete card. */
 .lc-set-card--caution { border-color: var(--warning-border); }
