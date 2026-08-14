@@ -84,6 +84,10 @@ pub enum RateLimitKind {
     /// user_id. Separate bucket from `AssistantAsk` so the docs helper and the
     /// room assistant do not share a counter. Bounds LLM + embeddings cost.
     HelpDocsAsk,
+    /// LC-713: per-user cap on AI help desk human escalations (`/human`). Keyed
+    /// by the asking user_id, tighter than the ask cap: each escalation fans out
+    /// a DM + push + email to every admin, so it is a spammier action to bound.
+    SupportEscalate,
     /// LC-534: per-channel slowmode. Cooldown (not per-minute count) keyed by
     /// `{room_id}:{user_id}`; checked via `check_cooldown`.
     Slowmode,
@@ -114,6 +118,7 @@ impl RateLimitKind {
             RateLimitKind::BridgeMessage => "brm",
             RateLimitKind::AssistantAsk => "ask",
             RateLimitKind::HelpDocsAsk => "help",
+            RateLimitKind::SupportEscalate => "esc",
             RateLimitKind::Slowmode => "slow",
             RateLimitKind::NewMemberPost => "newm",
             RateLimitKind::SttGlobal => "sttg",
