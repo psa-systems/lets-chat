@@ -30,12 +30,28 @@
     {# LC-706: personal greeting. The greeting word is picked client-side from the
        viewer's local hour (timestamps are stored UTC, so a server hour would be
        wrong); the fallback word renders fine without JS. #}
-    <div class="mb-4">
-      <h2 class="lc-h2"><span data-lc-greeting
-            data-morning="{{ "home-greeting-morning"|t }}"
-            data-afternoon="{{ "home-greeting-afternoon"|t }}"
-            data-evening="{{ "home-greeting-evening"|t }}">{{ "home-greeting-fallback"|t }}</span> {{ user.display_label() }}</h2>
-      <p class="lc-small text-content-muted">{{ "home-dash-subtitle"|t }}</p>
+    <div class="lc-home-greeting mb-4">
+      <div class="min-w-0">
+        <h2 class="lc-h2"><span data-lc-greeting
+              data-morning="{{ "home-greeting-morning"|t }}"
+              data-afternoon="{{ "home-greeting-afternoon"|t }}"
+              data-evening="{{ "home-greeting-evening"|t }}">{{ "home-greeting-fallback"|t }}</span> {{ user.display_label() }}</h2>
+        <p class="lc-small text-content-muted">{{ "home-dash-subtitle"|t }}</p>
+      </div>
+      {# LC-707: compact "your week" glance - messages sent and kudos received in
+         the last 7 days, each a quiet link to the fuller /stats and /kudos pages. #}
+      <div class="lc-home-glance">
+        <a href="/stats" class="lc-home-stat" title="{{ "home-glance-messages"|t }}">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path fill-rule="evenodd" d="M10 2c-4.418 0-8 3.134-8 7 0 1.76.743 3.37 1.97 4.6a.75.75 0 01.219.62l-.243 1.94 1.96-.98a.75.75 0 01.546-.06A9.71 9.71 0 0010 16c4.418 0 8-3.134 8-7s-3.582-7-8-7z" clip-rule="evenodd"/></svg>
+          <span class="lc-home-stat-num">{{ week_messages }}</span>
+          <span class="lc-home-stat-label">{{ "home-glance-messages"|t }}</span>
+        </a>
+        <a href="/kudos" class="lc-home-stat" title="{{ "home-glance-kudos"|t }}">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0" aria-hidden="true"><path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.4z" clip-rule="evenodd"/></svg>
+          <span class="lc-home-stat-num">{{ week_kudos }}</span>
+          <span class="lc-home-stat-label">{{ "home-glance-kudos"|t }}</span>
+        </a>
+      </div>
     </div>
 
     {# LC-706: quick actions - a small launchpad so Home is not just a summary.
@@ -112,6 +128,12 @@
             {% for r in catch_up %}
             <li>
               <a href="/room/{{ r.room_id }}" class="lc-home-row">
+                {# LC-707: avatar of the newest unread message's author - who is waiting. #}
+                {% if r.author_avatar_ext.is_some() %}
+                <img src="/avatars/{{ r.author_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
+                {% else %}
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-semibold text-content">{% if let Some(c) = r.author_name.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
+                {% endif %}
                 <span class="min-w-0 flex-1">
                   <span class="lc-home-row-title">
                     <span class="min-w-0 truncate">{{ r.name }}</span>

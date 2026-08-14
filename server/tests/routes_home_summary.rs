@@ -197,6 +197,35 @@ async fn dashboard_renders_greeting_quick_actions_and_quiet_strip() {
         body.contains("lc-home-quiet") && body.contains("All caught up"),
         "empty sections must collapse into the quiet strip"
     );
+    // LC-707: the personal "your week" glance always renders, linking to the
+    // fuller stats/kudos pages. Exercises the new glance `|t` keys.
+    assert!(
+        body.contains("lc-home-glance")
+            && body.contains("href=\"/stats\"")
+            && body.contains("messages this week")
+            && body.contains("href=\"/kudos\""),
+        "the weekly glance (messages + kudos, linked) must render"
+    );
+}
+
+#[tokio::test]
+async fn catch_up_row_shows_the_unread_authors_avatar() {
+    // LC-707: an unread message authored by the admin gives the member a catch-up
+    // row whose avatar reflects that author. The admin has no uploaded avatar, so
+    // the initials fallback renders - assert the row itself (its preview) reached
+    // the template, which only happens once author resolution succeeds.
+    let s = setup().await;
+    seed_unread(&s.chat, &s.admin).await;
+    let (status, body) = get_dashboard(&s.app, &s.member_session).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("Unread channels") && body.contains("ship the release by friday"),
+        "the unread-channels row (with its resolved author) must render"
+    );
+    assert!(
+        body.contains("rounded-full"),
+        "the row must carry an author avatar element"
+    );
 }
 
 #[tokio::test]

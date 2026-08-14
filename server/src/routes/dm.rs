@@ -85,6 +85,9 @@ pub async fn get_dm(
             drafts: &[],
             // LC-705: no dashboard here, so no workspace catch-up card.
             ai_catch_up: false,
+            // LC-707: no dashboard here, so the personal glance is unused.
+            week_messages: 0,
+            week_kudos: 0,
         };
         return Ok(html(&page)?.into_response());
     }
@@ -136,6 +139,9 @@ pub async fn get_dm(
                     drafts: &[],
                     // LC-705: no dashboard here, so no workspace catch-up card.
                     ai_catch_up: false,
+                    // LC-707: no dashboard here, so the personal glance is unused.
+                    week_messages: 0,
+                    week_kudos: 0,
                 };
                 return Ok(html(&page)?.into_response());
             }
