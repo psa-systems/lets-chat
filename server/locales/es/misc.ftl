@@ -46,6 +46,20 @@ home-dash-preview-file = 📎 Archivo
 home-catchup-ai-heading = Ponerme al día
 home-catchup-ai-scope = Un resumen rápido con IA de todo lo que te perdiste en tu espacio de trabajo.
 home-catchup-ai-caught-up = Estás al día. No hay nada sin leer en tu espacio de trabajo.
+# LC-706: panel compuesto - saludo, acciones rápidas y la franja discreta
+# "todo al día" que agrupa las secciones vacías.
+home-greeting-morning = Buenos días,
+home-greeting-afternoon = Buenas tardes,
+home-greeting-evening = Buenas noches,
+home-greeting-fallback = Bienvenido de nuevo,
+home-quick-new-message = Nuevo mensaje
+home-quick-jump-room = Ir a una sala
+home-quick-resume-draft = Retomar el último borrador
+home-quiet-heading = Todo al día
+# LC-707: resumen compacto "tu semana" en el saludo - el número va en línea,
+# estas son las etiquetas finales.
+home-glance-messages = mensajes esta semana
+home-glance-kudos = felicitaciones esta semana
 
 ## Message search results
 search-no-results = Sin resultados.
