@@ -56,6 +56,10 @@ home-quick-new-message = Nuevo mensaje
 home-quick-jump-room = Ir a una sala
 home-quick-resume-draft = Retomar el último borrador
 home-quiet-heading = Todo al día
+# LC-707: resumen compacto "tu semana" en el saludo - el número va en línea,
+# estas son las etiquetas finales.
+home-glance-messages = mensajes esta semana
+home-glance-kudos = felicitaciones esta semana
 
 ## Message search results
 search-no-results = Sin resultados.

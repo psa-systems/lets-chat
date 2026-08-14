@@ -5346,6 +5346,26 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-home-row-time { flex: none; font-size: 0.75rem; color: var(--content-subtle); }
 .lc-home-empty { padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--content-muted); }
 /* LC-706: quick-actions launchpad - a compact pill row under the greeting. */
+/* LC-707: greeting row - name/subtitle on the left, the "your week" glance on
+   the right; wraps beneath on narrow viewports. */
+.lc-home-greeting { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.75rem 1.5rem; }
+.lc-home-glance { display: flex; flex-wrap: wrap; gap: 0.375rem; flex: none; }
+.lc-home-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3125rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background: var(--surface-elevated);
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+    white-space: nowrap;
+}
+.lc-home-stat:hover { border-color: var(--border-strong); background: var(--surface-sunken); color: var(--content); }
+.lc-home-stat:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.lc-home-stat svg { color: var(--content-subtle); }
+.lc-home-stat-num { font-weight: 600; color: var(--content); }
 .lc-home-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .lc-home-action {
     display: inline-flex;
