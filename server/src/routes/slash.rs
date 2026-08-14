@@ -341,6 +341,11 @@ async fn dispatch_known(
                 // posts as the assistant bot; errors surface to the composer.
                 super::help_docs::handle_support(state, room, user, rest).await?;
             }
+            "human" => {
+                // LC-713: AI help desk escalation. Notifies the admins that the
+                // user wants a person; errors surface to the composer.
+                super::help_docs::handle_human(state, room, user, rest).await?;
+            }
             _ => return Ok(None),
         }
         // LC-228: form is `hx-swap="none"` so the rendered ComposerFragment
