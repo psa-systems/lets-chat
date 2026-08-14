@@ -268,6 +268,20 @@ pub struct SettingsPage<'a> {
     /// "staff"). False means the default "everyone". Drives the audience radio's
     /// checked state.
     pub llm_audience_staff: bool,
+    /// LC-712: whether an embeddings endpoint is configured
+    /// (`LETS_CHAT_EMBEDDINGS_URL`). The help desk docs search needs it, so the
+    /// docs card surfaces the precondition when it is missing.
+    pub embeddings_configured: bool,
+    /// LC-712: the configured documentation sources (`help_docs_sources`), one
+    /// `product|url` per line, edited in the docs card textarea.
+    pub help_docs_sources: String,
+    /// LC-712: the human-readable status line from the last index run
+    /// (`help_docs_last_status`), shown read-only. Empty hides the line.
+    pub help_docs_status: String,
+    /// LC-712: total indexed doc chunks, shown as the current index size.
+    pub help_docs_chunk_count: i64,
+    /// LC-712: number of distinct products currently indexed.
+    pub help_docs_products: usize,
     /// Operator-facing message shown on the 503 page while maintenance
     /// is on. Empty hides the message block.
     pub maintenance_message: String,

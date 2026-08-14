@@ -60,6 +60,7 @@ mod feeds;
 mod followups;
 mod forward;
 mod gif;
+pub mod help_docs;
 mod highlights;
 mod home;
 mod inbox;

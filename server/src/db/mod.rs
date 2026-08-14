@@ -12,6 +12,7 @@ pub mod bridge_avatar_proxies;
 pub mod bridges;
 pub mod chat;
 pub mod custom_emojis;
+pub mod doc_chunks;
 pub mod drafts;
 pub mod email_inbox;
 pub mod email_ingress_dedup;

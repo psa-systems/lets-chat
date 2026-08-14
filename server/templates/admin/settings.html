@@ -89,6 +89,43 @@
     </form>
   </div>
 
+  {# --- LC-712: AI help desk documentation knowledge base --- #}
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-helpdocs-heading"|t }}</h3>
+    </div>
+    {% if !embeddings_configured %}
+    <div class="alert alert-warning mb-3">
+      <span><strong>{{ "admin-settings-helpdocs-unconfigured-title"|t }}</strong> {{ "admin-settings-helpdocs-unconfigured-body"|t }} <code>LETS_CHAT_EMBEDDINGS_URL</code></span>
+    </div>
+    {% endif %}
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-helpdocs-note"|t }}</p>
+    <form class="lc-set-form" method="post" action="/admin/settings/help-docs"
+          hx-post="/admin/settings/help-docs" hx-target="#st-helpdocs" hx-swap="innerHTML" hx-disabled-elt="this">
+      <label class="lc-set-field">
+        <span class="lc-set-label">{{ "admin-settings-helpdocs-sources-label"|t }}</span>
+        <textarea name="sources" rows="4" class="input" spellcheck="false"
+                  placeholder="mokosh-server | https://a8n.systems/apps/mokosh-server/docs">{{ help_docs_sources }}</textarea>
+        <span class="lc-set-help">{{ "admin-settings-helpdocs-sources-note"|t }}</span>
+      </label>
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-helpdocs-save"|t }}</span></button>
+        <span id="st-helpdocs" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+    <p class="lc-set-card-desc text-sm text-content-muted mt-3 mb-1">{{ "admin-settings-helpdocs-index-label"|t }}: <strong>{{ help_docs_chunk_count }}</strong> {{ "admin-settings-helpdocs-index-chunks"|t }} ({{ help_docs_products }} {{ "admin-settings-helpdocs-index-products"|t }})</p>
+    {% if !help_docs_status.is_empty() %}
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ help_docs_status }}</p>
+    {% endif %}
+    <form class="lc-set-form" method="post" action="/admin/help-docs/reindex"
+          hx-post="/admin/help-docs/reindex" hx-target="#st-helpdocs-reindex" hx-swap="innerHTML" hx-disabled-elt="this">
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-secondary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-helpdocs-reindex"|t }}</span></button>
+        <span id="st-helpdocs-reindex" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
   {# --- Outbound email (SMTP), read-only env-var callout --- #}
   <div class="card lc-set-card">
     <div class="lc-set-card-head">
