@@ -240,6 +240,13 @@ pub enum ChatEvent {
     /// queue is `#[cfg(standalone)]`); in saas it falls through to `render_event`
     /// (None).
     AdminReportChanged,
+    /// LC-714: the open support-ticket set changed (a ticket was filed by the AI
+    /// help desk or resolved by an admin). Broadcast on the `admin` topic; the WS
+    /// send task re-queries and renders the `#admin-support-list` +
+    /// `#admin-support-badge` OOB fragment for each admin. Standalone-only on the
+    /// render side (the queue is `#[cfg(standalone)]`); in saas it falls through
+    /// to `render_event` (None), mirroring `AdminReportChanged`.
+    AdminSupportChanged,
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.

@@ -1,0 +1,7 @@
+{# LC-714: live OOB fragment for support-queue changes, broadcast on the `admin`
+   topic. Swaps the queue list (present only on /admin/support) and the nav badge
+   (present on every admin page). id-keyed swaps drop silently where absent. #}
+<div id="admin-support-list" hx-swap-oob="innerHTML">
+  {% include "admin/support_items.html" %}
+</div>
+<span id="admin-support-badge" hx-swap-oob="innerHTML">{% include "admin/support_badge.html" %}</span>

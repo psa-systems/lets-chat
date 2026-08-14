@@ -258,6 +258,12 @@ report-action-resolve = Resolve
 report-action-dismiss = Dismiss
 report-message-deleted = (message deleted)
 report-room-dm = Direct message
+# LC-714: AI help desk support-ticket queue (/admin/support).
+support-queue-title = Support
+support-queue-empty = No open support tickets.
+support-jump = Open channel
+support-row-in = In:
+support-action-resolve = Resolve
 
 ## Forward (LC-278)
 room-forward-title = Forward message

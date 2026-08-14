@@ -1,0 +1,5 @@
+{# LC-714: nav open-count badge inner markup. Rendered directly by
+   AdminSupportBadge (htmx load-trigger on every admin page) and included by
+   admin/support_oob.html for the live swap. Empty when there are no open
+   tickets. References `open_count`. #}
+{% if open_count > 0 %}<span class="ml-1 rounded-full bg-danger px-1.5 text-xs text-danger-content">{{ open_count }}</span>{% endif %}

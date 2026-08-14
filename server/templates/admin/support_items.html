@@ -1,0 +1,33 @@
+{# LC-714: open support-ticket rows. Shared by admin/support.html (full page) and
+   admin/support_oob.html (live OOB swap) so a fresh load and a live update render
+   identically. Iterates `tickets` (a slice of views::support::SupportView).
+   Resolve POSTs with hx-swap="none"; the handler returns an OOB fragment (and
+   broadcasts one to the `admin` topic) that re-renders this list and the nav
+   badge for every admin tab. #}
+{% if tickets.is_empty() %}
+{% let empty_text_key = "support-queue-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<ul class="flex flex-col gap-3">
+  {% for t in tickets %}
+  <li class="card p-3">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-medium">{{ t.requester_label }}</span>
+        <span class="text-xs text-content-muted">{{ t.created_at }}</span>
+      </div>
+      {% if let Some(rid) = t.room_id %}{% if !t.room_label.is_empty() %}
+      <a href="/room/{{ rid }}" class="text-xs text-accent hover:underline">{{ "support-jump"|t }}</a>
+      {% endif %}{% endif %}
+    </div>
+    {% if !t.room_label.is_empty() %}
+    <p class="text-xs text-content-muted">{{ "support-row-in"|t }} {{ t.room_label }}</p>
+    {% endif %}
+    <p class="text-sm mt-1">{{ t.body }}</p>
+    <div class="flex gap-2 mt-2">
+      <button hx-post="/admin/support/{{ t.id }}/resolve" hx-swap="none" class="btn btn-sm btn-primary">{{ "support-action-resolve"|t }}</button>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

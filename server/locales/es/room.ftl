@@ -258,6 +258,12 @@ report-action-resolve = Resolver
 report-action-dismiss = Descartar
 report-message-deleted = (mensaje eliminado)
 report-room-dm = Mensaje directo
+# LC-714: cola de tickets de soporte de la mesa de ayuda con IA (/admin/support).
+support-queue-title = Soporte
+support-queue-empty = No hay tickets de soporte abiertos.
+support-jump = Abrir canal
+support-row-in = En:
+support-action-resolve = Resolver
 
 ## Forward (LC-278)
 room-forward-title = Reenviar mensaje
