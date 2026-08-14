@@ -128,6 +128,10 @@ pub async fn get_home(
     let has_unread =
         !catch_up.is_empty() || !mentions.is_empty() || !threads.is_empty() || !dms.is_empty();
     let ai_catch_up = has_unread && super::ai_gate::llm_catch_up_available(&state, &user).await;
+    // LC-707: personal "your week" glance for the greeting - the same two cheap
+    // scalar aggregates the weekly recap DM uses, scoped to this user only.
+    let week_messages = db::stats::weekly_message_count(&state.chat, &user.id).await?;
+    let week_kudos = db::stats::weekly_kudos_received(&state.chat, &user.id).await?;
 
     let page = WelcomePage {
         user: &user,
@@ -149,6 +153,8 @@ pub async fn get_home(
         dms: &dms,
         drafts: &drafts,
         ai_catch_up,
+        week_messages,
+        week_kudos,
     };
     let body = html(&page)?;
     Ok(body.into_response())
@@ -231,6 +237,14 @@ async fn build_dashboard(
                 unread: *dm_counts.get(&row.room_id).unwrap_or(&0),
             });
         } else if catch_up.len() < CARD_CAP {
+            // LC-707: resolve the newest unread message's author for the row
+            // avatar. One lookup per shown row (cap 6), mirroring how the DM rows
+            // above resolve their peer. A deleted author falls back to initials.
+            let author = db::auth::find_user_by_id(&state.auth, &row.author_user_id).await?;
+            let (author_name, author_avatar_ext) = match author {
+                Some(a) => (a.username, a.avatar_ext),
+                None => (row.author_user_id.clone(), None),
+            };
             catch_up_msg_ids.push(row.message_id);
             catch_up.push(CatchUpRow {
                 room_id: row.room_id,
@@ -238,6 +252,9 @@ async fn build_dashboard(
                 preview: preview_text(&row.body),
                 unread: *room_counts.get(&row.room_id).unwrap_or(&0),
                 created_at: row.created_at.clone(),
+                author_id: row.author_user_id.clone(),
+                author_name,
+                author_avatar_ext,
             });
         }
     }
