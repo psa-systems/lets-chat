@@ -1,24 +1,45 @@
 [workspace]
-members = ["server", "desktop"]
+members = [
+    "server",
+    "desktop",
+]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.2.0"
-
-# Linking many large test binaries in parallel can exhaust memory on hosts
-# without swap. Trimming debug info to line tables keeps the linker footprint
-# small enough to avoid the OOM killer terminating `ld`.
-[profile.dev]
-debug = "line-tables-only"
+version = "0.3.0"
 
 [workspace.dependencies]
-dioxus = { version = "0.7.7", features = ["fullstack", "router"] }
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
-uuid = { version = "1", features = ["v4", "serde"] }
-tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 tracing = "0.1"
+
+[workspace.dependencies.dioxus]
+version = "0.7.7"
+features = [
+    "fullstack",
+    "router",
+]
+
+[workspace.dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[workspace.dependencies.chrono]
+version = "0.4"
+features = ["serde"]
+
+[workspace.dependencies.uuid]
+version = "1"
+features = [
+    "v4",
+    "serde",
+]
+
+[workspace.dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[profile.dev]
+debug = "line-tables-only"
