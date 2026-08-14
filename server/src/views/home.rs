@@ -53,6 +53,11 @@ pub struct WelcomePage<'a> {
     /// AI surface is available to this viewer (flag on, LLM configured, within
     /// the audience) AND there is something unread to summarize.
     pub ai_catch_up: bool,
+    /// LC-707: personal "your week" glance shown in the greeting area - messages
+    /// the user sent and kudos they received in the last 7 days. Cheap scalar
+    /// aggregates (the same two the weekly recap uses), linked to /stats /kudos.
+    pub week_messages: i64,
+    pub week_kudos: i64,
 }
 
 /// LC-575: one channel-with-unread row on the dashboard "Catch up" card.
@@ -68,6 +73,12 @@ pub struct CatchUpRow {
     /// LC-703: the newest unread message's timestamp (SQLite `YYYY-MM-DD
     /// HH:MM:SS`, UTC), shown quietly on the row. Empty hides the time.
     pub created_at: String,
+    /// LC-707: the newest unread message's author, so the row shows an avatar of
+    /// *who* is waiting. `author_id` drives the `/avatars/{id}` src; `author_name`
+    /// seeds the initials fallback when `author_avatar_ext` is None.
+    pub author_id: String,
+    pub author_name: String,
+    pub author_avatar_ext: Option<String>,
 }
 
 impl CatchUpRow {

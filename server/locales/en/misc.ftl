@@ -56,6 +56,10 @@ home-quick-new-message = New message
 home-quick-jump-room = Jump to a room
 home-quick-resume-draft = Resume last draft
 home-quiet-heading = All caught up
+# LC-707: compact "your week" glance in the greeting - number rendered inline,
+# these are the trailing labels.
+home-glance-messages = messages this week
+home-glance-kudos = kudos this week
 
 ## Message search results
 search-no-results = No results.
