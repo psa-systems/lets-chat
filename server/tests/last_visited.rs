@@ -115,7 +115,12 @@ async fn home_renders_welcome_when_no_cookie() {
 async fn home_renders_dashboard_when_user_has_rooms() {
     let (app, sess, _id, _) = app_with_user_in_general().await;
     let s = get_home(&app, &sess).await;
-    assert!(s.contains("Catch up"), "renders the dashboard heading");
+    // LC-706: the dashboard now leads with a personal greeting (the old "Catch up"
+    // heading was removed); its client-side enhancement hook is a stable marker.
+    assert!(
+        s.contains("data-lc-greeting"),
+        "renders the dashboard greeting"
+    );
     assert!(
         s.contains("Unread channels"),
         "renders the catch-up card heading"
