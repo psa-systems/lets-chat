@@ -47,6 +47,7 @@ pub mod shame_tags;
 pub mod stage;
 pub mod stats;
 pub mod summary;
+pub mod support;
 pub mod switcher;
 pub mod transcripts;
 pub mod translate;

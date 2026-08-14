@@ -1,0 +1,11 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{{ "support-queue-title"|t }} - Admin - Let's Chat{% endblock %}
+
+{% block admin_main %}
+{# LC-714: id-keyed live region. The AdminSupportOob fragment swaps this
+   innerHTML on the `admin` topic when the open-ticket set changes. #}
+<div id="admin-support-list">
+  {% include "admin/support_items.html" %}
+</div>
+{% endblock %}

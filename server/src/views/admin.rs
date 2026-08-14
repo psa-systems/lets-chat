@@ -217,6 +217,30 @@ pub struct ReportsPage<'a> {
     pub reports: &'a [ReportView],
 }
 
+/// LC-714: the AI help desk support-ticket queue page. Mirrors `ReportsPage`:
+/// the page and the live OOB fragment share `admin/support_items.html` so a
+/// fresh load and a live update render identically.
+#[derive(Template)]
+#[template(path = "admin/support.html")]
+pub struct SupportPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub tickets: &'a [crate::views::support::SupportView],
+}
+
 #[derive(Template)]
 #[template(path = "admin/settings.html")]
 pub struct SettingsPage<'a> {
