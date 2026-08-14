@@ -99,6 +99,16 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         admin_only: false,
         llm_only: true,
     },
+    // LC-713: AI help desk human escalation. Notifies the admins that the user
+    // wants a person, and tells them whether one is available right now.
+    BuiltinCommand {
+        name: "human",
+        description: "Ask the support assistant to bring in a human (notifies admins).",
+        usage: "/human [what you need]",
+        example: Some("/human my account is locked and the docs didn't help"),
+        admin_only: false,
+        llm_only: true,
+    },
 ];
 
 /// Look up a built-in by name (lowercase, no leading slash).

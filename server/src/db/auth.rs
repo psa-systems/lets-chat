@@ -540,6 +540,44 @@ pub async fn other_active_admin_exists(
     Ok(exists)
 }
 
+/// LC-713: every active (role=admin, not banned) admin as `(id, username)`,
+/// ordered by id. Drives the AI help desk human-escalation fan-out (all admins
+/// are notified so even an offline one gets the push/email/inbox when they
+/// return). Separate from `other_active_admin_exists`, which only needs a
+/// boolean.
+pub async fn list_admins(pool: &SqlitePool) -> Result<Vec<(String, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, username FROM users \
+         WHERE role = 'admin' AND is_banned = 0 ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("id"), r.get("username")))
+        .collect())
+}
+
+/// LC-713: true when at least one active admin has interacted within the last
+/// `minutes` (via HTTP `last_active_at` or a live WS `last_ws_seen_at`). This is
+/// the help desk's "is a human available right now" signal: it only changes the
+/// message shown to the user (available now vs notified-and-will-follow-up); the
+/// admins are notified either way. An admin with no activity timestamps at all
+/// (`datetime('')` is NULL) is treated as not available.
+pub async fn any_admin_active_within(pool: &SqlitePool, minutes: i64) -> Result<bool, sqlx::Error> {
+    let modifier = format!("-{minutes} minutes");
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users \
+         WHERE role = 'admin' AND is_banned = 0 \
+           AND datetime(MAX(COALESCE(last_active_at, ''), COALESCE(last_ws_seen_at, ''))) \
+               >= datetime('now', ?))",
+    )
+    .bind(&modifier)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
+}
+
 /// Issue a session token for `user_id` with no captured origin metadata.
 /// Production code should prefer `create_session_with_origin` so the
 /// settings sessions list can show a meaningful row; this no-origin variant

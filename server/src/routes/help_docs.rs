@@ -59,6 +59,15 @@ const MAX_PAGES_PER_SOURCE: usize = 100;
 const MAX_PAGE_BYTES: usize = 512 * 1024;
 /// Per-fetch timeout for the docs HTTP GETs.
 const FETCH_TIMEOUT_SECS: u64 = 15;
+/// LC-713: per-user support escalations (`/human`) per minute. Tighter than the
+/// ask cap because each escalation fans a DM + push + email to every admin.
+const ESCALATE_RATE_PER_MIN: u32 = 3;
+/// LC-713: an admin who interacted within this many minutes counts as available
+/// "right now". Admins are notified regardless; this only picks which
+/// confirmation the user sees.
+const ADMIN_AVAILABLE_MINUTES: i64 = 5;
+/// LC-713: max characters kept from the user's escalation note.
+const MAX_ESCALATE_CHARS: usize = 1000;
 
 /// LC-712: the INVARIANT half of the support system prompt - always applied
 /// (the global [`crate::llm`] guardrail is prepended by `complete_guarded`). It
@@ -618,7 +627,7 @@ pub async fn build_support_answer(
     if scored.is_empty() {
         return format!(
             "{header}\n\n_I couldn't find anything about that in the product documentation. \
-             An admin may be able to help - try rephrasing, or ask for a human._"
+             Try rephrasing, or type `/human` to bring in an admin._"
         );
     }
 
@@ -657,6 +666,151 @@ pub async fn build_support_answer(
         }
     }
     format!("{header}\n\n{answer}\n\n**Sources:**{sources}")
+}
+
+// LC-713: human escalation ("talk to a human") ----------------------------
+
+/// Result of a `/human` escalation: how many admins were notified, and whether
+/// at least one was active recently (the "available right now" signal that only
+/// changes the user-facing confirmation).
+pub struct EscalationOutcome {
+    pub notified: usize,
+    pub available: bool,
+}
+
+/// Handle `/human [message]` for `asker` in `room`. Notifies the admins (via a
+/// DM from the assistant bot that rides the existing DM push/email stack) that
+/// the user wants a person, then posts a confirmation in the room stating
+/// whether an admin is available now. Gated + rate-limited like the rest of the
+/// help desk surface; errors surface to the asker's composer.
+pub(crate) async fn handle_human(
+    state: &AppState,
+    room: &Room,
+    asker: &User,
+    message: &str,
+) -> Result<(), AppError> {
+    // Same runtime flag + audience gate as /support (the escalation is part of
+    // the one help desk surface, so it toggles with it).
+    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
+    if let Outcome::Deny { .. } = state.rate_limits.check(
+        RateLimitKind::SupportEscalate,
+        &asker.id,
+        ESCALATE_RATE_PER_MIN,
+    ) {
+        return Err(AppError::BadRequest(
+            "You're requesting a human too quickly. Try again in a minute.".into(),
+        ));
+    }
+    let message: String = message.trim().chars().take(MAX_ESCALATE_CHARS).collect();
+
+    let outcome = escalate_to_admins(state, asker, room, &message).await?;
+
+    let asker_label = match asker.display_name.as_deref() {
+        Some(n) if !n.trim().is_empty() => n,
+        _ => &asker.username,
+    };
+    let confirmation = if outcome.notified == 0 {
+        format!("_{asker_label}, there are no admins available to take this request yet._")
+    } else if outcome.available {
+        format!("_{asker_label}, an admin has been notified and should respond here shortly._")
+    } else {
+        format!(
+            "_{asker_label}, no admins are online right now, but they have been notified and will follow up._"
+        )
+    };
+    let bot = super::assistant::assistant_bot(state).await?;
+    let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;
+    super::room::finalize_message_send(state, room, &bot, msg_id, &confirmation, None).await?;
+    Ok(())
+}
+
+/// Notify every active admin (except the requester, if they are one) that
+/// `requester` wants a human, by DMing them from the assistant bot with a link
+/// back to `origin_room`. All admins are notified so an offline one still gets
+/// the push/email/inbox when they return; the returned `available` flag reports
+/// whether one was active recently. Public for integration tests.
+pub async fn escalate_to_admins(
+    state: &AppState,
+    requester: &User,
+    origin_room: &Room,
+    message: &str,
+) -> Result<EscalationOutcome, AppError> {
+    let admins = db::auth::list_admins(&state.auth).await?;
+    let targets: Vec<(String, String)> = admins
+        .into_iter()
+        .filter(|(id, _)| id != &requester.id)
+        .collect();
+    if targets.is_empty() {
+        return Ok(EscalationOutcome {
+            notified: 0,
+            available: false,
+        });
+    }
+    let available = db::auth::any_admin_active_within(&state.auth, ADMIN_AVAILABLE_MINUTES).await?;
+    let bot = super::assistant::assistant_bot(state).await?;
+
+    let requester_label = match requester.display_name.as_deref() {
+        Some(n) if !n.trim().is_empty() => n.to_string(),
+        _ => requester.username.clone(),
+    };
+    let quoted = if message.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n> {message}")
+    };
+    let dm_body = format!(
+        "\u{1f198} **Help requested** by {requester_label} in [#{}](/room/{}).{quoted}\n\nReply in that channel to help them.",
+        origin_room.name, origin_room.id
+    );
+
+    let mut notified = 0;
+    for (admin_id, admin_username) in &targets {
+        match dm_admin(state, &bot, admin_id, admin_username, &dm_body).await {
+            Ok(()) => notified += 1,
+            Err(e) => {
+                tracing::warn!(admin_id = %admin_id, error = %e, "help desk escalation DM failed")
+            }
+        }
+    }
+    Ok(EscalationOutcome {
+        notified,
+        available,
+    })
+}
+
+/// Send `body` as a DM from the assistant bot to one admin. Finds or creates the
+/// bot-to-admin DM room, then posts through `finalize_message_send`, which for a
+/// DM room already fans out the peer notification (WS + push + email) to the
+/// admin, so the escalation rides the exact same delivery path as any DM (no
+/// bespoke notification code, no double-send).
+async fn dm_admin(
+    state: &AppState,
+    bot: &User,
+    admin_id: &str,
+    admin_username: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let (room, created) = match db::chat::find_dm_room(&state.chat, &bot.id, admin_id).await? {
+        Some(r) => (r, false),
+        None => {
+            let name = format!("@{admin_username}");
+            let r = db::chat::create_dm_room(&state.chat, &name, &bot.id, admin_id).await?;
+            (r, true)
+        }
+    };
+    if created {
+        // New DM: nudge the admin's sidebar to pick it up live (mirrors routes::dm).
+        state.hub.broadcast_to_user(
+            admin_id,
+            &crate::ws::events::ChatEvent::RoomMemberAdded {
+                room_id: room.id,
+                user_id: admin_id.to_string(),
+            },
+        );
+    }
+    let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, body).await?;
+    super::room::finalize_message_send(state, &room, bot, msg_id, body, None).await?;
+    Ok(())
 }
 
 #[cfg(test)]
