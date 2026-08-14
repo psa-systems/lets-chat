@@ -243,6 +243,7 @@ async fn main() {
     spawn_outgoing_webhook_dispatcher(state.clone());
     spawn_room_digest_dispatcher(state.clone());
     spawn_embedding_backfill_dispatcher(state.clone());
+    spawn_help_docs_refresh_dispatcher(state.clone());
     spawn_analytics_aggregator(state.clone());
     spawn_weekly_recap_dispatcher(state.clone());
     spawn_message_retention_sweeper(state.clone());
@@ -565,6 +566,29 @@ fn spawn_embedding_backfill_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "embedding backfill tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-712: refresh the AI help desk documentation knowledge base. A slow tick
+/// re-fetches the configured docs sources and re-embeds any page whose content
+/// changed (content-hash skips unchanged pages). A no-op when the AI flag is off,
+/// no embeddings endpoint is configured, or no sources are set. Errors are
+/// best-effort (logged, the next tick retries), so a transient docs-host outage
+/// never crashes the process.
+fn spawn_help_docs_refresh_dispatcher(state: AppState) {
+    // Six hours: docs change rarely, and an admin can force an immediate reindex
+    // from the settings page.
+    const TICK_SECS: u64 = 6 * 60 * 60;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        // Skip the immediate fire so startup does not hit the docs hosts.
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            if let Err(e) = lets_chat::routes::help_docs::run_refresh_tick(&state).await {
+                tracing::warn!(error = %e, "help docs refresh tick failed");
             }
         }
     });

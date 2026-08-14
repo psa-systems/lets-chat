@@ -336,6 +336,11 @@ async fn dispatch_known(
                 // limited) surface to the asker's composer.
                 super::assistant::handle_ask(state, room, user, rest).await?;
             }
+            "support" => {
+                // LC-712: AI help desk. Answers from the docs knowledge base and
+                // posts as the assistant bot; errors surface to the composer.
+                super::help_docs::handle_support(state, room, user, rest).await?;
+            }
             _ => return Ok(None),
         }
         // LC-228: form is `hx-swap="none"` so the rendered ComposerFragment

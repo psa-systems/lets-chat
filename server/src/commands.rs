@@ -88,6 +88,17 @@ pub const BUILTINS: &[BuiltinCommand] = &[
         admin_only: false,
         llm_only: true,
     },
+    // LC-712: AI help desk. Answers from the product documentation knowledge
+    // base (not this room's messages), posting the reply as the assistant bot.
+    // llm_only, so it is hidden from the slash list when AI is off.
+    BuiltinCommand {
+        name: "support",
+        description: "Ask the product support assistant (answers from the docs).",
+        usage: "/support <question>",
+        example: Some("/support how do I configure mokosh-server postgres?"),
+        admin_only: false,
+        llm_only: true,
+    },
 ];
 
 /// Look up a built-in by name (lowercase, no leading slash).

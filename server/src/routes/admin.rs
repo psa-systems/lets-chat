@@ -40,6 +40,8 @@ pub fn router() -> Router<AppState> {
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
         .route("/admin/settings/llm", post(post_llm_flag))
+        .route("/admin/settings/help-docs", post(post_help_docs_sources))
+        .route("/admin/help-docs/reindex", post(post_help_docs_reindex))
         .route(
             "/admin/settings/email-digest-default",
             post(post_email_digest_default),
@@ -284,6 +286,18 @@ pub async fn get_settings(
     let llm_configured = state.llm_available();
     // LC-702: audience selector - true when narrowed to staff, else "everyone".
     let llm_audience_staff = !super::ai_gate::audience_is_everyone(&state).await;
+    // LC-712: AI help desk documentation config + index status.
+    let embeddings_configured = state.embeddings_available();
+    let help_docs_sources =
+        db::settings::get_setting(&state.settings, super::help_docs::HELP_DOCS_SOURCES_KEY)
+            .await?
+            .unwrap_or_default();
+    let help_docs_status =
+        db::settings::get_setting(&state.settings, super::help_docs::HELP_DOCS_STATUS_KEY)
+            .await?
+            .unwrap_or_default();
+    let help_docs_chunk_count = db::doc_chunks::count(&state.chat).await?;
+    let help_docs_products = db::doc_chunks::distinct_products(&state.chat).await?.len();
     let uploads_total_bytes = db::uploads::sum_size_bytes(&state.chat).await?;
     let uploads_total_display =
         format!("{:.2} MiB", uploads_total_bytes as f64 / (1024.0 * 1024.0));
@@ -357,6 +371,11 @@ pub async fn get_settings(
         llm_flag_enabled,
         llm_configured,
         llm_audience_staff,
+        embeddings_configured,
+        help_docs_sources,
+        help_docs_status,
+        help_docs_chunk_count,
+        help_docs_products,
         maintenance_message,
         uploads_total_display,
         uploads_orphan_count,
@@ -762,6 +781,80 @@ pub async fn post_llm_flag(
     db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+// Help desk documentation (LC-712) ------------------------------------------
+
+#[derive(Deserialize)]
+pub struct HelpDocsForm {
+    /// Textarea contents: one `product|url` documentation source per line.
+    #[serde(default)]
+    pub sources: String,
+}
+
+/// LC-712: save the AI help desk documentation sources (settings
+/// `help_docs_sources`, one `product|url` per line). Audited like the LLM flag.
+/// Saving does not itself re-index; the admin triggers that with the Reindex
+/// button, or the scheduled refresh picks up the change on its next tick.
+pub async fn post_help_docs_sources(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<HelpDocsForm>,
+) -> Result<Response, AppError> {
+    db::settings::set_setting(
+        &state.settings,
+        super::help_docs::HELP_DOCS_SOURCES_KEY,
+        form.sources.trim(),
+    )
+    .await?;
+    db::moderation::log_mod_action(
+        &state.chat,
+        "help_docs_sources",
+        "",
+        &actor.id,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+/// LC-712: trigger an immediate re-index of the help desk documentation. Fetch +
+/// embed can take many seconds, so it runs in the background and updates the
+/// `help_docs_last_status` line (shown on the settings page) when done.
+pub async fn post_help_docs_reindex(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    db::moderation::log_mod_action(
+        &state.chat,
+        "help_docs_reindex",
+        "",
+        &actor.id,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    let st = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = super::help_docs::reindex_all(&st, true).await {
+            tracing::warn!(error = %e, "help docs manual reindex failed");
+        }
+    });
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current(
+            "admin-settings-helpdocs-reindex-started",
+        )))?
+        .into_response());
     }
     Ok(Redirect::to("/admin/settings").into_response())
 }
