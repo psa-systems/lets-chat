@@ -180,6 +180,33 @@
         }
       };
 
+      // LC-718: support chat bubble open/close. Device-local like the other
+      // chrome toggles; the panel and root are inside the hx-loaded #lc-support-slot
+      // so we key off `data-lc-support-open` on <html> (set before paint) and let
+      // CSS in main.css show/hide the panel. Passing `false` force-closes (the X).
+      function applySupport(v) {
+        if (v === "1") d.setAttribute("data-lc-support-open", "1");
+        else d.removeAttribute("data-lc-support-open");
+      }
+      var su = null;
+      try { su = localStorage.getItem("lc-support-open"); } catch (e) {}
+      applySupport(su);
+      window.__lcToggleSupport = function (force) {
+        var on = d.getAttribute("data-lc-support-open") === "1";
+        var next = force === false ? "" : (on ? "" : "1");
+        try {
+          if (next) localStorage.setItem("lc-support-open", next);
+          else localStorage.removeItem("lc-support-open");
+        } catch (e) {}
+        applySupport(next);
+        // Fetch the thread immediately on open (polling then keeps it fresh); a
+        // closed bubble issues no requests.
+        if (next && window.htmx) {
+          var t = document.getElementById("lc-support-thread");
+          if (t) window.htmx.trigger(t, "lcopen");
+        }
+      };
+
       // LC-308: unread-only sidebar filter. Device-local; set before paint so
       // hidden rows never flash in. The actual hiding is pure CSS keyed on
       // this attribute (main.css), so it tracks live unread-badge OOB swaps

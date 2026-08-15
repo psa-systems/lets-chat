@@ -398,3 +398,13 @@ blocked-username-placeholder = usuario
 blocked-block-button = Bloquear
 blocked-empty = No has bloqueado a nadie.
 blocked-unblock = Desbloquear
+
+## LC-718: burbuja de chat de soporte (epic LC-717)
+support-bubble-open = ¿Necesitas ayuda? Pregúntale a nuestro asistente
+support-bubble-title = Soporte
+support-bubble-subtitle = Pregúntanos lo que sea
+support-bubble-close = Cerrar soporte
+support-bubble-placeholder = Escribe una pregunta…
+support-bubble-send = Enviar
+support-bubble-human = Hablar con una persona
+support-bubble-empty = Escribe una pregunta para empezar. Las respuestas provienen de nuestra documentación; puedes contactar a una persona cuando quieras.
