@@ -1,8 +1,10 @@
-{# LC-718: compact support-panel thread. Rendered by GET /support/panel/thread
-   (polled) and by the send response. Bubbles are the viewer's assistant-bot DM,
-   filtered to the two participants. body_html is the same markdown render used
-   in a room, so cited Sources links come through; Phase 3 (LC-720) upgrades
-   Sources / link-preview cards to first-class panel components. #}
+{# LC-718/719: compact support-panel thread. Rendered by GET /support/panel/thread,
+   the send response, and the WS OOB push (all via PanelThreadView). Bubbles are
+   the viewer's assistant-bot DM, filtered to the two participants; body_html is
+   the same markdown render used in a room, so cited Sources links come through.
+   The stage footer (LC-719) reflects the backend outcome: a low-confidence reply
+   surfaces a prominent "Talk to a human" CTA, and a /human fallback that filed a
+   ticket shows a "we've filed this (ref #N)" card. #}
 {% if empty %}
 <p class="lc-support-empty">{{ "support-bubble-empty"|t }}</p>
 {% else %}
@@ -12,3 +14,17 @@
 </div>
 {% endfor %}
 {% endif %}
+{% match stage %}
+{% when Stage::TicketFiled with (id) %}
+<div class="lc-support-stage lc-support-stage-filed" role="status">
+  <strong>{{ "support-stage-filed-title"|t }}</strong>
+  <span>{{ "support-stage-filed-body"|t }} #{{ id }}</span>
+</div>
+{% when Stage::Stuck %}
+<form class="lc-support-stage lc-support-stage-stuck" hx-post="/support/panel/send"
+      hx-target="#lc-support-thread" hx-swap="innerHTML">
+  <span>{{ "support-stage-stuck"|t }}</span>
+  <button type="submit" name="action" value="human" class="btn btn-sm btn-primary">{{ "support-bubble-human"|t }}</button>
+</form>
+{% when Stage::Normal %}
+{% endmatch %}

@@ -407,6 +407,19 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::AdminSupportChanged => {
                                     render_admin_support(&send_state).await
                                 }
+                                // LC-719: support-bubble panel push. Rendered per
+                                // recipient (only the addressed user's connections
+                                // receive it via broadcast_to_user) as an OOB swap
+                                // into #lc-support-thread. Both build modes.
+                                ChatEvent::SupportThreadChanged { user_id }
+                                    if user_id == &send_user.id =>
+                                {
+                                    crate::routes::support_panel::render_thread_oob(
+                                        &send_state,
+                                        &send_user,
+                                    )
+                                    .await
+                                }
                                 ChatEvent::ThreadReply { parent_id, message } => {
                                     render_thread_reply(
                                         &send_state,

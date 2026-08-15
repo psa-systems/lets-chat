@@ -413,3 +413,6 @@ support-bubble-placeholder = Ask a question…
 support-bubble-send = Send
 support-bubble-human = Talk to a human
 support-bubble-empty = Ask a question to get started. Answers come from our documentation; you can reach a person anytime.
+support-stage-stuck = Didn't find what you needed?
+support-stage-filed-title = We've filed your request
+support-stage-filed-body = An admin will follow up. Reference

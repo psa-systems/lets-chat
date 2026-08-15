@@ -390,6 +390,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::AdminReportChanged
         // LC-714: rendered per recipient in the WS send task (admin support queue OOB).
         | ChatEvent::AdminSupportChanged
+        // LC-719: rendered per recipient in the WS send task (support panel OOB).
+        | ChatEvent::SupportThreadChanged { .. }
         // LC-178: rendered per recipient in the WS send task (/saved list OOB).
         | ChatEvent::SavedChanged { .. }
         // LC-239: rendered per recipient in the WS send task (sidebar draft

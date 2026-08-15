@@ -247,6 +247,14 @@ pub enum ChatEvent {
     /// render side (the queue is `#[cfg(standalone)]`); in saas it falls through
     /// to `render_event` (None), mirroring `AdminReportChanged`.
     AdminSupportChanged,
+    /// LC-719: the support-bubble panel thread for `user_id` changed (a `/support`
+    /// answer landed or a `/human` confirmation posted in the user's assistant-bot
+    /// DM). Broadcast via `broadcast_to_user`, so only that user's connections
+    /// receive it; the WS send task re-renders the `#lc-support-thread` OOB
+    /// fragment for them. Replaces the Phase 1 open-panel poll.
+    SupportThreadChanged {
+        user_id: String,
+    },
     /// New thread reply rooted at `parent_id`. Recipients with the panel open
     /// for that parent append the reply; everyone updates the parent's
     /// "N replies" pill.
