@@ -44,11 +44,24 @@ struct PanelMsg {
     body_html: String,
 }
 
+/// LC-719: the conversation stage reflected in the panel, derived from the last
+/// assistant reply. Drives the affordance rendered under the thread.
+enum Stage {
+    /// A normal answer (or the opening state): the composer's actions suffice.
+    Normal,
+    /// The bot could not answer from the docs: surface a prominent "Still stuck?
+    /// Talk to a human" call to action.
+    Stuck,
+    /// A `/human` fallback filed a ticket: show a "we've filed this (ref #N)" card.
+    TicketFiled(i64),
+}
+
 #[derive(Template)]
 #[template(path = "support/panel_thread.html")]
 struct PanelThreadView {
     messages: Vec<PanelMsg>,
     empty: bool,
+    stage: Stage,
 }
 
 /// True when the support assistant is usable for `user`: the LLM and embeddings
@@ -76,13 +89,32 @@ async fn get_bubble(
     html(&BubbleView)
 }
 
-/// Render the viewer's support DM room as compact bubbles. Shared by the polled
-/// thread endpoint and the send response so a fresh poll and a just-sent message
-/// render identically.
-async fn render_thread(state: &AppState, user: &User) -> Result<Html, AppError> {
+/// Build the compact thread view for the viewer's support DM: participant-only
+/// bubbles plus the derived [`Stage`] affordance. Shared by the HTTP thread
+/// endpoint, the send response, and the WS OOB push, so all three render
+/// identically.
+async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadView, AppError> {
     let bot = crate::routes::assistant::assistant_bot(state).await?;
     let room = help_docs::support_dm_room(state, user).await?;
     let raw = db::chat::list_messages(&state.chat, room.id).await?;
+
+    // Stage from the last assistant reply: a filed ticket wins over a plain
+    // low-confidence decline; a normal answer needs no extra affordance.
+    let stage = raw
+        .iter()
+        .rev()
+        .find(|m| m.user_id == bot.id)
+        .map(|m| {
+            if let Some(id) = help_docs::ticket_ref(&m.body) {
+                Stage::TicketFiled(id)
+            } else if help_docs::is_low_confidence(&m.body) {
+                Stage::Stuck
+            } else {
+                Stage::Normal
+            }
+        })
+        .unwrap_or(Stage::Normal);
+
     let messages: Vec<PanelMsg> = raw
         .into_iter()
         .filter(|m| m.user_id == user.id || m.user_id == bot.id)
@@ -92,7 +124,27 @@ async fn render_thread(state: &AppState, user: &User) -> Result<Html, AppError> 
         })
         .collect();
     let empty = messages.is_empty();
-    html(&PanelThreadView { messages, empty })
+    Ok(PanelThreadView {
+        messages,
+        empty,
+        stage,
+    })
+}
+
+/// Render the thread partial for an HTTP response (fetch-on-open + send).
+async fn render_thread(state: &AppState, user: &User) -> Result<Html, AppError> {
+    html(&build_thread_view(state, user).await?)
+}
+
+/// LC-719: render the thread as an OOB fragment for a WS push. Wraps the same
+/// partial in the `#lc-support-thread` target so htmx's WS extension swaps it in
+/// place. Returns `None` on any error (the WS send task then sends nothing).
+pub(crate) async fn render_thread_oob(state: &AppState, user: &User) -> Option<String> {
+    let view = build_thread_view(state, user).await.ok()?;
+    let inner = crate::views::render_template(&view).ok()?;
+    Some(format!(
+        "<div id=\"lc-support-thread\" hx-swap-oob=\"innerHTML\">{inner}</div>"
+    ))
 }
 
 /// `GET /support/panel/thread` - the compact thread partial, polled while the

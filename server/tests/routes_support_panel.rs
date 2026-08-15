@@ -182,3 +182,43 @@ async fn talk_to_a_human_files_a_ticket() {
         open[0].body
     );
 }
+
+// LC-719: after a /human fallback files a ticket, the panel thread shows the
+// "we've filed this (ref #N)" stage card. The /human path is synchronous (no
+// spawned task), so the stage is visible on the next thread render.
+#[tokio::test]
+async fn thread_shows_ticket_filed_stage_after_human() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (_uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let send = Request::builder()
+        .method(Method::POST)
+        .uri("/support/panel/send")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=locked+out&action=human"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(send).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    let ticket_id = db::support_tickets::list_open(&chat).await.unwrap()[0].id;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let thread = body_string(app.oneshot(req).await.unwrap()).await;
+    assert!(
+        thread.contains("lc-support-stage-filed") && thread.contains(&format!("#{ticket_id}")),
+        "thread shows the ticket-filed stage with the reference, got: {thread}"
+    );
+}
