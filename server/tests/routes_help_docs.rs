@@ -111,6 +111,7 @@ async fn support_answer_cites_the_retrieved_doc() {
         &state,
         "how do I configure the postgres database connection?",
         "> alice: how do I configure the postgres database connection?",
+        false,
         &llm,
     )
     .await;
@@ -160,6 +161,7 @@ async fn support_answer_is_honest_when_nothing_relevant_is_indexed() {
         &state,
         "how do I rotate the kubernetes signing certificates?",
         "> bob: how do I rotate the kubernetes signing certificates?",
+        false,
         &llm,
     )
     .await;
@@ -177,6 +179,67 @@ async fn support_answer_is_honest_when_nothing_relevant_is_indexed() {
     assert!(
         !body.contains("**Sources:**"),
         "no citations when nothing matched"
+    );
+}
+
+// LC-715: an empty knowledge base is a distinct state from a real no-match. When
+// no docs are indexed at all, the reply must say the help desk is not configured
+// (not the generic "couldn't find anything") and be role-aware: admins get a link
+// to the settings panel, regular users do not.
+#[tokio::test]
+async fn support_answer_flags_unconfigured_knowledge_base_role_aware() {
+    let state = state_with_embeddings().await;
+
+    let llm = MockLlmClient {
+        canned: "This should never be shown.".into(),
+    };
+
+    // Regular user: plain "not set up" message, no admin settings link.
+    let user_body = lets_chat::routes::help_docs::build_support_answer(
+        &state,
+        "how do I invite a teammate?",
+        "> carol: how do I invite a teammate?",
+        false,
+        &llm,
+    )
+    .await;
+    assert!(
+        user_body.contains("isn't set up yet"),
+        "flags the empty knowledge base, got: {user_body}"
+    );
+    assert!(
+        user_body.contains("/human"),
+        "points the user at /human, got: {user_body}"
+    );
+    assert!(
+        !user_body.contains("/admin#st-helpdocs"),
+        "must not surface the admin settings link to a regular user, got: {user_body}"
+    );
+    assert!(
+        !user_body.contains("couldn't find anything about that"),
+        "distinct from a real no-match, got: {user_body}"
+    );
+    assert!(
+        !user_body.contains("This should never be shown"),
+        "must not call the model with an empty knowledge base, got: {user_body}"
+    );
+
+    // Admin: same distinct state, plus a direct link to the settings panel.
+    let admin_body = lets_chat::routes::help_docs::build_support_answer(
+        &state,
+        "how do I invite a teammate?",
+        "> root: how do I invite a teammate?",
+        true,
+        &llm,
+    )
+    .await;
+    assert!(
+        admin_body.contains("/admin#st-helpdocs"),
+        "surfaces the settings link to an admin, got: {admin_body}"
+    );
+    assert!(
+        admin_body.contains("no documentation configured"),
+        "explains the empty knowledge base to the admin, got: {admin_body}"
     );
 }
 
