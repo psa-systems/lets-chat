@@ -191,6 +191,15 @@
       var su = null;
       try { su = localStorage.getItem("lc-support-open"); } catch (e) {}
       applySupport(su);
+      // LC-720: first-run onboarding nudge. Shown until dismissed once (the X or
+      // the first panel open); mirrors the composer lcSlashTipDismissed pattern.
+      var hintDismissed = null;
+      try { hintDismissed = localStorage.getItem("lc-support-hint-dismissed"); } catch (e) {}
+      if (!hintDismissed) d.setAttribute("data-lc-support-hint", "1");
+      window.__lcDismissSupportHint = function () {
+        try { localStorage.setItem("lc-support-hint-dismissed", "1"); } catch (e) {}
+        d.removeAttribute("data-lc-support-hint");
+      };
       window.__lcToggleSupport = function (force) {
         var on = d.getAttribute("data-lc-support-open") === "1";
         var next = force === false ? "" : (on ? "" : "1");
@@ -203,6 +212,7 @@
         // Opening clears the attention dot and fetches the thread; a closed
         // bubble issues no requests (live updates arrive via WS push).
         if (next) {
+          if (window.__lcDismissSupportHint) window.__lcDismissSupportHint();
           if (root) root.removeAttribute("data-lc-attention");
           if (window.htmx) {
             var t = document.getElementById("lc-support-thread");
