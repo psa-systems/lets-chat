@@ -25,7 +25,8 @@
     {% endif %}
     <p class="text-sm mt-1">{{ t.body }}</p>
     <div class="flex gap-2 mt-2">
-      <button hx-post="/admin/support/{{ t.id }}/resolve" hx-swap="none" class="btn btn-sm btn-primary">{{ "support-action-resolve"|t }}</button>
+      <button hx-post="/admin/support/{{ t.id }}/claim" hx-swap="none" class="btn btn-sm btn-primary">{{ "support-action-claim"|t }}</button>
+      <button hx-post="/admin/support/{{ t.id }}/resolve" hx-swap="none" class="btn btn-sm btn-secondary">{{ "support-action-resolve"|t }}</button>
     </div>
   </li>
   {% endfor %}

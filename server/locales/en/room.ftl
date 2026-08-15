@@ -263,6 +263,7 @@ support-queue-title = Support
 support-queue-empty = No open support tickets.
 support-jump = Open channel
 support-row-in = In:
+support-action-claim = Claim
 support-action-resolve = Resolve
 
 ## Forward (LC-278)
