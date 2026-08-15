@@ -1,6 +1,8 @@
-//! LC-714: AI help desk support-ticket flow through the HTTP surface.
+//! LC-714/716: AI help desk support-ticket flow through the HTTP surface.
 //! - `/human` with no admin available files a ticket into the queue.
 //! - Resolving a ticket in the admin queue notifies the requester by a bot DM.
+//! - Claiming a ticket opens a dedicated support channel joining the requester,
+//!   the admin, and the assistant bot, and is a no-op if already claimed.
 
 use std::sync::Arc;
 
@@ -167,4 +169,107 @@ async fn resolving_a_ticket_notifies_the_requester() {
         body.contains(&format!("#{ticket_id}")),
         "DM references the ticket number, got: {body}"
     );
+}
+
+#[tokio::test]
+async fn claiming_a_ticket_opens_a_shared_channel() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    let admin2 = db::auth::create_user(&auth, "admin2", "h").await.unwrap();
+    for a in [&admin, &admin2] {
+        sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+            .bind(a)
+            .execute(&auth)
+            .await
+            .unwrap();
+    }
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+    let admin2_session = db::auth::create_session(&auth, &admin2).await.unwrap();
+
+    let ticket_id = db::support_tickets::create(&chat, &requester, Some(1), "general", "help me")
+        .await
+        .unwrap();
+
+    let app: Router =
+        routes::build_router(state_from(auth.clone(), chat.clone(), settings.clone()));
+
+    let claim = |session: String| {
+        let app = app.clone();
+        async move {
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!("/admin/support/{ticket_id}/claim"))
+                .header(header::COOKIE, format!("session={session}"))
+                .body(Body::empty())
+                .unwrap();
+            app.oneshot(req).await.unwrap()
+        }
+    };
+
+    let res = claim(admin_session).await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Ticket left the open queue (claimed, not resolved).
+    assert_eq!(db::support_tickets::count_open(&chat).await.unwrap(), 0);
+
+    // A dedicated private support room was created, joining requester + admin + bot.
+    let bot = db::auth::find_user_by_username(&auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    let (room_id, room_name, room_type): (i64, String, String) =
+        sqlx::query_as("SELECT id, name, room_type FROM rooms WHERE name LIKE 'Support:%'")
+            .fetch_one(&chat)
+            .await
+            .expect("support room created");
+    assert_eq!(room_type, "private", "support room is private");
+    assert!(
+        room_name.contains(&format!("#{ticket_id}")),
+        "room name carries the ticket id, got: {room_name}"
+    );
+    let members: Vec<String> =
+        sqlx::query_scalar("SELECT user_id FROM room_members WHERE room_id=?")
+            .bind(room_id)
+            .fetch_all(&chat)
+            .await
+            .unwrap();
+    for expected in [&requester, &admin, &bot.id] {
+        assert!(
+            members.contains(expected),
+            "support room includes {expected}, members: {members:?}"
+        );
+    }
+
+    // The requester got a bot DM pointing at the new channel.
+    let dm = db::chat::find_dm_room(&chat, &bot.id, &requester)
+        .await
+        .unwrap()
+        .expect("bot DM to the requester exists");
+    let dm_body: String =
+        sqlx::query_scalar("SELECT body FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 1")
+            .bind(dm.id)
+            .fetch_one(&chat)
+            .await
+            .unwrap();
+    assert!(
+        dm_body.contains(&format!("/room/{room_id}")),
+        "DM links to the support channel, got: {dm_body}"
+    );
+
+    // A second admin claiming the same ticket is a no-op: no second support room.
+    let res2 = claim(admin2_session).await;
+    assert_eq!(res2.status(), StatusCode::OK);
+    let support_rooms: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE name LIKE 'Support:%'")
+            .fetch_one(&chat)
+            .await
+            .unwrap();
+    assert_eq!(support_rooms, 1, "claim is idempotent; no duplicate room");
 }
