@@ -80,6 +80,7 @@ mod retention;
 pub(crate) mod room;
 mod suggest_reply;
 mod support;
+pub mod support_panel;
 // LC-341: expose the extracted Coyote Mode trigger for the test crate without
 // making the whole `room` module public.
 pub use room::maybe_coyote_ban;
@@ -1772,6 +1773,7 @@ pub fn build_router(state: AppState) -> Router {
             get(branding::get_enclave_logo),
         )
         .merge(enclave::router())
+        .merge(support_panel::router())
         .merge(shame_tags::router());
 
     // LC-22 cutover: Bunyip SSO is the sole sign-in surface in the standalone
