@@ -563,8 +563,9 @@ pub(crate) async fn handle_support(
     let st = state.clone();
     let room_id = room.id;
     let question = question.to_string();
+    let is_admin = asker.role == "admin";
     tokio::spawn(async move {
-        let final_body = build_support_answer(&st, &question, &header, &*llm).await;
+        let final_body = build_support_answer(&st, &question, &header, is_admin, &*llm).await;
         if let Err(e) = db::chat::replace_message_body(&st.chat, msg_id, &final_body).await {
             tracing::warn!(error = %e, message_id = msg_id, "failed to store support answer");
             return;
@@ -591,6 +592,7 @@ pub async fn build_support_answer(
     state: &AppState,
     question: &str,
     header: &str,
+    is_admin: bool,
     llm: &dyn crate::llm::LlmClient,
 ) -> String {
     let Some(client) = state.embedding_client.clone() else {
@@ -614,6 +616,28 @@ pub async fn build_support_answer(
             );
         }
     };
+
+    // LC-715: empty knowledge base is a distinct state from a real no-match. If
+    // no documentation has been indexed yet, say so explicitly instead of the
+    // generic "couldn't find anything" reply (which reads as if the docs were
+    // searched and came up empty). Admins get a direct link to the settings
+    // panel where sources are added; regular users only get the `/human` hint,
+    // so the setup path is not surfaced to non-admins.
+    if chunks.is_empty() {
+        return if is_admin {
+            format!(
+                "{header}\n\n_The help desk has no documentation configured yet, so I can't answer \
+                 product questions. Add one or more sources under [Admin settings](/admin#st-helpdocs), \
+                 then reindex. In the meantime, type `/human` to reach an admin._"
+            )
+        } else {
+            format!(
+                "{header}\n\n_The help desk isn't set up yet, so I can't answer product questions \
+                 right now. Type `/human` to reach an admin._"
+            )
+        };
+    }
+
     let mut scored: Vec<(f32, db::doc_chunks::DocChunk)> = chunks
         .into_iter()
         .map(|c| (embeddings::cosine_similarity(&query_vec, &c.vec), c))
