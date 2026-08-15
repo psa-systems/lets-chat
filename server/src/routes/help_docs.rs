@@ -564,6 +564,11 @@ pub(crate) async fn handle_support(
     let room_id = room.id;
     let question = question.to_string();
     let is_admin = asker.role == "admin";
+    // LC-719: when this /support runs inside a DM (the support bubble backs the
+    // panel with the assistant-bot DM), push the refreshed panel thread to the
+    // asker so the answer lands live without polling.
+    let notify_panel = room.room_type == "dm";
+    let asker_id = asker.id.clone();
     tokio::spawn(async move {
         let final_body = build_support_answer(&st, &question, &header, is_admin, &*llm).await;
         if let Err(e) = db::chat::replace_message_body(&st.chat, msg_id, &final_body).await {
@@ -579,6 +584,14 @@ pub(crate) async fn handle_support(
                 edited_at: String::new(),
             },
         );
+        if notify_panel {
+            st.hub.broadcast_to_user(
+                &asker_id,
+                &crate::ws::events::ChatEvent::SupportThreadChanged {
+                    user_id: asker_id.clone(),
+                },
+            );
+        }
     });
     Ok(())
 }
@@ -756,7 +769,41 @@ pub(crate) async fn handle_human(
     let bot = super::assistant::assistant_bot(state).await?;
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;
     super::room::finalize_message_send(state, room, &bot, msg_id, &confirmation, None).await?;
+    // LC-719: push the refreshed support panel when driven from the bubble (DM).
+    if room.room_type == "dm" {
+        state.hub.broadcast_to_user(
+            &asker.id,
+            &crate::ws::events::ChatEvent::SupportThreadChanged {
+                user_id: asker.id.clone(),
+            },
+        );
+    }
     Ok(())
+}
+
+/// LC-719: the ticket number a `/human` fallback confirmation carries, if any.
+/// The support-bubble panel uses this to render an explicit "we've filed this
+/// (ref #N)" stage. Kept next to the message it parses (the `handle_human`
+/// confirmation above) so the two stay in sync; the confirmations are English
+/// constants, not localized, so the marker is stable.
+pub(crate) fn ticket_ref(body: &str) -> Option<i64> {
+    let marker = "support ticket #";
+    let start = body.find(marker)? + marker.len();
+    let digits: String = body[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+/// LC-719: true when a bot reply is a low-confidence / cannot-answer outcome, so
+/// the panel can surface a prominent "Still stuck? Talk to a human" affordance.
+/// Matches the decline copy from [`build_support_answer`] (empty knowledge base
+/// and no-match) - all of which point the user at a human.
+pub(crate) fn is_low_confidence(body: &str) -> bool {
+    body.contains("couldn't find anything about that in the product documentation")
+        || body.contains("no documentation configured yet")
+        || body.contains("isn't set up yet")
 }
 
 /// Notify every active admin (except the requester, if they are one) that
@@ -892,6 +939,35 @@ async fn dm_from_bot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ticket_ref_extracts_the_filed_ticket_number() {
+        // The exact /human fallback confirmation.
+        let filed = "_alice, no admins are available right now. I've filed support ticket #42; an admin will follow up._";
+        assert_eq!(ticket_ref(filed), Some(42));
+        // The "available now" confirmation carries no ticket.
+        assert_eq!(
+            ticket_ref("_alice, an admin has been notified and should respond shortly._"),
+            None
+        );
+        assert_eq!(ticket_ref("a normal answer from the docs"), None);
+    }
+
+    #[test]
+    fn is_low_confidence_matches_the_decline_copy() {
+        assert!(is_low_confidence(
+            "> q\n\n_I couldn't find anything about that in the product documentation. Try rephrasing, or type `/human`._"
+        ));
+        assert!(is_low_confidence(
+            "_The help desk has no documentation configured yet, so I can't answer._"
+        ));
+        assert!(is_low_confidence(
+            "_The help desk isn't set up yet, so I can't answer product questions right now._"
+        ));
+        assert!(!is_low_confidence(
+            "> q\n\nTo reset your password, open Settings.\n\n**Sources:** ..."
+        ));
+    }
 
     #[test]
     fn parse_sources_keeps_valid_and_drops_junk() {
