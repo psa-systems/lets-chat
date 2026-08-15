@@ -411,3 +411,4 @@ support-bubble-empty = Escribe una pregunta para empezar. Las respuestas provien
 support-stage-stuck = ¿No encontraste lo que necesitabas?
 support-stage-filed-title = Registramos tu solicitud
 support-stage-filed-body = Un administrador te dará seguimiento. Referencia
+support-sources-label = Fuentes:
