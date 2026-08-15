@@ -733,22 +733,23 @@ pub(crate) async fn handle_human(
         Some(n) if !n.trim().is_empty() => n,
         _ => &asker.username,
     };
-    // LC-714: when a human is available now, the live notification suffices. When
-    // none is available (idle admins, or none at all), file a durable support
-    // ticket so the request is not lost, and surface it in the /admin/support
-    // queue. The admins were still DMed above (they get it when they return).
-    let confirmation = if outcome.available {
-        format!("_{asker_label}, an admin has been notified and should respond here shortly._")
+    // LC-716: always file a durable support ticket so an admin can claim it from
+    // the /admin/support queue (claiming opens a dedicated support channel joining
+    // the requester and that admin). The escalation DMs above are the live ping;
+    // the ticket is the claimable record, needed even when an admin is online now.
+    // The available/unavailable split only changes the wording shown to the user.
+    let body = if message.is_empty() {
+        "(the user asked for a human via /human)".to_string()
     } else {
-        let body = if message.is_empty() {
-            "(the user asked for a human via /human)".to_string()
-        } else {
-            message.clone()
-        };
-        let ticket_id =
-            db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
-                .await?;
-        super::support::broadcast_support_changed(state);
+        message.clone()
+    };
+    let ticket_id =
+        db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
+            .await?;
+    super::support::broadcast_support_changed(state);
+    let confirmation = if outcome.available {
+        format!("_{asker_label}, an admin has been notified and should respond shortly._")
+    } else {
         format!(
             "_{asker_label}, no admins are available right now. I've filed support ticket #{ticket_id}; an admin will follow up._"
         )
