@@ -862,8 +862,10 @@ pub async fn escalate_to_admins(
 
 /// LC-714: send `body` as a DM from the assistant bot to `recipient_id`,
 /// resolving the bot and recipient username. Used to tell a requester their
-/// support ticket was resolved (from `routes::admin`). No-op if the recipient no
-/// longer exists.
+/// support ticket was claimed or resolved (from `routes::admin`). No-op if the
+/// recipient no longer exists. LC-720: since this DM lands in the room that backs
+/// the support bubble, it also pushes the panel so the claim/resolve update
+/// surfaces live in the requester's bubble on whatever page they are on.
 // Only the standalone admin support queue calls this; without the allow, the
 // `saas` build (which never compiles `routes::admin`) fails `-D dead-code`.
 #[cfg_attr(not(feature = "standalone"), allow(dead_code))]
@@ -877,7 +879,14 @@ pub(crate) async fn notify_user_from_bot(
         Some(rec) => rec.username,
         None => return Ok(()),
     };
-    dm_from_bot(state, &bot, recipient_id, &recipient_username, body).await
+    dm_from_bot(state, &bot, recipient_id, &recipient_username, body).await?;
+    state.hub.broadcast_to_user(
+        recipient_id,
+        &crate::ws::events::ChatEvent::SupportThreadChanged {
+            user_id: recipient_id.to_string(),
+        },
+    );
+    Ok(())
 }
 
 /// LC-718: find-or-create the assistant-bot <-> `user` DM room that backs the

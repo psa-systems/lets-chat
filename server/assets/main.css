@@ -5739,3 +5739,67 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
     border: 1px solid var(--border);
 }
 .lc-support-stage-stuck > span { flex: 1 1 auto; }
+
+/* LC-720: onboarding nudge, source chips, message column. */
+.lc-support-nudge {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    order: 1;
+    max-width: 15rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    font-size: 0.8125rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+html[data-lc-support-hint]:not([data-lc-support-open]) .lc-support-nudge { display: flex; }
+.lc-support-nudge-close {
+    flex: none;
+    border: none;
+    background: transparent;
+    color: var(--content-muted);
+    font-size: 1.125rem;
+    line-height: 1;
+    padding: 0 0.125rem;
+    cursor: pointer;
+}
+.lc-support-nudge-close:hover { color: var(--content); }
+
+.lc-support-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-width: 85%;
+}
+.lc-support-msg-mine .lc-support-col { align-items: flex-end; }
+.lc-support-col .lc-support-bubble { max-width: 100%; }
+
+.lc-support-sources {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.125rem;
+}
+.lc-support-sources-label {
+    font-size: 0.6875rem;
+    color: var(--content-muted);
+    margin-right: 0.125rem;
+}
+.lc-support-source {
+    font-size: 0.75rem;
+    padding: 0.0625rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background-color: var(--surface);
+    color: var(--accent);
+    text-decoration: none;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lc-support-source:hover { text-decoration: underline; }

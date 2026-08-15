@@ -7,9 +7,10 @@
 //! runs `help_docs::handle_support` in that room (placeholder-then-edit answer),
 //! and the "Talk to a human" action runs `help_docs::handle_human` (the LC-713
 //! escalation + LC-714 ticket fallback + LC-716 claim). No new commands, no new
-//! storage. While the panel is open the thread is polled (htmx `every`) so the
-//! async bot answer and any admin reply appear; Phase 2 (LC-719) replaces the
-//! poll with a WS push and adds the closed-panel attention indicator.
+//! storage. The thread fetches once on open and stays live via the
+//! `SupportThreadChanged` WS push (LC-719); that phase also adds the stage-aware
+//! footer and the closed-panel attention dot. LC-720 lifts cited Sources into
+//! link chips and pushes the panel on claim/resolve notifications.
 
 use askama::Template;
 use axum::extract::State;
@@ -37,11 +38,51 @@ pub fn router() -> Router<AppState> {
 #[template(path = "support/bubble.html")]
 struct BubbleView;
 
+/// One cited documentation source, rendered as a link chip under a bot reply.
+struct SourceChip {
+    label: String,
+    url: String,
+}
+
 /// One rendered row in the compact panel thread.
 struct PanelMsg {
     /// Posted by the viewer (right-aligned bubble) vs. the assistant/admin.
     mine: bool,
     body_html: String,
+    /// LC-720: cited sources lifted out of the reply body and rendered as chips.
+    sources: Vec<SourceChip>,
+}
+
+/// LC-720: split a bot reply into its prose and its cited `Sources`, so the panel
+/// can render the citations as first-class link chips instead of a trailing
+/// markdown bullet list. Matches the `\n\n**Sources:**\n- {product}: {title}
+/// ({url})` block appended by [`help_docs::build_support_answer`]. A body without
+/// the marker (user messages, declines) returns the whole body and no chips.
+fn split_sources(body: &str) -> (&str, Vec<SourceChip>) {
+    const MARKER: &str = "\n\n**Sources:**";
+    let Some(idx) = body.find(MARKER) else {
+        return (body, Vec::new());
+    };
+    let chips = body[idx + MARKER.len()..]
+        .lines()
+        .filter_map(parse_source_line)
+        .collect();
+    (&body[..idx], chips)
+}
+
+/// Parse one `- {label} ({url})` source line into a chip. The label keeps the
+/// `product: title` text; the URL is the last parenthesised http(s) link.
+fn parse_source_line(line: &str) -> Option<SourceChip> {
+    let line = line.trim().strip_prefix("- ")?;
+    let open = line.rfind(" (")?;
+    let url = line[open + 2..].strip_suffix(')')?;
+    if !url.starts_with("http") {
+        return None;
+    }
+    Some(SourceChip {
+        label: line[..open].to_string(),
+        url: url.to_string(),
+    })
 }
 
 /// LC-719: the conversation stage reflected in the panel, derived from the last
@@ -118,9 +159,13 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
     let messages: Vec<PanelMsg> = raw
         .into_iter()
         .filter(|m| m.user_id == user.id || m.user_id == bot.id)
-        .map(|m| PanelMsg {
-            mine: m.user_id == user.id,
-            body_html: markdown::render(&m.body, &[], &[]),
+        .map(|m| {
+            let (main, sources) = split_sources(&m.body);
+            PanelMsg {
+                mine: m.user_id == user.id,
+                body_html: markdown::render(main, &[], &[]),
+                sources,
+            }
         })
         .collect();
     let empty = messages.is_empty();
@@ -198,4 +243,39 @@ async fn post_send(
         help_docs::handle_support(&state, &room, &user, &body).await?;
     }
     render_thread(&state, &user).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_sources_extracts_chips_and_strips_the_block() {
+        let body = "To reset, open Settings.\n\n**Sources:**\n\
+            - mokosh-server: Configuration (https://a8n.systems/apps/mokosh-server/docs/configuration)\n\
+            - mokosh-www: Theming (https://a8n.systems/apps/mokosh-www/docs/theming)";
+        let (main, chips) = split_sources(body);
+        assert_eq!(main, "To reset, open Settings.");
+        assert_eq!(chips.len(), 2);
+        assert_eq!(chips[0].label, "mokosh-server: Configuration");
+        assert_eq!(
+            chips[0].url,
+            "https://a8n.systems/apps/mokosh-server/docs/configuration"
+        );
+        assert_eq!(chips[1].label, "mokosh-www: Theming");
+    }
+
+    #[test]
+    fn split_sources_without_marker_returns_body_unchanged() {
+        let (main, chips) = split_sources("just a plain answer with no citations");
+        assert_eq!(main, "just a plain answer with no citations");
+        assert!(chips.is_empty());
+    }
+
+    #[test]
+    fn parse_source_line_rejects_non_http_and_malformed() {
+        assert!(parse_source_line("- product: title (ftp://nope)").is_none());
+        assert!(parse_source_line("- no url here").is_none());
+        assert!(parse_source_line("not a bullet").is_none());
+    }
 }

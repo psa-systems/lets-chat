@@ -5,6 +5,14 @@
    (base.html). The thread is polled every 3s while open; the composer maps a
    plain message to /support and the "Talk to a human" button to /human. #}
 <div class="lc-support-root" data-lc-support-root>
+  {# LC-720: first-run onboarding nudge. Shown only while html[data-lc-support-hint]
+     is set (base.html, from localStorage); dismissed once via the X or on first
+     open, and never nags again. #}
+  <div class="lc-support-nudge" data-lc-support-nudge role="note">
+    <span>{{ "support-bubble-open"|t }}</span>
+    <button type="button" class="lc-support-nudge-close" aria-label="{{ "support-bubble-close"|t }}"
+            onclick="window.__lcDismissSupportHint()">&times;</button>
+  </div>
   <button type="button" class="lc-support-launcher" data-lc-support-launcher
           aria-label="{{ "support-bubble-open"|t }}" title="{{ "support-bubble-open"|t }}"
           onclick="window.__lcToggleSupport()">

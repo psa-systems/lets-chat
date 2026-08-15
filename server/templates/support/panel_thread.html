@@ -10,7 +10,17 @@
 {% else %}
 {% for m in messages %}
 <div class="lc-support-msg{% if m.mine %} lc-support-msg-mine{% endif %}">
-  <div class="lc-support-bubble lc-prose">{{ m.body_html|safe }}</div>
+  <div class="lc-support-col">
+    <div class="lc-support-bubble lc-prose">{{ m.body_html|safe }}</div>
+    {% if !m.sources.is_empty() %}
+    <div class="lc-support-sources">
+      <span class="lc-support-sources-label">{{ "support-sources-label"|t }}</span>
+      {% for s in m.sources %}
+      <a class="lc-support-source" href="{{ s.url }}" target="_blank" rel="noopener noreferrer">{{ s.label }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endfor %}
 {% endif %}
