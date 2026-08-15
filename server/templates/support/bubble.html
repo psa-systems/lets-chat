@@ -23,12 +23,12 @@
       <button type="button" class="lc-support-panel-close" aria-label="{{ "support-bubble-close"|t }}"
               onclick="window.__lcToggleSupport(false)">&times;</button>
     </header>
-    {# Fetch on open (the `lcopen` event fired by __lcToggleSupport) and poll only
-       while open (the trigger filter), so a closed bubble makes no requests and
-       does not create the backing DM until the user actually opens it. #}
+    {# LC-719: fetch on open (the `lcopen` event fired by __lcToggleSupport); live
+       updates arrive via the SupportThreadChanged WS push (OOB into this id), so
+       there is no polling. A closed, never-opened bubble makes no requests and
+       does not create the backing DM until the user opens it. #}
     <div id="lc-support-thread" class="lc-support-thread" aria-live="polite"
-         hx-get="/support/panel/thread" hx-swap="innerHTML"
-         hx-trigger="lcopen, every 3s[document.documentElement.getAttribute('data-lc-support-open')==='1']"
+         hx-get="/support/panel/thread" hx-swap="innerHTML" hx-trigger="lcopen"
          hx-on::after-settle="this.scrollTop = this.scrollHeight"></div>
     <form class="lc-support-compose" hx-post="/support/panel/send"
           hx-target="#lc-support-thread" hx-swap="innerHTML"

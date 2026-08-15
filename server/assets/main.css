@@ -5699,3 +5699,43 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
 .lc-support-input { width: 100%; }
 .lc-support-actions { display: flex; gap: 0.5rem; }
 .lc-support-send { flex: 1 1 auto; }
+
+/* LC-719: support bubble stage affordances + attention indicator. */
+.lc-support-launcher { position: relative; }
+.lc-support-root[data-lc-attention] .lc-support-launcher::after {
+    content: "";
+    position: absolute;
+    top: 0.125rem;
+    right: 0.125rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 9999px;
+    background-color: var(--danger);
+    border: 2px solid var(--surface-elevated);
+}
+html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { display: none; }
+
+.lc-support-stage {
+    margin-top: 0.25rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.625rem;
+    font-size: 0.875rem;
+}
+.lc-support-stage-filed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    background-color: var(--accent-surface);
+    color: var(--accent-surface-content);
+    border: 1px solid var(--border);
+}
+.lc-support-stage-stuck {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background-color: var(--surface-sunken);
+    color: var(--content);
+    border: 1px solid var(--border);
+}
+.lc-support-stage-stuck > span { flex: 1 1 auto; }

@@ -199,13 +199,28 @@
           else localStorage.removeItem("lc-support-open");
         } catch (e) {}
         applySupport(next);
-        // Fetch the thread immediately on open (polling then keeps it fresh); a
-        // closed bubble issues no requests.
-        if (next && window.htmx) {
-          var t = document.getElementById("lc-support-thread");
-          if (t) window.htmx.trigger(t, "lcopen");
+        var root = document.querySelector("[data-lc-support-root]");
+        // Opening clears the attention dot and fetches the thread; a closed
+        // bubble issues no requests (live updates arrive via WS push).
+        if (next) {
+          if (root) root.removeAttribute("data-lc-attention");
+          if (window.htmx) {
+            var t = document.getElementById("lc-support-thread");
+            if (t) window.htmx.trigger(t, "lcopen");
+          }
         }
       };
+      // LC-719: when a support-panel WS push (OOB swap into #lc-support-thread)
+      // lands while the panel is closed, flag the launcher so the user notices a
+      // reply. Cleared on next open (above). Attached to document (body may not
+      // exist yet in this head script); htmx events bubble to it.
+      document.addEventListener("htmx:oobAfterSwap", function (e) {
+        if (e.target && e.target.id === "lc-support-thread" &&
+            d.getAttribute("data-lc-support-open") !== "1") {
+          var r = document.querySelector("[data-lc-support-root]");
+          if (r) r.setAttribute("data-lc-attention", "1");
+        }
+      });
 
       // LC-308: unread-only sidebar filter. Device-local; set before paint so
       // hidden rows never flash in. The actual hiding is pure CSS keyed on

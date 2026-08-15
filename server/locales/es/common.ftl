@@ -408,3 +408,6 @@ support-bubble-placeholder = Escribe una pregunta…
 support-bubble-send = Enviar
 support-bubble-human = Hablar con una persona
 support-bubble-empty = Escribe una pregunta para empezar. Las respuestas provienen de nuestra documentación; puedes contactar a una persona cuando quieras.
+support-stage-stuck = ¿No encontraste lo que necesitabas?
+support-stage-filed-title = Registramos tu solicitud
+support-stage-filed-body = Un administrador te dará seguimiento. Referencia
