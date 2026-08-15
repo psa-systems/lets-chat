@@ -403,3 +403,13 @@ blocked-username-placeholder = username
 blocked-block-button = Block
 blocked-empty = You haven't blocked anyone.
 blocked-unblock = Unblock
+
+## LC-718: support chat bubble (epic LC-717)
+support-bubble-open = Need help? Ask our assistant
+support-bubble-title = Support
+support-bubble-subtitle = Ask us anything
+support-bubble-close = Close support
+support-bubble-placeholder = Ask a question…
+support-bubble-send = Send
+support-bubble-human = Talk to a human
+support-bubble-empty = Ask a question to get started. Answers come from our documentation; you can reach a person anytime.

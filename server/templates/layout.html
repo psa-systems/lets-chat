@@ -291,6 +291,10 @@
      overflow clip, so the picker floats above the conversation instead of
      reflowing it. Single host = inherently single-open. #}
   <div id="lc-reaction-popover" role="dialog" aria-label="{{ "partials-reaction-add"|t }}" class="fixed z-50 hidden"></div>
+  {# LC-718: support chat bubble (epic LC-717). Self-gating slot: the endpoint
+     returns the launcher + panel only when the assistant is usable for the
+     viewer, otherwise empty markup. Fixed bottom-right, below the top banner. #}
+  <div id="lc-support-slot" hx-get="/support/bubble" hx-trigger="load" hx-swap="innerHTML"></div>
 </div>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser

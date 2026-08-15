@@ -833,6 +833,27 @@ pub(crate) async fn notify_user_from_bot(
     dm_from_bot(state, &bot, recipient_id, &recipient_username, body).await
 }
 
+/// LC-718: find-or-create the assistant-bot <-> `user` DM room that backs the
+/// support chat bubble. This is the same DM the escalation notices use, so the
+/// bubble thread and any `/support` answers persist across page loads and rooms.
+/// A freshly created room nudges the user's sidebar (mirrors [`dm_from_bot`]).
+pub(crate) async fn support_dm_room(state: &AppState, user: &User) -> Result<Room, AppError> {
+    let bot = super::assistant::assistant_bot(state).await?;
+    if let Some(r) = db::chat::find_dm_room(&state.chat, &bot.id, &user.id).await? {
+        return Ok(r);
+    }
+    let name = format!("@{}", bot.username);
+    let room = db::chat::create_dm_room(&state.chat, &name, &bot.id, &user.id).await?;
+    state.hub.broadcast_to_user(
+        &user.id,
+        &crate::ws::events::ChatEvent::RoomMemberAdded {
+            room_id: room.id,
+            user_id: user.id.clone(),
+        },
+    );
+    Ok(room)
+}
+
 /// Send `body` as a DM from the assistant bot to `recipient_id`. Finds or creates
 /// the bot-to-recipient DM room, then posts through `finalize_message_send`,
 /// which for a DM room already fans out the peer notification (WS + push +

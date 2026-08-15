@@ -1,0 +1,14 @@
+{# LC-718: compact support-panel thread. Rendered by GET /support/panel/thread
+   (polled) and by the send response. Bubbles are the viewer's assistant-bot DM,
+   filtered to the two participants. body_html is the same markdown render used
+   in a room, so cited Sources links come through; Phase 3 (LC-720) upgrades
+   Sources / link-preview cards to first-class panel components. #}
+{% if empty %}
+<p class="lc-support-empty">{{ "support-bubble-empty"|t }}</p>
+{% else %}
+{% for m in messages %}
+<div class="lc-support-msg{% if m.mine %} lc-support-msg-mine{% endif %}">
+  <div class="lc-support-bubble lc-prose">{{ m.body_html|safe }}</div>
+</div>
+{% endfor %}
+{% endif %}
