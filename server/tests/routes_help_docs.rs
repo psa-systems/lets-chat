@@ -326,6 +326,67 @@ async fn human_escalation_dms_all_admins_and_reports_availability() {
 }
 
 #[tokio::test]
+async fn human_escalation_from_the_bubble_points_admins_at_the_support_queue() {
+    // LC-721: a /human raised from the support bubble originates in the requester's
+    // private assistant-bot DM. An admin is not a member of that DM, so linking it
+    // (the old behaviour) gave the admin a 403 when they clicked "Reply in that
+    // channel". For a DM origin the escalation must point at the support queue,
+    // where claiming the ticket opens a shared channel, and must NOT link the DM.
+    let state = state_with_embeddings().await;
+    let req_id = db::auth::create_user(&state.auth, "member", "h")
+        .await
+        .unwrap();
+    let requester: User = db::auth::find_user_by_id(&state.auth, &req_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .into();
+    let admin = db::auth::create_user(&state.auth, "admin1", "h")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&state.auth)
+        .await
+        .unwrap();
+
+    // A DM-typed origin room stands in for the bubble's assistant-bot DM.
+    let dm = db::chat::create_dm_room(&state.chat, "@assistant", &req_id, &admin)
+        .await
+        .unwrap();
+    assert_eq!(dm.room_type, "dm");
+
+    let outcome =
+        lets_chat::routes::help_docs::escalate_to_admins(&state, &requester, &dm, "account locked")
+            .await
+            .unwrap();
+    assert_eq!(outcome.notified, 1);
+
+    let bot = db::auth::find_user_by_username(&state.auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    let admin_dm = db::chat::find_dm_room(&state.chat, &bot.id, &admin)
+        .await
+        .unwrap()
+        .expect("bot DM exists for the admin");
+    let body: String =
+        sqlx::query_scalar("SELECT body FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 1")
+            .bind(admin_dm.id)
+            .fetch_one(&state.chat)
+            .await
+            .unwrap();
+    assert!(
+        body.contains("/admin/support"),
+        "escalation points at the support queue, got: {body}"
+    );
+    assert!(
+        !body.contains("/room/"),
+        "escalation does not link the private DM the admin cannot open, got: {body}"
+    );
+}
+
+#[tokio::test]
 async fn human_escalation_with_no_admins_notifies_nobody() {
     let state = state_with_embeddings().await;
     let req_id = db::auth::create_user(&state.auth, "member", "h")

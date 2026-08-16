@@ -841,10 +841,23 @@ pub async fn escalate_to_admins(
     } else {
         format!("\n\n> {message}")
     };
-    let dm_body = format!(
-        "\u{1f198} **Help requested** by {requester_label} in [#{}](/room/{}).{quoted}\n\nReply in that channel to help them.",
-        origin_room.name, origin_room.id
-    );
+    // LC-721: the origin-room link is only useful to an admin who can actually
+    // open it. A request raised from the support bubble originates in the
+    // requester's private assistant-bot DM, which no admin is a member of, so
+    // linking it produced a 403 for the admin ("Reply in that channel" pointed at
+    // a channel they could not access). For a DM origin, point admins at the
+    // support queue instead, where claiming the ticket opens a shared channel with
+    // the requester (LC-716). A request from a normal room keeps the direct link.
+    let dm_body = if origin_room.room_type == "dm" {
+        format!(
+            "\u{1f198} **Help requested** by {requester_label} via the support assistant.{quoted}\n\nClaim it in the [support queue](/admin/support) to open a channel with them."
+        )
+    } else {
+        format!(
+            "\u{1f198} **Help requested** by {requester_label} in [#{}](/room/{}).{quoted}\n\nReply in that channel to help them.",
+            origin_room.name, origin_room.id
+        )
+    };
 
     let mut notified = 0;
     for (admin_id, admin_username) in &targets {
