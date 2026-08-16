@@ -265,6 +265,10 @@ support-jump = Open channel
 support-row-in = In:
 support-action-claim = Claim
 support-action-resolve = Resolve
+# LC-726: admin support visibility outside the admin section.
+support-rail-label = Support requests
+support-home-title = Support requests
+support-home-open-queue = Open the support queue
 
 ## Forward (LC-278)
 room-forward-title = Forward message

@@ -1,0 +1,25 @@
+{# LC-726: admin-only pending-support glance. Shared by the Home dashboard
+   (home/welcome.html) and the live AdminSupportChanged OOB swap (admin/support_oob.html
+   into #lc-home-support-card). Renders nothing when the queue is empty, so the
+   container can stay in the DOM and the card can appear live when a request lands.
+   References `open_count` and `tickets` (the newest few open SupportViews). #}
+{% if open_count > 0 %}
+<section class="card lc-home-card lc-home-support overflow-hidden p-0" aria-label="{{ "support-home-title"|t }}">
+  <header class="lc-home-card-head">
+    <span class="lc-home-card-title">{{ "support-home-title"|t }}</span>
+    <span class="lc-count-pill lc-count-pill--alert">{{ open_count }}</span>
+  </header>
+  <ul class="lc-home-support-list">
+    {% for t in tickets %}{% if loop.index0 < 3 %}
+    <li class="lc-home-support-row">
+      <div class="lc-home-support-row-top">
+        <span class="lc-home-support-who">{{ t.requester_label }}</span>
+        <span class="lc-home-support-when">{{ t.created_at }}</span>
+      </div>
+      <p class="lc-home-support-body">{{ t.body }}</p>
+    </li>
+    {% endif %}{% endfor %}
+  </ul>
+  <a href="/admin/support" class="lc-home-support-link">{{ "support-home-open-queue"|t }}</a>
+</section>
+{% endif %}

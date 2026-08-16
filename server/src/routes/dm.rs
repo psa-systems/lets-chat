@@ -88,6 +88,8 @@ pub async fn get_dm(
             // LC-707: no dashboard here, so the personal glance is unused.
             week_messages: 0,
             week_kudos: 0,
+            support_open_count: 0,
+            support_recent: &[],
         };
         return Ok(html(&page)?.into_response());
     }
@@ -142,6 +144,8 @@ pub async fn get_dm(
                     // LC-707: no dashboard here, so the personal glance is unused.
                     week_messages: 0,
                     week_kudos: 0,
+                    support_open_count: 0,
+                    support_recent: &[],
                 };
                 return Ok(html(&page)?.into_response());
             }
