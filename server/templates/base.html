@@ -226,8 +226,14 @@
       // (a bot answer, or a claim/resolve notice), so a running count is accurate.
       // Cleared on next open (above). Attached to document (body may not exist yet
       // in this head script); htmx events bubble to it.
+      //
+      // htmx fires htmx:oobAfterSwap on the newly-inserted child nodes, not on the
+      // OOB target, so the swapped element is in `e.detail.target` (matching the
+      // other oobAfterSwap listeners in layout.html) - `e.target` is a message row
+      // and never has the thread id.
       document.addEventListener("htmx:oobAfterSwap", function (e) {
-        if (e.target && e.target.id === "lc-support-thread" &&
+        var tgt = e.detail && e.detail.target;
+        if (tgt && tgt.id === "lc-support-thread" &&
             d.getAttribute("data-lc-support-open") !== "1") {
           var r = document.querySelector("[data-lc-support-root]");
           if (r) {
