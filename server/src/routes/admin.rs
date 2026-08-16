@@ -1678,7 +1678,8 @@ pub async fn post_support_claim(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
     Path(id): Path<i64>,
-) -> Result<Html, AppError> {
+) -> Result<axum::response::Response, AppError> {
+    use axum::response::IntoResponse;
     // Fetch first so we still have the requester + origin after the status flip.
     let ticket = db::support_tickets::get(&state.chat, id).await?;
     let updated = db::support_tickets::set_status(&state.chat, id, "claimed", &user.id).await?;
@@ -1701,8 +1702,23 @@ pub async fn post_support_claim(
             tracing::warn!(error = %e, ticket = id, "failed to notify requester of claim");
         }
         super::support::broadcast_support_changed(&state);
+        // LC-725: send the acting admin straight into the freshly-created support
+        // channel (they are a member, so it opens cleanly) instead of leaving them
+        // on the queue with the ticket silently gone. Every other admin tab still
+        // gets the queue OOB refresh via the broadcast above.
+        return Ok((
+            axum::http::StatusCode::OK,
+            [(
+                axum::http::header::HeaderName::from_static("hx-redirect"),
+                format!("/room/{room_id}"),
+            )],
+        )
+            .into_response());
     }
-    super::support::render_support_oob(&state).await
+    // Race: another admin claimed it first. Just refresh this admin's queue.
+    Ok(super::support::render_support_oob(&state)
+        .await?
+        .into_response())
 }
 
 fn random_code(len: usize) -> String {
