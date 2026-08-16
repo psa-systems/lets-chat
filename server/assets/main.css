@@ -5670,6 +5670,11 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
 .lc-support-msg-mine { justify-content: flex-end; }
 .lc-support-bubble {
     max-width: 85%;
+    /* LC-721: a flex item defaults to min-width:auto, which refuses to shrink
+       below its content and lets a wide code block push the whole panel sideways.
+       min-width:0 lets the bubble shrink so the `.lc-md pre { overflow-x:auto }`
+       rule scrolls long code inside the bubble instead of overflowing the panel. */
+    min-width: 0;
     padding: 0.5rem 0.75rem;
     border-radius: 0.75rem;
     background-color: var(--surface-sunken);
@@ -5700,18 +5705,28 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
 .lc-support-actions { display: flex; gap: 0.5rem; }
 .lc-support-send { flex: 1 1 auto; }
 
-/* LC-719: support bubble stage affordances + attention indicator. */
+/* LC-719/721: support bubble stage affordances + unread-count badge. When one or
+   more updates land while the panel is closed, the launcher shows a numbered
+   badge in the corner (the count comes from `data-lc-attention`, set by
+   base.html); it clears on the next open. */
 .lc-support-launcher { position: relative; }
 .lc-support-root[data-lc-attention] .lc-support-launcher::after {
-    content: "";
+    content: attr(data-lc-attention);
     position: absolute;
-    top: 0.125rem;
-    right: 0.125rem;
-    width: 0.75rem;
-    height: 0.75rem;
+    top: -0.25rem;
+    right: -0.25rem;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    padding: 0 0.25rem;
+    box-sizing: border-box;
     border-radius: 9999px;
     background-color: var(--danger);
+    color: var(--danger-content);
     border: 2px solid var(--surface-elevated);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 0.875rem;
+    text-align: center;
 }
 html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { display: none; }
 
@@ -5773,6 +5788,9 @@ html[data-lc-support-hint]:not([data-lc-support-open]) .lc-support-nudge { displ
     flex-direction: column;
     gap: 0.25rem;
     max-width: 85%;
+    /* LC-721: shrink below content so a wide code block scrolls inside the
+       bubble rather than stretching the panel (see .lc-support-bubble). */
+    min-width: 0;
 }
 .lc-support-msg-mine .lc-support-col { align-items: flex-end; }
 .lc-support-col .lc-support-bubble { max-width: 100%; }
