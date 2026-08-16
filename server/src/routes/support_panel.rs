@@ -70,6 +70,21 @@ fn split_sources(body: &str) -> (&str, Vec<SourceChip>) {
     (&body[..idx], chips)
 }
 
+/// LC-723: drop a leading `> ...` blockquote paragraph. Support answers are
+/// stored with a `> {asker}: {question}` attribution header (see
+/// [`help_docs::build_support_answer`]); in the panel the asker's own question is
+/// already shown as their own bubble, so echoing it back in the bot reply is
+/// redundant. Removes only the first paragraph, and only when it is a blockquote.
+fn strip_leading_quote(body: &str) -> &str {
+    match body.strip_prefix("> ") {
+        Some(rest) => match rest.find("\n\n") {
+            Some(idx) => &rest[idx + 2..],
+            None => body,
+        },
+        None => body,
+    }
+}
+
 /// Parse one `- {label} ({url})` source line into a chip. The label keeps the
 /// `product: title` text; the URL is the last parenthesised http(s) link.
 fn parse_source_line(line: &str) -> Option<SourceChip> {
@@ -160,9 +175,17 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
         .into_iter()
         .filter(|m| m.user_id == user.id || m.user_id == bot.id)
         .map(|m| {
+            let mine = m.user_id == user.id;
             let (main, sources) = split_sources(&m.body);
+            // LC-723: strip the redundant attribution header from bot replies (the
+            // asker's question already shows as their own bubble in the panel).
+            let main = if mine {
+                main
+            } else {
+                strip_leading_quote(main)
+            };
             PanelMsg {
-                mine: m.user_id == user.id,
+                mine,
                 body_html: markdown::render(main, &[], &[]),
                 sources,
             }
@@ -270,6 +293,21 @@ mod tests {
         let (main, chips) = split_sources("just a plain answer with no citations");
         assert_eq!(main, "just a plain answer with no citations");
         assert!(chips.is_empty());
+    }
+
+    #[test]
+    fn strip_leading_quote_drops_only_a_leading_blockquote_header() {
+        // The stored support-answer header, then the real answer.
+        let body = "> alice: how do I install?\n\nRun the installer, then sign in.";
+        assert_eq!(
+            strip_leading_quote(body),
+            "Run the installer, then sign in."
+        );
+        // A plain answer with no header is untouched.
+        assert_eq!(strip_leading_quote("Just an answer."), "Just an answer.");
+        // A blockquote that is the whole (single-paragraph) body is left as-is
+        // rather than emptied.
+        assert_eq!(strip_leading_quote("> only a quote"), "> only a quote");
     }
 
     #[test]

@@ -2,8 +2,9 @@
    the hx-get slot in layout.html; the route returns empty markup when the
    assistant is disabled for the viewer, so this only renders when usable. Open
    /close state persists in localStorage via window.__lcToggleSupport
-   (base.html). The thread is polled every 3s while open; the composer maps a
-   plain message to /support and the "Talk to a human" button to /human. #}
+   (base.html). The thread fetches when the panel opens and stays live via the
+   SupportThreadChanged WS push (no polling); the composer maps a plain message to
+   /support and the "Talk to a human" button to /human. #}
 <div class="lc-support-root" data-lc-support-root>
   {# LC-720: first-run onboarding nudge. Shown only while html[data-lc-support-hint]
      is set (base.html, from localStorage); dismissed once via the X or on first
@@ -31,12 +32,15 @@
       <button type="button" class="lc-support-panel-close" aria-label="{{ "support-bubble-close"|t }}"
               onclick="window.__lcToggleSupport(false)">&times;</button>
     </header>
-    {# LC-719: fetch on open (the `lcopen` event fired by __lcToggleSupport); live
-       updates arrive via the SupportThreadChanged WS push (OOB into this id), so
-       there is no polling. A closed, never-opened bubble makes no requests and
-       does not create the backing DM until the user opens it. #}
+    {# LC-719/723: fetch on open (the `lcopen` event fired by __lcToggleSupport),
+       plus once on load when the panel is already open from a prior session (the
+       `load` filter), so a bubble that starts open is not left blank. Live updates
+       arrive via the SupportThreadChanged WS push (OOB into this id), so there is
+       no polling. A closed bubble makes no requests and does not create the
+       backing DM until the user opens it. #}
     <div id="lc-support-thread" class="lc-support-thread" aria-live="polite"
-         hx-get="/support/panel/thread" hx-swap="innerHTML" hx-trigger="lcopen"
+         hx-get="/support/panel/thread" hx-swap="innerHTML"
+         hx-trigger="lcopen, load[document.documentElement.getAttribute('data-lc-support-open')==='1']"
          hx-on::after-settle="this.scrollTop = this.scrollHeight"></div>
     <form class="lc-support-compose" hx-post="/support/panel/send"
           hx-target="#lc-support-thread" hx-swap="innerHTML"

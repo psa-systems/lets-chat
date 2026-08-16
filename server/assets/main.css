@@ -5680,6 +5680,7 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
     background-color: var(--surface-sunken);
     color: var(--content);
     font-size: 0.9375rem;
+    line-height: 1.45;
     word-break: break-word;
     overflow-wrap: anywhere;
 }
@@ -5691,6 +5692,10 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
 .lc-support-bubble :where(p) { margin: 0.25rem 0; }
 .lc-support-bubble :where(p:first-child) { margin-top: 0; }
 .lc-support-bubble :where(p:last-child) { margin-bottom: 0; }
+/* LC-723: the compact panel is too narrow for the floating code-copy button
+   without it overlapping the first line of code; hide it here. The full timeline
+   keeps its copy button. */
+.lc-support-bubble .lc-code-copy { display: none; }
 
 .lc-support-compose {
     flex: none;

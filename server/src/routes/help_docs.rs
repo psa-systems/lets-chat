@@ -81,7 +81,10 @@ excerpts do not contain the answer, say so plainly and helpfully - tell the user
 it in the documentation and that they can ask an admin for a human - and do NOT guess or invent an \
 answer. If the question asks for harmful, dangerous, illegal, or otherwise unsafe information, refuse \
 briefly on safety grounds, and never phrase such a refusal as a documentation miss. Be concise and \
-use Markdown. Do not invent facts, links, or quotes.";
+use Markdown. Do not invent facts, links, or quotes. Write the answer as prose for the user; do NOT \
+repeat the bracketed source labels shown in the excerpts (such as [product - page - section]) - they \
+are provided only so you know each excerpt's origin. When you include commands or code, put them in a \
+fenced code block and always close the fence.";
 
 /// Placeholder shown the instant a `/support` is sent, then replaced in place by
 /// the answer. Italic so it reads as a transient status.
