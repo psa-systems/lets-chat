@@ -5637,25 +5637,33 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
    of the panel is keyed on `html[data-lc-support-open]` (toggled by
    window.__lcToggleSupport in base.html), so it survives htmx swaps and page
    loads without per-page state. */
+/* LC-729: the root is only as big as the launcher; the panel and the onboarding
+   nudge are absolutely positioned off it (see below) so the whole bubble can be
+   dragged anywhere without the docked flex column dictating which way the panel
+   opens. JS (base.html) may overwrite right/bottom inline when the user drags. */
 .lc-support-root {
     position: fixed;
     right: 1.25rem;
     bottom: 1.25rem;
     z-index: 50;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.625rem;
+    width: max-content;
     pointer-events: none;
 }
 /* LC-728: on a page with a message composer (its full-width bottom bar spans to
    the right edge), the launcher sat on top of the composer's send / toolbar
    controls. Lift the whole bubble above the composer bar there; pages without a
-   composer (Home, admin) keep the tighter bottom offset. */
+   composer (Home, admin) keep the tighter bottom offset. LC-729: this is only the
+   default dock - once the user drags, an inline `bottom` on the element wins. */
 body:has(#composer) .lc-support-root {
     bottom: 7rem;
 }
 .lc-support-root > * { pointer-events: auto; }
+/* LC-729: while dragging, drop the launcher hover transition so the bubble tracks
+   the pointer 1:1, and show a grabbing cursor. */
+.lc-support-root.lc-support-dragging .lc-support-launcher {
+    transition: none;
+    cursor: grabbing;
+}
 .lc-support-launcher {
     width: 3.25rem;
     height: 3.25rem;
@@ -5669,13 +5677,22 @@ body:has(#composer) .lc-support-root {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
     cursor: pointer;
     transition: transform 0.12s ease, background-color 0.12s ease;
-    order: 2;
+    /* LC-729: draggable via a pointer handler; opt out of the browser's touch
+       gestures so a drag on touch does not scroll the page instead. */
+    touch-action: none;
 }
 .lc-support-launcher:hover { background-color: var(--accent-hover); transform: translateY(-1px); }
 .lc-support-launcher:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* LC-729: the panel is anchored off the launcher and, by default, opens up and to
+   the left (matching the historical bottom-right dock). When the user drags the
+   launcher near a viewport edge, JS sets data-lc-vpos / data-lc-hpos on the root
+   and the panel flips to whichever side has room, so it never opens off-screen. */
 .lc-support-panel {
     display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.625rem);
     flex-direction: column;
     width: min(23rem, calc(100vw - 2rem));
     height: min(30rem, calc(100vh - 8rem));
@@ -5684,8 +5701,9 @@ body:has(#composer) .lc-support-root {
     background-color: var(--surface-elevated);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
     overflow: hidden;
-    order: 1;
 }
+.lc-support-root[data-lc-hpos="left"] .lc-support-panel { right: auto; left: 0; }
+.lc-support-root[data-lc-vpos="top"] .lc-support-panel { bottom: auto; top: calc(100% + 0.625rem); }
 html[data-lc-support-open] .lc-support-panel { display: flex; }
 
 .lc-support-panel-head {
@@ -5891,11 +5909,15 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
 .lc-support-field textarea { resize: vertical; }
 
 /* LC-720: onboarding nudge, source chips, message column. */
+/* LC-729: anchored off the launcher like the panel, and it flips sides the same
+   way so the first-run nudge stays on-screen wherever the launcher is dragged. */
 .lc-support-nudge {
     display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.625rem);
     align-items: center;
     gap: 0.5rem;
-    order: 1;
     max-width: 15rem;
     padding: 0.5rem 0.5rem 0.5rem 0.75rem;
     border: 1px solid var(--border);
@@ -5905,6 +5927,8 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
     font-size: 0.8125rem;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
 }
+.lc-support-root[data-lc-hpos="left"] .lc-support-nudge { right: auto; left: 0; }
+.lc-support-root[data-lc-vpos="top"] .lc-support-nudge { bottom: auto; top: calc(100% + 0.625rem); }
 html[data-lc-support-hint]:not([data-lc-support-open]) .lc-support-nudge { display: flex; }
 .lc-support-nudge-close {
     flex: none;
