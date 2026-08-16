@@ -417,3 +417,15 @@ support-stage-stuck = Didn't find what you needed?
 support-stage-filed-title = We've filed your request
 support-stage-filed-body = An admin will follow up. Reference
 support-sources-label = Sources:
+# LC-724: waiting-for-a-human stage + add-details form.
+support-waiting-live = An admin has been notified. Waiting for a reply…
+support-waiting-timeout = No one has picked this up yet. You can keep waiting, or add details below.
+support-add-details = Add details
+support-detail-need = What do you need help with?
+support-detail-tried = What have you tried?
+support-detail-urgency = Urgency
+support-detail-email = Contact email (optional)
+support-detail-submit = Send details
+support-urgency-low = Low
+support-urgency-normal = Normal
+support-urgency-high = High

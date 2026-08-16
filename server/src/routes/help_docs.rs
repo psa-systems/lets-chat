@@ -763,11 +763,19 @@ pub(crate) async fn handle_human(
         db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
             .await?;
     super::support::broadcast_support_changed(state);
+    // LC-724: both confirmations carry the ticket id so the panel can show a
+    // "waiting for a human" stage keyed on it (`ticket_ref`), with a live elapsed
+    // timer and an "add details" form that enriches this same ticket. The wording
+    // differs only in whether an admin is available now; the marker phrases ("an
+    // admin has been notified" / "no admins are available") are what the panel
+    // matches on, so keep them stable.
     let confirmation = if outcome.available {
-        format!("_{asker_label}, an admin has been notified and should respond shortly._")
+        format!(
+            "_{asker_label}, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #{ticket_id} so this doesn't get lost - you can keep waiting, or add details below._"
+        )
     } else {
         format!(
-            "_{asker_label}, no admins are available right now. I've filed support ticket #{ticket_id}; an admin will follow up._"
+            "_{asker_label}, no admins are available right now, so I've filed support ticket #{ticket_id} for follow-up. You can add details below to help them help you._"
         )
     };
     let bot = super::assistant::assistant_bot(state).await?;
@@ -968,14 +976,12 @@ mod tests {
 
     #[test]
     fn ticket_ref_extracts_the_filed_ticket_number() {
-        // The exact /human fallback confirmation.
-        let filed = "_alice, no admins are available right now. I've filed support ticket #42; an admin will follow up._";
-        assert_eq!(ticket_ref(filed), Some(42));
-        // The "available now" confirmation carries no ticket.
-        assert_eq!(
-            ticket_ref("_alice, an admin has been notified and should respond shortly._"),
-            None
-        );
+        // LC-724: both /human confirmations now carry the ticket id (so the panel
+        // can key its waiting stage on it).
+        let unavailable = "_alice, no admins are available right now, so I've filed support ticket #42 for follow-up. You can add details below._";
+        assert_eq!(ticket_ref(unavailable), Some(42));
+        let available = "_alice, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #7 so this doesn't get lost - you can keep waiting, or add details below._";
+        assert_eq!(ticket_ref(available), Some(7));
         assert_eq!(ticket_ref("a normal answer from the docs"), None);
     }
 

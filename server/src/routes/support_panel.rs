@@ -32,6 +32,52 @@ pub fn router() -> Router<AppState> {
         .route("/support/bubble", get(get_bubble))
         .route("/support/panel/thread", get(get_thread))
         .route("/support/panel/send", post(post_send))
+        .route("/support/panel/ticket", post(post_ticket_details))
+}
+
+/// LC-724: substring that marks the "you added details" confirmation, so the
+/// panel derives the ticket-filed stage from it (kept next to the message it
+/// matches, in [`post_ticket_details`]).
+const DETAILS_FILED_MARKER: &str = "added your details";
+
+/// LC-724: true when a bot message is a `/human` waiting confirmation (an admin
+/// was notified, or none were available). Matches the stable marker phrases in
+/// [`help_docs::handle_human`]; both variants also carry the ticket id.
+fn is_waiting_confirmation(body: &str) -> bool {
+    body.contains("an admin has been notified") || body.contains("no admins are available")
+}
+
+/// LC-724: turn a SQLite `datetime('now')` UTC timestamp ("YYYY-MM-DD HH:MM:SS")
+/// into an ISO-8601 UTC string ("YYYY-MM-DDTHH:MM:SSZ") that browsers parse as
+/// UTC, so the panel's client-side "waiting" elapsed timer starts from the right
+/// instant regardless of the viewer's timezone.
+fn to_iso_utc(sqlite_ts: &str) -> String {
+    let t = sqlite_ts.trim();
+    if t.is_empty() {
+        return String::new();
+    }
+    format!("{}Z", t.replace(' ', "T"))
+}
+
+/// LC-724: derive the panel stage from the last assistant message and its time.
+/// Order matters: an "added details" confirmation is the filed stage; a `/human`
+/// waiting confirmation (which carries the ticket id) is the waiting stage; a
+/// low-confidence decline is the stuck stage; anything else needs no affordance.
+fn derive_stage(body: &str, created_at: &str) -> Stage {
+    if body.contains(DETAILS_FILED_MARKER) {
+        if let Some(id) = help_docs::ticket_ref(body) {
+            return Stage::TicketFiled(id);
+        }
+    }
+    if is_waiting_confirmation(body) {
+        if let Some(id) = help_docs::ticket_ref(body) {
+            return Stage::Waiting(id, to_iso_utc(created_at));
+        }
+    }
+    if help_docs::is_low_confidence(body) {
+        return Stage::Stuck;
+    }
+    Stage::Normal
 }
 
 #[derive(Template)]
@@ -108,6 +154,11 @@ enum Stage {
     /// The bot could not answer from the docs: surface a prominent "Still stuck?
     /// Talk to a human" call to action.
     Stuck,
+    /// LC-724: the user asked for a human and a ticket was opened (ref #N), but no
+    /// details have been added yet: show the live "waiting for a human" state (an
+    /// elapsed timer keyed on the ISO-UTC start time, a timeout re-prompt, and an
+    /// "add details" form). The `String` is the ISO-UTC time the wait began.
+    Waiting(i64, String),
     /// A `/human` fallback filed a ticket: show a "we've filed this (ref #N)" card.
     TicketFiled(i64),
 }
@@ -154,21 +205,13 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
     let room = help_docs::support_dm_room(state, user).await?;
     let raw = db::chat::list_messages(&state.chat, room.id).await?;
 
-    // Stage from the last assistant reply: a filed ticket wins over a plain
-    // low-confidence decline; a normal answer needs no extra affordance.
+    // Stage from the last assistant reply and its timestamp (the waiting timer
+    // needs the start instant). See [`derive_stage`] for the precedence.
     let stage = raw
         .iter()
         .rev()
         .find(|m| m.user_id == bot.id)
-        .map(|m| {
-            if let Some(id) = help_docs::ticket_ref(&m.body) {
-                Stage::TicketFiled(id)
-            } else if help_docs::is_low_confidence(&m.body) {
-                Stage::Stuck
-            } else {
-                Stage::Normal
-            }
-        })
+        .map(|m| derive_stage(&m.body, &m.created_at))
         .unwrap_or(Stage::Normal);
 
     let messages: Vec<PanelMsg> = raw
@@ -268,6 +311,82 @@ async fn post_send(
     render_thread(&state, &user).await
 }
 
+/// LC-724: the in-panel "add details" form. Enriches the ticket opened when the
+/// user asked for a human; every field is optional.
+#[derive(serde::Deserialize)]
+struct DetailForm {
+    ticket_id: i64,
+    #[serde(default)]
+    need: String,
+    #[serde(default)]
+    tried: String,
+    #[serde(default)]
+    urgency: String,
+    #[serde(default)]
+    email: String,
+}
+
+/// Assemble the enriched ticket body from the detail form. Only non-empty fields
+/// are included, so a sparse submission still reads cleanly in the admin queue,
+/// and an entirely empty one keeps a sensible placeholder.
+fn compose_ticket_body(form: &DetailForm) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let need = form.need.trim();
+    if !need.is_empty() {
+        parts.push(need.to_string());
+    }
+    let tried = form.tried.trim();
+    if !tried.is_empty() {
+        parts.push(format!("What they tried: {tried}"));
+    }
+    let urgency = form.urgency.trim();
+    if !urgency.is_empty() {
+        parts.push(format!("Urgency: {urgency}"));
+    }
+    let email = form.email.trim();
+    if !email.is_empty() {
+        parts.push(format!("Contact: {email}"));
+    }
+    if parts.is_empty() {
+        return "(the user asked for a human via the support panel)".to_string();
+    }
+    parts.join("\n\n")
+}
+
+/// `POST /support/panel/ticket` - LC-724: the requester enriches their still-open
+/// support ticket with the structured detail from the in-panel form. The update
+/// is scoped in the DB to the caller and to the open state, so it can only touch
+/// the user's own not-yet-handled ticket. On success it refreshes the admin queue
+/// and posts a bot confirmation, moving the panel to the "ticket filed" stage; if
+/// the ticket is gone or already claimed/resolved it just re-renders the thread.
+async fn post_ticket_details(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<DetailForm>,
+) -> Result<Html, AppError> {
+    if !bubble_enabled(&state, &user).await {
+        return Err(AppError::Forbidden);
+    }
+    let room = help_docs::support_dm_room(&state, &user).await?;
+    let body = compose_ticket_body(&form);
+    let updated =
+        db::support_tickets::update_body(&state.chat, form.ticket_id, &user.id, &body).await?;
+    if !updated {
+        return render_thread(&state, &user).await;
+    }
+    crate::routes::support::broadcast_support_changed(&state);
+
+    let bot = crate::routes::assistant::assistant_bot(&state).await?;
+    let confirmation = format!(
+        "_Thanks - I've added your details to support ticket #{}. An admin will follow up._",
+        form.ticket_id
+    );
+    let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;
+    crate::routes::room::finalize_message_send(&state, &room, &bot, msg_id, &confirmation, None)
+        .await?;
+    render_thread(&state, &user).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,6 +412,69 @@ mod tests {
         let (main, chips) = split_sources("just a plain answer with no citations");
         assert_eq!(main, "just a plain answer with no citations");
         assert!(chips.is_empty());
+    }
+
+    #[test]
+    fn to_iso_utc_makes_a_browser_parseable_utc_stamp() {
+        assert_eq!(to_iso_utc("2026-08-16 00:46:02"), "2026-08-16T00:46:02Z");
+        assert_eq!(to_iso_utc("  2026-08-16 00:46:02 "), "2026-08-16T00:46:02Z");
+        assert_eq!(to_iso_utc(""), "");
+    }
+
+    #[test]
+    fn derive_stage_maps_each_confirmation_to_its_affordance() {
+        // The two /human confirmations -> the waiting stage, keyed on the ticket.
+        let waiting_available = "_bob, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #12 so this doesn't get lost - you can keep waiting, or add details below._";
+        assert!(matches!(
+            derive_stage(waiting_available, "2026-08-16 00:46:02"),
+            Stage::Waiting(12, ref s) if s == "2026-08-16T00:46:02Z"
+        ));
+        let waiting_unavailable = "_bob, no admins are available right now, so I've filed support ticket #13 for follow-up. You can add details below._";
+        assert!(matches!(
+            derive_stage(waiting_unavailable, "2026-08-16 00:46:02"),
+            Stage::Waiting(13, _)
+        ));
+        // The "added details" confirmation -> the filed stage.
+        let filed =
+            "_Thanks - I've added your details to support ticket #12. An admin will follow up._";
+        assert!(matches!(derive_stage(filed, ""), Stage::TicketFiled(12)));
+        // A low-confidence decline -> stuck; a normal answer -> normal.
+        assert!(matches!(
+            derive_stage(
+                "_I couldn't find anything about that in the product documentation._",
+                ""
+            ),
+            Stage::Stuck
+        ));
+        assert!(matches!(
+            derive_stage("Here is how to configure it.", ""),
+            Stage::Normal
+        ));
+    }
+
+    #[test]
+    fn compose_ticket_body_joins_only_the_filled_fields() {
+        let form = DetailForm {
+            ticket_id: 1,
+            need: "  Reset my password  ".into(),
+            tried: "the reset link".into(),
+            urgency: "high".into(),
+            email: "".into(),
+        };
+        let body = compose_ticket_body(&form);
+        assert_eq!(
+            body,
+            "Reset my password\n\nWhat they tried: the reset link\n\nUrgency: high"
+        );
+        // An entirely empty form keeps a sensible placeholder.
+        let empty = DetailForm {
+            ticket_id: 1,
+            need: "".into(),
+            tried: " ".into(),
+            urgency: "".into(),
+            email: "".into(),
+        };
+        assert!(compose_ticket_body(&empty).contains("asked for a human"));
     }
 
     #[test]

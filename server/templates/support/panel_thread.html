@@ -30,6 +30,47 @@
   <strong>{{ "support-stage-filed-title"|t }}</strong>
   <span>{{ "support-stage-filed-body"|t }} #{{ id }}</span>
 </div>
+{# LC-724: waiting-for-a-human. A live elapsed timer (base.html fills
+   [data-lc-elapsed] from data-since and flags [data-timedout] past 5 minutes, when
+   CSS reveals the timeout re-prompt), plus a collapsible form that enriches this
+   ticket with more detail. Keeping to wait is the passive default. #}
+{% when Stage::Waiting with (ticket_id, since) %}
+<div class="lc-support-stage lc-support-waiting" data-lc-support-waiting data-since="{{ since }}" role="status">
+  <div class="lc-support-waiting-live">
+    <span class="lc-support-waiting-dot" aria-hidden="true"></span>
+    <span class="lc-support-waiting-text">{{ "support-waiting-live"|t }}</span>
+    <span class="lc-support-waiting-elapsed" data-lc-elapsed aria-hidden="true"></span>
+  </div>
+  <p class="lc-support-waiting-timeout">{{ "support-waiting-timeout"|t }}</p>
+  <details class="lc-support-details">
+    <summary class="lc-support-details-summary">{{ "support-add-details"|t }}</summary>
+    <form class="lc-support-detail-form" hx-post="/support/panel/ticket"
+          hx-target="#lc-support-thread" hx-swap="innerHTML">
+      <input type="hidden" name="ticket_id" value="{{ ticket_id }}">
+      <label class="lc-support-field">
+        <span>{{ "support-detail-need"|t }}</span>
+        <textarea name="need" rows="2" class="input"></textarea>
+      </label>
+      <label class="lc-support-field">
+        <span>{{ "support-detail-tried"|t }}</span>
+        <textarea name="tried" rows="2" class="input"></textarea>
+      </label>
+      <label class="lc-support-field">
+        <span>{{ "support-detail-urgency"|t }}</span>
+        <select name="urgency" class="input">
+          <option value="low">{{ "support-urgency-low"|t }}</option>
+          <option value="normal" selected>{{ "support-urgency-normal"|t }}</option>
+          <option value="high">{{ "support-urgency-high"|t }}</option>
+        </select>
+      </label>
+      <label class="lc-support-field">
+        <span>{{ "support-detail-email"|t }}</span>
+        <input type="email" name="email" class="input" autocomplete="email">
+      </label>
+      <button type="submit" class="btn btn-sm btn-primary">{{ "support-detail-submit"|t }}</button>
+    </form>
+  </details>
+</div>
 {% when Stage::Stuck %}
 <form class="lc-support-stage lc-support-stage-stuck" hx-post="/support/panel/send"
       hx-target="#lc-support-thread" hx-swap="innerHTML">
