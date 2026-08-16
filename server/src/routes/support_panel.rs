@@ -97,6 +97,15 @@ struct PanelMsg {
     body_html: String,
     /// LC-720: cited sources lifted out of the reply body and rendered as chips.
     sources: Vec<SourceChip>,
+    /// LC-730: this is the transient "checking the docs" placeholder (see
+    /// [`help_docs::is_thinking_placeholder`]); the template renders the animated
+    /// skeleton loader instead of `body_html`, and it is replaced in place by the
+    /// real answer via the `SupportThreadChanged` push.
+    pending: bool,
+    /// LC-730: ISO-UTC time the placeholder was posted, so the client can rotate
+    /// the staged "searching -> reading -> writing" wording by elapsed time. Empty
+    /// unless `pending`.
+    pending_since: String,
 }
 
 /// LC-720: split a bot reply into its prose and its cited `Sources`, so the panel
@@ -227,10 +236,24 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
             } else {
                 strip_leading_quote(main)
             };
+            // LC-730: the "checking the docs" placeholder renders as an animated
+            // skeleton rather than flat italic text; skip the markdown render and
+            // carry its start time so the client can stage the wording.
+            let pending = !mine && help_docs::is_thinking_placeholder(main);
             PanelMsg {
                 mine,
-                body_html: markdown::render(main, &[], &[]),
+                body_html: if pending {
+                    String::new()
+                } else {
+                    markdown::render(main, &[], &[])
+                },
                 sources,
+                pending,
+                pending_since: if pending {
+                    to_iso_utc(&m.created_at)
+                } else {
+                    String::new()
+                },
             }
         })
         .collect();
@@ -412,6 +435,42 @@ mod tests {
         let (main, chips) = split_sources("just a plain answer with no citations");
         assert_eq!(main, "just a plain answer with no citations");
         assert!(chips.is_empty());
+    }
+
+    #[test]
+    fn thinking_placeholder_renders_the_animated_skeleton() {
+        // The "checking the docs" placeholder is detected (post header-strip)...
+        assert!(help_docs::is_thinking_placeholder(
+            "_The support assistant is checking the docs\u{2026}_"
+        ));
+        assert!(!help_docs::is_thinking_placeholder("Here is your answer."));
+
+        // ...and the panel renders the shared AI skeleton loader (with the start
+        // time for the staged wording) in place of the flat italic line.
+        let view = PanelThreadView {
+            messages: vec![PanelMsg {
+                mine: false,
+                body_html: String::new(),
+                sources: Vec::new(),
+                pending: true,
+                pending_since: "2026-08-16T00:46:02Z".into(),
+            }],
+            empty: false,
+            stage: Stage::Normal,
+        };
+        let html = view.render().unwrap();
+        assert!(
+            html.contains("data-lc-support-thinking") && html.contains("lc-ai-skel"),
+            "pending message renders the skeleton loader, got: {html}"
+        );
+        assert!(
+            html.contains("data-since=\"2026-08-16T00:46:02Z\""),
+            "the skeleton carries the start time for staged wording, got: {html}"
+        );
+        assert!(
+            !html.contains("checking the docs"),
+            "the flat italic placeholder text is replaced, got: {html}"
+        );
     }
 
     #[test]

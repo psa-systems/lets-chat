@@ -90,6 +90,14 @@ fenced code block and always close the fence.";
 /// the answer. Italic so it reads as a transient status.
 const THINKING_BODY: &str = "_The support assistant is checking the docs\u{2026}_";
 
+/// LC-730: true when a bot message body is the in-progress "checking the docs"
+/// placeholder above (compared after the panel has stripped the attribution
+/// header), so the support panel can render the animated skeleton loader in its
+/// place instead of the flat italic line.
+pub(crate) fn is_thinking_placeholder(body: &str) -> bool {
+    body.trim() == THINKING_BODY
+}
+
 /// One configured documentation source: a product name and its docs index URL.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocSource {

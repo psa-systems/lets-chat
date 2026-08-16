@@ -5779,6 +5779,19 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
    keeps its copy button. */
 .lc-support-bubble .lc-code-copy { display: none; }
 
+/* LC-730: the "checking the docs" loader bubble. Sits on the elevated surface so
+   the shared AI skeleton bars (surface-sunken, swept by a surface-elevated
+   highlight - see .lc-skel-bar, LC-654) read against it; the normal bot bubble is
+   sunken, where the bars would vanish. Sized so the skeleton previews the shape of
+   a short answer + a sources line rather than collapsing to the label. */
+.lc-support-thinking {
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    width: min(16rem, 100%);
+}
+.lc-support-thinking .lc-ai-skel { gap: 0.6rem; }
+.lc-support-thinking .lc-skel-block { gap: 0.45rem; }
+
 .lc-support-compose {
     flex: none;
     display: flex;
