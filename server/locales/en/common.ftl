@@ -417,6 +417,11 @@ support-stage-stuck = Didn't find what you needed?
 support-stage-filed-title = We've filed your request
 support-stage-filed-body = An admin will follow up. Reference
 support-sources-label = Sources:
+# LC-732: welcome + starter chips shown when the panel first opens (empty thread).
+support-welcome-title = Hi! How can we help?
+support-welcome-sub = Ask the assistant a question, or reach a person.
+support-starter-start = How do I get started?
+support-starter-docs = Where can I find the docs?
 # LC-730: staged wording for the "checking the docs" loader (rotated client-side).
 support-thinking-search = Searching the docs…
 support-thinking-read = Reading the relevant pages…

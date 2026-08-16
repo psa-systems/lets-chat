@@ -24,13 +24,26 @@
   </button>
   <section class="lc-support-panel" data-lc-support-panel
            aria-label="{{ "support-bubble-title"|t }}">
+    {# LC-732: branded header - a small assistant avatar next to the title, and a
+       comfortable close target. #}
     <header class="lc-support-panel-head">
+      <span class="lc-support-panel-avatar" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+      </span>
       <div class="lc-support-panel-heading">
         <span class="lc-support-panel-title">{{ "support-bubble-title"|t }}</span>
         <span class="lc-support-panel-sub">{{ "support-bubble-subtitle"|t }}</span>
       </div>
       <button type="button" class="lc-support-panel-close" aria-label="{{ "support-bubble-close"|t }}"
-              onclick="window.__lcToggleSupport(false)">&times;</button>
+              onclick="window.__lcToggleSupport(false)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
     </header>
     {# LC-719/723: fetch on open (the `lcopen` event fired by __lcToggleSupport),
        plus once on load when the panel is already open from a prior session (the
@@ -42,16 +55,33 @@
          hx-get="/support/panel/thread" hx-swap="innerHTML"
          hx-trigger="lcopen, load[document.documentElement.getAttribute('data-lc-support-open')==='1']"
          hx-on::after-settle="this.scrollTop = this.scrollHeight"></div>
-    <form class="lc-support-compose" hx-post="/support/panel/send"
-          hx-target="#lc-support-thread" hx-swap="innerHTML"
-          hx-on::after-request="if (event.detail.successful) this.reset();">
-      <input type="text" name="body" class="lc-support-input input" autocomplete="off"
-             placeholder="{{ "support-bubble-placeholder"|t }}"
-             aria-label="{{ "support-bubble-placeholder"|t }}">
-      <div class="lc-support-actions">
-        <button type="submit" class="btn btn-sm btn-primary lc-support-send">{{ "support-bubble-send"|t }}</button>
-        <button type="submit" name="action" value="human" class="btn btn-sm btn-secondary lc-support-human">{{ "support-bubble-human"|t }}</button>
-      </div>
-    </form>
+    {# LC-732: composer footer. "Talk to a human" is a quiet, secondary escalation
+       link above the input (its own hx-post, so Enter in the input always Sends -
+       the input form has a single submit, the embedded send icon-button). Send is
+       the clear primary action, an icon-button attached inside the input like a
+       real chat composer. #}
+    <div class="lc-support-compose">
+      <button type="button" class="lc-support-human-link"
+              hx-post="/support/panel/send" hx-vals='{"action": "human"}'
+              hx-target="#lc-support-thread" hx-swap="innerHTML">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+          <path d="M8 1a5 5 0 0 0-5 5v1h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a6 6 0 1 1 12 0v6a2.5 2.5 0 0 1-2.5 2.5H9.366a1 1 0 0 1-.866.5h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 .866.5H11.5A1.5 1.5 0 0 0 13 12h-1a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h1V6a5 5 0 0 0-5-5z"/>
+        </svg>
+        <span>{{ "support-bubble-human"|t }}</span>
+      </button>
+      <form class="lc-support-inputrow" hx-post="/support/panel/send"
+            hx-target="#lc-support-thread" hx-swap="innerHTML"
+            hx-on::after-request="if (event.detail.successful) this.reset();">
+        <input type="text" name="body" class="lc-support-input" autocomplete="off"
+               placeholder="{{ "support-bubble-placeholder"|t }}"
+               aria-label="{{ "support-bubble-placeholder"|t }}">
+        <button type="submit" class="lc-support-send-btn" aria-label="{{ "support-bubble-send"|t }}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+        </button>
+      </form>
+    </div>
   </section>
 </div>
