@@ -904,13 +904,9 @@ pub(crate) async fn notify_user_from_bot(
         Some(rec) => rec.username,
         None => return Ok(()),
     };
+    // dm_from_bot pushes SupportThreadChanged to the recipient's bubble itself
+    // (LC-725), so the claim/resolve notice surfaces live without a second push.
     dm_from_bot(state, &bot, recipient_id, &recipient_username, body).await?;
-    state.hub.broadcast_to_user(
-        recipient_id,
-        &crate::ws::events::ChatEvent::SupportThreadChanged {
-            user_id: recipient_id.to_string(),
-        },
-    );
     Ok(())
 }
 
@@ -967,6 +963,17 @@ async fn dm_from_bot(
     }
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, body).await?;
     super::room::finalize_message_send(state, &room, bot, msg_id, body, None).await?;
+    // LC-725: this bot DM is the room that backs the recipient's support bubble
+    // (support_dm_room resolves to the same bot<->recipient DM), so tell their
+    // bubble to refresh and flag an unread badge. Covers the admin escalation
+    // pings (which previously updated no bubble) as well as the claim/resolve
+    // notices to the requester.
+    state.hub.broadcast_to_user(
+        recipient_id,
+        &crate::ws::events::ChatEvent::SupportThreadChanged {
+            user_id: recipient_id.to_string(),
+        },
+    );
     Ok(())
 }
 

@@ -230,6 +230,14 @@ async fn claiming_a_ticket_opens_a_shared_channel() {
             .await
             .expect("support room created");
     assert_eq!(room_type, "private", "support room is private");
+    // LC-725: the claim response redirects the acting admin into that new channel.
+    assert_eq!(
+        res.headers()
+            .get("HX-Redirect")
+            .and_then(|v| v.to_str().ok()),
+        Some(format!("/room/{room_id}").as_str()),
+        "claim redirects the admin to the support channel"
+    );
     assert!(
         room_name.contains(&format!("#{ticket_id}")),
         "room name carries the ticket id, got: {room_name}"
