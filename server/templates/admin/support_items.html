@@ -16,9 +16,11 @@
         <span class="text-sm font-medium">{{ t.requester_label }}</span>
         <span class="text-xs text-content-muted">{{ t.created_at }}</span>
       </div>
-      {% if let Some(rid) = t.room_id %}{% if !t.room_label.is_empty() %}
-      <a href="/room/{{ rid }}" class="text-xs text-accent hover:underline">{{ "support-jump"|t }}</a>
-      {% endif %}{% endif %}
+      {# LC-725: the old "open channel" link pointed at the ticket's origin room,
+         which for a bubble-filed request is the requester's private assistant-bot
+         DM - an admin is not a member, so it 403'd. The shared channel does not
+         exist until the ticket is claimed (which then redirects here), so an open
+         ticket shows no channel link. #}
     </div>
     {% if !t.room_label.is_empty() %}
     <p class="text-xs text-content-muted">{{ "support-row-in"|t }} {{ t.room_label }}</p>
