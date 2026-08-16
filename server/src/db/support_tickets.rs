@@ -35,6 +35,30 @@ pub async fn create(
     Ok(result.last_insert_rowid())
 }
 
+/// LC-724: replace an open ticket's body with the richer context the requester
+/// added from the support panel ("what you need / tried / urgency / contact").
+/// Scoped to the owner and to the open state so a user can only enrich their own
+/// still-open ticket (not one already claimed/resolved, and not someone else's).
+/// Returns true when a row was updated.
+pub async fn update_body(
+    pool: &SqlitePool,
+    id: i64,
+    requester_id: &str,
+    body: &str,
+) -> Result<bool, sqlx::Error> {
+    let body: String = body.chars().take(MAX_TICKET_BODY_CHARS).collect();
+    let result = sqlx::query(
+        "UPDATE support_tickets SET body = ? \
+         WHERE id = ? AND requester_id = ? AND status = 'open'",
+    )
+    .bind(&body)
+    .bind(id)
+    .bind(requester_id)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Open tickets, newest first.
 pub async fn list_open(pool: &SqlitePool) -> Result<Vec<SupportTicket>, sqlx::Error> {
     let rows = sqlx::query(
