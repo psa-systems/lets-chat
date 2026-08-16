@@ -412,3 +412,15 @@ support-stage-stuck = ¿No encontraste lo que necesitabas?
 support-stage-filed-title = Registramos tu solicitud
 support-stage-filed-body = Un administrador te dará seguimiento. Referencia
 support-sources-label = Fuentes:
+# LC-724: etapa de espera de una persona + formulario de detalles.
+support-waiting-live = Se notificó a un administrador. Esperando respuesta…
+support-waiting-timeout = Nadie lo ha tomado todavía. Puedes seguir esperando o añadir detalles abajo.
+support-add-details = Añadir detalles
+support-detail-need = ¿Con qué necesitas ayuda?
+support-detail-tried = ¿Qué has intentado?
+support-detail-urgency = Urgencia
+support-detail-email = Correo de contacto (opcional)
+support-detail-submit = Enviar detalles
+support-urgency-low = Baja
+support-urgency-normal = Normal
+support-urgency-high = Alta

@@ -244,6 +244,28 @@
         }
       });
 
+      // LC-724: "waiting for a human" live elapsed timer + 5-minute timeout
+      // prompt. The waiting stage carries data-since (ISO-UTC); each tick updates
+      // the mm:ss readout and, past 5 minutes, flags the element so CSS reveals the
+      // "no admin yet" re-prompt. One timer for the single waiting element; cheap
+      // and a no-op when the panel is not in the waiting stage.
+      function lcSupportWaitingTick() {
+        var w = document.querySelector("[data-lc-support-waiting]");
+        if (!w) return;
+        var since = Date.parse(w.getAttribute("data-since") || "");
+        if (isNaN(since)) return;
+        var secs = Math.max(0, Math.floor((Date.now() - since) / 1000));
+        var out = w.querySelector("[data-lc-elapsed]");
+        if (out) {
+          var mm = Math.floor(secs / 60), ss = secs % 60;
+          out.textContent = mm + ":" + (ss < 10 ? "0" : "") + ss;
+        }
+        if (secs >= 300) w.setAttribute("data-timedout", "1");
+      }
+      setInterval(lcSupportWaitingTick, 1000);
+      document.addEventListener("htmx:afterSettle", lcSupportWaitingTick);
+      document.addEventListener("htmx:oobAfterSwap", lcSupportWaitingTick);
+
       // LC-308: unread-only sidebar filter. Device-local; set before paint so
       // hidden rows never flash in. The actual hiding is pure CSS keyed on
       // this attribute (main.css), so it tracks live unread-badge OOB swaps

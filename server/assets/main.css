@@ -5760,6 +5760,72 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
 }
 .lc-support-stage-stuck > span { flex: 1 1 auto; }
 
+/* LC-724: "waiting for a human" stage - live elapsed timer, a timeout re-prompt
+   revealed past 5 minutes, and a collapsible "add details" form. */
+.lc-support-waiting {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background-color: var(--surface-sunken);
+    color: var(--content);
+    border: 1px solid var(--border);
+}
+.lc-support-waiting-live {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.lc-support-waiting-dot {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    animation: lc-support-pulse 1.6s ease-in-out infinite;
+}
+@keyframes lc-support-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.7); }
+}
+.lc-support-waiting-text { flex: 1 1 auto; }
+.lc-support-waiting-elapsed {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+/* Hidden until the timer flags a timeout (base.html sets data-timedout at 5 min). */
+.lc-support-waiting-timeout {
+    display: none;
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-support-waiting[data-timedout] .lc-support-waiting-timeout { display: block; }
+
+.lc-support-details-summary {
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--accent);
+    list-style: none;
+}
+.lc-support-details-summary::-webkit-details-marker { display: none; }
+.lc-support-details[open] .lc-support-details-summary { margin-bottom: 0.5rem; }
+.lc-support-detail-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.lc-support-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+.lc-support-field textarea { resize: vertical; }
+
 /* LC-720: onboarding nudge, source chips, message column. */
 .lc-support-nudge {
     display: none;
