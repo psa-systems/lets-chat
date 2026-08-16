@@ -3100,6 +3100,24 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
 }
 /* Unread / mention badge: a ring in the rail surface color separates it from a
    neighboring tile. */
+/* LC-726: admin support rail tile. The count badge reuses the nav count fragment
+   (/admin/support/badge) but pins its span to the tile corner. Danger-red: it
+   counts pending work to triage, not unread chat (which is accent). */
+.lc-rail-support-slot > span {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    margin: 0;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--rail-surface);
+}
+
 .lc-rail-badge {
     position: absolute;
     top: -0.25rem;
@@ -5344,6 +5362,45 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     color: var(--content);
 }
 .lc-home-row-time { flex: none; font-size: 0.75rem; color: var(--content-subtle); }
+
+/* LC-726: admin pending-support dashboard card. A left accent bar marks it as an
+   action-needed card; rows are static (not links) - the footer link opens the
+   queue where the admin claims/resolves. */
+.lc-home-support { box-shadow: inset 3px 0 0 0 var(--danger); }
+.lc-count-pill--alert { background: var(--danger); color: var(--danger-content); }
+.lc-home-support-list { list-style: none; margin: 0; padding: 0; }
+.lc-home-support-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--border);
+}
+.lc-home-support-row-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.lc-home-support-who { font-size: 0.8125rem; font-weight: 600; color: var(--content); }
+.lc-home-support-when { flex: none; font-size: 0.6875rem; color: var(--content-subtle); }
+.lc-home-support-body {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lc-home-support-link {
+    display: block;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+.lc-home-support-link:hover { text-decoration: underline; }
 .lc-home-empty { padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--content-muted); }
 /* LC-706: quick-actions launchpad - a compact pill row under the greeting. */
 /* LC-707: greeting row - name/subtitle on the left, the "your week" glance on

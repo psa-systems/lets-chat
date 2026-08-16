@@ -281,3 +281,71 @@ async fn claiming_a_ticket_opens_a_shared_channel() {
             .unwrap();
     assert_eq!(support_rooms, 1, "claim is idempotent; no duplicate room");
 }
+
+// LC-726: pending support requests surface outside the admin section - an
+// admin-only rail tile (every page) and a Home dashboard card - so an admin does
+// not have to be in /admin to see the queue. A non-admin sees neither.
+#[tokio::test]
+async fn pending_support_surfaces_on_home_for_admins_only() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+    let member_session = db::auth::create_session(&auth, &requester).await.unwrap();
+    db::support_tickets::create(&chat, &requester, Some(1), "general", "printer on fire")
+        .await
+        .unwrap();
+
+    let app: Router = routes::build_router(state_from(auth.clone(), chat.clone(), settings));
+
+    let home = |session: String| {
+        let app = app.clone();
+        async move {
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri("/?home=1")
+                .header(header::COOKIE, format!("session={session}"))
+                .body(Body::empty())
+                .unwrap();
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+            let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            String::from_utf8(bytes.to_vec()).unwrap()
+        }
+    };
+
+    // Admin: rail Support tile + dashboard card with the pending request.
+    let admin_home = home(admin_session).await;
+    assert!(
+        admin_home.contains("lc-rail-support"),
+        "admin rail shows the Support tile"
+    );
+    assert!(
+        admin_home.contains("lc-home-support-card") && admin_home.contains("printer on fire"),
+        "admin dashboard shows the pending request card"
+    );
+
+    // Non-admin: neither surface.
+    let member_home = home(member_session).await;
+    assert!(
+        !member_home.contains("lc-rail-support"),
+        "a non-admin never sees the Support rail tile"
+    );
+    assert!(
+        !member_home.contains("printer on fire"),
+        "a non-admin never sees pending support content"
+    );
+}
