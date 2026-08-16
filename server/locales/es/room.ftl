@@ -265,6 +265,10 @@ support-jump = Abrir canal
 support-row-in = En:
 support-action-claim = Atender
 support-action-resolve = Resolver
+# LC-726: visibilidad del soporte fuera de la sección de administración.
+support-rail-label = Solicitudes de soporte
+support-home-title = Solicitudes de soporte
+support-home-open-queue = Abrir la cola de soporte
 
 ## Forward (LC-278)
 room-forward-title = Reenviar mensaje

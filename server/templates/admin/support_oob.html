@@ -5,3 +5,8 @@
   {% include "admin/support_items.html" %}
 </div>
 <span id="admin-support-badge" hx-swap-oob="innerHTML">{% include "admin/support_badge.html" %}</span>
+{# LC-726: two more id-keyed targets that live on non-admin pages (they drop
+   silently where absent). The rail badge (every page) reuses the same count
+   markup; the Home dashboard card re-renders from the newest tickets. #}
+<span id="lc-rail-support-badge" hx-swap-oob="innerHTML">{% include "admin/support_badge.html" %}</span>
+<div id="lc-home-support-card" hx-swap-oob="innerHTML">{% include "home/support_card.html" %}</div>
