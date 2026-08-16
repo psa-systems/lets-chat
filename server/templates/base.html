@@ -220,6 +220,118 @@
           }
         }
       };
+      // LC-729: Escape closes the open support panel (a fast keyboard dismiss that
+      // complements the X and the launcher). An outside click deliberately does
+      // NOT close it - the panel is a persistent widget, so clicking into the chat
+      // behind it must not drop a half-typed question. Only acts while open and
+      // never stops propagation, so other Escape handlers (modals) still run.
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && d.getAttribute("data-lc-support-open") === "1") {
+          window.__lcToggleSupport(false);
+        }
+      });
+      // LC-729: draggable launcher. The user can drag the bubble anywhere; the
+      // position is clamped on-screen, persisted per-device in localStorage, and
+      // restored on load. A drag suppresses the click that would otherwise toggle
+      // the panel. The panel/nudge are absolutely positioned off the launcher and
+      // flip sides via data-lc-vpos / data-lc-hpos so they never open off-screen.
+      // Listeners live on document (the launcher loads late via the hx slot) and
+      // pointer events cover mouse + touch.
+      (function () {
+        var dragging = false, moved = false, sx = 0, sy = 0, startR = 0, startB = 0;
+        var suppressClick = false;
+        function root() { return document.querySelector("[data-lc-support-root]"); }
+        function launcherRect() {
+          var l = document.querySelector("[data-lc-support-launcher]");
+          return l ? l.getBoundingClientRect() : null;
+        }
+        function clamp(r, b) {
+          var lr = launcherRect();
+          var w = lr ? lr.width : 52, h = lr ? lr.height : 52, m = 8;
+          return {
+            r: Math.min(Math.max(r, m), Math.max(m, window.innerWidth - w - m)),
+            b: Math.min(Math.max(b, m), Math.max(m, window.innerHeight - h - m))
+          };
+        }
+        function apply(r, b) {
+          var el = root();
+          if (!el) return null;
+          var c = clamp(r, b), lr = launcherRect();
+          var w = lr ? lr.width : 52, h = lr ? lr.height : 52;
+          el.style.right = c.r + "px";
+          el.style.bottom = c.b + "px";
+          el.style.left = "auto";
+          el.style.top = "auto";
+          // Launcher centre in viewport coords -> pick the side with room.
+          var cx = window.innerWidth - c.r - w / 2;
+          var cy = window.innerHeight - c.b - h / 2;
+          el.setAttribute("data-lc-hpos", cx < window.innerWidth / 2 ? "left" : "right");
+          el.setAttribute("data-lc-vpos", cy < window.innerHeight / 2 ? "top" : "bottom");
+          return c;
+        }
+        function restore() {
+          var raw = null;
+          try { raw = localStorage.getItem("lc-support-pos"); } catch (e) {}
+          if (!raw) return;
+          try {
+            var p = JSON.parse(raw);
+            if (p && typeof p.r === "number" && typeof p.b === "number") apply(p.r, p.b);
+          } catch (e) {}
+        }
+        document.addEventListener("pointerdown", function (e) {
+          var l = e.target.closest && e.target.closest("[data-lc-support-launcher]");
+          if (!l) return;
+          var el = root();
+          if (!el) return;
+          var rect = el.getBoundingClientRect();
+          dragging = true;
+          moved = false;
+          sx = e.clientX;
+          sy = e.clientY;
+          startR = window.innerWidth - rect.right;
+          startB = window.innerHeight - rect.bottom;
+        });
+        document.addEventListener("pointermove", function (e) {
+          if (!dragging) return;
+          var dx = e.clientX - sx, dy = e.clientY - sy;
+          if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+          if (!moved) {
+            moved = true;
+            var el = root();
+            if (el) el.classList.add("lc-support-dragging");
+          }
+          // Moving the pointer right/down shrinks the right/bottom offsets.
+          apply(startR - dx, startB - dy);
+          e.preventDefault();
+        });
+        document.addEventListener("pointerup", function () {
+          if (!dragging) return;
+          dragging = false;
+          var el = root();
+          if (el) el.classList.remove("lc-support-dragging");
+          if (moved && el) {
+            var rect = el.getBoundingClientRect();
+            var c = clamp(window.innerWidth - rect.right, window.innerHeight - rect.bottom);
+            try { localStorage.setItem("lc-support-pos", JSON.stringify(c)); } catch (e) {}
+            // Swallow the click that follows this drag so it does not toggle.
+            suppressClick = true;
+            setTimeout(function () { suppressClick = false; }, 0);
+          }
+        });
+        document.addEventListener("click", function (e) {
+          if (!suppressClick) return;
+          var l = e.target.closest && e.target.closest("[data-lc-support-launcher]");
+          if (l) { e.stopPropagation(); e.preventDefault(); }
+        }, true);
+        // Keep the launcher on-screen if the window shrinks, and restore the saved
+        // position once the hx slot has settled (and once now, in case it is early).
+        window.addEventListener("resize", function () {
+          var el = root();
+          if (el && el.style.right) apply(parseFloat(el.style.right), parseFloat(el.style.bottom));
+        });
+        document.addEventListener("htmx:afterSettle", restore);
+        restore();
+      })();
       // LC-719/721: when a support-panel WS push (OOB swap into #lc-support-thread)
       // lands while the panel is closed, bump a numbered badge on the launcher so
       // the user sees how many updates arrived. Each push is one incoming update
