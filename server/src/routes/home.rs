@@ -133,6 +133,24 @@ pub async fn get_home(
     let week_messages = db::stats::weekly_message_count(&state.chat, &user.id).await?;
     let week_kudos = db::stats::weekly_kudos_received(&state.chat, &user.id).await?;
 
+    // LC-726: admin-only pending-support glance for the dashboard card. The admin
+    // support queue is standalone-only, so this only runs there and only for an
+    // admin; everyone else gets an empty, zero-count card that renders nothing.
+    // `mut` is only exercised in the standalone block below; saas leaves them at
+    // the zero/empty defaults, so silence the lint there.
+    #[allow(unused_mut)]
+    let mut support_open_count = 0i64;
+    #[allow(unused_mut)]
+    let mut support_recent: Vec<crate::views::support::SupportView> = Vec::new();
+    #[cfg(feature = "standalone")]
+    if user.role == "admin" {
+        support_open_count = db::support_tickets::count_open(&state.chat).await?;
+        if support_open_count > 0 {
+            support_recent = super::support::build_support_views(&state).await?;
+            support_recent.truncate(3);
+        }
+    }
+
     let page = WelcomePage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -155,6 +173,8 @@ pub async fn get_home(
         ai_catch_up,
         week_messages,
         week_kudos,
+        support_open_count,
+        support_recent: &support_recent,
     };
     let body = html(&page)?;
     Ok(body.into_response())

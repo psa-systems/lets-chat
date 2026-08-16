@@ -81,6 +81,18 @@
       {# Primary column: AI hero + Unread channels. #}
       <div class="lc-home-primary">
 
+        {# LC-726: admin-only pending-support glance. The container is always
+           present (so a request arriving live can swap the card in via the
+           #lc-home-support-card OOB on the `admin` topic); the partial renders
+           nothing when the queue is empty. #}
+        {% if user.role == "admin" %}
+        <div id="lc-home-support-card">
+          {% let open_count = support_open_count %}
+          {% let tickets = support_recent %}
+          {% include "home/support_card.html" %}
+        </div>
+        {% endif %}
+
         {# LC-705 / LC-706: workspace-wide "Catch me up" AI summary, promoted to a
            hero at the top of the dashboard. Shown only when the AI surface is
            available to this viewer and there is unread to summarize (`ai_catch_up`).

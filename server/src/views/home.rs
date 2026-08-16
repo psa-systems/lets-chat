@@ -58,6 +58,13 @@ pub struct WelcomePage<'a> {
     /// aggregates (the same two the weekly recap uses), linked to /stats /kudos.
     pub week_messages: i64,
     pub week_kudos: i64,
+    /// LC-726: admin-only pending-support glance. `support_open_count` is the open
+    /// support-ticket count (0 for non-admins and when the queue is empty);
+    /// `support_recent` is the newest few open tickets. Drives the dashboard
+    /// support card and is the initial state for the live `#lc-home-support-card`
+    /// OOB swap on the `admin` topic.
+    pub support_open_count: i64,
+    pub support_recent: &'a [crate::views::support::SupportView],
 }
 
 /// LC-575: one channel-with-unread row on the dashboard "Catch up" card.
