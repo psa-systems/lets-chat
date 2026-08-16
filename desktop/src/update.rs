@@ -283,19 +283,53 @@ pub fn apply() -> Result<ApplyOutcome, String> {
     Ok(ApplyOutcome::Updated(m.version))
 }
 
-// Fire-and-forget background check used at GUI startup. Logs a single line to
-// stderr if an update is available; silent otherwise (including on network
-// failure, since we do not want a transient outage to noise up every launch).
-pub fn spawn_startup_check() {
-    std::thread::spawn(|| {
-        if let Ok(Some(v)) = check() {
+// Fire-and-forget background check used at GUI startup. Matches all three arms
+// of `check()` so no outcome can be silently dropped.
+//
+// LC-710: an update is announced through a native OS notification as well as
+// stderr. A GUI launched from a desktop icon has no readable stderr, so the
+// stderr line alone left the result invisible in the launch path that matters.
+pub fn spawn_startup_check(app: tauri::AppHandle) {
+    std::thread::spawn(move || match check() {
+        Ok(Some(v)) => {
+            let current = local_version();
             eprintln!(
-                "lets-chat-desktop: update available: {v} (current: {}). \
-                 Run `lets-chat-desktop --update` to install.",
-                local_version(),
+                "lets-chat-desktop: update available: {v} (current: {current}). \
+                 Run `lets-chat-desktop --update` to install."
             );
+            notify_update_available(&app, &v, current);
+        }
+        // Already on the latest version: announcing that on every launch is
+        // noise on both channels.
+        Ok(None) => {}
+        Err(e) => {
+            // Deliberate suppression of the USER-facing signal only: a startup
+            // update check is best-effort, and a transient outage must not pop
+            // a notification on every launch. The cause is still logged, and no
+            // caller reads a failed check as "up to date" - this thread is the
+            // only consumer of the result.
+            eprintln!("lets-chat-desktop: update check failed: {e}");
         }
     });
+}
+
+// Native OS notification for an available update, via the notification plugin
+// main.rs already registers. Failing to post it is logged rather than dropped;
+// the stderr line above remains for terminal users.
+fn notify_update_available(app: &tauri::AppHandle, available: &str, current: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title("Let's Chat update available")
+        .body(format!(
+            "Version {available} is available (you are on {current}). \
+             Run `lets-chat-desktop --update` to install."
+        ))
+        .show()
+    {
+        eprintln!("lets-chat-desktop: could not show update notification: {e}");
+    }
 }
 
 #[cfg(test)]
