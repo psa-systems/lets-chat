@@ -407,7 +407,7 @@ blocked-unblock = Unblock
 ## LC-718: support chat bubble (epic LC-717)
 support-bubble-open = Need help? Ask our assistant
 support-bubble-title = Support
-support-bubble-subtitle = Ask us anything
+support-bubble-subtitle = Answers from our docs
 support-bubble-close = Close support
 support-bubble-placeholder = Ask a question…
 support-bubble-send = Send
