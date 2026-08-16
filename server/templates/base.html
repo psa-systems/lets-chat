@@ -378,6 +378,32 @@
       document.addEventListener("htmx:afterSettle", lcSupportWaitingTick);
       document.addEventListener("htmx:oobAfterSwap", lcSupportWaitingTick);
 
+      // LC-730: rotate the "checking the docs" loader wording through honest,
+      // time-based stages (searching -> reading -> writing) so the wait reads as
+      // progress rather than a frozen line. The three translated phrases ride on
+      // the element's data-* attributes (data-search / data-read / data-write) so
+      // i18n stays server-side; we only pick which one by elapsed time. The
+      // placeholder is short-lived - the WS push swaps in the real answer - so
+      // this is a no-op the moment the answer arrives. Runs on the same 1s tick
+      // and htmx settle/oob hooks as the waiting timer.
+      function lcSupportThinkingTick() {
+        var el = document.querySelector("[data-lc-support-thinking]");
+        if (!el) return;
+        var lbl = el.querySelector("[data-lc-thinking-label]");
+        if (!lbl) return;
+        var since = Date.parse(el.getAttribute("data-since") || "");
+        var key = "search";
+        if (!isNaN(since)) {
+          var secs = (Date.now() - since) / 1000;
+          key = secs < 1.5 ? "search" : (secs < 4 ? "read" : "write");
+        }
+        var txt = el.getAttribute("data-" + key);
+        if (txt && lbl.textContent !== txt) lbl.textContent = txt;
+      }
+      setInterval(lcSupportThinkingTick, 1000);
+      document.addEventListener("htmx:afterSettle", lcSupportThinkingTick);
+      document.addEventListener("htmx:oobAfterSwap", lcSupportThinkingTick);
+
       // LC-308: unread-only sidebar filter. Device-local; set before paint so
       // hidden rows never flash in. The actual hiding is pure CSS keyed on
       // this attribute (main.css), so it tracks live unread-badge OOB swaps
