@@ -104,6 +104,11 @@ fn visible_commands(
         if b.admin_only && !is_admin {
             continue;
         }
+        // LC-731: hidden built-ins (e.g. /human) still dispatch but are not
+        // listed in the autocomplete dropdown or /help.
+        if b.hidden {
+            continue;
+        }
         // LC-686: an AI command is listed only when AI is available here.
         if b.llm_only && !ai_available {
             continue;
