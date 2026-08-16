@@ -78,7 +78,6 @@ fn main() {
     }
 
     eprintln!("lets-chat-desktop {VERSION} ({GIT_VERSION}, commit {GIT_HASH}, built {BUILD_DATE})");
-    update::spawn_startup_check();
     set_linux_gtk_env();
 
     let url = config::initial_server_url();
@@ -167,6 +166,10 @@ fn main() {
                 }
             }
             build_tray_icon(app.handle())?;
+            // LC-710: started here, not before the builder, because the check
+            // needs an AppHandle to raise its native "update available"
+            // notification.
+            update::spawn_startup_check(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
