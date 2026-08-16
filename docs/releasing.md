@@ -7,7 +7,7 @@ How lets-chat cuts releases, and the convention for recording changes that affec
 The project ships two ways:
 
 - **Server**: the `latest` OCI image, built off `main` (`build-oci-image.yml`). Operators run it directly. There is **no per-commit version**; `main` is the release.
-- **Desktop**: a self-updating Tao+Wry app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, and uploads them plus a `latest.json` manifest to Forgejo Generic Packages. The app's updater reads `latest.json` to discover the newest version. The manifest is Ed25519-signed (`latest.json.sig`) and each binary's SHA-256 is verified before the in-place replace; provisioning the signing key (`DESKTOP_UPDATE_SIGNING_KEY` secret + `DESKTOP_UPDATE_PUBLIC_KEY` variable) is a one-time step in `docs/desktop-update-signing.md`. Until that key is provisioned the updater fails closed (refuses to self-update), and the publish workflow refuses to ship an unsigned manifest.
+- **Desktop**: a self-updating Tao+Wry app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, and uploads them plus a `latest.json` manifest to Forgejo Generic Packages. The app's updater reads `latest.json` to discover the newest version. The manifest records each artifact's SHA-256, and the updater checks the downloaded binary against it before the in-place replace. The only credential the release needs is the packages PAT it uploads with.
 
 Tagging is automated and **semver, branch-driven**:
 
