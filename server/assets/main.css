@@ -5648,6 +5648,13 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     gap: 0.625rem;
     pointer-events: none;
 }
+/* LC-728: on a page with a message composer (its full-width bottom bar spans to
+   the right edge), the launcher sat on top of the composer's send / toolbar
+   controls. Lift the whole bubble above the composer bar there; pages without a
+   composer (Home, admin) keep the tighter bottom offset. */
+body:has(#composer) .lc-support-root {
+    bottom: 7rem;
+}
 .lc-support-root > * { pointer-events: auto; }
 .lc-support-launcher {
     width: 3.25rem;
