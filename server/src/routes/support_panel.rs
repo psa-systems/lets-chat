@@ -106,6 +106,10 @@ struct PanelMsg {
     /// the staged "searching -> reading -> writing" wording by elapsed time. Empty
     /// unless `pending`.
     pending_since: String,
+    /// LC-732: show the assistant avatar beside this bubble. True only for the
+    /// first message of a consecutive assistant run (and never for the viewer's own
+    /// messages), so a grouped set of bot replies shows one avatar, not one each.
+    show_avatar: bool,
 }
 
 /// LC-720: split a bot reply into its prose and its cited `Sources`, so the panel
@@ -223,40 +227,46 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
         .map(|m| derive_stage(&m.body, &m.created_at))
         .unwrap_or(Stage::Normal);
 
-    let messages: Vec<PanelMsg> = raw
+    // LC-732: `prev_bot` tracks whether the previously pushed bubble was the
+    // assistant, so the avatar shows once per consecutive assistant run.
+    let mut messages: Vec<PanelMsg> = Vec::new();
+    let mut prev_bot = false;
+    for m in raw
         .into_iter()
         .filter(|m| m.user_id == user.id || m.user_id == bot.id)
-        .map(|m| {
-            let mine = m.user_id == user.id;
-            let (main, sources) = split_sources(&m.body);
-            // LC-723: strip the redundant attribution header from bot replies (the
-            // asker's question already shows as their own bubble in the panel).
-            let main = if mine {
-                main
+    {
+        let mine = m.user_id == user.id;
+        let (main, sources) = split_sources(&m.body);
+        // LC-723: strip the redundant attribution header from bot replies (the
+        // asker's question already shows as their own bubble in the panel).
+        let main = if mine {
+            main
+        } else {
+            strip_leading_quote(main)
+        };
+        // LC-730: the "checking the docs" placeholder renders as an animated
+        // skeleton rather than flat italic text; skip the markdown render and
+        // carry its start time so the client can stage the wording.
+        let pending = !mine && help_docs::is_thinking_placeholder(main);
+        let show_avatar = !mine && !prev_bot;
+        prev_bot = !mine;
+        messages.push(PanelMsg {
+            mine,
+            body_html: if pending {
+                String::new()
             } else {
-                strip_leading_quote(main)
-            };
-            // LC-730: the "checking the docs" placeholder renders as an animated
-            // skeleton rather than flat italic text; skip the markdown render and
-            // carry its start time so the client can stage the wording.
-            let pending = !mine && help_docs::is_thinking_placeholder(main);
-            PanelMsg {
-                mine,
-                body_html: if pending {
-                    String::new()
-                } else {
-                    markdown::render(main, &[], &[])
-                },
-                sources,
-                pending,
-                pending_since: if pending {
-                    to_iso_utc(&m.created_at)
-                } else {
-                    String::new()
-                },
-            }
-        })
-        .collect();
+                markdown::render(main, &[], &[])
+            },
+            sources,
+            pending,
+            pending_since: if pending {
+                to_iso_utc(&m.created_at)
+            } else {
+                String::new()
+            },
+            show_avatar,
+        });
+    }
     let empty = messages.is_empty();
     Ok(PanelThreadView {
         messages,
@@ -454,6 +464,7 @@ mod tests {
                 sources: Vec::new(),
                 pending: true,
                 pending_since: "2026-08-16T00:46:02Z".into(),
+                show_avatar: true,
             }],
             empty: false,
             stage: Stage::Normal,

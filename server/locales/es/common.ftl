@@ -412,6 +412,11 @@ support-stage-stuck = ¿No encontraste lo que necesitabas?
 support-stage-filed-title = Registramos tu solicitud
 support-stage-filed-body = Un administrador te dará seguimiento. Referencia
 support-sources-label = Fuentes:
+# LC-732: bienvenida + sugerencias que aparecen al abrir el panel (hilo vacío).
+support-welcome-title = ¡Hola! ¿En qué te ayudamos?
+support-welcome-sub = Hazle una pregunta al asistente o habla con una persona.
+support-starter-start = ¿Cómo empiezo?
+support-starter-docs = ¿Dónde está la documentación?
 # LC-730: texto por etapas del indicador "consultando la documentación" (rotado en el cliente).
 support-thinking-search = Buscando en la documentación…
 support-thinking-read = Leyendo las páginas relevantes…

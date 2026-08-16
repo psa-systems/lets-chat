@@ -5694,10 +5694,12 @@ body:has(#composer) .lc-support-root {
     right: 0;
     bottom: calc(100% + 0.625rem);
     flex-direction: column;
-    width: min(23rem, calc(100vw - 2rem));
-    height: min(30rem, calc(100vh - 8rem));
+    /* LC-732: a touch wider/taller so replies with code and sources read
+       comfortably rather than cramped. */
+    width: min(24rem, calc(100vw - 2rem));
+    height: min(32rem, calc(100vh - 7rem));
     border: 1px solid var(--border);
-    border-radius: 0.875rem;
+    border-radius: 1rem;
     background-color: var(--surface-elevated);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
     overflow: hidden;
@@ -5706,31 +5708,46 @@ body:has(#composer) .lc-support-root {
 .lc-support-root[data-lc-vpos="top"] .lc-support-panel { bottom: auto; top: calc(100% + 0.625rem); }
 html[data-lc-support-open] .lc-support-panel { display: flex; }
 
+/* LC-732: branded header - the accent-tinted assistant avatar, the title/subtitle
+   stack, and a comfortable icon close target. */
 .lc-support-panel-head {
     flex: none;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.625rem;
     padding: 0.75rem 0.875rem;
     border-bottom: 1px solid var(--border);
     background-color: var(--surface);
 }
-.lc-support-panel-heading { display: flex; flex-direction: column; line-height: 1.2; }
+.lc-support-panel-avatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    color: var(--accent-content);
+}
+.lc-support-panel-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .lc-support-panel-title { font-weight: 600; color: var(--content); }
 .lc-support-panel-sub { font-size: 0.75rem; color: var(--content-muted); }
 .lc-support-panel-close {
     flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
     border: none;
     background: transparent;
     color: var(--content-muted);
-    font-size: 1.375rem;
-    line-height: 1;
-    padding: 0 0.25rem;
     cursor: pointer;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
 }
-.lc-support-panel-close:hover { color: var(--content); }
+.lc-support-panel-close:hover { color: var(--content); background-color: var(--surface-sunken); }
+.lc-support-panel-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .lc-support-thread {
     flex: 1 1 auto;
@@ -5748,8 +5765,23 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
     font-size: 0.875rem;
     padding: 1rem;
 }
-.lc-support-msg { display: flex; justify-content: flex-start; }
+/* LC-732: bot rows carry a small assistant avatar; the row aligns to the bubble
+   bottom so the avatar sits beside the last line of a tall reply. */
+.lc-support-msg { display: flex; justify-content: flex-start; align-items: flex-end; gap: 0.4375rem; }
 .lc-support-msg-mine { justify-content: flex-end; }
+.lc-support-avatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    color: var(--accent-content);
+}
+/* Grouped bot replies: keep the indent, hide the repeated glyph. */
+.lc-support-avatar-spacer { background-color: transparent; }
 .lc-support-bubble {
     max-width: 85%;
     /* LC-721: a flex item defaults to min-width:auto, which refuses to shrink
@@ -5792,18 +5824,74 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
 .lc-support-thinking .lc-ai-skel { gap: 0.6rem; }
 .lc-support-thinking .lc-skel-block { gap: 0.45rem; }
 
+/* LC-732: composer footer. A quiet "Talk to a human" escalation link sits above
+   the input, and Send is an icon-button attached inside the input pill (a real
+   chat composer), so the primary action is unmistakable and the escalation no
+   longer competes with it. */
 .lc-support-compose {
     flex: none;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0.75rem 0.875rem;
+    padding: 0.625rem 0.875rem 0.75rem;
     border-top: 1px solid var(--border);
     background-color: var(--surface);
 }
-.lc-support-input { width: 100%; }
-.lc-support-actions { display: flex; gap: 0.5rem; }
-.lc-support-send { flex: 1 1 auto; }
+.lc-support-human-link {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.1875rem 0.5rem;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--content-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+.lc-support-human-link:hover { color: var(--accent); background-color: var(--surface-sunken); }
+.lc-support-human-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lc-support-human-link svg { flex: none; }
+.lc-support-inputrow {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background-color: var(--surface-elevated);
+}
+.lc-support-inputrow:focus-within { border-color: var(--accent); }
+.lc-support-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--content);
+    font-size: 0.9375rem;
+    padding: 0.25rem 0;
+}
+.lc-support-input:focus { outline: none; }
+.lc-support-send-btn {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    color: var(--accent-content);
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+.lc-support-send-btn:hover { background-color: var(--accent-hover); }
+.lc-support-send-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Nudge the send glyph optically centered in its circle. */
+.lc-support-send-btn svg { margin-left: -1px; }
 
 /* LC-719/721: support bubble stage affordances + unread-count badge. When one or
    more updates land while the panel is closed, the launcher shows a numbered
@@ -5993,3 +6081,71 @@ html[data-lc-support-hint]:not([data-lc-support-open]) .lc-support-nudge { displ
     text-overflow: ellipsis;
 }
 .lc-support-source:hover { text-decoration: underline; }
+
+/* LC-732: welcome + starter chips shown on first open (empty thread). A friendly
+   greeting over a blank box, with tappable starters to make the assistant
+   discoverable. Each chip posts a question (or escalates) through /support. */
+.lc-support-welcome {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.375rem;
+    padding: 1rem 0.5rem;
+}
+.lc-support-welcome-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    color: var(--accent-content);
+    margin-bottom: 0.25rem;
+}
+.lc-support-welcome-title { font-weight: 600; color: var(--content); }
+.lc-support-welcome-sub { font-size: 0.8125rem; color: var(--content-muted); max-width: 16rem; }
+.lc-support-starters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+.lc-support-chip {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--surface-elevated);
+    color: var(--content);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.lc-support-chip:hover { border-color: var(--accent); background-color: var(--surface-sunken); }
+.lc-support-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lc-support-chip-human {
+    color: var(--accent);
+    font-weight: 500;
+    text-align: center;
+}
+
+/* LC-732: the panel eases in from its launcher corner rather than popping. The
+   transform-origin follows the docked/dragged side (LC-729 data attributes). */
+html[data-lc-support-open] .lc-support-panel { animation: lc-support-pop 160ms ease-out; }
+.lc-support-panel { transform-origin: bottom right; }
+.lc-support-root[data-lc-hpos="left"] .lc-support-panel { transform-origin: bottom left; }
+.lc-support-root[data-lc-vpos="top"] .lc-support-panel { transform-origin: top right; }
+.lc-support-root[data-lc-vpos="top"][data-lc-hpos="left"] .lc-support-panel { transform-origin: top left; }
+@keyframes lc-support-pop {
+    from { opacity: 0; transform: scale(0.96) translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    html[data-lc-support-open] .lc-support-panel { animation: none; }
+}
