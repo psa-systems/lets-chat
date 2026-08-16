@@ -220,15 +220,21 @@
           }
         }
       };
-      // LC-719: when a support-panel WS push (OOB swap into #lc-support-thread)
-      // lands while the panel is closed, flag the launcher so the user notices a
-      // reply. Cleared on next open (above). Attached to document (body may not
-      // exist yet in this head script); htmx events bubble to it.
+      // LC-719/721: when a support-panel WS push (OOB swap into #lc-support-thread)
+      // lands while the panel is closed, bump a numbered badge on the launcher so
+      // the user sees how many updates arrived. Each push is one incoming update
+      // (a bot answer, or a claim/resolve notice), so a running count is accurate.
+      // Cleared on next open (above). Attached to document (body may not exist yet
+      // in this head script); htmx events bubble to it.
       document.addEventListener("htmx:oobAfterSwap", function (e) {
         if (e.target && e.target.id === "lc-support-thread" &&
             d.getAttribute("data-lc-support-open") !== "1") {
           var r = document.querySelector("[data-lc-support-root]");
-          if (r) r.setAttribute("data-lc-attention", "1");
+          if (r) {
+            var n = parseInt(r.getAttribute("data-lc-attention"), 10) || 0;
+            n = n + 1;
+            r.setAttribute("data-lc-attention", n > 9 ? "9+" : String(n));
+          }
         }
       });
 
