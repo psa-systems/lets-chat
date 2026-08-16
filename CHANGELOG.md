@@ -10,6 +10,12 @@ git log --grep='\[operator-action\]' <last-tag>..HEAD
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections: **Security** (must-act), **Changed** (behavior/default/config changes), **Added**, **Fixed**, **Deprecated**. Internal-only work (refactors, test hygiene, decoder hardening with no operator impact) is intentionally omitted; the git history is the complete record.
 
+## [Unreleased]
+
+### Changed
+
+- **Desktop update manifests are no longer Ed25519-signed (LC-709).** The updater's manifest signature, the detached signature artifact published beside `latest.json`, and the public key embedded in the desktop binary are all removed. Desktop distribution is membership-gated and authenticated rather than public, so the signature is not what makes a download trustworthy; each artifact's SHA-256 is still recorded in `latest.json` and still checked before the in-place replace, which covers a corrupt or truncated download and a manifest that has drifted from the binaries it names, but not an attacker who controls the source. **Action:** the update-signing secret and public-key variable that the v0.1.0 Security entry below told you to provision are no longer read by anything; delete them from the org if you set them. Cutting a desktop release now needs no key material beyond the packages PAT.
+
 ## [v0.2.0] - 2026-07-22
 
 Second tagged release, cut from `main` after ~508 commits (roughly seven weeks) of work on top of the v0.1.0 seed. Server deployments track the `latest` OCI image built off `main`, so a running server does not pick this up until its image is repulled and the container is restarted; the tag is the pinning + desktop-updater baseline. The entries below are curated from the `[operator-action]` markers in `git log v0.1.0..HEAD`; internal work (refactors, test hygiene, dependency hardening with no operator impact) is intentionally omitted and lives in the git history.

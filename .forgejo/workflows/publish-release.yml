@@ -28,7 +28,7 @@ jobs:
   publish:
     name: Build + publish lets-chat-desktop binaries
     # Base image: both release builds run inside `docker buildx`; the runner
-    # only extracts, hashes, signs and uploads artifacts (LC-647).
+    # only extracts, hashes and uploads artifacts (LC-647).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
     permissions:
       contents: read
@@ -48,16 +48,13 @@ jobs:
       # the a8n-tools -> psa-systems move silently emptied every one of them.
       # The registry credentials failed loudly on the next push, but this
       # workflow only runs on a `v*` tag: a missing value here would surface
-      # twenty-odd minutes into a release, or - worse, for the public key - not
-      # at all, shipping binaries whose self-updater can never verify a
-      # manifest. Check every value up front so a missing secret costs seconds
-      # and names itself.
+      # twenty-odd minutes into a release. Check every value up front so a
+      # missing secret costs seconds and names itself.
       - name: Preflight required org variables and secrets
         shell: nu {0}
         env:
           # Secrets must be read at step-env: at job-env they arrive empty
           # inside a nu step (see the job-level note above).
-          SIGNING_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_KEY }}
           PACKAGE_PAT: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
         run: |
           # `$env.X?` rather than `$env.X`: an undefined variable is exactly the
@@ -65,8 +62,6 @@ jobs:
           # reporting it.
           let required = [
             { name: "vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER", value: ($env.PACKAGE_OWNER? | default "") }
-            { name: "vars.DESKTOP_UPDATE_PUBLIC_KEY", value: "${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}" }
-            { name: "secrets.DESKTOP_UPDATE_SIGNING_KEY", value: ($env.SIGNING_KEY? | default "") }
             { name: "secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT", value: ($env.PACKAGE_PAT? | default "") }
           ]
           let missing = ($required | where {|r| $r.value | is-empty } | get name)
@@ -108,9 +103,6 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
-              # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
-              # public key so the shipped binary enforces signature checks.
-              --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
               # LC-594: compile in the update source derived from the same
               # PACKAGE_OWNER this workflow uploads to, so the shipped default
               # cannot point at an org we no longer publish under.
@@ -154,9 +146,6 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
-              # LC-210-BINARY-INTEGRITY: embed the (non-secret) update-signing
-              # public key so the shipped binary enforces signature checks.
-              --build-arg $"LETS_CHAT_UPDATE_PUBLIC_KEY=${{ vars.DESKTOP_UPDATE_PUBLIC_KEY }}"
               # LC-594: see the Linux build step.
               --build-arg $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
               --tag lets-chat-desktop-windows:publish
@@ -177,11 +166,12 @@ jobs:
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          # LC-210-BINARY-INTEGRITY (#277): each artifact carries its
-          # lowercase-hex SHA-256 (nushell `hash sha256`). The desktop updater
-          # checks the downloaded binary against this value, and the value is
-          # covered by the manifest signature added in the next step - so a
-          # swapped binary OR a swapped hash is refused client-side.
+          # Each artifact carries its lowercase-hex SHA-256 (nushell
+          # `hash sha256`). The desktop updater checks the downloaded binary
+          # against this value before replacing itself, which catches a corrupt
+          # or truncated download and a manifest that has drifted from the
+          # binaries it names. LC-709 removed the manifest signature that used
+          # to cover these hashes, so this is integrity, not authenticity.
           let deb_src = (ls artifacts/bundle-linux/*.deb | first | get name)
           let appimage_src = (ls artifacts/bundle-linux/*.AppImage | first | get name)
           let manifest = {
@@ -194,37 +184,6 @@ jobs:
           $manifest | to json --indent 2 | save artifacts/latest.json
           print "Generated artifacts/latest.json:"
           open --raw artifacts/latest.json | print
-
-      - name: Sign update manifest
-        shell: nu {0}
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_KEY }}
-        run: |
-          # LC-210-BINARY-INTEGRITY (#277): produce the detached Ed25519
-          # signature the desktop updater verifies before it trusts the
-          # manifest. DESKTOP_UPDATE_SIGNING_KEY is the PRIVATE key in PKCS#8
-          # PEM; its public half is embedded in the desktop build via
-          # LETS_CHAT_UPDATE_PUBLIC_KEY (see docs/desktop-update-signing.md).
-          # `openssl pkeyutl -rawin` needs OpenSSL 3.x (present on the openSUSE
-          # runner) and writes the raw 64-byte signature, which is exactly what
-          # the client reads. Fail the release if the secret is unset rather
-          # than publishing an unsigned manifest the updater would then reject.
-          if ($env.UPDATE_SIGNING_KEY | is-empty) {
-              print --stderr "DESKTOP_UPDATE_SIGNING_KEY is unset; refusing to publish an unsigned update manifest"
-              exit 1
-          }
-          $env.UPDATE_SIGNING_KEY | save ed25519_private.pem
-          (
-              ^openssl pkeyutl
-                  -sign
-                  -rawin
-                  -inkey ed25519_private.pem
-                  -in artifacts/latest.json
-                  -out artifacts/latest.json.sig
-          )
-          rm ed25519_private.pem
-          let sig_size = (ls artifacts/latest.json.sig | first | get size)
-          print $"Signed latest.json -> latest.json.sig (($sig_size))"
 
       - name: Upload binaries and manifest to Generic Packages
         shell: nu {0}
@@ -246,9 +205,6 @@ jobs:
               { src: $appimage_src,                                    dest: [$version, "lets-chat-desktop-linux-amd64.AppImage"] }
               { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", dest: [$version, "lets-chat-desktop-windows-x86_64.exe"] }
               { src: "artifacts/latest.json",                          dest: ["latest", "latest.json"] }
-              # LC-210-BINARY-INTEGRITY (#277): detached signature, fetched and
-              # verified by the desktop updater alongside the manifest.
-              { src: "artifacts/latest.json.sig",                      dest: ["latest", "latest.json.sig"] }
           ]
           for entry in $uploads {
               let url = (
@@ -289,7 +245,6 @@ jobs:
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           print $"Manifest:        ($base)/latest/latest.json"
-          print $"Signature:       ($base)/latest/latest.json.sig"
           print $"Linux binary:    ($base)/($version)/lets-chat-desktop-linux-x86_64"
           print $"Linux .deb:      ($base)/($version)/lets-chat-desktop-linux-amd64.deb"
           print $"Linux .AppImage: ($base)/($version)/lets-chat-desktop-linux-amd64.AppImage"

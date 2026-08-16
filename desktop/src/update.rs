@@ -19,20 +19,20 @@
 // under /latest/latest.json. Pointing LETS_CHAT_UPDATE_URL at an alternative
 // http(s) host (eg. a fork or a staging mirror) overrides the default.
 //
-// LC-210: every fetch here (manifest + signature + binary download) goes
-// through `net_guard::guarded_get`, which validates each redirect hop against
-// the public-IP filter (an injected redirect to an internal host is refused).
+// LC-210: every fetch here (manifest + binary download) goes through
+// `net_guard::guarded_get`, which validates each redirect hop against the
+// public-IP filter (an injected redirect to an internal host is refused).
 // `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE=1` exempts ONLY the initial URL from
 // that filter, for an operator running a private internal update mirror;
 // redirect targets are still validated.
 //
-// LC-210-BINARY-INTEGRITY (#277): the SSRF guard does not make the artifact
-// trustworthy (a redirect to a public attacker host still serves bytes). So
-// `fetch_manifest` also fetches the detached signature `latest.json.sig` and
-// verifies it over the raw manifest bytes before parsing, and `apply` verifies
-// the downloaded binary's SHA-256 against the signed manifest value before
-// `self_replace`. Both fail closed. See `update_verify` and
-// `docs/desktop-update-signing.md`.
+// LC-709: the manifest is no longer signed. Distribution is membership-gated
+// and authenticated, so the fetch itself is what makes the source trustworthy.
+// The one remaining check is `apply` hashing the downloaded binary and
+// comparing it to the manifest's `sha256` before `self_replace`, which catches
+// a corrupt or truncated download and a manifest that has drifted from the
+// binaries it names; a manifest with no hash for this platform is refused
+// rather than installed. See `update_verify`.
 
 use crate::net_guard;
 use crate::update_verify;
@@ -56,8 +56,8 @@ use std::time::Duration;
 /// inferred from the repo path, which names the latter.
 ///
 /// Note that owner is a *private* org: an anonymous fetch of this URL is 401,
-/// so this default cannot serve public users as-is. Tracked separately; the
-/// updater fails closed on it either way.
+/// so this default cannot serve public users as-is. Authenticated distribution
+/// is tracked separately (LC-733).
 pub const DEFAULT_UPDATE_URL: &str = match option_env!("LETS_CHAT_UPDATE_BASE_URL") {
     Some(u) if !u.is_empty() => u,
     _ => "https://dev.a8n.run/api/packages/psa-systems-private/generic/lets-chat",
@@ -71,8 +71,8 @@ const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
 // in a Vec; the cap turns a hostile/oversized response into a clean error
 // instead of an OOM. Generous vs a desktop binary (tens of MiB).
 const MAX_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
-// The manifest + signature are tiny; cap small so a hostile endpoint cannot
-// stream gigabytes into the verifier.
+// The manifest is tiny; cap small so a hostile endpoint cannot stream
+// gigabytes into the parser.
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -87,10 +87,10 @@ pub struct Manifest {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Artifact {
     pub url: String,
-    // LC-210-BINARY-INTEGRITY: lowercase-hex SHA-256 of the artifact, covered
-    // by the manifest signature. Optional in the type so a malformed/legacy
-    // manifest deserializes; `apply` treats a missing hash as a hard error
-    // (MissingArtifactHash) rather than installing unverified bytes.
+    // Lowercase-hex SHA-256 of the artifact. Optional in the type so a
+    // malformed/legacy manifest deserializes; `apply` treats a missing hash as
+    // a hard error (MissingArtifactHash) rather than installing unverified
+    // bytes.
     #[serde(default)]
     pub sha256: Option<String>,
 }
@@ -117,11 +117,6 @@ fn manifest_url(base: &str) -> String {
     format!("{}/latest/latest.json", base.trim_end_matches('/'))
 }
 
-// LC-210-BINARY-INTEGRITY: detached signature lives next to the manifest.
-fn signature_url(base: &str) -> String {
-    format!("{}/latest/latest.json.sig", base.trim_end_matches('/'))
-}
-
 // Read a guarded response body into memory, refusing anything past `max` so a
 // hostile endpoint cannot OOM us. Reads one byte past the cap to distinguish
 // "exactly max" from "too large".
@@ -137,26 +132,10 @@ fn read_body_capped(response: ureq::Response, max: usize) -> Result<Vec<u8>, Str
     Ok(buf)
 }
 
-// Fetches the manifest AND its detached signature, verifies the signature over
-// the raw manifest bytes with the build-embedded public key, and only then
-// parses the JSON. A build with no embedded key fails closed here, so neither
-// the startup check nor `--update` will trust an unsigned/unverifiable
-// manifest. LC-210-BINARY-INTEGRITY (#277).
+// Fetches `latest.json` and parses it. LC-709 removed the manifest signature,
+// so there is nothing to verify here; the artifact hash check in `apply` is the
+// remaining integrity gate.
 pub fn fetch_manifest() -> Result<Manifest, String> {
-    // LC-607: check the embedded key before touching the network. An unkeyed
-    // build refuses every manifest at the verify step below, so fetching first
-    // only changes *which* failure the user is shown - and it showed the wrong
-    // one. Every binary shipped so far is unkeyed (the release workflow, the
-    // only place that injects the key, has never completed a run), and the
-    // configured default source is a private packages org, so `--check-update`
-    // reported a bare 401 against an internal URL. That reads as a broken
-    // server or a permissions problem the user might fix, when the real state
-    // is that this build has no self-update at all. Failing here says so, and
-    // makes no request to a source that could never have helped.
-    if update_verify::PUBLIC_KEY_HEX.is_empty() {
-        return Err(update_verify::VerifyError::NotConfigured.to_string());
-    }
-
     let base = update_url();
     let allow_private = allow_private_initial();
 
@@ -164,14 +143,6 @@ pub fn fetch_manifest() -> Result<Manifest, String> {
     let manifest_resp = net_guard::guarded_get(&m_url, allow_private, MANIFEST_TIMEOUT)
         .map_err(|e| format!("fetch manifest from {m_url}: {e}"))?;
     let manifest_bytes = read_body_capped(manifest_resp, MAX_MANIFEST_BYTES)?;
-
-    let s_url = signature_url(&base);
-    let sig_resp = net_guard::guarded_get(&s_url, allow_private, MANIFEST_TIMEOUT)
-        .map_err(|e| format!("fetch signature from {s_url}: {e}"))?;
-    let signature = read_body_capped(sig_resp, MAX_MANIFEST_BYTES)?;
-
-    update_verify::verify_manifest_signature(&manifest_bytes, &signature)
-        .map_err(|e| format!("verify manifest {m_url}: {e}"))?;
 
     serde_json::from_slice::<Manifest>(&manifest_bytes)
         .map_err(|e| format!("parse manifest JSON from {m_url}: {e}"))
@@ -241,9 +212,8 @@ pub fn apply() -> Result<ApplyOutcome, String> {
     }
     let artifact = platform_artifact(&m)
         .ok_or_else(|| "no release artifact published for this platform/arch".to_string())?;
-    // The manifest was signature-verified in fetch_manifest, so this sha256 is
-    // authentic. A manifest missing the hash for our platform is refused rather
-    // than installed unverified. LC-210-BINARY-INTEGRITY (#277).
+    // A manifest missing the hash for our platform is refused rather than
+    // installed unverified.
     let expected_sha256 = artifact
         .sha256
         .as_deref()
@@ -359,47 +329,6 @@ mod tests {
         assert!(
             DEFAULT_UPDATE_URL.starts_with("https://"),
             "the updater refuses plaintext sources: {DEFAULT_UPDATE_URL}"
-        );
-    }
-
-    /// LC-607: an unkeyed build must report *why* it cannot self-update, and
-    /// must not make the request to find out.
-    ///
-    /// The source is pointed at a loopback address the net guard rejects
-    /// outright. If the key check did not come first, the failure would be the
-    /// guard's ("resolves to a non-public address") or a transport error -
-    /// anything but the not-configured message. Getting the not-configured
-    /// message back is therefore evidence that no request was attempted.
-    /// Confirmed by deleting the early return: this asserts the guard's
-    /// message instead.
-    #[test]
-    fn unkeyed_build_reports_not_configured_without_fetching() {
-        assert_eq!(
-            update_verify::PUBLIC_KEY_HEX,
-            "",
-            "test assumes an unkeyed (non-release) build"
-        );
-
-        // SAFETY: single-threaded test process; no other thread reads the env
-        // while this runs. Restored before the assertions.
-        let prev = std::env::var("LETS_CHAT_UPDATE_URL").ok();
-        unsafe { std::env::set_var("LETS_CHAT_UPDATE_URL", "https://127.0.0.1:1/generic/x") };
-
-        let err = fetch_manifest().expect_err("an unkeyed build cannot fetch a usable manifest");
-
-        match prev {
-            Some(v) => unsafe { std::env::set_var("LETS_CHAT_UPDATE_URL", v) },
-            None => unsafe { std::env::remove_var("LETS_CHAT_UPDATE_URL") },
-        }
-
-        assert_eq!(
-            err,
-            update_verify::VerifyError::NotConfigured.to_string(),
-            "unkeyed build must fail on the missing key, not on the transport"
-        );
-        assert!(
-            !err.contains("127.0.0.1"),
-            "must not leak the configured source into the message: {err}"
         );
     }
 }
