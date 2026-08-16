@@ -402,7 +402,7 @@ blocked-unblock = Desbloquear
 ## LC-718: burbuja de chat de soporte (epic LC-717)
 support-bubble-open = ¿Necesitas ayuda? Pregúntale a nuestro asistente
 support-bubble-title = Soporte
-support-bubble-subtitle = Pregúntanos lo que sea
+support-bubble-subtitle = Respuestas de nuestra documentación
 support-bubble-close = Cerrar soporte
 support-bubble-placeholder = Escribe una pregunta…
 support-bubble-send = Enviar
