@@ -127,6 +127,25 @@ pub fn rc_input(frame: String, state: State<'_, ControlState>) {
     }
 }
 
+/// LC-733: receive the update-registry token the page read from the server
+/// route for the signed-in user, and persist it for the updater.
+///
+/// `--update` runs as its own process, so the token has to land in the config
+/// file rather than in memory. The page can only reach this command from the
+/// configured server origin (the runtime capability in main.rs), which is the
+/// same origin that minted the token.
+#[tauri::command]
+pub fn set_registry_token(token: String) {
+    let token = token.trim();
+    if token.is_empty() {
+        eprintln!("lets-chat-desktop: ignoring empty update-registry token from the page");
+        return;
+    }
+    if let Err(e) = crate::config::save_registry_token(token) {
+        eprintln!("lets-chat-desktop: could not store the update-registry token: {e}");
+    }
+}
+
 /// Synthesize a key-up / button-up for everything currently held, then clear
 /// the held sets. Runs at the start of every disarm.
 fn release_all(inner: &mut Inner) {
@@ -285,6 +304,34 @@ pub const BRIDGE_JS: &str = r#"
     var d = e && e.detail;
     inv('rc_input', { frame: typeof d === 'string' ? d : JSON.stringify(d) });
   });
+
+  // LC-733: hand the native updater a registry credential for the signed-in
+  // user. The route is session-authenticated, so a signed-out page just gets a
+  // 401 and we try again on the next load. Failures are logged rather than
+  // swallowed: a silent one would look identical to "up to date" later.
+  function pushRegistryToken() {
+    if (location.protocol !== 'https:' && location.protocol !== 'http:') { return; }
+    // Top frame only; the script runs in every frame and the token is one
+    // per session, not one per iframe.
+    if (window.top !== window.self) { return; }
+    fetch('/desktop/registry-token', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) { throw new Error('HTTP ' + r.status); }
+        return r.json();
+      })
+      .then(function (d) {
+        if (d && d.token) { inv('set_registry_token', { token: d.token }); }
+        else { throw new Error('response carried no token'); }
+      })
+      .catch(function (e) {
+        console.warn("Let's Chat: no update-registry credential yet:", e && e.message ? e.message : e);
+      });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pushRegistryToken);
+  } else {
+    pushRegistryToken();
+  }
 })();
 "#;
 

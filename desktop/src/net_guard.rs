@@ -1,7 +1,7 @@
 //! LC-210: SSRF guard for the desktop self-updater's outbound HTTP.
 //!
-//! The self-updater fetches an operator-configured `LETS_CHAT_UPDATE_URL`
-//! (manifest + binary download) via `ureq`. The operator sets the initial
+//! The self-updater fetches an operator-configured registry (LC-733: an OCI
+//! manifest + the artifact blob) via `ureq`. The operator sets the initial
 //! URL deliberately, so the meaningful SSRF risk is **redirects**: a
 //! compromised / MITM'd update endpoint (or a DNS/BGP redirect) could send
 //! the updater to an internal or attacker-controlled host. The cure is
@@ -213,17 +213,29 @@ fn plain_agent() -> ureq::Agent {
     ureq::builder().redirects(0).build()
 }
 
-/// Production entry point: fetch `raw_url` with per-hop SSRF validation.
+/// Production entry point: fetch `raw_url` with per-hop SSRF validation, a
+/// bearer credential and extra request headers (the OCI `Accept` set).
 /// `allow_private_initial` exempts ONLY the initial URL from the public-IP
-/// filter (the operator's deliberate choice, e.g. a private internal update
+/// filter (the operator's deliberate choice, e.g. a private internal registry
 /// mirror); redirect targets are ALWAYS validated.
-pub fn guarded_get(
+///
+/// LC-733: the bearer is attached ONLY while the chain stays on the initial URL's
+/// origin. An OCI registry routinely redirects a blob GET to a storage backend
+/// on another host, and replaying the user's registry token there would hand it
+/// to whoever the registry pointed at. Non-secret headers keep flowing on every
+/// hop. The public-IP filter is untouched: it still validates every hop exactly
+/// as before, and this is an additional restriction rather than a replacement.
+pub fn guarded_get_with_auth(
     raw_url: &str,
+    bearer: Option<&str>,
+    headers: &[(&str, &str)],
     allow_private_initial: bool,
     timeout: Duration,
 ) -> Result<ureq::Response, GuardError> {
     guarded_fetch_with(
         raw_url,
+        bearer,
+        headers,
         allow_private_initial,
         timeout,
         Arc::new(is_globally_routable),
@@ -232,11 +244,14 @@ pub fn guarded_get(
 
 fn guarded_fetch_with(
     raw_url: &str,
+    bearer: Option<&str>,
+    headers: &[(&str, &str)],
     allow_private_initial: bool,
     timeout: Duration,
     policy: IpPolicy,
 ) -> Result<ureq::Response, GuardError> {
     let mut url = Url::parse(raw_url).map_err(|e| GuardError::InvalidUrl(e.to_string()))?;
+    let credential_origin = url.origin();
     let guarded = guarded_agent(policy.clone());
     let plain = plain_agent();
 
@@ -259,7 +274,17 @@ fn guarded_fetch_with(
         }
 
         let agent = if full_guard { &guarded } else { &plain };
-        let resp = match agent.request_url("GET", &url).timeout(timeout).call() {
+        let mut request = agent.request_url("GET", &url).timeout(timeout);
+        for (name, value) in headers {
+            request = request.set(name, value);
+        }
+        // Same-origin hops only; a cross-origin hop is sent unauthenticated.
+        if let Some(token) = bearer {
+            if url.origin() == credential_origin {
+                request = request.set("Authorization", &format!("Bearer {token}"));
+            }
+        }
+        let resp = match request.call() {
             Ok(r) => r,
             Err(ureq::Error::Status(code, _)) => return Err(GuardError::HttpStatus(code)),
             Err(ureq::Error::Transport(t)) => return Err(GuardError::Transport(t.to_string())),
@@ -302,6 +327,54 @@ mod tests {
             is_globally_routable(ip)
         });
         (policy, seen)
+    }
+
+    /// Loopback server that answers a scripted sequence of responses and
+    /// records the raw request head of each one, so a test can assert which
+    /// headers actually went out on which hop. `make_script` receives the
+    /// bound addr so a response can point its `Location` back at this server.
+    /// Handles both a reused keep-alive connection and a fresh one per
+    /// request; the read timeout is what lets it fall back to `accept`.
+    fn scripted(
+        bind: Ipv4Addr,
+        make_script: impl FnOnce(SocketAddr) -> Vec<String>,
+    ) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
+        let listener = TcpListener::bind((bind, 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let script = make_script(addr);
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let log2 = log.clone();
+        std::thread::spawn(move || {
+            let mut sent = 0;
+            while sent < script.len() {
+                let Ok((mut sock, _)) = listener.accept() else {
+                    return;
+                };
+                let _ = sock.set_read_timeout(Some(Duration::from_millis(300)));
+                while sent < script.len() {
+                    let mut buf = [0u8; 4096];
+                    let n = match sock.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    log2.lock()
+                        .unwrap()
+                        .push(String::from_utf8_lossy(&buf[..n]).to_string());
+                    let _ = sock.write_all(script[sent].as_bytes());
+                    let _ = sock.flush();
+                    sent += 1;
+                }
+            }
+        });
+        (addr, log)
+    }
+
+    fn request_heads(log: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
+        log.lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.to_ascii_lowercase())
+            .collect()
     }
 
     /// One-shot loopback server: accepts a single connection, sends `resp`,
@@ -347,6 +420,8 @@ mod tests {
         let (policy, _) = recording_policy(vec![fixture.ip()]); // allow the fixture only
         let err = guarded_fetch_with(
             &format!("http://{fixture}/"),
+            None,
+            &[],
             false,
             Duration::from_secs(2),
             policy,
@@ -384,6 +459,8 @@ mod tests {
         let (policy, seen) = recording_policy(vec![a.ip(), b.ip()]);
         let resp = guarded_fetch_with(
             &format!("http://{a}/"),
+            None,
+            &[],
             false,
             Duration::from_secs(2),
             policy,
@@ -475,7 +552,7 @@ mod tests {
         assert!(
             violations.is_empty(),
             "raw ureq construction outside net_guard - route through \
-             net_guard::guarded_get:\n{}",
+             net_guard::guarded_get_with_auth:\n{}",
             violations.join("\n")
         );
     }
@@ -514,6 +591,8 @@ mod tests {
         let policy: IpPolicy = Arc::new(is_globally_routable);
         let err = guarded_fetch_with(
             &format!("http://{fixture}/"),
+            None,
+            &[],
             true, // allow_private_initial
             Duration::from_secs(2),
             policy,
@@ -528,6 +607,95 @@ mod tests {
                 }
             ),
             "opt-out must still guard redirects; got {err:?}"
+        );
+    }
+
+    // LC-733 test 1: a redirect that stays on the registry's origin keeps the
+    // bearer, so the registry can bounce a blob GET around its own host without
+    // the fetch losing its credential and 401-ing.
+    #[test]
+    fn authorization_survives_a_same_origin_redirect() {
+        let (addr, log) = scripted(Ipv4Addr::LOCALHOST, |_addr| {
+            vec![
+                // Relative Location: same scheme, host and port.
+                "HTTP/1.1 302 Found\r\nLocation: /v2/blobs/next\r\nContent-Length: 0\r\n\r\n"
+                    .to_string(),
+                "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".to_string(),
+            ]
+        });
+        let (policy, _) = recording_policy(vec![addr.ip()]);
+        let resp = guarded_fetch_with(
+            &format!("http://{addr}/v2/blobs/first"),
+            Some("registry-secret"),
+            &[("Accept", "application/vnd.oci.image.manifest.v1+json")],
+            false,
+            Duration::from_secs(2),
+            policy,
+        )
+        .expect("same-origin redirect should complete");
+        assert_eq!(resp.status(), 200);
+
+        let heads = request_heads(&log);
+        assert_eq!(heads.len(), 2, "expected two requests, saw {heads:?}");
+        for (n, head) in heads.iter().enumerate() {
+            assert!(
+                head.contains("authorization: bearer registry-secret"),
+                "hop {n} lost the bearer on a same-origin redirect: {head}"
+            );
+            assert!(
+                head.contains("accept: application/vnd.oci.image.manifest.v1+json"),
+                "hop {n} lost the non-secret headers: {head}"
+            );
+        }
+    }
+
+    // LC-733 test 2 (the killer): an OCI registry redirecting a blob GET to a
+    // storage backend on ANOTHER origin must NOT be handed the user's registry
+    // token. Asserts the absence of the header on the cross-origin hop, and its
+    // presence on the initial hop, so a fetch that never authenticated at all
+    // cannot pass this test.
+    #[test]
+    fn authorization_is_stripped_on_a_cross_origin_redirect() {
+        // Storage backend on a different loopback host = a different origin.
+        let (backend, backend_log) = scripted(Ipv4Addr::new(127, 0, 0, 2), |_addr| {
+            vec!["HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".to_string()]
+        });
+        let (registry, registry_log) = scripted(Ipv4Addr::LOCALHOST, move |_addr| {
+            vec![format!(
+                "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://{backend}/blob\r\nContent-Length: 0\r\n\r\n"
+            )]
+        });
+        let (policy, _) = recording_policy(vec![registry.ip(), backend.ip()]);
+        let resp = guarded_fetch_with(
+            &format!("http://{registry}/v2/lets-chat/blobs/sha256:abc"),
+            Some("registry-secret"),
+            &[("Accept", "application/octet-stream")],
+            false,
+            Duration::from_secs(2),
+            policy,
+        )
+        .expect("cross-origin redirect should still complete, just unauthenticated");
+        assert_eq!(resp.status(), 200);
+
+        let registry_heads = request_heads(&registry_log);
+        assert_eq!(registry_heads.len(), 1);
+        assert!(
+            registry_heads[0].contains("authorization: bearer registry-secret"),
+            "the initial registry hop must be authenticated: {}",
+            registry_heads[0]
+        );
+
+        let backend_heads = request_heads(&backend_log);
+        assert_eq!(backend_heads.len(), 1);
+        assert!(
+            !backend_heads[0].contains("authorization"),
+            "the bearer leaked to a cross-origin redirect target: {}",
+            backend_heads[0]
+        );
+        assert!(
+            backend_heads[0].contains("accept: application/octet-stream"),
+            "non-secret headers should still follow the redirect: {}",
+            backend_heads[0]
         );
     }
 }
