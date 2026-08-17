@@ -116,18 +116,20 @@
             : window.__lcS('outboxYouAreOffline', 'You are offline'))
         : window.__lcS('outboxDelivering', 'Delivering %n% queued message(s)…').replace('%n%', pending.length);
       html +=
-        '<div class="px-3 py-2 text-xs text-slate-700">' + escapeHtml(msg) + '</div>';
+        '<div class="px-3 py-2 text-xs text-content">' + escapeHtml(msg) + '</div>';
     }
     if (failed.length) {
-      html += '<ul class="divide-y border-t border-slate-200">';
+      // `divide-border` is explicit because Tailwind's preflight defaults every
+      // border to gray-200, which `divide-y` would otherwise inherit.
+      html += '<ul class="divide-y divide-border border-t border-border">';
       for (var i = 0; i < failed.length; i++) {
         var f = failed[i];
         html +=
           '<li class="px-3 py-2 text-xs flex items-center gap-2">' +
           '<span class="text-danger">' + window.__lcS('outboxFailed', 'Failed (%status%):').replace('%status%', function () { return escapeHtml(f.status); }) + '</span> ' +
-          '<span class="flex-1 truncate text-slate-700">' + escapeHtml(f.label) + '</span>' +
+          '<span class="flex-1 truncate text-content">' + escapeHtml(f.label) + '</span>' +
           '<button data-lc-outbox-retry="' + escapeHtml(f.id) + '" class="underline hover:no-underline">' + window.__lcS('outboxRetry', 'Retry') + '</button>' +
-          '<button data-lc-outbox-discard="' + escapeHtml(f.id) + '" class="underline hover:no-underline text-slate-500">' + window.__lcS('outboxDiscard', 'Discard') + '</button>' +
+          '<button data-lc-outbox-discard="' + escapeHtml(f.id) + '" class="underline hover:no-underline text-content-muted">' + window.__lcS('outboxDiscard', 'Discard') + '</button>' +
           '</li>';
       }
       html += '</ul>';

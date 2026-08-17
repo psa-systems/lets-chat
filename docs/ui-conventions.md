@@ -19,6 +19,12 @@ Use the semantic typography classes from `server/assets/main.css` instead of han
 
 The message body (`.lc-md`) keeps its own size, which the per-device text-size control scales; do not apply the chrome scale there.
 
+## Color tokens (LC-735)
+
+Every color comes from the semantic tokens in `server/tailwind.config.js` (`text-content`, `text-content-muted`, `text-content-subtle`, `bg-surface{,-elevated,-sunken}`, `border-border`, `text-danger`, ...), which resolve to the CSS vars in `server/assets/main.css` and so recolor across all four modes (`light`, `dark`, `hc-light`, `hc-dark`) and every palette. A raw numbered utility like `text-slate-700` is fixed for all four, so it survives review in the mode it was written for and goes unreadable in the others.
+
+`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically for `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row) that theme testing rarely reaches.
+
 ## Spacing rhythm (LC-365)
 
 Spacing stays on Tailwind's default 4px scale - compose from it rather than inventing new gaps. Conventions for the chat chrome:
