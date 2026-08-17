@@ -8,6 +8,12 @@
    the sidebar `+` (managers); member management on the settings page (reached
    via the switcher gear). Still subscribed to the enclave topic so the sidebar
    room list updates live; this pane itself carries no OOB target. #}
+{# LC-742: page top bar on the shared .lc-header skeleton. This was the one
+   in-app page with no bar, so the bar vanished when the pane swapped in. #}
+<header class="lc-header">
+  <h1 class="font-semibold truncate">{{ enclave.name }}</h1>
+  {% if enclave.is_public %}<span class="flex-none text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
+</header>
 <div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
 <section class="p-6 max-w-2xl">
   {% if let Some(msg) = flash_error %}
@@ -15,11 +21,7 @@
     {{ msg }}
   </div>
   {% endif %}
-  <header class="mb-4">
-    <h1 class="text-2xl font-semibold">{{ enclave.name }}</h1>
-    {% if let Some(d) = enclave.description %}<p class="text-content-muted mt-1">{{ d }}</p>{% endif %}
-    {% if enclave.is_public %}<span class="inline-block mt-2 text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
-  </header>
+  {% if let Some(d) = enclave.description %}<p class="text-content-muted mb-4">{{ d }}</p>{% endif %}
   <p class="text-content-muted">{{ "enclave-empty-no-rooms"|t }}</p>
   {% if can_manage %}
   <p class="text-sm text-content-muted mt-2">{{ "enclave-empty-hint"|t }}</p>
