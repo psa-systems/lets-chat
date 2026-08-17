@@ -48,6 +48,13 @@ jobs:
         # dev label, and no job may install a toolchain at run time (LC-647).
         run: nu ci-build/check-runner-labels.nu
 
+      - name: Asset color-token guard
+        # The browser assets inject markup in states nobody eyeballs (offline
+        # banner, failed send, active search row), so a raw palette shade there
+        # goes unnoticed until it renders unreadable in dark mode. See
+        # ci-build/check-asset-color-tokens.nu and LC-735.
+        run: nu ci-build/check-asset-color-tokens.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
