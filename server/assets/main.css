@@ -224,6 +224,13 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-content:  #ffffff;
     --danger:           #dc2626;
     --danger-content:   #ffffff;
+    /* LC-750 (F29): the sidebar star toggle. Palette-constant like the status
+       colors above, and deliberately NOT `--warning`: that token means
+       "warning", so the next warning retune would silently repaint every star.
+       The star only ever renders on the sidebar ramp, which is dark navy even
+       in light mode, so the light value is tuned against `--sidebar-surface`
+       (#d97706 on #071a2f is ~5.5:1), not against the page. */
+    --star:             #d97706; /* amber-600 */
     /* LC-215: soft-danger callout panel (delete-account, error banners).
        Surface + border that sit visibly against the page bg as "warning
        zone" without the loud full-fill of `--danger`. Heading + body copy
@@ -302,6 +309,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-content:  #451a03;
     --danger:           #ef4444;
     --danger-content:   #450a0a;
+    /* LC-750 (F29): sidebar star. ~8.7:1 on the dark sidebar ramp. */
+    --star:             #f59e0b; /* amber-500 */
     /* LC-215: dim red-tinted panel that recedes against slate-900 surface
        but reads as danger zone. Surface sits just darker than the
        red-950 used by `--danger-content` so the two never compose
@@ -399,6 +408,10 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-content:  #ffffff;
     --danger:           #b91c1c; /* red-700 */
     --danger-content:   #ffffff;
+    /* LC-750 (F29): sidebar star. The hc sidebar ramp is pure black in BOTH
+       high-contrast modes, so this does not follow `--warning`'s amber-700
+       here (~4.2:1 on black); amber-400 gives ~12.6:1. */
+    --star:             #fbbf24; /* amber-400 */
     /* LC-215: hc-light keeps panel surface bright (red-100) with a strong
        red-800 outline; matches the "everything has a hard outline" hc
        posture. */
@@ -466,6 +479,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     --warning-content:  #000000;
     --danger:           #f87171; /* red-400 */
     --danger-content:   #000000;
+    /* LC-750 (F29): sidebar star, same value as hc-light (same black ramp). */
+    --star:             #fbbf24; /* amber-400 */
     /* LC-215: hc-dark keeps the panel surface near-black with a maximal-
        contrast red-200 outline; the border does the visual heavy lifting
        on pure-black ground. Surface uses the same near-black as
@@ -2326,6 +2341,26 @@ math {
 /* LC-576: ⌘K hint chip inside the search field (prototype .sb-search kbd). The
    field reserves right padding so typed text never slides under the chip. */
 .lc-sidebar-search .lc-sidebar-field { padding-right: 3.25rem; padding-left: 1.9rem; }
+/* LC-750 (F26): the room header's clear button and in-flight indicator, scoped to
+   the sidebar field. The clear button takes the ⌘K chip's slot as soon as the
+   field has text (the chip is a shortcut hint for an empty field anyway), and the
+   indicator floats over the results dropdown rather than sitting in flow, so an
+   in-flight search never pushes the room list down. */
+.lc-sidebar-field:placeholder-shown ~ .lc-search-clear { display: none; }
+.lc-sidebar-field:not(:placeholder-shown) ~ .lc-sb-kbd { display: none; }
+.lc-sidebar-search .lc-search-clear { top: 50%; right: 0.5rem; }
+.lc-sidebar-search .lc-search-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    margin-top: 0.25rem;
+    z-index: 41;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+}
 /* LC-553: ephemeral-timer (self-destruct) control - a clock-icon popover that
    replaces the raw <select>. Muted clock when off; accent clock + inline
    duration when a timer is armed. Menu opens upward (composer is at the foot). */
@@ -4947,6 +4982,10 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
 .lc-set-field { display: flex; flex-direction: column; gap: 0.3125rem; }
 .lc-set-field.lc-set-field--narrow { max-width: 22rem; }
 .lc-set-label { font-size: 0.8125rem; font-weight: 500; color: var(--content); }
+/* LC-750 (F25): required-field marker (partials/required_mark.html). The glyph
+   is decorative and the sr-only "(required)" beside it does the conveying, so
+   this rule only has to make the asterisk visible, never meaningful on its own. */
+.lc-req { color: var(--danger); margin-left: 0.125rem; font-weight: 600; }
 .lc-set-help { font-size: 0.75rem; color: var(--content-muted); }
 /* LC-553: segmented control for enumerated prefs (theme mode, scaling, density),
    matching the prototype's settings pills. A radiogroup of sr-only radios wrapped

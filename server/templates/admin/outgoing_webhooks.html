@@ -44,8 +44,8 @@
       </div>
     </div>
     <div class="lc-set-field">
-      <label class="lc-set-label" for="webhook_url">{{ "admin-webhooks-delivery-url"|t }}</label>
-      <input id="webhook_url" name="url" type="url" required placeholder="https://example.com/hook" class="input">
+      <label class="lc-set-label" for="webhook_url">{{ "admin-webhooks-delivery-url"|t }}{% include "partials/required_mark.html" %}</label>
+      <input id="webhook_url" name="url" type="url" required aria-required="true" placeholder="https://example.com/hook" class="input">
     </div>
     <fieldset class="text-sm">
       <legend class="lc-set-label mb-1">{{ "admin-webhooks-events"|t }}</legend>

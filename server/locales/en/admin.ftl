@@ -281,6 +281,9 @@ admin-quarantine-reject-confirm = Reject this message? It will be permanently di
 admin-quarantine-empty = Nothing in the queue.
 
 ## Room row
+# LC-750 (F25): visible labels for the two room-row forms, which were
+# placeholder-only and so had no place to hang a required marker.
+admin-roomrow-name-label = Room name
 admin-roomrow-topic-placeholder = Topic
 admin-roomrow-save = Save
 admin-roomrow-username-placeholder = Username

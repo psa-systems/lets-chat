@@ -602,7 +602,6 @@
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
   <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>
   <script src="/assets/vendor/htmx-ext-ws.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/vendor/htmx-ext-response-targets.js?v={{ asset_version }}" defer></script>
   <script src="/assets/vendor/idiomorph.min.js?v={{ asset_version }}" defer></script>
   <script src="/assets/live.js?v={{ asset_version }}" defer></script>
   <script src="/assets/reactions.js?v={{ asset_version }}" defer></script>
@@ -633,7 +632,7 @@
      bundle it pulls loads lazily, only on pages that actually contain a diagram. #}
   <script src="/assets/mermaid.js?v={{ asset_version }}" defer></script>
 </head>
-<body hx-ext="response-targets" class="{% block body_class %}h-screen overflow-hidden{% endblock %} bg-surface text-content">
+<body class="{% block body_class %}h-screen overflow-hidden{% endblock %} bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
      (Tab from address bar lands here first), then becomes a positioned
      button that jumps focus to #main. Pages that don't have #main (login,

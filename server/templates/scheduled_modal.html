@@ -31,10 +31,10 @@
     </div>
     <form data-lc-scheduled-modal-form class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "scheduled-modal-deliver-at"|t }}</span>
+        <span class="text-content-muted">{{ "scheduled-modal-deliver-at"|t }}{% include "partials/required_mark.html" %}</span>
         <input type="datetime-local"
                name="scheduled_for_local"
-               required
+               required aria-required="true"
                class="rounded border border-border-strong px-2 py-1">
       </label>
       {# LC-485: optional recurrence. The JS reads this select and includes it

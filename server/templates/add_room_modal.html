@@ -21,9 +21,9 @@
     </div>
     <form method="post" action="/enclave/{{ eid }}/rooms" class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "sidebar-room-add"|t }}</span>
+        <span class="text-content-muted">{{ "sidebar-room-add"|t }}{% include "partials/required_mark.html" %}</span>
         <input name="name" data-lc-addroom-name placeholder="{{ "enclave-new-room-placeholder"|t }}"
-               maxlength="100" required autocomplete="off"
+               maxlength="100" required aria-required="true" autocomplete="off"
                class="rounded border border-border-strong px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 text-sm">

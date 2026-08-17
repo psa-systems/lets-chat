@@ -14,7 +14,7 @@
 
   <form method="post" action="/settings/blocked" class="max-w-xl space-y-2" autocomplete="off">
     <label class="block text-sm">
-      <span class="text-content-muted">{{ "blocked-by-username"|t }}</span>
+      <span class="text-content-muted">{{ "blocked-by-username"|t }}{% include "partials/required_mark.html" %}</span>
       <span class="block text-xs text-content-muted">{{ "blocked-by-username-help"|t }}</span>
       <div class="flex gap-2 mt-1">
         <div class="relative flex-1">
@@ -24,8 +24,8 @@
             name="username"
             value="{{ form_username }}"
             placeholder="{{ "blocked-username-placeholder"|t }}"
-            class="block w-full border rounded px-2 py-1"
-            required>
+            class="block w-full border rounded px-2 py-1{% if error.is_some() %} input-error{% endif %}"
+            required aria-required="true">
           <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
         </div>
         <button type="submit" class="bg-accent text-accent-content px-3 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "blocked-block-button"|t }}</button>

@@ -64,6 +64,10 @@ module.exports = {
           border: "var(--warning-border)",
           "surface-content": "var(--warning-surface-content)",
         },
+        // LC-750: the sidebar star toggle, the one sidebar glyph that used to
+        // be a fixed amber and so never moved with the palette. Its own token
+        // rather than `warning`, which means something else.
+        star: "var(--star)",
         danger: {
           DEFAULT: "var(--danger)",
           content: "var(--danger-content)",
