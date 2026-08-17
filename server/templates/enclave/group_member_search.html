@@ -1,39 +1,44 @@
 {% if results.is_empty() %}
-<div class="bg-surface-elevated border border-border-strong rounded shadow-lg p-3">
-  <p class="text-sm text-content-muted">{{ "enclave-search-no-matches"|t }}</p>
+<div class="lc-search-panel">
+  <p class="px-3 py-3 text-sm text-content-muted">{{ "enclave-search-no-matches"|t }}</p>
 </div>
 {% else %}
-<div role="listbox" class="bg-surface-elevated border border-border-strong rounded shadow-lg max-h-80 overflow-y-auto">
-  {% for r in results %}
-  <div data-group-member-row role="option" id="lc-opt-group-{{ group_id }}-{{ r.id }}" aria-selected="false" class="flex items-center gap-2 px-3 py-2 border-b border-border last:border-b-0">
-    {% let avatar_user_id = r.id.clone() %}
-    {% let avatar_username = r.username.clone() %}
-    {% let avatar_ext = r.avatar_ext.clone() %}
-    {% let avatar_status = r.status.clone() %}
-    {% let avatar_custom_status = r.custom_status.clone() %}
-    {% let avatar_size = "h-6 w-6 text-xs" %}
-    {% include "partials/avatar.html" %}
-    <div class="min-w-0 flex-1">
-      <div class="flex items-baseline gap-2">
-        <span class="font-medium truncate text-sm">{{ r.label() }}</span>
-        <span class="text-xs text-content-muted truncate">@{{ r.username }}</span>
+{# LC-736: shared .lc-search-panel / .lc-search-row chrome, same as
+   enclave/invite_search.html, so the keyboard highlight comes from the
+   component rule instead of a hand-rolled panel. #}
+<div class="lc-search-panel">
+  <div role="listbox" class="max-h-80 overflow-y-auto">
+    {% for r in results %}
+    <div data-group-member-row role="option" id="lc-opt-group-{{ group_id }}-{{ r.id }}" aria-selected="false" class="lc-search-row lc-search-row--center">
+      {% let avatar_user_id = r.id.clone() %}
+      {% let avatar_username = r.username.clone() %}
+      {% let avatar_ext = r.avatar_ext.clone() %}
+      {% let avatar_status = r.status.clone() %}
+      {% let avatar_custom_status = r.custom_status.clone() %}
+      {% let avatar_size = "h-6 w-6 text-xs" %}
+      {% include "partials/avatar.html" %}
+      <div class="min-w-0 flex-1">
+        <div class="flex items-baseline gap-2">
+          <span class="font-medium truncate text-sm">{{ r.label() }}</span>
+          <span class="text-xs text-content-muted truncate">@{{ r.username }}</span>
+        </div>
       </div>
+      {% if r.is_addable() %}
+      <form hx-post="/enclave/{{ enclave_id }}/groups/{{ group_id }}/members"
+            hx-target="closest [data-group-member-row]"
+            hx-swap="outerHTML"
+            class="inline">
+        <input type="hidden" name="user_id" value="{{ r.id }}">
+        <button type="submit"
+                class="text-xs bg-accent text-accent-content rounded px-2 py-1 hover:bg-accent-hover">{{ "enclave-search-add"|t }}</button>
+      </form>
+      {% else if r.is_in_group() %}
+      <span class="text-xs text-content-subtle">{{ "enclave-search-in-group"|t }}</span>
+      {% else if r.is_outside_enclave() %}
+      <span class="text-xs text-content-subtle">{{ "enclave-search-not-in-enclave"|t }}</span>
+      {% endif %}
     </div>
-    {% if r.is_addable() %}
-    <form hx-post="/enclave/{{ enclave_id }}/groups/{{ group_id }}/members"
-          hx-target="closest [data-group-member-row]"
-          hx-swap="outerHTML"
-          class="inline">
-      <input type="hidden" name="user_id" value="{{ r.id }}">
-      <button type="submit"
-              class="text-xs bg-accent text-accent-content rounded px-2 py-1 hover:bg-accent-hover">{{ "enclave-search-add"|t }}</button>
-    </form>
-    {% else if r.is_in_group() %}
-    <span class="text-xs text-content-subtle">{{ "enclave-search-in-group"|t }}</span>
-    {% else if r.is_outside_enclave() %}
-    <span class="text-xs text-content-subtle">{{ "enclave-search-not-in-enclave"|t }}</span>
-    {% endif %}
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>
 {% endif %}
