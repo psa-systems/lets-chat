@@ -87,25 +87,19 @@
               <div class="flex-1 min-w-0">
                 <div class="lc-set-field">
                   <span class="lc-set-label">{{ "settings-profile-picture"|t }}</span>
-                  {# LC-432: the native file input is sr-only (a styled <label>
-                     opens it), so the browser's "No file chosen" chrome + its
-                     stray native tooltip never render. Our own filename text
-                     reports the selection. #}
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <label for="lc-avatar-input" class="btn btn-secondary btn-sm">{{ "settings-choose-image"|t }}</label>
-                    <span data-lc-avatar-filename class="lc-set-help">{{ "settings-no-file"|t }}</span>
-                  </div>
-                  {# LC-439: client-side limits mirror the server (1 MiB + sniffed
-                     PNG/JPEG/WebP) so an oversized/wrong-type pick is rejected
-                     before save with the inline error below, never silently. #}
-                  <input id="lc-avatar-input" data-lc-avatar-input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" class="sr-only"
-                         data-lc-no-file="{{ "settings-no-file"|t }}"
-                         data-lc-max-bytes="1048576"
-                         data-lc-err-size="{{ "settings-avatar-err-size"|t }}"
-                         data-lc-err-type="{{ "settings-avatar-err-type"|t }}">
+                  {# LC-740: max_bytes mirrors MAX_AVATAR_BYTES in routes/settings.rs. #}
+                  {% let input_id = "lc-avatar-input" %}
+                  {% let name = "avatar" %}
+                  {% let accept = "image/png,image/jpeg,image/webp" %}
+                  {% let max_bytes = "1048576" %}
+                  {% let choose_label = "settings-choose-image"|t %}
+                  {% let no_file_label = "settings-no-file"|t %}
+                  {% let err_type = "settings-avatar-err-type"|t %}
+                  {% let err_size = "settings-avatar-err-size"|t %}
+                  {% let required = false %}
+                  {% include "partials/file_picker.html" %}
                   <p class="lc-set-help">{{ "settings-avatar-formats"|t }}</p>
                   <p data-lc-avatar-pending hidden class="lc-set-help lc-set-pending">{{ "settings-avatar-pending"|t }}</p>
-                  <p data-lc-avatar-error hidden role="alert" class="lc-set-error"></p>
                 </div>
               </div>
             </div>
@@ -657,7 +651,17 @@
             </div>
             <div class="lc-set-field">
               <span class="lc-set-label">{{ "settings-emoji-image-label"|t }}</span>
-              <input type="file" name="file" accept="image/png,image/gif,image/webp" required class="text-sm">
+              {# LC-740: max_bytes mirrors MAX_EMOJI_BYTES in routes/custom_emojis.rs. #}
+              {% let input_id = "lc-user-emoji-file" %}
+              {% let name = "file" %}
+              {% let accept = "image/png,image/gif,image/webp" %}
+              {% let max_bytes = "262144" %}
+              {% let choose_label = "settings-choose-image"|t %}
+              {% let no_file_label = "settings-no-file"|t %}
+              {% let err_type = "settings-emoji-err-type"|t %}
+              {% let err_size = "settings-emoji-err-size"|t %}
+              {% let required = true %}
+              {% include "partials/file_picker.html" %}
               <p class="lc-set-help">{{ "settings-emoji-formats"|t }} {{ emoji_max_kib }} KiB.</p>
             </div>
             <div class="lc-set-actions">

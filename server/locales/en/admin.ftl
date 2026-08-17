@@ -55,6 +55,11 @@ admin-backup-create-4 = and
 admin-backup-create-5 = trees. Each entry is sha256'd into a
 admin-backup-create-6 = so a later restore can verify integrity. The server keeps serving while the snapshot runs. Large deployments may take a minute or two; the response begins streaming as soon as the archive finishes building on disk.
 admin-backup-download = Download backup
+# LC-740: the restore archive picker (shared file-picker shape).
+admin-backup-archive-choose = Choose archive
+admin-backup-no-file = No file chosen
+admin-backup-archive-err-type = Use a .zip archive produced by "Download backup".
+admin-backup-archive-err-size = Archive must be under 10 GiB.
 admin-backup-restore-heading = Restore from archive
 admin-backup-restore-note = Upload a previously-downloaded backup. The server validates the manifest + per-file sha256, refuses archives built on a different Let's Chat version, then stages the contents in a sibling directory. A restart finalizes the swap.
 admin-backup-stage-confirm = Stage this archive for restore? On the next server restart the current data will be replaced.
@@ -125,6 +130,13 @@ admin-branding-intro-1 = Colors propagate to every page via CSS variables (no Ta
 admin-branding-intro-2 = The login heading and body render through a restricted markdown pipeline: bold, italic, links, lists, and paragraphs are allowed; raw HTML and fenced code blocks are stripped.
 admin-branding-primary-color = Primary color
 admin-branding-accent-color = Accent color
+# LC-740: shared file-picker copy for the logo + favicon pickers.
+admin-branding-choose = Choose image
+admin-branding-no-file = No file chosen
+admin-branding-logo-err-type = Use a PNG, JPEG, WebP, or GIF image.
+admin-branding-logo-err-size = Image must be under 1 MiB.
+admin-branding-favicon-err-type = Use a PNG, ICO, or SVG image.
+admin-branding-favicon-err-size = Image must be under 1 MiB.
 admin-branding-logo = Logo
 admin-branding-current-logo-alt = Current logo
 admin-branding-current-logo = Current logo

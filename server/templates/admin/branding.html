@@ -53,7 +53,18 @@
             <span class="text-xs text-content-muted">{{ "admin-branding-current-logo"|t }}</span>
           </div>
           {% endif %}
-          <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="block text-sm">
+          {# LC-740: max_bytes mirrors the 1 MiB cap persist_brand_file
+             enforces in routes/branding.rs. #}
+          {% let input_id = "logo" %}
+          {% let name = "logo" %}
+          {% let accept = "image/png,image/jpeg,image/webp,image/gif" %}
+          {% let max_bytes = "1048576" %}
+          {% let choose_label = "admin-branding-choose"|t %}
+          {% let no_file_label = "admin-branding-no-file"|t %}
+          {% let err_type = "admin-branding-logo-err-type"|t %}
+          {% let err_size = "admin-branding-logo-err-size"|t %}
+          {% let required = false %}
+          {% include "partials/file_picker.html" %}
           <p class="lc-set-help">{{ "admin-branding-logo-help"|t }}</p>
         </div>
         <div class="lc-set-field">
@@ -64,7 +75,18 @@
             <span class="text-xs text-content-muted">{{ "admin-branding-current-favicon"|t }}</span>
           </div>
           {% endif %}
-          <input id="favicon" name="favicon" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg" class="block text-sm">
+          {# LC-740: same 1 MiB cap; persist_brand_file only widens the accepted
+             types for a favicon, not the size. #}
+          {% let input_id = "favicon" %}
+          {% let name = "favicon" %}
+          {% let accept = "image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg" %}
+          {% let max_bytes = "1048576" %}
+          {% let choose_label = "admin-branding-choose"|t %}
+          {% let no_file_label = "admin-branding-no-file"|t %}
+          {% let err_type = "admin-branding-favicon-err-type"|t %}
+          {% let err_size = "admin-branding-favicon-err-size"|t %}
+          {% let required = false %}
+          {% include "partials/file_picker.html" %}
           <p class="lc-set-help">{{ "admin-branding-favicon-help"|t }}</p>
         </div>
       </div>
