@@ -204,16 +204,16 @@
       <form method="post" action="/room/{{ room.id }}/moderators" class="lc-set-form border-t border-border pt-4 mt-4">
         <span class="lc-set-label">{{ "room-mods-grant-heading"|t }}</span>
         <div class="lc-set-field lc-set-field--narrow">
-          <label class="lc-set-help" for="lc-grant-user">{{ "room-mods-member"|t }}</label>
-          <select id="lc-grant-user" name="user_id" required class="input">
+          <label class="lc-set-help" for="lc-grant-user">{{ "room-mods-member"|t }}{% include "partials/required_mark.html" %}</label>
+          <select id="lc-grant-user" name="user_id" required aria-required="true" class="input">
             {% for c in candidates %}
             <option value="{{ c.user_id }}">{{ c.label }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="lc-set-field lc-set-field--narrow">
-          <label class="lc-set-help" for="lc-grant-role">{{ "room-mods-role"|t }}</label>
-          <select id="lc-grant-role" name="role" required class="input">
+          <label class="lc-set-help" for="lc-grant-role">{{ "room-mods-role"|t }}{% include "partials/required_mark.html" %}</label>
+          <select id="lc-grant-role" name="role" required aria-required="true" class="input">
             <option value="moderator">{{ "room-mods-role-moderator"|t }}</option>
             <option value="admin">{{ "room-mods-role-admin"|t }}</option>
           </select>

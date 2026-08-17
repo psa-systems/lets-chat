@@ -27,6 +27,9 @@ enclave-discover-name-placeholder = Nombre del enclave
 enclave-discover-description-placeholder = Descripcion (opcional)
 enclave-discover-create-button = Crear
 enclave-discover-join-heading = Unirse con un codigo de invitacion
+# LC-750 (F25): visible label for a form control that was placeholder-only
+# and so had nowhere to hang a required marker.
+enclave-discover-join-code-label = Código de invitación
 enclave-discover-join-code-placeholder = codigo de invitacion
 enclave-discover-join-button = Unirse
 enclave-discover-public-heading = Enclaves publicos
@@ -136,6 +139,9 @@ enclave-settings-group-delete-confirm-prefix = Eliminar @
 enclave-settings-group-delete-confirm-suffix = ?
 enclave-settings-group-add-member = Anadir miembro
 enclave-settings-group-search-placeholder = Buscar por nombre de usuario o nombre visible...
+# LC-750 (F25): visible label for a form control that was placeholder-only
+# and so had nowhere to hang a required marker.
+enclave-settings-group-name-label = Nombre del grupo
 enclave-settings-create-group-placeholder = nombre-de-grupo
 enclave-settings-create-group = Crear grupo
 enclave-settings-branding-heading = Personalizacion

@@ -34,8 +34,8 @@
   <form method="post" action="/settings/api-tokens" class="space-y-3 border rounded-lg p-4">
     <h2 class="font-semibold">{{ "api-tokens-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-content-muted">{{ "api-tokens-name"|t }}</span>
-      <input name="name" type="text" required maxlength="80" placeholder="ci-bot"
+      <span class="text-content-muted">{{ "api-tokens-name"|t }}{% include "partials/required_mark.html" %}</span>
+      <input name="name" type="text" required aria-required="true" maxlength="80" placeholder="ci-bot"
              class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
     </label>
     <fieldset class="text-sm">

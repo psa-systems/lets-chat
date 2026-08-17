@@ -68,8 +68,8 @@
       <input id="lc-auto-match" name="match_text" class="input" maxlength="200" placeholder="{{ "room-automations-match-ph"|t }}">
     </div>
     <div class="lc-set-field">
-      <label class="lc-set-help" for="lc-auto-body">{{ "room-automations-do-label"|t }}</label>
-      <textarea id="lc-auto-body" name="action_body" class="input" rows="3" required placeholder="{{ "room-automations-do-ph"|t }}"></textarea>
+      <label class="lc-set-help" for="lc-auto-body">{{ "room-automations-do-label"|t }}{% include "partials/required_mark.html" %}</label>
+      <textarea id="lc-auto-body" name="action_body" class="input" rows="3" required aria-required="true" placeholder="{{ "room-automations-do-ph"|t }}"></textarea>
       <p class="lc-set-help">{{ "room-automations-vars-help"|t }}</p>
     </div>
     <div class="lc-set-actions">

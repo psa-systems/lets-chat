@@ -597,8 +597,8 @@
           </div>
           <form method="post" action="/settings/delete-account" data-lc-delete-form class="lc-set-form">
             <div class="lc-set-field">
-              <label class="lc-set-label text-danger" for="lc-del-confirm">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}</label>
-              <input id="lc-del-confirm" class="input border-danger-border" type="text" name="confirm_phrase" required autocomplete="off">
+              <label class="lc-set-label text-danger" for="lc-del-confirm">{{ "settings-delete-confirm-prefix"|t }} <code class="font-mono">delete my account</code> {{ "settings-delete-confirm-suffix"|t }}{% include "partials/required_mark.html" %}</label>
+              <input id="lc-del-confirm" class="input border-danger-border" type="text" name="confirm_phrase" required aria-required="true" autocomplete="off">
             </div>
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-danger" data-lc-working="{{ "settings-deleting"|t }}" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span data-lc-btn-label>{{ "settings-delete-account-button"|t }}</span></button>
@@ -646,8 +646,8 @@
           {% endif %}
           <form method="post" action="/settings/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3">
             <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-user-emoji-shortcode">{{ "settings-emoji-shortcode-label"|t }}</label>
-              <input id="lc-user-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required class="input font-mono text-sm">
+              <label class="lc-set-label" for="lc-user-emoji-shortcode">{{ "settings-emoji-shortcode-label"|t }}{% include "partials/required_mark.html" %}</label>
+              <input id="lc-user-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required aria-required="true" class="input font-mono text-sm">
             </div>
             <div class="lc-set-field">
               <span class="lc-set-label">{{ "settings-emoji-image-label"|t }}</span>
@@ -701,16 +701,16 @@
           {% endif %}
           <form method="post" action="/settings/canned" class="lc-set-form border-t border-border pt-3 mt-3">
             <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-canned-name">{{ "settings-canned-name-label"|t }}</label>
-              <input id="lc-canned-name" name="name" pattern="[A-Za-z0-9_-]{1,32}" required class="input font-mono text-sm" placeholder="sig">
+              <label class="lc-set-label" for="lc-canned-name">{{ "settings-canned-name-label"|t }}{% include "partials/required_mark.html" %}</label>
+              <input id="lc-canned-name" name="name" pattern="[A-Za-z0-9_-]{1,32}" required aria-required="true" class="input font-mono text-sm" placeholder="sig">
             </div>
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-canned-desc">{{ "settings-canned-desc-label"|t }}</label>
               <input id="lc-canned-desc" name="description" maxlength="200" class="input text-sm">
             </div>
             <div class="lc-set-field">
-              <label class="lc-set-label" for="lc-canned-body">{{ "settings-canned-body-label"|t }}</label>
-              <textarea id="lc-canned-body" name="body" rows="3" required class="input text-sm"></textarea>
+              <label class="lc-set-label" for="lc-canned-body">{{ "settings-canned-body-label"|t }}{% include "partials/required_mark.html" %}</label>
+              <textarea id="lc-canned-body" name="body" rows="3" required aria-required="true" class="input text-sm"></textarea>
             </div>
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary">{{ "settings-canned-add"|t }}</button>

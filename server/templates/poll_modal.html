@@ -13,13 +13,13 @@
     </div>
     <form data-lc-poll-form class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "poll-question"|t }}</span>
-        <input type="text" name="question" required maxlength="300"
+        <span class="text-content-muted">{{ "poll-question"|t }}{% include "partials/required_mark.html" %}</span>
+        <input type="text" name="question" required aria-required="true" maxlength="300"
                class="rounded border border-border-strong px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "poll-options"|t }}</span>
-        <textarea name="options" rows="4" required
+        <span class="text-content-muted">{{ "poll-options"|t }}{% include "partials/required_mark.html" %}</span>
+        <textarea name="options" rows="4" required aria-required="true"
                   class="rounded border border-border-strong px-2 py-1"></textarea>
       </label>
       <label class="flex items-center gap-2 text-sm">

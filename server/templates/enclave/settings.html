@@ -55,8 +55,8 @@
           <div class="lc-set-card-head"><h3 class="lc-set-card-title">{{ "enclave-settings-name"|t }}</h3></div>
           <form method="post" action="/enclave/{{ enclave.id }}/edit" class="lc-set-form">
             <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-enc-name">{{ "enclave-settings-name"|t }}</label>
-              <input id="lc-enc-name" name="name" value="{{ enclave.name }}" class="input" required>
+              <label class="lc-set-label" for="lc-enc-name">{{ "enclave-settings-name"|t }}{% include "partials/required_mark.html" %}</label>
+              <input id="lc-enc-name" name="name" value="{{ enclave.name }}" class="input" required aria-required="true">
             </div>
             <div class="lc-set-field">
               <label class="lc-set-label" for="lc-enc-desc">{{ "enclave-settings-description"|t }}</label>
@@ -259,8 +259,8 @@
           {% endif %}
           <form method="post" action="/enclave/{{ enclave.id }}/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3">
             <div class="lc-set-field lc-set-field--narrow">
-              <label class="lc-set-label" for="lc-emoji-shortcode">{{ "enclave-settings-emoji-shortcode-label"|t }}</label>
-              <input id="lc-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required class="input font-mono text-sm">
+              <label class="lc-set-label" for="lc-emoji-shortcode">{{ "enclave-settings-emoji-shortcode-label"|t }}{% include "partials/required_mark.html" %}</label>
+              <input id="lc-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required aria-required="true" class="input font-mono text-sm">
             </div>
             <div class="lc-set-field">
               <span class="lc-set-label">{{ "enclave-settings-emoji-image-label"|t }}</span>
@@ -331,9 +331,12 @@
             {% endfor %}
           </ul>
           {% endif %}
-          <form method="post" action="/enclave/{{ enclave.id }}/groups" class="flex gap-2 border-t border-border pt-3 mt-3">
-            <input type="text" name="name" placeholder="{{ "enclave-settings-create-group-placeholder"|t }}" pattern="[A-Za-z0-9_-]{1,40}" required class="input flex-1 text-sm">
-            <button type="submit" class="btn btn-primary btn-sm flex-none">{{ "enclave-settings-create-group"|t }}</button>
+          <form method="post" action="/enclave/{{ enclave.id }}/groups" class="border-t border-border pt-3 mt-3">
+            <label for="lc-enc-group-name" class="lc-set-label">{{ "enclave-settings-group-name-label"|t }}{% include "partials/required_mark.html" %}</label>
+            <div class="mt-1 flex gap-2">
+              <input id="lc-enc-group-name" type="text" name="name" placeholder="{{ "enclave-settings-create-group-placeholder"|t }}" pattern="[A-Za-z0-9_-]{1,40}" required aria-required="true" class="input flex-1 text-sm">
+              <button type="submit" class="btn btn-primary btn-sm flex-none">{{ "enclave-settings-create-group"|t }}</button>
+            </div>
           </form>
         </div>
 
