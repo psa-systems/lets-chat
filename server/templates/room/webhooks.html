@@ -35,8 +35,8 @@
   <form method="post" action="/room/{{ room.id }}/webhooks" class="space-y-3 border rounded p-4">
     <h2 class="font-semibold">{{ "room-webhooks-create-heading"|t }}</h2>
     <label class="block text-sm">
-      <span class="text-content-muted">{{ "room-inboxes-display-name"|t }}</span>
-      <input name="name" type="text" required maxlength="80" placeholder="{{ "room-webhooks-name-placeholder"|t }}"
+      <span class="text-content-muted">{{ "room-inboxes-display-name"|t }}{% include "partials/required_mark.html" %}</span>
+      <input name="name" type="text" required aria-required="true" maxlength="80" placeholder="{{ "room-webhooks-name-placeholder"|t }}"
              class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
     </label>
     <label class="block text-sm">

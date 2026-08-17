@@ -3,13 +3,17 @@
     <details>
       <summary class="cursor-pointer font-medium">{{ r.name }}{% if let Some(topic) = r.topic.as_ref() %} <span class="text-content-subtle text-xs font-normal">{{ topic }}</span>{% endif %}</summary>
       <form hx-post="/admin/rooms/{{ r.id }}/edit" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex flex-col gap-1">
-        <input name="name" value="{{ r.name }}" required maxlength="64" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        <label class="text-xs text-content-muted">{{ "admin-roomrow-name-label"|t }}{% include "partials/required_mark.html" %}
+          <input name="name" value="{{ r.name }}" required aria-required="true" maxlength="64" class="mt-0.5 block w-full rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        </label>
         <input name="topic" value="{% if let Some(topic) = r.topic.as_ref() %}{{ topic }}{% endif %}" maxlength="200" placeholder="{{ "admin-roomrow-topic-placeholder"|t }}" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
         <button type="submit" class="btn btn-sm btn-secondary self-start">{{ "admin-roomrow-save"|t }}</button>
       </form>
       {% if r.room_type == "private" %}
-      <form hx-post="/admin/rooms/{{ r.id }}/invite" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex gap-1">
-        <input name="username" required placeholder="{{ "admin-roomrow-username-placeholder"|t }}" class="rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+      <form hx-post="/admin/rooms/{{ r.id }}/invite" hx-target="#room-{{ r.id }}" hx-swap="outerHTML" class="mt-2 flex items-end gap-1">
+        <label class="text-xs text-content-muted">{{ "admin-roomrow-username-placeholder"|t }}{% include "partials/required_mark.html" %}
+          <input name="username" required aria-required="true" class="mt-0.5 block rounded border border-border bg-surface-elevated px-2 py-1 text-xs">
+        </label>
         <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-roomrow-invite"|t }}</button>
       </form>
       {% endif %}

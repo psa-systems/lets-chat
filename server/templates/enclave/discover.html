@@ -18,7 +18,10 @@
   <section class="border rounded p-4">
     <h2 class="font-semibold">{{ "enclave-discover-create-heading"|t }}</h2>
     <form method="post" action="/enclaves" class="mt-2 space-y-2">
-      <input name="name" placeholder="{{ "enclave-discover-name-placeholder"|t }}" class="w-full border rounded px-2 py-1" required>
+      <label class="block text-sm">
+        <span class="text-content-muted">{{ "enclave-discover-name-placeholder"|t }}{% include "partials/required_mark.html" %}</span>
+        <input name="name" class="mt-1 w-full border rounded px-2 py-1" required aria-required="true">
+      </label>
       <input name="description" placeholder="{{ "enclave-discover-description-placeholder"|t }}" class="w-full border rounded px-2 py-1">
       <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-discover-create-button"|t }}</button>
     </form>
@@ -26,9 +29,12 @@
 
   <section class="border rounded p-4">
     <h2 class="font-semibold">{{ "enclave-discover-join-heading"|t }}</h2>
-    <form method="post" action="/enclaves/join" class="mt-2 flex gap-2">
-      <input name="code" placeholder="{{ "enclave-discover-join-code-placeholder"|t }}" class="flex-1 border rounded px-2 py-1 font-mono" required>
-      <button type="submit" class="bg-surface-sunken rounded px-3 py-1">{{ "enclave-discover-join-button"|t }}</button>
+    <form method="post" action="/enclaves/join" class="mt-2">
+      <label for="lc-join-code" class="block text-sm text-content-muted">{{ "enclave-discover-join-code-label"|t }}{% include "partials/required_mark.html" %}</label>
+      <div class="mt-1 flex gap-2">
+        <input id="lc-join-code" name="code" placeholder="{{ "enclave-discover-join-code-placeholder"|t }}" class="flex-1 border rounded px-2 py-1 font-mono" required aria-required="true">
+        <button type="submit" class="bg-surface-sunken rounded px-3 py-1">{{ "enclave-discover-join-button"|t }}</button>
+      </div>
     </form>
   </section>
 

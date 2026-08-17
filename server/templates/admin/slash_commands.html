@@ -33,8 +33,8 @@
   </div>
   <form method="post" action="/admin/slash-commands" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <div class="lc-set-field">
-      <label class="lc-set-label" for="name">{{ "admin-slash-name-label"|t }}</label>
-      <input id="name" name="name" type="text" required placeholder="standup" class="input">
+      <label class="lc-set-label" for="name">{{ "admin-slash-name-label"|t }}{% include "partials/required_mark.html" %}</label>
+      <input id="name" name="name" type="text" required aria-required="true" placeholder="standup" class="input">
     </div>
     <div class="lc-set-field">
       <label class="lc-set-label" for="kind">{{ "admin-slash-kind-label"|t }}</label>
@@ -48,8 +48,8 @@
       <input id="description" name="description" type="text" placeholder="{{ "admin-slash-description-placeholder"|t }}" class="input">
     </div>
     <div class="lc-set-field sm:col-span-2">
-      <label class="lc-set-label" for="target">{{ "admin-slash-target-label"|t }}</label>
-      <input id="target" name="target" type="text" required placeholder="Standup for {args}" class="input">
+      <label class="lc-set-label" for="target">{{ "admin-slash-target-label"|t }}{% include "partials/required_mark.html" %}</label>
+      <input id="target" name="target" type="text" required aria-required="true" placeholder="Standup for {args}" class="input">
     </div>
     <label class="sm:col-span-2 flex items-center gap-2 text-sm">
       <input type="checkbox" name="admin_only"> {{ "admin-slash-admin-only"|t }}

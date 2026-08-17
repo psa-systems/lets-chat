@@ -11,10 +11,10 @@
    handler behind `name` enforces. Any help text goes in the caller, after the
    include, so the error slot sits directly under the control. #}
 <div class="flex items-center gap-2 flex-wrap">
-  <label for="{{ input_id }}" class="btn btn-secondary btn-sm">{{ choose_label }}</label>
+  <label for="{{ input_id }}" class="btn btn-secondary btn-sm">{{ choose_label }}{% if required %}{% include "partials/required_mark.html" %}{% endif %}</label>
   <span data-lc-picker-filename="{{ input_id }}" class="lc-set-help">{{ no_file_label }}</span>
 </div>
-<input id="{{ input_id }}" name="{{ name }}" type="file" accept="{{ accept }}" class="sr-only" data-lc-file-picker{% if required %} required{% endif %}
+<input id="{{ input_id }}" name="{{ name }}" type="file" accept="{{ accept }}" class="sr-only" data-lc-file-picker{% if required %} required aria-required="true"{% endif %}
        data-lc-no-file="{{ no_file_label }}"
        data-lc-max-bytes="{{ max_bytes }}"
        data-lc-err-type="{{ err_type }}"

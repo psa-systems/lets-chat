@@ -1,0 +1,5 @@
+{# LC-750 (F25): the one required-field marker. Include it inside the control's
+   label. The asterisk is decorative (aria-hidden); the sr-only text is what
+   carries the meaning, so "required" never rests on a glyph or on color alone.
+   The control itself still needs `required aria-required="true"`. #}
+<span class="lc-req" aria-hidden="true">*</span><span class="sr-only"> ({{ "form-required"|t }})</span>

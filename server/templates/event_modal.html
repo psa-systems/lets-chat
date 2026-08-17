@@ -14,13 +14,13 @@
     </div>
     <form data-lc-event-form class="flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "event-title-label"|t }}</span>
-        <input type="text" name="title" required maxlength="300"
+        <span class="text-content-muted">{{ "event-title-label"|t }}{% include "partials/required_mark.html" %}</span>
+        <input type="text" name="title" required aria-required="true" maxlength="300"
                class="rounded border border-border-strong px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 text-sm">
-        <span class="text-content-muted">{{ "event-when-label"|t }}</span>
-        <input type="datetime-local" name="event_at_local" required
+        <span class="text-content-muted">{{ "event-when-label"|t }}{% include "partials/required_mark.html" %}</span>
+        <input type="datetime-local" name="event_at_local" required aria-required="true"
                class="rounded border border-border-strong px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 text-sm">

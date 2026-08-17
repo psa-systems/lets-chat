@@ -132,6 +132,8 @@ transcript-brief-disclaimer = Generado por IA y personalizado para ti. Puede est
 ## Activity page
 activity-page-title = Actividad
 activity-heading = Actividad
+# LC-750 (F28): accessible name for the filter-pill <nav> landmark.
+activity-filter-label = Filtro de actividad
 activity-tab-all = Todo
 activity-tab-mentions = Menciones
 activity-tab-replies = Respuestas

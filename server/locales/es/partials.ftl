@@ -2,8 +2,10 @@
 # prefixed "partials-"/"sidebar-"/"switcher-"/"nav-", no dots. Grouped by area.
 
 ## Sidebar
-sidebar-search-messages-placeholder = Buscar…
-sidebar-search-people-placeholder = Personas…
+# LC-750 (F28): accessible name for the main room/DM <nav> landmark.
+sidebar-nav-label = Canales y mensajes directos
+sidebar-search-messages-placeholder = Buscar...
+sidebar-search-people-placeholder = Personas...
 sidebar-search-tab-messages = Mensajes
 sidebar-search-tab-people = Personas
 sidebar-link-admin = Administrar
@@ -47,10 +49,15 @@ sidebar-category-actions = Acciones de categoría
 sidebar-category-rename = Renombrar
 sidebar-category-delete = Eliminar categoría
 sidebar-category-delete-confirm = ¿Eliminar la categoría? Sus salas volverán a Todas las salas.
+# LC-750 (F25): visible label for a form control that was placeholder-only
+# and so had nowhere to hang a required marker.
+sidebar-category-name-label = Nombre de la categoría
 sidebar-category-new-placeholder = Nueva categoría
 sidebar-category-add = Añadir
 
 ## Enclave switcher
+# LC-750 (F28): accessible name for the enclave rail <nav> landmark.
+switcher-nav-label = Enclaves
 switcher-enclave-settings = Ajustes del enclave
 switcher-discover = Descubrir o crear enclaves
 switcher-sidebar-toggle = Contraer o expandir la barra lateral

@@ -132,6 +132,8 @@ transcript-brief-disclaimer = AI-generated and personalized to you. May be incom
 ## Activity page
 activity-page-title = Activity
 activity-heading = Activity
+# LC-750 (F28): accessible name for the filter-pill <nav> landmark.
+activity-filter-label = Activity filter
 activity-tab-all = All
 activity-tab-mentions = Mentions
 activity-tab-replies = Replies
