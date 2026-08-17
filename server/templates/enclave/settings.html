@@ -264,17 +264,18 @@
             </div>
             <div class="lc-set-field">
               <span class="lc-set-label">{{ "enclave-settings-emoji-image-label"|t }}</span>
-              <div class="flex items-center gap-2 flex-wrap">
-                <label for="lc-emoji-file" class="btn btn-secondary btn-sm">{{ "enclave-settings-emoji-choose"|t }}</label>
-                <span data-lc-emoji-filename class="lc-set-help">{{ "enclave-settings-no-file"|t }}</span>
-              </div>
-              <input id="lc-emoji-file" data-lc-emoji-input type="file" name="file" accept="image/png,image/gif,image/webp" required class="sr-only"
-                     data-lc-no-file="{{ "enclave-settings-no-file"|t }}"
-                     data-lc-max-bytes="262144"
-                     data-lc-err-type="{{ "enclave-settings-emoji-err-type"|t }}"
-                     data-lc-err-size="{{ "enclave-settings-emoji-err-size"|t }}">
+              {# LC-740: max_bytes mirrors MAX_EMOJI_BYTES in routes/custom_emojis.rs. #}
+              {% let input_id = "lc-emoji-file" %}
+              {% let name = "file" %}
+              {% let accept = "image/png,image/gif,image/webp" %}
+              {% let max_bytes = "262144" %}
+              {% let choose_label = "enclave-settings-emoji-choose"|t %}
+              {% let no_file_label = "enclave-settings-no-file"|t %}
+              {% let err_type = "enclave-settings-emoji-err-type"|t %}
+              {% let err_size = "enclave-settings-emoji-err-size"|t %}
+              {% let required = true %}
+              {% include "partials/file_picker.html" %}
               <p class="lc-set-help">{{ "enclave-settings-emoji-formats"|t }}</p>
-              <p data-lc-emoji-error hidden role="alert" class="lc-set-error"></p>
             </div>
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary">{{ "enclave-settings-add-emoji"|t }}</button>
@@ -356,10 +357,18 @@
             {% endif %}
             <div class="flex-1 min-w-0">
               <div class="lc-set-field">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <label for="lc-enclave-icon-input" class="btn btn-secondary btn-sm">{{ "enclave-settings-icon-choose"|t }}</label>
-                  <input id="lc-enclave-icon-input" type="file" name="logo" required accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only">
-                </div>
+                {# LC-740: max_bytes mirrors the 1 MiB cap persist_brand_file
+                   enforces in routes/branding.rs (post_icon parses through it). #}
+                {% let input_id = "lc-enclave-icon-input" %}
+                {% let name = "logo" %}
+                {% let accept = "image/png,image/jpeg,image/webp,image/gif" %}
+                {% let max_bytes = "1048576" %}
+                {% let choose_label = "enclave-settings-icon-choose"|t %}
+                {% let no_file_label = "enclave-settings-no-file"|t %}
+                {% let err_type = "enclave-settings-icon-err-type"|t %}
+                {% let err_size = "enclave-settings-icon-err-size"|t %}
+                {% let required = true %}
+                {% include "partials/file_picker.html" %}
                 <p class="lc-set-help">{{ "enclave-settings-icon-help"|t }}</p>
               </div>
               <div class="lc-set-actions mt-2">

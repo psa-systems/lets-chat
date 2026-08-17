@@ -55,6 +55,11 @@ admin-backup-create-4 = y
 admin-backup-create-5 = . Cada entrada se hace sha256 en un
 admin-backup-create-6 = para que una restauracion posterior pueda verificar la integridad. El servidor sigue sirviendo mientras se ejecuta la instantanea. Los despliegues grandes pueden tardar uno o dos minutos; la respuesta empieza a transmitirse en cuanto el archivo termina de construirse en disco.
 admin-backup-download = Descargar copia de seguridad
+# LC-740: selector del archivo de restauracion (forma compartida).
+admin-backup-archive-choose = Elegir archivo
+admin-backup-no-file = Ningun archivo seleccionado
+admin-backup-archive-err-type = Usa un archivo .zip generado por "Descargar copia de seguridad".
+admin-backup-archive-err-size = El archivo debe pesar menos de 10 GiB.
 admin-backup-restore-heading = Restaurar desde archivo
 admin-backup-restore-note = Sube una copia de seguridad descargada previamente. El servidor valida el manifiesto + sha256 por archivo, rechaza archivos creados en una version distinta de Let's Chat, y luego prepara el contenido en un directorio hermano. Un reinicio finaliza el intercambio.
 admin-backup-stage-confirm = Preparar este archivo para restaurar? En el proximo reinicio del servidor los datos actuales seran reemplazados.
@@ -125,6 +130,13 @@ admin-branding-intro-1 = Los colores se propagan a cada pagina mediante variable
 admin-branding-intro-2 = El encabezado y el cuerpo del inicio de sesion se renderizan a traves de un pipeline de markdown restringido: se permiten negrita, cursiva, enlaces, listas y parrafos; el HTML en bruto y los bloques de codigo se eliminan.
 admin-branding-primary-color = Color primario
 admin-branding-accent-color = Color de acento
+# LC-740: copia compartida de los selectores de logotipo y favicon.
+admin-branding-choose = Elegir imagen
+admin-branding-no-file = Ningun archivo seleccionado
+admin-branding-logo-err-type = Usa una imagen PNG, JPEG, WebP o GIF.
+admin-branding-logo-err-size = La imagen debe pesar menos de 1 MiB.
+admin-branding-favicon-err-type = Usa una imagen PNG, ICO o SVG.
+admin-branding-favicon-err-size = La imagen debe pesar menos de 1 MiB.
 admin-branding-logo = Logotipo
 admin-branding-current-logo-alt = Logotipo actual
 admin-branding-current-logo = Logotipo actual

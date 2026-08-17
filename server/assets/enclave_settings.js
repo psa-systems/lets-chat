@@ -85,44 +85,6 @@
     el.parentNode && el.parentNode.removeChild(el);
   }
 
-  // LC-463: emoji upload validation, mirroring the profile-avatar treatment.
-  function emojiInit(root) {
-    var input = root.querySelector('[data-lc-emoji-input]');
-    if (!input) return;
-    var filename = root.querySelector('[data-lc-emoji-filename]');
-    var errEl = root.querySelector('[data-lc-emoji-error]');
-    var noFile = input.getAttribute('data-lc-no-file') || '';
-    var form = input.closest('form');
-    var submit = form && form.querySelector('button[type="submit"]');
-    var MAX = parseInt(input.getAttribute('data-lc-max-bytes'), 10) || 262144;
-    var TYPES = { 'image/png': 1, 'image/gif': 1, 'image/webp': 1 };
-
-    function showError(msg) {
-      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
-      if (submit) submit.disabled = true;
-    }
-    function clearError() {
-      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
-      if (submit) submit.disabled = false;
-    }
-    input.addEventListener('change', function () {
-      var file = input.files && input.files[0];
-      if (!file) { if (filename) filename.textContent = noFile; clearError(); return; }
-      if (filename) filename.textContent = file.name;
-      if (file.type && !TYPES[file.type]) {
-        showError(input.getAttribute('data-lc-err-type') || 'Use a PNG, GIF, or WebP image.');
-        try { input.value = ''; } catch (e) {}
-        return;
-      }
-      if (file.size > MAX) {
-        showError(input.getAttribute('data-lc-err-size') || 'Image must be under 256 KiB.');
-        try { input.value = ''; } catch (e) {}
-        return;
-      }
-      clearError();
-    });
-  }
-
   // One-click copy for [data-lc-copy] (invite code). Flips the label to the
   // data-lc-copied text for ~1.5s.
   function copyInit(root) {
@@ -154,7 +116,6 @@
     if (!root) return;
     tabsInit(root);
     flashToast(root);
-    emojiInit(root);
     copyInit(root);
   }
 

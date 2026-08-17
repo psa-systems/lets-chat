@@ -148,6 +148,9 @@ enclave-settings-icon-desc = Shown on the enclave rail. Without a custom icon, t
 enclave-settings-icon-current-alt = Current enclave icon
 enclave-settings-icon-choose = Choose image
 enclave-settings-icon-help = Square PNG, JPG, WebP, or GIF, up to 1 MiB.
+# LC-740: client-side rejection copy for the enclave-icon picker.
+enclave-settings-icon-err-type = Use a PNG, JPEG, WebP, or GIF image.
+enclave-settings-icon-err-size = Image must be under 1 MiB.
 enclave-settings-icon-save = Save icon
 enclave-settings-delete = Delete enclave
 enclave-settings-delete-confirm = Permanently delete this enclave and all rooms?

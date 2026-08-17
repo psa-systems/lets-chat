@@ -68,17 +68,19 @@
           {% endif %}
           <div class="flex-1 min-w-0">
             <div class="lc-set-field">
-              <div class="flex items-center gap-2 flex-wrap">
-                <label for="lc-logo-input" class="btn btn-secondary btn-sm">{{ "enclave-branding-choose-logo"|t }}</label>
-                <span data-lc-logo-filename class="lc-set-help">{{ "enclave-branding-no-file"|t }}</span>
-              </div>
-              <input id="lc-logo-input" data-lc-logo-input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only"
-                     data-lc-no-file="{{ "enclave-branding-no-file"|t }}"
-                     data-lc-max-bytes="1048576"
-                     data-lc-err-type="{{ "enclave-branding-logo-err-type"|t }}"
-                     data-lc-err-size="{{ "enclave-branding-logo-err-size"|t }}">
+              {# LC-740: max_bytes mirrors the 1 MiB cap persist_brand_file
+                 enforces in routes/branding.rs. #}
+              {% let input_id = "lc-logo-input" %}
+              {% let name = "logo" %}
+              {% let accept = "image/png,image/jpeg,image/webp,image/gif" %}
+              {% let max_bytes = "1048576" %}
+              {% let choose_label = "enclave-branding-choose-logo"|t %}
+              {% let no_file_label = "enclave-branding-no-file"|t %}
+              {% let err_type = "enclave-branding-logo-err-type"|t %}
+              {% let err_size = "enclave-branding-logo-err-size"|t %}
+              {% let required = false %}
+              {% include "partials/file_picker.html" %}
               <p class="lc-set-help">{{ "enclave-branding-logo-help"|t }}</p>
-              <p data-lc-logo-error hidden role="alert" class="lc-set-error"></p>
             </div>
           </div>
         </div>

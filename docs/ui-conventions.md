@@ -78,6 +78,29 @@ Two contexts, one visual + accessibility contract.
 
 Both contexts must share the same visual treatment (`text-red-600`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
 
+## File pickers (LC-740)
+
+There is exactly **one** file picker: `partials/file_picker.html` plus the delegated handler in `server/assets/file_picker.js` (loaded in `base.html`). It renders a styled `<label class="btn btn-secondary btn-sm">` trigger, a filename echo, an `sr-only` `<input type="file">` and a `hidden role="alert"` error slot. The handler echoes the chosen filename, rejects a wrong type (matched against `accept`) or an oversized file (against `data-lc-max-bytes`) before submit, and disables the form's submit button while the pick is invalid.
+
+Bind these names with `{% let %}` and include the partial; put any help text after the include so the error sits directly under the control:
+
+```jinja
+{% let input_id = "lc-avatar-input" %}
+{% let name = "avatar" %}
+{% let accept = "image/png,image/jpeg,image/webp" %}
+{% let max_bytes = "1048576" %}
+{% let choose_label = "settings-choose-image"|t %}
+{% let no_file_label = "settings-no-file"|t %}
+{% let err_type = "settings-avatar-err-type"|t %}
+{% let err_size = "settings-avatar-err-size"|t %}
+{% let required = false %}
+{% include "partials/file_picker.html" %}
+```
+
+- `max_bytes` MUST equal the cap the handler behind `name` enforces (`MAX_AVATAR_BYTES`, `MAX_EMOJI_BYTES`, `persist_brand_file`'s 1 MiB, the route's `DefaultBodyLimit`). Read it from the handler rather than picking a round number, and cite it in a template comment.
+- The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
+- Per-site extras (the avatar preview in `settings.js`, the logo preview in `branding.js`) listen for the `lc:file-picked` event the handler dispatches (`detail.file` is null when the pick was rejected). Never re-implement the filename echo or the validation.
+
 ## Avatars and presence badges
 
 There is exactly **one** avatar renderer: `partials/avatar.html`. It renders the image-or-initial circle plus the presence status dot, driven by these caller-bound names:
