@@ -1,6 +1,7 @@
 mod config;
 mod inject;
 mod net_guard;
+mod oci;
 mod update;
 mod update_verify;
 mod welcome;
@@ -129,7 +130,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             set_server_url,
             inject::rc_session,
-            inject::rc_input
+            inject::rc_input,
+            inject::set_registry_token
         ])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
@@ -154,6 +156,7 @@ fn main() {
                 .build()?;
             install_media_permission_handler(&window)?;
             grant_remote_control_ipc(app, &url_for_cap);
+            grant_update_token_ipc(app, &url_for_cap);
             // LC-186: register the kill-switch hotkey. Non-fatal if the combo
             // is already taken by another app - the on-banner button remains.
             {
@@ -218,6 +221,27 @@ fn grant_remote_control_ipc(app: &tauri::App, server_url: &str) {
         .permission("allow-rc-input");
     if let Err(e) = app.add_capability(cap) {
         eprintln!("lets-chat-desktop: remote-control capability not added: {e}");
+    }
+}
+
+// LC-733: let the configured server origin (and only it) hand the native side
+// the update-registry token it minted for the signed-in user. Same shape and
+// same trust argument as `grant_remote_control_ipc`, kept as its own capability
+// so the two grants stay independently reviewable.
+fn grant_update_token_ipc(app: &tauri::App, server_url: &str) {
+    use tauri::{ipc::CapabilityBuilder, Manager};
+    let Some(pattern) = remote_url_pattern(server_url) else {
+        eprintln!("lets-chat-desktop: update-token bridge disabled (unparseable server URL)");
+        return;
+    };
+    let cap = CapabilityBuilder::new("update-token")
+        .window("main")
+        // Remote-only: the local welcome page has no session to mint against.
+        .local(false)
+        .remote(pattern)
+        .permission("allow-set-registry-token");
+    if let Err(e) = app.add_capability(cap) {
+        eprintln!("lets-chat-desktop: update-token capability not added: {e}");
     }
 }
 

@@ -149,6 +149,13 @@ pub async fn get_callback(
         }
     };
 
+    // LC-733: keep this login's access token so the desktop updater can pull
+    // the membership-gated binaries as this user (see routes::desktop_update).
+    // Stored before the suspicious-login gate below because both completion
+    // paths need it; an entry with no session behind it is unreachable, since
+    // the route that serves it requires one.
+    super::desktop_update::remember(&user_id, &tokens.access_token, tokens.expires_in);
+
     if let Err(e) =
         mirror_bunyip_admin_role(&state, &user_id, id_claims.bunyip_role.as_deref()).await
     {
