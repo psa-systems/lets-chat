@@ -51,8 +51,10 @@ jobs:
       - name: Asset color-token guard
         # The browser assets inject markup in states nobody eyeballs (offline
         # banner, failed send, active search row), so a raw palette shade there
-        # goes unnoticed until it renders unreadable in dark mode. See
-        # ci-build/check-asset-color-tokens.nu and LC-735.
+        # goes unnoticed until it renders unreadable in dark mode. Same for the
+        # [aria-selected="true"] highlight in main.css, only visible while a
+        # keyboard user is arrowing through a listbox. See
+        # ci-build/check-asset-color-tokens.nu, LC-735 and LC-736.
         run: nu ci-build/check-asset-color-tokens.nu
 
       - name: File-picker shape guard

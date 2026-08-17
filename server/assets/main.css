@@ -851,6 +851,27 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     outline-offset: 3px;
 }
 
+/* LC-168 / LC-736: visible highlight for the keyboard-active option in every
+   listbox. search.js and the composer popovers set aria-selected="true" as the
+   user arrows through; a row's own :hover style only fires for the mouse, so
+   without this the selection is announced to screen readers yet invisible to
+   sighted keyboard users. One token-driven rule owns the appearance for all of
+   them, and it sits here (before the component rules) so .lc-search-row and
+   .lc-ac-option can still specialize at equal specificity. */
+[role="option"][aria-selected="true"] {
+    background-color: var(--surface-sunken);
+}
+/* The high-contrast palettes deliberately collapse --surface-sunken onto
+   --surface-elevated (#f5f5f5 on #ffffff, #000000 on #0a0a0a), so a wash alone
+   is ~1.04:1 there. Add the maximal-contrast --ring outline those modes already
+   use for focus; inset so it neither shifts layout nor clips against the
+   panel's overflow: hidden. */
+[data-mode="hc-light"] [role="option"][aria-selected="true"],
+[data-mode="hc-dark"] [role="option"][aria-selected="true"] {
+    outline: 2px solid var(--ring, currentColor);
+    outline-offset: -2px;
+}
+
 #main {
     /* LC-199: with the LC-199 viewport-fit=cover meta in base.html, plain
      * 100vh on iOS Safari includes the URL bar / dynamic-toolbar area, so
@@ -1831,6 +1852,9 @@ html[data-scale="xl"]      { font-size: 20px; }
 .lc-search-row:last-child { border-bottom: 0; }
 .lc-search-row:hover,
 .lc-search-row[aria-selected="true"] { background-color: var(--surface-sunken); }
+/* LC-736: single-line rows (people, enclave invite, group add-member) center
+   their content; the default top alignment is for the two-line message snippet. */
+.lc-search-row--center { align-items: center; }
 .lc-search-avatar {
     height: 1.5rem;
     width: 1.5rem;
@@ -1994,16 +2018,6 @@ math[display="block"] {
 }
 math {
     vertical-align: -0.15em;
-}
-
-/* LC-168: visible highlight for the keyboard-active option in autocomplete
-   listboxes (slash-command + mention comboboxes). These set
-   aria-selected="true" on the active <li> as the user arrows through, but
-   the option's own hover style only triggers on mouse; without this rule the
-   keyboard selection is announced to screen readers yet invisible to sighted
-   keyboard users. Applies to any role="option" the project marks selected. */
-[role="option"][aria-selected="true"] {
-    background-color: rgb(241 245 249); /* slate-100 */
 }
 
 /* LC-196: motion & micro-interactions.

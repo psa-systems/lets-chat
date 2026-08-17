@@ -12,9 +12,8 @@
 // loaded once and uses delegated listeners, so it survives HTMX swaps without
 // re-binding.
 (function () {
-  // LC-735: token, not a raw palette shade, so the highlight recolors per
-  // mode. Matches `.lc-search-row[aria-selected="true"]` in main.css.
-  var ACTIVE_CLASS = 'bg-surface-sunken';
+  // LC-736: the highlight's appearance is owned solely by main.css, keyed on
+  // the `aria-selected` attribute this module sets. No class is toggled here.
 
   function resultsContainer(input) {
     var sel = input.getAttribute('data-lc-search-results');
@@ -36,12 +35,10 @@
   function setActive(input, opts, idx) {
     opts.forEach(function (o) {
       o.setAttribute('aria-selected', 'false');
-      o.classList.remove(ACTIVE_CLASS);
     });
     if (idx >= 0 && idx < opts.length) {
       var o = opts[idx];
       o.setAttribute('aria-selected', 'true');
-      o.classList.add(ACTIVE_CLASS);
       if (o.id) input.setAttribute('aria-activedescendant', o.id);
       if (o.scrollIntoView) o.scrollIntoView({ block: 'nearest' });
     } else {
