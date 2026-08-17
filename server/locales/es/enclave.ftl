@@ -148,6 +148,9 @@ enclave-settings-icon-desc = Se muestra en la barra de enclaves. Sin un icono pe
 enclave-settings-icon-current-alt = Icono actual del enclave
 enclave-settings-icon-choose = Elegir imagen
 enclave-settings-icon-help = PNG, JPG, WebP o GIF cuadrado, hasta 1 MiB.
+# LC-740: mensajes de rechazo del selector de icono de enclave.
+enclave-settings-icon-err-type = Usa una imagen PNG, JPEG, WebP o GIF.
+enclave-settings-icon-err-size = La imagen debe pesar menos de 1 MiB.
 enclave-settings-icon-save = Guardar icono
 enclave-settings-delete = Eliminar enclave
 enclave-settings-delete-confirm = Eliminar permanentemente este enclave y todas sus salas?

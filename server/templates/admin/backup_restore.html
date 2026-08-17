@@ -44,7 +44,20 @@
     {% endif %}
     <form method="post" action="/admin/restore" enctype="multipart/form-data" class="lc-set-form"
           onsubmit="return confirm('{{ "admin-backup-stage-confirm"|t }}')">
-      <input type="file" name="archive" required accept=".zip,application/zip" class="block text-sm">
+      <div class="lc-set-field">
+        {# LC-740: max_bytes mirrors the 10 GiB DefaultBodyLimit on
+           POST /admin/restore in routes/admin.rs. #}
+        {% let input_id = "lc-restore-archive" %}
+        {% let name = "archive" %}
+        {% let accept = ".zip,application/zip" %}
+        {% let max_bytes = "10737418240" %}
+        {% let choose_label = "admin-backup-archive-choose"|t %}
+        {% let no_file_label = "admin-backup-no-file"|t %}
+        {% let err_type = "admin-backup-archive-err-type"|t %}
+        {% let err_size = "admin-backup-archive-err-size"|t %}
+        {% let required = true %}
+        {% include "partials/file_picker.html" %}
+      </div>
       <div><button type="submit" class="btn btn-danger">{{ "admin-backup-stage"|t }}</button></div>
       <p class="lc-set-help">{{ "admin-backup-stage-note"|t }}</p>
     </form>

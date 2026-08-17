@@ -37,45 +37,18 @@
     });
   }
 
+  // LC-740: validation and the filename echo come from the shared
+  // file_picker.js handler; only the live logo preview is specific here.
   function logoInit(root) {
-    var input = root.querySelector('[data-lc-logo-input]');
+    var input = root.querySelector('#lc-logo-input');
     if (!input) return;
     var preview = root.querySelector('[data-lc-logo-preview]');
-    var filename = root.querySelector('[data-lc-logo-filename]');
-    var errEl = root.querySelector('[data-lc-logo-error]');
-    var noFile = input.getAttribute('data-lc-no-file') || '';
-    var form = input.closest('form');
-    var submit = form && form.querySelector('button[type="submit"]');
-    var MAX = parseInt(input.getAttribute('data-lc-max-bytes'), 10) || 1048576;
-    var TYPES = { 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1, 'image/gif': 1 };
-
-    function showError(msg) {
-      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
-      if (submit) submit.disabled = true;
-    }
-    function clearError() {
-      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
-      if (submit) submit.disabled = false;
-    }
-    input.addEventListener('change', function () {
-      var file = input.files && input.files[0];
-      if (!file) { if (filename) filename.textContent = noFile; clearError(); return; }
-      if (filename) filename.textContent = file.name;
-      if (file.type && !TYPES[file.type]) {
-        showError(input.getAttribute('data-lc-err-type') || 'Use a PNG, JPEG, WebP, or GIF image.');
-        try { input.value = ''; } catch (e) {}
-        return;
-      }
-      if (file.size > MAX) {
-        showError(input.getAttribute('data-lc-err-size') || 'Image must be under 1 MiB.');
-        try { input.value = ''; } catch (e) {}
-        return;
-      }
-      clearError();
-      if (preview) {
-        preview.src = URL.createObjectURL(file);
-        preview.classList.remove('hidden');
-      }
+    if (!preview) return;
+    input.addEventListener('lc:file-picked', function (e) {
+      var file = e.detail && e.detail.file;
+      if (!file) return;
+      preview.src = URL.createObjectURL(file);
+      preview.classList.remove('hidden');
     });
   }
 

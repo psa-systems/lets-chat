@@ -1,0 +1,22 @@
+{# LC-740: the one file picker. Every user-facing file input in the app renders
+   through this partial, so all of them look the same, echo the chosen filename,
+   and reject a wrong type or an oversized file inline before submit (see
+   assets/file_picker.js, one delegated handler keyed off `data-lc-file-picker`).
+   The native input stays `sr-only` so the browser's "no file chosen" chrome
+   never renders next to our own echo.
+
+   Callers bind these with `{% let %}` before the include:
+   `input_id`, `name`, `accept`, `max_bytes`, `choose_label`, `no_file_label`,
+   `err_type`, `err_size`, `required`. `max_bytes` MUST match the limit the
+   handler behind `name` enforces. Any help text goes in the caller, after the
+   include, so the error slot sits directly under the control. #}
+<div class="flex items-center gap-2 flex-wrap">
+  <label for="{{ input_id }}" class="btn btn-secondary btn-sm">{{ choose_label }}</label>
+  <span data-lc-picker-filename="{{ input_id }}" class="lc-set-help">{{ no_file_label }}</span>
+</div>
+<input id="{{ input_id }}" name="{{ name }}" type="file" accept="{{ accept }}" class="sr-only" data-lc-file-picker{% if required %} required{% endif %}
+       data-lc-no-file="{{ no_file_label }}"
+       data-lc-max-bytes="{{ max_bytes }}"
+       data-lc-err-type="{{ err_type }}"
+       data-lc-err-size="{{ err_size }}">
+<p data-lc-picker-error="{{ input_id }}" hidden role="alert" class="lc-set-error"></p>

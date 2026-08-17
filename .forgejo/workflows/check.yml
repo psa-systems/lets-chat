@@ -55,6 +55,13 @@ jobs:
         # ci-build/check-asset-color-tokens.nu and LC-735.
         run: nu ci-build/check-asset-color-tokens.nu
 
+      - name: File-picker shape guard
+        # A raw <input type="file"> opts out of the filename echo, the
+        # client-side type/size rejection and the inline error slot that
+        # partials/file_picker.html provides. See
+        # ci-build/check-file-pickers.nu and LC-740.
+        run: nu ci-build/check-file-pickers.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:

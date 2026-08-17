@@ -207,6 +207,9 @@ settings-emoji-empty = Aun no tienes emoji personales.
 settings-emoji-shortcode-label = Codigo corto
 settings-emoji-image-label = Imagen
 settings-emoji-formats = PNG, GIF o WebP, hasta
+# LC-740: mensajes de rechazo del selector de emoji personal.
+settings-emoji-err-type = Usa una imagen PNG, GIF o WebP.
+settings-emoji-err-size = La imagen debe pesar menos de 256 KiB.
 settings-emoji-add = Anadir emoji
 settings-emoji-delete = Eliminar
 settings-emoji-delete-confirm = Eliminar este emoji?

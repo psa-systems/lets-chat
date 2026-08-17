@@ -622,6 +622,9 @@
   <script src="/assets/sidebar_jump.js?v={{ asset_version }}" defer></script>
   <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
   <script src="/assets/toast.js?v={{ asset_version }}" defer></script>
+  {# LC-740: the one file-picker handler, shared by every partials/file_picker.html
+     include. Loaded before the pages that add per-site extras on top of it. #}
+  <script src="/assets/file_picker.js?v={{ asset_version }}" defer></script>
   <script src="/assets/settings.js?v={{ asset_version }}" defer></script>
   <script src="/assets/roominfo.js?v={{ asset_version }}" defer></script>
   <script src="/assets/enclave_settings.js?v={{ asset_version }}" defer></script>
