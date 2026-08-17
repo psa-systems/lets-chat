@@ -25,7 +25,13 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+
+# Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
+# browser assets, which must recolor from the design tokens (LC-735).
+[group('check')]
+check-asset-color-tokens:
+    nu ci-build/check-asset-color-tokens.nu
 
 # Check server compilation (standalone)
 [group('check')]
