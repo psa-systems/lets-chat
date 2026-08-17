@@ -75,67 +75,32 @@
     select(keyFromHash(), false);
   }
 
+  // LC-740: the filename echo, the type/size rejection and the Save block all
+  // live in the shared file_picker.js handler now. This only adds what is
+  // specific to the avatar: the LC-432 single preview <img> and the LC-439
+  // "not applied yet" hint.
   function avatarInit(root) {
-    var input = root.querySelector('[data-lc-avatar-input]');
+    var input = root.querySelector('#lc-avatar-input');
     if (!input) return;
-    // LC-432: one preview <img> (no fallback circle); the native input is
-    // sr-only, so we report the chosen filename ourselves.
     var preview = root.querySelector('[data-lc-avatar-preview]');
     var pending = root.querySelector('[data-lc-avatar-pending]');
-    var filename = root.querySelector('[data-lc-avatar-filename]');
-    var errEl = root.querySelector('[data-lc-avatar-error]');
-    var noFile = input.getAttribute('data-lc-no-file') || '';
-    var form = input.closest('form');
-    var saveBtn = form && form.querySelector('button[type="submit"]');
-    // LC-439: validate BEFORE preview/save so an oversized/wrong-type file is
-    // rejected with a clear message instead of silently failing on Save.
-    var MAX = parseInt(input.getAttribute('data-lc-max-bytes'), 10) || 1048576;
-    var TYPES = { 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1 };
+    var form = input.form;
 
-    function showError(msg) {
-      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
-      if (saveBtn) saveBtn.disabled = true; // block save while the pick is invalid
-    }
-    function clearError() {
-      if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
-      if (saveBtn) saveBtn.disabled = false;
-    }
-
-    input.addEventListener('change', function () {
-      var file = input.files && input.files[0];
-      if (!file) { if (filename) filename.textContent = noFile; clearError(); return; }
-      // Wrong type (the OS dialog can ignore `accept`). Only reject a known-bad
-      // MIME; an empty type passes here and the server's byte-sniff is the gate.
-      if (file.type && !TYPES[file.type]) {
-        if (filename) filename.textContent = file.name;
-        if (pending) pending.hidden = true;
-        showError(input.getAttribute('data-lc-err-type') || 'Unsupported format - use PNG, JPEG, or WebP.');
-        try { input.value = ''; } catch (e) {} // drop the bad pick so Save can't submit it
-        return;
-      }
-      if (file.size > MAX) {
-        if (filename) filename.textContent = file.name;
-        if (pending) pending.hidden = true;
-        showError(input.getAttribute('data-lc-err-size') || 'Image must be under 1 MiB.');
-        try { input.value = ''; } catch (e) {}
-        return;
-      }
-      // Valid: preview + mark not-yet-saved.
-      clearError();
+    input.addEventListener('lc:file-picked', function (e) {
+      var file = e.detail && e.detail.file;
+      if (!file) { if (pending) pending.hidden = true; return; }
       if (preview) preview.src = URL.createObjectURL(file);
-      if (filename) filename.textContent = file.name;
       if (pending) pending.hidden = false;
     });
 
     // Clear the "not applied yet" hint + filename once the profile form saves OK.
     if (form) {
       form.addEventListener('htmx:afterRequest', function (e) {
-        if (e.detail && e.detail.successful) {
-          if (pending) pending.hidden = true;
-          if (filename) filename.textContent = noFile;
-          clearError();
-          try { input.value = ''; } catch (err) {}
-        }
+        if (!e.detail || !e.detail.successful) return;
+        if (pending) pending.hidden = true;
+        try { input.value = ''; } catch (err) {}
+        // Re-run the shared handler so the filename echo and error slot reset.
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
   }
