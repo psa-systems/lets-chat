@@ -36,7 +36,6 @@ const PRECACHE_URLS = [
   '/assets/main.css?v=' + ASSET_VERSION,
   '/assets/vendor/htmx.min.js?v=' + ASSET_VERSION,
   '/assets/vendor/htmx-ext-ws.js?v=' + ASSET_VERSION,
-  '/assets/vendor/htmx-ext-response-targets.js?v=' + ASSET_VERSION,
   '/assets/vendor/idiomorph.min.js?v=' + ASSET_VERSION,
 ];
 

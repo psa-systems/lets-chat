@@ -37,27 +37,27 @@
   </div>
   <form method="post" action="/admin/bridges" class="lc-set-form">
     <div class="lc-set-field lc-set-field--narrow">
-      <label class="lc-set-label" for="bridge_room">{{ "admin-bridges-room"|t }}</label>
-      <select id="bridge_room" name="room_id" required class="input">
+      <label class="lc-set-label" for="bridge_room">{{ "admin-bridges-room"|t }}{% include "partials/required_mark.html" %}</label>
+      <select id="bridge_room" name="room_id" required aria-required="true" class="input">
         {% for room in rooms %}
         <option value="{{ room.id }}">#{{ room.name }}</option>
         {% endfor %}
       </select>
     </div>
     <div class="lc-set-field lc-set-field--narrow">
-      <label class="lc-set-label" for="bot_username">{{ "admin-bridges-bot-username"|t }}</label>
-      <input id="bot_username" name="bot_username" type="text" required maxlength="32" placeholder="matrix-bridge" class="input">
+      <label class="lc-set-label" for="bot_username">{{ "admin-bridges-bot-username"|t }}{% include "partials/required_mark.html" %}</label>
+      <input id="bot_username" name="bot_username" type="text" required aria-required="true" maxlength="32" placeholder="matrix-bridge" class="input">
     </div>
     <div class="lc-set-field lc-set-field--narrow">
-      <label class="lc-set-label" for="bridge_kind">{{ "admin-bridges-kind"|t }}</label>
-      <select id="bridge_kind" name="kind" required class="input">
+      <label class="lc-set-label" for="bridge_kind">{{ "admin-bridges-kind"|t }}{% include "partials/required_mark.html" %}</label>
+      <select id="bridge_kind" name="kind" required aria-required="true" class="input">
         <option value="matrix">matrix</option>
       </select>
       <p class="lc-set-help">{{ "admin-bridges-kind-note"|t }}</p>
     </div>
     <div class="lc-set-field">
-      <label class="lc-set-label" for="bridge_config">{{ "admin-bridges-config"|t }}</label>
-      <textarea id="bridge_config" name="config" rows="4" required class="input font-mono text-xs"
+      <label class="lc-set-label" for="bridge_config">{{ "admin-bridges-config"|t }}{% include "partials/required_mark.html" %}</label>
+      <textarea id="bridge_config" name="config" rows="4" required aria-required="true" class="input font-mono text-xs"
                 placeholder='{"homeserver":"https://matrix.example","shared_secret":"..."}'></textarea>
       <p class="lc-set-help">{{ "admin-bridges-config-note"|t }}</p>
     </div>

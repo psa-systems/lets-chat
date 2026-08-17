@@ -15,10 +15,14 @@
     <div class="alert alert-danger text-left" role="alert">{{ err }}</div>
     {% endif %}
     <input type="hidden" name="token" value="{{ token }}">
-    <input type="text" name="code" inputmode="numeric" pattern="[0-9]*"
-           autocomplete="one-time-code" maxlength="6" required autofocus
-           class="input w-full text-center text-lg tracking-widest"
-           placeholder="000000" aria-label="6-digit approval code">
+    {# LC-750 (F25): a real label rather than an aria-label, so the required
+       marker has somewhere visible to live. `input-error` marks the field itself
+       on a rejected code; the banner above carries the reason as text. #}
+    <label for="lc-approve-code" class="block text-left text-sm text-content-muted">6-digit approval code{% include "partials/required_mark.html" %}</label>
+    <input id="lc-approve-code" type="text" name="code" inputmode="numeric" pattern="[0-9]*"
+           autocomplete="one-time-code" maxlength="6" required aria-required="true" autofocus
+           class="input w-full text-center text-lg tracking-widest{% if error.is_some() %} input-error{% endif %}"
+           placeholder="000000">
     <button type="submit" class="btn btn-primary w-full">Approve sign-in</button>
     <p class="text-xs text-content-subtle">
       The code expires in 15 minutes. If this was not you, close this page - the

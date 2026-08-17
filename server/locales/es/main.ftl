@@ -1,6 +1,11 @@
 # LC-100: Spanish message catalog. Must define the same message ids as
 # en/main.ftl (CI checks coverage).
 
+## Forms
+# LC-750 (F25): the sr-only half of the required-field marker
+# (partials/required_mark.html renders it as "(required)" beside the `*`).
+form-required = obligatorio
+
 ## Common actions
 action-save = Guardar
 action-cancel = Cancelar

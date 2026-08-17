@@ -78,6 +78,22 @@ Two contexts, one visual + accessibility contract.
 
 Both contexts must share the same visual treatment (`text-red-600`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
 
+A field the server rejected also gets `input-error` (defined in `server/assets/tailwind.css`) on the control itself, alongside the message. The class is a red border and nothing else, so it is never the only signal: the reason always stays readable as text. See `auth/login_approve.html` and `settings/blocked.html`.
+
+## Required fields (LC-750)
+
+Every `required` control carries three things, and a form that has one without the others is incomplete:
+
+1. `required` for the browser.
+2. `aria-required="true"` alongside it.
+3. `{% include "partials/required_mark.html" %}` inside the control's label.
+
+The partial renders an `aria-hidden` `*` plus an `sr-only` " (required)". The asterisk is decoration; the text is what conveys the requirement, so the meaning never rests on a glyph or on color alone. Style comes from `.lc-req` in `main.css`.
+
+A control with no visible label has nowhere to put the marker, so give it one rather than settling for a placeholder: a placeholder is not a label, disappears on the first keystroke, and cannot host the marker. Several compact single-field forms (the sidebar category rename, the enclave join-code row) grew a label for exactly this reason.
+
+`partials/file_picker.html` handles all three itself when its caller binds `{% let required = true %}`.
+
 ## File pickers (LC-740)
 
 There is exactly **one** file picker: `partials/file_picker.html` plus the delegated handler in `server/assets/file_picker.js` (loaded in `base.html`). It renders a styled `<label class="btn btn-secondary btn-sm">` trigger, a filename echo, an `sr-only` `<input type="file">` and a `hidden role="alert"` error slot. The handler echoes the chosen filename, rejects a wrong type (matched against `accept`) or an oversized file (against `data-lc-max-bytes`) before submit, and disables the form's submit button while the pick is invalid.

@@ -3,6 +3,11 @@
 # use "-" between segments. Keep this file the canonical key set; every other
 # locale must define the same ids (CI checks this).
 
+## Forms
+# LC-750 (F25): the sr-only half of the required-field marker
+# (partials/required_mark.html renders it as "(required)" beside the `*`).
+form-required = required
+
 ## Common actions
 action-save = Save
 action-cancel = Cancel

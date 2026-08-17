@@ -83,6 +83,7 @@
           hx-trigger="input changed delay:200ms, keyup[key=='Enter'], focus"
           hx-target="#sidebar-search-results"
           hx-swap="innerHTML"
+          hx-indicator="#sidebar-search-indicator"
           data-lc-search
           data-lc-search-results="#sidebar-search-results"
           role="combobox"
@@ -90,9 +91,24 @@
           aria-controls="sidebar-search-results"
           aria-autocomplete="list"
           class="lc-sidebar-field">
+        {# LC-750 (F26): the clear button the room header got in LC-699, same class
+           and same behaviour. CSS hides it while the field is empty and swaps it
+           for the ⌘K chip once typing starts, so the two never share the slot. #}
+        <button type="button" class="lc-search-clear" aria-label="{{ "search-clear"|t }}"
+                onclick="var f=this.closest('form');var i=f.querySelector('input[name=q]');i.value='';i.focus();var r=document.getElementById('sidebar-search-results');if(r)r.innerHTML='';">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-3.5 w-3.5">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+          </svg>
+        </button>
         {# LC-576: ⌘K hint, matching the prototype's .sb-search kbd. The binding is
            wired in the delegated script below (focuses this input from anywhere). #}
         <kbd class="lc-sb-kbd" aria-hidden="true">⌘K</kbd>
+        {# LC-750 (F26): in-flight indicator (htmx-indicator), same class as the room
+           header. This is the global search and hits the same embedding-backed path,
+           so the wait is at least as long here. #}
+        <span id="sidebar-search-indicator" class="lc-search-indicator htmx-indicator" role="status" aria-live="polite">
+          {{ "search-searching"|t }}
+        </span>
         <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
       </form>
       {# Opens the SAME modal the ROOMS-header `+` opens (LC-400 moved the create
@@ -268,7 +284,7 @@
   {# LC-174: enclave-keyed id so an enclave room add/remove can OOB-swap just
      this nav for members currently viewing that enclave. A connection on Home
      or a different enclave has a different id and htmx drops the swap. #}
-  <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" class="flex-1 overflow-y-auto p-2 space-y-4">
+  <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" aria-label="{{ "sidebar-nav-label"|t }}" class="flex-1 overflow-y-auto p-2 space-y-4">
     {% include "partials/sidebar_nav.html" %}
   </nav>
   {# LC-368: the former footer account/utility group (Settings, theme, shortcuts,

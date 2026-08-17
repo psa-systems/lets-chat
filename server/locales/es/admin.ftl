@@ -281,6 +281,9 @@ admin-quarantine-reject-confirm = Rechazar este mensaje? Se descartara permanent
 admin-quarantine-empty = No hay nada en la cola.
 
 ## Room row
+# LC-750 (F25): visible labels for the two room-row forms, which were
+# placeholder-only and so had no place to hang a required marker.
+admin-roomrow-name-label = Nombre de la sala
 admin-roomrow-topic-placeholder = Tema
 admin-roomrow-save = Guardar
 admin-roomrow-username-placeholder = Nombre de usuario

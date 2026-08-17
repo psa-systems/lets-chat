@@ -23,8 +23,8 @@
   </div>
   <form method="post" action="/admin/link-filter" class="flex flex-wrap gap-2 items-end">
     <div class="flex-1 min-w-[12rem] lc-set-field">
-      <label class="lc-set-label" for="pattern">{{ "admin-linkfilter-pattern"|t }}</label>
-      <input id="pattern" name="pattern" type="text" required placeholder="*.example.com" class="input">
+      <label class="lc-set-label" for="pattern">{{ "admin-linkfilter-pattern"|t }}{% include "partials/required_mark.html" %}</label>
+      <input id="pattern" name="pattern" type="text" required aria-required="true" placeholder="*.example.com" class="input">
     </div>
     <div class="lc-set-field">
       <label class="lc-set-label" for="action">{{ "admin-linkfilter-action"|t }}</label>
