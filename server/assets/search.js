@@ -12,7 +12,9 @@
 // loaded once and uses delegated listeners, so it survives HTMX swaps without
 // re-binding.
 (function () {
-  var ACTIVE_CLASS = 'bg-slate-100';
+  // LC-735: token, not a raw palette shade, so the highlight recolors per
+  // mode. Matches `.lc-search-row[aria-selected="true"]` in main.css.
+  var ACTIVE_CLASS = 'bg-surface-sunken';
 
   function resultsContainer(input) {
     var sel = input.getAttribute('data-lc-search-results');
