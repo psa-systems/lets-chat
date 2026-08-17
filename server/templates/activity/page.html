@@ -4,7 +4,7 @@
 
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
-  <header class="border-b border-border px-4 py-2 flex items-center justify-between gap-2">
+  <header class="lc-header">
     <h1 class="font-semibold truncate">{{ "activity-heading"|t }}</h1>
     <nav aria-label="{{ "activity-filter-label"|t }}" class="flex gap-1 text-xs">
       <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-all"|t }}</a>

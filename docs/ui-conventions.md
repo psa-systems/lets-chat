@@ -25,6 +25,14 @@ Every color comes from the semantic tokens in `server/tailwind.config.js` (`text
 
 `tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically for `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row) that theme testing rarely reaches.
 
+## Page top bars (LC-742)
+
+Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
+
+`.lc-header` is `display: flex` with `align-items: center` and `justify-content: space-between`, so it wants exactly two children: the title block and the action cluster. A bar whose content needs a different alignment gets its own wrapper element (see `room/info.html` and `settings/blocked.html`) rather than a Tailwind override: `main.css` loads AFTER `tailwind-built.css`, so an equal-specificity utility such as `items-start` or `gap-3` does NOT win against the class. Utilities that `.lc-header` does not set (`flex-wrap` on `transcripts/index.html`) still compose normally.
+
+The right-hand panel headers (`px-3 py-2`) and the compose panels (`px-2 py-1.5`) are their own consistent groups and stay as they are.
+
 ## Spacing rhythm (LC-365)
 
 Spacing stays on Tailwind's default 4px scale - compose from it rather than inventing new gaps. Conventions for the chat chrome:
