@@ -23,7 +23,10 @@ The message body (`.lc-md`) keeps its own size, which the per-device text-size c
 
 Every color comes from the semantic tokens in `server/tailwind.config.js` (`text-content`, `text-content-muted`, `text-content-subtle`, `bg-surface{,-elevated,-sunken}`, `border-border`, `text-danger`, ...), which resolve to the CSS vars in `server/assets/main.css` and so recolor across all four modes (`light`, `dark`, `hc-light`, `hc-dark`) and every palette. A raw numbered utility like `text-slate-700` is fixed for all four, so it survives review in the mode it was written for and goes unreadable in the others.
 
-`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically for `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row) that theme testing rarely reaches.
+`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically in two places, both of them states that theme testing rarely reaches:
+
+- `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row).
+- Every `[aria-selected="true"]` rule in `server/assets/main.css`, which must paint its background from a `var(--...)` token. That is the selection highlight, only visible mid-keyboard-navigation; LC-736 found it hard-coded to `rgb(241 245 249)` there, outranking the tokenized `.lc-search-row` rule.
 
 ## Page top bars (LC-742)
 
@@ -124,6 +127,16 @@ Bind these names with `{% let %}` and include the partial; put any help text aft
 - `max_bytes` MUST equal the cap the handler behind `name` enforces (`MAX_AVATAR_BYTES`, `MAX_EMOJI_BYTES`, `persist_brand_file`'s 1 MiB, the route's `DefaultBodyLimit`). Read it from the handler rather than picking a round number, and cite it in a template comment.
 - The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
 - Per-site extras (the avatar preview in `settings.js`, the logo preview in `branding.js`) listen for the `lc:file-picked` event the handler dispatches (`detail.file` is null when the pick was rejected). Never re-implement the filename echo or the validation.
+
+## Result listboxes (LC-736)
+
+Every combobox result list is a `role="listbox"` whose rows carry `role="option"`, a unique `id` and `aria-selected`. `server/assets/search.js` (sidebar people/messages, room search, quick switcher, enclave invite, group add-member) and the composer's own popover nav (`@mention`, `/slash`, `:emoji:`, `#channel`) both drive selection by toggling `aria-selected` and pointing `aria-activedescendant` at the active row. Neither toggles a class.
+
+The keyboard highlight is owned by exactly **one** rule, `[role="option"][aria-selected="true"]` in `main.css`, which paints `var(--surface-sunken)`. It sits in the base layer above the component rules, so `.lc-search-row` and `.lc-ac-option` can still specialize at equal specificity, and a listbox added later is highlighted without touching CSS. A companion `[data-mode="hc-*"]` rule adds an inset `var(--ring)` outline, because the high-contrast palettes collapse `--surface-sunken` onto `--surface-elevated` and a wash alone is invisible there.
+
+- Never set the highlight from JavaScript. A class toggled in JS is a second owner of an appearance the CSS already owns via the attribute, and the two drift apart (`search.js` shipped a `bg-slate-100` toggle that outranked the tokenized `.lc-search-row` rule).
+- Panel chrome comes from `.lc-search-panel` with the scrolling `role="listbox"` nested inside it, and rows from `.lc-search-row` (add `.lc-search-row--center` for single-line rows; the default top alignment is for the two-line message snippet). Do not hand-roll `bg-surface-elevated border border-border-strong rounded shadow-lg`.
+- A row swapped in by HTMX (`enclave/invite_row_result.html`, `enclave/group_member_row_result.html`) uses the same row classes, so the chrome does not change under the swap.
 
 ## Avatars and presence badges
 

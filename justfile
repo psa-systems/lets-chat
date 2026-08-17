@@ -28,7 +28,8 @@ pre-commit: check test
 check: check-asset-color-tokens check-file-pickers check-locale-ellipsis check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
-# browser assets, which must recolor from the design tokens (LC-735).
+# browser assets, and untokenized backgrounds on the [aria-selected="true"]
+# selection highlight; both must recolor from the design tokens (LC-735, LC-736).
 [group('check')]
 check-asset-color-tokens:
     nu ci-build/check-asset-color-tokens.nu
