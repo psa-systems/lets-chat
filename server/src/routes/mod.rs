@@ -49,6 +49,10 @@ mod custom_emojis;
 // release build 404s inside the handler). Declared unconditionally so `just
 // check` compiles it in every profile.
 mod dev;
+// LC-733: registry credential for the desktop self-updater. Standalone-only,
+// like the Bunyip sign-in that supplies the token.
+#[cfg(feature = "standalone")]
+mod desktop_update;
 mod dm;
 mod dm_mute;
 mod drafts;
@@ -1784,6 +1788,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/bunyip/callback", get(bunyip_sso::get_callback))
         // LC-587: complete a login withheld for suspicious-login approval.
         .route("/auth/bunyip/approve", post(bunyip_sso::post_approve))
+        // LC-733: the desktop updater's registry credential, minted from the
+        // same Bunyip login. Session-authenticated, so it sits inside the
+        // cookie layers rather than under the bearer-token /api surface.
+        .merge(desktop_update::router())
         .merge(admin::router());
 
     #[cfg(feature = "saas")]

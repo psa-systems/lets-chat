@@ -7,7 +7,20 @@ How lets-chat cuts releases, and the convention for recording changes that affec
 The project ships two ways:
 
 - **Server**: the `latest` OCI image, built off `main` (`build-oci-image.yml`). Operators run it directly. There is **no per-commit version**; `main` is the release.
-- **Desktop**: a self-updating Tao+Wry app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, and uploads them plus a `latest.json` manifest to Forgejo Generic Packages. The app's updater reads `latest.json` to discover the newest version. The manifest records each artifact's SHA-256, and the updater checks the downloaded binary against it before the in-place replace. The only credential the release needs is the packages PAT it uploads with.
+- **Desktop**: a self-updating Tao+Wry app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, and uploads them plus a `latest.json` manifest to Forgejo Generic Packages. The only credential the release needs is the packages PAT it uploads with.
+
+### Desktop distribution is membership-gated (LC-733)
+
+The desktop binaries are **not public**. They live under a private org, so an anonymous download answers 401, and the updater has to prove the user's membership to fetch one.
+
+- **Publishing is unchanged.** CI keeps uploading the binaries (and `latest.json`) to Forgejo Generic Packages exactly as described above. Nothing in the release flow needs an OCI push.
+- **The client pulls over the OCI distribution API.** The updater fetches `{registry}/v2/{repository}/manifests/{tag}` for its platform (`latest-linux-x86_64` / `latest-windows-x86_64`), reads the release version from the manifest's `org.opencontainers.image.version` annotation and the single artifact layer's SHA-256 digest, then downloads that one blob. It is an artifact pull, not an image pull: no layer stack, no extraction. `latest.json` is still published but the updater no longer reads it.
+- **The registry is Bunyip**, which proxies Forgejo and serves the generic package over the OCI API, and is what accepts a Let's Chat user's token. The client speaks plain OCI to it; a divergence from the distribution spec is a Bunyip-side fix rather than a client special case. Until Bunyip's OCI endpoint is published, the compiled-in default names the Forgejo host that serves the packages today (`https://dev.a8n.run`); set `LETS_CHAT_UPDATE_REGISTRY_URL` to the Bunyip endpoint once it exists.
+- **The credential is the user's own Bunyip login.** `GET /desktop/registry-token` returns the access token from that user's Bunyip sign-in to their authenticated session (401 when signed out); the desktop bridge forwards it to the native side and the updater stores it in its config file. There is no second sign-in and no pasted token. A user without entitlement gets a spelled-out authorization error from the updater, not a generic network failure.
+- **The bearer never crosses an origin.** Registries redirect blob GETs to storage backends; the updater drops the `Authorization` header on any cross-origin hop and keeps the per-hop public-IP filter (LC-210) unchanged.
+- **Integrity** is still the artifact SHA-256, now the layer digest from the manifest, checked before the in-place replace. It catches a corrupt or truncated download, not an attacker who controls the source; the authenticated fetch is what makes the source trustworthy (LC-709).
+
+Operator overrides, all optional: `LETS_CHAT_UPDATE_REGISTRY_URL` (registry root), `LETS_CHAT_UPDATE_REPOSITORY` (`{owner}/{package}`), `LETS_CHAT_UPDATE_TAG`, `LETS_CHAT_UPDATE_TOKEN` (a credential for a headless check), and `LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE=1` to exempt only the initial URL from the public-IP filter for an internal mirror. The same registry and repository can be compiled in at build time under the same names.
 
 Tagging is automated and **semver, branch-driven**:
 

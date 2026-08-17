@@ -46,6 +46,10 @@ fn main() {
             "set_server_url",
             "rc_session",
             "rc_input",
+            // LC-733: the server page hands the native updater its registry
+            // credential through this one; without the declaration there is no
+            // `allow-set-registry-token` permission for main.rs to grant.
+            "set_registry_token",
         ]));
     tauri_build::try_build(attrs).expect("tauri_build failed");
 }
