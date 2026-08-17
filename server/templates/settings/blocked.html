@@ -3,9 +3,13 @@
 {% block title %}{{ "blocked-page-title"|t }} - Let's Chat{% endblock %}
 
 {% block main %}
-<header class="border-b border-border px-4 py-2 flex items-center gap-3">
-  <a href="/settings" class="text-sm text-accent hover:underline">&larr; {{ "blocked-back"|t }}</a>
-  <h1 class="font-semibold">{{ "blocked-heading"|t }}</h1>
+{# LC-742: the back link and the heading pack to the left, so they share one
+   flex child - .lc-header itself is justify-between. #}
+<header class="lc-header">
+  <div class="flex min-w-0 items-center gap-3">
+    <a href="/settings" class="text-sm text-accent hover:underline">&larr; {{ "blocked-back"|t }}</a>
+    <h1 class="font-semibold">{{ "blocked-heading"|t }}</h1>
+  </div>
 </header>
 <div class="flex-1 overflow-y-auto p-4 space-y-4">
   <p class="text-sm text-content-muted max-w-xl">
