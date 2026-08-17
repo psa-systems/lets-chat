@@ -9,7 +9,7 @@
      fires on change; both compose because the whole form is included each time.
      hx-push-url keeps the URL shareable / back-button friendly. No-JS still
      works as a plain GET submit. #}
-  <header class="border-b border-border px-4 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+  <header class="lc-header flex-wrap">
     <h1 class="lc-h2 truncate">{{ "transcript-index-heading"|t }}</h1>
     <form id="lc-tx-controls" action="/transcripts" method="get" autocomplete="off"
           hx-get="/transcripts" hx-target="#lc-transcript-list" hx-swap="innerHTML"

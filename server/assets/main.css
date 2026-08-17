@@ -3841,7 +3841,11 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the room, DM, and home headers, plus one action-button treatment (icon, or
    icon+label) so the top bar reads consistently everywhere. The room header also
    carries data-lc-density-tight="header", whose compact rule still wins on
-   padding (higher specificity) so density behaves as before. */
+   padding (higher specificity) so density behaves as before.
+   LC-742: now carried by EVERY page top bar, not just those three. Note that
+   main.css loads after tailwind-built.css, so a Tailwind utility of equal
+   specificity (items-start, gap-3, justify-start) will NOT override these
+   declarations - give a bar's content its own wrapper instead. */
 .lc-header {
     display: flex;
     align-items: center;
@@ -4896,9 +4900,12 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     min-height: 0;
     overflow-y: auto;
 }
+/* LC-742: same height floor and padding as .lc-header, so the top bar does not
+   resize when the user crosses between the app and the admin console. */
 .lc-admin-header {
     border-bottom: 1px solid var(--border);
-    padding: 0.625rem 1.25rem;
+    min-height: 3.5rem;
+    padding: 0.875rem 1.25rem;
 }
 .lc-admin-title { font-size: 1rem; font-weight: 600; color: var(--content); }
 /* LC-572: shared admin page-header. The bar sits the title/description block
