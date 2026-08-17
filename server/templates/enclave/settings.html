@@ -109,7 +109,7 @@
             {% include "enclave/settings_members_items.html" %}
           </div>
           {# LC-336: invite-by-search. Same hx contract as before. #}
-          <div class="relative mt-3" autocomplete="off">
+          <div class="relative mt-3">
             <input
               name="q"
               placeholder="{{ "enclave-invite-placeholder"|t }}"
@@ -315,7 +315,7 @@
               {% endif %}
               <details class="text-xs">
                 <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
-                <div class="relative mt-2" autocomplete="off">
+                <div class="relative mt-2">
                   <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}"
                     hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
                     hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
