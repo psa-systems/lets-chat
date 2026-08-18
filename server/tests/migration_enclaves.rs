@@ -8,7 +8,7 @@
 // the partial-unique-owner index is enforced). Converting it to the full
 // `sqlx::migrate!` set via `common::chat_pool()` would silently re-point its
 // assertions from "0009 produced exactly this state" to "the full-migration
-// end-state happens to have these properties" — a different test that could
+// end-state happens to have these properties" - a different test that could
 // pass while no longer catching a regression in 0009's data migration. The
 // explicit list is part of the test's contract; it documents which migrations
 // the asserted enclave behavior depends on. Keep it hand-rolled.

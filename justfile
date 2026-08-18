@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets, and untokenized backgrounds on the [aria-selected="true"]
@@ -74,6 +74,14 @@ check-single-tab-controller:
 [group('check')]
 check-revoke-confirm:
     nu ci-build/check-revoke-confirm.nu
+
+# The convention classes the 2026-08-11 UI audit closed, held closed: palette
+# literals in templates, fake link buttons, open-coded .btn-danger-outline,
+# untokenized borders, clipping table wrappers, raw h1 sizes, and the em-dash
+# ban (LC-749).
+[group('check')]
+check-ui-conventions:
+    nu ci-build/check-ui-conventions.nu
 
 # Check server compilation (standalone)
 [group('check')]
