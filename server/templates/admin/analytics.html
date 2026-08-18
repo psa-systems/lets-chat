@@ -26,12 +26,12 @@
 {% endblock %}
 
 {% block admin_main %}
-<div class="max-w-5xl space-y-6">
+<div class="lc-page-wide lc-page-stack">
   <p class="text-xs text-content-muted">{{ "admin-analytics-counts-note"|t }}</p>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     {% for c in cards %}
-    <section class="border rounded-lg p-4 space-y-2">
+    <section class="card p-4 space-y-2">
       <div class="flex items-baseline justify-between">
         <h2 class="text-sm font-medium text-content-muted">{{ c.label }}</h2>
         <div class="text-right">
@@ -46,11 +46,12 @@
     {% endfor %}
   </div>
 
-  <section class="border rounded-lg p-4 space-y-3">
+  <section class="card p-4 space-y-3">
     <h2 class="font-semibold">{{ "admin-analytics-retention-heading"|t }}</h2>
     <p class="text-xs text-content-muted">{{ "admin-analytics-retention-note"|t }}</p>
     {% if retention.is_empty() %}
-    <p class="text-sm text-content-muted italic">{{ "admin-analytics-no-cohorts"|t }}</p>
+    {% let empty_text_key = "admin-analytics-no-cohorts" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <div class="overflow-x-auto">
       <table class="text-xs border-collapse">
@@ -65,7 +66,7 @@
         </thead>
         <tbody>
           {% for cohort in retention %}
-          <tr class="border-t">
+          <tr class="border-t border-border">
             <td class="px-2 py-1 whitespace-nowrap font-mono">{{ cohort.week_label }}</td>
             <td class="px-2 py-1 text-right tabular-nums">{{ cohort.size }}</td>
             {% for cell in cohort.retained %}

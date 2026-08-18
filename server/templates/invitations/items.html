@@ -4,11 +4,12 @@
    parent struct includes it. #}
 <h1 class="lc-h1">{{ "invitations-pending-heading"|t }} ({{ invitations.len() }})</h1>
 {% if invitations.is_empty() %}
-<p class="text-content-muted mt-4">{{ "invitations-empty"|t }}</p>
+{% let empty_text_key = "invitations-empty" %}
+{% include "partials/empty_state.html" %}
 {% else %}
 <ul class="mt-4 space-y-2">
   {% for pair in invitations %}
-  <li class="flex items-center justify-between border rounded p-3">
+  <li class="card flex items-center justify-between p-3">
     <div>
       <div class="font-medium">{{ pair.1.name }}</div>
       {% if let Some(d) = pair.1.description %}<div class="text-sm text-content-muted">{{ d }}</div>{% endif %}

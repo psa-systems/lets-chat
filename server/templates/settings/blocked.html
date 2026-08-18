@@ -28,7 +28,7 @@
             name="username"
             value="{{ form_username }}"
             placeholder="{{ "blocked-username-placeholder"|t }}"
-            class="block w-full border rounded px-2 py-1{% if error.is_some() %} input-error{% endif %}"
+            class="input{% if error.is_some() %} input-error{% endif %}"
             required aria-required="true">
           <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
         </div>
@@ -36,7 +36,7 @@
       </div>
     </label>
     {% if let Some(msg) = error %}
-    <div class="p-2 bg-danger-surface border border-danger-border text-danger text-sm rounded">{{ msg }}</div>
+    <div class="alert alert-danger" role="alert">{{ msg }}</div>
     {% endif %}
   </form>
   <script>
@@ -96,7 +96,8 @@
   </script>
 
   {% if blocked.is_empty() %}
-  <p class="text-content-muted">{{ "blocked-empty"|t }}</p>
+  {% let empty_text_key = "blocked-empty" %}
+  {% include "partials/empty_state.html" %}
   {% else %}
   <ul class="space-y-1 max-w-xl">
     {% for b in blocked %}

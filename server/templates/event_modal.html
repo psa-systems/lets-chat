@@ -16,17 +16,17 @@
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "event-title-label"|t }}{% include "partials/required_mark.html" %}</span>
         <input type="text" name="title" required aria-required="true" maxlength="300"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "event-when-label"|t }}{% include "partials/required_mark.html" %}</span>
         <input type="datetime-local" name="event_at_local" required aria-required="true"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "event-location-label"|t }}</span>
         <input type="text" name="location" maxlength="200"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       <div data-lc-event-error class="hidden text-sm text-danger" role="alert"></div>
       <div class="flex justify-end gap-2 mt-1">

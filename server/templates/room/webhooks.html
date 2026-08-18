@@ -4,7 +4,7 @@
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-2xl space-y-6">
+<section class="lc-page-medium lc-page-pad lc-page-stack">
   <div class="flex items-baseline gap-2">
     <h1 class="lc-h1">{{ "room-webhooks-heading"|t }}</h1>
     <span class="text-sm text-content-muted">#{{ room.name }}</span>
@@ -20,12 +20,12 @@
   {% endif %}
 
   {% if let Some(url) = new_url %}
-  <div class="alert alert-success">
-    <div class="min-w-0 space-y-1">
-      <p class="font-medium text-success">{{ "room-webhooks-created"|t }}</p>
-      <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
-    </div>
-  </div>
+  {% let secret_heading_key = "room-webhooks-created" %}
+  {% let secret_subject = "" %}
+  {% let secret_suffix_key = "" %}
+  {% let secret_value = url %}
+  {% let secret_note_key = "" %}
+  {% include "partials/secret_reveal.html" %}
   {% endif %}
 
   {% if !available %}
@@ -34,25 +34,33 @@
     {{ "room-webhooks-unavailable-2"|t }}</span>
   </div>
   {% else %}
-  <form method="post" action="/room/{{ room.id }}/webhooks" class="space-y-3 border rounded p-4">
+  <form id="room-webhooks-create" method="post" action="/room/{{ room.id }}/webhooks" class="card space-y-3 p-4">
     <h2 class="font-semibold">{{ "room-webhooks-create-heading"|t }}</h2>
     <label class="block text-sm">
       <span class="text-content-muted">{{ "room-inboxes-display-name"|t }}{% include "partials/required_mark.html" %}</span>
       <input name="name" type="text" required aria-required="true" maxlength="80" placeholder="{{ "room-webhooks-name-placeholder"|t }}"
-             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
+             class="input mt-1">
     </label>
     <label class="block text-sm">
       <span class="text-content-muted">{{ "room-inboxes-avatar-url"|t }}</span>
       <input name="avatar_url" type="url" placeholder="https://example.com/icon.png"
-             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
+             class="input mt-1">
     </label>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "room-webhooks-create-button"|t }}</button>
+    <button type="submit" class="btn btn-primary">{{ "room-webhooks-create-button"|t }}</button>
   </form>
   {% endif %}
 
   {% if webhooks.is_empty() %}
   {% let empty_text_key = "room-webhooks-empty" %}
+  {% if available %}
+  {# LC-744: the empty state carries the action, pointing at the create form
+     above; with no secret key configured there is no form to point at. #}
+  {% let empty_action_href = "#room-webhooks-create" %}
+  {% let empty_action_key = "room-webhooks-create-button" %}
+  {% include "partials/empty_state_block.html" %}
+  {% else %}
   {% include "partials/empty_state.html" %}
+  {% endif %}
   {% else %}
   <div class="card lc-table-wrap">
     <table class="lc-table">

@@ -13,7 +13,8 @@
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if rows.is_empty() %}
-    <p class="p-4 text-sm text-content-muted">{{ "room-highlights-empty"|t }}</p>
+    {% let empty_text_key = "room-highlights-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <ul class="divide-y divide-border">
       {% for r in rows %}

@@ -47,7 +47,7 @@
                hx-trigger="change" hx-swap="none"
                placeholder="{{ "saved-label-placeholder"|t }}"
                aria-label="{{ "saved-label-aria"|t }}"
-               class="w-24 rounded-full border border-border bg-surface-sunken px-2.5 py-0.5 text-xs text-content placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+               class="input w-24 rounded-full bg-surface-sunken px-2.5 py-0.5 text-xs placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
         {# LC-684: Unsave as a clear secondary/destructive control with a confirm
            step, so an accidental click doesn't silently drop a save. #}
         <button hx-delete="/messages/{{ e.message_id }}/bookmark"

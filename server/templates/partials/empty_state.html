@@ -1,14 +1,15 @@
-{# LC-454: shared empty-state treatment (icon + muted text), one look across the
-   room About / Manage surfaces. Caller binds the i18n key before including:
+{# LC-454: shared empty-state treatment (icon + muted text), one look across
+   every surface that renders an empty collection. Caller binds the i18n key
+   before including:
      {% let empty_text_key = "room-description-empty" %}
      {% include "partials/empty_state.html" %}
-   Any action button (Set description, Create wiki, ...) is rendered by the
-   caller right after the include so it sits under the same block. #}
-<div class="lc-empty">
-  <svg class="lc-empty-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M3 7.5 12 3l9 4.5-9 4.5z"/>
-    <path d="M3 7.5v9L12 21l9-4.5v-9"/>
-    <path d="M12 12v9"/>
-  </svg>
-  <p class="lc-empty-text">{{ empty_text_key|t }}</p>
-</div>
+   LC-744: for an empty state that carries a call to action, bind the two extra
+   keys and include the block directly instead:
+     {% let empty_action_href = "#room-webhooks-create" %}
+     {% let empty_action_key = "room-webhooks-create-button" %}
+     {% include "partials/empty_state_block.html" %}
+   This entry point binds the action to the empty string, which is how the
+   block knows to render text only. #}
+{% let empty_action_href = "" %}
+{% let empty_action_key = "" %}
+{% include "partials/empty_state_block.html" %}

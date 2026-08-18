@@ -34,7 +34,7 @@
           name="custom_status"
           maxlength="50"
           value="{% if let Some(t) = current_custom %}{{ t }}{% endif %}"
-          class="block w-full rounded border px-2 py-1 pr-7"
+          class="input pr-7"
           oninput="
             var n = this.value.length;
             var c = document.getElementById('status-counter');
@@ -64,7 +64,7 @@
       <select
         id="status-clear-after"
         name="clear_after"
-        class="mt-1 block w-full rounded border px-2 py-1 text-sm"
+        class="input mt-1"
         {% if current_custom.is_none() %}disabled{% endif %}
       >
         <option value="">{{ "status-clear-after-never"|t }}</option>
