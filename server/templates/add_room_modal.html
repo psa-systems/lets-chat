@@ -24,18 +24,18 @@
         <span class="text-content-muted">{{ "sidebar-room-add"|t }}{% include "partials/required_mark.html" %}</span>
         <input name="name" data-lc-addroom-name placeholder="{{ "enclave-new-room-placeholder"|t }}"
                maxlength="100" required aria-required="true" autocomplete="off"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "enclave-room-kind-text"|t }} / {{ "enclave-room-kind-voice"|t }}</span>
-        <select name="kind" class="rounded border border-border-strong px-2 py-1">
+        <select name="kind" class="input">
           <option value="text">{{ "enclave-room-kind-text"|t }}</option>
           <option value="voice">{{ "enclave-room-kind-voice"|t }}</option>
         </select>
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "enclave-room-type-public"|t }} / {{ "enclave-room-type-private"|t }}</span>
-        <select name="room_type" class="rounded border border-border-strong px-2 py-1">
+        <select name="room_type" class="input">
           <option value="public">{{ "enclave-room-type-public"|t }}</option>
           <option value="private">{{ "enclave-room-type-private"|t }}</option>
         </select>

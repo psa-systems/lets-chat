@@ -24,8 +24,6 @@ const ONE_OFFS = [
     "server/templates/admin/analytics.html"
     # IMAP ingress drop log: a diagnostic dump inside a settings card.
     "server/templates/admin/settings.html"
-    # Component gallery: a one-row sample of `.lc-table` itself, no card.
-    "server/templates/dev/theme_gallery.html"
 ]
 
 def main [] {

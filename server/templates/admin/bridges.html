@@ -17,12 +17,13 @@
 {% endif %}
 
 {% if let Some(tok) = new_token %}
-<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
-  <p class="font-medium">
-    {{ "admin-bridges-created-prefix"|t }}{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} {{ "admin-bridges-created-suffix"|t }}
-  </p>
-  <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
-  <p class="text-xs text-content-muted">{{ "admin-bridges-token-scopes-note"|t }}</p>
+<div class="mb-4">
+  {% let secret_heading_key = "admin-bridges-created-prefix" %}
+  {% let secret_subject = new_bot_name.as_deref().unwrap_or("") %}
+  {% let secret_suffix_key = "admin-bridges-created-suffix" %}
+  {% let secret_value = tok %}
+  {% let secret_note_key = "admin-bridges-token-scopes-note" %}
+  {% include "partials/secret_reveal.html" %}
 </div>
 {% endif %}
 

@@ -739,8 +739,10 @@ pub struct OutgoingWebhooksPage<'a> {
     pub all_events: &'a [&'a str],
     pub webhooks: &'a [OutgoingWebhookRowView],
     /// The signing secret of a just-created / just-rotated webhook, with the
-    /// id it belongs to, shown once.
-    pub revealed: Option<(i64, String)>,
+    /// display label of the id it belongs to ("#12"), shown once. The label is
+    /// pre-formatted because partials/secret_reveal.html takes its subject as a
+    /// string (LC-744).
+    pub revealed: Option<(String, String)>,
     pub error: Option<String>,
 }
 

@@ -4,7 +4,7 @@
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-3xl space-y-6">
+<section class="lc-page-medium lc-page-pad lc-page-stack">
   <div class="flex items-baseline justify-between gap-2">
     <h1 class="lc-h1">{{ "api-tokens-heading"|t }}</h1>
     <a href="/settings" class="text-sm text-accent hover:underline">{{ "api-tokens-back"|t }}</a>
@@ -15,14 +15,16 @@
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+  <div class="alert alert-danger" role="alert">{{ err }}</div>
   {% endif %}
 
   {% if let Some(tok) = new_token %}
-  <div class="p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-    <p class="font-medium">{{ "api-tokens-created-note"|t }}</p>
-    <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
-  </div>
+  {% let secret_heading_key = "api-tokens-created-note" %}
+  {% let secret_subject = "" %}
+  {% let secret_suffix_key = "" %}
+  {% let secret_value = tok %}
+  {% let secret_note_key = "" %}
+  {% include "partials/secret_reveal.html" %}
   {% endif %}
 
   {% if !available %}
@@ -31,12 +33,12 @@
     (<code>LETS_CHAT_SECRET_KEY</code>){{ "api-tokens-disabled-suffix"|t }}</span>
   </div>
   {% else %}
-  <form method="post" action="/settings/api-tokens" class="space-y-3 border rounded-lg p-4">
+  <form id="api-tokens-create" method="post" action="/settings/api-tokens" class="card space-y-3 p-4">
     <h2 class="font-semibold">{{ "api-tokens-create-heading"|t }}</h2>
     <label class="block text-sm">
       <span class="text-content-muted">{{ "api-tokens-name"|t }}{% include "partials/required_mark.html" %}</span>
       <input name="name" type="text" required aria-required="true" maxlength="80" placeholder="ci-bot"
-             class="mt-1 w-full border border-border-strong rounded px-2 py-1 text-sm">
+             class="input mt-1">
     </label>
     <fieldset class="text-sm">
       <legend class="text-content-muted mb-1">{{ "api-tokens-scopes"|t }}</legend>
@@ -47,18 +49,25 @@
     <label class="block text-sm">
       <span class="text-content-muted">{{ "api-tokens-expires"|t }}</span>
       <input name="expires_days" type="number" min="0" step="1" placeholder="0"
-             class="mt-1 w-32 border border-border-strong rounded px-2 py-1 text-sm">
+             class="input mt-1 w-32">
     </label>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "api-tokens-create-button"|t }}</button>
+    <button type="submit" class="btn btn-primary">{{ "api-tokens-create-button"|t }}</button>
   </form>
   {% endif %}
 
   <section class="space-y-2">
     <h2 class="font-semibold">{{ "api-tokens-your-tokens"|t }}</h2>
     {% if tokens.is_empty() %}
-    <p class="text-sm text-content-muted italic">{{ "api-tokens-none"|t }}</p>
+    {% let empty_text_key = "api-tokens-none" %}
+    {% if available %}
+    {% let empty_action_href = "#api-tokens-create" %}
+    {% let empty_action_key = "api-tokens-create-button" %}
+    {% include "partials/empty_state_block.html" %}
     {% else %}
-    <ul class="divide-y border rounded">
+    {% include "partials/empty_state.html" %}
+    {% endif %}
+    {% else %}
+    <ul class="card divide-y divide-border">
       {% for t in tokens %}
       <li class="p-3 text-sm flex items-start justify-between gap-3">
         <div class="min-w-0">

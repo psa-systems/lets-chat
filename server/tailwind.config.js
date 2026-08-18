@@ -94,6 +94,15 @@ module.exports = {
           content: "var(--bridge-content)",
         },
       },
+      // LC-744: a bare `border` / `border-t` / `divide-y` resolves to
+      // `colors.gray[200]` (#e5e7eb) unless this is set: a fixed light grey in
+      // all four modes and every palette, brighter than the dark panels it
+      // outlines. This is the backstop; the templates still name their border
+      // color, guarded by `no-untokenized-borders` in check-ui-conventions.nu.
+      // `divideColor` inherits from `borderColor`, so it moves with it.
+      borderColor: {
+        DEFAULT: "var(--border)",
+      },
       ringColor: {
         DEFAULT: "var(--ring)",
         // LC-222: explicit `ring-ring` / `focus:ring-ring` named alias.

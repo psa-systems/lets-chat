@@ -18,9 +18,13 @@
 {% endif %}
 
 {% if let Some(rev) = revealed %}
-<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
-  <p class="font-medium">{{ "admin-webhooks-secret-prefix"|t }} #{{ rev.0 }} {{ "admin-webhooks-secret-suffix"|t }}</p>
-  <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ rev.1 }}</code>
+<div class="mb-4">
+  {% let secret_heading_key = "admin-webhooks-secret-prefix" %}
+  {% let secret_subject = rev.0.as_str() %}
+  {% let secret_suffix_key = "admin-webhooks-secret-suffix" %}
+  {% let secret_value = rev.1.as_str() %}
+  {% let secret_note_key = "" %}
+  {% include "partials/secret_reveal.html" %}
 </div>
 {% endif %}
 
