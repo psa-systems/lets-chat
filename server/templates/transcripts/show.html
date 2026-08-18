@@ -23,7 +23,7 @@
        staged status while the model runs, `.lc-ai-enter` fade on the result, and
        a disclaimer footer - matching the room "Catch me up" summary. #}
     {% if llm_available && !lines.is_empty() %}
-    <div class="mx-auto max-w-2xl mb-4 rounded-lg border border-border bg-surface-elevated overflow-hidden">
+    <div class="lc-page-medium card mb-4 overflow-hidden">
       <header class="border-b border-border px-3 py-2">
         <div class="font-semibold leading-tight">{{ "transcript-summary-heading"|t }}</div>
         <div class="text-xs text-content-muted">{{ "transcript-summary-scope"|t }}</div>
@@ -75,7 +75,7 @@
     {# LC-664: a per-viewer "what did I miss" brief - decisions, action items aimed
        at the viewer, and anything that concerns them. Personalized, so it is
        generated on demand (never cached) and starts from a Generate button. #}
-    <div class="mx-auto max-w-2xl mb-4 rounded-lg border border-border bg-surface-elevated overflow-hidden">
+    <div class="lc-page-medium card mb-4 overflow-hidden">
       <header class="border-b border-border px-3 py-2">
         <div class="font-semibold leading-tight">{{ "transcript-brief-heading"|t }}</div>
         <div class="text-xs text-content-muted">{{ "transcript-brief-scope"|t }}</div>
@@ -96,7 +96,7 @@
     </div>
     {# LC-506: LLM unconfigured but viewer is a site admin - disabled teaser. #}
     {% else if llm_teaser && !lines.is_empty() %}
-    <div class="mx-auto max-w-2xl mb-4 rounded-lg border border-border bg-surface-elevated overflow-hidden">
+    <div class="lc-page-medium card mb-4 overflow-hidden">
       <header class="border-b border-border px-3 py-2">
         <div class="font-semibold leading-tight">{{ "transcript-summary-heading"|t }}</div>
         <div class="text-xs text-content-muted">{{ "transcript-summary-scope"|t }}</div>
@@ -110,7 +110,7 @@
     {% if lines.is_empty() %}
     <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
     {% else %}
-    <div class="mx-auto max-w-2xl space-y-2">
+    <div class="lc-page-medium space-y-2">
       {% for line in lines %}
       <div class="rounded-md border border-border bg-surface-elevated px-3 py-2">
         <div class="flex items-baseline gap-2">

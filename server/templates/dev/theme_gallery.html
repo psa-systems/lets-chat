@@ -28,7 +28,11 @@
   <div class="alert alert-warning">Warning</div>
   <div class="alert alert-danger">Danger</div>
   <div class="alert alert-info">Info</div>
-  <div class="lc-table-wrap"><table class="lc-table"><tbody><tr class="lc-table-row"><td class="lc-table-cell">Table row</td></tr></tbody></table></div>
+  {# LC-744: the production table markup - bare `<th>` / `<td>` inside
+     `.card.lc-table-wrap`, with `.lc-table` owning the padding and the rules.
+     The gallery is the visual reference, so it demonstrates the contract the
+     13 real tables use, not a parallel one. #}
+  <div class="card lc-table-wrap"><table class="lc-table"><thead><tr><th>Table header</th></tr></thead><tbody><tr><td>Table row</td></tr></tbody></table></div>
   <span class="bg-webhook-surface text-webhook-content" style="padding:.1rem .4rem; border-radius:.25rem;">webhook</span>
 
   {# LC-569: the chat surface. The room view needs a real login, so the components

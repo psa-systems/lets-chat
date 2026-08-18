@@ -4,7 +4,7 @@
    Dismissible; the response also carries X-LC-Slash-Error so the composer keeps
    the typed command for the user to fix. #}
 <div id="lc-command-result" hx-swap-oob="innerHTML">
-  <div class="mb-1 flex items-start gap-2 rounded border border-danger-border bg-danger-surface px-2 py-1.5 text-xs text-danger">
+  <div class="alert alert-danger mb-1 text-xs" role="alert">
     <span class="flex-1 min-w-0">{{ message }}</span>
     <button type="button" aria-label="{{ "room-slash-dismiss"|t }}"
             onclick="var s=document.getElementById('lc-command-result'); if(s)s.innerHTML='';"

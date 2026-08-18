@@ -10,7 +10,8 @@
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if pins.is_empty() %}
-    <p class="p-4 text-sm text-content-muted">{{ "room-info-pinned-empty"|t }}</p>
+    {% let empty_text_key = "room-info-pinned-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <ul class="divide-y divide-border">
       {% for p in pins %}

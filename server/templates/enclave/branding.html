@@ -15,7 +15,7 @@
    success, re-renders with `error` on validation failure) is unchanged. #}
 <div class="flex-1 overflow-y-auto" data-lc-branding>
   {% if saved %}<div data-lc-flash-toast hidden>{{ "enclave-branding-saved"|t }}</div>{% endif %}
-  <div class="mx-auto max-w-2xl px-4 py-6 flex flex-col gap-5">
+  <div class="lc-page-medium lc-page-pad lc-page-stack">
     {% if let Some(err) = error %}
     <div class="alert alert-danger" role="alert">{{ err }}</div>
     {% endif %}

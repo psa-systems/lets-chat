@@ -15,7 +15,7 @@
   {% if enclave.is_public %}<span class="flex-none text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
 </header>
 <div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
-<section class="p-6 max-w-2xl">
+<section class="lc-page-medium lc-page-pad">
   {% if let Some(msg) = flash_error %}
   <div class="mb-4 alert alert-danger">
     {{ msg }}
