@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets, and untokenized backgrounds on the [aria-selected="true"]
@@ -45,6 +45,12 @@ check-file-pickers:
 [group('check')]
 check-table-scroll:
     nu ci-build/check-table-scroll.nu
+
+# Every table is the shared .lc-table inside a .card, and its cells take their
+# padding from the component rather than per-cell utilities (LC-745).
+[group('check')]
+check-table-shape:
+    nu ci-build/check-table-shape.nu
 
 # Reject U+2026 in the locale catalogs; the ellipsis is three periods (LC-750).
 [group('check')]

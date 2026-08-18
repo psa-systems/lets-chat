@@ -153,12 +153,17 @@ Bind these names with `{% let %}` and include the partial; put any help text aft
 - The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
 - Per-site extras (the avatar preview in `settings.js`, the logo preview in `branding.js`) listen for the `lc:file-picked` event the handler dispatches (`detail.file` is null when the pick was rejected). Never re-implement the filename echo or the validation.
 
-## Data tables (LC-510, LC-737)
+## Data tables (LC-510, LC-737, LC-745)
 
-Every table lives in a horizontal scroll container. The admin list pages use `<div class="card lc-table-wrap">` around `<table class="lc-table">`; `.lc-table-wrap` is `overflow-x: auto` in `main.css`, so the rows still go edge to edge and the card's rounded corners still clip them (a scroll container on one axis is a clipping context on the other), but a table wider than the viewport scrolls instead of hiding its trailing columns.
+Every record list is `<div class="card lc-table-wrap">` around `<table class="lc-table">`, with bare `<th>` and `<td>`. `.lc-table` (`main.css`) owns the cell padding, the header color, the row rules and the hover; the actions column is `class="lc-table-actions"` on both the header cell and the body cell (right-aligned, `white-space: nowrap`). `admin/invites.html` is the reference. A list scoped to a room reads the same as the server-wide one because both are the same component, not because someone matched the utilities by eye.
+
+`.lc-table-wrap` is `overflow-x: auto` in `main.css`, so the rows still go edge to edge and the card's rounded corners still clip them (a scroll container on one axis is a clipping context on the other), but a table wider than the viewport scrolls instead of hiding its trailing columns.
 
 - Never wrap a table in `overflow-hidden`. The widest admin tables carry 5 to 6 columns plus a `white-space: nowrap` `.lc-table-actions` cell with up to four buttons, and clipping made those buttons unreachable at 375px: no scrollbar, no drag, no way to get to them.
-- `ci-build/check-table-scroll.nu` (wired into `just check` and the Check workflow) rejects any `<table>` in a template whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. Email templates are excluded: they are inline-styled layout tables in a mail client.
+- Never put a padding utility on a `<th>` or `<td>`. The three room integration tables hand-rolled `py-2` headers and `py-1` cells, which is a row 6px shorter than every admin table; the component is the one place row height is decided.
+- An empty list is `partials/empty_state.html` under the page heading, not a `colspan` row inside a table with no data in it.
+- `ci-build/check-table-scroll.nu` rejects any `<table>` whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. `ci-build/check-table-shape.nu` rejects a `<table>` that is not `.lc-table`, an `.lc-table` outside a `.card` wrapper, and a padding utility on any cell inside one. Both are wired into `just check` and the Check workflow; both exclude the email templates, which are inline-styled layout tables in a mail client.
+- Three tables are named in `check-table-shape.nu`'s exemption list. The component gallery's one-row sample (`dev/theme_gallery.html`) shows the bare component and stays exempt; the cohort-retention heat grid (`admin/analytics.html`) and the IMAP ingress drop log (`admin/settings.html`) are real data tables that were outside LC-745's file set, and moving them onto the shared component is tracked in LC-756.
 
 ## Tabs (LC-747)
 

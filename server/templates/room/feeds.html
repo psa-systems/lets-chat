@@ -15,13 +15,15 @@
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+  <div class="alert alert-danger" role="alert">{{ err }}</div>
   {% endif %}
 
   {% if let Some(url) = new_url %}
-  <div class="p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-    <p class="font-medium text-success">{{ "room-feeds-created"|t }}</p>
-    <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
+  <div class="alert alert-success">
+    <div class="min-w-0 space-y-1">
+      <p class="font-medium text-success">{{ "room-feeds-created"|t }}</p>
+      <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
+    </div>
   </div>
   {% endif %}
 
@@ -43,39 +45,43 @@
   </form>
   {% endif %}
 
-  <div class="lc-table-wrap">
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="text-left text-content-muted border-b border-border">
-        <th class="py-2">{{ "room-feeds-table-type"|t }}</th>
-        <th class="py-2">{{ "room-table-created"|t }}</th>
-        <th class="py-2">{{ "room-feeds-table-last-fetched"|t }}</th>
-        <th class="py-2">{{ "room-table-status"|t }}</th>
-        <th class="py-2 text-right">{{ "room-table-actions"|t }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for f in feeds %}
-      <tr class="border-t border-border">
-        <td class="py-1 uppercase text-xs">{{ f.kind }}</td>
-        <td class="py-1 text-xs text-content-muted">{{ f.created_at }}</td>
-        <td class="py-1 text-xs text-content-muted">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
-        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
-        <td class="py-1 text-right">
-          {% if !f.revoked %}
-          <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
-            <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      {% if feeds.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "room-feeds-empty"|t }}</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+  {% if feeds.is_empty() %}
+  {% let empty_text_key = "room-feeds-empty" %}
+  {% include "partials/empty_state.html" %}
+  {% else %}
+  <div class="card lc-table-wrap">
+    <table class="lc-table">
+      <thead>
+        <tr>
+          <th>{{ "room-feeds-table-type"|t }}</th>
+          <th>{{ "room-table-created"|t }}</th>
+          <th>{{ "room-feeds-table-last-fetched"|t }}</th>
+          <th>{{ "room-table-status"|t }}</th>
+          <th class="lc-table-actions">{{ "room-table-actions"|t }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in feeds %}
+        <tr>
+          <td class="uppercase">{{ f.kind }}</td>
+          <td class="text-content-muted">{{ f.created_at }}</td>
+          <td class="text-content-muted">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+          <td>{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
+          <td class="lc-table-actions">
+            {% if !f.revoked %}
+            <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
+              <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
+            </form>
+            {% else %}
+            <span class="text-content-subtle">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% endif %}
 </section>
 </div>
 {% endblock %}
