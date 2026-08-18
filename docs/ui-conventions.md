@@ -143,6 +143,13 @@ Bind these names with `{% let %}` and include the partial; put any help text aft
 - The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
 - Per-site extras (the avatar preview in `settings.js`, the logo preview in `branding.js`) listen for the `lc:file-picked` event the handler dispatches (`detail.file` is null when the pick was rejected). Never re-implement the filename echo or the validation.
 
+## Data tables (LC-510, LC-737)
+
+Every table lives in a horizontal scroll container. The admin list pages use `<div class="card lc-table-wrap">` around `<table class="lc-table">`; `.lc-table-wrap` is `overflow-x: auto` in `main.css`, so the rows still go edge to edge and the card's rounded corners still clip them (a scroll container on one axis is a clipping context on the other), but a table wider than the viewport scrolls instead of hiding its trailing columns.
+
+- Never wrap a table in `overflow-hidden`. The widest admin tables carry 5 to 6 columns plus a `white-space: nowrap` `.lc-table-actions` cell with up to four buttons, and clipping made those buttons unreachable at 375px: no scrollbar, no drag, no way to get to them.
+- `ci-build/check-table-scroll.nu` (wired into `just check` and the Check workflow) rejects any `<table>` in a template whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. Email templates are excluded: they are inline-styled layout tables in a mail client.
+
 ## Result listboxes (LC-736)
 
 Every combobox result list is a `role="listbox"` whose rows carry `role="option"`, a unique `id` and `aria-selected`. `server/assets/search.js` (sidebar people/messages, room search, quick switcher, enclave invite, group add-member) and the composer's own popover nav (`@mention`, `/slash`, `:emoji:`, `#channel`) both drive selection by toggling `aria-selected` and pointing `aria-activedescendant` at the active row. Neither toggles a class.
