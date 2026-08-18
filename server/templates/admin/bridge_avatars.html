@@ -35,7 +35,7 @@
   </div>
   <div class="card p-3">
     <dt class="text-xs text-content-muted">{{ "admin-bridge-avatars-stat-oldest"|t }}</dt>
-    <dd class="text-xs text-content-muted">{% if let Some(ts) = stats.oldest_last_seen %}{{ ts }}{% else %}-{% endif %}</dd>
+    <dd class="text-xs text-content-muted">{% if let Some(ts) = stats.oldest_last_seen %}<time datetime="{{ ts|iso }}" title="{{ ts }}">{{ ts }}</time>{% else %}-{% endif %}</dd>
   </div>
 </dl>
 
@@ -66,7 +66,7 @@
         <td class="text-xs font-mono"><span title="{{ f.foreign_url }}">{{ f.foreign_host }}</span></td>
         <td class="text-xs text-danger break-all">{{ f.failure_reason }}</td>
         <td class="text-xs text-content-muted">{% if let Some(ct) = f.content_type.as_ref() %}{{ ct }}{% else %}-{% endif %}</td>
-        <td class="text-xs text-content-muted">{{ f.last_seen_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ f.last_seen_at|iso }}" title="{{ f.last_seen_at }}">{{ f.last_seen_at }}</time></td>
       </tr>
       {% endfor %}
     </tbody>

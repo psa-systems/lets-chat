@@ -10,6 +10,6 @@
   <a href="/room/{{ card_room_id }}#msg-{{ f.message_id }}"
      class="text-xs font-medium truncate hover:underline" title="{{ f.filename }}">{{ f.filename }}</a>
   <div class="text-xs text-content-muted">
-    {{ f.uploader_label }} - {{ f.created_at }}
+    {{ f.uploader_label }} - <time datetime="{{ f.created_at|iso }}" title="{{ f.created_at }}">{{ f.created_at }}</time>
   </div>
 </div>

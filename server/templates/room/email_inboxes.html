@@ -6,7 +6,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">{{ "room-inboxes-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "room-inboxes-heading"|t }}</h1>
     <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-content-muted">
@@ -70,8 +70,8 @@
         {% for i in inboxes %}
         <tr>
           <td>{{ i.name }}</td>
-          <td class="text-content-muted">{{ i.created_at }}</td>
-          <td class="text-content-muted">{% if let Some(at) = i.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+          <td class="text-content-muted"><time datetime="{{ i.created_at|iso }}" title="{{ i.created_at }}">{{ i.created_at }}</time></td>
+          <td class="text-content-muted">{% if let Some(at) = i.last_used_at %}<time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %}{{ "room-table-never"|t }}{% endif %}</td>
           <td>{% if i.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
           <td class="lc-table-actions">
             {% if !i.revoked %}

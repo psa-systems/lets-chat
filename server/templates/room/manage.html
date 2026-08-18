@@ -5,7 +5,7 @@
 {% block main %}
 <header class="lc-header">
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">{{ "room-manage-heading"|t }} <span class="text-content-subtle font-normal">#{{ room.name }}</span></h1>
+    <h1 class="lc-h1 truncate">{{ "room-manage-heading"|t }} <span class="text-content-subtle font-normal">#{{ room.name }}</span></h1>
   </div>
   <a href="/room/{{ room.id }}" class="btn btn-secondary btn-sm flex-none">{{ "room-info-back-to-chat"|t }}</a>
 </header>
@@ -187,7 +187,7 @@
           <div class="min-w-0">
             <div class="text-sm font-medium">{{ o.user_label }}</div>
             <div class="text-xs text-content-muted">
-              {{ o.role }} - {{ "room-mods-granted-by"|t }} {{ o.assigned_by_label }} {{ "room-mods-granted-on"|t }} {{ o.assigned_at }}
+              {{ o.role }} - {{ "room-mods-granted-by"|t }} {{ o.assigned_by_label }} {{ "room-mods-granted-on"|t }} <time datetime="{{ o.assigned_at|iso }}" title="{{ o.assigned_at }}">{{ o.assigned_at }}</time>
             </div>
           </div>
           <button type="button"

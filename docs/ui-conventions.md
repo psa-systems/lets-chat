@@ -9,7 +9,7 @@ Use the semantic typography classes from `server/assets/main.css` instead of han
 | Class | Use for | Size / weight |
 |---|---|---|
 | `lc-display` | hero / empty-state heading | 1.5rem / 600, tight |
-| `lc-h1` | page or panel heading | 1.125rem / 600 |
+| `lc-h1` | page or panel heading | 1.125rem / 700 |
 | `lc-h2` | section heading | 1rem / 600 |
 | `lc-h3` | card / row title | 0.875rem / 600 |
 | `lc-body` | default body text | 0.875rem / 400 |
@@ -18,6 +18,33 @@ Use the semantic typography classes from `server/assets/main.css` instead of han
 | `lc-section-label` | uppercase group label (sidebar sections) | 0.6875rem / 600, uppercase |
 
 The message body (`.lc-md`) keeps its own size, which the per-device text-size control scales; do not apply the chrome scale there.
+
+### Page headings (LC-746)
+
+A page has exactly one `<h1>`, and it takes its size from the scale, never from a raw `text-*` utility. Tailwind's preflight resets `<h1>` to `font-size: inherit`, so an `<h1>` with no class is not "the default heading size", it is body text at 1rem - which is how the audit found 36 page titles rendering at six different sizes.
+
+- `lc-h1` on every page with a header bar (`.lc-header`, `.lc-admin-header`, `.lc-callbar`). This is the default.
+- `lc-display` on a standalone centered page with no bar: `error.html`, `not_found.html`, `maintenance.html`, `auth/login.html`, `auth/login_approve.html`. That is the one deliberate second tier.
+- `landing.html` is a marketing hero outside the app scale and is excluded.
+
+A second heading in a body branch is an `<h2>`, not a second `<h1>`: `home/welcome.html` renders its page title in the header bar and its welcome hero as `<h2 class="lc-display">`, so the non-dashboard branch still has one top-level heading.
+
+## Timestamps (LC-746)
+
+Every rendered timestamp is a `<time>` carrying a machine-readable UTC instant:
+
+```
+<time datetime="{{ row.created_at|iso }}" title="{{ row.created_at }}">{{ row.created_at }}</time>
+```
+
+The `iso` filter (`server/src/i18n.rs`) converts SQLite's `YYYY-MM-DD HH:MM:SS`, which a browser would otherwise parse as local time, into `YYYY-MM-DDTHH:MM:SSZ`. Do not reformat in the template and do not add a per-struct accessor for it.
+
+Add `data-lc-ts` where a relative time reads better than an absolute one. The LC-314 upgrade in `layout.html` replaces the element's text with "3 minutes ago" (falling back to an absolute date past ~26 days) and leaves the exact stamp in the `title`:
+
+- **With `data-lc-ts`:** the feed-like surfaces - activity, inbox, pins (the pins page, the pinned strip, the room info panel), saved, related, search results, the transcripts list.
+- **Without:** the admin audit tables (modlog, quarantine, invites, deliveries, bots, link filter, bridges, ...), where the exact stamp is the point, and the settings / room integration tables that read the same way.
+
+That split is a decision, not an omission: an audit row is evidence, and "2 days ago" is not.
 
 ## Color tokens (LC-735)
 
@@ -134,6 +161,16 @@ A control with no visible label has nowhere to put the marker, so give it one ra
 
 `partials/file_picker.html` handles all three itself when its caller binds `{% let required = true %}`.
 
+## Accessible names on form controls (LC-746)
+
+Every `<input>`, `<select>` and `<textarea>` resolves an accessible name, from a `<label for>`, a wrapping `<label>`, `aria-label` or `aria-labelledby`. A `placeholder` is not a name: a screen reader announces it only as a fallback, and it disappears the moment the user types.
+
+- A row editor or a filter field in a dense table takes `aria-label` with the key the column header already uses.
+- Where voice control should be able to say the field's name, use an `sr-only` `<label for>` instead, so the name is a real label. The `admin/branding.html` hex fields do this.
+- `type="hidden"`, `submit`, `button`, `reset` and `image` are exempt: they are not announced, or they take their name from `value` / `alt`.
+
+`server/tests/template_a11y.rs` sweeps every template and fails with the file, line and tag of anything unnamed. It is a test rather than a rule in `check-ui-conventions.nu` because a wrapping `<label>` can only be resolved from element ranges, not from a single line.
+
 ## File pickers (LC-740)
 
 There is exactly **one** file picker: `partials/file_picker.html` plus the delegated handler in `server/assets/file_picker.js` (loaded in `base.html`). It renders a styled `<label class="btn btn-secondary btn-sm">` trigger, a filename echo, an `sr-only` `<input type="file">` and a `hidden role="alert"` error slot. The handler echoes the chosen filename, rejects a wrong type (matched against `accept`) or an oversized file (against `data-lc-max-bytes`) before submit, and disables the form's submit button while the pick is invalid.
@@ -237,6 +274,9 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color token | none |
 | No clipping table wrappers | `card overflow-hidden` under `server/templates/admin/` | none |
 | No raw h1 sizes | `<h1 ... text-lg/xl/2xl/...>` in templates | `landing.html`, a marketing hero outside the app scale |
+| h1 on the scale | an `<h1>` whose `class` carries neither `lc-h1` nor `lc-display` | `landing.html`, as above |
+| One h1 per template | a second `<h1>` in the same template file | none |
+| Timestamps are time elements | `{{ ..._at }}` on a line with no `<time>` | none; `email/` is already out of scope |
 | Offline page brand name | `lets-chat` in `server/assets/offline.html` and `server/assets/sw.js` | a comment line, which may keep the repo name |
 | Offline page follows the mode | a light-only `color-scheme` in `server/assets/offline.html` | none |
 | One ellipsis glyph, no em dash | U+2026 in the locale catalogs; U+2014 in every tracked text file | vendored assets (`server/assets/vendor/`) |

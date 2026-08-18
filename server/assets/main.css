@@ -4921,7 +4921,8 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     min-height: 3.5rem;
     padding: 0.875rem 1.25rem;
 }
-.lc-admin-title { font-size: 1rem; font-weight: 600; color: var(--content); }
+/* LC-746: `.lc-admin-title` is gone; the admin page title is `.lc-h1`, the same
+   step as every other page title, and inherits `text-content` from <body>. */
 /* LC-572: shared admin page-header. The bar sits the title/description block
    against an optional right-aligned action cluster and wraps on narrow widths;
    the filter/toolbar block (if any) renders on its own row under the bar. */
@@ -5453,7 +5454,8 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     gap: 0.5rem;
 }
 .lc-home-support-who { font-size: 0.8125rem; font-weight: 600; color: var(--content); }
-.lc-home-support-when { flex: none; font-size: 0.6875rem; color: var(--content-subtle); }
+/* LC-746: --content-muted, the one color every converted timestamp renders at. */
+.lc-home-support-when { flex: none; font-size: 0.6875rem; color: var(--content-muted); }
 .lc-home-support-body {
     margin: 0;
     font-size: 0.8125rem;

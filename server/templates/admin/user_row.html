@@ -2,7 +2,7 @@
   <td class="font-medium">{{ u.username }}</td>
   <td>
     <form hx-post="/admin/users/{{ u.id }}/role" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
-      <select name="role" class="rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+      <select name="role" aria-label="{{ "admin-userrow-role-label"|t }}" class="rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
         <option value="user"{% if u.role == "user" %} selected{% endif %}>{{ "admin-userrow-role-user"|t }}</option>
         <option value="moderator"{% if u.role == "moderator" %} selected{% endif %}>{{ "admin-userrow-role-moderator"|t }}</option>
         <option value="admin"{% if u.role == "admin" %} selected{% endif %}>{{ "admin-userrow-role-admin"|t }}</option>
@@ -13,13 +13,13 @@
   <td class="text-xs">
     {# LC-561: ban / mute / active state as unified status chips (.lc-pill). #}
     {% if u.is_banned %}<span class="lc-pill lc-pill--danger">{{ "admin-userrow-banned"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-userrow-active"|t }}</span>{% endif %}
-    {% if u.is_muted %} <span class="lc-pill lc-pill--warning">{{ "admin-userrow-muted"|t }}</span>{% if let Some(until) = u.muted_until %} <span class="text-content-muted">{{ "admin-userrow-muted-until"|t }} {{ until }} {{ "admin-userrow-muted-utc"|t }}</span>{% endif %}{% endif %}
+    {% if u.is_muted %} <span class="lc-pill lc-pill--warning">{{ "admin-userrow-muted"|t }}</span>{% if let Some(until) = u.muted_until %} <span class="text-content-muted">{{ "admin-userrow-muted-until"|t }} <time datetime="{{ until|iso }}" title="{{ until }}">{{ until }}</time> {{ "admin-userrow-muted-utc"|t }}</span>{% endif %}{% endif %}
   </td>
   <td class="text-xs">
     <form hx-post="/admin/users/{{ u.id }}/quota" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="flex gap-1 items-center">
       <span class="font-mono text-content-muted">{{ u.usage_display }}</span>
       <span class="text-content-subtle">/</span>
-      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" max="16777216" placeholder="{{ "admin-userrow-unlimited"|t }}" class="w-20 rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+      <input type="number" name="quota_mib" value="{{ u.quota_mib_value }}" min="0" max="16777216" placeholder="{{ "admin-userrow-unlimited"|t }}" aria-label="{{ "admin-userrow-quota-label"|t }}" class="w-20 rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
       <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-userrow-save"|t }}</button>
     </form>
   </td>
@@ -34,7 +34,7 @@
       <button hx-post="/admin/users/{{ u.id }}/unmute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" class="btn btn-sm btn-ghost">{{ "admin-userrow-unmute"|t }}</button>
       {% else %}
       <form hx-post="/admin/users/{{ u.id }}/mute" hx-target="#user-{{ u.id }}" hx-swap="outerHTML" hx-confirm="{{ "admin-userrow-mute-confirm"|t }}" class="inline-flex gap-1 items-center">
-        <select name="duration" class="rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+        <select name="duration" aria-label="{{ "admin-userrow-mute-duration-label"|t }}" class="rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
           <option value="15m">{{ "admin-userrow-mute-15m"|t }}</option>
           <option value="1h">{{ "admin-userrow-mute-1h"|t }}</option>
           <option value="8h">{{ "admin-userrow-mute-8h"|t }}</option>

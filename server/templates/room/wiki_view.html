@@ -4,7 +4,7 @@
 <div class="lc-md text-sm">{{ html|safe }}</div>
 <p class="text-xs text-content-muted">
   {{ "room-info-wiki-last-edited"|t }}
-  {% if let Some(at) = updated_at %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}
+  {% if let Some(at) = updated_at %}{{ "room-info-wiki-on"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% endif %}
   {% if let Some(by) = updated_by_label %}{{ "room-info-wiki-by"|t }} {{ by }}{% endif %}.
 </p>
 {% endif %}

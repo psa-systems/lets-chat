@@ -26,7 +26,7 @@
       {% for it in items %}
       <a href="/room/{{ it.room_id }}#msg-{{ it.message_id }}" role="listitem"
          class="block rounded border border-border bg-surface px-2 py-1.5 hover:border-accent hover:bg-surface-sunken">
-        <div class="text-xs text-content-muted">{{ it.author }} - {{ it.created_at }}</div>
+        <div class="text-xs text-content-muted">{{ it.author }} - <time data-lc-ts datetime="{{ it.created_at|iso }}" title="{{ it.created_at }}">{{ it.created_at }}</time></div>
         <div class="text-sm break-words line-clamp-3">{{ it.snippet }}</div>
       </a>
       {% endfor %}

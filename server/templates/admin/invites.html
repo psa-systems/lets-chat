@@ -31,7 +31,7 @@
       <tr id="invite-{{ inv.id }}">
         <td class="font-mono">{{ inv.code }}</td>
         <td>{{ inv.created_by_username }}</td>
-        <td class="text-content-muted">{{ inv.created_at }}</td>
+        <td class="text-content-muted"><time datetime="{{ inv.created_at|iso }}" title="{{ inv.created_at }}">{{ inv.created_at }}</time></td>
         <td>{% if let Some(name) = inv.used_by_username.as_ref() %}{{ name }}{% else %}<span class="text-content-subtle">-</span>{% endif %}</td>
         <td class="lc-table-actions">
           {% if inv.used_by_username.is_none() %}
