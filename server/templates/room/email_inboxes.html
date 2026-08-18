@@ -70,7 +70,7 @@
         <td class="py-1 text-right">
           {% if !i.revoked %}
           <form method="post" action="/room/{{ room.id }}/email-inboxes/{{ i.id }}/revoke" class="inline">
-            <button type="submit" class="text-danger hover:underline text-xs">{{ "room-table-revoke"|t }}</button>
+            <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
           </form>
           {% endif %}
         </td>

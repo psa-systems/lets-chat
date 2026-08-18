@@ -92,6 +92,13 @@ jobs:
         # ci-build/check-single-tab-controller.nu and LC-747.
         run: nu ci-build/check-single-tab-controller.nu
 
+      - name: Revoke confirmation guard
+        # Revoking a credential cannot be undone and breaks every integration
+        # using it on the next request. Five of the six revoke surfaces fired
+        # on one click of a text link in a table row. See
+        # ci-build/check-revoke-confirm.nu and LC-738.
+        run: nu ci-build/check-revoke-confirm.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:

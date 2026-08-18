@@ -342,6 +342,7 @@ settings-update-password = Actualizar contraseña
 settings-active-sessions = Sesiones activas
 settings-sessions-help = Todos los dispositivos con sesión iniciada en esta cuenta. Revoca cualquier sesión que no reconozcas. Cerrar sesión finaliza la actual.
 settings-session-revoked = Sesión revocada.
+settings-session-revoke-confirm = ¿Revocar esta sesión? El dispositivo se cerrará de inmediato y tendrá que iniciar sesión otra vez.
 settings-this-device = Este dispositivo
 settings-last-seen = Visto por última vez
 settings-from = desde
@@ -392,6 +393,7 @@ api-tokens-last-used = usado por última vez
 api-tokens-never-used = nunca usado
 api-tokens-expires-at = caduca
 api-tokens-revoked = revocado
+api-tokens-revoke-confirm = ¿Revocar este token? Todo lo que lo usa dejará de funcionar de inmediato y no se puede restaurar.
 
 ## Blocked users page
 blocked-page-title = Usuarios bloqueados
