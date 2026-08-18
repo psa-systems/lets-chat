@@ -23,10 +23,13 @@ The message body (`.lc-md`) keeps its own size, which the per-device text-size c
 
 Every color comes from the semantic tokens in `server/tailwind.config.js` (`text-content`, `text-content-muted`, `text-content-subtle`, `bg-surface{,-elevated,-sunken}`, `border-border`, `text-danger`, ...), which resolve to the CSS vars in `server/assets/main.css` and so recolor across all four modes (`light`, `dark`, `hc-light`, `hc-dark`) and every palette. A raw numbered utility like `text-slate-700` is fixed for all four, so it survives review in the mode it was written for and goes unreadable in the others.
 
-`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically in two places, both of them states that theme testing rarely reaches:
+`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically in three places:
 
 - `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row).
 - Every `[aria-selected="true"]` rule in `server/assets/main.css`, which must paint its background from a `var(--...)` token. That is the selection highlight, only visible mid-keyboard-navigation; LC-736 found it hard-coded to `rgb(241 245 249)` there, outranking the tokenized `.lc-search-row` rule.
+- `server/templates/**/*.html` (LC-741). The last holdout was the call overlays in `layout.html`, which a theme pass only reaches during a live call: a `bg-white` remote-control consent card with an `indigo-600` grant button (a hue used nowhere else, so no palette and no operator branding could move it) and a `bg-red-600` control banner.
+
+A surface that is deliberately dark in every mode says so explicitly rather than reaching for a dark palette shade: the fullscreen video stage is `bg-black` with a comment, and the chrome painted directly on it uses on-dark constants (`text-white`, `border-white/20`) instead of mode tokens, which would assume a background that follows the mode.
 
 ## Page top bars (LC-742)
 
