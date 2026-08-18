@@ -3,6 +3,7 @@
 
 ## Shared
 room-save = Guardar
+room-edit-message-label = Editar mensaje
 room-cancel = Cancelar
 
 ## Composer

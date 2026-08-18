@@ -12,7 +12,7 @@
   <div class="flex min-w-0 items-start gap-4">
     <div class="lc-info-badge" aria-hidden="true">#</div>
     <div class="min-w-0">
-      <h1 class="text-xl font-extrabold truncate">{{ room.name }}</h1>
+      <h1 class="lc-h1 truncate">{{ room.name }}</h1>
       {% if let Some(topic) = room.topic.as_ref() %}
       <p class="text-sm text-content-muted mt-1 truncate">{{ topic }}</p>
       {% endif %}
@@ -93,7 +93,7 @@
             <div class="lc-md text-sm">{{ wiki_html|safe }}</div>
             <p class="lc-set-help">
               {{ "room-info-wiki-last-edited"|t }}
-              {% if let Some(at) = room.wiki_updated_at.as_ref() %}{{ "room-info-wiki-on"|t }} {{ at }}{% endif %}
+              {% if let Some(at) = room.wiki_updated_at.as_ref() %}{{ "room-info-wiki-on"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% endif %}
               {% if let Some(by) = wiki_updated_by_label.as_ref() %}{{ "room-info-wiki-by"|t }} {{ by }}{% endif %}.
             </p>
             {% endif %}
@@ -125,7 +125,7 @@
             <li class="py-3 first:pt-0 last:pb-0 space-y-1">
               <div class="text-xs text-content-muted">
                 <span class="font-medium text-content">{{ p.author_label }}</span>
-                - {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} {{ "room-info-pinned-on"|t }} {{ p.pinned_at }}
+                - {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} {{ "room-info-pinned-on"|t }} <time data-lc-ts datetime="{{ p.pinned_at|iso }}" title="{{ p.pinned_at }}">{{ p.pinned_at }}</time>
               </div>
               <div class="text-sm whitespace-pre-wrap">{{ p.body }}</div>
             </li>

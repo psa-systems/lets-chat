@@ -37,7 +37,7 @@
         {# LC-684: the caption links to the permalink route, which jumps to this
            exact message in its original room / DM context. #}
         <a href="{{ e.context_path }}" class="text-accent hover:underline">{{ e.context_label }}</a>
-        &middot; {{ "saved-saved-at"|t }} {{ e.saved_at }}
+        &middot; {{ "saved-saved-at"|t }} <time data-lc-ts datetime="{{ e.saved_at|iso }}" title="{{ e.saved_at }}">{{ e.saved_at }}</time>
       </span>
       <span class="flex items-center gap-2 shrink-0">
         {# LC-479: inline label editor (tag-style). Posts on change (htmx sends

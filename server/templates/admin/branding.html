@@ -3,7 +3,7 @@
 {% block title %}{{ "admin-branding-title"|t }} - Admin - Let's Chat{% endblock %}
 
 {% block admin_main %}
-<div class="lc-admin-narrow">
+<div class="lc-admin-narrow" data-lc-branding>
   {% if saved %}
   <div class="alert alert-success">{{ "admin-branding-saved"|t }}</div>
   {% endif %}
@@ -23,18 +23,24 @@
         <h3 class="lc-set-card-title">{{ "admin-branding-primary-color"|t }} &amp; {{ "admin-branding-accent-color"|t }}</h3>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div class="lc-set-field">
+        {# LC-746: same swatch/hex pair as enclave/branding.html. The hex field is
+           editable and two-way synced by branding.js ([data-lc-color-pair]); it
+           carries an sr-only <label for> so voice control can address it too.
+           It posts nothing - the swatch's `primary_color` is the submitted value. #}
+        <div class="lc-set-field" data-lc-color-pair>
           <label class="lc-set-label" for="primary_color">{{ "admin-branding-primary-color"|t }}</label>
           <div class="flex gap-2 items-center">
-            <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}" class="lc-swatch">
-            <input name="primary_color_text" type="text" value="{{ primary_color }}" readonly class="input font-mono text-xs flex-1">
+            <input id="primary_color" name="primary_color" type="color" value="{{ primary_color }}" class="lc-swatch" data-lc-color-swatch>
+            <label class="sr-only" for="primary_color_text">{{ "admin-branding-primary-color"|t }}</label>
+            <input id="primary_color_text" type="text" value="{{ primary_color }}" maxlength="7" class="input font-mono text-xs flex-1 uppercase" data-lc-color-hex>
           </div>
         </div>
-        <div class="lc-set-field">
+        <div class="lc-set-field" data-lc-color-pair>
           <label class="lc-set-label" for="accent_color">{{ "admin-branding-accent-color"|t }}</label>
           <div class="flex gap-2 items-center">
-            <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}" class="lc-swatch">
-            <input name="accent_color_text" type="text" value="{{ accent_color }}" readonly class="input font-mono text-xs flex-1">
+            <input id="accent_color" name="accent_color" type="color" value="{{ accent_color }}" class="lc-swatch" data-lc-color-swatch>
+            <label class="sr-only" for="accent_color_text">{{ "admin-branding-accent-color"|t }}</label>
+            <input id="accent_color_text" type="text" value="{{ accent_color }}" maxlength="7" class="input font-mono text-xs flex-1 uppercase" data-lc-color-hex>
           </div>
         </div>
       </div>

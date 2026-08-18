@@ -22,7 +22,7 @@
   <dl class="px-3 py-2 space-y-3 text-sm">
     <div class="flex items-center justify-between gap-2">
       <dt class="text-content-muted">{{ "room-details-created"|t }}</dt>
-      <dd class="text-content font-medium">{{ room.created_at }}</dd>
+      <dd class="text-content font-medium"><time datetime="{{ room.created_at|iso }}" title="{{ room.created_at }}">{{ room.created_at }}</time></dd>
     </div>
     <div class="flex items-center justify-between gap-2">
       <dt class="text-content-muted">{{ "room-details-members"|t }}</dt>

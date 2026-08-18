@@ -14,7 +14,7 @@
     <li class="lc-home-support-row">
       <div class="lc-home-support-row-top">
         <span class="lc-home-support-who">{{ t.requester_label }}</span>
-        <span class="lc-home-support-when">{{ t.created_at }}</span>
+        <span class="lc-home-support-when"><time datetime="{{ t.created_at|iso }}" title="{{ t.created_at }}">{{ t.created_at }}</time></span>
       </div>
       <p class="lc-home-support-body">{{ t.body }}</p>
     </li>

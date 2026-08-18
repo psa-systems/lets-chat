@@ -25,7 +25,7 @@
      until joined (voice.js toggles them). #}
   <header class="lc-callbar">
     <div class="lc-callbar-title flex min-w-0 items-center gap-2">
-      <h1 class="truncate font-semibold">{{ room.name }}</h1>
+      <h1 class="lc-h1 truncate">{{ room.name }}</h1>
       <span class="rounded bg-surface-sunken px-1.5 text-xs font-medium uppercase tracking-wide text-content-muted">{{ "voice-badge"|t }}</span>
       <span data-lc-voice-count class="lc-voice-countchip hidden rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-content-muted" aria-label="{{ "voice-in-call"|t }}">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">

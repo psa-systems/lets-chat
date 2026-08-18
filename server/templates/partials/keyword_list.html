@@ -18,7 +18,7 @@
   </div>
   <form hx-post="/settings/keywords" hx-target="#lc-keyword-list" hx-swap="outerHTML" class="mt-2 flex items-center gap-2"
     {% if at_cap %}data-lc-at-cap{% endif %}>
-    <input type="text" name="word" autocomplete="off" maxlength="50"
+    <input type="text" name="word" autocomplete="off" maxlength="50" aria-label="{{ "settings-keyword-placeholder"|t }}"
       {% if at_cap %}disabled placeholder="{{ "settings-keyword-cap"|t }}"{% else %}placeholder="{{ "settings-keyword-placeholder"|t }}"{% endif %}
       class="w-48 rounded border border-border px-2 py-1 text-sm disabled:opacity-50">
     <button type="submit" {% if at_cap %}disabled{% endif %}

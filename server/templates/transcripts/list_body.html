@@ -17,14 +17,14 @@
   <div data-lc-transcript-row class="lc-tx-row group{% if r.segment_count == 0 %} lc-tx-row--empty{% endif %}">
     {# Stretched link makes the whole row clickable; interactive children (the
        delete button) sit above it via z-index so they don't conflict. #}
-    <a href="/transcripts/{{ r.id }}" class="lc-tx-link" aria-label="{{ r.title }} {{ r.kind_label }} {{ r.started_at }}"></a>
+    <a href="/transcripts/{{ r.id }}" class="lc-tx-link" aria-labelledby="lc-tx-title-{{ r.id }} lc-tx-kind-{{ r.id }} lc-tx-when-{{ r.id }}"></a>
     <div class="lc-tx-main">
       <div class="lc-tx-titleline">
-        <span class="lc-tx-title">{{ r.title }}</span>
-        <span class="lc-tx-badge lc-tx-badge--{% if r.is_dm %}dm{% else %}voice{% endif %}">{{ r.kind_label }}</span>
+        <span id="lc-tx-title-{{ r.id }}" class="lc-tx-title">{{ r.title }}</span>
+        <span id="lc-tx-kind-{{ r.id }}" class="lc-tx-badge lc-tx-badge--{% if r.is_dm %}dm{% else %}voice{% endif %}">{{ r.kind_label }}</span>
         {% if !r.ended %}<span class="lc-tx-live">{{ "transcript-in-progress"|t }}</span>{% endif %}
       </div>
-      <div class="lc-tx-meta tabular-nums">{{ r.started_at }} &middot; {{ r.segment_count }} {{ "transcript-lines"|t }}</div>
+      <div class="lc-tx-meta tabular-nums"><time id="lc-tx-when-{{ r.id }}" data-lc-ts datetime="{{ r.started_at|iso }}" title="{{ r.started_at }}">{{ r.started_at }}</time> &middot; {{ r.segment_count }} {{ "transcript-lines"|t }}</div>
     </div>
     {% if r.can_delete %}
     <button type="button" class="lc-tx-del"
