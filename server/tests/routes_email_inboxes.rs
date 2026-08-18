@@ -229,6 +229,47 @@ async fn list_includes_the_created_inbox_with_active_status() {
     );
 }
 
+/// LC-745: the room integration list renders the shared table component, not a
+/// hand-rolled one. `ci-build/check-table-shape.nu` guards the source shape for
+/// all three room templates; this pins what actually reaches the browser.
+#[tokio::test]
+async fn list_renders_the_shared_table_and_empty_state() {
+    let t = app().await;
+
+    let (status, empty) = get_list(&t.app, &t.admin_session, t.room).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        empty.contains("lc-empty"),
+        "an empty list is the shared empty-state partial, not a colspan row",
+    );
+    assert!(
+        !empty.contains("<table"),
+        "an empty list renders no table at all",
+    );
+
+    let (_, _) = post_create(&t.app, &t.admin_session, t.room, "Pager").await;
+    let (status, body) = get_list(&t.app, &t.admin_session, t.room).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(r#"<div class="card lc-table-wrap">"#),
+        "the table sits in a card that scrolls horizontally",
+    );
+    assert!(
+        body.contains(r#"<table class="lc-table">"#),
+        "the table is the shared component",
+    );
+    assert!(
+        body.contains(r#"<th class="lc-table-actions">"#),
+        "the actions column uses the shared right-aligned nowrap cell",
+    );
+    // The component owns the row height; a padding utility on a cell would
+    // re-derive it and drift from the admin tables.
+    assert!(
+        !body.contains(r#"<td class="py-"#) && !body.contains(r#"<th class="py-"#),
+        "no cell carries a padding utility",
+    );
+}
+
 #[tokio::test]
 async fn revoke_flips_inbox_to_revoked() {
     let t = app().await;

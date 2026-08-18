@@ -71,6 +71,13 @@ jobs:
         # ci-build/check-table-scroll.nu and LC-737.
         run: nu ci-build/check-table-scroll.nu
 
+      - name: Table shape guard
+        # A hand-rolled table re-derives the row height, header color and row
+        # rules that .lc-table already owns, so the same list rendered at two
+        # different heights depending on the surface. See
+        # ci-build/check-table-shape.nu and LC-745.
+        run: nu ci-build/check-table-shape.nu
+
       - name: Locale ellipsis guard
         # One ellipsis spelling in the catalogs: three periods, never U+2026.
         # The mixed spelling put "Search..." beside "Search…" in the same
