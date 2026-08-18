@@ -6,17 +6,19 @@ use crate::models::{Room, User};
 use crate::views::layout::{SidebarCategoryGroup, SidebarPeer, SidebarRoom, SwitcherEntry};
 use crate::views::room_automations::AutomationRow;
 
-/// LC-677: a self-re-rendering on/off settings toggle (assistant / digest /
-/// stage). Rendered inline on the Manage page (via `{% include %}`) and returned
+/// LC-677: a self-re-rendering on/off settings toggle. Rendered inline (via
+/// `{% include %}` on the room Manage and enclave Settings pages) and returned
 /// by the toggle handlers so a click updates the switch, label, and hidden
-/// next-value in place, no reload. `field` is the route segment
-/// (`/room/{id}/{field}`); `status` is empty on the page render, "Saved" after a
-/// toggle. See `partials/settings_toggle.html`.
+/// next-value in place, no reload. LC-747 replaced the hardcoded
+/// `/room/{id}/{field}` post target with a caller-provided `action` plus the
+/// form field `name`, so any boolean setting can use it. `status` is empty on
+/// the page render, "Saved" after a toggle. See
+/// `partials/settings_toggle.html`.
 #[derive(Template)]
 #[template(path = "partials/settings_toggle.html")]
 pub struct SettingsToggleFragment {
-    pub room_id: i64,
-    pub field: &'static str,
+    pub action: String,
+    pub name: &'static str,
     pub enabled: bool,
     pub aria_label: String,
     pub on_label: String,
