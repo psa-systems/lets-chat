@@ -5097,7 +5097,10 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 .lc-set-defs dt { width: 8rem; flex: none; color: var(--content-muted); }
 .lc-set-defs dd { color: var(--content); min-width: 0; word-break: break-word; }
 
-/* Toggle switch: a styled checkbox + label + description, aligned in a row. */
+/* Toggle switch: a styled checkbox + label + description, aligned in a row.
+   LC-747: the input carries role="switch", so it announces the same as the
+   .lc-switch button below; this shape is for settings that batch into one form
+   with a Save button, where a per-control POST is not wanted. */
 .lc-toggle {
     display: flex;
     align-items: flex-start;
@@ -5591,9 +5594,10 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     border-color: var(--accent);
 }
 
-/* LC-463: toggle switch for enclave on/off settings. Rendered as a submit
-   button (so the existing POST-flip server contract is unchanged); aria-checked
-   drives the visual on/off state, set by the server from the current value. */
+/* LC-463: toggle switch for an immediately-applied on/off setting. Rendered as
+   a submit button (so the existing POST-flip server contract is unchanged);
+   aria-checked drives the visual on/off state, set by the server from the
+   current value. Only partials/settings_toggle.html emits this markup. */
 .lc-switch {
     position: relative;
     display: inline-flex;

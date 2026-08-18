@@ -91,7 +91,7 @@
           <form method="post" action="/enclave/{{ enclave.id }}/visibility" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/visibility" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <label class="lc-toggle">
-              <input type="checkbox" name="is_public" value="1" {% if enclave.is_public %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="is_public" value="1" {% if enclave.is_public %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text">
                 <span class="lc-toggle-title">{{ "enclave-settings-visibility-public-label"|t }}</span>
@@ -203,7 +203,7 @@
           <form method="post" action="/enclave/{{ enclave.id }}/coyote-mode" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/coyote-mode" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <label class="lc-toggle">
-              <input type="checkbox" name="enabled" value="1" {% if enclave.coyote_mode %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="enabled" value="1" {% if enclave.coyote_mode %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text">
                 <span class="lc-toggle-title">{{ "enclave-settings-coyote-enable"|t }}</span>
@@ -226,7 +226,7 @@
           <form method="post" action="/enclave/{{ enclave.id }}/shame-tags" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/shame-tags" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <label class="lc-toggle">
-              <input type="checkbox" name="enabled" value="1" {% if enclave.shame_tags_enabled %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="enabled" value="1" {% if enclave.shame_tags_enabled %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text">
                 <span class="lc-toggle-title">{{ "enclave-settings-shame-enable"|t }}</span>
@@ -282,7 +282,7 @@
           <form method="post" action="/enclave/{{ enclave.id }}/share-emojis" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/share-emojis" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <label class="lc-toggle">
-              <input type="checkbox" name="share" value="1" {% if enclave.share_emojis_globally %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="share" value="1" {% if enclave.share_emojis_globally %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text">
                 <span class="lc-toggle-title">{{ "enclave-settings-emojis-shared-label"|t }}</span>

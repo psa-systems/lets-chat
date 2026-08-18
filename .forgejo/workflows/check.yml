@@ -77,6 +77,21 @@ jobs:
         # sidebar. See ci-build/check-locale-ellipsis.nu and LC-750.
         run: nu ci-build/check-locale-ellipsis.nu
 
+      - name: Boolean-setting control guard
+        # One control for "turn this on": the shared role="switch" partial, or a
+        # .lc-toggle checkbox that carries role="switch" itself. A copy of the
+        # switch markup drifts away from the shared feedback contract, and a
+        # bare checkbox announces differently from the identical-looking switch
+        # one page over. See ci-build/check-boolean-settings.nu and LC-747.
+        run: nu ci-build/check-boolean-settings.nu
+
+      - name: Single tab controller guard
+        # Three copies of the tablist controller had already drifted: one reset
+        # the visible panel on any hashchange, so an in-page anchor jumped the
+        # user to a different tab. See
+        # ci-build/check-single-tab-controller.nu and LC-747.
+        run: nu ci-build/check-single-tab-controller.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:

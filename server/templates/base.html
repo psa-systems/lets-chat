@@ -624,6 +624,9 @@
   {# LC-740: the one file-picker handler, shared by every partials/file_picker.html
      include. Loaded before the pages that add per-site extras on top of it. #}
   <script src="/assets/file_picker.js?v={{ asset_version }}" defer></script>
+  {# LC-747: the one tablist controller, shared by the three consumers below.
+     Loaded first so window.lcInitTabs exists when their init() runs. #}
+  <script src="/assets/tabs.js?v={{ asset_version }}" defer></script>
   <script src="/assets/settings.js?v={{ asset_version }}" defer></script>
   <script src="/assets/roominfo.js?v={{ asset_version }}" defer></script>
   <script src="/assets/enclave_settings.js?v={{ asset_version }}" defer></script>
