@@ -4939,8 +4939,12 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
 /* A redesigned page caps form content; tables stay full-width. */
 .lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }
 
-/* LC-510: shared admin table. Wrap in `.card.overflow-hidden` so rows go edge
+/* LC-510: shared admin table. Wrap in `.card.lc-table-wrap` so rows go edge
    to edge; cells provide the padding. Reused across the admin list pages. */
+/* LC-737: the wrapper scrolls instead of clipping. `overflow-x: auto` still
+   makes the y axis a clipping context, so the card's rounded corners keep
+   cutting the first and last rows. */
+.lc-table-wrap { overflow-x: auto; }
 .lc-table { width: 100%; font-size: 0.875rem; border-collapse: collapse; }
 .lc-table thead th {
     text-align: left;
