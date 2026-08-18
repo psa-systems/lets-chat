@@ -1,4 +1,5 @@
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -71,6 +72,21 @@ fn flash_name_param(name: &str) -> String {
     percent_encoding::utf8_percent_encode(name, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
+/// LC-739: dual-mode answer for a settings save whose new state the form
+/// controls already carry (the toggles, the burst input). htmx gets the shared
+/// `SettingsFeedback` fragment (inline status next to the button + a toast); a
+/// no-JS submit gets the redirect it has always had. Both paths resolve the
+/// same `?ok=` code, so they say the same thing.
+fn saved_or_redirect(headers: &HeaderMap, id: i64, ok: &str) -> Result<Response, AppError> {
+    if super::is_hx(headers) {
+        let Some(msg) = flash_ok_message(Some(ok)) else {
+            return Err(AppError::Internal(format!("unknown flash ok code: {ok}")));
+        };
+        return Ok(html(&SettingsFeedback::ok(msg))?.into_response());
+    }
+    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok={ok}")).into_response())
+}
+
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
@@ -84,6 +100,7 @@ use crate::views::enclave::{
     EnclaveInviteRowResult, EnclaveInviteSearchFragment, EnclaveMemberView, EnclavePage,
     EnclaveSettingsPage,
 };
+use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -360,6 +377,9 @@ pub async fn get_discover(
 
 #[derive(Deserialize)]
 pub struct VisibilityForm {
+    /// LC-739: the settings checkbox only posts when checked, so an absent
+    /// field is the "make it private" case, not a malformed submit.
+    #[serde(default)]
     pub is_public: String,
 }
 
@@ -367,15 +387,18 @@ pub async fn post_visibility(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<VisibilityForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_public(&state.chat, id, form.is_public == "1").await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+    saved_or_redirect(&headers, id, "updated")
 }
 
 #[derive(Deserialize)]
 pub struct ShareEmojisForm {
+    /// Absent when the sharing checkbox is unchecked (see `VisibilityForm`).
+    #[serde(default)]
     pub share: String,
 }
 
@@ -386,11 +409,12 @@ pub async fn post_share_emojis(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<ShareEmojisForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::set_share_emojis_globally(&state.chat, id, form.share == "1").await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+    saved_or_redirect(&headers, id, "updated")
 }
 
 /// LC-217: form for `POST /enclave/{id}/rate-limit`. `burst` is a per-minute
@@ -408,8 +432,9 @@ pub async fn post_msg_rate_limit(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<MsgRateLimitForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let burst: u32 = form
         .burst
@@ -420,12 +445,14 @@ pub async fn post_msg_rate_limit(
         return Err(AppError::BadRequest("burst exceeds 10000".into()));
     }
     db::enclave::set_msg_rate_limit_burst(&state.chat, id, burst).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=saved")))
+    saved_or_redirect(&headers, id, "saved")
 }
 
 #[derive(Deserialize)]
 pub struct CoyoteModeForm {
-    /// "1" enables, anything else (incl. the toggle-off button's "0") disables.
+    /// "1" enables; anything else, including the absent field an unchecked
+    /// settings checkbox posts, disables.
+    #[serde(default)]
     pub enabled: String,
 }
 
@@ -434,12 +461,13 @@ pub async fn post_coyote_mode(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<CoyoteModeForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_coyote_mode(&state.chat, id, enabled).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+    saved_or_redirect(&headers, id, "updated")
 }
 
 /// LC-342: toggle the shame-tag prototype for an enclave (manager-gated).
@@ -447,12 +475,13 @@ pub async fn post_shame_tags(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<CoyoteModeForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let enabled = form.enabled.trim() == "1";
     db::enclave::set_shame_tags_enabled(&state.chat, id, enabled).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+    saved_or_redirect(&headers, id, "updated")
 }
 
 /// LC-340: lift an enclave ban (manager-gated). The user can then rejoin and
@@ -461,17 +490,23 @@ pub async fn post_unban(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((id, target)): Path<(i64, String)>,
-) -> Result<impl IntoResponse, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     db::enclave::unban_from_enclave(&state.chat, id, &target).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=unbanned")))
+    // The lifted ban's row has to leave the list, so htmx reloads the page.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{id}/settings?ok=unbanned"),
+    ))
 }
 
 pub async fn post_invite_code(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let code: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
@@ -479,7 +514,11 @@ pub async fn post_invite_code(
         .map(char::from)
         .collect();
     db::enclave::regenerate_invite_code(&state.chat, id, &code).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=rotated")))
+    // The new code has to replace the one on screen, so htmx reloads the page.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{id}/settings?ok=rotated"),
+    ))
 }
 
 pub async fn delete_invite_code(
@@ -900,8 +939,9 @@ pub async fn post_edit(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<EditForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let name = form.name.trim();
     if name.is_empty() {
@@ -916,14 +956,31 @@ pub async fn post_edit(
     .await
     {
         if is_unique_violation(&e) {
+            // LC-739: the taken-name detail reaches an htmx submit as the inline
+            // status + toast instead of the flash banner a reload would show.
+            if super::is_hx(&headers) {
+                let Some(msg) = flash_message(Some("enclave_name_taken"), Some(name)) else {
+                    // flash_message maps this code unconditionally; a miss is a bug.
+                    return Err(AppError::Internal(
+                        "no flash message for enclave_name_taken".into(),
+                    ));
+                };
+                return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+            }
             return Ok(Redirect::to(&format!(
                 "/enclave/{id}/settings?error=enclave_name_taken&name={}",
                 flash_name_param(name)
-            )));
+            ))
+            .into_response());
         }
         return Err(e.into());
     }
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=saved")))
+    // The new name is in the page header and the enclave switcher, so htmx
+    // reloads the page rather than leaving both showing the old one.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{id}/settings?ok=saved"),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -951,7 +1008,8 @@ pub async fn post_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
     let m = db::enclave::get_membership(&state.chat, id, &user.id).await?;
     if !enclave_can_delete(m.map(|x| x.role), &user.role) {
         return Err(AppError::Forbidden);
@@ -971,7 +1029,9 @@ pub async fn post_delete(
         // now-defunct topic so no stale tab keeps receiving its events.
         state.hub.unsubscribe_user_from_topic(&fm.user_id, &topic);
     }
-    Ok(Redirect::to("/"))
+    // The enclave is gone, so the settings page it was rendered from has to go
+    // too: htmx navigates home instead of swapping a status into a dead page.
+    Ok(super::redirect_or_hx(&headers, "/"))
 }
 
 pub async fn post_leave(
@@ -1154,8 +1214,9 @@ pub async fn post_add_bot(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<AddBotForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
     let bot_id = form.bot_id.trim();
     let Some(bot) = db::auth::find_user_by_id(&state.auth, bot_id).await? else {
@@ -1177,7 +1238,7 @@ pub async fn post_add_bot(
         .await?
         .is_some()
     {
-        return Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")));
+        return saved_or_redirect(&headers, id, "updated");
     }
     db::enclave::add_member(&state.chat, id, &bot.id, EnclaveRole::Member).await?;
     broadcast_enclave_topic(
@@ -1188,7 +1249,9 @@ pub async fn post_add_bot(
             user_id: bot.id.clone(),
         },
     );
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=updated")))
+    // The broadcast above refreshes the member list over the WS, so an htmx
+    // submit only needs the inline status.
+    saved_or_redirect(&headers, id, "updated")
 }
 
 #[derive(Deserialize)]
@@ -1578,6 +1641,7 @@ pub async fn post_icon(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
     multipart: Multipart,
 ) -> Result<Response, AppError> {
     require_manage(&state, &user, id).await?;
@@ -1585,8 +1649,13 @@ pub async fn post_icon(
         Ok(f) => f,
         // A validation failure (unsupported type / over 1 MiB) carries a
         // specific message. Re-render the full branding editor with it inline
-        // rather than losing the detail through a redirect flash code.
+        // rather than losing the detail through a redirect flash code. LC-739:
+        // an htmx submit gets that same message in the form's status slot,
+        // since swapping a whole page into a status span is not a thing.
         Err(msg) => {
+            if super::is_hx(&headers) {
+                return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+            }
             return Ok(
                 render_enclave_branding_page(&state, &user, id, false, Some(msg))
                     .await?
@@ -1597,6 +1666,13 @@ pub async fn post_icon(
     let Some(new_logo_id) = form.new_logo_id else {
         // No file chosen (the client marks the input required, so this is the
         // forged/empty-submit path). Bounce back with a generic prompt.
+        if super::is_hx(&headers) {
+            let Some(msg) = flash_message(Some("icon"), None) else {
+                // flash_message maps this code unconditionally; a miss is a bug.
+                return Err(AppError::Internal("no flash message for icon".into()));
+            };
+            return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+        }
         return Ok(Redirect::to(&format!("/enclave/{id}/settings?error=icon")).into_response());
     };
     // Preserve every other branding field; only the logo changes.
@@ -1623,5 +1699,10 @@ pub async fn post_icon(
         Some(&format!("enclave={id}")),
     )
     .await?;
-    Ok(Redirect::to(&format!("/enclave/{id}/settings?ok=icon_updated")).into_response())
+    // The icon preview (and the switcher rail) must show the new logo, so htmx
+    // reloads the page.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{id}/settings?ok=icon_updated"),
+    ))
 }

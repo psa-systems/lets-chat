@@ -5057,7 +5057,10 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
 /* LC-432: push a trailing action (Remove avatar) to the far right so the status
    stays anchored next to Save. */
 .lc-set-actions-end { margin-left: auto; }
-.lc-set-actions .lc-spinner.htmx-indicator { display: none; }
+/* LC-739: unscoped from .lc-set-actions - the settings save buttons that sit in
+   a plain row (unban, delete emoji, add bot, create group) carry the same
+   in-button spinner and must hide it the same way while idle. */
+.lc-spinner.htmx-indicator { display: none; }
 .htmx-request .lc-spinner.htmx-indicator { display: inline-block; }
 /* Inline per-form status, swapped in by the server fragment. */
 .lc-set-status:empty { display: none; }

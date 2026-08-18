@@ -69,13 +69,14 @@ Three confirmation styles exist in the codebase. Pick by blast radius, not by co
 | Style | Use for | Mechanism |
 |-------|---------|-----------|
 | `hx-confirm` attribute | Reversible or low-stakes htmx-driven mutations: delete a message, cancel a scheduled message, revoke a moderator role, delete a sidebar category. | Native browser `confirm()` fired by htmx **before it issues the request**. Only works on elements that issue an htmx request (`hx-post`/`hx-delete`/...). |
-| `onsubmit="return confirm(...)"` / `onclick="return confirm(...)"` | The same low-stakes confirmation on a **plain `<form>` POST** that is not htmx-driven (e.g. block user, transfer enclave ownership, delete a custom emoji). | Native `confirm()` wired directly to the DOM event. |
+| `onsubmit="return confirm(...)"` / `onclick="return confirm(...)"` | The same low-stakes confirmation on a **plain `<form>` POST** that is not htmx-driven (e.g. block user, transfer enclave ownership). | Native `confirm()` wired directly to the DOM event. |
 | Typed / re-auth verification | Irreversible, high-blast-radius actions: delete account, delete an entire enclave, stage a backup restore. | A real form gate the user must satisfy (password re-entry, or typing a confirmation phrase) handled server-side. A single `confirm()` OK click is **not** sufficient here. |
 
 Decision rules:
 
 - **Default to `hx-confirm`** for htmx-driven destructive actions. It is the least code and is already the majority pattern.
 - **`hx-confirm` only guards htmx requests.** It does nothing for a plain `<form>` submit. Do not add `hx-confirm` to a non-htmx form expecting it to fire; use `onsubmit="return confirm(...)"` instead, or convert the action to htmx first. Converting a plain form to htmx is behavior-changing (response handling, redirect vs. fragment) and must be audited per site, not done blindly.
+- **`onsubmit="return confirm(...)"` is not a guard on an htmx form (LC-739).** htmx issues the request from the `submit` event without checking `defaultPrevented`, so cancelling the dialog cancels nothing and the mutation still runs. When a form gains `hx-post`, its `onsubmit` confirm must become `hx-confirm`. An `onclick="return confirm(...)"` on the submit button *is* safe on an htmx form: cancelling the click means the `submit` event htmx listens for never fires (this is how the custom-emoji delete still guards itself on `enclave/settings.html`).
 - **Irreversible + wide blast radius gets a stronger gate than a single OK click.** Prefer server-side re-auth (password) or a typed confirmation phrase. The native dialog is dismissible by reflex; data you cannot get back deserves friction the server enforces.
 
 When adding a new destructive action, copy the closest existing example of the matching tier rather than inventing a fourth style.
@@ -90,6 +91,20 @@ Two contexts, one visual + accessibility contract.
 Both contexts must share the same visual treatment (`text-red-600`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
 
 A field the server rejected also gets `input-error` (defined in `server/assets/tailwind.css`) on the control itself, alongside the message. The class is a red border and nothing else, so it is never the only signal: the reason always stays readable as text. See `auth/login_approve.html` and `settings/blocked.html`.
+
+## Settings save feedback (LC-429, LC-739)
+
+Every form on a `.lc-set-*` settings surface (`admin/settings.html`, `settings/page.html`, `room/manage.html`, `enclave/settings.html`) carries the same three things, and a form missing any of them is incomplete:
+
+1. `hx-post` at the same URL as its `action`, with `hx-target="find .lc-set-status"`, `hx-swap="innerHTML"` and `hx-disabled-elt="find button[type=submit]"`. `method="post"` and `action` stay, so a no-JS submit still posts and redirects.
+2. `<span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>Label</span>` inside the submit button.
+3. A `<span class="lc-set-status" role="status" aria-live="polite">` inside the form, next to that button.
+
+The handler answers both callers: `views::settings::SettingsFeedback` (inline status plus an out-of-band toast) when `HX-Request` is set, its existing redirect otherwise. Where a save changes page content the status fragment cannot patch (a rotated invite code, a removed row, a renamed enclave in the header), answer `routes::redirect_or_hx` instead: htmx navigates to the same URL the no-JS redirect uses, so the reload renders the new content and fires that URL's `?ok=` flash toast.
+
+Failures need no per-form work. A non-2xx leaves the swap untouched and the global net in `settings.js` writes the message into that form's `.lc-set-status` plus a toast, which is why the slot is mandatory even on forms whose success path reloads. Never answer a failed save with a 2xx.
+
+A boolean setting is a checkbox plus a Save button (`.lc-toggle`), not a one-click switch that posts the opposite value: the checkbox already holds the new state, so the inline status can land without a reload. Bind the field `#[serde(default)]`, since an unchecked box posts nothing. The one-click `partials/settings_toggle.html` switch is for surfaces that re-render the whole toggle from the response.
 
 ## Required fields (LC-750)
 
