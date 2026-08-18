@@ -104,7 +104,11 @@ The handler answers both callers: `views::settings::SettingsFeedback` (inline st
 
 Failures need no per-form work. A non-2xx leaves the swap untouched and the global net in `settings.js` writes the message into that form's `.lc-set-status` plus a toast, which is why the slot is mandatory even on forms whose success path reloads. Never answer a failed save with a 2xx.
 
-A boolean setting is a checkbox plus a Save button (`.lc-toggle`), not a one-click switch that posts the opposite value: the checkbox already holds the new state, so the inline status can land without a reload. Bind the field `#[serde(default)]`, since an unchecked box posts nothing. The one-click `partials/settings_toggle.html` switch is for surfaces that re-render the whole toggle from the response.
+A boolean setting is a checkbox plus a Save button (`.lc-toggle`), not a one-click switch that posts the opposite value: the checkbox already holds the new state, so the inline status can land without a reload. Bind the field `#[serde(default)]`, since an unchecked box posts nothing. The one-click `partials/settings_toggle.html` switch is for surfaces that re-render the whole toggle from the response; it takes the post target as a caller-provided `action` plus the form field `name`, so it is not tied to any one route shape.
+
+Either way the control announces as a switch, because the two look identical and a setting must not be described differently depending on which page it is on (LC-747). The partial's button carries `role="switch"` with a server-set `aria-checked`; a `.lc-toggle` checkbox carries `role="switch"` on the `<input>` itself, where the native checked state supplies `aria-checked`. Never add a literal `aria-checked` to a checkbox: it goes stale the moment the user clicks. `ci-build/check-boolean-settings.nu` (wired into `just check` and the Check workflow) rejects a `.lc-toggle` checkbox with no `role="switch"`, and rejects `.lc-switch` markup anywhere but the partial.
+
+A checkbox that is one option among several (an API-token scope list, a webhook event list, the LLM audience) is not a switch and correctly stays a plain checkbox; it lives inside a `<fieldset>` with a `<legend>` naming the group, and carries no `.lc-toggle` class.
 
 ## Required fields (LC-750)
 
@@ -149,6 +153,17 @@ Every table lives in a horizontal scroll container. The admin list pages use `<d
 
 - Never wrap a table in `overflow-hidden`. The widest admin tables carry 5 to 6 columns plus a `white-space: nowrap` `.lc-table-actions` cell with up to four buttons, and clipping made those buttons unreachable at 375px: no scrollbar, no drag, no way to get to them.
 - `ci-build/check-table-scroll.nu` (wired into `just check` and the Check workflow) rejects any `<table>` in a template whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. Email templates are excluded: they are inline-styled layout tables in a mail client.
+
+## Tabs (LC-747)
+
+There is exactly **one** tablist controller: `server/assets/tabs.js`, loaded in `base.html` before its consumers and precached by `sw.js`. It exposes `window.lcInitTabs(root, storageKey)`; the settings page, the enclave settings page and the room-info page each call it with their own root and key (`lc-settings-tab`, `lc-enclave-tab`, `lc-roominfo-tab`) so the three remember their tab independently.
+
+Markup contract: `[data-lc-tab="<key>"]` triggers with `role="tab"`, `[data-lc-tabpanel="<key>"]` panels with `role="tabpanel"`, all inside the root. Panels stay in the DOM so their htmx wiring survives; the controller only toggles `hidden`, `aria-selected` and the roving tabindex.
+
+- The initial tab is the URL hash, then the `sessionStorage` value, then whichever tab the server pre-rendered as `aria-selected="true"`, then the first.
+- On `hashchange`, only a hash that names a tab moves the panel. Following an in-page anchor to anything else leaves the visible panel alone. The three copies this replaced had already drifted on exactly this point: `settings.js` re-ran its full fallback chain on every `hashchange`, so an unrelated anchor silently reset the user to the remembered or first tab.
+- Arrow keys wrap in both directions, `Home` and `End` jump to the ends, and the moved-to tab takes focus.
+- `ci-build/check-single-tab-controller.nu` (wired into `just check` and the Check workflow) rejects any `[data-lc-tab]` reference in an asset other than `tabs.js`, and checks that each consumer calls `window.lcInitTabs`, that `base.html` loads the file, and that `sw.js` precaches it.
 
 ## Result listboxes (LC-736)
 

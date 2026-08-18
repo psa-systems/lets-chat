@@ -37,6 +37,7 @@ const PRECACHE_URLS = [
   '/assets/vendor/htmx.min.js?v=' + ASSET_VERSION,
   '/assets/vendor/htmx-ext-ws.js?v=' + ASSET_VERSION,
   '/assets/vendor/idiomorph.min.js?v=' + ASSET_VERSION,
+  '/assets/tabs.js?v=' + ASSET_VERSION,
 ];
 
 const OFFLINE_URL = '/assets/offline.html';

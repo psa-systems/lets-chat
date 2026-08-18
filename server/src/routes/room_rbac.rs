@@ -266,8 +266,8 @@ fn saved_toggle(room_id: i64, field: &'static str, enabled: bool) -> SettingsTog
         ),
     };
     SettingsToggleFragment {
-        room_id,
-        field,
+        action: format!("/room/{room_id}/{field}"),
+        name: "enabled",
         enabled,
         aria_label: translate_current(aria),
         on_label: translate_current(on_l),

@@ -366,27 +366,27 @@
                 hx-post="/settings" hx-target="#st-prefs" hx-swap="innerHTML"
                 hx-disabled-elt="find button[type=submit]" class="lc-set-form">
             <label class="lc-toggle">
-              <input type="checkbox" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-read-receipts"|t }}</span></span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="is_profile_public" value="1" {% if user.is_profile_public %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="is_profile_public" value="1" {% if user.is_profile_public %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-public-profile"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-public-profile-help"|t }}</span></span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-browser-notify"|t }}</span></span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-sound"|t }}</span></span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_push_enabled" value="1" {% if user.notify_push_enabled %}checked{% endif %}{% if !push_available %} disabled{% endif %}>
+              <input type="checkbox" role="switch" name="notify_push_enabled" value="1" {% if user.notify_push_enabled %}checked{% endif %}{% if !push_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-push"|t }}</span>{% if !push_available %}<span class="lc-toggle-desc">{{ "settings-pref-push-unavailable-prefix"|t }} <code class="font-mono">LETS_CHAT_SECRET_KEY</code> {{ "settings-pref-push-unavailable-suffix"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-push-available"|t }}</span>{% endif %}</span>
             </label>
@@ -408,23 +408,23 @@
             </div>
             {% endif %}
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_email_digest_enabled" value="1" {% if user.notify_email_digest_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <input type="checkbox" role="switch" name="notify_email_digest_enabled" value="1" {% if user.notify_email_digest_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-digest"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-digest-help"|t }}</span>{% endif %}</span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_login_alerts_enabled" value="1" {% if user.notify_login_alerts_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <input type="checkbox" role="switch" name="notify_login_alerts_enabled" value="1" {% if user.notify_login_alerts_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-login-alerts"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-login-alerts-help"|t }}</span>{% endif %}</span>
             </label>
             <label class="lc-toggle">
-              <input type="checkbox" name="notify_email_activity_enabled" value="1" {% if user.notify_email_activity_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
+              <input type="checkbox" role="switch" name="notify_email_activity_enabled" value="1" {% if user.notify_email_activity_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-activity"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-activity-help"|t }}</span>{% endif %}</span>
             </label>
             {# LC-526 follow-up: opt out of the public kudos leaderboard. #}
             <label class="lc-toggle">
-              <input type="checkbox" name="kudos_leaderboard_opt_out" value="1" {% if kudos_opt_out %}checked{% endif %}>
+              <input type="checkbox" role="switch" name="kudos_leaderboard_opt_out" value="1" {% if kudos_opt_out %}checked{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
               <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-kudos-optout"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-kudos-optout-help"|t }}</span></span>
             </label>

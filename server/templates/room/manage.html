@@ -100,8 +100,8 @@
       <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
       {% endif %}
       {# LC-677: self-re-rendering toggle (see partials/settings_toggle.html). #}
-      {% let room_id = room.id %}
-      {% let field = "assistant" %}
+      {% let action = "/room/{}/assistant"|format(room.id) %}
+      {% let name = "enabled" %}
       {% let enabled = assistant_enabled %}
       {% let aria_label = "room-assistant-heading"|t %}
       {% let on_label = "room-assistant-on-label"|t %}
@@ -121,8 +121,8 @@
       {% if !assistant_available %}
       <p class="lc-set-help">{{ "room-assistant-unconfigured"|t }}</p>
       {% endif %}
-      {% let room_id = room.id %}
-      {% let field = "digest" %}
+      {% let action = "/room/{}/digest"|format(room.id) %}
+      {% let name = "enabled" %}
       {% let enabled = digest_enabled %}
       {% let aria_label = "room-digest-heading"|t %}
       {% let on_label = "room-digest-on-label"|t %}
@@ -140,8 +140,8 @@
         <p class="lc-set-card-desc">{{ "room-stage-intro"|t }}</p>
       </div>
       <p class="lc-set-help">{{ "room-stage-audio-note"|t }}</p>
-      {% let room_id = room.id %}
-      {% let field = "stage" %}
+      {% let action = "/room/{}/stage"|format(room.id) %}
+      {% let name = "enabled" %}
       {% let enabled = stage_enabled %}
       {% let aria_label = "room-stage-heading"|t %}
       {% let on_label = "room-stage-on-label"|t %}
