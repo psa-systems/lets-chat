@@ -15,6 +15,7 @@
     </div>
     <input type="search" data-lc-gif-search name="q"
            placeholder="{{ "gif-search-placeholder"|t }}"
+           aria-label="{{ "gif-search-placeholder"|t }}"
            autocomplete="off"
            hx-get="/api/gifs"
            hx-trigger="input changed delay:350ms, lcgifopen"

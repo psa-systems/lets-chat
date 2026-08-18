@@ -5,7 +5,7 @@
 {% block main %}
 <header class="lc-header">
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">{{ enclave.name }} <span class="text-content-subtle font-normal">{{ "enclave-settings-title"|t }}</span></h1>
+    <h1 class="lc-h1 truncate">{{ enclave.name }} <span class="text-content-subtle font-normal">{{ "enclave-settings-title"|t }}</span></h1>
   </div>
   <a href="/enclave/{{ enclave.id }}" class="btn btn-secondary btn-sm flex-none">{{ "enclave-settings-back"|t }}</a>
 </header>
@@ -138,6 +138,7 @@
             <input
               name="q"
               placeholder="{{ "enclave-invite-placeholder"|t }}"
+              aria-label="{{ "enclave-invite-placeholder"|t }}"
               hx-get="/enclave/{{ enclave.id }}/invite/search"
               hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
               hx-target="#enclave-invite-results"
@@ -255,7 +256,7 @@
             <li class="flex items-center justify-between gap-2 py-2 first:pt-0">
               <div class="min-w-0">
                 <div class="text-sm truncate" title="{{ b.user_id }}">{{ b.label }}</div>
-                <div class="text-xs text-content-muted">{% if let Some(r) = b.reason %}{{ r }} - {% endif %}{{ b.banned_at }}</div>
+                <div class="text-xs text-content-muted">{% if let Some(r) = b.reason %}{{ r }} - {% endif %}<time datetime="{{ b.banned_at|iso }}" title="{{ b.banned_at }}">{{ b.banned_at }}</time></div>
               </div>
               <form method="post" action="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban" class="flex flex-wrap items-center gap-2"
                     hx-post="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
@@ -377,7 +378,7 @@
               <details class="text-xs">
                 <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
                 <div class="relative mt-2">
-                  <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}"
+                  <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}" aria-label="{{ "enclave-settings-group-search-placeholder"|t }}"
                     hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
                     hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
                     hx-target="#group-{{ g.id }}-add-results" hx-swap="innerHTML"

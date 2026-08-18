@@ -258,7 +258,7 @@
         <tbody>
           {% for d in imap_recent_drops %}
           <tr class="border-b border-border">
-            <td class="py-1 pr-3 font-mono whitespace-nowrap">{{ d.dropped_at }}</td>
+            <td class="py-1 pr-3 font-mono whitespace-nowrap"><time datetime="{{ d.dropped_at|iso }}" title="{{ d.dropped_at }}">{{ d.dropped_at }}</time></td>
             <td class="py-1 pr-3 font-mono">{{ d.reason }}</td>
             <td class="py-1 pr-3 font-mono">{% if let Some(u) = d.uid %}{{ u }}{% else %}-{% endif %}</td>
             <td class="py-1">{% if let Some(detail) = d.detail %}{{ detail }}{% else %}-{% endif %}</td>

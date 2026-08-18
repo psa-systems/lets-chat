@@ -6,7 +6,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">{{ "room-feeds-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "room-feeds-heading"|t }}</h1>
     <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-content-muted">
@@ -64,8 +64,8 @@
         {% for f in feeds %}
         <tr>
           <td class="uppercase">{{ f.kind }}</td>
-          <td class="text-content-muted">{{ f.created_at }}</td>
-          <td class="text-content-muted">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+          <td class="text-content-muted"><time datetime="{{ f.created_at|iso }}" title="{{ f.created_at }}">{{ f.created_at }}</time></td>
+          <td class="text-content-muted">{% if let Some(at) = f.last_fetched_at %}<time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %}{{ "room-table-never"|t }}{% endif %}</td>
           <td>{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
           <td class="lc-table-actions">
             {% if !f.revoked %}

@@ -13,7 +13,7 @@
      (code blocks, lists, paragraphs) is fully visible and editable instead of
      being clipped to its first line. Ctrl/Cmd+Enter saves, so a plain Enter can
      insert a newline. #}
-  <textarea name="body" autofocus rows="3"
+  <textarea name="body" autofocus rows="3" aria-label="{{ "room-edit-message-label"|t }}"
     onkeydown="if (event.key === 'Escape') { event.preventDefault(); var c = this.form.querySelector('button[hx-get]'); if (c) c.click(); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); this.form.requestSubmit(); }"
     class="input">{{ current_body }}</textarea>
   <div class="text-xs mt-1 flex gap-2">

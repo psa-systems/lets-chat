@@ -3,6 +3,8 @@
 
 ## Shared
 room-save = Save
+# LC-746: accessible name for the inline message editor's textarea.
+room-edit-message-label = Edit message
 room-cancel = Cancel
 
 ## Composer

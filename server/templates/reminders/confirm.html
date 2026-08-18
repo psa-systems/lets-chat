@@ -5,7 +5,7 @@
   <div class="w-80 rounded-lg bg-surface-elevated p-5 shadow-xl text-center">
     <div class="text-2xl mb-2" aria-hidden="true">⏰</div>
     <p class="text-sm text-content-muted">{{ "reminders-set-for"|t }}</p>
-    <p class="font-semibold">{{ remind_at }} UTC</p>
+    <p class="font-semibold"><time datetime="{{ remind_at|iso }}" title="{{ remind_at }}">{{ remind_at }}</time> UTC</p>
     <p class="mt-2 text-xs text-content-muted">
       {{ "reminders-manage-prefix"|t }} <a href="/reminders" class="text-accent hover:underline">{{ "reminders-manage-link"|t }}</a> {{ "reminders-manage-suffix"|t }}
     </p>

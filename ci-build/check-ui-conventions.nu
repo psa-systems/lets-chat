@@ -50,6 +50,18 @@ const DIVIDE_COLOR = 'divide-(border|accent|danger|success|warning|transparent|c
 # `.lc-display` (main.css), not from a per-page pick out of six.
 const H1_RAW_SIZE = '<h1[^>]*text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)'
 
+# LC-746: the other half of the same rule. An `<h1>` with no size utility at all
+# still renders at the 1rem body size, because Tailwind's preflight resets it to
+# `font-size: inherit`; the class has to be on the element, not merely absent.
+const H1_TAG = '<h1[\s>]'
+const H1_ON_SCALE = '<h1[^>]*class="[^"]*\b(lc-h1|lc-display)\b'
+
+# LC-746: a rendered timestamp is a `<time>` with a machine-readable `datetime`
+# (`{{ x|iso }}`), so assistive technology gets the instant and the LC-314
+# relative-time upgrade can key on it. Same pattern as the issue's acceptance
+# grep; a line carrying `<time` has already been converted.
+const BARE_TIMESTAMP = '\{\{ *[a-z_.]*_at[a-z_.()]* *\}\}'
+
 const EM_DASH = "\u{2014}"
 
 # LC-748: the service worker's offline fallback. It is a standalone document
@@ -169,11 +181,50 @@ def clipping-table-wrappers [] {
     }
 }
 
-def raw-h1-sizes [] {
+def app-h1-files [] {
     # landing.html is a marketing hero deliberately outside the app scale
     # (LC-746 states the same exclusion).
-    let files = (template-files | where {|f| ($f | path basename) != "landing.html" })
-    scan-lines $files $H1_RAW_SIZE
+    template-files | where {|f| ($f | path basename) != "landing.html" }
+}
+
+def raw-h1-sizes [] {
+    scan-lines (app-h1-files) $H1_RAW_SIZE
+}
+
+def h1-off-the-scale [] {
+    (app-h1-files) | each {|file|
+        open --raw $file
+        | decode utf-8
+        | lines
+        | enumerate
+        | where {|row| ($row.item =~ $H1_TAG) and ($row.item !~ $H1_ON_SCALE) }
+        | each {|row| $"($file):($row.index + 1): ($row.item | str trim)" }
+    } | flatten
+}
+
+# One `<h1>` per template: the page header bar already renders the page title, so
+# a second one in a body branch gives the page two competing top-level headings.
+def extra-h1s [] {
+    template-files | each {|file|
+        let hits = (
+            open --raw $file
+            | decode utf-8
+            | lines
+            | enumerate
+            | where {|row| $row.item =~ $H1_TAG }
+        )
+        let total = ($hits | reduce --fold 0 {|row, acc| $acc + (($row.item | split row --regex $H1_TAG | length) - 1) })
+        if $total > 1 {
+            $hits | each {|row| $"($file):($row.index + 1): ($row.item | str trim)" }
+        } else {
+            []
+        }
+    } | flatten
+}
+
+def bare-timestamps [] {
+    scan-lines (template-files) $BARE_TIMESTAMP
+    | where {|hit| not ($hit | str contains "<time") }
 }
 
 def offline-brand-name [] {
@@ -221,9 +272,27 @@ def rules [] {
         }
         {
             id: "no-raw-h1-sizes"
-            pending: "LC-746"
+            pending: null
             fix: "put the page title on `.lc-h1` (or `.lc-display` on a standalone centered page); a raw size utility is how 36 h1 elements ended up rendering at six sizes (LC-746)"
             check: {|| raw-h1-sizes }
+        }
+        {
+            id: "h1-on-the-scale"
+            pending: null
+            fix: "give the `<h1>` a `class` carrying `lc-h1` (a page with a header bar) or `lc-display` (a standalone centered page: error, not-found, maintenance, the two auth pages); with no class it inherits the 1rem body size (LC-746)"
+            check: {|| h1-off-the-scale }
+        }
+        {
+            id: "one-h1-per-template"
+            pending: null
+            fix: "keep a single top-level heading per page; demote the extra one to `<h2 class=\"lc-display\">`, which is what home/welcome.html's welcome hero does (LC-746)"
+            check: {|| extra-h1s }
+        }
+        {
+            id: "timestamps-are-time-elements"
+            pending: null
+            fix: "render a timestamp as `<time datetime=\"{{ x|iso }}\" title=\"{{ x }}\">{{ x }}</time>`; a bare string gives assistive technology no machine-readable instant and cannot take the LC-314 relative-time upgrade. Add `data-lc-ts` on the seven feed-like surfaces (activity, inbox, pins, saved, related, search results, transcripts list) and leave it off the admin audit tables, where the exact stamp is the point (LC-746)"
+            check: {|| bare-timestamps }
         }
         {
             id: "offline-page-brand-name"

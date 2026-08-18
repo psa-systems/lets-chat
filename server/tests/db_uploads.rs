@@ -151,7 +151,7 @@ async fn waveform_round_trips_through_attachment_load() {
     assert_eq!(a.waveform.as_deref(), Some(&[0.0, 0.5, 1.0][..]));
     assert_eq!(a.waveform_csv(), "0.000,0.500,1.000");
     assert_eq!(a.voice_duration, Some(1.5));
-    assert_eq!(a.duration_attr(), "1.500");
+    assert_eq!(a.duration_secs(), "1.500");
 }
 
 #[tokio::test]

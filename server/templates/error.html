@@ -34,7 +34,7 @@
     </div>
     <div class="space-y-1">
       <p class="font-mono text-xs text-content-subtle">{{ status }}</p>
-      <h1 class="text-xl font-semibold {% if status >= 500 %}text-danger{% else %}text-warning{% endif %}">{{ status_heading }}</h1>
+      <h1 class="lc-display {% if status >= 500 %}text-danger{% else %}text-warning{% endif %}">{{ status_heading }}</h1>
     </div>
     {# LC-552: friendly, human description keyed by the error variant - always
        present, so even a bare 404 / 403 reads as real copy. #}

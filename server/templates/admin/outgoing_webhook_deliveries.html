@@ -38,8 +38,8 @@
           {% else if d.status_kind() == "warn" %}<span class="font-medium text-warning">{{ d.status_display() }}</span>
           {% else %}<span class="text-content-subtle">{{ "admin-deliveries-pending"|t }}</span>{% endif %}
         </td>
-        <td class="text-xs text-content-muted">{{ d.scheduled_at }}</td>
-        <td class="text-xs text-content-muted">{% if let Some(at) = d.delivered_at %}{{ at }}{% else %}-{% endif %}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ d.scheduled_at|iso }}" title="{{ d.scheduled_at }}">{{ d.scheduled_at }}</time></td>
+        <td class="text-xs text-content-muted">{% if let Some(at) = d.delivered_at %}<time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %}-{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

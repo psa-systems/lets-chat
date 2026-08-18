@@ -11,7 +11,7 @@
   </div>
   {% endif %}
   <header>
-    <h1 class="text-2xl font-semibold">{{ "enclave-discover-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "enclave-discover-heading"|t }}</h1>
     <p class="text-content-muted mt-1">{{ "enclave-discover-subtitle"|t }}</p>
   </header>
 
@@ -22,7 +22,7 @@
         <span class="text-content-muted">{{ "enclave-discover-name-placeholder"|t }}{% include "partials/required_mark.html" %}</span>
         <input name="name" class="mt-1 w-full border rounded px-2 py-1" required aria-required="true">
       </label>
-      <input name="description" placeholder="{{ "enclave-discover-description-placeholder"|t }}" class="w-full border rounded px-2 py-1">
+      <input name="description" placeholder="{{ "enclave-discover-description-placeholder"|t }}" aria-label="{{ "enclave-discover-description-placeholder"|t }}" class="w-full border rounded px-2 py-1">
       <button type="submit" class="bg-accent text-accent-content rounded px-3 py-1">{{ "enclave-discover-create-button"|t }}</button>
     </form>
   </section>
