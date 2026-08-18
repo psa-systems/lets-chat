@@ -77,8 +77,8 @@ check-revoke-confirm:
 
 # The convention classes the 2026-08-11 UI audit closed, held closed: palette
 # literals in templates, fake link buttons, open-coded .btn-danger-outline,
-# untokenized borders, clipping table wrappers, raw h1 sizes, and the em-dash
-# ban (LC-749).
+# untokenized borders, clipping table wrappers, raw h1 sizes, the offline
+# page's mode bootstrap and brand name, and the em-dash ban (LC-749).
 [group('check')]
 check-ui-conventions:
     nu ci-build/check-ui-conventions.nu

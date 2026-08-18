@@ -284,7 +284,7 @@ self.addEventListener('push', (event) => {
       try { return new URL(c.url).pathname === target; } catch (e) { return false; }
     });
     if (onTarget) return; // user is already reading the room
-    return self.registration.showNotification(payload.title || 'lets-chat', {
+    return self.registration.showNotification(payload.title || "Let's Chat", {
       body: payload.body || '',
       icon: payload.icon,
       tag: payload.tag,
