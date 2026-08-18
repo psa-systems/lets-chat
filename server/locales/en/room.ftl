@@ -121,6 +121,7 @@ room-table-never = never
 room-table-active = active
 room-table-revoked = revoked
 room-table-revoke = Revoke
+room-table-revoke-confirm = Revoke this credential? Every integration using it stops working immediately and it cannot be restored.
 
 ## Files
 room-files-empty = No files match this filter.

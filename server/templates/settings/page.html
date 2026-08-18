@@ -541,7 +541,7 @@
               <form method="post" action="/settings/sessions/{{ s.id }}/revoke"
                     hx-post="/settings/sessions/{{ s.id }}/revoke" hx-target="closest .lc-set-session"
                     hx-swap="outerHTML" hx-disabled-elt="find button">
-                <button type="submit" class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface">{{ "action-revoke"|t }}</button>
+                <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "settings-session-revoke-confirm"|t }}')">{{ "action-revoke"|t }}</button>
               </form>
               {% endif %}
             </div>

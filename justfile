@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-locale-ellipsis check-boolean-settings check-single-tab-controller check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-table-scroll check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets, and untokenized backgrounds on the [aria-selected="true"]
@@ -62,6 +62,12 @@ check-boolean-settings:
 [group('check')]
 check-single-tab-controller:
     nu ci-build/check-single-tab-controller.nu
+
+# Every revoke control asks first; a revoke is irreversible and breaks every
+# integration using the credential (LC-738).
+[group('check')]
+check-revoke-confirm:
+    nu ci-build/check-revoke-confirm.nu
 
 # Check server compilation (standalone)
 [group('check')]
