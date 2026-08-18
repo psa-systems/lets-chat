@@ -20,7 +20,8 @@
   </header>
   <div class="flex-1 min-w-0 overflow-y-auto p-2">
     {% if items.is_empty() %}
-    <p class="p-3 text-sm text-content-muted">{{ "related-empty"|t }}</p>
+    {% let empty_text_key = "related-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <div role="list" class="flex flex-col gap-1">
       {% for it in items %}

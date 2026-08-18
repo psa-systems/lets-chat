@@ -39,12 +39,16 @@ const PALETTE_ALLOW = "lc-allow-palette"
 # Character-for-character what `.btn-danger-outline` (main.css) expands to.
 const DANGER_OUTLINE = "text-danger border border-danger-border hover:bg-danger-surface"
 
-# A border utility paints Tailwind's `colors.gray[200]` default unless a color
-# token comes with it: fixed light grey in all four modes and every palette.
+# A border utility used to paint Tailwind's `colors.gray[200]` default - a fixed
+# light grey in all four modes and every palette. LC-744 set `borderColor.DEFAULT`
+# to `var(--border)`, so that is no longer the failure mode; the rule stays
+# because a template that names its border color cannot be silently repainted by
+# a later config change, and because `.card` / `.input` already carry the right
+# one. A numbered palette color counts as named here and is LC-741's rule, not
+# this one.
 const BARE_BORDER = '(^| )(border|border-[0-9]+|border-[trblxy](-[0-9]+)?)( |$)'
-const BORDER_COLOR = 'border-(border|accent|danger|success|warning|transparent|current)'
 const BARE_DIVIDE = '(^| )divide-[xy](-[0-9]+)?( |$)'
-const DIVIDE_COLOR = 'divide-(border|accent|danger|success|warning|transparent|current)'
+const COLOR_NAMES = "border|accent|danger|success|warning|star|transparent|current|inherit|black|white"
 
 # Raw size utilities on an `<h1>`: the page-title size comes from `.lc-h1` or
 # `.lc-display` (main.css), not from a per-page pick out of six.
@@ -61,6 +65,30 @@ const H1_ON_SCALE = '<h1[^>]*class="[^"]*\b(lc-h1|lc-display)\b'
 # relative-time upgrade can key on it. Same pattern as the issue's acceptance
 # grep; a line carrying `<time` has already been converted.
 const BARE_TIMESTAMP = '\{\{ *[a-z_.]*_at[a-z_.()]* *\}\}'
+
+# LC-744: the shared components that shipped and were then not adopted. These
+# three rules guard what that issue deleted or converted, so none of it reopens
+# the way it did between LC-557 / LC-561 / LC-562 and the 2026-08-11 audit.
+#
+# The deleted names: a second empty-state component that duplicated `.lc-empty`,
+# a sixth page width at the same 48rem as `.lc-page-medium`, and the three
+# explicit table sub-classes whose only user was the dev gallery. The sweep reads
+# the templates and both stylesheets, so a name is gone only when neither the
+# markup nor the CSS mentions it - prose in this repo says "head / row / cell
+# sub-classes" rather than spelling them.
+const DEAD_CLASSES = ['lc-tx-empty' 'lc-admin-narrow' 'lc-table-head' 'lc-table-cell' 'lc-table-row']
+
+# A page's content column takes its width from `.lc-page-narrow/medium/wide`, not
+# from a per-page `max-w-*`. landing.html is a marketing page with a deliberately
+# wider grid and is out of scope (LC-744 states the same exclusion).
+const CENTERED_WIDTH = 'mx-auto[^"]*max-w-|max-w-[a-z0-9]+[^"]*mx-auto'
+
+# A bordered soft-surface box IS `.alert`. A pill (`rounded-full`) and an edge
+# rule (`border-b` with no all-sides `border`) are different components and do
+# not match: the pair that identifies a callout is an all-sides border plus the
+# matching `-surface` / `-border` token pair.
+const CALLOUT_TONES = ["success" "warning" "danger"]
+const ALL_SIDES_BORDER = '(^| )border( |$)'
 
 const EM_DASH = "\u{2014}"
 
@@ -163,12 +191,17 @@ def palette-in-templates [] {
     } | flatten
 }
 
+# `border-border`, `border-danger-border`, `border-slate-700`, `border-black`.
+def color-pattern [prefix: string] {
+    $"($prefix)-\(\(($COLOR_NAMES)\)|\(($HUES)\)-[0-9]{2,3}\)"
+}
+
 def bare-border [value: string] {
-    ($value =~ $BARE_BORDER) and ($value !~ $BORDER_COLOR)
+    ($value =~ $BARE_BORDER) and ($value !~ (color-pattern "border"))
 }
 
 def bare-divide [value: string] {
-    ($value =~ $BARE_DIVIDE) and ($value !~ $DIVIDE_COLOR)
+    ($value =~ $BARE_DIVIDE) and ($value !~ (color-pattern "divide"))
 }
 
 def untokenized-borders [] {
@@ -222,6 +255,30 @@ def extra-h1s [] {
     } | flatten
 }
 
+# The dead class names, swept over the templates AND the two stylesheets: a
+# removal only holds if neither the markup nor the CSS brings the name back.
+def dead-classes [] {
+    let files = (template-files | append ["server/assets/main.css" "server/assets/tailwind.css"])
+    $DEAD_CLASSES | each {|name| scan-lines $files $name } | flatten | sort
+}
+
+def per-page-widths [] {
+    let files = (template-files | where {|f| ($f | path basename) != "landing.html" })
+    scan-lines $files $CENTERED_WIDTH
+}
+
+def hand-rolled-callouts [] {
+    scan-class-attrs (template-files) {|value|
+        if ($value =~ '(^| )alert( |$)') or ($value =~ 'rounded-full') { return false }
+        if ($value !~ $ALL_SIDES_BORDER) { return false }
+        # Unprefixed only: a `hover:` fill is an outline button (LC-743), not a
+        # callout, and it is that rule's to own.
+        ($CALLOUT_TONES | any {|tone|
+            ($value =~ $"\(^| \)bg-($tone)-surface\( |$\)") and ($value =~ $"\(^| \)border-($tone)-border\( |$\)")
+        })
+    }
+}
+
 def bare-timestamps [] {
     scan-lines (template-files) $BARE_TIMESTAMP
     | where {|hit| not ($hit | str contains "<time") }
@@ -260,9 +317,27 @@ def rules [] {
         }
         {
             id: "no-untokenized-borders"
-            pending: "LC-744"
-            fix: "add a border color token (`border-border`, `divide-border`, ...) or use `.card` / `.input`; a bare border resolves to Tailwind's gray-200 default, which is brighter than the panel it borders in dark mode (LC-744)"
+            pending: null
+            fix: "add a border color token (`border-border`, `divide-border`, ...) or use `.card` / `.input`; `borderColor.DEFAULT` in tailwind.config.js is the backstop, and naming the color at the call site is what keeps a config change from repainting the element silently (LC-744)"
             check: {|| untokenized-borders }
+        }
+        {
+            id: "no-superseded-component-classes"
+            pending: null
+            fix: "these class names were deleted by LC-744 because a shared component already covered them: the transcript-list empty state is partials/empty_state.html, the admin form width is `lc-page-medium lc-page-stack`, and a table is bare `<th>` / `<td>` inside `.lc-table` (main.css). Re-adding one restores the duplicate this issue removed"
+            check: {|| dead-classes }
+        }
+        {
+            id: "page-width-from-a-helper"
+            pending: null
+            fix: "center a content column with `lc-page-narrow` (login / error / short forms), `lc-page-medium` (settings and content) or `lc-page-wide` (admin tables), not a per-page `mx-auto max-w-*`; landing.html is the one marketing page excluded (LC-744)"
+            check: {|| per-page-widths }
+        }
+        {
+            id: "no-hand-rolled-callouts"
+            pending: null
+            fix: "an all-sides bordered box on a `-surface` / `-border` token pair is `.alert` plus `alert-success` / `alert-warning` / `alert-danger` (tailwind.css); the hand-rolled copies differed from it by 2px and 4px of padding and by one radius step (LC-744)"
+            check: {|| hand-rolled-callouts }
         }
         {
             id: "no-clipping-table-wrappers"

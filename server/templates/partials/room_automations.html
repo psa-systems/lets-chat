@@ -11,7 +11,8 @@
   </div>
 
   {% if automations.is_empty() %}
-  <p class="lc-set-help">{{ "room-automations-empty"|t }}</p>
+  {% let empty_text_key = "room-automations-empty" %}
+  {% include "partials/empty_state.html" %}
   {% else %}
   <ul class="divide-y divide-border">
     {% for a in automations %}

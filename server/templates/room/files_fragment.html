@@ -13,7 +13,8 @@ HTMX swaps via the originating `hx-target="#files-load-more"`.
 {% let card_room_id = room_id %}
 {% if !append %}
   {% if files.is_empty() %}
-  <p class="text-sm text-content-muted italic">{{ "room-files-empty"|t }}</p>
+  {% let empty_text_key = "room-files-empty" %}
+  {% include "partials/empty_state.html" %}
   {% else %}
   <div id="files-grid-rows" class="grid grid-cols-2 md:grid-cols-3 gap-3">
     {% for f in files %}

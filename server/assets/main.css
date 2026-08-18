@@ -4937,8 +4937,9 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
 .lc-admin-desc { font-size: 0.875rem; line-height: 1.4; color: var(--content-muted); }
 .lc-admin-header > .lc-toolbar { margin-top: 0.625rem; }
 .lc-admin-main { flex: 1 1 auto; padding: 1.5rem 1.25rem 4rem; }
-/* A redesigned page caps form content; tables stay full-width. */
-.lc-admin-narrow { max-width: 48rem; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 1.25rem; }
+/* LC-744: the admin form pages had their own width helper here, a sixth page
+   width at the same 48rem as `.lc-page-medium` (tailwind.css). They now use
+   `.lc-page-medium .lc-page-stack`; tables stay full-width. */
 
 /* LC-510: shared admin table. Wrap in `.card.lc-table-wrap` so rows go edge
    to edge; cells provide the padding. Reused across the admin list pages. */
@@ -5356,19 +5357,9 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     cursor: pointer;
     user-select: none;
 }
-/* Friendly empty state. */
-.lc-tx-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 3rem 1rem;
-    text-align: center;
-    color: var(--content-muted);
-}
-.lc-tx-empty-ico { height: 2.5rem; width: 2.5rem; color: var(--content-subtle); }
-.lc-tx-empty-title { font-size: 0.875rem; color: var(--content-muted); max-width: 22rem; }
+/* LC-744: the transcript list had its own empty-state component here, a second
+   copy of `.lc-empty` twenty lines below it that differed only in its numbers.
+   The list now renders partials/empty_state.html like every other surface. */
 @media (prefers-reduced-motion: reduce) {
     .lc-tx-row, .lc-tx-del { transition: none; }
 }

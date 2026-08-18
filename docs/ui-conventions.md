@@ -50,7 +50,7 @@ That split is a decision, not an omission: an audit row is evidence, and "2 days
 
 Every color comes from the semantic tokens in `server/tailwind.config.js` (`text-content`, `text-content-muted`, `text-content-subtle`, `bg-surface{,-elevated,-sunken}`, `border-border`, `text-danger`, ...), which resolve to the CSS vars in `server/assets/main.css` and so recolor across all four modes (`light`, `dark`, `hc-light`, `hc-dark`) and every palette. A raw numbered utility like `text-slate-700` is fixed for all four, so it survives review in the mode it was written for and goes unreadable in the others.
 
-`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically in two places, both of them states that theme testing rarely reaches:
+`tailwind.config.js` uses `extend`, not an override, so the raw palette still compiles: nothing stops a raw shade except the review. One default IS overridden: `borderColor.DEFAULT` is `var(--border)` (LC-744), because a bare `border` / `border-t` / `divide-y` otherwise resolves to `colors.gray[200]`, a fixed light grey that reads brighter than the `#0b2542` panel it outlines in every dark mode. That is a backstop, not a licence: the gate below still requires the call site to name its border color, so a later config change cannot repaint an element silently. The convention applies to every surface. `ci-build/check-asset-color-tokens.nu` (wired into `just check` and the Check workflow) enforces it mechanically in two places, both of them states that theme testing rarely reaches:
 
 - `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row).
 - Every `[aria-selected="true"]` rule in `server/assets/main.css`, which must paint its background from a `var(--...)` token. That is the selection highlight, only visible mid-keyboard-navigation; LC-736 found it hard-coded to `rgb(241 245 249)` there, outranking the tokenized `.lc-search-row` rule.
@@ -196,7 +196,7 @@ Bind these names with `{% let %}` and include the partial; put any help text aft
 
 ## Data tables (LC-510, LC-737, LC-745)
 
-Every record list is `<div class="card lc-table-wrap">` around `<table class="lc-table">`, with bare `<th>` and `<td>`. `.lc-table` (`main.css`) owns the cell padding, the header color, the row rules and the hover; the actions column is `class="lc-table-actions"` on both the header cell and the body cell (right-aligned, `white-space: nowrap`). `admin/invites.html` is the reference. A list scoped to a room reads the same as the server-wide one because both are the same component, not because someone matched the utilities by eye.
+Every record list is `<div class="card lc-table-wrap">` around `<table class="lc-table">`, with bare `<th>` and `<td>`. `.lc-table` (`main.css`) owns the cell padding, the header color, the row rules and the hover, and it is declared in exactly one place: `tailwind.css` used to declare the same class name a second time, with explicit head / row / cell sub-classes, and because `base.html` loads `main.css` second the sub-classes styled nothing outside the dev gallery (deleted in LC-744); the actions column is `class="lc-table-actions"` on both the header cell and the body cell (right-aligned, `white-space: nowrap`). `admin/invites.html` is the reference. A list scoped to a room reads the same as the server-wide one because both are the same component, not because someone matched the utilities by eye.
 
 `.lc-table-wrap` is `overflow-x: auto` in `main.css`, so the rows still go edge to edge and the card's rounded corners still clip them (a scroll container on one axis is a clipping context on the other), but a table wider than the viewport scrolls instead of hiding its trailing columns.
 
@@ -204,7 +204,47 @@ Every record list is `<div class="card lc-table-wrap">` around `<table class="lc
 - Never put a padding utility on a `<th>` or `<td>`. The three room integration tables hand-rolled `py-2` headers and `py-1` cells, which is a row 6px shorter than every admin table; the component is the one place row height is decided.
 - An empty list is `partials/empty_state.html` under the page heading, not a `colspan` row inside a table with no data in it.
 - `ci-build/check-table-scroll.nu` rejects any `<table>` whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. `ci-build/check-table-shape.nu` rejects a `<table>` that is not `.lc-table`, an `.lc-table` outside a `.card` wrapper, and a padding utility on any cell inside one. Both are wired into `just check` and the Check workflow; both exclude the email templates, which are inline-styled layout tables in a mail client.
-- Three tables are named in `check-table-shape.nu`'s exemption list. The component gallery's one-row sample (`dev/theme_gallery.html`) shows the bare component and stays exempt; the cohort-retention heat grid (`admin/analytics.html`) and the IMAP ingress drop log (`admin/settings.html`) are real data tables that were outside LC-745's file set, and moving them onto the shared component is tracked in LC-756.
+- Two tables are named in `check-table-shape.nu`'s exemption list: the cohort-retention heat grid (`admin/analytics.html`) and the IMAP ingress drop log (`admin/settings.html`). Both are real data tables that were outside LC-745's file set, and moving them onto the shared component is tracked in LC-756. The component gallery (`dev/theme_gallery.html`) is no longer exempt: LC-744 put it on the production markup, because a gallery that demonstrates a different contract from the one the 13 real tables use is worse than no gallery.
+
+## Empty states (LC-454, LC-557, LC-744)
+
+An empty collection renders `partials/empty_state.html`: the caller binds the message key and includes it.
+
+```
+{% let empty_text_key = "room-webhooks-empty" %}
+{% include "partials/empty_state.html" %}
+```
+
+That gives one icon, one size and one color everywhere, instead of the six treatments the 2026-08-11 audit found (a `<p>` at four sizes, an italic variant, a padding-less variant, and a `colspan` row at `text-xs text-content-subtle`, the codebase's quietest color at its smallest size on the surface where an operator most needs to see that nothing is configured yet).
+
+For an empty state that carries a call to action, bind two more values and include the block directly; the action then sits inside the same centered column rather than under it.
+
+```
+{% let empty_text_key = "room-webhooks-empty" %}
+{% let empty_action_href = "#room-webhooks-create" %}
+{% let empty_action_key = "room-webhooks-create-button" %}
+{% include "partials/empty_state_block.html" %}
+```
+
+`partials/empty_state.html` is the text-only entry point: it binds the two action values to the empty string and includes the same block. Askama has no optional include parameter, so a value the block reads has to be bound on every path.
+
+## Page widths (LC-562, LC-744)
+
+A content column takes its width from one of three helpers in `tailwind.css`, chosen by role, never from a per-page `max-w-*`:
+
+| Helper | Width | Use for |
+|---|---|---|
+| `lc-page-narrow` | `max-w-lg` | login, error, maintenance, short standalone forms |
+| `lc-page-medium` | `max-w-3xl` | settings-card and content pages |
+| `lc-page-wide` | `max-w-5xl` | admin table pages |
+
+All three centre the column and go full-width on mobile. `lc-page-pad` (`px-4 py-6 sm:px-6`) and `lc-page-stack` (`flex flex-col gap-6`) go with them on the pages that used to hand-write those. Picking the width per page is what left two single-column settings pages in the same sibling group at `max-w-3xl` and `max-w-2xl`. `landing.html` is the one exclusion: it is a marketing page with a deliberately wider grid, and the gate skips it by name.
+
+## Callouts and secret reveals (LC-555, LC-744)
+
+An inline callout is `.alert` plus one of `alert-success` / `alert-warning` / `alert-danger` / `alert-info`, with `role="alert"` on the ones that report a failure or a one-time value. The base class owns the radius, the padding and the `flex items-start gap-2.5` layout; the modifier owns the tokens. Hand-rolled copies of it drifted by 2px and 4px of padding and by one radius step, and three admin templates used the component for the error branch of an `if` and hand-rolled the success branch of the same `if`.
+
+The seven "here is your new secret, copy it now" surfaces (room webhooks / feeds / email inboxes, personal API tokens, admin bots / bridges / outgoing webhooks) all render `partials/secret_reveal.html`, which is that alert plus the monospace value. The caller binds `secret_heading_key` and `secret_value`, and passes `""` for the `secret_subject` / `secret_suffix_key` / `secret_note_key` it does not use.
 
 ## Tabs (LC-747)
 
@@ -271,7 +311,10 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | No palette literals in templates | `server/templates/**/*.html` | a line (or the line above it) carrying an `lc-allow-palette` comment naming why, for the deliberately-dark call stage |
 | No fake link buttons | `<button ... hover:underline>` in templates | none |
 | No open-coded danger outline | the literal `.btn-danger-outline` expansion | none |
-| No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color token | none |
+| No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color | none; a numbered palette color counts as named here and is the palette rule's to reject |
+| No superseded component classes | the class names LC-744 deleted, over the templates and both stylesheets | none |
+| Page width from a helper | `mx-auto` next to a `max-w-*` in a template | `landing.html`, a marketing page with a wider grid |
+| No hand-rolled callouts | an all-sides `border` with a matching `bg-*-surface` + `border-*-border` pair and no `alert` | a pill (`rounded-full`) and an edge rule (`border-b` alone), which are different components |
 | No clipping table wrappers | `card overflow-hidden` under `server/templates/admin/` | none |
 | No raw h1 sizes | `<h1 ... text-lg/xl/2xl/...>` in templates | `landing.html`, a marketing hero outside the app scale |
 | h1 on the scale | an `<h1>` whose `class` carries neither `lc-h1` nor `lc-display` | `landing.html`, as above |

@@ -15,12 +15,12 @@
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "poll-question"|t }}{% include "partials/required_mark.html" %}</span>
         <input type="text" name="question" required aria-required="true" maxlength="300"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "poll-options"|t }}{% include "partials/required_mark.html" %}</span>
         <textarea name="options" rows="4" required aria-required="true"
-                  class="rounded border border-border-strong px-2 py-1"></textarea>
+                  class="input"></textarea>
       </label>
       <label class="flex items-center gap-2 text-sm">
         <input type="checkbox" name="allows_multi"> {{ "poll-allow-multi"|t }}
@@ -31,7 +31,7 @@
       <label class="flex items-center gap-2 text-sm">
         {{ "poll-close-after"|t }}
         <input type="number" name="closes_in" min="0" max="525600" step="1" placeholder="0"
-               class="w-20 rounded border border-border-strong px-2 py-1"> {{ "poll-close-after-suffix"|t }}
+               class="input w-20"> {{ "poll-close-after-suffix"|t }}
       </label>
       <div data-lc-poll-error class="hidden text-sm text-danger" role="alert"></div>
       <div class="flex justify-end gap-2 mt-1">

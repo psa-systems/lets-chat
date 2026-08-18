@@ -208,14 +208,9 @@
   .lc-palette-swatch[data-palette="royal-navy"] .lc-palette-preview { --pp-sidebar:#080f2a; --pp-surface:#f6f8ff; --pp-accent:#1d4ed8; }
   .lc-palette-swatch[data-palette="amethyst"] .lc-palette-preview { --pp-sidebar:#1a1030; --pp-surface:#faf8ff; --pp-accent:#7c3aed; }
 
-  /* LC-541: tokenized data table for the dev theme/component gallery (Task
-     11) and, in a later phase, utility/admin pages. Explicit classes rather
-     than descendant selectors, so a caller marks up only the rows/cells that
-     need it: `.lc-table` (base) > `.lc-table-head` (header cell text)
-     / `.lc-table-row` (body row, hover) / `.lc-table-cell` (cell padding). */
-  .lc-table { width: 100%; border-collapse: collapse; }
-  .lc-table-head { text-align: left; color: var(--content-muted); font-weight: 600; }
-  .lc-table-row { border-bottom: 1px solid var(--border); }
-  .lc-table-row:hover { background: var(--surface-sunken); }
-  .lc-table-cell { padding: 0.5rem 0.75rem; }
+  /* LC-744: the shared data table used to be declared here too, with three
+     explicit head / row / cell sub-classes. main.css loads second and
+     redeclared the same class name with descendant selectors, so that
+     definition always won and the sub-classes styled nothing outside the dev
+     gallery. The one definition now lives in main.css. */
 }
