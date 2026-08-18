@@ -30,6 +30,8 @@ Every color comes from the semantic tokens in `server/tailwind.config.js` (`text
 
 The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (see "Convention gates" below), reporting rather than failing until LC-741 clears the call overlays in `layout.html`.
 
+One surface is deliberately outside the token layer: `server/assets/offline.html`, the service worker's navigation fallback. It is precached and served with the network down, so it can neither link `main.css` nor run the layout's bootstrap. It therefore carries its own copy of the six colors it needs and its own `lc-mode` resolver, mirroring `server/templates/base.html`. Keep the copied values in step with `main.css` when the light or dark ramp moves; the gate below only checks that the page still resolves a mode, not that the hexes still match (LC-748).
+
 ## Page top bars (LC-742)
 
 Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
@@ -235,6 +237,8 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color token | none |
 | No clipping table wrappers | `card overflow-hidden` under `server/templates/admin/` | none |
 | No raw h1 sizes | `<h1 ... text-lg/xl/2xl/...>` in templates | `landing.html`, a marketing hero outside the app scale |
+| Offline page brand name | `lets-chat` in `server/assets/offline.html` and `server/assets/sw.js` | a comment line, which may keep the repo name |
+| Offline page follows the mode | a light-only `color-scheme` in `server/assets/offline.html` | none |
 | One ellipsis glyph, no em dash | U+2026 in the locale catalogs; U+2014 in every tracked text file | vendored assets (`server/assets/vendor/`) |
 
 Email templates are excluded from every template rule: they render in a mail client with no stylesheet, so a Tailwind class there is inert. The U+2026 half lives in `ci-build/check-locale-ellipsis.nu` and the `server/assets/**/*.js` palette rule in `ci-build/check-asset-color-tokens.nu`; both run in the same job.

@@ -3,26 +3,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Offline - lets-chat</title>
+  <title>Offline - Let's Chat</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <!-- Mode bootstrap, mirroring base.html. The service worker serves this file
+       from cache, so it cannot inherit the layout's bootstrap and would
+       otherwise flash light at a dark-mode user. -->
+  <script>
+    (function () {
+      var EXPLICIT = { light: 1, dark: 1, "hc-light": 1, "hc-dark": 1 };
+      var m = document.cookie.match("(?:^|; )lc-mode=([^;]*)");
+      var p = m ? decodeURIComponent(m[1]) : null;
+      // Blocked storage is not a failure here: it means this device has no
+      // saved preference, which is the same answer as an empty one.
+      if (!p) { try { p = localStorage.getItem("lc-mode"); } catch (e) {} }
+      if (!EXPLICIT[p]) {
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        var hc = matchMedia("(prefers-contrast: more)").matches;
+        p = hc ? (dark ? "hc-dark" : "hc-light") : (dark ? "dark" : "light");
+      }
+      document.documentElement.setAttribute("data-mode", p);
+    })();
+  </script>
   <style>
-    :root { color-scheme: light; }
+    /* The six colors this page needs, mirroring the token values in main.css.
+       main.css is deliberately not linked: a precached fallback has to render
+       from cache with no second request. */
+    :root {
+      color-scheme: light dark;
+      --surface:         #f7fbff;
+      --content:         #071426;
+      --content-muted:   #52657a;
+      --accent:          #2563eb;
+      --accent-hover:    #1d4ed8;
+      --accent-content:  #ffffff;
+    }
+    [data-mode="light"], [data-mode="hc-light"] { color-scheme: only light; }
+    [data-mode$="dark"] {
+      color-scheme: dark;
+      --surface:         #071a2f;
+      --content:         #eaf4ff;
+      --content-muted:   #9fb6d0;
+    }
     body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-           font-family: ui-sans-serif, system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+           font-family: ui-sans-serif, system-ui, sans-serif; background: var(--surface); color: var(--content); }
     .card { text-align: center; padding: 2rem; max-width: 24rem; }
-    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 9999px; background: #2563eb; margin: 0 2px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 9999px; background: var(--accent); margin: 0 2px; }
     h1 { font-size: 1.25rem; margin: 1rem 0 0.5rem; }
-    p { color: #475569; font-size: 0.9rem; line-height: 1.4; }
-    button { margin-top: 1.25rem; background: #2563eb; color: #fff; border: 0; border-radius: 0.375rem;
+    p { color: var(--content-muted); font-size: 0.9rem; line-height: 1.4; }
+    button { margin-top: 1.25rem; background: var(--accent); color: var(--accent-content); border: 0; border-radius: 0.375rem;
              padding: 0.5rem 1rem; font-size: 0.875rem; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
+    button:hover { background: var(--accent-hover); }
   </style>
 </head>
 <body>
   <div class="card">
     <div aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
     <h1>You're offline</h1>
-    <p>lets-chat can't reach the server right now. Any messages you send will be queued and delivered automatically when you're back online.</p>
+    <p>Let's Chat can't reach the server right now. Any messages you send will be queued and delivered automatically when you're back online.</p>
     <button onclick="location.reload()">Try again</button>
   </div>
 </body>
