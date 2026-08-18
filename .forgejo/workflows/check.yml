@@ -64,6 +64,13 @@ jobs:
         # ci-build/check-file-pickers.nu and LC-740.
         run: nu ci-build/check-file-pickers.nu
 
+      - name: Table scroll-wrapper guard
+        # A wrapper that clips instead of scrolling makes the trailing columns
+        # unreachable on a 375px viewport: no scrollbar, no drag, and the
+        # actions cell is the one that overflows. See
+        # ci-build/check-table-scroll.nu and LC-737.
+        run: nu ci-build/check-table-scroll.nu
+
       - name: Locale ellipsis guard
         # One ellipsis spelling in the catalogs: three periods, never U+2026.
         # The mixed spelling put "Search..." beside "Search…" in the same
