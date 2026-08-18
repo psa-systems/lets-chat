@@ -25,7 +25,7 @@
         <td class="font-mono text-xs">{{ entry.action }}</td>
         <td>{{ entry.target_user }}</td>
         <td class="text-content-muted">{% if let Some(reason) = entry.reason.as_ref() %}{{ reason }}{% else %}-{% endif %}</td>
-        <td class="text-xs text-content-muted whitespace-nowrap">{{ entry.created_at }}</td>
+        <td class="text-xs text-content-muted whitespace-nowrap"><time datetime="{{ entry.created_at|iso }}" title="{{ entry.created_at }}">{{ entry.created_at }}</time></td>
       </tr>
       {% endfor %}
     </tbody>

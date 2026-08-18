@@ -113,7 +113,7 @@ impl Attachment {
 
     /// Recording duration for the template's `data-duration` attribute.
     /// Empty string when unknown; the player then probes the audio element.
-    pub fn duration_attr(&self) -> String {
+    pub fn duration_secs(&self) -> String {
         match self.voice_duration {
             Some(d) => format!("{d:.3}"),
             None => String::new(),

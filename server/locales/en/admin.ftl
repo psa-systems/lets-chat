@@ -166,6 +166,9 @@ admin-enclaves-public = Public
 admin-enclaves-private = Private
 admin-enclaves-none = none
 admin-enclaves-unlimited = unlimited
+# LC-746: accessible name for the inline quota field (the column header is not
+# a <label>, so a screen reader had only the placeholder to go on).
+admin-enclaves-quota-label = Storage quota (MiB)
 admin-enclaves-save = Save
 admin-enclaves-open = Open
 admin-enclaves-manage = Manage
@@ -441,6 +444,11 @@ admin-slash-delete-confirm = Delete this custom command?
 admin-slash-empty = No custom commands yet.
 
 ## User row
+# LC-746: accessible names for the three inline row controls (role, quota,
+# mute duration); each sits in a table cell with no <label>.
+admin-userrow-role-label = Role
+admin-userrow-quota-label = Storage quota (MiB)
+admin-userrow-mute-duration-label = Mute duration
 admin-userrow-role-user = user
 admin-userrow-role-moderator = moderator
 admin-userrow-role-admin = admin

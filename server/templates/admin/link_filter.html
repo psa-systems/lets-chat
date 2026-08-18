@@ -63,7 +63,7 @@
           {% else %}<span class="text-content-muted">{{ "admin-linkfilter-warn"|t }}</span>{% endif %}
         </td>
         <td class="text-xs font-mono">{{ r.created_by }}</td>
-        <td class="text-xs text-content-muted">{{ r.created_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ r.created_at|iso }}" title="{{ r.created_at }}">{{ r.created_at }}</time></td>
         <td class="lc-table-actions">
           <form method="post" action="/admin/link-filter/{{ r.id }}/delete"
                 onsubmit="return confirm('{{ "admin-linkfilter-delete-confirm"|t }}')">

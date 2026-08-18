@@ -166,6 +166,7 @@ admin-enclaves-public = Publico
 admin-enclaves-private = Privado
 admin-enclaves-none = ninguno
 admin-enclaves-unlimited = ilimitado
+admin-enclaves-quota-label = Cuota de almacenamiento (MiB)
 admin-enclaves-save = Guardar
 admin-enclaves-open = Abrir
 admin-enclaves-manage = Gestionar
@@ -441,6 +442,9 @@ admin-slash-delete-confirm = Eliminar este comando personalizado?
 admin-slash-empty = Aun no hay comandos personalizados.
 
 ## User row
+admin-userrow-role-label = Rol
+admin-userrow-quota-label = Cuota de almacenamiento (MiB)
+admin-userrow-mute-duration-label = Duración del silencio
 admin-userrow-role-user = usuario
 admin-userrow-role-moderator = moderador
 admin-userrow-role-admin = administrador

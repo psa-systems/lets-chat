@@ -2,7 +2,7 @@
    live OOB fragment (ws/invitations_live.html) so both render identically.
    References `invitations: &[(EnclaveInvitation, Enclave)]` from whichever
    parent struct includes it. #}
-<h1 class="text-2xl font-semibold">{{ "invitations-pending-heading"|t }} ({{ invitations.len() }})</h1>
+<h1 class="lc-h1">{{ "invitations-pending-heading"|t }} ({{ invitations.len() }})</h1>
 {% if invitations.is_empty() %}
 <p class="text-content-muted mt-4">{{ "invitations-empty"|t }}</p>
 {% else %}

@@ -6,7 +6,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-2xl space-y-6">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">{{ "room-webhooks-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "room-webhooks-heading"|t }}</h1>
     <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-content-muted">
@@ -69,8 +69,8 @@
         {% for w in webhooks %}
         <tr>
           <td>{{ w.name }}</td>
-          <td class="text-content-muted">{{ w.created_at }}</td>
-          <td class="text-content-muted">{% if let Some(at) = w.last_used_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+          <td class="text-content-muted"><time datetime="{{ w.created_at|iso }}" title="{{ w.created_at }}">{{ w.created_at }}</time></td>
+          <td class="text-content-muted">{% if let Some(at) = w.last_used_at %}<time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %}{{ "room-table-never"|t }}{% endif %}</td>
           <td>{% if w.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
           <td class="lc-table-actions">
             {% if !w.revoked %}

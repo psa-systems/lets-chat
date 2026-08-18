@@ -6,7 +6,7 @@
 <div class="flex-1 overflow-y-auto">
 <section class="p-6 max-w-3xl space-y-6">
   <div class="flex items-baseline justify-between gap-2">
-    <h1 class="text-2xl font-semibold">{{ "api-tokens-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "api-tokens-heading"|t }}</h1>
     <a href="/settings" class="text-sm text-accent hover:underline">{{ "api-tokens-back"|t }}</a>
   </div>
   <p class="text-sm text-content-muted">
@@ -65,9 +65,9 @@
           <div class="font-medium {% if t.revoked %}text-content-subtle line-through{% endif %}">{{ t.name }}</div>
           <div class="text-xs text-content-muted font-mono break-all">{{ t.scopes }}</div>
           <div class="text-xs text-content-subtle">
-            {{ "api-tokens-created-at"|t }} {{ t.created_at }}
-            {% if let Some(at) = t.last_used_at %} &middot; {{ "api-tokens-last-used"|t }} {{ at }}{% else %} &middot; {{ "api-tokens-never-used"|t }}{% endif %}
-            {% if let Some(at) = t.expires_at %} &middot; {{ "api-tokens-expires-at"|t }} {{ at }}{% endif %}
+            {{ "api-tokens-created-at"|t }} <time datetime="{{ t.created_at|iso }}" title="{{ t.created_at }}">{{ t.created_at }}</time>
+            {% if let Some(at) = t.last_used_at %} &middot; {{ "api-tokens-last-used"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %} &middot; {{ "api-tokens-never-used"|t }}{% endif %}
+            {% if let Some(at) = t.expires_at %} &middot; {{ "api-tokens-expires-at"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% endif %}
             {% if t.revoked %} &middot; <span class="text-danger">{{ "api-tokens-revoked"|t }}</span>{% endif %}
           </div>
         </div>

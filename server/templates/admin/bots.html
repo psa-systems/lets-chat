@@ -101,7 +101,7 @@
       {% for b in bots %}
       <tr>
         <td class="font-mono text-xs">{{ b.username }}{% if b.is_assistant %} <span class="lc-pill lc-pill--neutral font-sans">{{ "admin-bots-assistant-pill"|t }}</span>{% endif %}</td>
-        <td class="text-xs text-content-muted">{{ b.created_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ b.created_at|iso }}" title="{{ b.created_at }}">{{ b.created_at }}</time></td>
         <td class="text-xs">{% if b.disabled %}<span class="lc-pill lc-pill--danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
         <td class="lc-table-actions">
           {% if !b.disabled %}
