@@ -110,7 +110,8 @@ jobs:
         # The classes the 2026-08-11 UI audit closed, held closed by one grep
         # each: palette literals in templates, buttons styled as text links,
         # the open-coded .btn-danger-outline string, borders with no color
-        # token, clipping admin table wrappers, raw h1 sizes, and the em-dash
+        # token, clipping admin table wrappers, raw h1 sizes, the offline
+        # page's mode bootstrap and brand name, and the em-dash
         # ban. A rule whose class is not clear yet reports its hits without
         # failing, and names the issue that enables it. See
         # ci-build/check-ui-conventions.nu and LC-749.

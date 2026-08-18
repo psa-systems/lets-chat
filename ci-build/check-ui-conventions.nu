@@ -52,6 +52,15 @@ const H1_RAW_SIZE = '<h1[^>]*text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)'
 
 const EM_DASH = "\u{2014}"
 
+# LC-748: the service worker's offline fallback. It is a standalone document
+# outside the template layer, so nothing else here covers it: it must stay
+# mode-aware (no light-only `color-scheme`) and must call the product by its
+# name. A comment may keep the repo name.
+const OFFLINE_ASSETS = ["server/assets/offline.html" "server/assets/sw.js"]
+const REPO_NAME = "lets-chat"
+const LIGHT_ONLY_SCHEME = 'color-scheme:\s*light\s*;'
+const COMMENT_LINE = '^\s*(//|/\*|\*|<!--)'
+
 # The em-dash rule sweeps every tracked text file, so it needs an extension
 # allowlist rather than a glob; `justfile` and the Dockerfiles carry no
 # extension and are matched by name.
@@ -167,6 +176,17 @@ def raw-h1-sizes [] {
     scan-lines $files $H1_RAW_SIZE
 }
 
+def offline-brand-name [] {
+    $OFFLINE_ASSETS | each {|file|
+        open --raw $file
+        | decode utf-8
+        | lines
+        | enumerate
+        | where {|row| ($row.item | str contains $REPO_NAME) and ($row.item !~ $COMMENT_LINE) }
+        | each {|row| $"($file):($row.index + 1): ($row.item | str trim)" }
+    } | flatten
+}
+
 def rules [] {
     [
         {
@@ -204,6 +224,18 @@ def rules [] {
             pending: "LC-746"
             fix: "put the page title on `.lc-h1` (or `.lc-display` on a standalone centered page); a raw size utility is how 36 h1 elements ended up rendering at six sizes (LC-746)"
             check: {|| raw-h1-sizes }
+        }
+        {
+            id: "offline-page-brand-name"
+            pending: null
+            fix: $"the offline page and the push fallback title say \"Let's Chat\", the name every other user-visible surface uses; \"($REPO_NAME)\" is the repo, and belongs only in a comment \(LC-748\)"
+            check: {|| offline-brand-name }
+        }
+        {
+            id: "offline-page-follows-mode"
+            pending: null
+            fix: "server/assets/offline.html resolves `lc-mode` and paints from its own light/dark custom properties; a light-only `color-scheme` flashes a white page at a dark-mode user at the worst moment (LC-748)"
+            check: {|| scan-lines ["server/assets/offline.html"] $LIGHT_ONLY_SCHEME }
         }
         {
             id: "no-em-dash"
