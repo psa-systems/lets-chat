@@ -81,6 +81,12 @@ Decision rules:
 
 When adding a new destructive action, copy the closest existing example of the matching tier rather than inventing a fourth style.
 
+**Revoking a credential always asks first (LC-738).** A revoke cannot be undone: the token or secret is not recoverable and every integration using it breaks on the next request. Five of the six revoke surfaces (API tokens, room webhooks, room feeds, room email inboxes, sessions) had no confirmation at all, and four of them were a text link in a table row, one click away with nothing separating them from the row's other cells. All six now confirm, and the four text links are `class="btn btn-sm btn-danger-outline"`, the treatment the admin tables already use. The blast radius is one credential, so the single OK click is the right tier here; it is the account and enclave deletes that need the typed or re-auth gate.
+
+- The confirmation string is shared per object type, not per surface: `room-table-revoke-confirm` covers all three room integration tables (they already share the `room-table-revoke` label), with `api-tokens-revoke-confirm`, `settings-session-revoke-confirm` and `admin-invites-revoke-confirm` for the others.
+- The session revoke is an htmx form with a plain-POST fallback, so it uses `onclick="return confirm(...)"` on the submit button rather than `hx-confirm` on the form: per the LC-739 rule above the `onclick` form is safe on an htmx form, and it is the only one of the two that also guards the no-htmx submit.
+- `ci-build/check-revoke-confirm.nu` (wired into `just check` and the Check workflow) rejects any `<form>` or `<button>` that targets a `/revoke` endpoint without a `confirm` inside it. Email templates are excluded: they render in a mail client with no scripting.
+
 ## Form-error rendering
 
 Two contexts, one visual + accessibility contract.

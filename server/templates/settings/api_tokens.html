@@ -73,7 +73,7 @@
         </div>
         {% if !t.revoked %}
         <form method="post" action="/settings/api-tokens/{{ t.id }}/revoke">
-          <button type="submit" class="text-danger hover:underline text-xs">{{ "action-revoke"|t }}</button>
+          <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "api-tokens-revoke-confirm"|t }}')">{{ "action-revoke"|t }}</button>
         </form>
         {% endif %}
       </li>

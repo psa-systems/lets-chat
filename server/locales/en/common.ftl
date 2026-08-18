@@ -347,6 +347,7 @@ settings-update-password = Update password
 settings-active-sessions = Active sessions
 settings-sessions-help = Every device signed in to this account. Revoke any session you do not recognize. Logging out ends the current one.
 settings-session-revoked = Session revoked.
+settings-session-revoke-confirm = Revoke this session? The device is signed out immediately and has to sign in again.
 settings-this-device = This device
 settings-last-seen = Last seen
 settings-from = from
@@ -397,6 +398,7 @@ api-tokens-last-used = last used
 api-tokens-never-used = never used
 api-tokens-expires-at = expires
 api-tokens-revoked = revoked
+api-tokens-revoke-confirm = Revoke this token? Everything using it stops working immediately and it cannot be restored.
 
 ## Blocked users page
 blocked-page-title = Blocked users

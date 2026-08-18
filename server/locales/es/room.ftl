@@ -121,6 +121,7 @@ room-table-never = nunca
 room-table-active = activo
 room-table-revoked = revocado
 room-table-revoke = Revocar
+room-table-revoke-confirm = ¿Revocar esta credencial? Todas las integraciones que la usan dejarán de funcionar de inmediato y no se puede restaurar.
 
 ## Files
 room-files-empty = No hay archivos que coincidan con este filtro.
