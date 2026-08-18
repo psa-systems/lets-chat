@@ -6,7 +6,8 @@
 //! `@group-name` tokens; no UI is bundled here yet, manage via curl /
 //! direct API until a templates pass lands.
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Redirect};
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::Form;
 use serde::Deserialize;
 
@@ -47,8 +48,9 @@ pub async fn post_create(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(enclave_id): Path<i64>,
+    headers: HeaderMap,
     Form(form): Form<GroupForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_manage(&state, &user, enclave_id).await?;
     let name = form.name.trim();
     if name.is_empty() {
@@ -62,9 +64,12 @@ pub async fn post_create(
         &user.id,
     )
     .await?;
-    Ok(Redirect::to(&format!(
-        "/enclave/{enclave_id}/settings?ok=created"
-    )))
+    // LC-739: the new group has to appear in the list above the form, so an
+    // htmx submit reloads the settings page instead of taking a status swap.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{enclave_id}/settings?ok=created"),
+    ))
 }
 
 /// PATCH /enclave/{id}/groups/{group_id}

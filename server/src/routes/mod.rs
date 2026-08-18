@@ -123,6 +123,32 @@ mod users;
 mod webhooks;
 mod ws;
 
+/// True when the request came from htmx, so a mutating handler answers with a
+/// fragment instead of a full-page redirect. Mirrors `routes::settings::is_hx`.
+pub(crate) fn is_hx(headers: &axum::http::HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+}
+
+/// LC-739: dual-mode answer for a settings form whose success changes page
+/// content an inline status fragment cannot patch (a rotated invite code, a
+/// removed ban row, a renamed enclave in the page header). htmx gets
+/// `HX-Redirect` so the browser navigates to the same URL the no-JS submit
+/// redirects to, which re-renders the new content and fires that URL's `?ok=`
+/// flash toast; a no-JS submit still gets the plain redirect.
+pub(crate) fn redirect_or_hx(headers: &axum::http::HeaderMap, to: &str) -> Response {
+    if is_hx(headers) {
+        return (
+            StatusCode::OK,
+            [(
+                axum::http::header::HeaderName::from_static("hx-redirect"),
+                to.to_string(),
+            )],
+        )
+            .into_response();
+    }
+    Redirect::to(to).into_response()
+}
+
 /// Override a persisted status with `"offline"` when the user has no live
 /// WebSocket. Online presence is hub-derived; the `users.status` column only
 /// stores the explicit user choice plus the idle auto-flip.
