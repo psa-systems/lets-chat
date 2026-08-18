@@ -110,7 +110,7 @@ async fn test_admin_sees_all_rooms_including_private() {
         .await
         .unwrap();
 
-    // Admin sees all — not a member but is_admin = true
+    // Admin sees all - not a member but is_admin = true
     let rooms = lets_chat::db::chat::list_rooms(&pool, "admin-user", true)
         .await
         .unwrap();

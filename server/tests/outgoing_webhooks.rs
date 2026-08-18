@@ -192,7 +192,7 @@ async fn delivery_blocks_non_public_url_and_is_terminal() {
 
     // LC-152: production `run_delivery_tick` (no client param) goes through
     // `http_client::outbound_post`, which refuses loopback. This test
-    // exercises the production path on purpose — the assertion is that
+    // exercises the production path on purpose - the assertion is that
     // the loopback delivery is marked failed by the helper's filter.
     let stats = lets_chat::outgoing::run_delivery_tick(&chat).await.unwrap();
     assert_eq!(stats.failed, 1, "loopback URL must be blocked");

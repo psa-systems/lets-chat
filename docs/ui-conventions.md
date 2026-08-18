@@ -28,6 +28,8 @@ Every color comes from the semantic tokens in `server/tailwind.config.js` (`text
 - `server/assets/**/*.js` outside `vendor/`, where markup is built in JS and injected in transient states (offline banner, failed send, active search row).
 - Every `[aria-selected="true"]` rule in `server/assets/main.css`, which must paint its background from a `var(--...)` token. That is the selection highlight, only visible mid-keyboard-navigation; LC-736 found it hard-coded to `rgb(241 245 249)` there, outranking the tokenized `.lc-search-row` rule.
 
+The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (see "Convention gates" below), reporting rather than failing until LC-741 clears the call overlays in `layout.html`.
+
 ## Page top bars (LC-742)
 
 Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
@@ -159,7 +161,7 @@ Every record list is `<div class="card lc-table-wrap">` around `<table class="lc
 
 `.lc-table-wrap` is `overflow-x: auto` in `main.css`, so the rows still go edge to edge and the card's rounded corners still clip them (a scroll container on one axis is a clipping context on the other), but a table wider than the viewport scrolls instead of hiding its trailing columns.
 
-- Never wrap a table in `overflow-hidden`. The widest admin tables carry 5 to 6 columns plus a `white-space: nowrap` `.lc-table-actions` cell with up to four buttons, and clipping made those buttons unreachable at 375px: no scrollbar, no drag, no way to get to them.
+- Never wrap a table in `overflow-hidden`. The widest admin tables carry 5 to 6 columns plus a `white-space: nowrap` `.lc-table-actions` cell with up to four buttons, and clipping made those buttons unreachable at 375px: no scrollbar, no drag, no way to get to them. `ci-build/check-ui-conventions.nu` rejects a `card overflow-hidden` wrapper anywhere under `server/templates/admin/`.
 - Never put a padding utility on a `<th>` or `<td>`. The three room integration tables hand-rolled `py-2` headers and `py-1` cells, which is a row 6px shorter than every admin table; the component is the one place row height is decided.
 - An empty list is `partials/empty_state.html` under the page heading, not a `colspan` row inside a table with no data in it.
 - `ci-build/check-table-scroll.nu` rejects any `<table>` whose wrapper does not carry `lc-table-wrap` or `overflow-x-auto`. `ci-build/check-table-shape.nu` rejects a `<table>` that is not `.lc-table`, an `.lc-table` outside a `.card` wrapper, and a padding utility on any cell inside one. Both are wired into `just check` and the Check workflow; both exclude the email templates, which are inline-styled layout tables in a mail client.
@@ -220,3 +222,24 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 - The tooltip is a single `position:fixed` element appended to `<body>`, so it escapes `overflow` clipping. It shows after a 400ms hover delay, immediately on keyboard focus, and hides on leave/blur/scroll/resize/Escape.
 - **Accessibility:** the tooltip element is `aria-hidden`; it is decoration, not the accessible name. The trigger must carry its own accessible name. For an icon-only control add an explicit `aria-label`; a control with visible text already has one, so do not add a redundant `aria-label` (it would override the visible text). Do not leave a `title=` alongside `data-lc-tip` - it double-renders (native + styled).
 - Placement convention: vertical rails (the enclave switcher) use `data-lc-tip-pos="right"`; top bars (the room header) use `data-lc-tip-pos="bottom"`, so the tooltip opens away from the chrome edge.
+
+## Convention gates (LC-749)
+
+`ci-build/check-ui-conventions.nu` (`just check-ui-conventions`, and a step of the Check workflow) holds closed the classes that reopen the moment someone adds a file. Each is one pattern with its own allowlist, and each failure message names the convention and the issue that established it.
+
+| Rule | Scope | Allowed exceptions |
+|---|---|---|
+| No palette literals in templates | `server/templates/**/*.html` | a line (or the line above it) carrying an `lc-allow-palette` comment naming why, for the deliberately-dark call stage |
+| No fake link buttons | `<button ... hover:underline>` in templates | none |
+| No open-coded danger outline | the literal `.btn-danger-outline` expansion | none |
+| No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color token | none |
+| No clipping table wrappers | `card overflow-hidden` under `server/templates/admin/` | none |
+| No raw h1 sizes | `<h1 ... text-lg/xl/2xl/...>` in templates | `landing.html`, a marketing hero outside the app scale |
+| One ellipsis glyph, no em dash | U+2026 in the locale catalogs; U+2014 in every tracked text file | vendored assets (`server/assets/vendor/`) |
+
+Email templates are excluded from every template rule: they render in a mail client with no stylesheet, so a Tailwind class there is inert. The U+2026 half lives in `ci-build/check-locale-ellipsis.nu` and the `server/assets/**/*.js` palette rule in `ci-build/check-asset-color-tokens.nu`; both run in the same job.
+
+Two things to know before editing the script:
+
+- A rule whose class is not clear yet carries a `pending: "<issue>"` marker. It still runs and prints its hits on every run, but does not fail the build; the issue named in the marker deletes it as part of its own change, which is why each of those issues carries "add the CI check" in its own acceptance criteria. The script is the source of which rules are live; do not restate that here.
+- Read files with `open --raw`, never `grep -r`. `server/templates/layout.html` contains a literal NUL byte (a separator in an inline JS `join`), so grep skips the whole file as binary, and that file is where two of these rules match today (LC-757).
