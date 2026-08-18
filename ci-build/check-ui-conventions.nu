@@ -172,25 +172,25 @@ def rules [] {
         {
             id: "no-palette-literals-in-templates"
             pending: "LC-741"
-            fix: $"use the semantic tokens from tailwind.config.js \(bg-surface-elevated, text-content, border-border, bg-danger, ...\); the one deliberately-dark call stage line must carry a comment with the ($PALETTE_ALLOW) marker naming why"
+            fix: $"use the semantic tokens from tailwind.config.js \(bg-surface-elevated, text-content, border-border, bg-danger, ...\); the one deliberately-dark call stage line must carry a comment with the ($PALETTE_ALLOW) marker naming why \(LC-741, and LC-735 for the same rule over the browser assets\)"
             check: {|| palette-in-templates }
         }
         {
             id: "no-fake-link-buttons"
             pending: "LC-743"
-            fix: "a control that performs an action looks like a button: `btn btn-sm btn-danger-outline` / `btn-ghost` / `btn-primary`, never a color plus hover:underline, which is what the 24 real anchors use"
+            fix: "a control that performs an action looks like a button: `btn btn-sm btn-danger-outline` / `btn-ghost` / `btn-primary`, never a color plus hover:underline, which is what the 24 real anchors use (LC-743)"
             check: {|| scan-lines (template-files) '<button[^>]*hover:underline' }
         }
         {
             id: "no-open-coded-danger-outline"
             pending: "LC-743"
-            fix: $"use `btn btn-sm btn-danger-outline` \(main.css\); the inline copy is character-for-character what the class expands to"
+            fix: $"use `btn btn-sm btn-danger-outline` \(main.css\); the inline copy is character-for-character what the class expands to \(LC-743\)"
             check: {|| scan-lines (template-files) $DANGER_OUTLINE }
         }
         {
             id: "no-untokenized-borders"
             pending: "LC-744"
-            fix: "add a border color token (`border-border`, `divide-border`, ...) or use `.card` / `.input`; a bare border resolves to Tailwind's gray-200 default, which is brighter than the panel it borders in dark mode"
+            fix: "add a border color token (`border-border`, `divide-border`, ...) or use `.card` / `.input`; a bare border resolves to Tailwind's gray-200 default, which is brighter than the panel it borders in dark mode (LC-744)"
             check: {|| untokenized-borders }
         }
         {
@@ -202,13 +202,13 @@ def rules [] {
         {
             id: "no-raw-h1-sizes"
             pending: "LC-746"
-            fix: "put the page title on `.lc-h1` (or `.lc-display` on a standalone centered page); a raw size utility is how 36 h1 elements ended up rendering at six sizes"
+            fix: "put the page title on `.lc-h1` (or `.lc-display` on a standalone centered page); a raw size utility is how 36 h1 elements ended up rendering at six sizes (LC-746)"
             check: {|| raw-h1-sizes }
         }
         {
             id: "no-em-dash"
             pending: null
-            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence"
+            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (CLAUDE.md style rules, folded into this job by LC-749)"
             check: {|| scan-lines (tracked-text-files) $EM_DASH }
         }
     ]
