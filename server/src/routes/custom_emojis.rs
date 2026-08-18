@@ -1,6 +1,6 @@
 use axum::body::Body;
 use axum::extract::{Multipart, Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
@@ -208,6 +208,7 @@ pub async fn post_upload(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(enclave_id): Path<i64>,
+    headers: HeaderMap,
     multipart: Multipart,
 ) -> Result<Response, AppError> {
     require_manage(&state, &user, enclave_id).await?;
@@ -242,7 +243,12 @@ pub async fn post_upload(
         Err(e) => return Err(e.into()),
     }
 
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings?ok=added")).into_response())
+    // LC-739: the new emoji has to appear in the grid above the form, so an
+    // htmx submit reloads the settings page instead of taking a status swap.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{enclave_id}/settings?ok=added"),
+    ))
 }
 
 /// POST /settings/emojis - LC-482 personal (user-scoped) emoji upload. Same
@@ -304,6 +310,7 @@ pub async fn post_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((enclave_id, emoji_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     require_manage(&state, &user, enclave_id).await?;
     let row = db::custom_emojis::get(&state.chat, emoji_id)
@@ -313,7 +320,12 @@ pub async fn post_delete(
         return Err(AppError::NotFound);
     }
     db::custom_emojis::delete(&state.chat, emoji_id).await?;
-    Ok(Redirect::to(&format!("/enclave/{enclave_id}/settings?ok=deleted")).into_response())
+    // LC-739: the deleted emoji's tile has to leave the grid, so an htmx submit
+    // reloads the settings page.
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/enclave/{enclave_id}/settings?ok=deleted"),
+    ))
 }
 
 /// GET /api/emojis/{id} - stream a custom emoji file. Any logged-in user
