@@ -18,7 +18,7 @@
 //! full-migration helper would change what it tests." A file on this list
 //! MUST carry a top-of-file comment justifying why (see
 //! `migration_enclaves.rs`). A future file that legitimately needs a partial
-//! list gets added here WITH that justification — the ban forces the
+//! list gets added here WITH that justification - the ban forces the
 //! justification to be explicit rather than letting silent drift back in.
 
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 /// file.
 const ALLOWED_PATHS: &[&str] = &["tests/migration_enclaves.rs"];
 
-/// Anchored literal — the opening quote AND the trailing slash are part of
+/// Anchored literal - the opening quote AND the trailing slash are part of
 /// the pattern, so it cannot false-positive on `include_str!("../migrations_
 /// test_data/...)` or any sibling directory that merely starts with
 /// "migrations". Assembled via `concat!` so THIS file's source never
@@ -57,7 +57,7 @@ fn no_handrolled_migration_lists_in_tests() {
     walk(Path::new("tests"), &mut files);
     assert!(
         !files.is_empty(),
-        "no .rs files under tests/ — must run from the server crate root"
+        "no .rs files under tests/ - must run from the server crate root"
     );
 
     let pat = banned_pattern();
@@ -86,7 +86,7 @@ fn no_handrolled_migration_lists_in_tests() {
             "\n\nLC-204: hand-rolled migration list(s) found in tests/.\n\
              \n\
              Build the pool via `common::auth_pool()` / `common::chat_pool()` /\n\
-             `common::settings_pool()` instead — they run the full migration set\n\
+             `common::settings_pool()` instead - they run the full migration set\n\
              via `sqlx::migrate!` and never go stale. A hand-rolled\n\
              `include_str!(\"../migrations/...)` list pins a stale schema subset\n\
              and surfaces later as \"no such column\" 500s.\n\
@@ -103,7 +103,7 @@ fn no_handrolled_migration_lists_in_tests() {
 
 /// Meta-test: the allow-list isn't a defanged no-op. Every allowed file must
 /// (a) exist on disk at that exact path, and (b) actually contain the banned
-/// pattern — otherwise the exemption is dead and a future cleanup that
+/// pattern - otherwise the exemption is dead and a future cleanup that
 /// "removes the rot" from the allow-listed file would not be caught when it
 /// then re-adds drift elsewhere. Same shape as LC-152's grep-ban sanity test.
 #[test]
@@ -116,7 +116,7 @@ fn allow_list_entries_exist_and_are_load_bearing() {
         assert!(
             body.contains(&pat),
             "{path:?} is allow-listed but contains no hand-rolled migration list; \
-             it no longer needs the exemption — remove it from ALLOWED_PATHS"
+             it no longer needs the exemption - remove it from ALLOWED_PATHS"
         );
     }
 }

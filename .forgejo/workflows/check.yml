@@ -106,6 +106,16 @@ jobs:
         # ci-build/check-revoke-confirm.nu and LC-738.
         run: nu ci-build/check-revoke-confirm.nu
 
+      - name: UI convention guard
+        # The classes the 2026-08-11 UI audit closed, held closed by one grep
+        # each: palette literals in templates, buttons styled as text links,
+        # the open-coded .btn-danger-outline string, borders with no color
+        # token, clipping admin table wrappers, raw h1 sizes, and the em-dash
+        # ban. A rule whose class is not clear yet reports its hits without
+        # failing, and names the issue that enables it. See
+        # ci-build/check-ui-conventions.nu and LC-749.
+        run: nu ci-build/check-ui-conventions.nu
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
