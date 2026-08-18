@@ -2,7 +2,7 @@
 //!
 //! The filter itself is proven at the API level by the killer suite
 //! (`lc152_resolver_property_pair`). These tests prove that **each migrated
-//! site handles an `OutboundError::HostNotPublic` rejection gracefully** —
+//! site handles an `OutboundError::HostNotPublic` rejection gracefully** -
 //! the rejection becomes the right operator-facing failure mode, not a
 //! panic, not a fall-through to an unguarded path, not a swallowed error
 //! that masks the security event.
@@ -16,7 +16,7 @@
 //!   - LC-78 bridge-avatar fetch → `mark_failed` on the row, render
 //!     falls back to initials via `<img onerror>`.
 //!   - Web Push → `Err(PushError::*)` propagates cleanly; the push loop
-//!     does not crash (the audit's worst finding — a swallowed error
+//!     does not crash (the audit's worst finding - a swallowed error
 //!     here would be silent SSRF reachable through every mention/DM).
 //!   - Unfurl → `empty_preview()` fallback (LC-150 redirect loop already
 //!     uses the same pattern; the helper just feeds it Err earlier).
@@ -37,7 +37,7 @@ async fn lc75_delivery_marks_blocked_url_failed_terminal_not_retried() {
         "global",
         None,
         "message.posted",
-        // Literal private IP — exactly the bypass the URL-input layer closes.
+        // Literal private IP - exactly the bypass the URL-input layer closes.
         "http://10.0.0.1/hook",
         "signing-secret",
         "admin",
@@ -155,7 +155,7 @@ async fn web_push_send_to_private_endpoint_returns_err_not_panic() {
     // Dummy VAPID keypair: the test's load-bearing assertion is that
     // `send()` returns Err (regardless of whether the encrypt step or the
     // SSRF check produced the error). Either failure mode is acceptable
-    // here — the property under test is "the push loop does not crash on
+    // here - the property under test is "the push loop does not crash on
     // a malicious endpoint URL," which is satisfied by ANY Err return.
     let vapid = Arc::new(lets_chat::db::vapid::VapidKeypair {
         public_key_b64url: String::new(),
@@ -173,7 +173,7 @@ async fn web_push_send_to_private_endpoint_returns_err_not_panic() {
         endpoint: "http://169.254.169.254/v3/push".to_string(),
         // Valid-shape base64 strings; the actual crypto inputs may not
         // validate, in which case the encrypt step fails first. That's
-        // ALSO an acceptable error-propagation path — the push loop
+        // ALSO an acceptable error-propagation path - the push loop
         // doesn't crash.
         p256dh_key: "BNbRD-9GVSdTcAGtTQ7Y2zqyyhVjbBNQ8YJsRJxN-3kLNxh1U_p9pT_2gWNTBR-vUcq5VtJSPbf4kUg4WfQv5_g".to_string(),
         auth_key: "8eDyX_uCN0XRhSbY5hs7Hg".to_string(),
@@ -199,11 +199,11 @@ async fn web_push_send_to_private_endpoint_returns_err_not_panic() {
 // `match { Err(_) => return Ok(empty_preview()) }` triggers. This is
 // proven by static inspection + the killer suite's coverage of the helper
 // return value. A regression here would mean a refactor that handles the
-// Result other than via the existing match — caught at code-review time.
+// Result other than via the existing match - caught at code-review time.
 
 // ────────────────────────────────────────────────────────────────────
 // Slash command webhook: BadRequest on filter rejection. Same mechanical
-// invariant as unfurl — `outbound_post(url).await.map_err(...)` rewrites
+// invariant as unfurl - `outbound_post(url).await.map_err(...)` rewrites
 // any OutboundError to AppError::BadRequest with the operator-facing
 // "URL is not allowed" message. Proven by static inspection + the killer
 // suite's coverage of the helper return value.

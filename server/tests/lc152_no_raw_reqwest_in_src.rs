@@ -4,7 +4,7 @@
 //! `crate::http_client::outbound_*()`. The exception-free rule is what
 //! makes the LC-152 SSRF fix structural rather than audited-compliant; a
 //! single bypass is a complete SSRF (the audit that motivated this PR
-//! found exactly that — Web Push at `push/mod.rs` had NO SSRF guard at
+//! found exactly that - Web Push at `push/mod.rs` had NO SSRF guard at
 //! all because nothing prevented constructing a raw `reqwest::Client`).
 //!
 //! What this test enforces:
@@ -20,12 +20,12 @@
 //!
 //! Exclusion list: EXACTLY `http_client.rs`. No broad glob, no `tests/`
 //! pattern (this file lives in `tests/` which isn't walked at all). If
-//! the exception list ever grows, it's a red flag — the design intent is
+//! the exception list ever grows, it's a red flag - the design intent is
 //! a single chokepoint module.
 
 use std::path::{Path, PathBuf};
 
-/// Exception list — **full paths relative to the server crate root**, not
+/// Exception list - **full paths relative to the server crate root**, not
 /// basenames. A basename match would silently exempt any future file
 /// named `http_client.rs` anywhere under `src/` (e.g.,
 /// `src/foo/http_client.rs`), inheriting the raw-construction allowance
@@ -67,7 +67,7 @@ fn no_raw_reqwest_or_unchecked_in_src() {
     walk(Path::new("src"), &mut files);
     assert!(
         !files.is_empty(),
-        "no .rs files found under src/ — test must run from the server crate root"
+        "no .rs files found under src/ - test must run from the server crate root"
     );
 
     let allowed: Vec<PathBuf> = ALLOWED_FILE_PATHS.iter().map(PathBuf::from).collect();
@@ -123,7 +123,7 @@ fn no_raw_reqwest_or_unchecked_in_src() {
 ///    relative path. Catches a file move that would otherwise silently
 ///    DEFANG the exception list (no file matches the entry, the ban
 ///    still runs across every file in `src/`, the test still passes
-///    because nothing was wrongly exempted — but the EXCEPTION is dead
+///    because nothing was wrongly exempted - but the EXCEPTION is dead
 ///    code, which would surface as a confusing compile error the next
 ///    time `http_client.rs` legitimately needs to use a forbidden
 ///    pattern). Better to fail loudly on a moved file.
